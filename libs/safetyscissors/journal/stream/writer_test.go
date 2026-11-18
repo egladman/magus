@@ -1,8 +1,7 @@
-package eventstream
+package stream
 
 import (
 	"bytes"
-	"github.com/egladman/magus/types/events"
 	"strings"
 	"sync"
 	"testing"
@@ -22,7 +21,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 	cases := []struct {
 		name string
 		in   journal.Record
-		want events.Event
+		want Event
 	}{
 		{
 			name: "started carries command lineage",
@@ -30,14 +29,14 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 				Version: "0.5.0",
 				Command: journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun},
 			}),
-			want: events.Event{Ts: 100, Workspace: "/repo", Inv: "inv1", Body: events.Run{
+			want: Event{Ts: 100, Workspace: "/repo", Inv: "inv1", Body: Run{
 				Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0",
 			}},
 		},
 		{
 			name: "finished carries the outcome",
 			in:   rec(200, journal.Finished{Status: journal.StatusFail}),
-			want: events.Event{Ts: 200, Workspace: "/repo", Inv: "inv1", Body: events.Run{
+			want: Event{Ts: 200, Workspace: "/repo", Inv: "inv1", Body: Run{
 				Phase: "finished", Status: "fail",
 			}},
 		},
@@ -47,7 +46,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 				Project: "api", Target: "test",
 				Status: journal.StatusPass, Ref: "out_abc", Duration: 1200 * time.Millisecond,
 			}),
-			want: events.Event{Ts: 150, Workspace: "/repo", Inv: "inv1", Body: events.Target{
+			want: Event{Ts: 150, Workspace: "/repo", Inv: "inv1", Body: Target{
 				Project: "api", Target: "test", Status: "ok", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
 			}},
 		},
@@ -57,14 +56,14 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 				Project: "proto", Target: "ci",
 				Status: journal.StatusPermitted, Ref: "out_abc", Duration: 1200 * time.Millisecond,
 			}),
-			want: events.Event{Ts: 155, Workspace: "/repo", Inv: "inv1", Body: events.Target{
+			want: Event{Ts: 155, Workspace: "/repo", Inv: "inv1", Body: Target{
 				Project: "proto", Target: "ci", Status: "permitted", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
 			}},
 		},
 		{
 			name: "output carries the stream it came from",
 			in:   rec(160, journal.Output{Project: "api", Target: "test", Stream: journal.Stderr, Text: "FAIL"}),
-			want: events.Event{Ts: 160, Workspace: "/repo", Inv: "inv1", Body: events.Output{
+			want: Event{Ts: 160, Workspace: "/repo", Inv: "inv1", Body: Output{
 				Project: "api", Target: "test", Stream: "stderr", Text: "FAIL",
 			}},
 		},
@@ -85,7 +84,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
 	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: journal.StatusCached}))
 	require.True(t, ok)
-	assert.Equal(t, events.Target{Status: "ok", CacheHit: true}, got.Body)
+	assert.Equal(t, Target{Status: "ok", CacheHit: true}, got.Body)
 }
 
 // TestFromJournalUnknownStatusIsNotGreen: a status magus grows later must not
@@ -93,7 +92,7 @@ func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
 func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
 	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: "quarantined"}))
 	require.True(t, ok)
-	assert.Equal(t, events.Target{Status: "failed"}, got.Body)
+	assert.Equal(t, Target{Status: "failed"}, got.Body)
 }
 
 // TestFromJournalSkipsKindsWithNoStreamEquivalent: skipping is the designed
@@ -116,15 +115,15 @@ func TestFromJournalSkipsKindsWithNoStreamEquivalent(t *testing.T) {
 
 func TestWriterEmitsOneLinePerEvent(t *testing.T) {
 	var buf bytes.Buffer
-	w := NewWriter(&buf, events.Filter{})
-	require.NoError(t, w.Emit(events.Event{Ts: 1, Body: events.Run{Phase: "started"}}))
-	require.NoError(t, w.Emit(events.Event{Ts: 2, Body: events.Run{Phase: "finished", Status: "pass"}}))
+	w := NewWriter(&buf, Filter{})
+	require.NoError(t, w.Write(Event{Ts: 1, Body: Run{Phase: "started"}}))
+	require.NoError(t, w.Write(Event{Ts: 2, Body: Run{Phase: "finished", Status: "pass"}}))
 	require.NoError(t, w.Close())
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	require.Len(t, lines, 2)
 	for _, line := range lines {
-		_, err := events.DecodeStreamEvent([]byte(line))
+		_, err := decode([]byte(line))
 		require.NoError(t, err, "line %q", line)
 	}
 }
@@ -133,8 +132,8 @@ func TestWriterEmitsOneLinePerEvent(t *testing.T) {
 // the Writer is where that promise is kept for every transport.
 func TestWriterDropsFilteredTypes(t *testing.T) {
 	var buf bytes.Buffer
-	w := NewWriter(&buf, events.Filter{})
-	require.NoError(t, w.Emit(events.Event{Ts: 1, Body: events.Output{Stream: "stdout", Text: "noisy"}}))
+	w := NewWriter(&buf, Filter{})
+	require.NoError(t, w.Write(Event{Ts: 1, Body: Output{Stream: "stdout", Text: "noisy"}}))
 	require.NoError(t, w.Close())
 	assert.Empty(t, buf.String())
 }
@@ -144,7 +143,7 @@ func TestWriterDropsFilteredTypes(t *testing.T) {
 // after it would fail to parse.
 func TestWriterIsConcurrencySafe(t *testing.T) {
 	var buf bytes.Buffer
-	w := NewWriter(&buf, events.Filter{})
+	w := NewWriter(&buf, Filter{})
 
 	const writers, each = 8, 50
 	var wg sync.WaitGroup
@@ -153,7 +152,7 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < each; j++ {
-				_ = w.Emit(events.Event{Ts: 1, Body: events.Target{Project: "p", Target: "build", Status: "ok"}})
+				_ = w.Write(Event{Ts: 1, Body: Target{Project: "p", Target: "build", Status: "ok"}})
 			}
 		}()
 	}
@@ -163,7 +162,7 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	require.Len(t, lines, writers*each)
 	for _, line := range lines {
-		_, err := events.DecodeStreamEvent([]byte(line))
+		_, err := decode([]byte(line))
 		require.NoError(t, err, "interleaved line %q", line)
 	}
 }
@@ -174,7 +173,7 @@ func TestFromJournalCarriesTheFailureReason(t *testing.T) {
 		Project: "api", Target: "build", Status: journal.StatusFail, Error: "exit status 2",
 	}))
 	require.True(t, ok)
-	body, ok := got.Body.(events.Target)
+	body, ok := got.Body.(Target)
 	require.True(t, ok)
-	assert.Equal(t, events.Target{Project: "api", Target: "build", Status: "failed", Error: "exit status 2"}, body)
+	assert.Equal(t, Target{Project: "api", Target: "build", Status: "failed", Error: "exit status 2"}, body)
 }

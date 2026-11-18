@@ -1,4 +1,4 @@
-package events
+package stream
 
 import (
 	"github.com/egladman/magus/libs/codec"
@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// decode reads one wire line through Event's own decoder.
+func decode(line []byte) (Event, error) {
+	var e Event
+	err := codec.Unmarshal(line, &e)
+	return e, err
+}
 
 // TestStreamEventMarshalsFlat pins the wire shape an integrator parses: envelope
 // fields and body fields at ONE level, never nested under a data key. A change
@@ -56,10 +63,10 @@ func TestStreamEventRoundTrips(t *testing.T) {
 			line, err := codec.Marshal(want)
 			require.NoError(t, err)
 
-			got, err := DecodeStreamEvent(line)
+			got, err := decode(line)
 			require.NoError(t, err)
 			assert.Equal(t, want, got)
-			assert.Equal(t, typ, got.Body.StreamType())
+			assert.Equal(t, typ, got.Body.EventType())
 		})
 	}
 }
@@ -82,16 +89,16 @@ func TestStreamEventRejectsUnusableBody(t *testing.T) {
 // scalarBody marshals to a JSON scalar, which the splice cannot flatten.
 type scalarBody struct{}
 
-func (scalarBody) StreamType() EventType        { return RunStarted }
+func (scalarBody) EventType() EventType         { return RunStarted }
 func (scalarBody) MarshalJSON() ([]byte, error) { return []byte(`"nope"`), nil }
 
 // TestStreamRunPhaseDefaultsToFinished: a body with no phase must still close a
 // run a subscriber has open. Leaving a spinner spinning forever is the worse
 // failure, so the fallback is deliberate rather than an accident of ordering.
 func TestStreamRunPhaseDefaultsToFinished(t *testing.T) {
-	assert.Equal(t, RunFinished, Run{}.StreamType())
-	assert.Equal(t, RunFinished, Run{Phase: "bogus"}.StreamType())
-	assert.Equal(t, RunStarted, Run{Phase: "started"}.StreamType())
+	assert.Equal(t, RunFinished, Run{}.EventType())
+	assert.Equal(t, RunFinished, Run{Phase: "bogus"}.EventType())
+	assert.Equal(t, RunStarted, Run{Phase: "started"}.EventType())
 }
 
 // TestStreamFilterZeroValueExcludesOutput pins the one asymmetry in the filter:
@@ -112,7 +119,7 @@ func TestStreamFilterZeroValueExcludesOutput(t *testing.T) {
 // zero body it would have to test for. Line-oriented clients skip instead, which
 // is what lets the taxonomy grow without a schema bump.
 func TestDecodeStreamEventUnknownType(t *testing.T) {
-	_, err := DecodeStreamEvent([]byte(`{"schema":1,"type":"target.reslut","ts":1}`))
+	_, err := decode([]byte(`{"schema":1,"type":"target.reslut","ts":1}`))
 	assert.ErrorContains(t, err, `unknown type "target.reslut"`)
 }
 
@@ -120,7 +127,7 @@ func TestDecodeStreamEventUnknownType(t *testing.T) {
 // additive changes keep old fields meaning what they meant, so a client built
 // against schema 1 must not refuse a later line.
 func TestDecodeStreamEventAcceptsNewerSchema(t *testing.T) {
-	got, err := DecodeStreamEvent([]byte(`{"schema":99,"type":"run.finished","ts":7,"phase":"finished","status":"pass","future_field":true}`))
+	got, err := decode([]byte(`{"schema":99,"type":"run.finished","ts":7,"phase":"finished","status":"pass","future_field":true}`))
 	require.NoError(t, err)
 	assert.Equal(t, Run{Phase: "finished", Status: "pass"}, got.Body)
 	assert.Equal(t, int64(7), got.Ts)
@@ -129,11 +136,11 @@ func TestDecodeStreamEventAcceptsNewerSchema(t *testing.T) {
 // TestParseStreamEventTypeRejectsTypos: an ignored typo presents as a stream
 // that is merely quiet, which is the failure that costs an hour to find.
 func TestParseStreamEventTypeRejectsTypos(t *testing.T) {
-	got, err := ParseStreamEventType("target.result")
+	got, err := ParseEventType("target.result")
 	require.NoError(t, err)
 	assert.Equal(t, TargetResult, got)
 
-	_, err = ParseStreamEventType("target.reslut")
+	_, err = ParseEventType("target.reslut")
 	assert.ErrorContains(t, err, "unknown event type")
 }
 

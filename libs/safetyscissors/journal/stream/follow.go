@@ -1,9 +1,8 @@
-package eventstream
+package stream
 
 import (
 	"context"
 	"errors"
-	"github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,7 +55,7 @@ func NewFollower(runsDir, workspace string) *Follower {
 // A limit of 0 or less replays every retained invocation. Ordering is by file
 // modification time rather than by the timestamps inside, because an invocation
 // still running has no final timestamp to sort on.
-func (f *Follower) Replay(ctx context.Context, limit int, emit func(events.Event) error) error {
+func (f *Follower) Replay(ctx context.Context, limit int, emit func(Event) error) error {
 	logs, err := f.logs()
 	if err != nil {
 		return err
@@ -109,7 +108,7 @@ func (f *Follower) skip(names []string) {
 // closing, and continuing to read a directory nobody is listening to is waste. A
 // read error on one log is skipped rather than fatal, because a log being written
 // concurrently is the normal case.
-func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func(events.Event) error) error {
+func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func(Event) error) error {
 	if interval <= 0 {
 		interval = 250 * time.Millisecond
 	}
@@ -170,7 +169,7 @@ func (f *Follower) logs() ([]string, error) {
 // drain reads whatever is new in one log and emits it, advancing the stored
 // offset to the last COMPLETE line. A log that does not read is left for the
 // next poll.
-func (f *Follower) drain(ctx context.Context, name string, emit func(events.Event) error) error {
+func (f *Follower) drain(ctx context.Context, name string, emit func(Event) error) error {
 	records, next, err := journal.RecordsSince(ctx, f.dir, strings.TrimSuffix(name, runLogExt), f.offsets[name])
 	if err != nil {
 		return nil

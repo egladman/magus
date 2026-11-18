@@ -1,4 +1,4 @@
-package events
+package stream
 
 import (
 	"bytes"
@@ -42,9 +42,8 @@ import (
 // reading both streams should not meet two conventions. It also keeps a jq
 // filter or an Emacs alist lookup one level deep.
 type Event struct {
-	// Ts is the event time in unix milliseconds, matching journal.Event.Ts so a
-	// mapped event keeps the timestamp its producer recorded rather than the time
-	// the mapping ran.
+	// Ts is the journal record's time in unix milliseconds, not the time the
+	// mapping ran.
 	Ts int64 `json:"-"`
 	// Workspace is the absolute repository root. It is present on every event
 	// because a subscriber may watch more than one workspace over a single
@@ -72,7 +71,7 @@ const Schema = 1
 // switches on it; an unrecognized value must be skipped, not treated as an error.
 type EventType string
 
-// The taxonomy, all four mapped from the run journal by internal/eventstream.
+// The taxonomy, all four mapped from the journal by [Follower].
 //
 // Diagnostics, file changes, attention requests and guard verdicts have stores but no
 // adapter, and are absent rather than silent: a type a subscriber can name and never
@@ -96,17 +95,17 @@ const (
 )
 
 // Body is the per-type payload of a [Event]. Implementations are the
-// Stream* body structs in this file; the interface is closed in practice, and
-// [DecodeStreamEvent] fails on a type it does not know rather than guessing.
+// body structs in this file; the interface is closed in practice, and
+// [Event.UnmarshalJSON] fails on a type it does not know rather than guessing.
 //
 // Every implementation marshals to a JSON OBJECT. A body that marshals to an
 // array or a scalar cannot be spliced flat into the envelope, and
 // [Event.MarshalJSON] reports that as an error rather than emitting a line
 // no subscriber can parse.
 type Body interface {
-	// StreamType reports the type stamped on the wire. It is derived from the body
-	// rather than stored on the envelope so the two can never disagree.
-	StreamType() EventType
+	// EventType reports the type stamped on the wire. It is derived from the
+	// body rather than stored on the envelope so the two can never disagree.
+	EventType() EventType
 }
 
 // Run is the body of [RunStarted] and [RunFinished].
@@ -132,10 +131,10 @@ type Run struct {
 	Status string `json:"status,omitempty"`
 }
 
-// StreamType reports [RunStarted] or [RunFinished] from Phase. An
+// EventType reports [RunStarted] or [RunFinished] from Phase. An
 // unset or unrecognized Phase reports RunFinished, so a malformed body
 // still closes a run a subscriber has open rather than leaving a spinner forever.
-func (b Run) StreamType() EventType {
+func (b Run) EventType() EventType {
 	if b.Phase == "started" {
 		return RunStarted
 	}
@@ -168,8 +167,8 @@ type Target struct {
 	Error string `json:"error,omitempty"`
 }
 
-// StreamType implements [Body].
-func (Target) StreamType() EventType { return TargetResult }
+// EventType implements [Body].
+func (Target) EventType() EventType { return TargetResult }
 
 // Output is the body of [TargetOutput]: one line a subprocess wrote.
 //
@@ -186,8 +185,8 @@ type Output struct {
 	Text string `json:"text"`
 }
 
-// StreamType implements [Body].
-func (Output) StreamType() EventType { return TargetOutput }
+// EventType implements [Body].
+func (Output) EventType() EventType { return TargetOutput }
 
 // streamHead is the envelope half of a marshalled line. It exists so
 // [Event.MarshalJSON] can encode the fixed fields with the standard
@@ -213,7 +212,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	}
 	head, err := codec.Marshal(streamHead{
 		Schema:    Schema,
-		Type:      e.Body.StreamType(),
+		Type:      e.Body.EventType(),
 		Ts:        e.Ts,
 		Workspace: e.Workspace,
 		Inv:       e.Inv,
@@ -239,59 +238,40 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalJSON decodes one wire line. Without it every field is tagged "-", so
-// json.Unmarshal would report no error and leave a zero event with a nil Body.
+// UnmarshalJSON decodes one wire line, the counterpart to [Event.MarshalJSON]
+// for Go subscribers. An unknown type is an error: a Go caller can switch on
+// the type first, and a silent zero body would be worse. A newer schema is
+// read, since additive changes keep old fields meaning what they meant.
 func (e *Event) UnmarshalJSON(line []byte) error {
-	got, err := DecodeStreamEvent(line)
-	if err != nil {
-		return err
-	}
-	*e = got
-	return nil
-}
-
-// DecodeStreamEvent parses one wire line back into a [Event].
-//
-// It is the counterpart to [Event.MarshalJSON] for Go subscribers and for
-// round-trip tests; the reference clients decode in their own language. An
-// unrecognized type is an error here rather than a skip, because a Go caller can
-// check [EventType] before decoding and a silent zero body would be worse
-// than a refusal. Line-oriented consumers that want the documented
-// skip-what-you-do-not-know behavior should switch on the type first.
-//
-// A schema newer than [Schema] is decoded rather than refused: the envelope
-// contract is that additive changes keep old fields meaning what they meant, so a
-// client built against schema 1 reads a schema 2 line correctly for the fields it
-// knows.
-func DecodeStreamEvent(line []byte) (Event, error) {
 	var head streamHead
 	if err := codec.Unmarshal(line, &head); err != nil {
-		return Event{}, fmt.Errorf("decode stream event: %w", err)
+		return fmt.Errorf("decode stream event: %w", err)
 	}
 	var body Body
 	switch head.Type {
 	case RunStarted, RunFinished:
 		var b Run
 		if err := codec.Unmarshal(line, &b); err != nil {
-			return Event{}, err
+			return err
 		}
 		body = b
 	case TargetResult:
 		var b Target
 		if err := codec.Unmarshal(line, &b); err != nil {
-			return Event{}, err
+			return err
 		}
 		body = b
 	case TargetOutput:
 		var b Output
 		if err := codec.Unmarshal(line, &b); err != nil {
-			return Event{}, err
+			return err
 		}
 		body = b
 	default:
-		return Event{}, fmt.Errorf("decode stream event: unknown type %q", head.Type)
+		return fmt.Errorf("decode stream event: unknown type %q", head.Type)
 	}
-	return Event{Ts: head.Ts, Workspace: head.Workspace, Inv: head.Inv, Body: body}, nil
+	*e = Event{Ts: head.Ts, Workspace: head.Workspace, Inv: head.Inv, Body: body}
+	return nil
 }
 
 // EventTypes lists the taxonomy in wire order for `magus events --help` and
@@ -334,12 +314,9 @@ func (f Filter) Allows(t EventType) bool {
 	return false
 }
 
-// ParseStreamEventType validates a type name from a flag or a subscribe frame.
-//
-// It refuses an unknown name instead of ignoring it: a typo in `--type
-// target.reslut` would otherwise present as a stream that is simply quiet, which
-// is the failure a person debugs for an hour.
-func ParseStreamEventType(s string) (EventType, error) {
+// ParseEventType refuses a name that is not a type. A typo in `--type
+// target.reslut` ignored would read as a stream that is simply quiet.
+func ParseEventType(s string) (EventType, error) {
 	for _, t := range EventTypes() {
 		if string(t) == s {
 			return t, nil

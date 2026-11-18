@@ -1,10 +1,10 @@
-package eventstream
+package main
 
 import (
 	"errors"
 	"testing"
 
-	eventstypes "github.com/egladman/magus/types/events"
+	"github.com/egladman/magus/libs/safetyscissors/journal/stream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ func TestParseFilterEmptyAllowsEverything(t *testing.T) {
 func TestParseFilterTrimsAndSkipsEmptyNames(t *testing.T) {
 	f, err := ParseFilter(" target.result , ,run.started,")
 	require.NoError(t, err)
-	assert.Equal(t, []eventstypes.EventType{eventstypes.TargetResult, eventstypes.RunStarted}, f.Types)
+	assert.Equal(t, []stream.EventType{stream.TargetResult, stream.RunStarted}, f.Types)
 }
 
 func TestParseFilterRefusesATypoAndListsTheTaxonomy(t *testing.T) {
@@ -32,27 +32,27 @@ func TestParseFilterRefusesATypoAndListsTheTaxonomy(t *testing.T) {
 
 func TestRecordEmitterNamesEachEventByItsType(t *testing.T) {
 	var gotNames [][]string
-	emit := RecordEmitter(eventstypes.Filter{}, func(_ any, names []string) error {
+	emit := RecordEmitter(stream.Filter{}, func(_ any, names []string) error {
 		gotNames = append(gotNames, names)
 		return nil
 	})
-	require.NoError(t, emit(eventstypes.Event{Body: eventstypes.Target{Project: "api"}}))
-	assert.Equal(t, [][]string{{string(eventstypes.TargetResult)}}, gotNames)
+	require.NoError(t, emit(stream.Event{Body: stream.Target{Project: "api"}}))
+	assert.Equal(t, [][]string{{string(stream.TargetResult)}}, gotNames)
 }
 
 func TestRecordEmitterDropsFilteredAndBodylessEvents(t *testing.T) {
 	calls := 0
-	emit := RecordEmitter(eventstypes.Filter{Types: []eventstypes.EventType{eventstypes.TargetOutput}}, func(any, []string) error {
+	emit := RecordEmitter(stream.Filter{Types: []stream.EventType{stream.TargetOutput}}, func(any, []string) error {
 		calls++
 		return nil
 	})
-	require.NoError(t, emit(eventstypes.Event{Body: eventstypes.Target{}}))
-	require.NoError(t, emit(eventstypes.Event{}))
+	require.NoError(t, emit(stream.Event{Body: stream.Target{}}))
+	require.NoError(t, emit(stream.Event{}))
 	assert.Zero(t, calls)
 }
 
 func TestRecordEmitterReturnsTheRendererError(t *testing.T) {
 	want := errors.New("closed pipe")
-	emit := RecordEmitter(eventstypes.Filter{}, func(any, []string) error { return want })
-	assert.ErrorIs(t, emit(eventstypes.Event{Body: eventstypes.Target{}}), want)
+	emit := RecordEmitter(stream.Filter{}, func(any, []string) error { return want })
+	assert.ErrorIs(t, emit(stream.Event{Body: stream.Target{}}), want)
 }
