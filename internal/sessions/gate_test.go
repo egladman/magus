@@ -14,10 +14,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+type GateSuite struct{ suite.Suite }
+
+func TestGate(t *testing.T) { suite.Run(t, new(GateSuite)) }
+
 // TestGateRoundTrip proves a gate verdict written by one producer is read back
 // by another through the folded store, the way two worktrees of one repo share
 // it.
-func TestGateRoundTrip(t *testing.T) {
+func (s *GateSuite) TestGateRoundTrip() {
+	t := s.T()
 	dir := t.TempDir()
 	start := session.InvocationStart{Workspace: "/repo", Command: "gate"}
 	g := GateResult{
@@ -51,7 +56,8 @@ func TestGateRoundTrip(t *testing.T) {
 
 // TestGateNewestWins proves a later fail supersedes an earlier pass: the
 // redundancy check must see a red branch, not the stale green behind it.
-func TestGateNewestWins(t *testing.T) {
+func (s *GateSuite) TestGateNewestWins() {
+	t := s.T()
 	dir := t.TempDir()
 	start := session.InvocationStart{Workspace: "/repo"}
 	pass := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomePass, Fingerprint: "f1"}
@@ -70,7 +76,8 @@ func TestGateNewestWins(t *testing.T) {
 
 // TestLatestGateEmptyStore is the inert state: nothing recorded means no
 // finding, so the first gate on a branch always runs.
-func TestLatestGateEmptyStore(t *testing.T) {
+func (s *GateSuite) TestLatestGateEmptyStore() {
+	t := s.T()
 	fold, err := session.ReadAll(t.Context(), t.TempDir())
 	require.NoError(t, err)
 	_, ok := LatestGate(fold, "b", "ci")
@@ -80,7 +87,8 @@ func TestLatestGateEmptyStore(t *testing.T) {
 // TestGateAtMatchesTheCommitOnAnyRef pins the lookup the push rule reads: a verdict at a
 // commit answers for that commit whichever branch recorded it, an abbreviation matches
 // the full id, and a deferral never counts as a verdict.
-func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
+func (s *GateSuite) TestGateAtMatchesTheCommitOnAnyRef() {
+	t := s.T()
 	dir := t.TempDir()
 	start := session.InvocationStart{Workspace: "/repo"}
 	require.NoError(t, RecordGate(t.Context(), dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "a", Commit: "a89dee5c7f00", Outcome: session.OutcomePass}, start))

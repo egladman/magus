@@ -6,15 +6,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
+type ActivitySuite struct{ suite.Suite }
+
+func TestActivity(t *testing.T) { suite.Run(t, new(ActivitySuite)) }
+
 // The lineage join: a loaded transcript and the guard's live observations share the host
 // session id, so `show` reports what the trail in this checkout saw the session do, under
 // which lease, and whom it spawned.
-func TestActivityHereJoinsThisCheckoutsLog(t *testing.T) {
+func (s *ActivitySuite) TestActivityHereJoinsThisCheckoutsLog() {
+	t := s.T()
 	cacheDir := t.TempDir()
 	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
 	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
@@ -30,7 +36,8 @@ func TestActivityHereJoinsThisCheckoutsLog(t *testing.T) {
 	assert.Contains(t, out.String(), "spawned Explore (lease fleet/w1-child)")
 }
 
-func TestActivityHereIsAbsentForASessionThatRanElsewhere(t *testing.T) {
+func (s *ActivitySuite) TestActivityHereIsAbsentForASessionThatRanElsewhere() {
+	t := s.T()
 	cacheDir := t.TempDir()
 	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 

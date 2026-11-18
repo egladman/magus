@@ -12,7 +12,12 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type CostSuite struct{ suite.Suite }
+
+func TestCost(t *testing.T) { suite.Run(t, new(CostSuite)) }
 
 var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
 
@@ -34,7 +39,8 @@ func mainCall(sec int, size int64, mdl string) activityCall {
 	return activityCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
 }
 
-func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostMeasuresEverySectionFromACompleteTrail() {
+	t := s.T()
 	tr := &Activity{Commands: 6, Spawns: []activitySpawn{
 		{Child: "Explore", At: at(5), DeclaredModel: "claude-sonnet-5-5"},
 		{Child: "Explore", At: at(100), DeclaredModel: ""},
@@ -92,7 +98,8 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 	assert.InDelta(t, (0.1+0.3+0.6)*0.20, got.Dollars.FloorUSD, 1e-9)
 }
 
-func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostSaysNothingWasMeasuredWithoutATrail() {
+	t := s.T()
 	got := SummarizeCost(nil, fixtureModels())
 
 	assert.Nil(t, got.RootContext)
@@ -100,7 +107,8 @@ func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
 	assert.Len(t, got.NotMeasured, len(costSections), "every section names why it is empty")
 }
 
-func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts() {
+	t := s.T()
 	tr := &Activity{Commands: 3, Spawns: []activitySpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
 
 	got := SummarizeCost(tr, fixtureModels())
@@ -113,7 +121,8 @@ func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 }
 
 // The path `session show` takes: calls written by the hook, folded by readActivity, summarized.
-func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostReadsTheFactsAHookRecorded() {
+	t := s.T()
 	base := t.TempDir()
 	for range 2 {
 		recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
@@ -140,7 +149,8 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	assert.Equal(t, types.AgentBillingMetered, got.Dollars.Billing)
 }
 
-func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot() {
+	t := s.T()
 	calls := []activityCall{{At: at(1), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}}
 
 	got := SummarizeCost(&Activity{Commands: 1, Calls: calls}, fixtureModels())
@@ -149,7 +159,8 @@ func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
 	assert.Equal(t, "no call is known to be on the main thread (1 of unknown thread)", got.NotMeasured[costRootContext])
 }
 
-func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
+func (s *CostSuite) TestSummarizeCostLeavesItsCallersCallsInOrder() {
+	t := s.T()
 	calls := []activityCall{mainCall(2, 1, "m"), mainCall(1, 1, "m")}
 
 	SummarizeCost(&Activity{Calls: calls}, fixtureModels())
@@ -159,7 +170,8 @@ func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
 
 // No call observing a result is unmeasured; a call observing an empty one is a measured
 // zero.
-func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
+func (s *CostSuite) TestDelegableTellsAnUnobservedResultFromAnEmptyOne() {
+	t := s.T()
 	assert.Nil(t, sumDelegable([]activityCall{mainCall(1, 1, "m")}))
 
 	empty := mainCall(1, 1, "m")
@@ -170,7 +182,8 @@ func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
 	assert.Zero(t, got.Share())
 }
 
-func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
+func (s *CostSuite) TestDollarsPriceTheCacheReadFloorOnceForEachModelCall() {
+	t := s.T()
 	metered := func(sec int, size int64, mdl string) activityCall {
 		c := mainCall(sec, size, mdl)
 		c.Billing = types.AgentBillingMetered
@@ -190,29 +203,30 @@ func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
 	assert.InDelta(t, 0.5*0.20+0.6*0.20+0.15*0.01*5, est.FloorUSD, 1e-9)
 }
 
-func TestDollarsAreWithheldWhenTheyWouldBeAGuess(t *testing.T) {
-	for name, tc := range map[string]struct {
-		billing types.AgentBilling
-		model   string
-		want    string
-	}{
-		"quota":         {types.AgentBillingQuota, "claude-opus-5-5", "billing is quota, which has no per-token price"},
-		"unset":         {"", "claude-opus-5-5", "billing is unknown: set agents.billing in magus.yaml"},
-		"unknown model": {types.AgentBillingMetered, "claude-opus-9", `model "claude-opus-9" is not in the model table: add it under agents.models in magus.yaml`},
-	} {
-		t.Run(name, func(t *testing.T) {
-			c := mainCall(1, 400_000, tc.model)
-			c.Billing = tc.billing
-
-			est, why := estimateDollars([]activityCall{c}, fixtureModels())
-
-			assert.Nil(t, est)
-			assert.Equal(t, tc.want, why)
-		})
-	}
+// withheld prices one call billed as billing on mdl, which must be withheld,
+// and returns why.
+func (s *CostSuite) withheld(billing types.AgentBilling, mdl string) string {
+	c := mainCall(1, 400_000, mdl)
+	c.Billing = billing
+	est, why := estimateDollars([]activityCall{c}, fixtureModels())
+	s.Nil(est)
+	return why
 }
 
-func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
+func (s *CostSuite) TestDollarsAreWithheldUnderQuotaBilling() {
+	s.Equal("billing is quota, which has no per-token price", s.withheld(types.AgentBillingQuota, "claude-opus-5-5"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldWithBillingUnset() {
+	s.Equal("billing is unknown: set agents.billing in magus.yaml", s.withheld("", "claude-opus-5-5"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldForAModelTheTableLacks() {
+	s.Equal(`model "claude-opus-9" is not in the model table: add it under agents.models in magus.yaml`, s.withheld(types.AgentBillingMetered, "claude-opus-9"))
+}
+
+func (s *CostSuite) TestDollarsAreWithheldWhenOneCallLacksBilling() {
+	t := s.T()
 	billed := mainCall(1, 400_000, "claude-opus-5-5")
 	billed.Billing = types.AgentBillingMetered
 
@@ -222,7 +236,8 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	assert.Contains(t, why, "billing is unknown")
 }
 
-func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
+func (s *CostSuite) TestAdvisoryFollowEndsAfterTheWindow() {
+	t := s.T()
 	adv := mainCall(0, 1, "m")
 	adv.Decision, adv.Rule = verdict.Advise, "root-heavy-command"
 	main := []activityCall{adv}
@@ -239,13 +254,15 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 }
 
 // Every declared decision is printed, a zero included, in the declared order.
-func TestShadowTallyPrintsEveryDecision(t *testing.T) {
+func (s *CostSuite) TestShadowTallyPrintsEveryDecision() {
+	t := s.T()
 	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, verdict.Ask: 1}}
 
 	assert.Equal(t, "standard 0 defer/2 advise/1 ask/0 deny", tally.String())
 }
 
-func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
+func (s *CostSuite) TestRenderCostPrintsMeasuredAndUnmeasuredSections() {
+	t := s.T()
 	tr := &Activity{Commands: 2, Spawns: []activitySpawn{
 		{Child: "Explore", At: at(9), DeclaredModel: "claude-sonnet-5-5"},
 		{Child: "Explore", At: at(10)},

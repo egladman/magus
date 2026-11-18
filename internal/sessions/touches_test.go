@@ -19,6 +19,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+type TouchesSuite struct{ suite.Suite }
+
+func TestTouches(t *testing.T) { suite.Run(t, new(TouchesSuite)) }
+
 // record writes one observation the way the guard hook does.
 func record(t *testing.T, base string, c recorder.AgentCommand) {
 	t.Helper()
@@ -42,7 +46,8 @@ func recordUndecodable(t *testing.T, base string) string {
 }
 
 // A blob that does not decode is named, and the touches the rest give are still returned.
-func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
+func (s *TouchesSuite) TestReplayReturnsAnUndecodableBlobBesideTheTouches() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileWrite, Path: "magus.go"})
 	ref := recordUndecodable(t, base)
@@ -55,7 +60,8 @@ func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
 	assert.Len(t, got["magus.go"], 1)
 }
 
-func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
+func (s *TouchesSuite) TestReplayThreadsReadsIntoTheWriteThatFollowed() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: recorder.ToolFileRead, Path: "internal/cache/output.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "types/impact.go"})
@@ -82,7 +88,8 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 // payload is served to every MCP client. This is a REGRESSION test for an observed leak: an
 // op=state response carried a live server bearer token, in exactly the shape below, because
 // the trail stored the command line verbatim.
-func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
+func (s *TouchesSuite) TestReplayKeepsCredentialsOutOfTheTrail() {
+	t := s.T()
 	const token = "mgs_liveTokenThatMustNotEscape" // a fixture, not a credential
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: `T=` + token + ` curl -H "Authorization: Bearer $T" http://127.0.0.1:7391/mcp`})
@@ -104,7 +111,8 @@ func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 
 // The whole point of walking oldest-first: a path reached AFTER the write must not
 // retroactively become its explanation.
-func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
+func (s *TouchesSuite) TestReplayIgnoresReadsThatCameAfterTheWrite() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "before.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
@@ -118,7 +126,8 @@ func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
 
 // An agent almost always reads a file before editing it; reporting that as context crowds out
 // the paths that actually explain the edit.
-func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
+func (s *TouchesSuite) TestReplayDropsTheWrittenFileFromItsOwnReadList() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "target.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "context.go"})
@@ -130,7 +139,8 @@ func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
 }
 
 // A session that edits a file repeatedly is ONE story, not eleven.
-func TestReplayKeepsOneTouchPerSession(t *testing.T) {
+func (s *TouchesSuite) TestReplayKeepsOneTouchPerSession() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "first.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
@@ -143,7 +153,8 @@ func TestReplayKeepsOneTouchPerSession(t *testing.T) {
 	assert.Contains(t, touches[0].Read, "second.go")
 }
 
-func TestReplaySeparatesSessions(t *testing.T) {
+func (s *TouchesSuite) TestReplaySeparatesSessions() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "a.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileWrite, Path: "target.go"})
@@ -166,14 +177,16 @@ func TestReplaySeparatesSessions(t *testing.T) {
 
 // A host with no session id produces attributable events that cannot be threaded into a story.
 // Collapsing them all into one fictional session would invent a narrative.
-func TestReplaySkipsEventsWithNoSession(t *testing.T) {
+func (s *TouchesSuite) TestReplaySkipsEventsWithNoSession() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Tool: recorder.ToolFileRead, Path: "a.go"})
 	record(t, base, recorder.AgentCommand{Tool: recorder.ToolFileWrite, Path: "target.go"})
 	assert.Empty(t, replayed(t, "", base, []string{"target.go"}, 100))
 }
 
-func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
+func (s *TouchesSuite) TestReplayOnlyReportsRequestedPaths() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "wanted.go"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "unwanted.go"})
@@ -184,7 +197,8 @@ func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
 }
 
 // A repeated read must not fill the whole window with one path.
-func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
+func (s *TouchesSuite) TestReplayDeduplicatesRepeatedReads() {
+	t := s.T()
 	base := t.TempDir()
 	for range 5 {
 		record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "same.go"})
@@ -199,13 +213,15 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 
 // A workspace whose agents have no guard hook wired is the normal case, and a review has to
 // open anyway.
-func TestReplayOnAnEmptyTrailIsEmptyNotAnError(t *testing.T) {
+func (s *TouchesSuite) TestReplayOnAnEmptyTrailIsEmptyNotAnError() {
+	t := s.T()
 	assert.Empty(t, replayed(t, "", t.TempDir(), []string{"anything.go"}, 100))
 }
 
 // replayLoaded answers the same question from a loaded transcript: the reads and programs
 // that preceded a write, ordered by the host's clock rather than by arrival.
-func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
+func (s *TouchesSuite) TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed() {
+	t := s.T()
 	dir := t.TempDir()
 	_, err := session.LoadEvents(t.Context(), dir, []session.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
@@ -232,7 +248,8 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 
 // AttachTouches merges both stores onto the review: the trail wins for a session both hold,
 // and the loaded transcripts add the sessions no hook observed.
-func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
+func (s *TouchesSuite) TestAttachTouchesMergesTheTrailAndTheLoadedStore() {
+	t := s.T()
 	testkit.Isolate(t)
 	root, base := t.TempDir(), t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "from-trail.go"})
@@ -258,7 +275,8 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 	assert.Nil(t, rev.Files[1].Touches, "a file nobody wrote keeps no touches")
 }
 
-func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
+func (s *TouchesSuite) TestAttachTouchesLeavesTheReviewAloneWithNeitherStore() {
+	t := s.T()
 	testkit.Isolate(t)
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}}}
 	require.NoError(t, AttachTouches(t.Context(), &rev, t.TempDir(), t.TempDir()))
@@ -267,7 +285,8 @@ func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 
 // ForSession is the join a transcript reader needs: what the guard saw this host session do
 // in this checkout, under which lease, and whom it handed work to.
-func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
+func (s *TouchesSuite) TestForSessionFoldsOneHostSessionsTrail() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
@@ -298,7 +317,8 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 }
 
 // The post-call tool-time row is the same call as the pre-call row before it.
-func TestForSessionCountsACallOnceWithItsToolTime(t *testing.T) {
+func (s *TouchesSuite) TestForSessionCountsACallOnceWithItsToolTime() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: "Bash", ToolMs: 40})
@@ -311,7 +331,8 @@ func TestForSessionCountsACallOnceWithItsToolTime(t *testing.T) {
 
 // A response blob written before the defer rename holds "pass", and the read refuses it
 // with the store to clear rather than count the call as undecided.
-func TestForSessionRefusesARetiredDecision(t *testing.T) {
+func (s *TouchesSuite) TestForSessionRefusesARetiredDecision() {
+	t := s.T()
 	base := t.TempDir()
 	response := recorder.WritePayload(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
 	ref := response.Ref
@@ -323,7 +344,8 @@ func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	assert.Equal(t, recorder.RetiredDecisionError{Store: filepath.Join(base, "activity"), Ref: ref, Decision: "pass"}, *retired, "the store to clear is the activity directory")
 }
 
-func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
+func (s *TouchesSuite) TestForSessionReturnsEachCallsCostFacts() {
+	t := s.T()
 	base := t.TempDir()
 	shadow := map[types.GuardProfile]verdict.Decision{types.GuardProfileStandard: verdict.Advise}
 	advised := types.AgentFacts{

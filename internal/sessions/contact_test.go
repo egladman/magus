@@ -8,7 +8,12 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ContactSuite struct{ suite.Suite }
+
+func TestContact(t *testing.T) { suite.Run(t, new(ContactSuite)) }
 
 // contact is one event to lay down, flattened so a case reads as a table.
 type contact struct {
@@ -38,8 +43,8 @@ func contactStore(t *testing.T, events ...contact) string {
 	return dir
 }
 
-func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
-	t.Parallel()
+func (s *ContactSuite) TestReadPathContactCountsSessionsNotEvents() {
+	t := s.T()
 
 	now := time.Now().UnixMilli()
 	dir := contactStore(t,
@@ -58,8 +63,8 @@ func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
 // TestReadPathContactIgnoresPathlessKinds pins that only file events count. A shell
 // command's text is never stored, so anything else matching a path is not contact with
 // the file.
-func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
-	t.Parallel()
+func (s *ContactSuite) TestReadPathContactIgnoresPathlessKinds() {
+	t := s.T()
 
 	dir := contactStore(t,
 		contact{session: "one", kind: session.EventShellCommand, path: "magusfile.buzz", atMs: 5},
@@ -70,8 +75,8 @@ func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
 	assert.Equal(t, PathContact{}, readPathContact(t.Context(), dir, "magusfile.buzz"))
 }
 
-func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
-	t.Parallel()
+func (s *ContactSuite) TestReadPathContactRecordsWhatTheHostRefused() {
+	t := s.T()
 
 	dir := contactStore(t,
 		contact{session: "one", kind: session.EventFileWrite, path: "gen/graph.json", atMs: 10, denied: true},
@@ -87,8 +92,8 @@ func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
 // does not get one invented. Taken literally a zero is 1970, which is After every real
 // time, so one undated event would date the whole contact to the epoch and render as a
 // confident "20000 days ago" rather than the missing answer it is.
-func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
-	t.Parallel()
+func (s *ContactSuite) TestReadPathContactLeavesAnUndatedContactUndated() {
+	t := s.T()
 
 	dir := contactStore(t,
 		contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 0},
@@ -98,8 +103,8 @@ func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(t.Context(), dir, "a.go"))
 }
 
-func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
-	t.Parallel()
+func (s *ContactSuite) TestReadPathContactSaysNothingWhenThereIsNothingToSay() {
+	t := s.T()
 
 	dir := contactStore(t, contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 1})
 

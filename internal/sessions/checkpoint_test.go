@@ -10,7 +10,12 @@ import (
 	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type CheckpointSuite struct{ suite.Suite }
+
+func TestCheckpoint(t *testing.T) { suite.Run(t, new(CheckpointSuite)) }
 
 func hostCheckpoint() Checkpoint {
 	return Checkpoint{
@@ -49,8 +54,8 @@ func recorded(t *testing.T, dir string) []Checkpoint {
 	return out
 }
 
-func TestRecordCheckpointRoundTrip(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestRecordCheckpointRoundTrip() {
+	t := s.T()
 	dir := t.TempDir()
 	want := hostCheckpoint()
 
@@ -63,8 +68,8 @@ func TestRecordCheckpointRoundTrip(t *testing.T) {
 
 // The case that makes this a developer's tool rather than an agent's: two branches
 // parked by a person, with no host session anywhere, are two lines of work.
-func TestLatestCheckpointsSeparateAPersonsBranches(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestLatestCheckpointsSeparateAPersonsBranches() {
+	t := s.T()
 	dir := t.TempDir()
 	monday := personCheckpoint("/repo", "cache-dynamic-needs", "waiting on the review")
 	tuesday := personCheckpoint("/repo", "release-index", "half a manifest written")
@@ -81,8 +86,8 @@ func TestLatestCheckpointsSeparateAPersonsBranches(t *testing.T) {
 
 // The store is repo-wide across clones and worktrees, so a branch name alone is not a
 // line of work: two checkouts parked on main are two.
-func TestLatestCheckpointsSeparateWorktreesOnOneBranch(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestLatestCheckpointsSeparateWorktreesOnOneBranch() {
+	t := s.T()
 	dir := t.TempDir()
 	here := personCheckpoint("/repo", "main", "mid-refactor")
 	there := personCheckpoint("/repo-review", "main", "reviewing a pull request")
@@ -97,8 +102,8 @@ func TestLatestCheckpointsSeparateWorktreesOnOneBranch(t *testing.T) {
 }
 
 // A host hook fires every turn. Turns that moved nothing must not each cost a record.
-func TestRecordCheckpointSkipsAnUnchangedRefile(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestRecordCheckpointSkipsAnUnchangedRefile() {
+	t := s.T()
 	dir := t.TempDir()
 	c := hostCheckpoint()
 
@@ -112,8 +117,8 @@ func TestRecordCheckpointSkipsAnUnchangedRefile(t *testing.T) {
 	assert.Len(t, recorded(t, dir), 1)
 }
 
-func TestRecordCheckpointSupersedesRatherThanRewrites(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestRecordCheckpointSupersedesRatherThanRewrites() {
+	t := s.T()
 	dir := t.TempDir()
 	first := hostCheckpoint()
 	second := first
@@ -140,8 +145,8 @@ func TestRecordCheckpointSupersedesRatherThanRewrites(t *testing.T) {
 
 // Every checkpoint on one line of work shares a session file, or a hook firing each turn
 // buries the run history it sits above.
-func TestRecordCheckpointAppendsToOneSessionFile(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestRecordCheckpointAppendsToOneSessionFile() {
+	t := s.T()
 	dir := t.TempDir()
 	c := hostCheckpoint()
 
@@ -158,8 +163,8 @@ func TestRecordCheckpointAppendsToOneSessionFile(t *testing.T) {
 	assert.Len(t, session.Summarize(fold), 1)
 }
 
-func TestLatestCheckpointsReportOneThreadPerHostSession(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestLatestCheckpointsReportOneThreadPerHostSession() {
+	t := s.T()
 	dir := t.TempDir()
 	codex := hostCheckpoint()
 	claude := Checkpoint{Host: "claude", HostSession: "54023016-5d8b", Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "62660968c", Branch: "main"}}
@@ -175,8 +180,8 @@ func TestLatestCheckpointsReportOneThreadPerHostSession(t *testing.T) {
 // The store is grow-only and every reader folds all of it, so one pasted transcript
 // cannot become a cost every later read pays. The caller is told what was stored, not
 // what it asked for.
-func TestRecordCheckpointClampsANoteAndReportsTheStoredOne(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestRecordCheckpointClampsANoteAndReportsTheStoredOne() {
+	t := s.T()
 	dir := t.TempDir()
 	c := personCheckpoint("/repo", "main", strings.Repeat("e", MaxMessageBytes+512))
 
@@ -188,8 +193,8 @@ func TestRecordCheckpointClampsANoteAndReportsTheStoredOne(t *testing.T) {
 	assert.Equal(t, []Checkpoint{stored}, recorded(t, dir))
 }
 
-func TestLatestCheckpointsIsEmptyWithoutAny(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestLatestCheckpointsIsEmptyWithoutAny() {
+	t := s.T()
 	dir := t.TempDir()
 
 	w, err := session.Open(t.Context(), dir, "sess1", session.InvocationStart{Command: "run build"})
@@ -201,15 +206,16 @@ func TestLatestCheckpointsIsEmptyWithoutAny(t *testing.T) {
 
 // A detached HEAD has no branch to key on; two of them in one workspace are one line
 // of work rather than an unbounded stream of them.
-func TestCheckpointKeyFallsBackToTheWorkspace(t *testing.T) {
-	t.Parallel()
+func (s *CheckpointSuite) TestCheckpointKeyFallsBackToTheWorkspace() {
+	t := s.T()
 	detached := Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "deadbeef"}}
 	other := Checkpoint{Workspace: "/other", Tree: vcs.Checkpoint{Revision: "deadbeef"}}
 
 	assert.Equal(t, checkpointKey(detached), checkpointKey(Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "cafe"}}))
 	assert.NotEqual(t, checkpointKey(detached), checkpointKey(other))
 }
-func TestCheckpointRecordedLineDistinguishesANewOneFromAnUnchangedOne(t *testing.T) {
+func (s *CheckpointSuite) TestCheckpointRecordedLineDistinguishesANewOneFromAnUnchangedOne() {
+	t := s.T()
 	c := Checkpoint{
 		Workspace: "/repo",
 		Tree:      vcs.Checkpoint{Revision: "9cd51c88aef0d1e2", Branch: "handoff", Dirty: true},
@@ -223,11 +229,13 @@ func TestCheckpointRecordedLineDistinguishesANewOneFromAnUnchangedOne(t *testing
 }
 
 // A tree before its first commit, or under no VCS, still has a location worth naming.
-func TestCheckpointWhereNamesTheWorkspaceWithoutARevision(t *testing.T) {
+func (s *CheckpointSuite) TestCheckpointWhereNamesTheWorkspaceWithoutARevision() {
+	t := s.T()
 	assert.Equal(t, "/repo", checkpointWhere(Checkpoint{Workspace: "/repo"}))
 	assert.Equal(t, "codex /repo", checkpointWhere(Checkpoint{Host: "codex", Workspace: "/repo"}))
 }
-func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
+func (s *CheckpointSuite) TestRenderCheckpointsBoundsTheListAndPointsAtTheRest() {
+	t := s.T()
 	at := time.Date(2026, 9, 8, 12, 42, 45, 0, time.UTC)
 	var records []CheckpointRecord
 	for _, branch := range []string{"one", "two", "three", "four", "five"} {
@@ -247,7 +255,8 @@ func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
 	assert.Contains(t, got, "and 2 more")
 	assert.Contains(t, got, "2026-09-08 12:42:45")
 }
-func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
+func (s *CheckpointSuite) TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny() {
+	t := s.T()
 	var b strings.Builder
 	renderCheckpoints(context.Background(), "", &b, []CheckpointRecord{{
 		Checkpoint: Checkpoint{
@@ -269,7 +278,8 @@ func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
 
 // Nothing recorded prints nothing at all, so the listing keeps its shape for the common
 // case of a repository where every session finished what it started.
-func TestRenderCheckpointsIsSilentWithNothingRecorded(t *testing.T) {
+func (s *CheckpointSuite) TestRenderCheckpointsIsSilentWithNothingRecorded() {
+	t := s.T()
 	var b strings.Builder
 	renderCheckpoints(context.Background(), "", &b, nil)
 	assert.Empty(t, b.String())

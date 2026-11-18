@@ -57,7 +57,12 @@ func captureFactWarnings(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
+type FactsSuite struct{ suite.Suite }
+
+func TestFacts(t *testing.T) { suite.Run(t, new(FactsSuite)) }
+
+func (s *FactsSuite) TestFactHandlerRecordsOneFactPerTargetResult() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -105,7 +110,8 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	}, fold.Records[0])
 }
 
-func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerMapsStatusOntoOutcomeAndReplay() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -131,7 +137,8 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	}, summaries[0].Targets)
 }
 
-func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerCopiesTheClaimAndCost() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -163,7 +170,8 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 
 // Everything that is not a target result must leave no trace, or the session store
 // becomes a second copy of the execution journal.
-func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerIgnoresEverythingButResults() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -186,7 +194,8 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 
 // Two invocations against two worktrees of one repo must land in one store, which is
 // what makes `magus session` a cross-worktree view rather than a per-checkout one.
-func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerFoldsSessionsFromEveryWorktree() {
+	t := s.T()
 	testkit.Isolate(t)
 
 	main := t.TempDir()
@@ -220,7 +229,8 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 
 // A store that cannot be written is the case where silence lies: nothing is recorded,
 // and `magus session` then reports in good faith that no session has run.
-func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -248,7 +258,8 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 // The lease is stamped from the SessionStart the caller supplied, never re-read per fact:
 // a mid-run environment change would otherwise split one session's facts across two
 // leases, which is a history no producer could have meant.
-func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
+func (s *FactsSuite) TestFactHandlerStampsTheSuppliedLeaseOnEveryFact() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -274,7 +285,8 @@ func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 // With no resolvable state directory there is nowhere to journal, and a machine in that
 // state must still be able to run builds. The nil is an untyped one, so a caller may
 // compare it against nil rather than reaching for reflection.
-func TestNewFactHandlerIsNilWithoutAStateDir(t *testing.T) {
+func (s *FactsSuite) TestNewFactHandlerIsNilWithoutAStateDir() {
+	t := s.T()
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")

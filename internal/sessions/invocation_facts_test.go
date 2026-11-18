@@ -15,7 +15,12 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type InvocationFactsSuite struct{ suite.Suite }
+
+func TestInvocationFacts(t *testing.T) { suite.Run(t, new(InvocationFactsSuite)) }
 
 // emitJournalEvent hands one result for inv to the sink h.
 func emitJournalEvent(t *testing.T, h recorder.Sink, inv string, run journal.Run) {
@@ -52,7 +57,8 @@ func firstPayload(t *testing.T, fold session.Fold, kind string) string {
 	return ""
 }
 
-func TestWithInvocationFactsRecordsAffectedResults(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsRecordsAffectedResults() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -96,7 +102,8 @@ func TestWithInvocationFactsRecordsAffectedResults(t *testing.T) {
 // `magus session` is a view of the repository, so a fact must not carry a trace of which
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
-func TestWithInvocationFactsWritesTheSameFactForRunAndAffected(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsWritesTheSameFactForRunAndAffected() {
+	t := s.T()
 	testkit.Isolate(t)
 	runRoot, affectedRoot := t.TempDir(), t.TempDir()
 
@@ -137,37 +144,41 @@ func TestWithInvocationFactsWritesTheSameFactForRunAndAffected(t *testing.T) {
 // The lease is stamped in the shared wiring, not per command, for the same reason the fact shape
 // is: `magus session` is a view of the repository, and a lease that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestWithInvocationFactsStampsTheLeaseOnEveryVerb(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsStampsTheLeaseOnRun() {
+	s.leaseStamped("run", "ci", "api")
+}
+
+func (s *InvocationFactsSuite) TestWithInvocationFactsStampsTheLeaseOnAffected() {
+	s.leaseStamped("affected", "ci")
+}
+
+// leaseStamped records one result under verb and a resolved lease, and
+// asserts the store stamped that lease on the invocation and its result.
+func (s *InvocationFactsSuite) leaseStamped(verb string, args ...string) {
+	t := s.T()
 	testkit.Isolate(t)
+	root := t.TempDir()
+	sinks := withJournalLease(context.Background(), nil, root, verb, args, leaseResolver("fleet/f3", job.LeaseSourceEnv, nil))
+	s.Require().Len(sinks, 1)
+	emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "ci", Project: "api", Status: journal.StatusPass})
 
-	for verb, args := range map[string][]string{
-		"run":      {"ci", "api"},
-		"affected": {"ci"},
-	} {
-		t.Run(verb, func(t *testing.T) {
-			root := t.TempDir()
-			sinks := withJournalLease(context.Background(), nil, root, verb, args, leaseResolver("fleet/f3", job.LeaseSourceEnv, nil))
-			require.Len(t, sinks, 1)
-			emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "ci", Project: "api", Status: journal.StatusPass})
+	dir, err := Dir(root)
+	s.Require().NoError(err)
+	fold, err := session.ReadAll(t.Context(), dir)
+	s.Require().NoError(err)
 
-			dir, err := Dir(root)
-			require.NoError(t, err)
-			fold, err := session.ReadAll(t.Context(), dir)
-			require.NoError(t, err)
-
-			summaries := session.Summarize(fold)
-			require.Len(t, summaries, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Lease)
-			assert.Equal(t, []session.TargetResult{
-				{Target: "ci", Project: "api", Outcome: session.OutcomePass, Lease: "fleet/f3", LeaseFrom: job.LeaseSourceEnv},
-			}, summaries[0].Targets)
-		})
-	}
+	summaries := session.Summarize(fold)
+	s.Require().Len(summaries, 1)
+	s.Equal("fleet/f3", summaries[0].Lease)
+	s.Equal([]session.TargetResult{
+		{Target: "ci", Project: "api", Outcome: session.OutcomePass, Lease: "fleet/f3", LeaseFrom: job.LeaseSourceEnv},
+	}, summaries[0].Targets)
 }
 
 // A lease that does not resolve records none and says why, rather than recording a
 // claim as if nothing outranked it.
-func TestWithInvocationFactsRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsRecordsNoLeaseWhenTheBindingDoesNotRead() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -188,7 +199,8 @@ func TestWithInvocationFactsRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing.T
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
-func TestWithInvocationFactsSurvivesAnUnwritableStore(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsSurvivesAnUnwritableStore() {
+	t := s.T()
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -215,7 +227,8 @@ func TestWithInvocationFactsSurvivesAnUnwritableStore(t *testing.T) {
 
 // With no resolvable state directory there is nowhere to journal, and a machine in that
 // state must still be able to run builds.
-func TestWithInvocationFactsLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
+func (s *InvocationFactsSuite) TestWithInvocationFactsLeavesHandlersAloneWithoutAStateDir() {
+	t := s.T()
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")

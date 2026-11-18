@@ -7,7 +7,12 @@ import (
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
+
+type NotifySuite struct{ suite.Suite }
+
+func TestNotify(t *testing.T) { suite.Run(t, new(NotifySuite)) }
 
 // captureWarnings installs a slog handler for the duration of fn and returns what it
 // logged. A producer reports a request it could not use through slog rather than an
@@ -23,24 +28,22 @@ func captureWarnings(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestClassifyOutcome(t *testing.T) {
-	for raw, want := range map[string]types.EventOutcome{
-		"Notification":       types.OutcomeWaiting,
-		"SubagentStop":       types.OutcomeFinished,
-		"permission-request": types.OutcomePermission,
-		"build failed":       types.OutcomeFailed,
-		"diagnostic":         types.OutcomeDiagnostic,
-		"available update":   types.OutcomeUpdate,
-		"":                   types.OutcomeOther,
-		"something new":      types.OutcomeOther,
-	} {
-		t.Run(raw, func(t *testing.T) {
-			assert.Equal(t, want, ClassifyOutcome(raw))
-		})
-	}
+func (s *NotifySuite) TestClassifyOutcomeReadsEachKnownSpelling() {
+	s.Equal(types.OutcomeWaiting, ClassifyOutcome("Notification"))
+	s.Equal(types.OutcomeFinished, ClassifyOutcome("SubagentStop"))
+	s.Equal(types.OutcomePermission, ClassifyOutcome("permission-request"))
+	s.Equal(types.OutcomeFailed, ClassifyOutcome("build failed"))
+	s.Equal(types.OutcomeDiagnostic, ClassifyOutcome("diagnostic"))
+	s.Equal(types.OutcomeUpdate, ClassifyOutcome("available update"))
 }
 
-func TestEventFromStdin(t *testing.T) {
+func (s *NotifySuite) TestClassifyOutcomeOfAnythingElseIsOther() {
+	s.Equal(types.OutcomeOther, ClassifyOutcome(""))
+	s.Equal(types.OutcomeOther, ClassifyOutcome("something new"))
+}
+
+func (s *NotifySuite) TestEventFromStdin() {
+	t := s.T()
 	canonical := `{"api_version":"magus.event/v1alpha1","outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
 	got := EventFromStdin(t.Context(), []byte(canonical))
 	assert.Equal(t, types.Event{
@@ -55,46 +58,44 @@ func TestEventFromStdin(t *testing.T) {
 	assert.Equal(t, types.Event{Message: "build failed"}, EventFromStdin(t.Context(), []byte("build failed")))
 }
 
+// demoted reads body through EventFromStdin, which must still deliver it as
+// prose, and returns what it warned.
+func (s *NotifySuite) demoted(body string) string {
+	var ev types.Event
+	logged := captureWarnings(s.T(), func() { ev = EventFromStdin(s.T().Context(), []byte(body)) })
+	s.Equal(body, ev.Message, "the body is still delivered as prose")
+	return logged
+}
+
 // A body that LOOKS like an envelope and fails still demotes to prose (the notification
 // has to fire either way), but silently it was undiagnosable: the producer saw a working
 // notification, no attention request, and nothing anywhere saying why.
-func TestEventFromStdinWarnsOnAnUnusableEnvelope(t *testing.T) {
-	for name, tc := range map[string]struct {
-		body  string
-		wants []string
-	}{
-		"missing every required field": {
-			`{"severity":"warning"}`,
-			[]string{"not a complete event envelope", "message", "outcome", "source.kind"},
-		},
-		"missing only the source": {
-			`{"outcome":"waiting","message":"needs a decision"}`,
-			[]string{"not a complete event envelope", "source.kind"},
-		},
-		"unparseable json object": {
-			`{"outcome":"waiting",`,
-			[]string{"did not parse"},
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var ev types.Event
-			logged := captureWarnings(t, func() { ev = EventFromStdin(t.Context(), []byte(tc.body)) })
-
-			assert.Equal(t, tc.body, ev.Message, "the body is still delivered as prose")
-			for _, want := range tc.wants {
-				assert.Contains(t, logged, want)
-			}
-		})
+func (s *NotifySuite) TestEventFromStdinWarnsOnAnEnvelopeMissingEveryRequiredField() {
+	logged := s.demoted(`{"severity":"warning"}`)
+	for _, want := range []string{"not a complete event envelope", "message", "outcome", "source.kind"} {
+		s.Contains(logged, want)
 	}
 }
 
+func (s *NotifySuite) TestEventFromStdinWarnsOnAnEnvelopeMissingOnlyTheSource() {
+	logged := s.demoted(`{"outcome":"waiting","message":"needs a decision"}`)
+	s.Contains(logged, "not a complete event envelope")
+	s.Contains(logged, "source.kind")
+}
+
+func (s *NotifySuite) TestEventFromStdinWarnsOnAnUnparseableObject() {
+	s.Contains(s.demoted(`{"outcome":"waiting",`), "did not parse")
+}
+
 // Prose is the documented input, not a degraded envelope, so it must warn about nothing.
-func TestEventFromStdinIsSilentForPlainText(t *testing.T) {
+func (s *NotifySuite) TestEventFromStdinIsSilentForPlainText() {
+	t := s.T()
 	logged := captureWarnings(t, func() { EventFromStdin(t.Context(), []byte("build failed")) })
 	assert.Empty(t, logged)
 }
 
-func TestRenderNotificationAlwaysHasABody(t *testing.T) {
+func (s *NotifySuite) TestRenderNotificationAlwaysHasABody() {
+	t := s.T()
 	title, body := RenderNotification(types.Event{Outcome: types.OutcomeWaiting})
 	assert.NotEmpty(t, title)
 	assert.NotEmpty(t, body)

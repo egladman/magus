@@ -12,13 +12,18 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestMain isolates the environment the adapters under test inherit.
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-func TestRunAdaptersReportsEachOneWhole(t *testing.T) {
-	t.Parallel()
+type AdapterSuite struct{ suite.Suite }
+
+func TestAdapter(t *testing.T) { suite.Run(t, new(AdapterSuite)) }
+
+func (s *AdapterSuite) TestRunAdaptersReportsEachOneWhole() {
+	t := s.T()
 
 	assert.Equal(t,
 		[]AdapterResult{
@@ -32,8 +37,8 @@ func TestRunAdaptersReportsEachOneWhole(t *testing.T) {
 		"order follows declaration, and a clean run carries no error")
 }
 
-func TestRunAdaptersRunsFromTheWorkspaceRoot(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestRunAdaptersRunsFromTheWorkspaceRoot() {
+	t := s.T()
 	root := t.TempDir()
 
 	results := RunAdapters(t.Context(), root, []Adapter{{Host: "h", Argv: []string{"pwd"}}})
@@ -47,8 +52,8 @@ func TestRunAdaptersRunsFromTheWorkspaceRoot(t *testing.T) {
 
 // TestRunAdaptersReportsAFailureRatherThanReturningAnError pins the contract the caller
 // depends on: a graph build carries on around a broken adapter.
-func TestRunAdaptersReportsAFailureRatherThanReturningAnError(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestRunAdaptersReportsAFailureRatherThanReturningAnError() {
+	t := s.T()
 
 	results := RunAdapters(t.Context(), t.TempDir(), []Adapter{
 		{Host: "broken", Argv: []string{"sh", "-c", "echo nope >&2; exit 3"}},
@@ -66,8 +71,8 @@ func TestRunAdaptersReportsAFailureRatherThanReturningAnError(t *testing.T) {
 		"stderr is kept: it is where an adapter says why it could not run")
 }
 
-func TestRunAdaptersRunsNothingWithoutSomethingToRun(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestRunAdaptersRunsNothingWithoutSomethingToRun() {
+	t := s.T()
 
 	marker := filepath.Join(t.TempDir(), "ran")
 	touch := Adapter{Host: "h", Argv: []string{"touch", marker}}
@@ -86,8 +91,8 @@ func TestRunAdaptersRunsNothingWithoutSomethingToRun(t *testing.T) {
 // TestRunAdaptersStopsWithTheContext pins that a caller's cancellation reaches the
 // adapter. A graph build interrupted at the keyboard must not leave a transcript scan
 // running.
-func TestRunAdaptersStopsWithTheContext(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestRunAdaptersStopsWithTheContext() {
+	t := s.T()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -99,8 +104,8 @@ func TestRunAdaptersStopsWithTheContext(t *testing.T) {
 // TestAnAdapterIsNotAShellLine pins what the argv shape buys. A declared value that would
 // be a pipeline under a shell is one program's arguments here, so a committed config
 // cannot become a second command on a machine that merely pulled the branch.
-func TestAnAdapterIsNotAShellLine(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestAnAdapterIsNotAShellLine() {
+	t := s.T()
 
 	results := RunAdapters(t.Context(), t.TempDir(), []Adapter{
 		{Host: "literal", Argv: []string{"echo", "a; touch /tmp/pwn | sh $(whoami)"}},
@@ -119,8 +124,8 @@ func TestAnAdapterIsNotAShellLine(t *testing.T) {
 // an adapter that leaves a background process holding that pipe hung the caller forever,
 // and in the server that wedged a run slot, which the maintenance scheduler reads as busy
 // for the rest of the process's life.
-func TestARunawayAdapterDoesNotHangTheCaller(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestARunawayAdapterDoesNotHangTheCaller() {
+	t := s.T()
 
 	// The child exits at once; the grandchild keeps the inherited pipe open well past any
 	// deadline this test would wait for.
@@ -144,8 +149,8 @@ func TestARunawayAdapterDoesNotHangTheCaller(t *testing.T) {
 
 // TestAdapterOutputIsCapped pins that a chatty adapter cannot cost the caller its memory
 // or the server its log. The TAIL survives, because an adapter's summary is its last line.
-func TestAdapterOutputIsCapped(t *testing.T) {
-	t.Parallel()
+func (s *AdapterSuite) TestAdapterOutputIsCapped() {
+	t := s.T()
 
 	results := RunAdapters(t.Context(), t.TempDir(), []Adapter{
 		{Host: "chatty", Argv: []string{"awk", `BEGIN{for(i=0;i<20000;i++) print "noise noise noise"; print "loaded 7"}`}},
