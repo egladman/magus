@@ -472,24 +472,24 @@ func opaqueMembers() map[string]bool {
 	return map[string]bool{"annotations": true, "labels": true, "check": true}
 }
 
-// SnakeKeyCollisionError is a stored object carrying a member under its camelCase key and
+// snakeKeyCollisionError is a stored object carrying a member under its camelCase key and
 // its snake_case key both, so neither can be told for the one the record means.
-type SnakeKeyCollisionError struct {
+type snakeKeyCollisionError struct {
 	Path, Camel, Snake string
 }
 
-func (e *SnakeKeyCollisionError) Error() string {
+func (e *snakeKeyCollisionError) Error() string {
 	return fmt.Sprintf("%s carries %q and %q, one member under two spellings", e.Path, e.Camel, e.Snake)
 }
 
-// UnplacedEnumError is a stored enum value no value list spells, in Go or in the CamelCase
+// unplacedEnumError is a stored enum value no value list spells, in Go or in the CamelCase
 // a record stored before [keysSnaked].
-type UnplacedEnumError struct {
+type unplacedEnumError struct {
 	Path, Value string
 	Values      []string
 }
 
-func (e *UnplacedEnumError) Error() string {
+func (e *unplacedEnumError) Error() string {
 	return fmt.Sprintf("%s is %q, which is no stored value of %s", e.Path, e.Value, strings.Join(e.Values, ", "))
 }
 
@@ -503,7 +503,7 @@ func snakeRecord(e migrate.Entry) (migrate.Entry, error) {
 	for k, v := range e {
 		name := snakeKey(keys, k)
 		if _, dup := out[name]; dup {
-			return nil, &SnakeKeyCollisionError{Path: "the line", Camel: k, Snake: name}
+			return nil, &snakeKeyCollisionError{Path: "the line", Camel: k, Snake: name}
 		}
 		if !opaque[k] {
 			var err error
@@ -546,7 +546,7 @@ func snakeValue(keys map[string]string, opaque map[string]bool, path string, raw
 		for k, v := range obj {
 			name := snakeKey(keys, k)
 			if _, dup := out[name]; dup {
-				return nil, &SnakeKeyCollisionError{Path: path, Camel: k, Snake: name}
+				return nil, &snakeKeyCollisionError{Path: path, Camel: k, Snake: name}
 			}
 			if !opaque[k] {
 				var err error
@@ -608,7 +608,7 @@ func (e storedEnum) read(path, stored string) (string, error) {
 	if v, ok := e.known[stored]; ok {
 		return v, nil
 	}
-	return "", &UnplacedEnumError{Path: path, Value: stored, Values: e.values}
+	return "", &unplacedEnumError{Path: path, Value: stored, Values: e.values}
 }
 
 // enumMember is one enum member of a stored record: the record's kind, the path to it
@@ -803,7 +803,7 @@ func snakeCheck(raw codec.RawMessage, at string) (codec.RawMessage, error) {
 		return raw, nil
 	}
 	if _, dup := check["no_default_charms"]; dup {
-		return nil, &SnakeKeyCollisionError{Path: at, Camel: "noDefaultCharms", Snake: "no_default_charms"}
+		return nil, &snakeKeyCollisionError{Path: at, Camel: "noDefaultCharms", Snake: "no_default_charms"}
 	}
 	delete(check, "noDefaultCharms")
 	check["no_default_charms"] = v

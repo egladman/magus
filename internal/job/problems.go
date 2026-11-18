@@ -10,10 +10,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DeclarationProblems is every problem d shows on its own, without a workspace: its
+// declarationProblems is every problem d shows on its own, without a workspace: its
 // faults under magus's codes, with a deviation allowed only a [types.Permissible] code,
 // and every check it carries that does not read as a lease check.
-func DeclarationProblems(d job.Declaration) types.JobProblems {
+func declarationProblems(d job.Declaration) types.JobProblems {
 	codes := types.PermissibleCodes()
 	permissible := make([]job.Code, len(codes))
 	for i, c := range codes {
@@ -39,12 +39,12 @@ func DeclarationProblems(d job.Declaration) types.JobProblems {
 }
 
 // ValidateDeclaration reports what is wrong with a declared job, or nil: every problem
-// [DeclarationProblems] finds, joined.
-func ValidateDeclaration(d job.Declaration) error { return DeclarationProblems(d).Error() }
+// [declarationProblems] finds, joined.
+func ValidateDeclaration(d job.Declaration) error { return declarationProblems(d).Error() }
 
-// ValidateGoal reports whether g can be matched to an output record without interpreting
+// validateGoal reports whether g can be matched to an output record without interpreting
 // a shell command: every problem it shows on its own, joined.
-func ValidateGoal(g job.Goal) error {
+func validateGoal(g job.Goal) error {
 	return types.FaultProblems(append(g.Faults(), goalCheckFaults(g, "")...)).Error()
 }
 

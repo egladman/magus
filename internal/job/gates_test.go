@@ -107,7 +107,7 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			for _, g := range got {
 				goal, err := g.Goal.Module()
 				require.NoError(t, err)
-				require.NoError(t, ValidateGoal(goal), "the goal to add must be declarable as printed")
+				require.NoError(t, validateGoal(goal), "the goal to add must be declarable as printed")
 			}
 		})
 	}

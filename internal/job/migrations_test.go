@@ -636,16 +636,16 @@ func (s *snakeRecordSuite) TestARespelledLineIsKeptAsItIs() {
 func (s *snakeRecordSuite) TestAValueNoListSpellsIsRefused() {
 	_, err := s.snaked(strings.Replace(camelRow, `"writeProof":"Disjoint"`, `"writeProof":"Sideways"`, 1))
 
-	var unplaced *UnplacedEnumError
+	var unplaced *unplacedEnumError
 	s.Require().ErrorAs(err, &unplaced)
-	s.Equal(&UnplacedEnumError{Path: "status.write_proof", Value: "Sideways", Values: unplaced.Values}, unplaced)
+	s.Equal(&unplacedEnumError{Path: "status.write_proof", Value: "Sideways", Values: unplaced.Values}, unplaced)
 	s.Contains(unplaced.Values, "disjoint")
 }
 
 func (s *snakeRecordSuite) TestACredentialKindTheCallerDoesNotAdmitIsRefused() {
 	_, err := s.snaked(strings.Replace(camelRow, `"class":"Operator"`, `"class":"Smartcard"`, 1))
 
-	var unplaced *UnplacedEnumError
+	var unplaced *unplacedEnumError
 	s.Require().ErrorAs(err, &unplaced)
 	s.Equal("status.registered_by.credential.class", unplaced.Path)
 }
@@ -653,7 +653,7 @@ func (s *snakeRecordSuite) TestACredentialKindTheCallerDoesNotAdmitIsRefused() {
 func (s *snakeRecordSuite) TestAKeyUnderBothSpellingsIsRefused() {
 	_, err := s.snaked(strings.Replace(camelRow, `"maxAttempts":2`, `"maxAttempts":2,"max_attempts":3`, 1))
 
-	var collision *SnakeKeyCollisionError
+	var collision *snakeKeyCollisionError
 	s.Require().ErrorAs(err, &collision)
 	s.Equal("max_attempts", collision.Snake)
 }
@@ -740,7 +740,7 @@ func (s *snakeStoreSuite) TestAValueNoListSpellsLeavesTheStoreAsItWas() {
 
 	_, err = st.Read(types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.4.3", Commit: s.base}))
 
-	var unplaced *UnplacedEnumError
+	var unplaced *unplacedEnumError
 	s.Require().ErrorAs(err, &unplaced)
 	after, err := os.ReadFile(jobs)
 	s.Require().NoError(err)

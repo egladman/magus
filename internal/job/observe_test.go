@@ -156,7 +156,7 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 			} else {
 				gate.Symbols = []string{"Nope"}
 			}
-			if err := ValidateGoal(gate); err != nil {
+			if err := validateGoal(gate); err != nil {
 				continue // the matrix refuses this pair, so there is nothing to grade
 			}
 			graded++

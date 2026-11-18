@@ -113,19 +113,6 @@ func SameLeaseCheck(a, b *types.LeaseCheck) bool {
 		a.NoDefaultCharms == b.NoDefaultCharms && a.Test == b.Test && slices.Equal(a.Args, b.Args)
 }
 
-// Words is the check in the form [ParseLeaseCheck] reads, `<target> <project> [-- args]`,
-// or its script in place of the target and project.
-func Words(c types.LeaseCheck) string {
-	line := c.Script
-	if line == "" {
-		line = fmt.Sprintf("%s %s", c.Target, cmp.Or(c.Project, "."))
-	}
-	if len(c.Args) > 0 {
-		line += " -- " + strings.Join(c.Args, " ")
-	}
-	return line
-}
-
 // RawCheck is c as the job store keeps it: validated, then encoded.
 func RawCheck(c types.LeaseCheck) (codec.RawMessage, error) {
 	valid, err := ValidateLeaseCheck(c)

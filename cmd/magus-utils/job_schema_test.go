@@ -285,13 +285,13 @@ func TestWritePathPatternMatchesTheValidator(t *testing.T) {
 		if !tc.accept {
 			continue
 		}
-		for _, p := range internaljob.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}}) {
-			assert.NotContains(t, p.Field, "paths.write", "%q: %s", tc.path, p.Message)
+		if err := internaljob.ValidateDeclaration(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}}); err != nil {
+			assert.NotContains(t, err.Error(), "paths.write", "%q", tc.path)
 		}
 	}
 	for _, refused := range []string{"~/x", "/abs/x", "../x"} {
-		problems := internaljob.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
-		assert.NotEmpty(t, problems, "the validator accepts %q, and the pattern refuses it", refused)
+		err := internaljob.ValidateDeclaration(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
+		assert.Error(t, err, "the validator accepts %q, and the pattern refuses it", refused)
 	}
 }
 

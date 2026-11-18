@@ -78,7 +78,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 	// write paths with every check it runs for an update.
 	judged := merged
 	if updates {
-		ps = append(ps, newProblems(DeclarationProblems(rowDeclaration(prev)), DeclarationProblems(rowDeclaration(merged)))...)
+		ps = append(ps, newProblems(declarationProblems(rowDeclaration(prev)), declarationProblems(rowDeclaration(merged)))...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, droppedProblems(prev, merged)...)
 		var goals []job.Goal
@@ -116,7 +116,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 			v.WriteProof = store.WriteProof(rows, merged)
 		}
 	} else {
-		ps = append(ps, DeclarationProblems(rowDeclaration(merged))...)
+		ps = append(ps, declarationProblems(rowDeclaration(merged))...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
@@ -189,7 +189,7 @@ func contendedFork(ctx context.Context, store *Store, rows []job.Job, id string,
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	ps := slices.Concat(DeclarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
+	ps := slices.Concat(declarationProblems(rowDeclaration(merged)), unscopedProblems(merged), ungradedProblems(merged),
 		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)

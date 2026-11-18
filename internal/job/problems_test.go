@@ -170,34 +170,34 @@ func TestScriptCheckNamesOneSubject(t *testing.T) {
 	gate := func(c types.LeaseCheck) job.Goal {
 		return job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: fixtureCheck(c), Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 	}
-	require.NoError(t, ValidateGoal(gate(script)))
+	require.NoError(t, validateGoal(gate(script)))
 
 	both := script
 	both.Target = "test"
-	require.ErrorContains(t, ValidateGoal(gate(both)), "a check names one")
+	require.ErrorContains(t, validateGoal(gate(both)), "a check names one")
 
 	scoped := script
 	scoped.Project = "cmd/magus"
-	require.ErrorContains(t, ValidateGoal(gate(scoped)), "belongs to the workspace")
+	require.ErrorContains(t, validateGoal(gate(scoped)), "belongs to the workspace")
 
 	tested := script
 	tested.Test = true
-	require.NoError(t, ValidateGoal(gate(tested)))
+	require.NoError(t, validateGoal(gate(tested)))
 }
 
 func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	t.Parallel()
 
 	target := job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Test: true})}.Resolve()
-	require.ErrorContains(t, ValidateGoal(target), `check target "test" sets test`)
+	require.ErrorContains(t, validateGoal(target), `check target "test" sets test`)
 
 	rec := job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "fix-parser", Check: fixtureCheck(types.LeaseCheck{Target: "test", Test: true})}
-	ps := DeclarationProblems(rec)
+	ps := declarationProblems(rec)
 	require.Len(t, ps, 1)
 	assert.Equal(t, "check.test", ps[0].Field)
 
 	rec.Check = fixtureCheck(types.LeaseCheck{Script: "probes/key.buzz", Test: true})
-	require.Empty(t, DeclarationProblems(rec))
+	require.Empty(t, declarationProblems(rec))
 	var row job.Job
 	rec.Apply(&row)
 	require.True(t, job.HasCheck(row.Check))
@@ -227,7 +227,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		},
 	}
 
-	ps := DeclarationProblems(d)
+	ps := declarationProblems(d)
 
 	fields := make([]string, len(ps))
 	for i, p := range ps {
@@ -267,7 +267,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 		Goals:      []job.Goal{{ID: "names", Kind: job.GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{job.PrimaryGoalID}}},
 	}
 
-	assert.Empty(t, DeclarationProblems(d))
+	assert.Empty(t, declarationProblems(d))
 	require.NoError(t, ValidateDeclaration(d))
 }
 
@@ -279,7 +279,7 @@ func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
 		{ID: "z", Kind: job.GoalKindPaths, Paths: []string{"p"}, DependsOn: []string{"z"}},
 	}}
 
-	ps := DeclarationProblems(d)
+	ps := declarationProblems(d)
 
 	require.Len(t, ps, 2)
 	assert.Equal(t, "goals[0].depends_on", ps[1].Field)
@@ -311,19 +311,19 @@ func TestGoalProblemsNameTheFieldUnderTheGoal(t *testing.T) {
 	for _, p := range ps {
 		assert.Equal(t, types.JobGoalInvalid, p.Code)
 	}
-	require.ErrorIs(t, ValidateGoal(g), types.JobGoalInvalid)
+	require.ErrorIs(t, validateGoal(g), types.JobGoalInvalid)
 }
 
 func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 
 	rec := job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "cli-ls-files", Claim: []job.ClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
-	assert.Empty(t, DeclarationProblems(rec))
+	assert.Empty(t, declarationProblems(rec))
 
 	rec.Agent = job.Instructed("more")
 	rec.Claim = append(rec.Claim, job.ClaimRequest{Path: "../x.go", Because: "released"}, job.ClaimRequest{Path: "internal/**", Because: "maybe"})
 	var fields []string
-	for _, p := range DeclarationProblems(rec) {
+	for _, p := range declarationProblems(rec) {
 		fields = append(fields, p.Field)
 	}
 	assert.Equal(t, []string{"claim", "claim[1].path", "claim[2].path", "claim[2].because"}, fields)

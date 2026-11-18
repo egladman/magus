@@ -133,11 +133,11 @@ func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
 }
 
 func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
-	ps := DeclarationProblems(job.Declaration{ID: "w", Check: codec.RawMessage(`{"target":"test","bogus":1}`)})
+	ps := declarationProblems(job.Declaration{ID: "w", Check: codec.RawMessage(`{"target":"test","bogus":1}`)})
 	s.Require().Len(ps, 1)
 	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 
-	ps = DeclarationProblems(job.Declaration{ID: "w", Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck,
+	ps = declarationProblems(job.Declaration{ID: "w", Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck,
 		Check: fixtureCheck(types.LeaseCheck{Target: "test", Script: "p.buzz"}), Accept: []job.Basis{job.BasisWitnessed}}}})
 	s.Require().Len(ps, 1)
 	s.Equal(types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])

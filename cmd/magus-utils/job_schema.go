@@ -201,6 +201,12 @@ func properties(pkg, structName string, st *ast.StructType, d *goDecls, version 
 	if err != nil {
 		return nil, nil, err
 	}
+	return published(fields)
+}
+
+// published is fields as a schema's properties and its required names. A field whose
+// type has no schema fails it here, once no shallower field hides it.
+func published(fields []schemaField) (node, []string, error) {
 	var props node
 	required := []string{}
 	for _, f := range fields {
@@ -277,21 +283,9 @@ func collectFields(pkg, structName string, st *ast.StructType, d *goDecls, versi
 // MirroredFields does. Two at the shallowest depth are ambiguous, and a
 // schema that picked one would publish a guess.
 func visibleFields(structName string, fields []schemaField) ([]schemaField, error) {
-	shallowest := map[string]int{}
-	for _, f := range fields {
-		if d, ok := shallowest[f.name]; !ok || f.depth < d {
-			shallowest[f.name] = f.depth
-		}
-	}
-	winners := map[string]schemaField{}
-	for _, f := range fields {
-		if f.depth != shallowest[f.name] {
-			continue
-		}
-		if _, dup := winners[f.name]; dup {
-			return nil, fmt.Errorf("%s: json name %q is declared twice at one depth, so neither is the one the decoder reads", structName, f.name)
-		}
-		winners[f.name] = f
+	winners, err := shallowestFields(structName, fields)
+	if err != nil {
+		return nil, err
 	}
 	var out []schemaField
 	placed := map[string]bool{}
@@ -303,6 +297,34 @@ func visibleFields(structName string, fields []schemaField) ([]schemaField, erro
 		out = append(out, winners[f.name])
 	}
 	return out, nil
+}
+
+// shallowestFields is the field each json name publishes: the one declared at the
+// shallowest depth. Two there are ambiguous.
+func shallowestFields(structName string, fields []schemaField) (map[string]schemaField, error) {
+	shallowest := shallowestDepths(fields)
+	winners := map[string]schemaField{}
+	for _, f := range fields {
+		if f.depth != shallowest[f.name] {
+			continue
+		}
+		if _, dup := winners[f.name]; dup {
+			return nil, fmt.Errorf("%s: json name %q is declared twice at one depth, so neither is the one the decoder reads", structName, f.name)
+		}
+		winners[f.name] = f
+	}
+	return winners, nil
+}
+
+// shallowestDepths is the shallowest depth each json name is declared at.
+func shallowestDepths(fields []schemaField) map[string]int {
+	shallowest := map[string]int{}
+	for _, f := range fields {
+		if d, ok := shallowest[f.name]; !ok || f.depth < d {
+			shallowest[f.name] = f.depth
+		}
+	}
+	return shallowest
 }
 
 // embeddedRef names the struct an embedded field declares: a bare name is in

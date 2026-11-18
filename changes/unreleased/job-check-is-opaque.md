@@ -22,8 +22,8 @@
 - **`types.LeaseCheck` and the `types` job views read the opaque check.** `types.Job`,
   `types.Goal`, `types.JobList` and `types.Declaration` decode it as a lease check, and
   `-o yaml` prints a row's check as an object.
-- **`ValidateDeclaration`, `ValidateGoal` and `DeclarationProblems` move to
-  `internal/job`.** They report a check that does not read as a lease check.
+- **`ValidateDeclaration` moves to `internal/job`.** It reports a check that does not
+  read as a lease check; `types.DeclarationProblems` and `types.ValidateGoal` are gone.
 - **A check over the workspace root renders as `magus run <target> --all`.** The
   validation line and the command the guard names both spell it so.
 - **buzzgen and `jobschema` follow Go's field-visibility rule.** An embedded field

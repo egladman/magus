@@ -453,7 +453,7 @@ func TestClaimCommandIsOneApplyLine(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, decoded, 1)
 	assert.Equal(t, job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "cli-ls-files", Claim: reqs}, decoded[0])
-	assert.Empty(t, DeclarationProblems(decoded[0]))
+	assert.Empty(t, declarationProblems(decoded[0]))
 
 	long := []job.ClaimRequest{{Path: strings.Repeat("a/", maxClaimCommand) + "x.go", Because: "released"}}
 	_, ok = ClaimCommand("cli-ls-files", long)
