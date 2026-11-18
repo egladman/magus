@@ -1,23 +1,21 @@
-// Cost: one commit lookup; with --apply, one advisory posted.
+// Cost: one commit lookup.
 //
-// Tells every agent session in this repository to bring its checkout onto a revision and
-// rebuild ./magus. It posts one advisory through `magus session advise`, which each root
-// session sees once at its next prompt and each later session sees at its start, until
-// `magus session retract`. --expect names the command every acting session runs, so
-// `magus session advisories` can count how many did.
+// Drafts the advisory that tells every agent session in this repository to bring its
+// checkout onto a revision and rebuild ./magus, and prints the `magus session advise` line
+// that posts it. Each root session sees a posted advisory once at its next prompt and each
+// later session sees it at its start, until `magus session retract`. --expect names the
+// command every acting session runs, so `magus session advisories` can count how many did.
 //
-//	magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason "<why>"] [--apply]
+//	magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason "<why>"]
 //
 // --revision defaults to origin/main as this repository holds it now. The script never
-// fetches: run `git fetch` first if the tip it should name is not local yet. Without --apply
-// it prints the advisory and the command it would run and posts nothing. Only a person at an
-// interactive terminal may post; `magus session advise` refuses anyone else, and this script
-// reports that refusal as it was given. A reason that would push the advisory past the
-// message limit is refused, never truncated.
+// fetches: run `git fetch` first if the tip it should name is not local yet. It never posts
+// either: `magus session advise` posts only from a person's interactive terminal, and a
+// nested magus never has one, since the script captures its output. A reason that would push
+// the advisory past the message limit is refused, never truncated.
 namespace advisererebuild;
 
 import "flags";
-import "magus";
 import "result";
 import "std";
 import "vcs";
@@ -27,8 +25,8 @@ import "assert";
 final SUMMARY = "advise every session to move onto a revision and rebuild ./magus";
 final SERVES = ["replaces:magus session advise"];
 
-final USAGE = "usage: magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason \"<why>\"] [--apply]";
-final HELP = "cost: one commit lookup; with --apply, one advisory posted\n{USAGE}\n\nThe default revision is the local origin/main; nothing is fetched. Without --apply nothing is posted.";
+final USAGE = "usage: magus buzz hack/dev/issue-rebuild-advisory.buzz -- [--revision <rev>] [--reason \"<why>\"]";
+final HELP = "cost: one commit lookup\n{USAGE}\n\nThe default revision is the local origin/main; nothing is fetched. Nothing is posted: run the printed command at your own terminal.";
 
 final DEFAULT_REVISION = "origin/main";
 final EXPECT = "./magus buzz hack/dev/bootstrap-checkout.buzz";
@@ -65,38 +63,21 @@ export fun quote(text: str) > str {
     return "\"" + text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("$", with: "\\$").replace("`", with: "\\`") + "\"";
 }
 
-// adviseLine is the exact command --apply runs, as a person would type it.
+// adviseLine is the command a person runs to post text.
 export fun adviseLine(text: str) > str {
     return "magus session advise {quote(text)} --expect {quote(EXPECT)}";
 }
 
-// dryReport is what a run without --apply prints.
-export fun dryReport(text: str, revision: str) > [str] {
+// report is what the script prints: the advisory, then the command that posts it.
+export fun report(text: str, revision: str) > [str] {
     return [
-        "dry run: nothing posted; pass --apply to post. {revision} resolved locally, nothing was fetched.",
+        "{revision} resolved locally, nothing was fetched. Nothing is posted: run the command below at your own terminal.",
         "advisory ({text.len()} of {MAX_MESSAGE_BYTES} bytes):",
         text,
         "command:",
         adviseLine(text),
+        "then `magus session advisories` counts the sessions that acted, and `magus session retract <id>` withdraws it.",
     ];
-}
-
-// appliedReport is what a posted advisory prints: its id, how to read the count, and how to withdraw it.
-export fun appliedReport(id: str) > [str] {
-    return [
-        "posted {id}",
-        "read the count later: magus session advisories",
-        "retract: magus session retract {id}",
-    ];
-}
-
-// postedId reads the id from `posted <id>` on the first line of `magus session advise`.
-export fun postedId(stdout: str) > result\Result::<str> {
-    final words = stdout.trim().split("\n")[0].split(" ");
-    if (words.len() < 2 or words[0] != "posted") {
-        return result\fail::<str>("issue-rebuild-advisory: `magus session advise` printed no advisory id: {stdout.trim()}");
-    }
-    return result\ok::<str>(words[1]);
 }
 
 // Rev is a resolved revision.
@@ -115,23 +96,8 @@ export fun lookup(rev: str) > result\Result::<Rev> {
     }
 }
 
-// post runs `magus session advise` and returns the advisory id. A refusal, such as there
-// being no interactive terminal, is returned with the command's own words.
-export fun post(text: str) > result\Result::<str> {
-    var ran: magus\ExecResult? = null;
-    try {
-        ran = magus\cmd("session", args: ["advise", text, "--expect", EXPECT], opts: magus\CommandOptions{ allowFailure = true });
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "issue-rebuild-advisory: run magus session advise");
-    }
-    if (!ran!.ok) {
-        return result\fail::<str>("issue-rebuild-advisory: magus session advise refused (exit {ran!.code}): {ran!.stderr.trim()}");
-    }
-    return postedId(ran!.stdout);
-}
-
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["--revision", "--reason"]);
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--revision", "--reason"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -149,17 +115,7 @@ export fun main(args: [str]) > void !> any {
     if (fits.error != null) {
         throw fits.error!.message;
     }
-    if (parsed.values["--apply"] == null) {
-        foreach (line in dryReport(text, revision: rev)) {
-            std\print(line);
-        }
-        return;
-    }
-    final id = post(text);
-    if (id.error != null) {
-        throw id.error!.message;
-    }
-    foreach (line in appliedReport(id.value!)) {
+    foreach (line in report(text, revision: rev)) {
         std\print(line);
     }
 }
@@ -207,18 +163,17 @@ test "a reason that just fits passes" {
     assert\equal(checkFits(advisoryText(SHORT, full: FULL, reason: "a" + "x".repeat(room + 1))).error != null, want: true, message: "one over");
 }
 
-test "the flags parse: valued, switch, and unknown" {
-    final parsed = flags\parse(["--revision", "abc", "--reason", "why", "--apply", "--bogus"], switches: ["--apply", "--help"], valued: ["--revision", "--reason"]);
+test "the flags parse: valued, and --apply is unknown" {
+    final parsed = flags\parse(["--revision", "abc", "--reason", "why", "--apply"], switches: ["--help"], valued: ["--revision", "--reason"]);
     assert\equal(parsed.values["--revision"], want: "abc", message: "revision");
     assert\equal(parsed.values["--reason"], want: "why", message: "reason");
-    assert\equal(parsed.values["--apply"] != null, want: true, message: "apply");
-    assert\equal(parsed.unknown, want: ["--bogus"], message: "unknown");
+    assert\equal(parsed.unknown, want: ["--apply"], message: "--apply is gone");
 }
 
-test "the dry report posts nothing and prints the exact command" {
+test "the report posts nothing and prints the exact command" {
     final text = advisoryText(SHORT, full: FULL, reason: "");
-    final lines = dryReport(text, revision: "origin/main");
-    assert\equal(lines[0].startsWith("dry run: nothing posted; pass --apply to post."), want: true, message: "says dry");
+    final lines = report(text, revision: "origin/main");
+    assert\equal(lines[0].indexOf("Nothing is posted: run the command below at your own terminal.") != null, want: true, message: "says nothing posted");
     assert\equal(lines[2], want: text, message: "advisory text");
     assert\equal(lines[4].startsWith("magus session advise \"Bring your checkout"), want: true, message: "command start");
     assert\equal(lines[4].endsWith(" --expect \"./magus buzz hack/dev/bootstrap-checkout.buzz\""), want: true, message: "expect");
@@ -226,13 +181,4 @@ test "the dry report posts nothing and prints the exact command" {
 
 test "quoting escapes what a shell would expand" {
     assert\equal(quote("a \"b\" $c `d`"), want: "\"a \\\"b\\\" \\$c \\`d\\`\"", message: "escaped");
-}
-
-test "the applied report names the id, the count line and the retract line" {
-    assert\equal(appliedReport("adv-1"), want: ["posted adv-1", "read the count later: magus session advisories", "retract: magus session retract adv-1"], message: "report");
-}
-
-test "the posted id is read from the first line" {
-    assert\equal(postedId("posted adv-abc\n  Bring your checkout").value!, want: "adv-abc", message: "id");
-    assert\equal(postedId("retracted adv-abc").error != null, want: true, message: "other verb");
 }
