@@ -1,16 +1,19 @@
 package guard
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
@@ -73,6 +76,82 @@ func (u Unjudged) Rule() string {
 // has not closed on within two seconds reads as empty.
 func UnjudgedHook(root string, r io.Reader, cause error) (answer Unjudged, reason string) {
 	return UnjudgedEvent(root, readHookEvent(r, hookEventWait), cause)
+}
+
+// FailedGlue answers a hook glue that stopped before writing its verdict, because cause
+// stopped it: a script that is missing, does not compile, or failed while it ran. The
+// event on r is answered as [UnjudgedEvent] answers it, and reason names cause, the
+// rebuild and the hooks' reinstall. isHook is false, and nothing is answered, when r
+// carries no host hook event and named is false: that is a script some other program
+// piped into, whose failure is its own. named reports that the glue's argv names its host.
+func FailedGlue(root string, r io.Reader, named bool, cause error) (answer Unjudged, reason string, isHook bool) {
+	event := readHookEvent(r, hookEventWait)
+	if !named && !hostHookEvent(event) {
+		return unjudgedRefused, "", false
+	}
+	answer, reason = UnjudgedEvent(root, event, fmt.Errorf("its hook glue stopped before it answered: %w", cause))
+	if reason != "" {
+		reason += fmt.Sprintf("\nRebuild magus, or reinstall the hooks with `%s` from your own terminal.", hint.AgentHarnessInstall)
+	}
+	return answer, reason, true
+}
+
+// HookStdin keeps every byte a glue reads from stdin, so a glue that fails before its
+// verdict is answered from the event it was handed. A tee rather than a read up front,
+// because a script piped a stream reads it as it comes.
+type HookStdin struct {
+	real *os.File
+	pipe *os.File
+	done chan struct{}
+	mu   sync.Mutex
+	read bytes.Buffer
+}
+
+// TeeHookStdin puts a HookStdin in front of os.Stdin, which it replaces for the rest of
+// the process.
+func TeeHookStdin() (*HookStdin, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	h := &HookStdin{real: os.Stdin, pipe: r, done: make(chan struct{})}
+	go func() {
+		defer close(h.done)
+		defer w.Close()
+		_, _ = io.Copy(w, io.TeeReader(h.real, h)) // a glue that stops reading closes its end; Event reads what is left
+	}()
+	os.Stdin = r
+	return h, nil
+}
+
+func (h *HookStdin) Write(p []byte) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.read.Write(p)
+}
+
+// Event closes the glue's end of stdin and returns the whole event: what the glue read,
+// then what it left. Call it once, after the glue is done.
+func (h *HookStdin) Event() io.Reader {
+	_ = h.pipe.Close() // only stops the tee; the glue is done with it
+	select {
+	case <-h.done:
+	case <-time.After(hookEventWait):
+	}
+	h.mu.Lock()
+	read := bytes.Clone(h.read.Bytes())
+	h.mu.Unlock()
+	return io.MultiReader(bytes.NewReader(read), h.real)
+}
+
+// hostHookEvent reports event as an envelope a host hands its hooks: one naming its
+// hook event, or a stop.
+func hostHookEvent(event string) bool {
+	if _, stops := decodeStop(event); stops {
+		return true
+	}
+	req, ok := decodeHookEnvelope(strings.TrimSpace(event), agent.ToolRows{})
+	return ok && req.Who.Event != ""
 }
 
 // UnjudgedEvent answers a hook event that no guard policy can judge, because the magus
