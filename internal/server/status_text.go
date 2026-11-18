@@ -238,10 +238,10 @@ func PrintBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, n
 
 // PrintWorkByOwner renders what runs against the broker grouped by owner (a job lease,
 // or unleased for a person or a root session), each with its kind, pid, age, slots and
-// deadline, then the work the broker stopped lately and why. It prints nothing when
-// nothing runs and nothing was stopped.
+// deadline, then each validation seat's holder, then the work the broker stopped lately
+// and why. It prints nothing when nothing runs, no seat is held and nothing was stopped.
 func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
-	if len(r.Running) == 0 && len(r.Ended) == 0 {
+	if len(r.Running) == 0 && len(r.Seats) == 0 && len(r.Ended) == 0 {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -273,6 +273,17 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 			}
 		}
 	}
+	if len(r.Seats) > 0 {
+		fmt.Fprintln(tw, "\nvalidation seats")
+		for _, seat := range r.Seats {
+			fmt.Fprintf(tw, "  %s\tjob %s\tpid %d %s\tseated %s\t%s\n", seat.Tree, cmp.Or(seat.Lease, "-"), seat.PID,
+				aliveText(seat.PIDAlive, "running", "exited"),
+				cmp.Or(sessions.FormatDur(now.Sub(seat.Since).Round(time.Second)), "0s"), seatGroupsText(seat.Groups))
+			if seat.Dead() {
+				fmt.Fprintf(tw, "    %s\n", DeadSeatText(seat))
+			}
+		}
+	}
 	if len(r.Ended) > 0 {
 		fmt.Fprintln(tw, "\nstopped by the broker")
 		for _, e := range r.Ended {
@@ -281,6 +292,32 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 		}
 	}
 	_ = tw.Flush()
+}
+
+// DeadSeatText says that a seat is held by a dead group and what frees it.
+func DeadSeatText(seat broker.Seat) string {
+	return fmt.Sprintf("job %s's seat in tree %s is held by a dead group: its run (pid %d) and every group it recorded have ended, "+
+		"while the connection holding the seat is still open; `%s` frees it", seat.Lease, seat.Tree, seat.PID, hint.JobStop.With(seat.Lease))
+}
+
+// seatGroupsText is each recorded group of a seat, and whether it still runs.
+func seatGroupsText(groups []broker.Group) string {
+	if len(groups) == 0 {
+		return "no recorded group"
+	}
+	parts := make([]string, 0, len(groups))
+	for _, g := range groups {
+		parts = append(parts, fmt.Sprintf("pgid %d %s (%s)", g.PGID, aliveText(g.Alive, "alive", "gone"), truncate(g.Command, 40)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// aliveText is yes or no, worded for what is alive.
+func aliveText(alive bool, yes, no string) string {
+	if alive {
+		return yes
+	}
+	return no
 }
 
 // printBrokerDown is the broker row when none answers, naming the policy that decides

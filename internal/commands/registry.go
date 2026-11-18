@@ -1166,7 +1166,7 @@ Signals:
 			Short:  "Send a graceful shutdown request to the running server (needs it running)",
 			Flags: []command.Flag{
 				{Name: "socket", Kind: command.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
-				{Name: "pools", Kind: command.Bool, Default: false, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone"},
+				{Name: "pools", Kind: command.Bool, Default: false, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone; then name each validation seat a dead group holds and the `magus job stop` that frees it"},
 			},
 		},
 		serverStatusCommand,
@@ -2396,7 +2396,7 @@ a place in a queue.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume|stop> [flags]",
 	Children: []command.Command{
 		{
 			Name:   "fork",
@@ -2607,6 +2607,19 @@ shows what it is doing.`,
 			Effect: command.EffectLocalWrite,
 			Short:  "Lift the pause on jobs",
 			Usage:  "magus job resume <job>... [flags]",
+		},
+		{
+			Name:   "stop",
+			Effect: command.EffectSharedWrite,
+			Short:  "Stop the process groups the broker recorded for a job, and free their seats",
+			Description: "Signal each process group the broker recorded for the job's claims, a step's group or a " +
+				"`magus job exec --timeout` command: SIGTERM, then SIGKILL once a grace passes. Then release the claims " +
+				"those groups rode and the validation seats of the runs that recorded them, so a run waiting on the seat " +
+				"starts. It refuses a job the broker recorded no group for, and it refuses the whole stop, signaling " +
+				"nothing, when a group may no longer be the one recorded: its id was reused by a later process, or its " +
+				"leader exited while the group runs on. A group already gone is only released. No other process is " +
+				"signaled. `magus server status` names each seat's holder and says when job stop frees it.",
+			Usage: "magus job stop <job> [flags]",
 		},
 		{
 			Name:   "pin",

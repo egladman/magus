@@ -2035,7 +2035,7 @@ type ServerStopFlags struct {
 func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
 	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
-	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone")
+	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone; then name each validation seat a dead group holds and the `magus job stop` that frees it")
 	command.NegatedBoolVar(fs, &f.Pools, FlagServerStopPools)
 	return &f
 }

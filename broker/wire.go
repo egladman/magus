@@ -50,6 +50,8 @@ const (
 	typeHoldReply      = "hold.reply"
 	typeWork           = "work"
 	typeWorkReply      = "work.reply"
+	typeJobStop        = "job.stop"
+	typeJobStopReply   = "job.stop.reply"
 	typeError          = "error"
 )
 
@@ -144,6 +146,12 @@ type holdReleaseRequest struct {
 	ID string `json:"id"`
 }
 
+// jobStopRequest asks the broker to stop the process groups it recorded for job Lease
+// and to free the seats they held.
+type jobStopRequest struct {
+	Lease string `json:"lease"`
+}
+
 // releaseRequest returns a granted claim. An id the broker does not hold, or one another
 // connection took, is ignored.
 type releaseRequest struct {
@@ -227,6 +235,12 @@ const (
 	CodeDraining ErrorCode = "draining"
 	// CodeCancelled answers a parked request its client cancelled.
 	CodeCancelled ErrorCode = "cancelled"
+	// CodeNoGroup is a job stop for a job the broker recorded no process group for.
+	CodeNoGroup ErrorCode = "no-group"
+	// CodeGroupChanged is a job stop refused because a group it would signal may no longer
+	// be the group the broker recorded: its id was reused, or its leader is gone while the
+	// group still runs.
+	CodeGroupChanged ErrorCode = "group-changed"
 )
 
 // errorReply is the body of an error frame.

@@ -27,3 +27,11 @@ func SignalGroup(pgid int, _ bool) error {
 // groupAlive cannot tell a live process from a gone one here without opening it, so it
 // reports none left once a kill was sent.
 func groupAlive(int) bool { return false }
+
+// processAlive cannot tell a live process from a gone one here, as groupAlive cannot.
+func processAlive(int) bool { return false }
+
+// ProcessGroup has no group to answer on a platform with no process groups.
+func ProcessGroup(int) (int, error) {
+	return 0, errors.New("broker: this platform has no process groups")
+}

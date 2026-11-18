@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -276,6 +277,26 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	}
 }
 
+// reportDeadSeats names each validation seat a dead group holds. A pool sweep cannot free
+// one: the broker it lives in is the same build, and a seat outlives the run that took it
+// while any process keeps its connection open. It says so rather than freeing the seat,
+// because only `magus job stop` proves the groups it would release are the recorded ones.
+func reportDeadSeats(ctx context.Context) {
+	work, err := queryWork(ctx)
+	if errors.Is(err, broker.ErrUnavailable) {
+		return
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "could not read the broker's validation seats, so dead ones go unreported", attr.Notice(""), attr.Component("magus"), attr.Error(err))
+		return
+	}
+	for _, seat := range work.Seats {
+		if seat.Dead() {
+			slog.WarnContext(ctx, server.DeadSeatText(seat), attr.Notice(""), attr.Component("magus"))
+		}
+	}
+}
+
 // serverStop shuts down the persistent server, or with --pools the live
 // per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
@@ -302,7 +323,9 @@ func serverStop(ctx context.Context, args []string) error {
 		if opts.Format != outputText {
 			return exit.Usagef("magus server stop --pools: -o is not supported")
 		}
-		return proc.StopStalePools(ctx, version)
+		err := proc.StopStalePools(ctx, version)
+		reportDeadSeats(ctx)
+		return err
 	}
 
 	// Confirm a server is actually there before claiming to stop it, and capture its pid

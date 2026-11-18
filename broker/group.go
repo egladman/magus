@@ -33,3 +33,13 @@ func SignalGroup(pgid int, kill bool) error {
 func groupAlive(pgid int) bool {
 	return pgid > 1 && syscall.Kill(-pgid, 0) == nil
 }
+
+// processAlive reports whether process pid still exists.
+func processAlive(pid int) bool {
+	return pid > 0 && syscall.Kill(pid, 0) == nil
+}
+
+// ProcessGroup is the process group process pid is in.
+func ProcessGroup(pid int) (int, error) {
+	return syscall.Getpgid(pid)
+}

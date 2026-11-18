@@ -88,6 +88,8 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
+	case hint.JobStop.Leaf():
+		return jobStop(ctx, args[1:])
 	case "apply":
 		return jobApply(ctx, root, args[1:])
 	case "prune":
@@ -103,7 +105,7 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 	case "pin", "advance":
 		return jobPinOrAdvance(ctx, root, args[0], args[1:])
 	default:
-		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, graph, rm, prune, pause, resume, grant, pin or advance; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, graph, rm, prune, pause, resume, stop, grant, pin or advance; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 

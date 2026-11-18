@@ -3,7 +3,7 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]"
+.RI "job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume|stop> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read paths, plus the one check
@@ -257,6 +257,9 @@ Hold jobs' holders off the machine budget until resumed
 .TP
 \fBresume\fR
 Lift the pause on jobs
+.TP
+\fBstop\fR
+Stop the process groups the broker recorded for a job, and free their seats
 .TP
 \fBpin\fR
 Record the hash of the ./magus that judges a job's checkout
