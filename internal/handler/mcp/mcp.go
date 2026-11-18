@@ -26,7 +26,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -125,7 +125,7 @@ var ToolNeed = auth.Need{Scope: auth.ScopeMCP, Level: auth.LevelWrite}
 // grants nothing.
 func authorize(fn handlerFn) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-		cred := trail.CredentialFromContext(ctx)
+		cred := recorder.CredentialFromContext(ctx)
 		if !cred.Grant.Allows(ToolNeed) {
 			held := cred.Grant.String()
 			if held == "" {
@@ -394,7 +394,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		ctx = origin.WithContext(ctx, o)
 		// The one boundary where the client's name is known: every record made under this
 		// call is stamped with it as the origin's Host.
-		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, job.EntryPointMCP), o.Name)
+		ctx = recorder.ContextWithHost(recorder.ContextWithEntryPoint(ctx, job.EntryPointMCP), o.Name)
 		ctx = interactive.WithHints(ctx)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//
@@ -431,9 +431,9 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
 		// trail line. Request = the tool arguments, response = the result text.
-		request := trail.WriteBlob(ctx, trailDir, "mcp", argsJSON(req.GetArguments()))
+		request := recorder.WritePayload(ctx, trailDir, "mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		response := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
+		response := recorder.WritePayload(ctx, trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
 		ev := journal.Call{
@@ -464,7 +464,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		default:
 			reqLog.InfoContext(ctx, "tooldone", slog.Duration("duration", dur))
 		}
-		trail.Append(ctx, trailDir, ev)
+		recorder.AppendCall(ctx, trailDir, ev)
 		if tel != nil {
 			// INPUT = the serialized tool arguments; OUTPUT = every byte the agent is
 			// sent, the structured copy of the payload included. Attribute by tool +

@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
@@ -341,7 +341,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 
-	ctx := trail.ContextWithEntryPoint(t.Context(), jobtypes.EntryPointServer)
+	ctx := recorder.ContextWithEntryPoint(t.Context(), jobtypes.EntryPointServer)
 	_, err := store.Update(ctx, "sync-graph", func(row *jobtypes.Job) {
 		row.State = jobtypes.StateRunning
 		row.LastRun = &jobtypes.Run{Invocation: "inv-1"}

@@ -1,12 +1,11 @@
-package trail
+package sessions
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -20,9 +19,9 @@ import (
 )
 
 // record writes one observation the way the guard hook does.
-func record(t *testing.T, base string, c AgentCommand) {
+func record(t *testing.T, base string, c recorder.AgentCommand) {
 	t.Helper()
-	AppendAgentCommand(context.Background(), base, c)
+	recorder.AppendAgentCommand(context.Background(), base, c)
 }
 
 // replayed is replayTrail over a store whose every blob decodes.
@@ -36,15 +35,15 @@ func replayed(t *testing.T, root, base string, paths []string, limit int) map[st
 // recordUndecodable writes an agent command whose request blob is not JSON.
 func recordUndecodable(t *testing.T, base string) string {
 	t.Helper()
-	request := WriteBlob(t.Context(), base, "agent", []byte("not json"))
-	Append(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: toolShell, Request: request})
+	request := recorder.WritePayload(t.Context(), base, "agent", []byte("not json"))
+	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: recorder.ToolShellCommand, Request: request})
 	return request.Ref
 }
 
 // A blob that does not decode is named, and the touches the rest give are still returned.
 func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "magus.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileWrite, Path: "magus.go"})
 	ref := recordUndecodable(t, base)
 
 	got, err := replayTrail(t.Context(), "", base, []string{"magus.go"}, 100)
@@ -55,24 +54,12 @@ func TestReplayReturnsAnUndecodableBlobBesideTheTouches(t *testing.T) {
 	assert.Len(t, got["magus.go"], 1)
 }
 
-func TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts(t *testing.T) {
-	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "a.go"})
-	recordUndecodable(t, base)
-
-	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
-
-	var undecodable *blobUndecodableError
-	require.ErrorAs(t, err, &undecodable)
-	assert.Equal(t, [3]int{1, 0, 0}, [3]int{reads, writes, shell})
-}
-
 func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: toolRead, Path: "internal/cache/output.go"})
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "types/impact.go"})
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolShell, Command: "go test ./internal/cache/"})
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: toolWrite, Path: "magus.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: recorder.ToolFileRead, Path: "internal/cache/output.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "types/impact.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolShellCommand, Command: "go test ./internal/cache/"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: recorder.ToolFileWrite, Path: "magus.go"})
 
 	got := replayed(t, "", base, []string{"magus.go"}, 100)
 	touches := got["magus.go"]
@@ -97,9 +84,9 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 	const token = "mgs_liveTokenThatMustNotEscape" // a fixture, not a credential
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: `T=` + token + ` curl -H "Authorization: Bearer $T" http://127.0.0.1:7391/mcp`})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "/usr/local/bin/psql --password=hunter2"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "magus.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: `T=` + token + ` curl -H "Authorization: Bearer $T" http://127.0.0.1:7391/mcp`})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "/usr/local/bin/psql --password=hunter2"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "magus.go"})
 
 	touches := replayed(t, "", base, []string{"magus.go"}, 100)["magus.go"]
 	require.Len(t, touches, 1)
@@ -114,30 +101,13 @@ func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 	}
 }
 
-func TestCommandProgramReducesToTheProgram(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"go test ./internal/cache/", "go"},
-		{"./magus run build .", "magus"},
-		{"/usr/local/bin/psql --password=hunter2", "psql"},
-		{`SECRET=abc TOKEN=def curl -H "Authorization: Bearer $TOKEN"`, "curl"},
-		{`sh -c "curl -H 'Authorization: Bearer x'"`, "sh"},
-		// A path that merely contains "=" is a program, not an assignment.
-		{"/opt/we=ird/tool --flag", "tool"},
-		// Nothing parseable reduces to empty and is dropped rather than guessed at.
-		{"", ""},
-		{"ONLY=assignments HERE=too", ""},
-	} {
-		assert.Equal(t, tc.want, CommandProgram(tc.in), "input %q", tc.in)
-	}
-}
-
 // The whole point of walking oldest-first: a path reached AFTER the write must not
 // retroactively become its explanation.
 func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "before.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "after.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "before.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "after.go"})
 
 	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
@@ -149,9 +119,9 @@ func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
 // the paths that actually explain the edit.
 func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "target.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "context.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "context.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
 
 	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
@@ -161,10 +131,10 @@ func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
 // A session that edits a file repeatedly is ONE story, not eleven.
 func TestReplayKeepsOneTouchPerSession(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "first.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "second.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "first.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "second.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
 
 	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1, "one session is one story")
@@ -174,10 +144,10 @@ func TestReplayKeepsOneTouchPerSession(t *testing.T) {
 
 func TestReplaySeparatesSessions(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "a.go"})
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "target.go"})
-	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolRead, Path: "b.go"})
-	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "a.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s2", Host: "codex", Tool: recorder.ToolFileRead, Path: "b.go"})
+	record(t, base, recorder.AgentCommand{Session: "s2", Host: "codex", Tool: recorder.ToolFileWrite, Path: "target.go"})
 
 	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 2)
@@ -197,15 +167,15 @@ func TestReplaySeparatesSessions(t *testing.T) {
 // Collapsing them all into one fictional session would invent a narrative.
 func TestReplaySkipsEventsWithNoSession(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Tool: toolRead, Path: "a.go"})
-	record(t, base, AgentCommand{Tool: toolWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Tool: recorder.ToolFileRead, Path: "a.go"})
+	record(t, base, recorder.AgentCommand{Tool: recorder.ToolFileWrite, Path: "target.go"})
 	assert.Empty(t, replayed(t, "", base, []string{"target.go"}, 100))
 }
 
 func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "wanted.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "unwanted.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "wanted.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "unwanted.go"})
 
 	got := replayed(t, "", base, []string{"wanted.go"}, 100)
 	assert.Len(t, got, 1)
@@ -216,10 +186,10 @@ func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
 func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 	base := t.TempDir()
 	for range 5 {
-		record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "same.go"})
+		record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "same.go"})
 	}
-	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "other.go"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileRead, Path: "other.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolFileWrite, Path: "target.go"})
 
 	touches := replayed(t, "", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
@@ -264,10 +234,10 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 	testkit.Isolate(t)
 	root, base := t.TempDir(), t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "from-trail.go"})
-	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "magus.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileRead, Path: "from-trail.go"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Host: "claude-code", Tool: recorder.ToolFileWrite, Path: "magus.go"})
 
-	dir, err := sessions.Dir(root)
+	dir, err := Dir(root)
 	require.NoError(t, err)
 	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
@@ -298,30 +268,30 @@ func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 // in this checkout, under which lease, and whom it handed work to.
 func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
-	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: verdict.Deny})
-	AppendAgentSpawn(context.Background(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
+	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "rm -rf", Decision: verdict.Deny})
+	recorder.AppendAgentSpawn(context.Background(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
-	got, err := ForSession(t.Context(), base, "s1", 100)
+	got, err := ReadActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
 	require.Len(t, got.Spawns, 1)
 	require.Len(t, got.Calls, 2)
-	assert.Equal(t, SessionTrail{
+	assert.Equal(t, Activity{
 		Commands: 2,
 		Denied:   1,
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
-		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
-		Calls: []SessionCall{
-			{At: got.Calls[0].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
-			{At: got.Calls[1].At, Decision: verdict.Deny, Action: toolShell, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+		Spawns:   []ActivitySpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
+		Calls: []ActivityCall{
+			{At: got.Calls[0].At, Decision: verdict.Defer, Action: recorder.ToolShellCommand, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
+			{At: got.Calls[1].At, Decision: verdict.Deny, Action: recorder.ToolShellCommand, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
 		},
 	}, got)
 
-	none, err := ForSession(t.Context(), base, "", 100)
+	none, err := ReadActivity(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	assert.Zero(t, none.Commands, "no session id joins nothing")
-	absent, err := ForSession(t.Context(), t.TempDir(), "s1", 100)
+	absent, err := ReadActivity(t.Context(), t.TempDir(), "s1", 100)
 	require.NoError(t, err)
 	assert.Zero(t, absent.Commands, "an absent store is empty, not an error")
 }
@@ -330,14 +300,14 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 // with the store to clear rather than count the call as undecided.
 func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	base := t.TempDir()
-	response := WriteBlob(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	response := recorder.WritePayload(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
 	ref := response.Ref
-	Append(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: toolShell, Response: response})
+	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
 
-	_, err := ForSession(t.Context(), base, "s1", 100)
+	_, err := ReadActivity(t.Context(), base, "s1", 100)
 	var retired *retiredDecisionError
 	require.ErrorAs(t, err, &retired)
-	assert.Equal(t, retiredDecisionError{Store: filepath.Join(base, dir), Ref: ref, Decision: "pass"}, *retired)
+	assert.Equal(t, retiredDecisionError{Store: recorder.CallsDir(base), Ref: ref, Decision: "pass"}, *retired)
 }
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
@@ -349,20 +319,20 @@ func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	}
 	chars := 5000
 	passed := types.AgentFacts{Thread: types.AgentThreadMain, DelegableClass: types.DelegableSearch, ResultChars: &chars}
-	record(t, base, AgentCommand{
-		Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Advise, Rule: "root-heavy-command", AgentFacts: advised,
+	record(t, base, recorder.AgentCommand{
+		Session: "s1", Tool: recorder.ToolShellCommand, Command: "grep -r x .", Decision: verdict.Advise, Rule: "root-heavy-command", AgentFacts: advised,
 	})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
-	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
-	AppendAgentSpawn(t.Context(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
+	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
+	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
+	recorder.AppendAgentSpawn(t.Context(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
-	got, err := ForSession(t.Context(), base, "s1", 100)
+	got, err := ReadActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
 	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
-	assert.Equal(t, SessionCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: toolShell, AgentFacts: advised}, got.Calls[0])
-	assert.Equal(t, SessionCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: toolShell, AgentFacts: passed}, got.Calls[1])
+	assert.Equal(t, ActivityCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: recorder.ToolShellCommand, AgentFacts: advised}, got.Calls[0])
+	assert.Equal(t, ActivityCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: recorder.ToolShellCommand, AgentFacts: passed}, got.Calls[1])
 	require.Len(t, got.Spawns, 1)
-	assert.Equal(t, SessionSpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
+	assert.Equal(t, ActivitySpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
 }
 
 type RepeatsSuite struct {
@@ -375,19 +345,19 @@ func TestRepeatsSuite(t *testing.T) { suite.Run(t, new(RepeatsSuite)) }
 func (s *RepeatsSuite) SetupTest() { s.start = time.UnixMilli(1_700_000_000_000) }
 
 // poll is a tool-time row n seconds in.
-func (s *RepeatsSuite) poll(n int, worker, call, result string) SessionCall {
-	return SessionCall{
+func (s *RepeatsSuite) poll(n int, worker, call, result string) ActivityCall {
+	return ActivityCall{
 		At: s.start.Add(time.Duration(n) * time.Second), Action: "Bash", Worker: worker, ToolMs: 100,
 		AgentFacts: types.AgentFacts{CallDigest: call, ResultDigest: result},
 	}
 }
 
-func (s *RepeatsSuite) write(n int, worker string) SessionCall {
-	return SessionCall{At: s.start.Add(time.Duration(n) * time.Second), Action: toolWrite, Worker: worker}
+func (s *RepeatsSuite) write(n int, worker string) ActivityCall {
+	return ActivityCall{At: s.start.Add(time.Duration(n) * time.Second), Action: recorder.ToolFileWrite, Worker: worker}
 }
 
 func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime() {
-	got := repeats([]SessionCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
+	got := repeats([]ActivityCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
 	s.Equal([]RepeatRun{{
 		Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 3,
 		First: s.start, Last: s.start.Add(9 * time.Second), ToolMs: 300, SpanMs: 9000,
@@ -395,7 +365,7 @@ func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime(
 }
 
 func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
-	got := repeats([]SessionCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
+	got := repeats([]ActivityCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
 	s.Equal([]RepeatRun{{
 		Tool: "Bash", CallDigest: "c", ResultDigest: "r1", Count: 2,
 		First: s.start, Last: s.start.Add(time.Second), ToolMs: 200, SpanMs: 1000,
@@ -403,42 +373,42 @@ func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
 }
 
 func (s *RepeatsSuite) TestAWriteByTheSameWorkerEndsTheRun() {
-	got := repeats([]SessionCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
+	got := repeats([]ActivityCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnotherWorkersWriteLeavesTheRunAlone() {
-	got := repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
+	got := repeats([]ActivityCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
 	s.Require().Len(got, 1)
 	s.Equal("w1", got[0].Worker)
 }
 
 func (s *RepeatsSuite) TestTwoWorkersRunningTheSameCallAreNotARepeat() {
-	got := repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
+	got := repeats([]ActivityCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnUnobservedDigestJoinsNoRun() {
 	noResult := s.poll(0, "", "c", "")
 	noCall := s.poll(1, "", "", "r")
-	s.Empty(repeats([]SessionCall{noResult, noResult, noCall, noCall}))
+	s.Empty(repeats([]ActivityCall{noResult, noResult, noCall, noCall}))
 }
 
 func (s *RepeatsSuite) TestRowsWithoutToolTimeAreNotCounted() {
 	pre := s.poll(0, "", "c", "r")
 	pre.ToolMs = 0
-	s.Empty(repeats([]SessionCall{pre, pre}))
+	s.Empty(repeats([]ActivityCall{pre, pre}))
 }
 
 func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() {
 	base := s.T().TempDir()
 	facts := types.AgentFacts{CallDigest: "c", ResultDigest: "r"}
-	record(s.T(), base, AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 40, AgentFacts: facts})
-	record(s.T(), base, AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 60, AgentFacts: facts})
-	record(s.T(), base, AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 5,
+	record(s.T(), base, recorder.AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 40, AgentFacts: facts})
+	record(s.T(), base, recorder.AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 60, AgentFacts: facts})
+	record(s.T(), base, recorder.AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 5,
 		AgentFacts: types.AgentFacts{CallDigest: "c", Unobserved: []string{"result"}}})
 
-	got, err := ForSession(s.T().Context(), base, "s1", 100)
+	got, err := ReadActivity(s.T().Context(), base, "s1", 100)
 	s.Require().NoError(err)
 	s.Require().Len(got.Calls, 3)
 	s.Equal("w1", got.Calls[0].Worker)
@@ -449,39 +419,3 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	s.Equal(RepeatRun{Worker: "w1", Thread: "unknown", Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 2, ToolMs: 100}, run)
 }
 
-func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
-	base := t.TempDir()
-	_, ok := LastAgentActivity(base)
-	assert.False(t, ok, "an empty trail has no activity to report")
-
-	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
-	record(t, base, AgentCommand{Session: "s2", Host: "opencode", Tool: toolRead, Path: "magus.go"})
-
-	got, ok := LastAgentActivity(base)
-	require.True(t, ok)
-	assert.Equal(t, AgentActivity{Session: "s2", Host: "opencode", At: got.At}, got)
-	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
-
-	_, ok = LastAgentActivity(t.TempDir())
-	assert.False(t, ok, "an absent trail is no activity, not an error")
-}
-
-// The observation is found however many other events sit on top of it, and a line
-// carrying no timestamp is not one: clocking it would date the answer to 1970 rather
-// than report that nothing has been observed.
-func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
-	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
-	for range 200 {
-		Append(t.Context(), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
-	}
-
-	got, ok := LastAgentActivity(base)
-	require.True(t, ok, "an observation does not age out because other events were recorded after it")
-	assert.Equal(t, "s1", got.Session)
-
-	stamped := t.TempDir()
-	Append(t.Context(), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
-	_, ok = LastAgentActivity(stamped)
-	assert.False(t, ok, "an observation with no timestamp has no age to report")
-}

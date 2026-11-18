@@ -36,7 +36,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -262,7 +262,7 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	dir := t.TempDir()
-	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
+	ctx := recorder.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
 
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
 

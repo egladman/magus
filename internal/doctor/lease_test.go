@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types/check"
@@ -85,7 +85,7 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	cacheDir, root, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=adj/from-env")
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
@@ -108,15 +108,15 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 	cacheDir, _, _ := newWorkspaceLedger(t)
 	bindCheckout(t, cacheDir, "adj/marker")
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=adj/from-env")
 
-	lease, from := job.ActingLease(place(t, cacheDir, ""), trail.LeaseFromEnv())
+	lease, from := job.ActingLease(place(t, cacheDir, ""), recorder.LeaseFromEnv())
 	assert.Equal(t, "adj/marker", lease)
 	assert.Equal(t, jobtypes.LeaseSourceContested, from)
 
 	// With no marker the environment is the only answer there is, which stays true: a
 	// checkout nobody bound is the unattributed case the guard fails open on.
-	lease, from = job.ActingLease(place(t, t.TempDir(), ""), trail.LeaseFromEnv())
+	lease, from = job.ActingLease(place(t, t.TempDir(), ""), recorder.LeaseFromEnv())
 	assert.Equal(t, "adj/from-env", lease)
 	assert.Equal(t, jobtypes.LeaseSourceEnv, from)
 }

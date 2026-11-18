@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"cmp"
@@ -172,8 +172,8 @@ func LeaseDenials(ctx context.Context, base, lease string, since int64, limit in
 // agentCommand is one agent-command event with its request and response blobs decoded.
 type agentCommand struct {
 	event    journal.Call
-	request  agentCommandRequest
-	response agentCommandResponse
+	request  AgentCommandRequest
+	response AgentCommandResponse
 }
 
 // agentCommands yields the agent-command events among events, in their order, whose

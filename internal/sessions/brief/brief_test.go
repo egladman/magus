@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -48,7 +48,7 @@ func assertBriefIsContextSafe(t *testing.T, text string) {
 }
 
 func TestSessionBriefSurfacesOneRecurringFeedbackReview(t *testing.T) {
-	brief := Payload{Feedback: []trail.GuardFeedback{
+	brief := Payload{Feedback: []recorder.GuardFeedback{
 		{Rule: "raw-tool", Denied: 3, Sessions: 1, FollowedSessions: 1},
 		{Rule: "output-pipe", Denied: 2, Sessions: 2},
 	}}
@@ -421,7 +421,7 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	}
 	// Bound after the rows are written: the store refuses a bound session's write to a
 	// row it did not create.
-	t.Setenv(trail.EnvBaggage, "magus.lease=bound")
+	t.Setenv(recorder.EnvBaggage, "magus.lease=bound")
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
 	ids := make([]string, len(brief.Leases))
@@ -584,7 +584,7 @@ func TestSessionBriefListsTheForksOfTheJobActedUnder(t *testing.T) {
 		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	t.Setenv(trail.EnvBaggage, "magus.lease=worker")
+	t.Setenv(recorder.EnvBaggage, "magus.lease=worker")
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
 	assert.Equal(t, &briefJobTree{Root: "worker", Jobs: []briefJob{

@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -198,7 +198,7 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 // would tell a reader to set it to a bare id and produce a value no baggage parser accepts.
 const (
 	flagHookLease = "lease"
-	envHookLease  = trail.EnvBaggage + "=" + trail.BaggageLease
+	envHookLease  = recorder.EnvBaggage + "=" + recorder.BaggageLease
 )
 
 // writeGrade is what the job store has to say about one write. Separate from
@@ -505,7 +505,7 @@ func holderNotice(owner jobtypes.Job) string {
 // there is nothing to teach from. Neither is an already-enrolled worker: naming a lease is
 // the whole thing being asked for.
 func adviseUnleasedWorker(actingLease string) writeGrade {
-	if actingLease != "" || trail.SpawnFromEnv().ParentSpanID == "" {
+	if actingLease != "" || recorder.SpawnFromEnv().ParentSpanID == "" {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: verdict.Advise, Kind: advisoryUnleasedWrite,
@@ -833,7 +833,7 @@ func holderLastCall(ctx context.Context, deps Dependencies, at location, owner j
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
 	var last time.Time
-	for e, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), holderTrailWindow) {
+	for e, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), holderTrailWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
@@ -1435,7 +1435,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // spawn ancestry: a person editing their own checkout is owed silence, the same
 // exemption every other file-write rule gives them.
 //
-// "Agent-attributed" reads trail.SpawnFromEnv, the ancestry claim adviseUnleasedWorker
+// "Agent-attributed" reads recorder.SpawnFromEnv, the ancestry claim adviseUnleasedWorker
 // above already teaches an unleased worker to declare: a parent span id means some tool
 // started this process deliberately, and nothing here can turn a false claim into a
 // worse verdict than the deny a true one earns, since a person's own edit carries no
@@ -1445,7 +1445,7 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if writePath == "" {
 		return writeGrade{}
 	}
-	if actingLease == "" && trail.SpawnFromEnv().ParentSpanID == "" {
+	if actingLease == "" && recorder.SpawnFromEnv().ParentSpanID == "" {
 		return writeGrade{}
 	}
 	root, err := workspace.FindRoot("")

@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"context"
@@ -23,8 +23,8 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	dir := t.TempDir()
 	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
 
-	Append(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
+	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
+	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
 	events, err := recentCalls(t.Context(), dir, 2)
 	require.NoError(t, err)

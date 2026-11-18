@@ -18,9 +18,9 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/sessions/brief"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -169,7 +169,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 
 // localOrigin is this process's OS account, entering through e.
 func localOrigin(ctx context.Context, e jobtypes.EntryPoint) jobtypes.Origin {
-	return trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: e})
+	return recorder.StampOrigin(ctx, jobtypes.Origin{EntryPoint: e})
 }
 
 // sessionLoad implements `magus session load`.
@@ -290,7 +290,7 @@ func sessionShow(ctx context.Context, root string, args []string) error {
 	if ok {
 		out.Trail = &tr
 	}
-	out.Cost = trail.SummarizeCost(out.Trail, sessionModelTable(root))
+	out.Cost = sessions.SummarizeCost(out.Trail, sessionModelTable(root))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -440,19 +440,19 @@ type sessionShowOutput struct {
 	// between the host's transcript and the observations magus made while it ran. Absent
 	// when the trail here holds nothing for it, which is the case for a session that ran
 	// in another worktree.
-	Trail *trail.SessionTrail `json:"trail,omitempty"`
+	Trail *sessions.Activity `json:"trail,omitempty"`
 	// Cost is what the session's context and spawns cost. The sections the trail could not
 	// measure are named in its not_measured map rather than left out or zeroed.
-	Cost *trail.SessionCost `json:"cost,omitempty"`
+	Cost *sessions.Cost `json:"cost,omitempty"`
 }
 
 func renderSessionShow(w io.Writer, s sessionShowOutput) {
 	sessions.RenderShow(w, s.ShowSummary)
 	if s.Trail != nil {
-		trail.RenderSessionTrail(w, s.Trail)
+		sessions.RenderActivity(w, s.Trail)
 	}
 	if s.Cost != nil {
-		trail.RenderCost(w, s.Cost)
+		sessions.RenderCost(w, s.Cost)
 	}
 }
 
@@ -465,14 +465,14 @@ func checkoutCacheDir(root string) string {
 	return cacheDir
 }
 
-// sessionTrailHere is [trail.SessionTrailHere] for the checkout at root, reporting false
+// sessionTrailHere is [sessions.ActivityHere] for the checkout at root, reporting false
 // when root has no cache dir to hold a trail.
-func sessionTrailHere(ctx context.Context, root, session string) (trail.SessionTrail, bool, error) {
+func sessionTrailHere(ctx context.Context, root, session string) (sessions.Activity, bool, error) {
 	cacheDir := checkoutCacheDir(root)
 	if cacheDir == "" {
-		return trail.SessionTrail{}, false, nil
+		return sessions.Activity{}, false, nil
 	}
-	return trail.SessionTrailHere(ctx, cacheDir, session)
+	return sessions.ActivityHere(ctx, cacheDir, session)
 }
 
 func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheClock {
@@ -480,7 +480,7 @@ func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheCloc
 	if cacheDir == "" {
 		return sessions.PromptCacheClock{}
 	}
-	return trail.PromptCacheForCheckout(cacheDir, now)
+	return sessions.PromptCacheForCheckout(cacheDir, now)
 }
 
 // The helpers below keep the names that cmd files outside this one still call.

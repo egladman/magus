@@ -26,9 +26,9 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -590,7 +590,7 @@ func (h *Host) recordJobActivity(ctx context.Context, args []string, dur time.Du
 		ev.Outcome = journal.OutcomeError
 		ev.Error = err.Error()
 	}
-	trail.Append(ctx, base, ev)
+	recorder.AppendCall(ctx, base, ev)
 	completeJobRow(ctx, h.jobStore, args, dur, err)
 }
 
@@ -609,7 +609,7 @@ func completeJobRow(ctx context.Context, store *job.Store, args []string, dur ti
 		return // an adopted run rather than one of the server's own, so there is no row
 	}
 	catalog := job.All()[i]
-	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
+	ctx = recorder.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
 	if _, err := store.Update(ctx, catalog.Name, func(row *jobtypes.Job) {
 		row.State = jobtypes.StatePass
 		if jobErr != nil {

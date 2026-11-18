@@ -17,9 +17,9 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
@@ -86,7 +86,7 @@ func TestShareMintIsAudited(t *testing.T) {
 
 	minter := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: auth.AccessConsole()}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
-	req = req.WithContext(trail.ContextWithCredential(req.Context(), minter))
+	req = req.WithContext(recorder.ContextWithCredential(req.Context(), minter))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -110,13 +110,13 @@ func TestShareMintIsAudited(t *testing.T) {
 		Request: e.Request,
 		Preview: e.Preview,
 	}, e)
-	blob, err := e.Request.Read(trail.CallsDir(trailDir))
+	blob, err := e.Request.Read(recorder.CallsDir(trailDir))
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
-	var rec trail.MintRecord
+	var rec recorder.MintRecord
 	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
-	assert.Equal(t, trail.MintRecord{
+	assert.Equal(t, recorder.MintRecord{
 		Minted:  auth.Credential{Kind: auth.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: auth.AccessViewer()},
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  minter,

@@ -1,9 +1,9 @@
-package trail
+package sessions
 
 import (
 	"time"
 
-	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 // PromptCacheForCheckout resolves the prompt-cache clock from the newest guard
@@ -17,10 +17,10 @@ import (
 // An empty clock for a checkout whose trail holds nothing: no hook wired, or a tree
 // nobody has run an agent against. Nothing is printed then, because the alternative is
 // a clock counting up from an activity magus never saw.
-func PromptCacheForCheckout(cacheDir string, now time.Time) sessions.PromptCacheClock {
-	act, ok := LastAgentActivity(cacheDir)
+func PromptCacheForCheckout(cacheDir string, now time.Time) PromptCacheClock {
+	act, ok := recorder.LastAgentActivity(cacheDir)
 	if !ok {
-		return sessions.PromptCacheClock{}
+		return PromptCacheClock{}
 	}
-	return sessions.PromptCacheAt(act.Session, act.At, now)
+	return PromptCacheAt(act.Session, act.At, now)
 }

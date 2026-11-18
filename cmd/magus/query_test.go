@@ -35,7 +35,6 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/server"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
@@ -250,7 +249,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	global = globalFlags{}
 	m := newQueryTestWorkspace(t)
 	ctx := withMagus(context.Background(), m)
-	ref := trail.WriteBlob(ctx, m.CacheDir(), "grd", []byte("the full verdict")).Ref
+	ref := recorder.WritePayload(ctx, m.CacheDir(), "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, ref)
 
 	out := captureStdout(t, func() {

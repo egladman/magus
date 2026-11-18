@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -210,13 +210,13 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 1)
 	got := calls[0]
 	got.At = time.Time{}
-	assert.Equal(t, trail.SessionCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
+	assert.Equal(t, sessions.ActivityCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
 		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 	}}, got)
 }
@@ -227,7 +227,7 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 2)

@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"bufio"
@@ -111,12 +111,12 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 				out.Observations = append(out.Observations, obs)
 			}
 		case journal.CallKindAgentSpawn:
-			if e.Name == ActionAgentContinue {
+			if e.Name == NameAgentContinue {
 				continue
 			}
 			sp := trailrecord.Spawn{At: e.Time.UnixMilli(), Agent: e.Agent, Child: e.Name, Lease: e.Lease}
 			if raw, err := e.Request.Read(CallsDir(s.base)); err == nil {
-				var req agentSpawnRequest
+				var req AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
 				}
@@ -133,8 +133,8 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 // [*blobUndecodableError], or a [*retiredDecisionError] for one holding a retired guard
 // decision.
 func feedbackObservation(base string, e journal.Call) (trailrecord.Observation, bool, error) {
-	var req agentCommandRequest
-	var resp agentCommandResponse
+	var req AgentCommandRequest
+	var resp AgentCommandResponse
 	var retired *retiredDecisionError
 	if e.Request.Ref == "" {
 		return trailrecord.Observation{}, false, nil

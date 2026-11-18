@@ -1,4 +1,4 @@
-package trail
+package sessions
 
 import (
 	"cmp"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -30,7 +29,7 @@ var costAdviceRules = []string{
 }
 
 // costSection names one cost section. A section nobody could measure is listed under
-// SessionCost.NotMeasured by its name instead of being left out or zeroed.
+// Cost.NotMeasured by its name instead of being left out or zeroed.
 type costSection string
 
 const (
@@ -66,10 +65,10 @@ type costSpawn struct {
 	Model string
 }
 
-// SessionCost is the cost half of `magus session show`. Every section is a pointer or a
+// Cost is the cost half of `magus session show`. Every section is a pointer or a
 // slice that is absent when it could not be measured, and NotMeasured says why, so an
 // unmeasured section never reads as a measured zero.
-type SessionCost struct {
+type Cost struct {
 	RootContext *rootContext           `json:"root_context,omitempty"`
 	Delegable   *delegableShare        `json:"delegable,omitempty"`
 	Spawns      *spawnTally            `json:"spawns,omitempty"`
@@ -93,7 +92,7 @@ type rootContext struct {
 type delegableShare struct {
 	Chars   chars                  `json:"chars"`
 	Total   chars                  `json:"total"`
-	ByClass []sessions.CountedName `json:"by_class,omitempty"`
+	ByClass []CountedName `json:"by_class,omitempty"`
 }
 
 // Share is Chars as a fraction of Total, 0 when every observed result was empty.
@@ -107,7 +106,7 @@ func (d delegableShare) Share() float64 {
 // spawnTally counts the session's spawns by the model each declared, "" for none.
 type spawnTally struct {
 	Total   int                    `json:"total"`
-	ByModel []sessions.CountedName `json:"by_model,omitempty"`
+	ByModel []CountedName `json:"by_model,omitempty"`
 }
 
 // advisoryOutcome counts the cost advisories the main thread was given and how many it
@@ -157,8 +156,8 @@ const noCallFacts = "the trail holds no per-call facts for this session"
 // SummarizeCost folds one session's trail into the cost sections. tr is nil when this
 // checkout's trail holds nothing for the session, in which case no section is measured.
 // tr is not modified.
-func SummarizeCost(tr *SessionTrail, table model.Table) *SessionCost {
-	c := &SessionCost{NotMeasured: map[costSection]string{}}
+func SummarizeCost(tr *Activity, table model.Table) *Cost {
+	c := &Cost{NotMeasured: map[costSection]string{}}
 	if tr == nil {
 		for _, s := range costSections {
 			c.NotMeasured[s] = "this checkout's trail holds nothing for the session"
@@ -170,8 +169,8 @@ func SummarizeCost(tr *SessionTrail, table model.Table) *SessionCost {
 
 	// The root is the main thread; a call of unknown thread is never counted as the root's.
 	calls := slices.Clone(tr.Calls)
-	slices.SortStableFunc(calls, func(a, b SessionCall) int { return a.At.Compare(b.At) })
-	var main []SessionCall
+	slices.SortStableFunc(calls, func(a, b ActivityCall) int { return a.At.Compare(b.At) })
+	var main []ActivityCall
 	unknown := 0
 	for _, call := range calls {
 		switch call.Thread {
@@ -221,7 +220,7 @@ func SummarizeCost(tr *SessionTrail, table model.Table) *SessionCost {
 		c.NotMeasured[costDollars] = why
 	}
 	c.Repeats = tr.Repeats
-	if !slices.ContainsFunc(calls, func(call SessionCall) bool { return call.ToolMs > 0 && call.ResultDigest != "" }) {
+	if !slices.ContainsFunc(calls, func(call ActivityCall) bool { return call.ToolMs > 0 && call.ResultDigest != "" }) {
 		c.NotMeasured[costRepeats] = "no tool-time row carried a result digest, so a repeated answer cannot be told from a changed one"
 	}
 	if len(c.NotMeasured) == 0 {
@@ -230,7 +229,7 @@ func SummarizeCost(tr *SessionTrail, table model.Table) *SessionCost {
 	return c
 }
 
-func sessionSpawns(tr *SessionTrail) []costSpawn {
+func sessionSpawns(tr *Activity) []costSpawn {
 	out := make([]costSpawn, 0, len(tr.Spawns))
 	for _, sp := range tr.Spawns {
 		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel})
@@ -243,10 +242,10 @@ func spawnsByModel(spawns []costSpawn) *spawnTally {
 	for _, sp := range spawns {
 		tally[sp.Model]++
 	}
-	return &spawnTally{Total: len(spawns), ByModel: sessions.Counted(tally)}
+	return &spawnTally{Total: len(spawns), ByModel: Counted(tally)}
 }
 
-func buildRootContext(main []SessionCall) *rootContext {
+func buildRootContext(main []ActivityCall) *rootContext {
 	var sizes []tokens
 	models := map[string]bool{}
 	for _, call := range main {
@@ -271,7 +270,7 @@ func buildRootContext(main []SessionCall) *rootContext {
 
 // sumDelegable sums the result sizes the main thread's calls observed, nil when none
 // observed one.
-func sumDelegable(main []SessionCall) *delegableShare {
+func sumDelegable(main []ActivityCall) *delegableShare {
 	var total, delegable chars
 	observed := false
 	byClass := map[string]int{}
@@ -289,10 +288,10 @@ func sumDelegable(main []SessionCall) *delegableShare {
 	if !observed {
 		return nil
 	}
-	return &delegableShare{Chars: delegable, Total: total, ByClass: sessions.Counted(byClass)}
+	return &delegableShare{Chars: delegable, Total: total, ByClass: Counted(byClass)}
 }
 
-func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
+func tallyAdvisories(main []ActivityCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
 		if call.Decision != verdict.Advise || !slices.Contains(costAdviceRules, call.Rule) {
@@ -314,7 +313,7 @@ func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
 
 // tallyShadow tallies each profile's decisions across the main thread's calls. An unset
 // decision is an allow, as a rule's zero verdict is.
-func tallyShadow(main []SessionCall) []shadowTally {
+func tallyShadow(main []ActivityCall) []shadowTally {
 	byProfile := map[types.GuardProfile]map[verdict.Decision]int{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
@@ -338,7 +337,7 @@ func tallyShadow(main []SessionCall) []shadowTally {
 // estimateDollars prices the main thread's context through [model.Table.PriceContext], the
 // arithmetic a job's recorded outcome is priced by too, and returns its reason instead when
 // the price would be a guess.
-func estimateDollars(main []SessionCall, table model.Table) (*dollarEstimate, string) {
+func estimateDollars(main []ActivityCall, table model.Table) (*dollarEstimate, string) {
 	facts := make([]types.AgentFacts, len(main))
 	for i, call := range main {
 		facts[i] = call.AgentFacts
@@ -353,7 +352,7 @@ func estimateDollars(main []SessionCall, table model.Table) (*dollarEstimate, st
 	return &dollarEstimate{Billing: types.AgentBillingMetered, Calls: floor.Calls, FloorUSD: floor.USD}, ""
 }
 
-func RenderCost(w io.Writer, c *SessionCost) {
+func RenderCost(w io.Writer, c *Cost) {
 	fmt.Fprintln(w, "\nCost, with the root as the main thread:")
 	line := func(s costSection, text string) {
 		if why, no := c.NotMeasured[s]; no {

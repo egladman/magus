@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"bufio"

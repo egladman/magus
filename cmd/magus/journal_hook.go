@@ -5,7 +5,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -14,5 +14,5 @@ func withInvocationJournal(ctx context.Context, sinks []recorder.Sink, root, ver
 	lease := func(ctx context.Context, root string) (string, job.LeaseSource, error) {
 		return guard.CheckoutLease(ctx, root, jobPlace)
 	}
-	return trail.WithInvocationJournal(ctx, sinks, root, verb, args, version, lease)
+	return sessions.WithInvocationFacts(ctx, sinks, root, verb, args, version, lease)
 }

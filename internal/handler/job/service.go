@@ -25,8 +25,8 @@ import (
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -268,7 +268,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 		return
 	}
 	// The server holds its catalog's rows whoever asked for the run.
-	ctx = trail.ContextWithEntryPoint(ctx, job.EntryPointServer)
+	ctx = recorder.ContextWithEntryPoint(ctx, job.EntryPointServer)
 	if _, err := s.store.Update(ctx, j.Name, func(row *job.Job) {
 		row.State = job.StateRunning
 		if row.LastRun == nil {
@@ -303,7 +303,7 @@ func (s *Service) job(ctx context.Context, j jobstore.CatalogEntry, running map[
 	// for a job that ran before anything wrote rows, where a run with no id still beats none.
 	if row.LastRun != nil {
 		info.LastRun = storedRun(row.LastRun)
-	} else if ev, ok := trail.LastRun(ctx, s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
+	} else if ev, ok := recorder.LastJob(ctx, s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
 	info.Goals = wireGoals(row.Goals)
@@ -523,7 +523,7 @@ func wireJobResult(r *job.Result) *jobv1.JobResult {
 func (s *Service) targetSize(j jobstore.CatalogEntry) *jobv1.ResourceSize {
 	switch j.Name {
 	case jobstore.NameRotateActivities:
-		bytes, count := trail.Stat(s.ws.CacheDir())
+		bytes, count := recorder.StatCalls(s.ws.CacheDir())
 		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobstore.NameRotateLogs:
 		bytes, count := cache.NewOutputStore(s.ws.CacheDir()).RunsStat()

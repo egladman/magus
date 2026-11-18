@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/check"
 )
@@ -53,7 +53,7 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 	recordGuardDenial(t, base, "claude-code", "session-1")
 	recordGuardDenial(t, base, "claude-code", "session-1")
 	recordGuardDenial(t, base, "claude-code", "session-1")
-	trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
+	recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
 		Host: "claude-code", Session: "session-1", Tool: "shell.command",
 		Command: "magus run test .", Decision: verdict.Defer,
 	})
@@ -93,7 +93,7 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 // the guard writes to the activity trail on a real deny.
 func recordGuardDenial(t *testing.T, base, host, session string) {
 	t.Helper()
-	trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
+	recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: "go test ./...",
 		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})

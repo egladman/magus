@@ -31,9 +31,9 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -489,7 +489,7 @@ func (g *linkGuard) recordFirstUse(r *http.Request) {
 	// KindTokenLifecycle is the closest existing activity kind: a share token being
 	// exercised by a remote device is a lifecycle event of that token. No new proto
 	// kind is added; the console derives the alert from this event frontend-side.
-	go trail.Append(trailCtx, g.m.trailDir, journal.Call{
+	go recorder.AppendCall(trailCtx, g.m.trailDir, journal.Call{
 		Time:      time.Now(),
 		Kind:      journal.CallKindTokenLifecycle,
 		Name:      "share.open",

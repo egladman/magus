@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -296,7 +296,7 @@ func TestOutputLookupsReadASiblingWorktree(t *testing.T) {
 	require.NoError(t, err)
 	idleCache, err := ResolveCacheDir(idle)
 	require.NoError(t, err)
-	verdict := trail.WriteBlob(t.Context(), judgeCache, "grd", []byte("the full verdict")).Ref
+	verdict := recorder.WritePayload(t.Context(), judgeCache, "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, verdict)
 
 	opened, err := Inspect(t.Context(), worker, WithSpawnRule(tier.Ceiling))

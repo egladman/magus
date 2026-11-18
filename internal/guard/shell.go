@@ -22,7 +22,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
@@ -676,7 +676,7 @@ func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, co
 	if record, _ := job.ActingLease(at.jobs(), ""); record != "" {
 		return denial{}
 	}
-	if cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv()) == actingLease {
+	if cmp.Or(lineBaggageLease(f), recorder.LeaseFromEnv()) == actingLease {
 		return denial{}
 	}
 	var heredoc strings.Builder

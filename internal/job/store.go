@@ -37,8 +37,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/store/migrate"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -217,7 +217,7 @@ func (s *Store) open() *Store {
 	opened, err := job.Open(filepath.Dir(s.path),
 		job.WithRoot(s.root),
 		job.WithActor(s.Actor),
-		job.WithOrigin(func(ctx context.Context) job.Origin { return trail.StampOrigin(ctx, job.Origin{}) }),
+		job.WithOrigin(func(ctx context.Context) job.Origin { return recorder.StampOrigin(ctx, job.Origin{}) }),
 		job.WithDenials(s.holderDenials),
 		job.WithWriteHook(s.writeHook),
 		job.WithRetention(s.retainDue),
@@ -389,7 +389,7 @@ func (s *Store) holderDenials(ctx context.Context, holderCheckout, id string, si
 	if err != nil {
 		return nil, false, err
 	}
-	return trail.LeaseDenials(ctx, base, id, since, maxDenialsRead)
+	return recorder.LeaseDenials(ctx, base, id, since, maxDenialsRead)
 }
 
 // holderTrail is the trail base of the checkout a holder took its job in: this Store's own

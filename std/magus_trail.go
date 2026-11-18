@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -45,7 +45,7 @@ func MagusTrailRead(ctx context.Context, opts trailtypes.ReadOptions) (trailtype
 	if rel, err := filepath.Rel(root, cacheDir); err == nil && filepath.IsLocal(rel) {
 		cacheRel = rel
 	}
-	return trail.ReadFeedback(trail.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
+	return recorder.ReadFeedback(recorder.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
 }
 
 // listCheckouts is root and every other checkout of its repository. A repository whose
@@ -68,8 +68,8 @@ func listCheckouts(ctx context.Context, root string) []string {
 
 // feedbackWindow reads the trail call's window. A value that does not parse raises rather
 // than reading as its default, which would be a report about the wrong window.
-func feedbackWindow(opts trailtypes.ReadOptions, now time.Time) (trail.FeedbackWindow, error) {
-	w := trail.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
+func feedbackWindow(opts trailtypes.ReadOptions, now time.Time) (recorder.FeedbackWindow, error) {
+	w := recorder.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
 	var err error
 	if until := strings.TrimSpace(opts.Until); until != "" {
 		if w.Until, err = time.Parse(time.RFC3339, until); err != nil {
@@ -100,7 +100,7 @@ func MagusTrailMarks(ctx context.Context) ([]trailtypes.Mark, error) {
 	if err != nil {
 		return nil, err
 	}
-	return trail.ReadFeedbackMarks(dir)
+	return recorder.ReadFeedbackMarks(dir)
 }
 
 // MagusTrailMark backs magus\session().mark: one mark in the repo's store.
@@ -113,7 +113,7 @@ func MagusTrailMark(ctx context.Context, mark map[string]any) (trailtypes.Mark, 
 	if err != nil {
 		return trailtypes.Mark{}, err
 	}
-	return trail.AppendFeedbackMark(dir, m, time.Now())
+	return recorder.AppendFeedbackMark(dir, m, time.Now())
 }
 
 func feedbackMarksDir(ctx context.Context, member string) (string, error) {
@@ -121,7 +121,7 @@ func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 	if ws == nil {
 		return "", errorNoWorkspace(member)
 	}
-	return trail.FeedbackMarksDir(ws.Root())
+	return recorder.FeedbackMarksDir(ws.Root())
 }
 
 // decodeTrailMark reads a magus\trail\Mark object, raising on a field of

@@ -21,7 +21,7 @@ import (
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -302,7 +302,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 
 	spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, []trail.RuleFailure{{
+	assert.Equal(t, []recorder.RuleFailure{{
 		Side:  decidedByApproved,
 		Error: "the rule could not be resolved: approved magusfile: magusfile.buzz:3:1: expected expression",
 	}}, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
@@ -381,7 +381,7 @@ const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostT
 // spawnBlob is the part of an agent_spawn request blob these tests read.
 type spawnBlob struct {
 	Target       string              `json:"target"`
-	RuleFailures []trail.RuleFailure `json:"rule_failures"`
+	RuleFailures []recorder.RuleFailure `json:"rule_failures"`
 }
 
 func readSpawnBlob(t *testing.T, cacheDir string, e journal.Call) spawnBlob {
@@ -426,7 +426,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 			spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
 			require.Len(t, spawns, 1)
 			assert.Equal(t, tc.by, callDecidedBy(spawns[0]))
-			assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
+			assert.Equal(t, []recorder.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
 				readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 		})
 	}
@@ -453,7 +453,7 @@ func TestContinueIsRecordedOnTheTrail(t *testing.T) {
 
 	spawns := trailEvents(t, cacheDir, journal.CallKindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, trail.ActionAgentContinue, spawns[0].Name)
+	assert.Equal(t, recorder.NameAgentContinue, spawns[0].Name)
 	assert.Equal(t, spawnBlob{Target: "a1b2c3"}, readSpawnBlob(t, cacheDir, spawns[0]))
 }
 
@@ -1265,7 +1265,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "bound-session"}, "bound-job")
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator agent-job", "", "", "", "a1b2c3"), Host: "claude-code"})
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=claimed-job")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=claimed-job")
 
 	type answer struct {
 		Lease string
@@ -1552,7 +1552,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	require.Len(t, failures, 2, "under one deadline the working tree's rule has none left after the approved resolve")
 	assert.Equal(t, decidedByApproved, failures[0].Side)
 	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
-	assert.Equal(t, trail.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
+	assert.Equal(t, recorder.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
 	require.NotEmpty(t, phasesOf(spawns[0]))
 	assert.Equal(t, phaseApprovedResolve, phasesOf(spawns[0])[0].Name)
 	assert.True(t, phasesOf(spawns[0])[0].Lapsed)
@@ -1684,9 +1684,9 @@ func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 				row("fresh-job", jobtypes.StateDeclared), row("done-job", jobtypes.StateExited))
 			bindCaller(t, ctx, who, "held-job")
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+				t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.claim))
 			} else {
-				t.Setenv(trail.EnvBaggage, "")
+				t.Setenv(recorder.EnvBaggage, "")
 			}
 
 			v := Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, "ls"), Host: who.Host})

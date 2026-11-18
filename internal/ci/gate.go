@@ -39,7 +39,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -718,7 +717,7 @@ func (g *GateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	// A verdict decided before the signal is still filed: the store write outlives the
 	// invocation's cancellation and keeps its values for the invocation id.
 	ctx = context.WithoutCancel(ctx)
-	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
+	err = sessions.RecordGate(ctx, dir, rec, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: g.version})
 	if err != nil {
 		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
 			slog.String("store", dir), attr.Error(err))

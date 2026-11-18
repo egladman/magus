@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -92,7 +92,7 @@ func Serve(ctx context.Context, in io.Reader, out, errOut io.Writer, open func(c
 		return 1
 	}
 	if host != "" {
-		ctx = trail.ContextWithHost(ctx, host)
+		ctx = recorder.ContextWithHost(ctx, host)
 	}
 	result, err := Run(ctx, req)
 	if err != nil {
@@ -124,10 +124,10 @@ func InstallCallerLease() {
 	_ = os.Unsetenv(LeaseEnv)
 	_ = os.Setenv(job.EnvStampedLease, "1")
 	if lease == "" {
-		_ = os.Unsetenv(trail.EnvBaggage)
+		_ = os.Unsetenv(recorder.EnvBaggage)
 		return
 	}
-	_ = os.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, lease))
+	_ = os.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, lease))
 }
 
 // Run evaluates one program. The workspace, when one is open, is already on ctx.

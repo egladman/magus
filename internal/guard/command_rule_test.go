@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
@@ -294,13 +294,13 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 
 	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.NotEmpty(t, commands)
-	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
+	assert.Equal(t, []recorder.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
 		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
 }
 
 // commandBlob is the part of an agent_command response blob these tests read.
 type commandBlob struct {
-	RuleFailures []trail.RuleFailure `json:"rule_failures"`
+	RuleFailures []recorder.RuleFailure `json:"rule_failures"`
 }
 
 func readCommandBlob(t *testing.T, cacheDir string, e journal.Call) commandBlob {
@@ -370,7 +370,7 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil
 	}}
-	judge := func(t *testing.T, command string) (verdict.Judgment, []trail.RuleFailure) {
+	judge := func(t *testing.T, command string) (verdict.Judgment, []recorder.RuleFailure) {
 		ctx, cacheDir := spawnFixture(t)
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()

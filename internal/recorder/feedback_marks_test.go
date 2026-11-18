@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	trailtypes "github.com/egladman/magus/types/trail"

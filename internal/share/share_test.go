@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
@@ -603,7 +603,7 @@ func waitTrailCount(t *testing.T, dir string, want int) []journal.Call {
 // loggedCalls is the newest calls in the log under dir.
 func loggedCalls(ctx context.Context, dir string) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(dir), 10) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(dir), 10) {
 		if err != nil {
 			return nil, err
 		}

@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 // checkInterval is how often the scheduler wakes to look for a due job. It is deliberately coarse
@@ -125,7 +125,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 // if at least its interval has elapsed since its last run (finish time = recorded start plus
 // duration). Pure over (base, now) so the schedule decision is testable without a live server.
 func isDue(ctx context.Context, base string, j scheduledJob, now time.Time) bool {
-	ev, ok := trail.LastRun(ctx, base, j.action)
+	ev, ok := recorder.LastJob(ctx, base, j.action)
 	if !ok {
 		return true // never run in the retained trail
 	}

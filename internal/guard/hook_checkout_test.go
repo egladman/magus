@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -293,7 +293,7 @@ func (s *DelegateToCheckoutSuite) TestADeadlineWithoutADelegationIsDroppedUnread
 }
 
 func (s *DelegateToCheckoutSuite) TestADelegateHandedAPastDeadlineDeniesAndSaysToRetry() {
-	s.T().Setenv(trail.EnvBaggage, "")
+	s.T().Setenv(recorder.EnvBaggage, "")
 	s.T().Setenv(delegatedEnv, "/other/magus")
 	s.T().Setenv(HookDeadlineEnv, strconv.FormatInt(time.Now().Add(-time.Second).UnixMilli(), 10))
 	var out bytes.Buffer

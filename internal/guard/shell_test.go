@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -2618,21 +2618,21 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 	assert.Equal(t, graded{false, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
 	assert.Equal(t, graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(edit("cmd/magus/main.go")))
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-b")
 	assert.Equal(t, graded{true, "lease-b", jobtypes.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
 
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
 }
 
 // `refs --rename --dry-run` grades each file as the rename would and leaves no activity line.
 func TestEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	edit := func(rel string, dryRun bool) verdict.Judgment {
 		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
@@ -2663,7 +2663,7 @@ func TestGradeEdit(t *testing.T) { suite.Run(t, new(GradeEditSuite)) }
 
 func (s *GradeEditSuite) SetupTest() {
 	s.layers, s.root = fleetLayers(s.T(), fixture.FleetLeases()...)
-	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.T().Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 }
 
 // workspace classifies rel as role.
@@ -2713,14 +2713,14 @@ func (s *GradeEditSuite) edit(rel string) verdict.Judgment {
 
 // `magus job exec` binds the checkout, which names the lease with no BAGGAGE.
 func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
-	s.T().Setenv(trail.EnvBaggage, "")
+	s.T().Setenv(recorder.EnvBaggage, "")
 	bindCaller(s.T(), s.testContext(), hookAttribution{}, "lease-a")
 	s.Equal(graded{false, "lease-a", jobtypes.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
 	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
 func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
-	s.T().Setenv(trail.EnvBaggage, "")
+	s.T().Setenv(recorder.EnvBaggage, "")
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Err: errors.New("store locked")}))
 	_, reason := s.grade(s.workspace("docs/readme.md", "source"), "docs/readme.md", EditGrade{})
 	s.Contains(reason, "store locked")
@@ -2738,7 +2738,7 @@ func TestPersonLease(t *testing.T) { suite.Run(t, new(PersonLeaseSuite)) }
 
 func (s *PersonLeaseSuite) SetupTest() {
 	s.layers, s.root = fleetLayers(s.T(), fixture.FleetLeases()...)
-	s.T().Setenv(trail.EnvBaggage, "")
+	s.T().Setenv(recorder.EnvBaggage, "")
 }
 
 // holdHere records id as taken in this checkout, as `job exec` does.
@@ -2777,7 +2777,7 @@ func (s *PersonLeaseSuite) TestAPersonMayWriteTheHookWiringInALeasedCheckout() {
 
 func (s *PersonLeaseSuite) TestAClaimStillBindsTheProcess() {
 	s.holdHere("lease-c", "web/**")
-	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.T().Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
@@ -2815,7 +2815,7 @@ func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {
 	claimed := s.judgeBound(claimForLeaseA + renameDryRun)
 	s.NotEqual(verdict.Deny, claimed.Decision, claimed.Reason)
 
-	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.T().Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")), "outside the row")
 	s.Equal(graded{false, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("internal/ledger/store.go")), "inside the row")
 }
@@ -2826,7 +2826,7 @@ func (s *PersonLeaseSuite) TestARewriteClaimingAnotherLeaseIsRefused() {
 }
 
 func (s *PersonLeaseSuite) TestTheSessionsOwnClaimReachesTheProcess() {
-	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.T().Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound(renameDryRun).Rule)
 }
 

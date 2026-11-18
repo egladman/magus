@@ -23,9 +23,9 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/activityrpc"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
@@ -71,7 +71,7 @@ func request[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg)
 
 // as is a context carrying the credential the bearer guard would have verified.
 func as(grant auth.Access) context.Context {
-	return trail.ContextWithCredential(context.Background(), auth.Credential{Kind: auth.KindStored, ID: "0badf00d", Grant: grant})
+	return recorder.ContextWithCredential(context.Background(), auth.Credential{Kind: auth.KindStored, ID: "0badf00d", Grant: grant})
 }
 
 // operator is the context the server's guard gives the operator token.
@@ -420,7 +420,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 		connect.WithInterceptors(activityrpc.Interceptor(dir, journal.CallKindTokenLifecycle, activityrpc.WithSubject(AuditSubject))))
 	op := auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
+		h.ServeHTTP(w, r.WithContext(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
 	}))
 	defer srv.Close()
 	c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
@@ -438,9 +438,9 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	require.NotEqual(t, firstID, secondID)
 
 	var subjects []string
-	for e, err := range journal.Calls(t.Context(), trail.CallsDir(dir), 10) {
+	for e, err := range journal.Calls(t.Context(), recorder.CallsDir(dir), 10) {
 		require.NoError(t, err)
-		blob, err := e.Request.Read(trail.CallsDir(dir))
+		blob, err := e.Request.Read(recorder.CallsDir(dir))
 		require.NoError(t, err)
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)

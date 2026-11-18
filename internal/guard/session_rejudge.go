@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 )
@@ -53,5 +53,5 @@ func commandProgram(text string) string {
 	if cmds, parsed := ParseCommands(text); parsed && len(cmds) > 0 {
 		return cmds[0].Name
 	}
-	return trail.CommandProgram(text)
+	return recorder.CommandProgram(text)
 }

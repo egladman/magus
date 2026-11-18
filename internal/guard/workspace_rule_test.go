@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -52,7 +52,7 @@ func unloadedDependencies(loadErr error) Dependencies {
 }
 
 // staleFailures are the failures unloadedDeps reports on either seam.
-var staleFailures = []trail.RuleFailure{
+var staleFailures = []recorder.RuleFailure{
 	{Side: decidedByWorktree, Error: "the magusfile failed to load: " + errStaleLoad.Error()},
 	{Side: decidedByApproved, Error: "the rule could not be resolved: approved magusfile: " + errStaleLoad.Error()},
 }
@@ -227,7 +227,7 @@ func TestLoadFailureDenyNamesThePlacementForALeasedWorker(t *testing.T) {
 // error rather than letting it run on the built-in rules alone. Reads still run.
 func TestLoadFailureOfATypoRefusesChangesNamingTheError(t *testing.T) {
 	typo := errors.New("magusfile.buzz:3:1: expected expression")
-	failures := []trail.RuleFailure{
+	failures := []recorder.RuleFailure{
 		{Side: decidedByWorktree, Error: "the magusfile failed to load: " + typo.Error()},
 		{Side: decidedByApproved, Error: "the rule could not be resolved: approved magusfile: " + typo.Error()},
 	}
@@ -636,7 +636,7 @@ func TestRuleFailureNoteBuildsTheJudgingLineOnlyForAFailure(t *testing.T) {
 	assert.Empty(t, ruleFailureNote(r))
 	assert.False(t, called)
 
-	r.failures = []trail.RuleFailure{{Side: decidedByWorktree, Error: "boom"}}
+	r.failures = []recorder.RuleFailure{{Side: decidedByWorktree, Error: "boom"}}
 	assert.Contains(t, ruleFailureNote(r), "Judged by x.")
 	assert.True(t, called)
 }

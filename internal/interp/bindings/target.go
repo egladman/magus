@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -341,7 +340,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 // interaction policy rests on, and put a credential one formatting mistake from a
 // durable append-only file.
 func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) {
-	base := trail.BaseFromContext(ctx)
+	base := recorder.BaseFromContext(ctx)
 	if base == "" {
 		return
 	}
@@ -351,7 +350,7 @@ func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) 
 	if o, ok := origin.FromContext(ctx); ok {
 		userAgent = o.UserAgent
 	}
-	trail.Append(ctx, base, journal.Call{
+	recorder.AppendCall(ctx, base, journal.Call{
 		Time:      time.Now(),
 		Kind:      journal.CallKindCredentialGrant,
 		UserAgent: userAgent,

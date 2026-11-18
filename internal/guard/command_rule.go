@@ -12,7 +12,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -34,7 +34,7 @@ const advisoryCommandRuleFailed hint.MarkerKind = "workspace-command-failed"
 type workspaceRuleRecord struct {
 	// decidedBy is the side whose answer stands, "" when the rule changed nothing.
 	decidedBy string
-	failures  []trail.RuleFailure
+	failures  []recorder.RuleFailure
 }
 
 // commandRuleInput is the one shell command the workspace rule is asked about, with who

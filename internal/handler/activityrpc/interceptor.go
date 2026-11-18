@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
@@ -113,11 +113,11 @@ func Interceptor(trailDir string, kind journal.CallKind, opts ...Option) connect
 				}
 				if cfg.subject != nil && err == nil && resp != nil {
 					if blob, preview := cfg.subject(resp); len(blob) > 0 {
-						ev.Request = trail.WriteBlob(ctx, trailDir, "tok", blob)
+						ev.Request = recorder.WritePayload(ctx, trailDir, "tok", blob)
 						ev.Preview = preview
 					}
 				}
-				trail.Append(ctx, trailDir, ev)
+				recorder.AppendCall(ctx, trailDir, ev)
 			}
 			return resp, err
 		}

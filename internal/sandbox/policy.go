@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox/env"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
@@ -383,11 +383,11 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 	if err == nil {
 		return
 	}
-	base := trail.BaseFromContext(ctx)
+	base := recorder.BaseFromContext(ctx)
 	if base == "" {
 		return
 	}
-	trail.Append(ctx, base, journal.Call{
+	recorder.AppendCall(ctx, base, journal.Call{
 		Time: time.Now(),
 		Kind: journal.CallKindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease

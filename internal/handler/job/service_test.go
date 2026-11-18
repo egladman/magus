@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -164,9 +164,9 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	dir := t.TempDir()
 	// A completed rotate-activities job in the trail, plus two more events so Stat has a count of 3.
 	start := time.UnixMilli(1_000_000).UnixMilli()
-	trail.Append(t.Context(), dir, journal.Call{Time: time.UnixMilli(start), Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK, Duration: 250 * time.Millisecond})
-	trail.Append(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
-	trail.Append(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 2), Kind: journal.CallKindMCPTool, Name: "explain", Outcome: journal.OutcomeOK})
+	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start), Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK, Duration: 250 * time.Millisecond})
+	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 2), Kind: journal.CallKindMCPTool, Name: "explain", Outcome: journal.OutcomeOK})
 
 	s := newTestService(trailWorkspace{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}

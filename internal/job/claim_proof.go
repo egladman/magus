@@ -21,7 +21,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -682,7 +682,7 @@ func (s *Store) Claim(ctx context.Context, id string, reqs []job.ClaimRequest, f
 	if len(reqs) == 0 {
 		return job.Job{}, claimRefusal(actor, id, "the record claims nothing")
 	}
-	by := trail.StampOrigin(ctx, job.Origin{})
+	by := recorder.StampOrigin(ctx, job.Origin{})
 	if slices.ContainsFunc(reqs, takesFromDeadHolder) {
 		return s.claimFromDeadHolders(ctx, actor, id, reqs, facts, limits, dryRun, by)
 	}

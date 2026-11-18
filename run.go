@@ -43,7 +43,6 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/sys/mem"
-	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -2864,7 +2863,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = m.ContextWithSecrets(ctx)
 	// So a magusfile binding can record a governance event (a credential granted, an
 	// endpoint opened) without the trail path being threaded through the VM.
-	ctx = trail.ContextWithBase(ctx, m.CacheDir())
+	ctx = recorder.ContextWithBase(ctx, m.CacheDir())
 	ctx = types.WithWorkspace(ctx, m.internals())
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run

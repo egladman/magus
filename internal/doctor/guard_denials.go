@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -24,7 +24,7 @@ const recurringGuardDenialLimit = 500
 // and the magus-workspace-rules skill carries the method for choosing it.
 func (r *runner) checkRecurringGuardDenials(ctx context.Context) check.Check {
 	const name = "recurring-guard-denials"
-	feedback, err := trail.RecentGuardFeedback(ctx, r.cacheDir(), "", recurringGuardDenialLimit)
+	feedback, err := recorder.RecentGuardFeedback(ctx, r.cacheDir(), "", recurringGuardDenialLimit)
 	if err != nil {
 		return check.Check{
 			Name:     name,
@@ -33,7 +33,7 @@ func (r *runner) checkRecurringGuardDenials(ctx context.Context) check.Check {
 			Message:  "no readable activity trail, so nothing can be said about recurring denials",
 		}
 	}
-	recurring := make([]trail.GuardFeedback, 0, len(feedback))
+	recurring := make([]recorder.GuardFeedback, 0, len(feedback))
 	for _, item := range feedback {
 		if item.NeedsReview() {
 			recurring = append(recurring, item)

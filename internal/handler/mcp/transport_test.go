@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -238,7 +238,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
 	with := func(c auth.Credential) func(context.Context) context.Context {
-		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
+		return func(ctx context.Context) context.Context { return recorder.ContextWithCredential(ctx, c) }
 	}
 
 	for name, tc := range map[string]struct {
@@ -281,7 +281,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	require.NoError(t, err)
 	connector := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
+		h.ServeHTTP(w, r.WithContext(recorder.ContextWithCredential(r.Context(), connector)))
 	}))
 	defer srv.Close()
 	post := func(baggage, session, body string) (http.Header, toolResult) {
@@ -352,7 +352,7 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 		"console":   {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))
+			h.ServeHTTP(w, r.WithContext(recorder.ContextWithCredential(r.Context(), tc.cred)))
 		}))
 		post := func(session, body string) (http.Header, []byte) {
 			req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(body))

@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
@@ -27,13 +27,13 @@ func (m *Magus) PayloadByRef(ctx context.Context, ref string) ([]byte, error) {
 	}
 	payload := journal.Payload{Ref: ref}
 	searched := []string{m.CacheDir()}
-	data, err := payload.Read(trail.CallsDir(m.CacheDir()))
+	data, err := payload.Read(recorder.CallsDir(m.CacheDir()))
 	if errors.Is(err, fs.ErrNotExist) {
 		// The session store records output refs only, so the primary checkout is the one
 		// other store searched.
 		_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
 			searched = append(searched, dir)
-			data, err = payload.Read(trail.CallsDir(dir))
+			data, err = payload.Read(recorder.CallsDir(dir))
 			return err
 		})
 	}

@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -759,7 +759,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 
 	t.Run("spawn ancestry and no lease advises", func(t *testing.T) {
 		ctx, root := fleetFixture(t)
-		t.Setenv(trail.EnvTraceparent, spawned)
+		t.Setenv(recorder.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go"))
 
 		require.Equal(t, writeGrade{Decision: verdict.Advise, Context: got.Context, Why: got.Why, Kind: advisoryUnleasedWrite}, got,
@@ -770,22 +770,22 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 
 	t.Run("no ancestry stays silent", func(t *testing.T) {
 		ctx, root := fleetFixture(t)
-		t.Setenv(trail.EnvTraceparent, "")
+		t.Setenv(recorder.EnvTraceparent, "")
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"a run carrying no trace context IS a person, and a person editing their own checkout is owed silence")
 	})
 
 	t.Run("a malformed claim stays silent", func(t *testing.T) {
-		// Dropped rather than salvaged, which is trail.SpawnFromEnv's contract. A value that
+		// Dropped rather than salvaged, which is recorder.SpawnFromEnv's contract. A value that
 		// does not parse claims nothing, so there is no worker here to teach.
 		ctx, root := fleetFixture(t)
-		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
+		t.Setenv(recorder.EnvTraceparent, "not-a-traceparent")
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision)
 	})
 
 	t.Run("an enrolled worker stays silent", func(t *testing.T) {
 		ctx, root := fleetFixture(t)
-		t.Setenv(trail.EnvTraceparent, spawned)
+		t.Setenv(recorder.EnvTraceparent, spawned)
 		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"naming a lease is the whole thing being asked for")
 	})
@@ -794,7 +794,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		// The rule fills a silence and never competes: with live rows on record the existing
 		// grading answers, and this advisory is not reached at all.
 		ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-		t.Setenv(trail.EnvTraceparent, spawned)
+		t.Setenv(recorder.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, verdict.Advise, got.Decision)
 		assert.Contains(t, got.Context, "lease-a", "the collision report is the more specific answer")
@@ -1116,7 +1116,7 @@ func entryFleet(root string) []jobtypes.Job {
 // holderCalled plants a tool call the guard graded under lease, ago before now.
 func holderCalled(t *testing.T, ctx context.Context, lease string, ago time.Duration) {
 	t.Helper()
-	trail.Append(ctx, hookLocation(ctx, Dependencies{}).cacheDir, journal.Call{
+	recorder.AppendCall(ctx, hookLocation(ctx, Dependencies{}).cacheDir, journal.Call{
 		Time: time.Now().Add(-ago), Kind: journal.CallKindAgentCommand, Name: "Edit", Lease: lease, Outcome: journal.OutcomeOK,
 	})
 }
@@ -1246,14 +1246,14 @@ func TestVCSOffSwitchDeniesLeasedWrite(t *testing.T) {
 
 // TestVCSOffSwitchDeniesAgentAttributedEdit covers the other half of "leased or
 // agent-attributed": no lease is named, but the process carries spawn ancestry
-// (trail.SpawnFromEnv), the same claim adviseUnleasedWorker already reads elsewhere among
+// (recorder.SpawnFromEnv), the same claim adviseUnleasedWorker already reads elsewhere among
 // the file-write rules. The edit is a replacement applied to what the file holds on disk,
 // not a whole-file write, so this also proves resolvedWriteContent applies it correctly.
 func TestVCSOffSwitchDeniesAgentAttributedEdit(t *testing.T) {
 	root := vcsOffSwitchWorkspace(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
 		[]byte("concurrency: 4\nvcs:\n  enabled: true\n"), 0o644))
-	t.Setenv(trail.EnvTraceparent, vcsOffSwitchSpawned)
+	t.Setenv(recorder.EnvTraceparent, vcsOffSwitchSpawned)
 	fields := writeFields{OldText: "enabled: true", NewText: "enabled: false"}
 
 	got := denyVCSOffSwitch("", filepath.Join(root, "magus.yaml"), fields)
@@ -1285,7 +1285,7 @@ func TestVCSOffSwitchDeniesUserTierFile(t *testing.T) {
 func TestVCSOffSwitchPassesEverythingElse(t *testing.T) {
 	t.Run("unleased and unattributed is a person in their own checkout", func(t *testing.T) {
 		root := vcsOffSwitchWorkspace(t)
-		t.Setenv(trail.EnvTraceparent, "")
+		t.Setenv(recorder.EnvTraceparent, "")
 		fields := writeFields{Content: "vcs:\n  enabled: false\n"}
 		assert.Empty(t, denyVCSOffSwitch("", filepath.Join(root, "magus.yaml"), fields).Decision,
 			"a run carrying no lease and no trace context IS a person, owed silence like every other rule here")

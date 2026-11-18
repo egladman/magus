@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -48,7 +48,7 @@ func resolveActingLease(who hookAttribution, at location, explicit string) (stri
 // its parent, and a parent that read the checkout's would be graded as whichever
 // identity-less caller took a job here last.
 func resolveLease(who hookAttribution, explicit, bound string) (string, jobtypes.LeaseSource) {
-	q := job.LeaseQuery{Flag: explicit, Claim: trail.LeaseFromEnv()}
+	q := job.LeaseQuery{Flag: explicit, Claim: recorder.LeaseFromEnv()}
 	if who.caller().Identified() {
 		q.CallerJob = bound
 	} else {
@@ -327,7 +327,7 @@ func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Bin
 	case held.Terminal():
 		return job.Binding{}
 	case held == jobtypes.StateExited:
-		if claim := trail.LeaseFromEnv(); claim != b.Job && state(claim).Editing() {
+		if claim := recorder.LeaseFromEnv(); claim != b.Job && state(claim).Editing() {
 			return job.Binding{}
 		}
 	}

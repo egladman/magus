@@ -27,10 +27,10 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -1923,7 +1923,7 @@ func (r *runner) ownVersion() string {
 // people to ignore the check.
 func (r *runner) checkObserverRecording(ctx context.Context) check.Check {
 	const window = 2000
-	reads, writes, shell, err := trail.ObservedCounts(ctx, r.cacheDir(), window)
+	reads, writes, shell, err := recorder.ObservedCounts(ctx, r.cacheDir(), window)
 	c := observerCheck(window, reads, writes, shell)
 	if err != nil {
 		// The counts leave out what did not decode, so a verdict on them alone would

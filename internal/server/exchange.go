@@ -11,8 +11,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -67,7 +67,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 			return
 		}
 		code := auth.Credential{Kind: auth.KindExchange, ID: auth.TokenID(req.Code), Name: tok.Name, Grant: tok.Grant}
-		trail.AppendMint(r.Context(), trailDir, "link.redeem", trail.MintRecord{Minted: tok.Credential(), Expires: tok.Expires, Minter: code})
+		recorder.AppendMint(r.Context(), trailDir, "link.redeem", recorder.MintRecord{Minted: tok.Credential(), Expires: tok.Expires, Minter: code})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := codec.NewEncoder(w).Encode(exchangeResponse{token: secret, expires: tok.Expires}); err != nil {

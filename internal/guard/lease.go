@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -1847,7 +1847,7 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 	// The magus the line runs resolves its store's actor as job.RunLease does: the
 	// checkout's record, else the BAGGAGE it starts with, which is the line's own when it
 	// sets one and the session's otherwise, the environment this hook shares.
-	claim := cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv())
+	claim := cmp.Or(lineBaggageLease(f), recorder.LeaseFromEnv())
 	h := holder{
 		id:       actingLease,
 		standing: sync.OnceValue(func() leaseStanding { return actingLeaseStanding(ctx, deps, actingLease) }),
@@ -1893,10 +1893,10 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 func lineBaggageLease(f *syntax.File) string {
 	lease := ""
 	take := func(a *syntax.Assign) {
-		if a == nil || a.Name == nil || a.Name.Value != trail.EnvBaggage || a.Value == nil {
+		if a == nil || a.Name == nil || a.Name.Value != recorder.EnvBaggage || a.Value == nil {
 			return
 		}
-		if l := trail.LeaseFromBaggage(literalWord(a.Value.Parts)); l != "" {
+		if l := recorder.LeaseFromBaggage(literalWord(a.Value.Parts)); l != "" {
 			lease = l
 		}
 	}
@@ -2048,7 +2048,7 @@ func boundedExecRebind(h holder) rebind {
 	}
 	return rebind{
 		problem: fmt.Sprintf("would run a command owned by lease %s while lease %s is in flight", owner, h.id),
-		fix:     fmt.Sprintf("set BAGGAGE=%s=%s on the line so it runs under your own lease", trail.BaggageLease, h.id),
+		fix:     fmt.Sprintf("set BAGGAGE=%s=%s on the line so it runs under your own lease", recorder.BaggageLease, h.id),
 	}
 }
 

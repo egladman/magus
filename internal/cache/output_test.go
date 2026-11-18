@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -210,11 +210,11 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 	}
 	adopted := jobtypes.WithLease(t.Context(), "wave/client")
 
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
 	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "a run the daemon adopted records its client's lease")
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=wave/api")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=wave/api")
 	assert.Equal(t, "wave/api", record().Lease)
 	assert.Equal(t, "wave/client", recordIn(adopted).Lease, "the client's lease outranks the daemon's environment")
 
@@ -980,7 +980,7 @@ func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
 // miss's attempt.
 func TestCacheHitReusesTheSameRef(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	root, cdir, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)

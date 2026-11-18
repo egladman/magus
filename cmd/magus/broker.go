@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/server"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
@@ -291,7 +291,7 @@ func processBrokerClient() *broker.Client {
 // in the checkout workspace.FindRoot(rootOverride) finds. Outside a workspace only BAGGAGE
 // can name one. A checkout whose job store cannot be placed is said, and BAGGAGE answers.
 func processLease(rootOverride string) string {
-	claim := trail.LeaseFromEnv()
+	claim := recorder.LeaseFromEnv()
 	root, err := workspace.FindRoot(rootOverride)
 	if err != nil {
 		return claim

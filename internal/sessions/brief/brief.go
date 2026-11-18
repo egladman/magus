@@ -14,8 +14,8 @@ import (
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -121,7 +121,7 @@ type Payload struct {
 	// Feedback is the bounded, recurring guard evidence a compacted session can
 	// review. It is derived from activity on every brief, not copied into a
 	// checkpoint, so an old stop never keeps injecting an already-resolved issue.
-	Feedback []trail.GuardFeedback `json:"feedback,omitempty"`
+	Feedback []recorder.GuardFeedback `json:"feedback,omitempty"`
 	// Recent is what OTHER sessions in this repository did lately, from transcripts a
 	// `magus session load` folded in. Empty until a workspace declares an adapter, and
 	// empty is the honest answer then: nothing was observed, rather than nothing happened.
@@ -309,7 +309,7 @@ func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Re
 	}
 	brief.PromptCache = r.PromptCache(root, time.Now())
 	if base, err := r.CacheDir(root); err == nil {
-		if feedback, err := trail.RecentGuardFeedback(ctx, base, "", briefFeedbackEvents); err == nil {
+		if feedback, err := recorder.RecentGuardFeedback(ctx, base, "", briefFeedbackEvents); err == nil {
 			for _, item := range feedback {
 				if item.NeedsReview() {
 					item.Evidence = item.Evidence[:min(len(item.Evidence), briefFeedbackEvidence)]

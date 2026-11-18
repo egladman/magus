@@ -1,4 +1,4 @@
-package trail
+package sessions
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -17,8 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) { testkit.Main(m) }
 
 // emitJournalEvent hands one result for inv to the sink h.
 func emitJournalEvent(t *testing.T, h recorder.Sink, inv string, run journal.Run) {
@@ -34,7 +31,7 @@ func leaseResolver(lease string, from job.LeaseSource, err error) func(context.C
 
 // withJournalLease wires the handler with a fixed build version and resolve as the lease.
 func withJournalLease(ctx context.Context, sinks []recorder.Sink, root, verb string, args []string, resolve func(context.Context, string) (string, job.LeaseSource, error)) []recorder.Sink {
-	return WithInvocationJournal(ctx, sinks, root, verb, args, "test", resolve)
+	return WithInvocationFacts(ctx, sinks, root, verb, args, "test", resolve)
 }
 
 // withJournal is withJournalLease under no lease.
@@ -55,7 +52,7 @@ func firstPayload(t *testing.T, fold session.Fold, kind string) string {
 	return ""
 }
 
-func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
+func TestWithInvocationFactsRecordsAffectedResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -66,7 +63,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "test", Project: "api", Status: journal.StatusFail})
 	emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "lint", Project: "web", Status: journal.StatusCached})
 
-	dir, err := sessions.Dir(root)
+	dir, err := Dir(root)
 	require.NoError(t, err)
 	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
@@ -75,7 +72,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
 	assert.Empty(t, summaries[0].Session, "a CLI run is in no host session")
-	assert.Equal(t, LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
+	assert.Equal(t, recorder.LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
 	assert.Equal(t, "affected ci --base main", summaries[0].Command)
 	assert.Equal(t, root, summaries[0].Workspace)
 	assert.Equal(t, []session.TargetResult{
@@ -99,7 +96,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 // `magus session` is a view of the repository, so a fact must not carry a trace of which
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
-func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
+func TestWithInvocationFactsWritesTheSameFactForRunAndAffected(t *testing.T) {
 	testkit.Isolate(t)
 	runRoot, affectedRoot := t.TempDir(), t.TempDir()
 
@@ -113,12 +110,12 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 	require.Len(t, affectedSinks, 1)
 	emitJournalEvent(t, affectedSinks[0], "inv1", result)
 
-	runDir, err := sessions.Dir(runRoot)
+	runDir, err := Dir(runRoot)
 	require.NoError(t, err)
 	runFold, err := session.ReadAll(t.Context(), runDir)
 	require.NoError(t, err)
 
-	affectedDir, err := sessions.Dir(affectedRoot)
+	affectedDir, err := Dir(affectedRoot)
 	require.NoError(t, err)
 	affectedFold, err := session.ReadAll(t.Context(), affectedDir)
 	require.NoError(t, err)
@@ -140,7 +137,7 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 // The lease is stamped in the shared wiring, not per command, for the same reason the fact shape
 // is: `magus session` is a view of the repository, and a lease that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
+func TestWithInvocationFactsStampsTheLeaseOnEveryVerb(t *testing.T) {
 	testkit.Isolate(t)
 
 	for verb, args := range map[string][]string{
@@ -153,7 +150,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 			require.Len(t, sinks, 1)
 			emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "ci", Project: "api", Status: journal.StatusPass})
 
-			dir, err := sessions.Dir(root)
+			dir, err := Dir(root)
 			require.NoError(t, err)
 			fold, err := session.ReadAll(t.Context(), dir)
 			require.NoError(t, err)
@@ -170,7 +167,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 
 // A lease that does not resolve records none and says why, rather than recording a
 // claim as if nothing outranked it.
-func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing.T) {
+func TestWithInvocationFactsRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
@@ -179,7 +176,7 @@ func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing
 	require.Len(t, sinks, 1)
 	emitJournalEvent(t, sinks[0], "inv1", journal.Run{Target: "ci", Status: journal.StatusPass})
 
-	dir, err := sessions.Dir(root)
+	dir, err := Dir(root)
 	require.NoError(t, err)
 	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
@@ -191,13 +188,13 @@ func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
-func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
+func TestWithInvocationFactsSurvivesAnUnwritableStore(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
 	// A regular file where the store directory belongs: MkdirAll then fails for a reason
 	// no permission bit can be chmod-ed away, which a test running as root would defeat.
-	dir, err := sessions.Dir(root)
+	dir, err := Dir(root)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
@@ -218,7 +215,7 @@ func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
 
 // With no resolvable state directory there is nowhere to journal, and a machine in that
 // state must still be able to run builds.
-func TestWithInvocationJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
+func TestWithInvocationFactsLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")

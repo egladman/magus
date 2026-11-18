@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -559,7 +559,7 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
@@ -575,10 +575,10 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	claimed := jobtypes.WithLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
 
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/env")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/env")
 	assert.Equal(t, "fleet/env", acting(context.Background()), "BAGGAGE, with no forwarded lease")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "a forwarded lease over BAGGAGE")
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 
 	bindCheckout(t, cacheDir, "fleet/bound")
 	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
@@ -791,7 +791,7 @@ done
 
 // The checkpoint's spawn ancestry is read from the environment, so its lease must be the
 // environment's claim too: a hook process forwards none, and guard.CheckoutLease has to agree with
-// job.ActingLease over trail.SpawnFromEnv for every source.
+// job.ActingLease over recorder.SpawnFromEnv for every source.
 func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testing.T) {
 	for name, tc := range map[string]struct{ claim, bound string }{
 		"nothing":                 {},
@@ -807,12 +807,12 @@ func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testi
 			if tc.bound != "" {
 				bindCheckout(t, cacheDir, tc.bound)
 			}
-			t.Setenv(trail.EnvBaggage, "")
+			t.Setenv(recorder.EnvBaggage, "")
 			if tc.claim != "" {
-				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+				t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.claim))
 			}
 
-			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
+			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, recorder.SpawnFromEnv().Lease)
 			lease, from, err := guard.CheckoutLease(context.Background(), root, jobPlace)
 			require.NoError(t, err)
 			assert.Equal(t, wantLease, lease)
@@ -825,7 +825,7 @@ func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))

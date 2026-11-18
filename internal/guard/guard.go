@@ -28,8 +28,8 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sys/pid"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -2808,12 +2808,12 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if len(phases) > 0 {
 		judged = phases[len(phases)-1].ElapsedMs
 	}
-	command := trail.AgentCommand{
+	command := recorder.AgentCommand{
 		PolicyDigest: policyDigest,
 		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(judgment)),
 		RuleFailures: rule.failures,
 		// A call typed at a terminal entered through the CLI, not a hook.
-		EntryPoint:      trail.EntryPointFromContext(ctx),
+		EntryPoint:      recorder.EntryPointFromContext(ctx),
 		Workspace:       location.workspace,
 		Host:            who.Host,
 		Session:         who.Session,
@@ -2841,7 +2841,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	} else {
 		command.Path = input
 	}
-	trail.AppendAgentCommand(ctx, location.cacheDir, command)
+	recorder.AppendAgentCommand(ctx, location.cacheDir, command)
 }
 
 // appendToolTime records how long a host says tool ran, and its digests.
@@ -2863,9 +2863,9 @@ func appendToolTime(ctx context.Context, location location, who hookAttribution,
 	if req.ResultDigest == "" {
 		facts.Unobserved = append(facts.Unobserved, "result")
 	}
-	trail.AppendAgentCommand(ctx, location.cacheDir, trail.AgentCommand{
+	recorder.AppendAgentCommand(ctx, location.cacheDir, recorder.AgentCommand{
 		AgentFacts: facts,
-		EntryPoint: trail.EntryPointFromContext(ctx),
+		EntryPoint: recorder.EntryPointFromContext(ctx),
 		Workspace:  location.workspace,
 		Host:       who.Host,
 		Session:    who.Session,
@@ -2886,7 +2886,7 @@ type spawnVerdictRecord struct {
 	// target is the agent a continuation addresses, resolved to its id when magus knows it.
 	target string
 	// ruleFailures are the workspace spawn rules that judged nothing, and why.
-	ruleFailures []trail.RuleFailure
+	ruleFailures []recorder.RuleFailure
 }
 
 // appendHookSpawn records a spawn or a continuation into the same trail, so a person
@@ -2907,7 +2907,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	cost := types.AgentFacts{Thread: thread, ThreadFrom: from, Billing: accountAt(location.workspace).billing}
 	setContext(&cost, callerContext(location, who, thread, facts))
 	recordAgentCalls(ctx, cost, nil)
-	spawn := trail.AgentSpawn{
+	spawn := recorder.AgentSpawn{
 		VerdictRef:    rec.verdictRef,
 		PolicyDigest:  rec.policyDigest,
 		DecidedBy:     rec.decidedBy,
@@ -2915,7 +2915,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Target:        rec.target,
 		RuleFailures:  rec.ruleFailures,
 		Workspace:     location.workspace,
-		EntryPoint:    trail.EntryPointFromContext(ctx),
+		EntryPoint:    recorder.EntryPointFromContext(ctx),
 		Host:          who.Host,
 		Session:       who.Session,
 		Agent:         who.Agent,
@@ -2930,7 +2930,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Phases:        judgmentPhases(ctx).phases(),
 		AgentFacts:    cost,
 	}
-	trail.AppendAgentSpawn(ctx, location.cacheDir, spawn)
+	recorder.AppendAgentSpawn(ctx, location.cacheDir, spawn)
 }
 
 // hookLocation resolves the local workspace cache because a hook runs as a short-lived

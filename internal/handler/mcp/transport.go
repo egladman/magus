@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/std"
 )
@@ -79,7 +79,7 @@ func callerActor(ctx context.Context) (actor job.Actor, ok bool) {
 		}
 		return job.Actor{Lease: lease}, true
 	}
-	switch trail.CredentialFromContext(ctx).Kind {
+	switch recorder.CredentialFromContext(ctx).Kind {
 	case "", auth.KindStdio:
 		return job.Actor{}, false
 	}
@@ -198,7 +198,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	if opts.Magus != nil {
 		cacheDir = opts.Magus.CacheDir()
 	}
-	trail.Rotate(cacheDir)
+	recorder.RotateCalls(cacheDir)
 	registerTools(srv, opts, log, originFn, cacheDir, tasks)
 	return srv
 }
@@ -234,7 +234,7 @@ func ServeStdio(ctx context.Context, opts Options, in io.Reader, out io.Writer) 
 	stdio := mcpserver.NewStdioServer(buildServer(opts, log, hooks, originFn))
 	stdio.SetErrorLogger(slog.NewLogLogger(log.Handler(), slog.LevelError))
 	stdio.SetContextFunc(func(ctx context.Context) context.Context {
-		return trail.ContextWithCredential(ctx, auth.CredentialStdio())
+		return recorder.ContextWithCredential(ctx, auth.CredentialStdio())
 	})
 	if err := stdio.Listen(ctx, in, out); err != nil && ctx.Err() == nil {
 		return fmt.Errorf("mcp: serve stdio: %w", err)
@@ -302,7 +302,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		// context so the initialize hook can capture it. stdio has no equivalent
 		// (it carries no request headers), so this signal is HTTP-only by nature.
 		mcpserver.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-			return withCallerLease(withUserAgent(ctx, r.Header.Get("User-Agent")), trail.LeaseFromBaggage(r.Header.Get(baggageHeader)))
+			return withCallerLease(withUserAgent(ctx, r.Header.Get("User-Agent")), recorder.LeaseFromBaggage(r.Header.Get(baggageHeader)))
 		}),
 	), nil
 }

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -25,7 +25,7 @@ const EnvStampedLease = "MAGUS_STAMPED_LEASE"
 // process with no lease is the unbound actor, unless [EnvStampedLease] says a transport
 // stamped that absence.
 func ActingActor(loc Location) job.Actor {
-	claim := trail.LeaseFromEnv()
+	claim := recorder.LeaseFromEnv()
 	lease, _ := ActingLease(loc, claim)
 	if os.Getenv(EnvStampedLease) == "" {
 		return job.Actor{Lease: lease}
@@ -44,7 +44,7 @@ func ActingActor(loc Location) job.Actor {
 func RunLease(ctx context.Context, loc Location) (string, job.LeaseSource) {
 	claim, ok := job.LookupLease(ctx)
 	if !ok {
-		claim = trail.LeaseFromEnv()
+		claim = recorder.LeaseFromEnv()
 	}
 	return ActingLease(loc, claim)
 }
@@ -60,7 +60,7 @@ func (s *Store) As(a job.Actor) *Store {
 
 // unstampedRemedy is what a refused [job.Actor.Unstamped] caller is told to do, the
 // module store's refusals included (see [diagnose]).
-const unstampedRemedy = "send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
+const unstampedRemedy = "send the lease you act under with the call (a baggage header carrying " + recorder.BaggageLease +
 	"), or make the write from your own checkout, where magus reads it for you"
 
 // refuse builds the refusal for actor's attempt to WRITE lease id.

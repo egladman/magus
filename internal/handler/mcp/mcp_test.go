@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -81,7 +81,7 @@ func mcpCallTelemetry(t *testing.T) (*observabilitytest.MockProvider, *[]observa
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(base), limit) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -199,10 +199,10 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := ev.Response.Read(trail.CallsDir(dir))
+	resp, err := ev.Response.Read(recorder.CallsDir(dir))
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := ev.Request.Read(trail.CallsDir(dir))
+	reqBody, err := ev.Request.Read(recorder.CallsDir(dir))
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "query")
 }
@@ -244,7 +244,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(trail.ContextWithCredential(context.Background(), auth.CredentialStdio()), callRequest(d.Name, nil))
+		res, err := st.Handler(recorder.ContextWithCredential(context.Background(), auth.CredentialStdio()), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -555,7 +555,7 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			res, err := authorize(ok)(trail.ContextWithCredential(t.Context(), c.cred), req)
+			res, err := authorize(ok)(recorder.ContextWithCredential(t.Context(), c.cred), req)
 			require.NoError(t, err)
 			text := allText(res)
 			if c.allowed {

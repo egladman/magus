@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -55,7 +55,7 @@ type rulesAnswer struct {
 	// answered are the sides whose rule ran and answered, in the order asked.
 	answered []string
 	// failures are the sides that judged nothing, and why.
-	failures []trail.RuleFailure
+	failures []recorder.RuleFailure
 	// lapse is the first phase that ran out of its share of the hook's deadline, nil when
 	// every phase answered in time. denyLapse decides what it costs the call.
 	lapse *ruleLapse
@@ -70,7 +70,7 @@ type rulesAnswer struct {
 	// not unloaded: it is in raised, for denyRaised.
 	unloaded bool
 	// raised are the sides whose rule ran and returned an error.
-	raised []trail.RuleFailure
+	raised []recorder.RuleFailure
 	// loadFailure is why the working tree did not load, for denyUnloaded to tell a binary
 	// older than the tree from a typo.
 	loadFailure error
@@ -104,7 +104,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	log := judgmentPhases(ctx)
 	out := rulesAnswer{loadFailure: config.WithRunningVersion(deps.LoadFailure, deps.BinaryVersion), dryRun: isDryRun(ctx), log: log}
 	lapsed := func(l ruleLapse) {
-		out.failures = append(out.failures, trail.RuleFailure{Side: l.side, Error: l.failure()})
+		out.failures = append(out.failures, recorder.RuleFailure{Side: l.side, Error: l.failure()})
 		if out.lapse == nil {
 			out.lapse = &l
 		}
@@ -116,7 +116,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			said: lapseWording{"loading this workspace's guard rules", "finish"}, failed: lapseWording{"the magusfile", "load"},
 		})
 	case deps.LoadFailure != nil:
-		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
+		out.failures = append(out.failures, recorder.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
 	}
 	// The lease rules read the job store, and one that could not be read in time judged
 	// nothing.
@@ -148,7 +148,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			lapsed(lapse)
 			return
 		case err != nil:
-			f := trail.RuleFailure{Side: by, Error: "the rule failed: " + err.Error()}
+			f := recorder.RuleFailure{Side: by, Error: "the rule failed: " + err.Error()}
 			out.failures = append(out.failures, f)
 			out.raised = append(out.raised, f)
 			return
@@ -190,7 +190,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 					failed: lapseWording{"resolving the rule", "finish"},
 				})
 			case err != nil:
-				out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
+				out.failures = append(out.failures, recorder.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
 			}
 		}
 	}
@@ -270,7 +270,7 @@ func commitVerb(command string, d Dialect) string {
 
 // raisedDenial is the deny for a gated call while a rule of seam raises: the rule judged
 // nothing, so the built-ins alone would pass the call it exists to judge.
-func raisedDenial(verb string, seam functionSeam, raised []trail.RuleFailure) denial {
+func raisedDenial(verb string, seam functionSeam, raised []recorder.RuleFailure) denial {
 	lines := failureLines(raised)
 	var why strings.Builder
 	fmt.Fprintf(&why, "The workspace %s rule raised, so it judged nothing:", seam.member())
@@ -406,7 +406,7 @@ func brokenPolicyDenial(call judgedCall, failures []string) denial {
 // failureLines renders each failure as the side and the head of its error. An error
 // annotated as stale carries the generic fix after a blank line, and the deny states the
 // fix for the caller itself.
-func failureLines(failures []trail.RuleFailure) []string {
+func failureLines(failures []recorder.RuleFailure) []string {
 	out := make([]string, len(failures))
 	for i, f := range failures {
 		head, _, _ := strings.Cut(f.Error, "\n\n")
@@ -418,7 +418,7 @@ func failureLines(failures []trail.RuleFailure) []string {
 // unloadedDenial is the deny for a gated verb while the policy does not load. recorded is
 // whether the last policy that loaded registered seam's rule; false means no policy is on
 // record here. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
-func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, recorded bool, root string) denial {
+func unloadedDenial(call judgedCall, failures []recorder.RuleFailure, own, recorded bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, root, call.lease, call.builds)
 	var why strings.Builder
@@ -524,7 +524,7 @@ func sideName(seam functionSeam, side string) string {
 type ruleFailureReport struct {
 	gate     hint.Gate
 	seam     functionSeam
-	failures []trail.RuleFailure
+	failures []recorder.RuleFailure
 	answered []string
 	// TODO: drop with its three callers; the note is always told in full.
 	toldInFull bool

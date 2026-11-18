@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -247,7 +247,7 @@ func readMerged(ctx context.Context, workspaces []Workspace, limit int) []journa
 // first. A line that does not decode is passed over.
 func readCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), limit) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), limit) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
@@ -267,7 +267,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 	var err error
 	for _, w := range s.loaded() {
 		var body []byte
-		if body, err = (journal.Payload{Ref: ref}).Read(trail.CallsDir(w.CacheDir)); err == nil {
+		if body, err = (journal.Payload{Ref: ref}).Read(recorder.CallsDir(w.CacheDir)); err == nil {
 			return connect.NewResponse(&activityv1.Payload{Body: body, SizeBytes: int64(len(body))}), nil
 		}
 	}

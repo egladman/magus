@@ -1,19 +1,4 @@
-// Package trail writes the magus activity trail: a durable, append-only record of consequential
-// actions taken against the server (who did what, and did it succeed) kept next to the
-// execution journal under a base directory. The event and its readers are
-// libs/safetyscissors/trail, which exports no writer; this package is the writer magus's
-// producers (the MCP handler, agent hooks, background jobs) call until the writer moves into
-// the module with the guard. The console's ActivityService reads through the module.
-//
-// The magus.activity.v1alpha1 proto is the WIRE format only; the handler maps Event to it;
-// this package never depends on the proto or the handler stack.
-//
-// Every operation is a stateless free function taking the trail's base directory. Writes are
-// low-frequency (agent tool calls, background jobs), so a per-call open/append/close is cheap
-// and avoids a long-lived handle, a lock, and a second write path. POSIX append of a short line
-// is atomic, so concurrent producers do not interleave; the "lines stay small" invariant
-// (events carry payload REFS, never bodies) is what keeps that true.
-package trail
+package recorder
 
 import (
 	"bufio"
@@ -128,9 +113,12 @@ type AgentCommand struct {
 	types.AgentFacts
 }
 
-const agentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
+// AgentCommandAPIVersion versions the two payloads an agent command keeps.
+const AgentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
 
-type agentCommandRequest struct {
+// AgentCommandRequest is the request payload of an agent command: what the
+// host asked to run, restated by magus.
+type AgentCommandRequest struct {
 	APIVersion types.APIVersion `json:"api_version"`
 	Host       string           `json:"host,omitempty"`
 	Session    string           `json:"session,omitempty"`
@@ -139,11 +127,13 @@ type agentCommandRequest struct {
 	Tool       string           `json:"tool,omitempty"`
 	Command    string           `json:"command,omitempty"`
 	Path       string           `json:"path,omitempty"`
-	// Additive for the reason agentCommandResponse.PreauthorizedBy gives.
+	// Additive for the reason AgentCommandResponse.PreauthorizedBy gives.
 	types.AgentFacts
 }
 
-type agentCommandResponse struct {
+// AgentCommandResponse is the response payload of an agent command: how the
+// guard answered.
+type AgentCommandResponse struct {
 	APIVersion types.APIVersion `json:"api_version"`
 	Decision   verdict.Decision `json:"decision"`
 	Reason     string           `json:"reason,omitempty"`
@@ -186,7 +176,7 @@ func (e *blobUndecodableError) Unwrap() error { return e.Err }
 
 // decodeRequestBlob decodes the request blob ref under base into req. A retired decision
 // is a [*retiredDecisionError] and any other failure a [*blobUndecodableError].
-func decodeRequestBlob(base, ref string, raw []byte, req *agentCommandRequest) error {
+func decodeRequestBlob(base, ref string, raw []byte, req *AgentCommandRequest) error {
 	err := decodeAgentBlob(base, ref, raw, req)
 	var retired *retiredDecisionError
 	if err == nil || errors.As(err, &retired) {
@@ -244,8 +234,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Reason = secrets.RedactString(ctx, command.Reason)
 	command.Context = secrets.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
-	requestBody, _ := codec.Marshal(agentCommandRequest{
-		APIVersion: agentCommandAPIVersion,
+	requestBody, _ := codec.Marshal(AgentCommandRequest{
+		APIVersion: AgentCommandAPIVersion,
 		Host:       command.Host,
 		Session:    command.Session,
 		Transcript: command.Transcript,
@@ -255,8 +245,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Path:       command.Path,
 		AgentFacts: command.AgentFacts,
 	})
-	responseBody, _ := codec.Marshal(agentCommandResponse{
-		APIVersion:      agentCommandAPIVersion,
+	responseBody, _ := codec.Marshal(AgentCommandResponse{
+		APIVersion:      AgentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
 		Context:         command.Context,
@@ -264,8 +254,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		PreauthorizedBy: command.PreauthorizedBy,
 		RuleFailures:    redactFailures(ctx, command.RuleFailures),
 	})
-	request := WriteBlob(ctx, base, "agent", requestBody)
-	response := WriteBlob(ctx, base, "agent", responseBody)
+	request := WritePayload(ctx, base, "agent", requestBody)
+	response := WritePayload(ctx, base, "agent", responseBody)
 
 	// The lease is the one the producer resolved through job.LeaseQuery, recorded as given:
 	// reading BAGGAGE here as well would be a second resolution order. One that fails
@@ -287,7 +277,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	if command.Decision != "" {
 		preview = "guard: " + string(command.Decision)
 	}
-	Append(ctx, base, journal.Call{
+	AppendCall(ctx, base, journal.Call{
 		Time:      time.Now(),
 		Kind:      journal.CallKindAgentCommand,
 		Origin:    hookOrigin(job.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
@@ -391,9 +381,12 @@ type RuleFailure struct {
 	Error string `json:"error"`
 }
 
-const agentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
+// AgentSpawnAPIVersion versions an agent spawn's request payload.
+const AgentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
 
-type agentSpawnRequest struct {
+// AgentSpawnRequest is the request payload of an agent spawn: the context
+// the caller handed its subagent.
+type AgentSpawnRequest struct {
 	APIVersion types.APIVersion `json:"api_version"`
 	Host       string           `json:"host,omitempty"`
 	Session    string           `json:"session,omitempty"`
@@ -405,7 +398,7 @@ type agentSpawnRequest struct {
 	// DeclaredModel is additive: an older reader ignores a field it does not know, and one
 	// reading a record written before this field existed gets "" for it, which is exactly
 	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
-	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
+	// bump, for the reason AgentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
 	// Target and RuleFailures are additive for the reason DeclaredModel is.
 	Target       string        `json:"target,omitempty"`
@@ -414,11 +407,11 @@ type agentSpawnRequest struct {
 }
 
 const (
-	// ActionAgentSpawn is the action of an agent_spawn event whose host named no child.
-	ActionAgentSpawn = "agent.spawn"
-	// ActionAgentContinue is the action of an agent_spawn event recording a message to a
+	// NameAgentSpawn is the action of an agent_spawn event whose host named no child.
+	NameAgentSpawn = "agent.spawn"
+	// NameAgentContinue is the action of an agent_spawn event recording a message to a
 	// subagent that already exists.
-	ActionAgentContinue = "agent.continue"
+	NameAgentContinue = "agent.continue"
 )
 
 // AppendAgentSpawn records one spawn or continuation and stores the context it was given
@@ -448,8 +441,8 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
-	body, _ := codec.Marshal(agentSpawnRequest{
-		APIVersion:    agentSpawnAPIVersion,
+	body, _ := codec.Marshal(AgentSpawnRequest{
+		APIVersion:    AgentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
 		Event:         spawn.Event,
@@ -462,7 +455,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		RuleFailures:  failures,
 		AgentFacts:    spawn.AgentFacts,
 	})
-	request := WriteBlob(ctx, base, "spawn", body)
+	request := WritePayload(ctx, base, "spawn", body)
 
 	// The CHILD is the action, the way an MCP call's action is its tool name: it is the field a
 	// reader groups a page of leases by. A host that supplied no label leaves the generic
@@ -471,11 +464,11 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	action := spawn.Child
 	switch {
 	case spawn.Continue:
-		action = ActionAgentContinue
+		action = NameAgentContinue
 	case action == "":
-		action = ActionAgentSpawn
+		action = NameAgentSpawn
 	}
-	Append(ctx, base, journal.Call{
+	AppendCall(ctx, base, journal.Call{
 		Time:      time.Now(),
 		Kind:      journal.CallKindAgentSpawn,
 		Origin:    hookOrigin(job.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
@@ -559,6 +552,152 @@ func leaseFromContext(handed string) string {
 // journal.Calls and (journal.Payload).Read take.
 func CallsDir(base string) string { return filepath.Join(base, dir) }
 
+// The tool labels an agent command's request names; see cmd/magus/agent.go.
+// They are magus's own, never a host's tool names.
+const (
+	ToolFileWrite    = "file.write"
+	ToolFileRead     = "file.read"
+	ToolShellCommand = "shell.command"
+)
+
+// AgentActivity is the newest guard observation one checkout's log holds:
+// when a host last ran something past the guard here, and in which session.
+// A turn that ran no tool leaves nothing, so a session is never colder than
+// this says.
+type AgentActivity struct {
+	Session string
+	Host    string
+	At      time.Time
+}
+
+// LastAgentActivity returns the newest agent call in the log under base. It
+// reports false for a log that is absent, unreadable or holds no agent call.
+// It decodes one line: a hook asks on every call, and the rest of the file is
+// matched by substring.
+func LastAgentActivity(base string) (AgentActivity, bool) {
+	if base == "" {
+		return AgentActivity{}, false
+	}
+	f, err := os.Open(eventsPath(base))
+	if err != nil {
+		return AgentActivity{}, false
+	}
+	defer f.Close()
+
+	newest := ""
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		if line := sc.Text(); strings.Contains(line, agentKindTag) {
+			newest = line
+		}
+	}
+	if sc.Err() != nil || newest == "" {
+		return AgentActivity{}, false
+	}
+	var e journal.Call
+	if codec.Unmarshal([]byte(newest), &e) != nil {
+		return AgentActivity{}, false
+	}
+	if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn || e.Time.IsZero() || e.Time.UnixMilli() <= 0 {
+		// A missing time would clock to 1970 and print half a century of age.
+		return AgentActivity{}, false
+	}
+	return AgentActivity{Session: e.Session, Host: e.Host, At: e.Time}, true
+}
+
+// agentKindTag is the encoded prefix both agent kinds share.
+const agentKindTag = `"kind":"agent_`
+
+// relativize makes a recorded path workspace-relative. A path already
+// relative, or outside the workspace, comes back unchanged.
+func relativize(root, p string) string {
+	if p == "" || root == "" || !strings.HasPrefix(p, root) {
+		return p
+	}
+	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+}
+
+// ObservedCounts reports how many reads, writes and shell commands the
+// newest limit calls under base observed. It answers whether the observer
+// records at all. A log that cannot be read is the error. A request payload
+// that does not decode is left out and returned in the joined error.
+func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
+	events, err := recentCalls(ctx, base, limit)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	var errs []error
+	for _, e := range events {
+		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
+			continue
+		}
+		raw, rerr := e.Request.Read(CallsDir(base))
+		if rerr != nil {
+			continue
+		}
+		var req AgentCommandRequest
+		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		switch req.Tool {
+		case ToolFileRead:
+			reads++
+		case ToolFileWrite:
+			writes++
+		case ToolShellCommand:
+			shell++
+		}
+	}
+	return reads, writes, shell, errors.Join(errs...)
+}
+
+// CommandProgram reduces a recorded command line to the program it ran and
+// drops every argument, where a credential would sit. Leading VAR=value
+// assignments are skipped for the same reason. A line it cannot read
+// reduces to "", since a guessed program would be an invented fact.
+func CommandProgram(cmd string) string {
+	for _, tok := range strings.Fields(cmd) {
+		if isEnvAssignment(tok) {
+			continue
+		}
+		if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
+			tok = tok[i+1:]
+		}
+		if tok == "" {
+			continue
+		}
+		if len(tok) > commandProgramMax {
+			tok = tok[:commandProgramMax]
+		}
+		return tok
+	}
+	return ""
+}
+
+// commandProgramMax bounds a reported program name.
+const commandProgramMax = 32
+
+// isEnvAssignment reports the NAME=value shape a shell reads as an
+// assignment before the command, not any token holding "=".
+func isEnvAssignment(tok string) bool {
+	i := strings.IndexByte(tok, '=')
+	if i <= 0 {
+		return false
+	}
+	for j := 0; j < i; j++ {
+		c := tok[j]
+		switch {
+		case c == '_', c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z':
+		case j > 0 && c >= '0' && c <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // recentCalls is up to limit calls from the end of the log under base, newest
 // first. A line that does not decode is passed over.
 func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
@@ -581,15 +720,11 @@ func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 func eventsPath(base string) string { return filepath.Join(base, dir, eventsFile) }
 func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDir) }
 
-// Append records one event under base. Best-effort: an empty base or any I/O error is dropped,
-// because the trail is never a precondition for the action it records. Concurrent Appends from
-// different producers do not interleave: each is a single POSIX append of one short line.
-//
-// ctx carries the run's secret resolver, and every free-text field goes through it first. The
-// trail is DURABLE and append-only, so a credential that lands here is on disk until someone
-// deletes the file, strictly worse than the same value reaching a terminal. It took a ctx
-// parameter for no other reason.
-func Append(ctx context.Context, base string, c journal.Call) {
+// AppendCall records c in the activity log under base. An empty base or an
+// I/O error is dropped: the log is never a precondition for the call. Each
+// append is one POSIX append of one short line, so writers do not
+// interleave. Every free-text field is redacted through ctx's resolver first.
+func AppendCall(ctx context.Context, base string, c journal.Call) {
 	if base == "" {
 		return
 	}
@@ -607,11 +742,12 @@ func Append(ctx context.Context, base string, c journal.Call) {
 	_ = codec.AppendLines(path, [][]byte{line}, 0o600, codec.WithoutSync())
 }
 
-// WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte
-// size. An empty base, invalid prefix, empty data, or write failure yields an empty ref (the
-// caller omits it) while still reporting the size. Idempotent by content and replaced whole,
-// so a concurrent reader never observes a partial blob.
-func WriteBlob(ctx context.Context, base, prefix string, data []byte) journal.Payload {
+// WritePayload stores data under a provenance prefix such as "mcp" and
+// returns the payload that names it. An empty base, a bad prefix, empty data
+// or a failed write gives a payload with no ref and its size still set. The
+// write is idempotent by content and replaces whole, so a concurrent reader
+// never sees a partial payload.
+func WritePayload(ctx context.Context, base, prefix string, data []byte) journal.Payload {
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
 	// stored. Blobs are the highest-risk data in this package: an MCP request/response pair
 	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
@@ -641,26 +777,23 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) journal.Pa
 	return kept
 }
 
-// LastRun returns the most recent KIND_JOB event whose Action equals action (the space-joined
-// worker argv recorded for a background job, e.g. "graph build") and whether one was found.
-// It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
-// that has not run within it is (zero, false).
-func LastRun(ctx context.Context, base, action string) (journal.Call, bool) {
+// LastJob returns the newest job call whose Name is name, the space-joined
+// argv of a background job such as "graph build", and whether there is one.
+// A job that has not run within the retained log is (zero, false).
+func LastJob(ctx context.Context, base, name string) (journal.Call, bool) {
 	calls, _ := recentCalls(ctx, base, maxEvents)
 	for _, c := range calls { // newest-first
-		if c.Kind == journal.CallKindJob && c.Name == action {
+		if c.Kind == journal.CallKindJob && c.Name == name {
 			return c, true
 		}
 	}
 	return journal.Call{}, false
 }
 
-// Stat reports the trail's current on-disk footprint under base: total bytes (the events file
-// plus every payload blob) and the number of recorded events. It is what a caller shows to
-// judge whether a rotate is worth running. Best-effort and read-only: a missing or empty trail
-// is (0, 0), and an unreadable directory is skipped rather than erroring: a size readout is
-// never a precondition for anything.
-func Stat(base string) (size int64, count int64) {
+// StatCalls reports the activity log's footprint under base: the bytes of
+// the log and every payload, and the number of calls. A missing log is
+// (0, 0), and an unreadable directory is skipped rather than an error.
+func StatCalls(base string) (size int64, count int64) {
 	if base == "" {
 		return 0, 0
 	}
@@ -687,18 +820,12 @@ func Stat(base string) (size int64, count int64) {
 	return size, count
 }
 
-// Rotate keeps the last maxEvents events and deletes blobs that no kept event references.
-// Best-effort: any error leaves the trail as-is, and it only rewrites when the file exceeds the
-// cap. It takes no lock, so a concurrent Append racing the read-rewrite window can be dropped:
-// acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
-//
-// It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
-// server's maintenance schedule be the single owner of rotation. A second, write-triggered path
-// (a rotate driven off a producer's own append counter) can only cover that one producer: an agent
-// hook is a short-lived process with nowhere to keep a counter, so a hook-fed trail would be
-// write-bounded by nothing at all. One trigger that every producer shares beats two that disagree
-// about who is covered.
-func Rotate(base string) { rotate(base, maxEvents) }
+// RotateCalls keeps the newest maxEvents calls and deletes payloads no kept
+// call names. An error leaves the log as it was. It takes no lock, so an
+// append racing the rewrite can be dropped. A small log costs one stat, so
+// the server's schedule is the only trigger: a hook process has nowhere to
+// keep an append counter.
+func RotateCalls(base string) { rotate(base, maxEvents) }
 
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
 // file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,

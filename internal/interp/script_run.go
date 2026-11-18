@@ -18,7 +18,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -451,7 +450,7 @@ func (r *ScriptRunner) Context(ctx context.Context, root string) (context.Contex
 	if serr != nil {
 		return nil, serr
 	}
-	return trail.ContextWithBase(sctx, ws.CacheDir), nil
+	return recorder.ContextWithBase(sctx, ws.CacheDir), nil
 }
 
 // RunContext is Context plus one EvalOnce for the run.

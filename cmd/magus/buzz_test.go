@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -100,7 +100,7 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 // loggedCalls is the newest limit calls in the log under cacheDir.
 func loggedCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), limit) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func loggedCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Cal
 
 // loggedPayload is the payload ref names in the log under cacheDir.
 func loggedPayload(cacheDir, ref string) ([]byte, error) {
-	return journal.Payload{Ref: ref}.Read(trail.CallsDir(cacheDir))
+	return journal.Payload{Ref: ref}.Read(recorder.CallsDir(cacheDir))
 }
 
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the

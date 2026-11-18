@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -3300,19 +3300,19 @@ EOF`, me.ID, me.ID),
 func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.T) {
 	me := narrowLease()
 	ctx, _ := fleetFixture(t, me)
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	fork := fmt.Sprintf("magus job fork %s/impl --parent %s --write-paths %s --check 'test .'", me.ID, me.ID, me.Paths.Write[0])
 
 	for _, line := range []string{
-		fmt.Sprintf("export BAGGAGE=%s=%s; %s", trail.BaggageLease, me.ID, fork),
-		fmt.Sprintf("BAGGAGE=%s=%s %s", trail.BaggageLease, me.ID, fork),
+		fmt.Sprintf("export BAGGAGE=%s=%s; %s", recorder.BaggageLease, me.ID, fork),
+		fmt.Sprintf("BAGGAGE=%s=%s %s", recorder.BaggageLease, me.ID, fork),
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
 	}
-	other := fmt.Sprintf("export BAGGAGE=%s=elsewhere; %s", trail.BaggageLease, fork)
+	other := fmt.Sprintf("export BAGGAGE=%s=elsewhere; %s", recorder.BaggageLease, fork)
 	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, other).Say, "nothing would grade")
 
-	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, me.ID))
+	t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, me.ID))
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, fork), "the session's own BAGGAGE is what the line starts with")
 }
 
@@ -3322,21 +3322,21 @@ func TestDenyLeaseScopedRebindLetsTheStoreGradeALineCarryingTheLease(t *testing.
 func TestDenyLeaseScopedRebindLetsAHolderBoundItsOwnRun(t *testing.T) {
 	me := narrowLease()
 	ctx, _ := fleetFixture(t, me)
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	const bounded = "magus job exec --timeout 1m -- true"
 
 	for _, line := range []string{
 		bounded,
 		"./magus job exec --timeout 20m -- ./magus run go-test . -- -run TestX",
-		fmt.Sprintf("BAGGAGE=%s=%s %s", trail.BaggageLease, me.ID, bounded),
+		fmt.Sprintf("BAGGAGE=%s=%s %s", recorder.BaggageLease, me.ID, bounded),
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, line), "%q", line)
 	}
 
-	other := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "export BAGGAGE="+trail.BaggageLease+"=elsewhere; "+bounded)
+	other := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "export BAGGAGE="+recorder.BaggageLease+"=elsewhere; "+bounded)
 	require.True(t, other.refused())
 	assert.Contains(t, other.Say, "owned by lease elsewhere")
-	assert.Contains(t, other.Say, fmt.Sprintf("BAGGAGE=%s=%s", trail.BaggageLease, me.ID), "the remedy is the holder's own")
+	assert.Contains(t, other.Say, fmt.Sprintf("BAGGAGE=%s=%s", recorder.BaggageLease, me.ID), "the remedy is the holder's own")
 	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, "magus job exec --timeout 1m harness/other").Say,
 		"take the lease on another job", "a job operand is still a take")
 }

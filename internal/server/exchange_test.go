@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
@@ -25,7 +25,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 func loggedCalls(t *testing.T, base string) []journal.Call {
 	t.Helper()
 	var out []journal.Call
-	for c, err := range journal.Calls(t.Context(), trail.CallsDir(base), 10) {
+	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(base), 10) {
 		require.NoError(t, err)
 		out = append(out, c)
 	}
@@ -87,15 +87,15 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	events := loggedCalls(t, trailDir)
 	require.Len(t, events, 1)
 	assert.Equal(t, "link.redeem", events[0].Name)
-	blob, err := events[0].Request.Read(trail.CallsDir(trailDir))
+	blob, err := events[0].Request.Read(recorder.CallsDir(trailDir))
 	require.NoError(t, err)
 	for _, s := range []string{code, got.Token} {
 		assert.NotContains(t, string(blob), s)
 		assert.NotContains(t, events[0].Preview, s)
 	}
-	var rec trail.MintRecord
+	var rec recorder.MintRecord
 	require.NoError(t, codec.Unmarshal(blob, &rec))
-	assert.Equal(t, trail.MintRecord{
+	assert.Equal(t, recorder.MintRecord{
 		Minted:  auth.Credential{Kind: auth.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  auth.Credential{Kind: auth.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},

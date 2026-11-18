@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
@@ -125,7 +125,7 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
-	trail.Append(context.Background(), dir, journal.Call{
+	recorder.AppendCall(context.Background(), dir, journal.Call{
 		Time:     time.UnixMilli(1000),
 		Kind:     journal.CallKindJob,
 		Name:     "run test libs/authkit",

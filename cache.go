@@ -19,9 +19,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -368,7 +368,7 @@ func (m *Magus) FileDiskAttention(ctx context.Context, message string) error {
 		Severity: string(types.SeverityWarning),
 		Source:   diskAttentionSource,
 		Message:  message,
-	}, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
+	}, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: m.ws.Root})
 	return err
 }
 

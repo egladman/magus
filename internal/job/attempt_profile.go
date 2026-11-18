@@ -6,7 +6,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
@@ -30,12 +30,12 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 	if base == "" {
 		return nil, nil
 	}
-	denials, known, err := trail.LeaseDenials(ctx, base, lease, since, math.MaxInt)
+	denials, known, err := recorder.LeaseDenials(ctx, base, lease, since, math.MaxInt)
 	if err != nil || !known {
 		return nil, nil
 	}
 	var events []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(base), workReadWindow) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), workReadWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
@@ -99,7 +99,7 @@ func callFacts(base string, e journal.Call) (types.AgentFacts, bool) {
 	if e.Request.Ref == "" {
 		return types.AgentFacts{}, false
 	}
-	raw, err := e.Request.Read(trail.CallsDir(base))
+	raw, err := e.Request.Read(recorder.CallsDir(base))
 	if err != nil {
 		return types.AgentFacts{}, false
 	}

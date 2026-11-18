@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"testing"
@@ -8,15 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// record writes one observation the way the guard hook does.
+func record(t *testing.T, base string, c AgentCommand) {
+	t.Helper()
+	AppendAgentCommand(t.Context(), base, c)
+}
+
 func TestConsultedJoinsQuestionsToTheWriteThroughTheLease(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolShell, Command: `magus query "kind=target project=internal/trail"`})
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolShell, Command: "magus explain internal/trail"})
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolShell, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: `magus query "kind=target project=internal/trail"`})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
 	// Neither of these is a consultation: one runs work, the other is not magus at all.
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolShell, Command: "magus run go-build ."})
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolShell, Command: "grep -rn explain internal/trail"})
-	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: toolWrite, Path: "internal/trail/consult.go"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "magus run go-build ."})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "grep -rn explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
 
 	got, gap, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
 
@@ -32,11 +38,11 @@ func TestConsultedJoinsQuestionsToTheWriteThroughTheLease(t *testing.T) {
 // changeset, so every lease that wrote into it contributes to one merged list.
 func TestConsultedMergesEveryLeaseThatWroteTheChangeset(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: toolShell, Command: "magus explain internal/trail"})
-	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: toolWrite, Path: "a.go"})
-	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: toolShell, Command: "magus explain internal/trail"})
-	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: toolShell, Command: "magus refs Consulted"})
-	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: toolWrite, Path: "b.go"})
+	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: ToolFileWrite, Path: "a.go"})
+	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: ToolShellCommand, Command: "magus refs Consulted"})
+	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: ToolFileWrite, Path: "b.go"})
 
 	got, gap, _ := Consulted(t.Context(), "", base, []string{"a.go", "b.go"}, 100)
 
@@ -61,8 +67,8 @@ func TestConsultedNamesWhichSilenceItIs(t *testing.T) {
 	t.Run("observed but unleased", func(t *testing.T) {
 		t.Setenv(EnvBaggage, "")
 		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "magus explain internal/trail"})
-		record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "a.go"})
+		record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+		record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "a.go"})
 
 		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
 		assert.Equal(t, ConsultGapUnleased, gap)
@@ -70,8 +76,8 @@ func TestConsultedNamesWhichSilenceItIs(t *testing.T) {
 
 	t.Run("leased work that wrote other files", func(t *testing.T) {
 		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: toolShell, Command: "magus explain internal/trail"})
-		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: toolWrite, Path: "elsewhere.go"})
+		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolFileWrite, Path: "elsewhere.go"})
 
 		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
 		assert.Equal(t, ConsultGapUnmatched, gap)
@@ -79,8 +85,8 @@ func TestConsultedNamesWhichSilenceItIs(t *testing.T) {
 
 	t.Run("the authors asked nothing", func(t *testing.T) {
 		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolShell, Command: "go doc net/http"})
-		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolWrite, Path: "a.go"})
+		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "go doc net/http"})
+		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "a.go"})
 
 		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
 		assert.Equal(t, ConsultGapNoQuestions, gap)
@@ -94,8 +100,8 @@ func TestConsultedReportsNothingWithoutALease(t *testing.T) {
 	// themselves be run by an agent working under a lease.
 	t.Setenv(EnvBaggage, "")
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "magus explain internal/trail"})
-	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "internal/trail/consult.go"})
+	record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
 
 	got, gap, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
 	assert.Empty(t, got)
@@ -106,10 +112,10 @@ func TestConsultedReportsNothingWithoutALease(t *testing.T) {
 // travel to this one.
 func TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolShell, Command: "magus refs AppendAgentCommand"})
-	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolWrite, Path: "internal/trail/consult.go"})
-	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: toolShell, Command: "magus explain a"})
-	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: toolWrite, Path: "console/src/app.ts"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "magus refs AppendAgentCommand"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
+	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: ToolShellCommand, Command: "magus explain a"})
+	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: ToolFileWrite, Path: "console/src/app.ts"})
 
 	got, _, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
 	require.Len(t, got, 1)
@@ -120,8 +126,8 @@ func TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(t *testing.T) {
 // workspace-relative. Replay closes the same vocabulary gap.
 func TestConsultedRelativizesTheWrittenPath(t *testing.T) {
 	base := t.TempDir()
-	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: toolShell, Command: "magus describe target ci ."})
-	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: toolWrite, Path: "/repo/magusfile.buzz"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolShellCommand, Command: "magus describe target ci ."})
+	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolFileWrite, Path: "/repo/magusfile.buzz"})
 
 	got, _, _ := Consulted(t.Context(), "/repo", base, []string{"magusfile.buzz"}, 100)
 	require.Len(t, got, 1)

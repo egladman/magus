@@ -45,7 +45,6 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -1132,7 +1131,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		return exit.Usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
 	}
 	root = resolveRootOrEmpty(root)
-	caller := trail.SpawnFromEnv()
+	caller := recorder.SpawnFromEnv()
 	lease := caller.Lease
 	if root != "" {
 		if loc, err := jobPlace(root); err == nil {
@@ -1725,7 +1724,7 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recorded yet would refuse exactly when a job has only just begun.
 func recentTrail(ctx context.Context, cacheDir string) []journal.Call {
 	var calls []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(cacheDir), jobWatchWindow) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), jobWatchWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

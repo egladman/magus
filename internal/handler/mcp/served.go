@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -109,7 +109,7 @@ func (s *served) stamp(ctx context.Context, res *mcplib.CallToolResult) {
 
 func (s *served) info(ctx context.Context) servedInfo {
 	info := servedInfo{Root: s.root, Version: s.build.Version, Commit: s.build.Commit, Transport: "http"}
-	stdio := trail.CredentialFromContext(ctx).Kind == auth.KindStdio
+	stdio := recorder.CredentialFromContext(ctx).Kind == auth.KindStdio
 	if stdio {
 		info.Transport = "stdio"
 	}

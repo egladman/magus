@@ -20,8 +20,8 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -72,8 +72,8 @@ type echoed struct {
 // credentialEcho answers with the credential and entry point the guard left on the context.
 var credentialEcho = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	err := codec.NewEncoder(w).Encode(echoed{
-		Credential: trail.CredentialFromContext(r.Context()),
-		EntryPoint: trail.EntryPointFromContext(r.Context()),
+		Credential: recorder.CredentialFromContext(r.Context()),
+		EntryPoint: recorder.EntryPointFromContext(r.Context()),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -169,7 +169,7 @@ func TestGrantGuardHoldsTheCredentialOnTheContextToThePathsNeed(t *testing.T) {
 	serve := func(path string, cred auth.Credential) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, path, nil)
-		g.ServeHTTP(rec, req.WithContext(trail.ContextWithCredential(req.Context(), cred)))
+		g.ServeHTTP(rec, req.WithContext(recorder.ContextWithCredential(req.Context(), cred)))
 		return rec
 	}
 	viewer := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessViewer()}

@@ -1,22 +1,21 @@
-package trail
+package sessions
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"errors"
-	"github.com/egladman/magus/types/diff"
-	"os"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 )
 
 // A touch is one agent session's contact with one file: that it wrote the file, what it had
@@ -26,14 +25,6 @@ import (
 // sees every path an agent reaches, so magus can say what an agent was LOOKING AT
 // immediately before it wrote something, which is the closest thing to "why is this change
 // shaped like this" that any tool can produce without asking the author.
-
-// The tool labels magus itself writes; see cmd/magus/agent.go. Matched rather than a host's
-// own tool names, which magus deliberately never learns.
-const (
-	toolWrite = "file.write"
-	toolRead  = "file.read"
-	toolShell = "shell.command"
-)
 
 // replayReadCap and replayRanCap bound what one Touch carries.
 //
@@ -78,7 +69,7 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 		paths[i] = f.Path
 	}
 	byPath, errs := replayTrail(ctx, root, base, paths, DefaultReplayEvents)
-	if dir, err := sessions.Dir(root); err == nil {
+	if dir, err := Dir(root); err == nil {
 		fold, err := session.ReadAll(ctx, dir)
 		if err != nil {
 			errs = errors.Join(errs, err)
@@ -106,7 +97,7 @@ func AttachTouches(ctx context.Context, rev *diff.Diff, root, base string) error
 // in the joined error, which is a [*blobUndecodableError] or a [*retiredDecisionError] per
 // blob.
 func replayTrail(ctx context.Context, root, base string, paths []string, limit int) (map[string][]diff.Touch, error) {
-	events, err := recentCalls(ctx, base, limit)
+	events, err := readCalls(ctx, base, limit)
 	if err != nil {
 		return map[string][]diff.Touch{}, err
 	}
@@ -128,11 +119,11 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := e.Request.Read(CallsDir(base))
+		raw, rerr := e.Request.Read(recorder.CallsDir(base))
 		if rerr != nil {
 			continue
 		}
-		var req agentCommandRequest
+		var req recorder.AgentCommandRequest
 		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
@@ -148,7 +139,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		// else reads the touch, and every consumer then has to remember to redact.
 		obs = append(obs, observation{
 			Host: req.Host, Session: req.Session, Transcript: req.Transcript,
-			Tool: req.Tool, Path: relativize(root, req.Path), Program: CommandProgram(req.Command),
+			Tool: req.Tool, Path: relativize(root, req.Path), Program: recorder.CommandProgram(req.Command),
 			At: e.Time,
 		})
 	}
@@ -165,11 +156,11 @@ func replayLoaded(fold session.Fold, paths []string) map[string][]diff.Touch {
 		var tool string
 		switch ev.Kind {
 		case session.EventFileRead:
-			tool = toolRead
+			tool = recorder.ToolFileRead
 		case session.EventFileWrite:
-			tool = toolWrite
+			tool = recorder.ToolFileWrite
 		case session.EventShellCommand:
-			tool = toolShell
+			tool = recorder.ToolShellCommand
 		default:
 			continue
 		}
@@ -218,15 +209,15 @@ func touchesRead(obs []observation, paths []string) map[string][]diff.Touch {
 			states[o.Session] = st
 		}
 		switch o.Tool {
-		case toolRead:
+		case recorder.ToolFileRead:
 			if o.Path != "" {
 				st.read = prependCapped(st.read, o.Path, replayReadCap)
 			}
-		case toolShell:
+		case recorder.ToolShellCommand:
 			if o.Program != "" {
 				st.ran = prependCapped(st.ran, o.Program, replayRanCap)
 			}
-		case toolWrite:
+		case recorder.ToolFileWrite:
 			if o.Path == "" || !want[o.Path] {
 				continue
 			}
@@ -245,21 +236,21 @@ func touchesRead(obs []observation, paths []string) map[string][]diff.Touch {
 	return out
 }
 
-// SessionTrail is what one checkout's trail holds for a host session: the join between a
-// transcript a host wrote and the observations the guard made while that session ran. It is
-// scoped to the checkout whose cache dir was read, because that is where the hook wrote.
-type SessionTrail struct {
+// Activity is what one checkout's activity log holds for a host session:
+// the guard's observations while that session ran. It is scoped to the
+// checkout whose cache dir was read, because that is where the hook wrote.
+type Activity struct {
 	// Commands is how many tool calls the guard observed; Denied how many it refused.
 	Commands int `json:"commands"`
 	Denied   int `json:"denied"`
 	// Leases are the ledger leases the observations were made under, first seen first.
 	Leases []string `json:"leases,omitempty"`
 	// Spawns are the subagents this session started, oldest first.
-	Spawns []SessionSpawn `json:"spawns,omitempty"`
+	Spawns []ActivitySpawn `json:"spawns,omitempty"`
 	// Calls are the observations in the same order, with the cost facts each recorded. They
 	// feed the cost summary and stay out of the encoded form, which would otherwise carry
 	// one row per tool call.
-	Calls []SessionCall `json:"-"`
+	Calls []ActivityCall `json:"-"`
 	// Repeats are facts, not a verdict: policy says which to report.
 	Repeats []RepeatRun `json:"repeats,omitempty"`
 }
@@ -284,9 +275,9 @@ type RepeatRun struct {
 
 // repeats folds calls into the runs of two or more. A call missing either
 // digest joins no run: an absent digest would equal every other.
-func repeats(calls []SessionCall) []RepeatRun {
+func repeats(calls []ActivityCall) []RepeatRun {
 	ordered := slices.Clone(calls)
-	slices.SortStableFunc(ordered, func(a, b SessionCall) int { return a.At.Compare(b.At) })
+	slices.SortStableFunc(ordered, func(a, b ActivityCall) int { return a.At.Compare(b.At) })
 	open := map[string]map[string]*RepeatRun{}
 	var out []RepeatRun
 	finish := func(run *RepeatRun) {
@@ -297,7 +288,7 @@ func repeats(calls []SessionCall) []RepeatRun {
 	}
 	for _, call := range ordered {
 		runs := open[call.Worker]
-		if call.Action == toolWrite {
+		if call.Action == recorder.ToolFileWrite {
 			for _, run := range runs {
 				finish(run)
 			}
@@ -338,7 +329,7 @@ func sortRepeatRuns(runs []RepeatRun) {
 	})
 }
 
-func startRun(call SessionCall) *RepeatRun {
+func startRun(call ActivityCall) *RepeatRun {
 	return &RepeatRun{
 		Worker: call.Worker, Thread: call.Thread, ThreadFrom: call.ThreadFrom,
 		Tool: call.Action, CallDigest: call.CallDigest, ResultDigest: call.ResultDigest,
@@ -346,12 +337,12 @@ func startRun(call SessionCall) *RepeatRun {
 	}
 }
 
-// SessionCall is one guard observation of a call and the cost facts recorded beside it.
+// ActivityCall is one guard observation of a call and the cost facts recorded beside it.
 // The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
 // its zero value, except Thread, which reads as types.AgentThreadUnknown.
 //
 // Decision is the hook verdict's: defer, advise, ask or deny.
-type SessionCall struct {
+type ActivityCall struct {
 	At       time.Time
 	Decision verdict.Decision
 	Rule     string
@@ -363,31 +354,27 @@ type SessionCall struct {
 	types.AgentFacts
 }
 
-// SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
-// context it was given named, when, and what the caller claimed about the model.
-//
-// DeclaredModel is "" both when the caller named no model and when the spawn blob could not
-// be read; a reader who needs to tell those apart reads the trail's own blob (RequestRef,
-// off the underlying trail.Event) rather than this summary. The spawn record's cost facts
-// are the caller's, so none of them is here: nothing in the trail measures the child.
-type SessionSpawn struct {
+// ActivitySpawn is one recorded spawn: the label the host gave the callee,
+// the lease its context named, when, and the model the caller claimed.
+// DeclaredModel is "" both when none was named and when the payload could
+// not be read.
+type ActivitySpawn struct {
 	Child         string    `json:"child"`
 	Lease         string    `json:"lease,omitempty"`
 	At            time.Time `json:"at"`
 	DeclaredModel string    `json:"declared_model,omitempty"`
 }
 
-// ForSession folds the trail at base for one host session, reading at most limit recent
-// events. A missing trail is an empty result; one that cannot be read is its error. A blob
-// that cannot be read is left out, since the join is context for a transcript that stands
-// on its own, except one holding a retired guard decision, a [*retiredDecisionError], since
-// reading around it would miscount the session.
-func ForSession(ctx context.Context, base, session string, limit int) (SessionTrail, error) {
-	var out SessionTrail
+// ReadActivity folds the activity log at base for one host session, reading
+// at most limit recent calls. A missing log is an empty result and one that
+// cannot be read is the error. A payload that cannot be read is left out,
+// except one holding a retired guard decision, which is the error.
+func ReadActivity(ctx context.Context, base, session string, limit int) (Activity, error) {
+	var out Activity
 	if session == "" {
 		return out, nil
 	}
-	events, err := recentCalls(ctx, base, limit)
+	events, err := readCalls(ctx, base, limit)
 	if err != nil {
 		return out, err
 	}
@@ -400,12 +387,12 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 		switch e.Kind {
 		case journal.CallKindAgentCommand:
 			out.Commands++
-			call := SessionCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := e.Response.Read(CallsDir(base)); err == nil {
-				var resp agentCommandResponse
+			call := ActivityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
+			if raw, err := e.Response.Read(recorder.CallsDir(base)); err == nil {
+				var resp recorder.AgentCommandResponse
 				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
 				case errors.As(err, &retired):
-					return SessionTrail{}, err
+					return Activity{}, err
 				case err == nil:
 					call.Decision, call.Rule = resp.Decision, resp.Rule
 					if resp.Decision == verdict.Deny {
@@ -413,11 +400,11 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 					}
 				}
 			}
-			if raw, err := e.Request.Read(CallsDir(base)); err == nil {
-				var req agentCommandRequest
+			if raw, err := e.Request.Read(recorder.CallsDir(base)); err == nil {
+				var req recorder.AgentCommandRequest
 				switch err := decodeAgentBlob(base, e.Request.Ref, raw, &req); {
 				case errors.As(err, &retired):
-					return SessionTrail{}, err
+					return Activity{}, err
 				case err == nil:
 					call.AgentFacts = req.AgentFacts
 					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
@@ -425,12 +412,12 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 			}
 			out.Calls = append(out.Calls, call)
 		case journal.CallKindAgentSpawn:
-			if e.Name == ActionAgentContinue {
+			if e.Name == recorder.NameAgentContinue {
 				continue
 			}
-			sp := SessionSpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
-			if raw, err := e.Request.Read(CallsDir(base)); err == nil {
-				var req agentSpawnRequest
+			sp := ActivitySpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
+			if raw, err := e.Request.Read(recorder.CallsDir(base)); err == nil {
+				var req recorder.AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
 				}
@@ -447,69 +434,6 @@ func ForSession(ctx context.Context, base, session string, limit int) (SessionTr
 	return out, nil
 }
 
-// AgentActivity is the newest guard observation one checkout's trail holds: when a host
-// last ran something past the guard here, and which of its sessions did.
-//
-// It bounds the last API request from BELOW: a turn that ran no tool at all leaves
-// nothing here, so a session can be warmer than this says and never colder.
-type AgentActivity struct {
-	Session string
-	Host    string
-	At      time.Time
-}
-
-// LastAgentActivity returns the newest agent observation in the trail at base. It
-// reports false for an unreadable or absent trail and for one holding no agent event,
-// which are the same fact to a caller: nothing here has been observed, so there is no
-// age to report.
-//
-// ONE decode, over the whole file. It answers a `magus session --brief` that a hook
-// puts in a model's window on every call, and decoding a recent WINDOW of events for
-// one timestamp both cost that path thousands of unmarshals and dropped the answer
-// entirely whenever the window happened to hold no agent event.
-//
-// Nothing new is written to produce it. The guard already appends one event per tool
-// call (appendHookActivity), so the timestamp exists and this only reads it back.
-func LastAgentActivity(base string) (AgentActivity, bool) {
-	if base == "" {
-		return AgentActivity{}, false
-	}
-	f, err := os.Open(eventsPath(base))
-	if err != nil {
-		return AgentActivity{}, false
-	}
-	defer f.Close()
-
-	newest := ""
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		// A substring test rather than a decode: every other line is some other kind,
-		// and the whole point is not to unmarshal them.
-		if line := sc.Text(); strings.Contains(line, agentKindTag) {
-			newest = line
-		}
-	}
-	if sc.Err() != nil || newest == "" {
-		return AgentActivity{}, false
-	}
-	var e journal.Call
-	if codec.Unmarshal([]byte(newest), &e) != nil {
-		return AgentActivity{}, false
-	}
-	if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindAgentSpawn || e.Time.IsZero() || e.Time.UnixMilli() <= 0 {
-		// A missing timestamp would clock to 1970, which is not time.Time's zero, so
-		// the prompt-cache clock would print an age of half a century with every
-		// window closed instead of taking its documented empty branch.
-		return AgentActivity{}, false
-	}
-	return AgentActivity{Session: e.Session, Host: e.Host, At: e.Time}, true
-}
-
-// agentKindTag is the encoded prefix both agent kinds share, which is what makes the
-// scan above a substring test instead of a decode.
-const agentKindTag = `"kind":"agent_`
-
 // relativize turns a recorded path into the workspace-relative form a review speaks. A path
 // already relative, or one outside the workspace entirely, is returned unchanged; the latter
 // then matches nothing, which is the honest outcome for a file this review is not about.
@@ -520,106 +444,74 @@ func relativize(root, p string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
 }
 
-// ObservedCounts reports how many of each observed tool kind the trail holds, newest-first
-// within limit.
-//
-// It exists for one question a fleet cannot answer any other way: is the observer actually
-// RECORDING? An absent observer is silent by design (a per-read interruption would be worse),
-// so a hook that is wired but writing nothing looks exactly like an agent that read nothing,
-// and both look like a human wrote the file. This repository has already paid for that: 3252
-// events, not one read, correct wiring, and a green doctor, because the hook resolved a PATH
-// magus too old to know --observe.
-//
-// Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
-// caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
-//
-// A trail that cannot be read is its error. A request blob that does not decode is left out
-// of the counts and returned in the joined error, a [*blobUndecodableError] or a
-// [*retiredDecisionError] per blob.
-func ObservedCounts(ctx context.Context, base string, limit int) (reads, writes, shell int, err error) {
-	events, err := recentCalls(ctx, base, limit)
-	if err != nil {
-		return 0, 0, 0, err
+// readCalls is up to limit calls from the end of the log under base, newest
+// first. A line that does not decode is passed over.
+func readCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
+	if base == "" {
+		return nil, errors.New("sessions: read names no directory")
 	}
-	var errs []error
-	for _, e := range events {
-		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
-		raw, rerr := e.Request.Read(CallsDir(base))
-		if rerr != nil {
-			continue
+		if err != nil {
+			return nil, err
 		}
-		var req agentCommandRequest
-		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		switch req.Tool {
-		case toolRead:
-			reads++
-		case toolWrite:
-			writes++
-		case toolShell:
-			shell++
-		}
+		out = append(out, c)
 	}
-	return reads, writes, shell, errors.Join(errs...)
+	return out, nil
 }
 
-// CommandProgram reduces a recorded command line to the program it invoked, dropping every
-// argument. See Touch.Ran for why the arguments cannot be kept.
-//
-// Leading VAR=value assignments are skipped rather than reported, because they are the single
-// likeliest place for a credential to sit; the observed leak was literally `T=<token> curl -H
-// "Authorization: Bearer $T"`, whose first token IS the secret. Only the shape a shell would
-// treat as an assignment counts, so a path that happens to contain "=" is still a program.
-//
-// A command this cannot read reduces to the empty string and is dropped. Reporting a
-// best-guess program for an unparsable line would put an invented fact in a provenance
-// record, and an admitted gap beats a low-confidence match here for the same reason it does
-// in the notes store.
-func CommandProgram(cmd string) string {
-	for _, tok := range strings.Fields(cmd) {
-		if isEnvAssignment(tok) {
-			continue
-		}
-		if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
-			tok = tok[i+1:]
-		}
-		if tok == "" {
-			continue
-		}
-		// A program name is short. Anything longer is not one, and truncating bounds what an
-		// odd invocation can push into the payload.
-		if len(tok) > commandProgramMax {
-			tok = tok[:commandProgramMax]
-		}
-		return tok
-	}
-	return ""
+// The payload decoders below copy internal/recorder's: the spec exports the
+// payload types and not their readers, and each side names its own errors.
+
+// retiredDecisionError is a payload holding "pass" or "allow", the names
+// the guard's defer had before. A reader refuses the store rather than drop
+// the observation from what it counts.
+type retiredDecisionError struct {
+	Store    string
+	Ref      string
+	Decision string
 }
 
-// commandProgramMax bounds a reported program name.
-const commandProgramMax = 32
+func (e *retiredDecisionError) Error() string {
+	return fmt.Sprintf("sessions: %s holds the retired guard decision %q in payload %s: clear that store (remove the directory) or start a fresh session", e.Store, e.Decision, e.Ref)
+}
 
-// isEnvAssignment reports the NAME=value shape a shell treats as an environment assignment
-// preceding the command, rather than any token containing "=".
-func isEnvAssignment(tok string) bool {
-	i := strings.IndexByte(tok, '=')
-	if i <= 0 {
-		return false
+// blobUndecodableError is a payload that is there and does not decode.
+type blobUndecodableError struct {
+	Store string
+	Ref   string
+	Err   error
+}
+
+func (e *blobUndecodableError) Error() string {
+	return fmt.Sprintf("sessions: payload %s in %s does not decode, so what it recorded is not counted: %v", e.Ref, e.Store, e.Err)
+}
+
+func (e *blobUndecodableError) Unwrap() error { return e.Err }
+
+// decodeRequestBlob decodes a request payload into req: a retired decision
+// is a [*retiredDecisionError] and any other failure a [*blobUndecodableError].
+func decodeRequestBlob(base, ref string, raw []byte, req *recorder.AgentCommandRequest) error {
+	err := decodeAgentBlob(base, ref, raw, req)
+	var retired *retiredDecisionError
+	if err == nil || errors.As(err, &retired) {
+		return err
 	}
-	for j := 0; j < i; j++ {
-		c := tok[j]
-		switch {
-		case c == '_', c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z':
-		case j > 0 && c >= '0' && c <= '9':
-		default:
-			return false
-		}
+	return &blobUndecodableError{Store: recorder.CallsDir(base), Ref: ref, Err: err}
+}
+
+// decodeAgentBlob decodes an agent payload into v. A retired decision is a
+// [*retiredDecisionError]; any other failure is returned as is.
+func decodeAgentBlob(base, ref string, raw []byte, v any) error {
+	err := codec.Unmarshal(raw, v)
+	var unknown *verdict.UnknownDecisionError
+	if errors.As(err, &unknown) && slices.Contains([]string{"pass", "allow"}, unknown.Decision) {
+		return &retiredDecisionError{Store: recorder.CallsDir(base), Ref: ref, Decision: unknown.Decision}
 	}
-	return true
+	return err
 }
 
 // prependCapped puts v at the front and bounds the list, dropping a duplicate so a file read

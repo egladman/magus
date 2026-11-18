@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
@@ -49,7 +49,7 @@ func (r record) subject() string {
 func (w *workspace) records(t *testing.T) []record {
 	t.Helper()
 	var events []journal.Call
-	for c, err := range journal.Calls(t.Context(), trail.CallsDir(w.cacheDir()), 100000) {
+	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(w.cacheDir()), 100000) {
 		if err != nil {
 			t.Fatalf("read the activity log: %v", err)
 		}
@@ -74,7 +74,7 @@ func readBlob[T any](t *testing.T, w *workspace, ref string) T {
 	if ref == "" {
 		return v
 	}
-	body, err := journal.Payload{Ref: ref}.Read(trail.CallsDir(w.cacheDir()))
+	body, err := journal.Payload{Ref: ref}.Read(recorder.CallsDir(w.cacheDir()))
 	if err != nil {
 		t.Logf("trail blob %s: %v", ref, err)
 		return v

@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 )
 
@@ -203,7 +203,7 @@ func livePendingSpawns(facts hint.Gate, now time.Time) []pendingSpawnEntry {
 // it by, which names no spawn, and several foreground spawns can wait at once. That join
 // (firstCall) guesses nothing. It reads the spawn title the host filed for the child (see
 // hostSpawnTitle) and joins the pending spawn with that title, or none. A host that files
-// no title leaves the lease the hook process declares (see [trail.LeaseFromEnv]), which is
+// no title leaves the lease the hook process declares (see [recorder.LeaseFromEnv]), which is
 // the host's environment and not a worker's shell export. When spawns naming jobs are
 // waiting and that declaration matches none, the caller runs unbound and advice says so: a
 // subagent that is no worker must not be refused while spawns wait. Two waiting spawns of
@@ -237,7 +237,7 @@ func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hoo
 		return "", ""
 	}
 	var titled, matched []pendingSpawnEntry
-	claim := trail.LeaseFromEnv()
+	claim := recorder.LeaseFromEnv()
 	for _, e := range pending {
 		row, ok := spawnTitleJob(ctx, at, e.spawn.Record.Description)
 		if !ok {

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
@@ -255,7 +255,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	base := t.TempDir()
 	allowed := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
-	ctx := trail.ContextWithBase(t.Context(), base)
+	ctx := recorder.ContextWithBase(t.Context(), base)
 
 	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
@@ -278,7 +278,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	base := t.TempDir()
 	policy := &Policy{Lease: "fleet/worker-3", LeaseFrom: job.LeaseSourceMarker}
-	ctx := trail.ContextWithBase(t.Context(), base)
+	ctx := recorder.ContextWithBase(t.Context(), base)
 
 	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
@@ -300,7 +300,7 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 func loggedCalls(t *testing.T, base string) []journal.Call {
 	t.Helper()
 	var out []journal.Call
-	for c, err := range journal.Calls(t.Context(), trail.CallsDir(base), 10) {
+	for c, err := range journal.Calls(t.Context(), recorder.CallsDir(base), 10) {
 		require.NoError(t, err)
 		out = append(out, c)
 	}

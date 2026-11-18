@@ -27,7 +27,7 @@ import (
 	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -197,7 +197,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	if events[0].Preview != "token 3fa9c1d2" || events[0].Request.Ref == "" {
 		t.Fatalf("the subject was not recorded: %+v", events[0])
 	}
-	blob, err := events[0].Request.Read(trail.CallsDir(dir))
+	blob, err := events[0].Request.Read(recorder.CallsDir(dir))
 	if err != nil || !strings.Contains(string(blob), "3fa9c1d2") {
 		t.Fatalf("subject blob = %q, %v", blob, err)
 	}
@@ -206,7 +206,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range journal.Calls(ctx, trail.CallsDir(base), limit) {
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +219,7 @@ func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 // entry point on the request context before any service sees it.
 func verifiedAs(credential auth.Credential, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), job.EntryPointRPC)
+		ctx := recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), credential), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

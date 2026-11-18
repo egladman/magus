@@ -1,4 +1,4 @@
-package trail
+package recorder
 
 import (
 	"context"
@@ -143,17 +143,17 @@ func Consulted(ctx context.Context, root, base string, paths []string, limit int
 		if rerr != nil {
 			continue
 		}
-		var req agentCommandRequest
+		var req AgentCommandRequest
 		if err := decodeRequestBlob(base, e.Request.Ref, raw, &req); err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		switch req.Tool {
-		case toolWrite:
+		case ToolFileWrite:
 			if want[relativize(root, req.Path)] {
 				leases[e.Lease] = true
 			}
-		case toolShell:
+		case ToolShellCommand:
 			if verb, subject, ok := parseConsultation(req.Command); ok {
 				asked = append(asked, question{e.Lease, verb, subject})
 			}
