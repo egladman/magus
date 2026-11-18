@@ -63,7 +63,7 @@ func (s *WriterSuite) TestAPermittedResultNeverReadsAsOK() {
 	}}, got)
 }
 
-func (s *WriterSuite) TestOutputCarriesTheStreamItCameFrom() {
+func (s *WriterSuite) TestOutputCarriesItsStream() {
 	got := s.mapped(rec(160, journal.Output{Project: "api", Target: "test", Stream: journal.Stderr, Text: "FAIL"}))
 	s.Equal(Event{Ts: 160, Workspace: "/repo", Inv: "inv1", Body: Output{
 		Project: "api", Target: "test", Stream: "stderr", Text: "FAIL",
