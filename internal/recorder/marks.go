@@ -33,11 +33,11 @@ var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
 func FeedbackMarksDir(root string) (string, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
-		return "", fmt.Errorf("feedback: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
+		return "", fmt.Errorf("recorder: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
 	dir, err := vcs.StateDir(base, "feedback", root)
 	if err != nil {
-		return "", fmt.Errorf("feedback: %w", err)
+		return "", fmt.Errorf("recorder: %w", err)
 	}
 	return dir, nil
 }
@@ -70,7 +70,7 @@ func AppendFeedbackMark(dir string, m feedback.Mark, now time.Time) (feedback.Ma
 		return m, err
 	}
 	if err := codec.AppendLines(filepath.Join(dir, marksFile), [][]byte{line}, 0o644, codec.WithoutSync()); err != nil {
-		return m, fmt.Errorf("feedback: %w", err)
+		return m, fmt.Errorf("recorder: %w", err)
 	}
 	return m, nil
 }
@@ -97,7 +97,7 @@ func ReadFeedbackMarks(dir string) ([]feedback.Mark, error) {
 		}
 		var m feedback.Mark
 		if err := codec.Unmarshal(sc.Bytes(), &m); err != nil {
-			return nil, fmt.Errorf("feedback: %s:%d: %w", path, n, err)
+			return nil, fmt.Errorf("recorder: %s:%d: %w", path, n, err)
 		}
 		out = append(out, m)
 	}
