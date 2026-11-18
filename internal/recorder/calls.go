@@ -37,15 +37,8 @@ const (
 // collisions and short in a ref.
 const refHexLen = 16
 
-// maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
-// blobs no kept event references. Rotate runs at server start and thereafter on the server's
-// rotate-activities schedule, never per append, because the trail is stateless and lock-free by
-// design (append is a bare POSIX append; there is no long-lived handle to hang a count on), so a
-// write-triggered rotate would have to re-scan the whole file per write.
-//
-// The overshoot between scheduled runs is therefore bounded by the SCHEDULE, not by a counter.
-// That is the honest shape: a counter can only ever bound the one producer that owns it, and the
-// producers that most need bounding (short-lived agent hooks) have nowhere to keep one.
+// maxEvents is how many calls RotateCalls keeps. It runs on a schedule, never
+// per append: a hook process has nowhere to keep a count.
 const maxEvents = 10000
 
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the
@@ -89,16 +82,16 @@ type AgentCommand struct {
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
 	PreauthorizedBy string
-	// VerdictRef is the grd blob a repeat deny cites; see Event.VerdictRef.
+	// VerdictRef is the grd blob a repeat deny cites; see journal.Guard.
 	VerdictRef string
-	// PolicyDigest and DecidedBy link the verdict to the rules that reached it; see Event.
+	// PolicyDigest and DecidedBy link the verdict to the rules behind it.
 	PolicyDigest string
 	DecidedBy    string
 	// RuleFailures are the workspace command rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
-	// Binary, BinaryVersion and Cwd are the judging magus and the directory it judged in,
-	// and Phases its timed steps; see Event.
+	// Binary, BinaryVersion and Cwd are the judging magus and the directory
+	// it judged in, and Phases its timed steps; see journal.Guard.
 	Binary        string
 	BinaryVersion string
 	Cwd           string
@@ -354,10 +347,9 @@ type AgentSpawn struct {
 	Child         string
 	Context       string
 	DeclaredModel string
-	// VerdictRef is the grd blob a deny or advisory cites; see Event.VerdictRef.
+	// VerdictRef is the grd blob a deny or advisory cites; see journal.Guard.
 	VerdictRef string
-	// PolicyDigest and DecidedBy link the spawn's verdict to the rules that reached it;
-	// see Event.
+	// PolicyDigest and DecidedBy link the spawn's verdict to its rules.
 	PolicyDigest string
 	DecidedBy    string
 	// Continue marks a message to a subagent that already exists rather than a new one.
@@ -367,8 +359,8 @@ type AgentSpawn struct {
 	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
-	// Binary, BinaryVersion and Cwd are the judging magus and the directory it judged in,
-	// and Phases its timed steps; see Event.
+	// Binary, BinaryVersion and Cwd are the judging magus and the directory
+	// it judged in, and Phases its timed steps; see journal.Guard.
 	Binary        string
 	BinaryVersion string
 	Cwd           string
@@ -424,10 +416,8 @@ const (
 // Best-effort and error-free, like every other producer here: an audit write must never be able
 // to fail the lease it observes.
 //
-// NOTE ON GROWTH: this producer runs in the short-lived hook process, which has no append counter
-// to drive RotateOnCount, so nothing it writes triggers a rotate; only the server's boot-time
-// Rotate bounds the trail. That was already true of AppendAgentCommand; it bites harder here
-// because a spawn blob is a whole lease prompt rather than one command line.
+// Nothing it writes triggers a rotate; only RotateCalls on the server's
+// schedule bounds the log, and a spawn blob is a whole lease prompt.
 func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	if base == "" || spawn.Context == "" {
 		return
@@ -915,14 +905,9 @@ const minEventBytes = 40
 // straight recency, so a quiet trail behaves exactly as it did before.
 const perKindFloor = 500
 
-// selectKept chooses which lines survive a rotate: every kind keeps its newest perKindFloor
-// events, and whatever budget remains goes to the newest events of any kind. Order is preserved,
-// because the file is append-ordered and every reader (ReadRecent, LastRun) depends on that.
-//
-// Kind is read with a narrow decode rather than a full Event unmarshal: this runs over the whole
-// file, and the only field the policy needs is the kind. A line that fails to decode has no kind
-// to reserve against and competes on recency alone, which is the same treatment ReadRecent gives
-// a corrupt line.
+// selectKept keeps every kind's newest perKindFloor lines, then the newest
+// of any kind, in file order, which every reader depends on. A line that
+// does not decode has no kind and competes on recency alone.
 func selectKept(lines []string, max int) []string {
 	type lineKind struct {
 		Kind string `json:"kind"`
@@ -1031,15 +1016,9 @@ func rotate(ctx context.Context, base string, keep int) error {
 	return gcBlobs(base, kept)
 }
 
-// blobGraceWindow holds back GC on a blob younger than this, even when no kept event
-// references it yet. WriteBlob finalizes (renames) a blob before its producer's Append
-// writes the event that references it; a rotate landing in that gap would otherwise see
-// the blob as unreferenced by the snapshot it just read and delete it out from under the
-// still-pending event: the event survives, the payload is gone. Every producer in this
-// tree calls WriteBlob immediately followed by Append on the same goroutine (wrap() in
-// internal/handler/mcp, AppendAgentCommand above), so the real gap is microseconds; this
-// window is deliberately generous to also absorb scheduler preemption, without adding a
-// lock that would serialize Append behind rotation.
+// blobGraceWindow spares a young blob no kept line names yet. WritePayload
+// lands a blob before AppendCall writes the line naming it. A rotate in that
+// gap would delete a payload about to go live.
 const blobGraceWindow = 30 * time.Second
 
 // gcBlobs removes the blobs no kept line references that are older than

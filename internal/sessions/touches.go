@@ -101,16 +101,9 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		return map[string][]diff.Touch{}, err
 	}
 
-	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
-	// chronology; Ts is a lossy shadow of it, stamped in whole milliseconds. A burst of hook
-	// observations (which is the normal shape, since an agent reads several files and then
-	// writes one, all inside a millisecond) lands on identical timestamps, and a stable sort
-	// over ties preserves whatever order it was handed. ReadRecent hands back newest-first, so
-	// sorting by Ts silently walks the whole thing backwards and every read looks like it
-	// happened after the write it explained.
-	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
-		events[i], events[j] = events[j], events[i]
-	}
+	// Reversed, not sorted by time: the log's order is the chronology. A burst
+	// of hook rows shares one millisecond, and a sort would scramble it.
+	slices.Reverse(events)
 
 	obs := make([]observation, 0, len(events))
 	var errs []error

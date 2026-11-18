@@ -13,11 +13,9 @@ import (
 // Consultation is one question an agent asked magus while producing a change: a read verb, what
 // it named, and how many times it was asked.
 //
-// The subject is what makes this evidence, which is why it is kept where [Touch.Ran] reduces a
-// command to its program. That reduction answers a leak: a recorded command line is stored
-// VERBATIM, because the hook process installs no secret resolver (only the MCP handler does, so
-// the Redact calls on that path are pass-throughs) and a review payload once carried a live
-// bearer token out of one.
+// The subject is what makes this evidence, so it is kept where
+// diff.Touch.Ran keeps only the program. The hook process installs no
+// secret resolver, so a recorded command line is stored verbatim.
 //
 // What keeps this record off that path is consultVerbs, a closed set. Every verb in it takes a
 // graph subject, so the text kept here is a node id, a path, or a query string. Widening that set
@@ -94,10 +92,9 @@ const (
 // read verbs they ran under the same lease, aggregated by subject, most asked first. It reads at
 // most limit recent events.
 //
-// The join is the LEASE rather than the session [Replay] groups by. A session is one host
-// process; a lease is the declared work unit, and one work unit spans an orchestrator and the
-// subagents it hands work to. Joining on the session would report the orchestrator's questions
-// and drop every question its workers asked about the same change.
+// The join is the LEASE, not the session: one work unit spans an
+// orchestrator and its subagents, and a session join would drop every
+// question the workers asked.
 //
 // Every lease that wrote into paths contributes, and their questions MERGE into one list keyed by
 // subject. A work unit that fanned out to subagents has a lease per worker, and the reviewer is
