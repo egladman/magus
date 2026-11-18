@@ -73,7 +73,7 @@ func feedbackWindow(opts feedback.ReadOptions, now time.Time) (recorder.Feedback
 	var err error
 	if until := strings.TrimSpace(opts.Until); until != "" {
 		if w.Until, err = time.Parse(time.RFC3339, until); err != nil {
-			return w, fmt.Errorf("Session.trail: opts.until %q is not an RFC3339 time", until)
+			return w, fmt.Errorf("session.trail: opts.until %q is not an RFC3339 time", until)
 		}
 	}
 	switch since := strings.TrimSpace(opts.Since); since {
@@ -85,11 +85,11 @@ func feedbackWindow(opts feedback.ReadOptions, now time.Time) (recorder.Feedback
 		} else if t, terr := time.Parse(time.RFC3339, since); terr == nil {
 			w.Since = t
 		} else {
-			return w, fmt.Errorf("Session.trail: opts.since %q is neither a positive duration (6h) nor an RFC3339 time", since)
+			return w, fmt.Errorf("session.trail: opts.since %q is neither a positive duration (6h) nor an RFC3339 time", since)
 		}
 	}
 	if !w.Since.Before(w.Until) {
-		return w, fmt.Errorf("Session.trail: the window starts at %s, not before its end %s", w.Since.Format(time.RFC3339), w.Until.Format(time.RFC3339))
+		return w, fmt.Errorf("session.trail: the window starts at %s, not before its end %s", w.Since.Format(time.RFC3339), w.Until.Format(time.RFC3339))
 	}
 	return w, nil
 }
@@ -135,7 +135,7 @@ func decodeFeedbackMark(in map[string]any) (feedback.Mark, error) {
 		}
 		s, ok := v.(string)
 		if !ok {
-			return "", fmt.Errorf("Session.mark:%s is %T, want a string", k, v)
+			return "", fmt.Errorf("session.mark: %s is %T, want a string", k, v)
 		}
 		return s, nil
 	}
@@ -156,14 +156,14 @@ func decodeFeedbackMark(in map[string]any) (feedback.Mark, error) {
 		for _, e := range ex {
 			s, ok := e.(string)
 			if !ok {
-				return m, fmt.Errorf("Session.mark:examples holds a %T, want strings", e)
+				return m, fmt.Errorf("session.mark: examples holds a %T, want strings", e)
 			}
 			m.Examples = append(m.Examples, s)
 		}
 	case []string:
 		m.Examples = ex
 	default:
-		return m, fmt.Errorf("Session.mark:examples is %T, want a list of strings", ex)
+		return m, fmt.Errorf("session.mark: examples is %T, want a list of strings", ex)
 	}
 	return m, nil
 }
