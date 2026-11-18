@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -1130,43 +1129,32 @@ func (s *Store) Digest(ctx context.Context, declared string) string {
 
 // fileDigest is Digest for a path SplitClaim already cut.
 func (s *Store) fileDigest(ctx context.Context, declared string) string {
+	body, marker := s.readReleased(ctx, declared)
+	if marker != "" {
+		return marker
+	}
+	sum := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// readReleased reads the released file at declared, or names the marker Digest answers
+// for it instead.
+func (s *Store) readReleased(ctx context.Context, declared string) ([]byte, string) {
 	if s.root == "" {
 		s.notice(Notice{Path: declared, Text: "the store names no root (WithRoot), so its release records " + DigestAbsent})
-		return DigestAbsent
+		return nil, DigestAbsent
 	}
 	if ctx.Err() != nil {
-		return DigestUnreadable
+		return nil, DigestUnreadable
 	}
 	// Symlinks are resolved on BOTH sides before the containment check, so a link inside
 	// the root pointing outside it is never hashed, and a root reached through a symlinked
 	// parent does not read as an escape from itself.
 	full, ok := s.resolve(declared)
 	if !ok {
-		return DigestAbsent
+		return nil, DigestAbsent
 	}
-	info, err := os.Stat(full)
-	switch {
-	case err != nil:
-		return DigestUnreadable
-	case info.IsDir():
-		return DigestDir
-	case !info.Mode().IsRegular():
-		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
-		// somebody writes to it, and it would block holding the store's mutex.
-		return DigestUnreadable
-	case info.Size() > maxDigestBytes:
-		return DigestUnreadable
-	}
-	fh, err := os.Open(full)
-	if err != nil {
-		return DigestUnreadable
-	}
-	defer fh.Close()
-	sum := sha256.New()
-	if _, err := io.Copy(sum, fh); err != nil {
-		return DigestUnreadable
-	}
-	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
+	return readRegular(full)
 }
 
 // resolve is declared inside the root with symlinks resolved, and false when nothing
@@ -1191,28 +1179,16 @@ func (s *Store) resolve(declared string) (string, bool) {
 // declarationDigest is Digest for one declaration of the file at p. The file passes every
 // check Digest makes of a whole file before a line of it is placed.
 func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
-	if whole := s.fileDigest(ctx, p); !strings.HasPrefix(whole, "sha256:") {
-		return whole
+	body, marker := s.readReleased(ctx, p)
+	if marker != "" {
+		return marker
 	}
 	if s.declared == nil {
 		s.notice(Notice{Path: p, Text: "the store digests no declaration (WithDeclarationDigest), so the release of " + decl + " records " + DigestUnreadable})
 		return DigestUnreadable
 	}
-	full, ok := s.resolve(p)
-	if !ok {
-		return DigestAbsent
-	}
-	body, err := os.ReadFile(full)
-	if err != nil {
-		return DigestUnreadable
-	}
 	return s.declared(ctx, p, decl, body)
 }
-
-// maxDigestBytes bounds one release digest, because the hash is computed while the store
-// holds its mutex; a path over the cap records unreadable, which is what it is from the
-// reader's side.
-const maxDigestBytes = 32 << 20
 
 // attemptsLog is attempts.jsonl beside the rows: an attempt lives and dies with the row
 // it is a try of.

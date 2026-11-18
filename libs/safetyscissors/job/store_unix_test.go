@@ -146,3 +146,30 @@ func (s *StoreUnixSuite) TestDeleteRefusesABoundHolder() {
 	s.Require().ErrorAs(err, &refused, "a holder deleting its own row is a refusal, not a failure")
 	s.Contains(refused.Rule, "handed out")
 }
+
+// readRegular judges the file it opened: a fifo with no writer is refused without
+// blocking, a directory is named, and a regular file is read whole.
+func (s *StoreUnixSuite) TestReadRegularJudgesWhatItOpened() {
+	dir := s.T().TempDir()
+	pipe := filepath.Join(dir, "pipe")
+	s.Require().NoError(syscall.Mkfifo(pipe, 0o644))
+	file := filepath.Join(dir, "f.go")
+	s.Require().NoError(os.WriteFile(file, []byte("package f\n"), 0o644))
+
+	done := make(chan string, 1)
+	go func() {
+		_, marker := readRegular(pipe)
+		done <- marker
+	}()
+	select {
+	case marker := <-done:
+		s.Equal(DigestUnreadable, marker)
+	case <-time.After(5 * time.Second):
+		s.FailNow("opening a fifo with no writer blocked")
+	}
+	_, marker := readRegular(dir)
+	s.Equal(DigestDir, marker)
+	body, marker := readRegular(file)
+	s.Empty(marker)
+	s.Equal("package f\n", string(body))
+}
