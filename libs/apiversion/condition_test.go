@@ -19,8 +19,8 @@ func (s *ConditionSuite) TestMarshalUsesMetaV1Keys() {
 		Reason:             "Done", Message: "ok",
 	})
 	s.Require().NoError(err)
-	s.JSONEq(`{"type":"Ready","status":"True","observedGeneration":2,
-		"lastTransitionTime":"2026-11-11T00:00:00Z","reason":"Done","message":"ok"}`, string(data))
+	s.JSONEq(`{"type":"Ready","status":"True","observed_generation":2,
+		"last_transition_time":"2026-11-11T00:00:00Z","reason":"Done","message":"ok"}`, string(data))
 }
 
 func (s *ConditionSuite) TestStatusConstants() {
