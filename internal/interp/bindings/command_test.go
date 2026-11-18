@@ -35,7 +35,7 @@ func TestExecCommandCollapsesProgressRedrawsOffATerminal(t *testing.T) {
 	}
 	script := []string{"-c", `printf 'a [0/3]\ra [1/3]\ra [3/3]\n'`}
 	var out, errOut bytes.Buffer
-	ctx := spawn.WithOutputWriters(t.Context(), &out, &errOut)
+	ctx := spawn.WithOutputWriters(testCtx(), &out, &errOut)
 
 	_, err := execCommand(ctx, t.TempDir(), "sh", script, nil, "", false, false)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func serviceOp() spells.Op {
 // subproject target (go["go-run"] from docs/) resolve its relative paths correctly.
 func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 	dir := t.TempDir()
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 
 	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo hi > marker.txt"}}}
 	_, err := runCommand(ctx, op, commandOpts{})
@@ -97,7 +97,7 @@ func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
 		Spells:  decls,
 	})
 	childEnv := func(projectSpells []string, opSpell string) string {
-		ctx := std.WithCurrentWorkingDirectory(sandbox.WithStep(sandbox.WithPolicy(t.Context(), p), projectSpells, nil), dir)
+		ctx := std.WithCurrentWorkingDirectory(sandbox.WithStep(sandbox.WithPolicy(testCtx(), p), projectSpells, nil), dir)
 		res, err := runCommand(ctx, spells.Op{Command: spells.Command{Bin: "env", Capture: true}}, commandOpts{spell: opSpell})
 		require.NoError(t, err)
 		return res.Stdout
@@ -124,7 +124,7 @@ func TestRunCommandSupervisesServiceDependency(t *testing.T) {
 	rr.EXPECT().Start(mock.Anything, mock.Anything).Return(struct{}{}, nil).Once()
 	rr.EXPECT().Stop(mock.Anything, mock.Anything).Maybe()
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
-	ctx := service.WithSupervision(service.WithSession(context.Background(), sess))
+	ctx := service.WithSupervision(service.WithSession(testCtx(), sess))
 
 	_, err := runCommand(ctx, serviceOp(), commandOpts{})
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 	rr := servicetest.NewMockRunner(t)
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
 	// Session present but supervision NOT active: this is a directly-run service.
-	ctx := service.WithSession(context.Background(), sess)
+	ctx := service.WithSession(testCtx(), sess)
 
 	_, err := runCommand(ctx, serviceOp(), commandOpts{})
 	require.NoError(t, err) // `true` exits 0
@@ -149,7 +149,7 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 func streamOp(t *testing.T, script string, quiet bool) (res spawn.ExecResult, stdout, stderr string, err error) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	ctx := spawn.WithOutputWriters(std.WithCurrentWorkingDirectory(t.Context(), t.TempDir()), &out, &errOut)
+	ctx := spawn.WithOutputWriters(std.WithCurrentWorkingDirectory(testCtx(), t.TempDir()), &out, &errOut)
 	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", script}, Capture: true, Quiet: quiet}}
 	res, err = runCommand(ctx, op, commandOpts{})
 	return res, out.String(), errOut.String(), err
@@ -189,7 +189,7 @@ func TestRunCommandQuietFailureWritesStderr(t *testing.T) {
 // sibling project's failure surface as `docs content-generate: go exited 1` with no
 // stderr, in a batch where docs alone passes.
 func TestExecCommandReportsCancellationNotExitCode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(testCtx())
 	defer cancel()
 	time.AfterFunc(50*time.Millisecond, cancel)
 
@@ -206,7 +206,7 @@ func TestExecCommandReportsCancellationNotExitCode(t *testing.T) {
 // still reports its own exit code, so the cancellation check above cannot swallow a
 // genuine failure.
 func TestExecCommandReportsRealExitCode(t *testing.T) {
-	_, err := execCommand(context.Background(), t.TempDir(), "sh", []string{"-c", "exit 3"}, nil, "", true, false)
+	_, err := execCommand(testCtx(), t.TempDir(), "sh", []string{"-c", "exit 3"}, nil, "", true, false)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sh exited 3")
@@ -219,7 +219,7 @@ func TestExecCommandReportsRealExitCode(t *testing.T) {
 // WHY it failed, the same shape TestExecCommandReportsCancellationNotExitCode
 // pins for the cancellation case.
 func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
-	_, err := execCommand(context.Background(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true, false)
+	_, err := execCommand(testCtx(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, exec.ErrNotFound,
@@ -313,7 +313,7 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	}
 
 	t.Run("a real non-zero exit advises through the run writers", func(t *testing.T) {
-		got := run6(context.Background(), hintOp())
+		got := run6(testCtx(), hintOp())
 		assert.Contains(t, got, "run docker login", "advice must reach the run's stderr writer")
 		assert.Contains(t, got, "authentication required", "the tool's own error still streams")
 	})
@@ -321,7 +321,7 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	t.Run("a cancelled run advises nothing", func(t *testing.T) {
 		// The critical case: spawn.Exec joins ctx.Err() into its error, so gating on err
 		// alone told a user who pressed Ctrl-C to go and authenticate.
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(testCtx())
 		cancel()
 		assert.NotContains(t, run6(ctx, hintOp()), "run docker login",
 			"a cancelled run must not be diagnosed as an authentication failure")
@@ -333,13 +333,13 @@ func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 			Args:  []string{"-c", "echo 'authentication required'"},
 			Hints: hintOp().Hints,
 		}}
-		assert.NotContains(t, run6(context.Background(), ok), "run docker login",
+		assert.NotContains(t, run6(testCtx(), ok), "run docker login",
 			"matching text on a PASSING command must not advise")
 	})
 
 	t.Run("an op declaring no hints installs no tee", func(t *testing.T) {
 		bare := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo hi >&2; exit 1"}}}
-		assert.NotContains(t, run6(context.Background(), bare), "hint:")
+		assert.NotContains(t, run6(testCtx(), bare), "hint:")
 	})
 }
 
@@ -360,7 +360,7 @@ func TestRunCommandDefaultArgs(t *testing.T) {
 			DefaultArgs: []string{"DEFAULT"},
 		}}
 		opts.env = map[string]string{"LOGFILE": logFile}
-		_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+		_, err := runCommand(std.WithCurrentWorkingDirectory(testCtx(), dir), op, opts)
 		require.NoError(t, err)
 		lines := logLines(t, logFile)
 		require.Len(t, lines, 1)
@@ -405,7 +405,7 @@ func TestRunCommandGoCleanTrailingArgs(t *testing.T) {
 			TrailingArgs: []string{"./..."},
 		}}
 		opts.env = map[string]string{"LOGFILE": logFile}
-		_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+		_, err := runCommand(std.WithCurrentWorkingDirectory(testCtx(), dir), op, opts)
 		require.NoError(t, err)
 		lines := logLines(t, logFile)
 		require.Len(t, lines, 1)
@@ -466,7 +466,7 @@ func (s *runCommandPathScopeSuite) run(opts commandOpts) []string {
 	}}
 	opts.op = "go-vet"
 	opts.env = map[string]string{"LOGFILE": s.logFile}
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), s.dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), s.dir)
 	ctx = spawn.WithOutputWriters(ctx, io.Discard, &s.stderr)
 	_, err := runCommand(ctx, op, opts)
 	s.Require().NoError(err)
@@ -524,7 +524,7 @@ func TestRunCommandNeedsArgs(t *testing.T) {
 		}}
 		opts.op = "serve"
 		opts.env = map[string]string{"LOGFILE": logFile}
-		_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+		_, err := runCommand(std.WithCurrentWorkingDirectory(testCtx(), dir), op, opts)
 		if err != nil {
 			assert.NoFileExists(t, logFile, "a refused command must not spawn")
 			return nil, err
@@ -603,7 +603,7 @@ func logLines(t *testing.T, path string) []string {
 func TestRunCommandSourcesBatchesAllMatches(t *testing.T) {
 	dir := t.TempDir()
 	files := writeSourceFixture(t, dir)
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 	logFile := filepath.Join(dir, "calls.log")
 
 	op := logInvocationOp([]string{"**/*.txt"}, false)
@@ -629,7 +629,7 @@ func TestRunCommandSourcesChunksPastTheBatchLimit(t *testing.T) {
 	for i := range n {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d.txt", i)), nil, 0o644))
 	}
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 	logFile := filepath.Join(dir, "calls.log")
 
 	op := logInvocationOp([]string{"*.txt"}, false)
@@ -655,7 +655,7 @@ func TestRunCommandSourcesChunksPastTheBatchLimit(t *testing.T) {
 func TestRunCommandSourcesEachInvokesPerFile(t *testing.T) {
 	dir := t.TempDir()
 	files := writeSourceFixture(t, dir)
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 	logFile := filepath.Join(dir, "calls.log")
 
 	op := logInvocationOp([]string{"**/*.txt"}, true)
@@ -673,7 +673,7 @@ func TestRunCommandSourcesEachInvokesPerFile(t *testing.T) {
 func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
 	dir := t.TempDir()
 	writeSourceFixture(t, dir)
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 	logFile := filepath.Join(dir, "calls.log")
 
 	op := logInvocationOp([]string{"**/*.doesnotexist"}, false)
@@ -691,7 +691,7 @@ func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
 func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 	dir := t.TempDir()
 	writeSourceFixture(t, dir)
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 	logFile := filepath.Join(dir, "calls.log")
 
 	op := logInvocationOp([]string{"**/*.txt"}, false)
@@ -764,7 +764,7 @@ func TestResolveRunnerRefs(t *testing.T) {
 // runner's own value, with no shell involved.
 func TestRunCommandResolvesMagusRef(t *testing.T) {
 	dir := t.TempDir()
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), dir)
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), dir)
 
 	op := spells.Op{Command: spells.Command{
 		Bin:  "sh",
@@ -787,7 +787,7 @@ func TestRunCommandResolvesMagusRef(t *testing.T) {
 // rather than either exec'ing a literal "$NOT_A_REAL_REF" or silently dropping
 // it as an empty argument.
 func TestRunCommandUnresolvedRefFailsBeforeExec(t *testing.T) {
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), t.TempDir())
+	ctx := std.WithCurrentWorkingDirectory(testCtx(), t.TempDir())
 	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo $1", "sh", "$NOT_A_REAL_REF"}}}
 
 	_, err := runCommand(ctx, op, commandOpts{op: "example"})
@@ -810,7 +810,7 @@ func (s *TestScopeArgsSuite) argv(forwarded ...string) []string {
 		TestScope:   []string{"./{dir}"},
 	}}
 	opts := commandOpts{args: forwarded, env: map[string]string{"LOGFILE": logFile}}
-	_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+	_, err := runCommand(std.WithCurrentWorkingDirectory(testCtx(), dir), op, opts)
 	s.Require().NoError(err)
 	lines := logLines(s.T(), logFile)
 	s.Require().Len(lines, 1)
@@ -840,7 +840,7 @@ func (s *TestScopeArgsSuite) sourcedArgv(forwarded ...string) [][]string {
 	op := logInvocationOp([]string{"*.txt"}, false)
 	op.TestScope = []string{"{file}"}
 	opts := commandOpts{args: forwarded, env: map[string]string{"LOGFILE": logFile}}
-	_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+	_, err := runCommand(std.WithCurrentWorkingDirectory(testCtx(), dir), op, opts)
 	s.Require().NoError(err)
 	var out [][]string
 	for _, line := range logLines(s.T(), logFile) {

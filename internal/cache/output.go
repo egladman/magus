@@ -276,8 +276,11 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// The descriptor's free-form fields (ErrMsg today) are Go-side strings that never pass
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
-	descriptor = secrets.Redact(ctx, descriptor)
-	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
+	descriptor, err = secrets.Redact(ctx, descriptor)
+	if err != nil {
+		return OutputDescriptor{}, err
+	}
+	if err :=file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -38,11 +39,16 @@ func leased(t testing.TB, ctx context.Context, lease string) context.Context {
 	return ctx
 }
 
+// withResolver is ctx carrying an empty secret resolver, which redaction needs.
+func withResolver(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
+
 // mustPersist stores one execution and returns its step ref, failing the test on error.
 // Most tests only need the ref; the stamped descriptor is re-read via ByRef/Attempts.
 func mustPersist(t *testing.T, s *OutputStore, cacheKey string, output []byte, d OutputDescriptor) string {
 	t.Helper()
-	stored, err := s.Persist(context.Background(), cacheKey, output, d)
+	stored, err := s.Persist(withResolver(context.Background()), cacheKey, output, d)
 	require.NoError(t, err)
 	return stored.Ref
 }
@@ -76,7 +82,7 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 // an output is a build's whole log.
 func TestOutputStorePersistIsPrivateToItsOwner(t *testing.T) {
 	s := NewOutputStore(filepath.Join(t.TempDir(), "cache"))
-	stored, err := s.Persist(t.Context(), "deadbeefcafef00d", []byte("log\n"), OutputDescriptor{Project: "api", Target: "test"})
+	stored, err := s.Persist(withResolver(t.Context()), "deadbeefcafef00d", []byte("log\n"), OutputDescriptor{Project: "api", Target: "test"})
 	require.NoError(t, err)
 
 	perm := func(p string) os.FileMode {
@@ -142,7 +148,7 @@ func TestOutputStorePersistNeverExposesPartialBlob(t *testing.T) {
 		}
 	}()
 
-	_, err := s.Persist(context.Background(), cacheKey, payload, OutputDescriptor{Project: "svc/api", Target: "test"})
+	_, err := s.Persist(withResolver(context.Background()), cacheKey, payload, OutputDescriptor{Project: "svc/api", Target: "test"})
 	require.NoError(t, err)
 	close(done)
 	wg.Wait()
@@ -214,9 +220,9 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 	}
 	record := func() OutputDescriptor {
 		t.Helper()
-		return recordIn(t.Context())
+		return recordIn(withResolver(t.Context()))
 	}
-	adopted := leased(t, t.Context(), "wave/client")
+	adopted := leased(t, withResolver(t.Context()), "wave/client")
 
 	t.Setenv(recorder.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
@@ -390,9 +396,9 @@ func TestOutputStoreSameMillisecondLaterAttemptWins(t *testing.T) {
 	for i := range 32 {
 		key := fmt.Sprintf("samems%02d", i)
 		d := OutputDescriptor{Project: "p", Target: "lint", TimestampMs: 1000}
-		first, err := s.Persist(context.Background(), key, []byte("earlier\n"), d)
+		first, err := s.Persist(withResolver(context.Background()), key, []byte("earlier\n"), d)
 		require.NoError(t, err)
-		second, err := s.Persist(context.Background(), key, []byte("later\n"), d)
+		second, err := s.Persist(withResolver(context.Background()), key, []byte("later\n"), d)
 		require.NoError(t, err)
 		require.Greater(t, second.PersistedNs, first.PersistedNs)
 
@@ -418,9 +424,9 @@ func TestPortableRefDeterministicAcrossCaches(t *testing.T) {
 
 	runOnce := func(t *testing.T) string {
 		t.Helper()
-		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
+		c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true))
 		require.NoError(t, err)
-		r, err := c.Run(context.Background(), makeStep(root), func(ctx context.Context) error {
+		r, err := c.Run(withResolver(context.Background()), makeStep(root), func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "built")
 			return nil
@@ -450,13 +456,13 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 	boom := errors.New("exit status 1")
 	var refs []string
 	for i := 0; i < 3; i++ {
-		_, err := c.Run(context.Background(), step, func(ctx context.Context) error {
+		_, err := c.Run(withResolver(context.Background()), step, func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintf(stdout, "attempt %d failed\n", i)
 			return boom
 		})
 		require.ErrorIs(t, err, boom)
-		hash, herr := c.hashStep(context.Background(), &step)
+		hash, herr := c.hashStep(withResolver(context.Background()), &step)
 		require.NoError(t, herr)
 		refs = append(refs, PortableRef(hash))
 	}
@@ -618,7 +624,7 @@ func TestOutputStorePruneKeepsWhatTheRefResolvesTo(t *testing.T) {
 
 	var persisted []OutputDescriptor
 	for _, ts := range []int64{100, 200, 300, 400, 400} {
-		d, err := s.Persist(context.Background(), key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: ts})
+		d, err := s.Persist(withResolver(context.Background()), key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: ts})
 		require.NoError(t, err)
 		persisted = append(persisted, d)
 	}
@@ -707,7 +713,7 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 	require.NoError(t, os.Chtimes(killedPath, base, base))
 	require.NoError(t, os.Chtimes(sweepPath, base.Add(time.Minute), base.Add(time.Minute)))
 
-	got := NewOutputStore(dir).ListRunLogs(t.Context(), 0)
+	got := NewOutputStore(dir).ListRunLogs(withResolver(t.Context()), 0)
 	require.Len(t, got, 2, "only .jsonl journals list")
 	// Newest by modtime first. The interrupted run has no finished event, so no outcome to claim,
 	// and its last event still dates the run.
@@ -724,8 +730,8 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 		},
 	}, got)
 
-	assert.Len(t, NewOutputStore(dir).ListRunLogs(t.Context(), 1), 1, "a positive limit keeps the newest")
-	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(t.Context(), 0), "a store with no runs dir lists nothing")
+	assert.Len(t, NewOutputStore(dir).ListRunLogs(withResolver(t.Context()), 1), 1, "a positive limit keeps the newest")
+	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(withResolver(t.Context()), 0), "a store with no runs dir lists nothing")
 }
 
 func fileSize(t *testing.T, path string) int64 {
@@ -743,7 +749,7 @@ func TestListRunLogsKeepsAJournalWithNoStartedEvent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runs, "invodd.jsonl"), []byte("not json\n"), 0o644))
 
-	got := NewOutputStore(dir).ListRunLogs(t.Context(), 0)
+	got := NewOutputStore(dir).ListRunLogs(withResolver(t.Context()), 0)
 	require.Len(t, got, 1)
 	assert.Equal(t, "invodd", got[0].Inv)
 	assert.Empty(t, got[0].Arguments)
@@ -767,7 +773,7 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 	writeMain(t, root, "package main")
 
 	step := makeStep(root)
-	r, err := c.Run(context.Background(), step, func(ctx context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprint(stdout, "no newline here") // no '\n' -> the trailing partial line goes through flush
 		return nil
@@ -809,7 +815,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	writeMain(t, root, "package main")
 
 	pass := makeStep(root)
-	rPass, err := c.Run(context.Background(), pass, func(ctx context.Context) error {
+	rPass, err := c.Run(withResolver(context.Background()), pass, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "build ok: 3 files")
 		return nil
@@ -828,14 +834,14 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	fail := makeStep(root)
 	fail.Target = "test"
 	boom := errors.New("exit status 1")
-	_, err = c.Run(context.Background(), fail, func(ctx context.Context) error {
+	_, err = c.Run(withResolver(context.Background()), fail, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: assertion failed")
 		return boom
 	})
 	require.ErrorIs(t, err, boom)
 
-	failHash, herr := c.hashStep(context.Background(), &fail)
+	failHash, herr := c.hashStep(withResolver(context.Background()), &fail)
 	require.NoError(t, herr)
 	failRef := PortableRef(failHash)
 	fdata, fmeta, err := c.outputs.ByRef(failRef)
@@ -893,7 +899,7 @@ func BenchmarkOutputStorePersist(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := range b.N {
-		if _, err := s.Persist(context.Background(), fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
+		if _, err := s.Persist(withResolver(context.Background()), fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -904,7 +910,7 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 	raw := benchRaw(benchLines)
 	dir := b.TempDir()
 	s := NewOutputStore(dir)
-	stored, err := s.Persist(context.Background(), "deadbeefcafef00d", raw, benchMeta())
+	stored, err := s.Persist(withResolver(context.Background()), "deadbeefcafef00d", raw, benchMeta())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -940,7 +946,7 @@ func TestRefShapeContract(t *testing.T) {
 	writeMain(t, root, "package main")
 	step := makeStep(root)
 	step.Target = "build"
-	r, err := c.Run(context.Background(), step, func(context.Context) error { return nil })
+	r, err := c.Run(withResolver(context.Background()), step, func(context.Context) error { return nil })
 	require.NoError(t, err)
 
 	require.Regexp(t, realRefShape, r.Ref, "a real run must print out + 12 hex")
@@ -967,14 +973,14 @@ func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	cLinux, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("linux/amd64"))
+	cLinux, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), withPlatform("linux/amd64"))
 	require.NoError(t, err)
-	cDarwin, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("darwin/arm64"))
+	cDarwin, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), withPlatform("darwin/arm64"))
 	require.NoError(t, err)
 
-	hLinux, err := cLinux.hashStep(context.Background(), &step)
+	hLinux, err := cLinux.hashStep(withResolver(context.Background()), &step)
 	require.NoError(t, err)
-	hDarwin, err := cDarwin.hashStep(context.Background(), &step)
+	hDarwin, err := cDarwin.hashStep(withResolver(context.Background()), &step)
 	require.NoError(t, err)
 
 	assert.Equal(t, hLinux, hDarwin, "cache key must be byte-identical across platforms")
@@ -996,14 +1002,14 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	build := func(context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	miss, err := c.Run(context.Background(), step, build)
+	miss, err := c.Run(withResolver(context.Background()), step, build)
 	require.NoError(t, err)
 	require.False(t, miss.Hit)
 	require.NotEmpty(t, miss.Ref)
 
-	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
+	c2, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(leased(t, t.Context(), "wave/hit"), step, build)
+	hit, err := c2.Run(leased(t, withResolver(t.Context()), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")
@@ -1040,7 +1046,7 @@ func TestFailingRunRefResolves(t *testing.T) {
 	step.Target = "test"
 
 	boom := errors.New("exit status 1")
-	res, err := c.Run(context.Background(), step, func(ctx context.Context) error {
+	res, err := c.Run(withResolver(context.Background()), step, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprintln(stdout, "FAIL: one assertion")
 		return boom
@@ -1069,7 +1075,7 @@ func TestConcurrentPersistsShareRefWithDistinctAttempts(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			stored, err := s.Persist(context.Background(), key,
+			stored, err := s.Persist(withResolver(context.Background()), key,
 				[]byte(fmt.Sprintf("run %d\n", i)), OutputDescriptor{Project: "p", Target: "build"})
 			if err == nil {
 				refs[i], attempts[i] = stored.Ref, stored.Attempt
@@ -1206,7 +1212,7 @@ func TestRefNotFoundNamesTheStoresConsulted(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 
-	_, _, err := c.OutputByRef(context.Background(), "outdeadbeefcafe")
+	_, _, err := c.OutputByRef(withResolver(context.Background()), "outdeadbeefcafe")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "the CLI's not-found diagnostic keys on this")
 
@@ -1382,7 +1388,7 @@ func runPrinting(t *testing.T, c *Cache, root, target, printed string) Result {
 	step := makeStep(root)
 	step.Target = target
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-	r, err := c.Run(t.Context(), step, func(ctx context.Context) error {
+	r, err := c.Run(withResolver(t.Context()), step, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		fmt.Fprint(stdout, printed)
 		return os.WriteFile(out, []byte("built"), 0o644)
@@ -1399,7 +1405,7 @@ func TestCacheHitFromAnotherCheckoutReportsMGS8005(t *testing.T) {
 	var records recordingHandler
 	open := func() *Cache {
 		t.Helper()
-		c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store), WithLocalWrite(true), WithLogger(slog.New(&records)))
+		c, err := Open(withResolver(t.Context()), t.TempDir(), WithStoreDir(store), WithLocalWrite(true), WithLogger(slog.New(&records)))
 		require.NoError(t, err)
 		return c
 	}

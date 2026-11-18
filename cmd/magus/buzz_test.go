@@ -75,7 +75,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	require.NoError(t, os.WriteFile(script,
 		fmt.Appendf(nil, "import \"fs\";\n\nfun main(args: [str]) > void !> any {\n    fs\\removeAll(\"%s\");\n}\n", buzzSandboxTarget), 0o644))
 
-	return withMagus(t.Context(), m), m, script
+	return withMagus(withSecrets(t.Context()), m), m, script
 }
 
 // TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` does not
@@ -171,7 +171,7 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	})
 
 	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
+	stdout := captureStdout(t, func() { runErr = buzzCommand(withSecrets(t.Context()), root, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "1\n", stdout)
@@ -194,7 +194,7 @@ func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
 	})
 
 	var runErr error
-	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
+	stdout := captureStdout(t, func() { runErr = buzzCommand(withSecrets(t.Context()), root, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "jobs=0\n", stdout)
@@ -276,7 +276,7 @@ func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
 
 			var runErr error
 			withStdin(t, event, func() {
-				captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
+				captureStdout(t, func() { runErr = buzzCommand(withSecrets(t.Context()), root, []string{"-s", script}) })
 			})
 
 			require.NoError(t, runErr, "a hook script must never fail: its host reads a non-zero exit as an error notice, and exit 2 as a block")
@@ -332,7 +332,7 @@ func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
 		t.Run(strings.Join(args[:len(args)-1], " "), func(t *testing.T) {
 			t.Chdir(filepath.Join(root, "sub", "deeper"))
 			var runErr error
-			stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), "", args) })
+			stdout := captureStdout(t, func() { runErr = buzzCommand(withSecrets(t.Context()), "", args) })
 			require.NoError(t, runErr)
 			assert.Equal(t, "ok\n", stdout)
 		})
@@ -347,7 +347,7 @@ func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
 		{"-e", "fun main() > void {}", "-C", missing},
 		{"-C", missing, "lsp"},
 	} {
-		err := buzzCommand(t.Context(), "", args)
+		err := buzzCommand(withSecrets(t.Context()), "", args)
 		require.Error(t, err, "%v", args)
 		assert.Contains(t, err.Error(), fmt.Sprintf("-C %s: no such file or directory", missing))
 	}
@@ -384,7 +384,7 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
+	require.NoError(t, recordBuzzRun(withSecrets(t.Context()), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
 
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
@@ -415,7 +415,7 @@ func (s *BuzzRecordSuite) SetupTest() { s.root = s.T().TempDir() }
 
 func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	args := []string{"a", "b"}
-	s.Require().NoError(recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil))
+	s.Require().NoError(recordBuzzRun(withSecrets(s.T().Context()), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil))
 
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)
@@ -465,7 +465,7 @@ func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
 	s.Require().NoError(err)
 	saved := os.Stderr
 	os.Stderr = w
-	recErr := recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	recErr := recordBuzzRun(withSecrets(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
 	os.Stderr = saved
 	s.Require().NoError(w.Close())
 	printed, err := io.ReadAll(r)
@@ -490,7 +490,7 @@ func (s *BuzzRecordSuite) TestAStaleJobStoreRecordsTheRunWithoutALease() {
 	s.Require().NoError(err)
 	saved := os.Stderr
 	os.Stderr = w
-	recErr := recordBuzzRun(s.T().Context(), root, "p.buzz", "code", nil, true, nil, time.Now(), nil)
+	recErr := recordBuzzRun(withSecrets(s.T().Context()), root, "p.buzz", "code", nil, true, nil, time.Now(), nil)
 	os.Stderr = saved
 	s.Require().NoError(w.Close())
 	printed, err := io.ReadAll(r)
@@ -508,7 +508,7 @@ func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "outputs"), []byte("x"), 0o644))
 
-	err = recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	err = recordBuzzRun(withSecrets(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "--record: store the run")
 }
@@ -534,7 +534,7 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			require.NoError(t, os.WriteFile(script, []byte(code), 0o644))
 
 			var runErr error
-			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
+			captureStdout(t, func() { runErr = buzzCommand(withSecrets(t.Context()), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
 			lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
@@ -574,7 +574,7 @@ test %q {
 
 func (s *BuzzTestManyScriptsSuite) run(args ...string) (string, error) {
 	var err error
-	out := captureStdout(s.T(), func() { err = buzzCommand(s.T().Context(), s.dir, args) })
+	out := captureStdout(s.T(), func() { err = buzzCommand(withSecrets(s.T().Context()), s.dir, args) })
 	return out, err
 }
 
@@ -672,7 +672,7 @@ func writeBuzz(t *testing.T, dir, name, body string) string {
 func runBuzzFile(t *testing.T, r *interp.ScriptRunner, root string, o interp.ScriptOptions, rest ...string) (string, error) {
 	t.Helper()
 	var err error
-	out := testkit.CaptureStdout(t, func() { err = r.Run(t.Context(), root, o, "", rest, nil, false) })
+	out := testkit.CaptureStdout(t, func() { err = r.Run(withSecrets(t.Context()), root, o, "", rest, nil, false) })
 	return out, err
 }
 
@@ -680,7 +680,7 @@ func runBuzzInline(t *testing.T, code string) (string, error) {
 	t.Helper()
 	var err error
 	out := testkit.CaptureStdout(t, func() {
-		err = scriptRunnerOver(&scriptOpens{}).Run(t.Context(), "", interp.ScriptOptions{Inline: true}, code, nil, nil, false)
+		err = scriptRunnerOver(&scriptOpens{}).Run(withSecrets(t.Context()), "", interp.ScriptOptions{Inline: true}, code, nil, nil, false)
 	})
 	return out, err
 }

@@ -356,7 +356,11 @@ func (t *plainTerminal) Handle(ctx context.Context, r slog.Record) error {
 func (t *plainTerminal) Print(ctx context.Context, text string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	_, err := io.WriteString(t.w, secrets.RedactString(ctx, text))
+	text, err := secrets.RedactString(ctx, text)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(t.w, text)
 	return err
 }
 

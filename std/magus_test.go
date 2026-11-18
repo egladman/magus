@@ -702,7 +702,7 @@ func graphContext(t *testing.T) context.Context {
 			Provenance: "scip count=1 lines=3",
 		})
 	}
-	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	return types.WithWorkspace(withSecrets(t.Context()), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 }
 
 func TestGraphMembersAreServedInProcess(t *testing.T) {
@@ -856,7 +856,7 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 	t.Parallel()
 	cacheDir := t.TempDir()
-	ctx := types.WithOutputCacheDir(t.Context(), cacheDir)
+	ctx := types.WithOutputCacheDir(withSecrets(t.Context()), cacheDir)
 
 	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("cd", 32),
 		[]byte("FAIL\n"), cache.OutputDescriptor{Project: "pkg/a", Target: "test", Failed: true})
@@ -887,7 +887,7 @@ func (s *stdSuite) TestForkFactsRefusesAWorkspaceWithNoCacheDirectory() {
 
 func (s *stdSuite) TestForkFactsReadsThePinnedStore() {
 	cacheDir := s.T().TempDir()
-	ctx := job.WithSnapshot(types.WithOutputCacheDir(s.T().Context(), cacheDir), job.Snapshot{})
+	ctx := job.WithSnapshot(types.WithOutputCacheDir(withSecrets(s.T().Context()), cacheDir), job.Snapshot{})
 	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("ef", 32),
 		[]byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", Revision: "abc"})
 	s.Require().NoError(err)

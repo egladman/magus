@@ -134,7 +134,7 @@ func (s *allowFailureSuite) TestAnOpThatDoesNotCaptureIsRefused() {
 // quietFailure exits 100 on a quiet op and returns the run's stderr.
 func (s *allowFailureSuite) quietFailure(allow bool) string {
 	var stdout, stderr bytes.Buffer
-	ctx := spawn.WithOutputWriters(s.T().Context(), &stdout, &stderr)
+	ctx := spawn.WithOutputWriters(testCtx(), &stdout, &stderr)
 	op := spells.Op{
 		Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo boom >&2; exit 100"}, Capture: true, Quiet: true},
 	}

@@ -554,7 +554,7 @@ func (s *UnloadCauseSuite) withBinary() string {
 
 // cause is unloadCause for an unleased call in root.
 func (s *UnloadCauseSuite) cause(failure error, root string) unloadKind {
-	return unloadCause(s.T().Context(), failure, location{workspace: root}, "")
+	return unloadCause(withSecrets(s.T().Context()), failure, location{workspace: root}, "")
 }
 
 func (s *UnloadCauseSuite) TestAnotherContractIsStaleWhateverTheErrorSays() {

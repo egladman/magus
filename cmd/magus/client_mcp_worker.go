@@ -8,6 +8,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp/mcpclient"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // runClientWorker is the private re-exec entry point for the MCP client tool.
@@ -17,6 +19,7 @@ import (
 func runClientWorker(ctx context.Context, in io.Reader, out, errOut io.Writer) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 	defer stop()
+	ctx = secrets.WithResolver(ctx, recorder.NewSecretResolver())
 	return mcpclient.Serve(ctx, in, out, errOut, func(ctx context.Context) (context.Context, error) {
 		return mcpclient.OpenWorkspace(ctx, errOut, openClientWorkspace)
 	})

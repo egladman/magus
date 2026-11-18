@@ -99,7 +99,7 @@ func (s *TreeBoundSuite) run(depth int, hold bool, shape string) error {
 	if hold {
 		env = append(env, forkHoldEnv+"=1")
 	}
-	_, err := Exec(s.T().Context(), os.Args[0], nil, ExecOptions{Env: env, Capture: true, Quiet: true})
+	_, err := Exec(withTestResolver(s.T().Context()), os.Args[0], nil, ExecOptions{Env: env, Capture: true, Quiet: true})
 	return err
 }
 

@@ -621,7 +621,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 	fixtureGit(t, repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
 	replayed = fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
 	require.NotEqual(t, gated, replayed)
-	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo, gated, replayed
+	return withSecrets(context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()})), repo, gated, replayed
 }
 
 func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
@@ -678,7 +678,7 @@ func TestGateScopeSuite(t *testing.T) { suite.Run(t, new(GateScopeSuite)) }
 func (s *GateScopeSuite) recordAt(root string, g sessions.GateResult) {
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, g, session.InvocationStart{Workspace: root}))
+	s.Require().NoError(sessions.RecordGate(withSecrets(s.T().Context()), dir, g, session.InvocationStart{Workspace: root}))
 	time.Sleep(2 * time.Millisecond)
 }
 
@@ -715,7 +715,7 @@ func (s *GateScopeSuite) TestAProjectPassIsNoReplayOfTheTree() {
 	fixtureGit(s.T(), repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
 	replayed := fixtureGit(s.T(), repo.Root(), "rev-parse", "HEAD")
 
-	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(s.T().Context(), repo.Root())).replayed
+	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(withSecrets(s.T().Context()), repo.Root())).replayed
 	s.False(ok)
 }
 
@@ -724,12 +724,12 @@ func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
 	root := s.T().TempDir()
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
-	w, err := session.Open(s.T().Context(), dir, sessions.NewID(), session.InvocationStart{Workspace: root})
+	w, err := session.Open(withSecrets(s.T().Context()), dir, sessions.NewID(), session.InvocationStart{Workspace: root})
 	s.Require().NoError(err)
 	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
-	s.Require().NoError(w.Append(s.T().Context(), sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": session.OutcomePass}))
+	s.Require().NoError(w.Append(withSecrets(s.T().Context()), sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": session.OutcomePass}))
 
-	s.Equal(gateUnscoped, gateVerdictAt(s.T().Context(), root, commit[:12]))
+	s.Equal(gateUnscoped, gateVerdictAt(withSecrets(s.T().Context()), root, commit[:12]))
 	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateUnscoped, commit: commit[:12]}, "")
 	s.Equal(verdict.Deny, decision)
 	s.Contains(reason, "recorded before gate records named their scope, so it reads as project scope")
@@ -781,14 +781,14 @@ func (s *NarrowPushSuite) SetupTest() {
 func (s *NarrowPushSuite) gateAtFirstCommit() {
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(withSecrets(s.T().Context()), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.gated, Outcome: session.OutcomePass, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 }
 
 // passed records a passing run of target at revision, clean, with args.
 func (s *NarrowPushSuite) passed(key, target, revision string, args ...string) {
-	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(s.T().Context(), key, []byte("ok\n"), cache.OutputDescriptor{
+	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(withSecrets(s.T().Context()), key, []byte("ok\n"), cache.OutputDescriptor{
 		Project: ".", Target: target, Revision: revision, ExtraArgs: args, TimestampMs: time.Now().UnixMilli(),
 	})
 	s.Require().NoError(err)
@@ -796,7 +796,7 @@ func (s *NarrowPushSuite) passed(key, target, revision string, args ...string) {
 
 func (s *NarrowPushSuite) push(commit string) pushEvidence {
 	s.deps.Revision = func(context.Context, string, string) string { return commit[:12] }
-	return pushCoverage(s.T().Context(), s.deps, s.at, "git push", DialectBash, s.repo.Root())
+	return pushCoverage(withSecrets(s.T().Context()), s.deps, s.at, "git push", DialectBash, s.repo.Root())
 }
 
 func (s *NarrowPushSuite) TestNarrowRunsCoveringEveryChangedFileAdmitThePush() {
@@ -843,7 +843,7 @@ func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGa
 	var gated []string
 	for i := range 4 {
 		c := s.repo.Commit(fmt.Sprintf("gated %d", i), map[string]string{"a.go": fmt.Sprintf("package a\n\nvar A = %d\n", i)})
-		s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
+		s.Require().NoError(sessions.RecordGate(withSecrets(s.T().Context()), dir, sessions.GateResult{
 			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: c, Outcome: session.OutcomePass, Inv: fmt.Sprintf("inv-%d", i),
 		}, session.InvocationStart{Workspace: s.repo.Root()}))
 		gated = append(gated, c)
@@ -890,7 +890,7 @@ func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedInAFewGitProcesses
 	head = s.repo.Commit("again", map[string]string{"f000.go": files["f000.go"]})
 	s.passed(strings.Repeat("g", 64), "go-test", head)
 	s.deps.Revision = func(context.Context, string, string) string { return head[:12] }
-	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
+	ctx := withPhaseLog(withSecrets(s.T().Context()), journal.Phase{})
 	calls := s.gitCalls()
 
 	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
@@ -964,7 +964,7 @@ func (s *NarrowPushSuite) TestAFileThisHostBuildsStillNeedsARun() {
 }
 
 func (s *NarrowPushSuite) producedRun(key, target, revision string, dirty bool, finished time.Time) {
-	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(s.T().Context(), key, []byte("ok\n"), cache.OutputDescriptor{
+	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(withSecrets(s.T().Context()), key, []byte("ok\n"), cache.OutputDescriptor{
 		Project: ".", Target: target, Revision: revision, Dirty: dirty, TimestampMs: finished.UnixMilli(),
 	})
 	s.Require().NoError(err)
@@ -1060,7 +1060,7 @@ func (s *UnrunGateSuite) SetupTest() {
 }
 
 func (s *UnrunGateSuite) record(outcome string, scope sessions.GateScope) {
-	s.Require().NoError(sessions.RecordGate(s.T().Context(), s.dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(withSecrets(s.T().Context()), s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: scope, Commit: unrunCommit, Outcome: outcome,
 		Unrun: []string{"images/magus:image-build: MGS3004 docker is installed but not ready"},
 	}, session.InvocationStart{Workspace: s.root}))
@@ -1070,7 +1070,7 @@ func (s *UnrunGateSuite) record(outcome string, scope sessions.GateScope) {
 
 func (s *UnrunGateSuite) TestAPushTheGateCouldNotFullyRunPassesNamingWhatIsOwed() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
-	cover, rec := readGateHistory(s.T().Context(), s.root).recordAt(unrunCommit[:12])
+	cover, rec := readGateHistory(withSecrets(s.T().Context()), s.root).recordAt(unrunCommit[:12])
 	s.Require().Equal(gateUnrun, cover)
 
 	ev := pushEvidence{cover: cover, commit: unrunCommit[:12], unrun: rec}
@@ -1082,18 +1082,18 @@ func (s *UnrunGateSuite) TestAPushTheGateCouldNotFullyRunPassesNamingWhatIsOwed(
 func (s *UnrunGateSuite) TestAFailedGateAtTheCommitOutranksALaterUnrunOne() {
 	s.record(session.OutcomeFail, sessions.GateScopeAffected)
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
-	s.Equal(gateFailed, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
+	s.Equal(gateFailed, gateVerdictAt(withSecrets(s.T().Context()), s.root, unrunCommit[:12]))
 }
 
 func (s *UnrunGateSuite) TestAnUnrunGateOverNamedProjectsIsProjectScope() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeProject)
-	s.Equal(gateProjectScoped, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
+	s.Equal(gateProjectScoped, gateVerdictAt(withSecrets(s.T().Context()), s.root, unrunCommit[:12]))
 }
 
 func (s *UnrunGateSuite) TestAnUnrunBranchGateOutranksAProjectPass() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
 	s.record(session.OutcomePass, sessions.GateScopeProject)
-	s.Equal(gateUnrun, gateVerdictAt(s.T().Context(), s.root, unrunCommit[:12]))
+	s.Equal(gateUnrun, gateVerdictAt(withSecrets(s.T().Context()), s.root, unrunCommit[:12]))
 }
 
 // RemoteGatePushSuite pins the push gate under ci.remote_gate.
@@ -1119,7 +1119,7 @@ func (s *RemoteGatePushSuite) declare() {
 
 func (s *RemoteGatePushSuite) push(commit string) pushEvidence {
 	s.deps.Revision = func(context.Context, string, string) string { return commit[:12] }
-	return pushCoverage(s.T().Context(), s.deps, s.at, "git push", DialectBash, s.repo.Root())
+	return pushCoverage(withSecrets(s.T().Context()), s.deps, s.at, "git push", DialectBash, s.repo.Root())
 }
 
 func (s *RemoteGatePushSuite) TestPushGateAdmitsARemoteGate() {
@@ -1139,7 +1139,7 @@ func (s *RemoteGatePushSuite) TestPushGateStillRefusesAFailedGateUnderARemoteGat
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
-	s.Require().NoError(sessions.RecordGate(s.T().Context(), dir, sessions.GateResult{
+	s.Require().NoError(sessions.RecordGate(withSecrets(s.T().Context()), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: session.OutcomeFail, Inv: "inv-red",
 	}, session.InvocationStart{Workspace: s.repo.Root()}))
 

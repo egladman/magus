@@ -22,7 +22,9 @@ func (s *SecretProviderSuite) TestAResolverReadsThroughItOnce() {
 		s.Equal("fake-vault-token", v.Reveal())
 	}
 	s.Equal(1, p.Fetches("vault/token"), "the resolver memoizes, so the provider is fetched once")
-	s.Equal("token="+"***", r.RedactString("token=fake-vault-token"))
+	red, err := r.RedactString("token=fake-vault-token")
+	s.Require().NoError(err)
+	s.Equal("token="+"***", red)
 }
 
 func (s *SecretProviderSuite) TestAnUnknownReferenceIsAnErrorNamingIt() {

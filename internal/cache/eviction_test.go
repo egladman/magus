@@ -34,7 +34,7 @@ func runForProject(t *testing.T, c *Cache, root, projectPath, outContent string)
 		Outputs:       types.MustParseGlobs(filepath.Join(projectPath, "out.txt")),
 		WorkspaceRoot: root,
 	}
-	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	_, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte(outContent), 0o644)
 	})
 	require.NoError(t, err, "Run %s", projectPath)
@@ -112,21 +112,21 @@ func TestEvictAndPruneReclaimOutputs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(cdir, "manifests", "p"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cdir, "manifests", "p", key+".json"),
 		[]byte(`{"project_path":"p","hash":"`+key+`","outputs":[],"created_at":"2020-01-01T00:00:00Z"}`), 0o644))
-	_, err := c.outputs.Persist(context.Background(), key, bytes.Repeat([]byte("x"), 4096),
+	_, err := c.outputs.Persist(withResolver(context.Background()), key, bytes.Repeat([]byte("x"), 4096),
 		OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
 
 	sized, _ := c.scanManifests()
 	assert.Greater(t, sized, int64(4096), "stored outputs count toward the measured size")
 
-	n, freed, err := c.Prune(context.Background(), time.Now(), true) // dry run
+	n, freed, err := c.Prune(withResolver(context.Background()), time.Now(), true) // dry run
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 	assert.Greater(t, freed, int64(4096), "a dry run tallies the outputs it would reclaim")
 	_, statErr := os.Stat(filepath.Join(cdir, "outputs", key))
 	require.NoError(t, statErr, "a dry run deletes nothing")
 
-	n, _, err = c.Prune(context.Background(), time.Now(), false)
+	n, _, err = c.Prune(withResolver(context.Background()), time.Now(), false)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 	_, statErr = os.Stat(filepath.Join(cdir, "outputs", key))
@@ -146,7 +146,7 @@ func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
-	_, err := c.Run(context.Background(), step, func(context.Context) error {
+	_, err := c.Run(withResolver(context.Background()), step, func(context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err)
@@ -155,12 +155,12 @@ func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 
 	// Orphan output: a stored execution whose key has no manifest (the failure shape).
 	const orphanKey = "0000111122223333444455556666"
-	_, err = c.outputs.Persist(context.Background(), orphanKey, bytes.Repeat([]byte("x"), 8192),
+	_, err = c.outputs.Persist(withResolver(context.Background()), orphanKey, bytes.Repeat([]byte("x"), 8192),
 		OutputDescriptor{Project: "test/pkg", Target: "test", Failed: true})
 	require.NoError(t, err)
 
 	total, _ := c.scanManifests()
-	c.evictOldest(context.Background(), total-4096) // must shed ~4KB
+	c.evictOldest(withResolver(context.Background()), total-4096) // must shed ~4KB
 
 	_, statErr := os.Stat(filepath.Join(cdir, "outputs", orphanKey))
 	assert.ErrorIs(t, statErr, fs.ErrNotExist, "the orphan output must be reclaimed")
@@ -173,7 +173,7 @@ func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "shared-content")
@@ -191,7 +191,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	// subtracted — blobRefs for the shared blob drops to 1, not 0 — so
 	// eviction halts after one manifest, leaving the blob and newer manifest intact.
 	total, _ := c.scanManifests()
-	c.evictOldest(context.Background(), total-1)
+	c.evictOldest(withResolver(context.Background()), total-1)
 
 	surviving := listManifests(t, cdir)
 	require.NotEmpty(t, surviving, "evictLRU removed every manifest; cap was too aggressive for the test")
@@ -203,7 +203,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 func TestPrune_SharedBlobsSurvive(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "shared-content")
@@ -213,7 +213,7 @@ func TestPrune_SharedBlobsSurvive(t *testing.T) {
 
 	assert.Equal(t, 1, countBlobs(t, cdir), "setup: want 1 shared blob in CAS")
 
-	n, _, err := c.Prune(context.Background(), cutoff, false)
+	n, _, err := c.Prune(withResolver(context.Background()), cutoff, false)
 	require.NoError(t, err, "Prune")
 	assert.Equal(t, 1, n, "Prune: want 1 entry removed")
 
@@ -229,7 +229,7 @@ func TestPrune_SharedBlobsSurvive(t *testing.T) {
 func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "Open")
 
 	runForProject(t, c, root, "a", "content-a")
@@ -241,7 +241,7 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 
 	// Cap to a tiny non-zero value: evictLRU will evict every manifest
 	// since the cache is much larger than 1 byte.
-	c.evictOldest(context.Background(), 1)
+	c.evictOldest(withResolver(context.Background()), 1)
 
 	assert.Empty(t, listManifests(t, cdir), "want 0 surviving manifests")
 	assert.Equal(t, 0, countBlobs(t, cdir), "want all blobs gc'd")
@@ -252,7 +252,7 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 // manifest it has not stored yet, and one it is replaying from an entry the GC evicts.
 func TestGCSparesBlobsAnotherProcessHolds(t *testing.T) {
 	store := t.TempDir()
-	c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithStoreDir(store))
 	require.NoError(t, err)
 
 	root := t.TempDir()
@@ -265,12 +265,12 @@ func TestGCSparesBlobsAnotherProcessHolds(t *testing.T) {
 		Outputs:       types.MustParseGlobs("p/out.txt"),
 		WorkspaceRoot: root,
 	}
-	r, err := c.Run(t.Context(), step, func(context.Context) error {
+	r, err := c.Run(withResolver(t.Context()), step, func(context.Context) error {
 		return os.WriteFile(out, []byte("replayed"), 0o644)
 	})
 	require.NoError(t, err)
 	ageBlobs(t, store)
-	held, err := c.local.lookup(t.Context(), &step, r.Hash)
+	held, err := c.local.lookup(withResolver(t.Context()), &step, r.Hash)
 	require.NoError(t, err)
 
 	snapshot := func(content string) OutputRecord {
@@ -292,7 +292,7 @@ func TestGCSparesBlobsAnotherProcessHolds(t *testing.T) {
 	assert.NoFileExists(t, c.blobPath(stale.Blob), "an unreferenced blob nobody holds is collected")
 	assert.FileExists(t, c.blobPath(pending.Blob), "a blob written for a manifest not yet stored survives")
 	require.NoError(t, os.Remove(out))
-	_, err = c.replay(t.Context(), held.manifest, root)
+	_, err = c.replay(withResolver(t.Context()), held.manifest, root)
 	require.NoError(t, err, "the replay of an entry looked up before the eviction completes")
 	got, err := os.ReadFile(out)
 	require.NoError(t, err)
@@ -303,7 +303,7 @@ func TestGCSparesBlobsAnotherProcessHolds(t *testing.T) {
 // checkout's magus evicting every entry in the shared store and collecting its blobs.
 func collectInAnotherProcess(t *testing.T, store string) {
 	t.Helper()
-	cmd := osexec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestHelperCollectStore$")
+	cmd := osexec.CommandContext(withResolver(t.Context()), os.Args[0], "-test.run=^TestHelperCollectStore$")
 	cmd.Env = append(os.Environ(), "CACHETEST_STORE="+store)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "%s", out)
@@ -314,7 +314,7 @@ func TestHelperCollectStore(t *testing.T) {
 	if store == "" {
 		t.Skip("subprocess helper; not run directly")
 	}
-	c, err := Open(t.Context(), t.TempDir(), WithStoreDir(store))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithStoreDir(store))
 	require.NoError(t, err)
-	c.evictOldest(t.Context(), 1)
+	c.evictOldest(withResolver(t.Context()), 1)
 }

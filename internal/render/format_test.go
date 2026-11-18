@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -91,6 +92,12 @@ func glueHostSchemaDir(t testing.TB) string {
 // glueTemplateDir is the shipped glue.
 func glueTemplateDir(t testing.TB) string {
 	return gluePath(t, "docs", "guides", "integrations", "agents")
+}
+
+// withSecrets gives a context the resolver main installs in production; a glue
+// that execs a command has its output captured, which refuses without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
 }
 
 // glueRunner runs a glue file the way `magus buzz -s` does outside a workspace: the host
@@ -266,7 +273,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 	var reply string
 	withStdin(t, a.event, func() {
 		reply = testkit.CaptureStdout(t, func() {
-			runErr = glueRunner().Run(t.Context(), dir, interp.ScriptOptions{}, "", []string{script}, []string{"--agent-name", a.host}, true)
+			runErr = glueRunner().Run(withSecrets(t.Context()), dir,interp.ScriptOptions{}, "", []string{script}, []string{"--agent-name", a.host}, true)
 		})
 	})
 	require.NoError(t, runErr, "%s (%s) must never fail: its host reads a non-zero exit as an error", name, a.label)

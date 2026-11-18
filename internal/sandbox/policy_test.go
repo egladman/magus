@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/spells"
 )
 
@@ -255,7 +256,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	base := t.TempDir()
 	allowed := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
-	ctx := recorder.ContextWithBase(t.Context(), base)
+	ctx := recorder.ContextWithBase(withSecrets(t.Context()), base)
 
 	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
@@ -278,7 +279,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	base := t.TempDir()
 	policy := &Policy{Lease: "fleet/worker-3", LeaseFrom: job.LeaseSourceMarker}
-	ctx := recorder.ContextWithBase(t.Context(), base)
+	ctx := recorder.ContextWithBase(withSecrets(t.Context()), base)
 
 	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
@@ -294,6 +295,11 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 		Outcome:   journal.OutcomeError,
 		Error:     events[0].Error,
 	}, events[0])
+}
+
+// withSecrets gives the trail writers the resolver they refuse to run without.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
 }
 
 // loggedCalls is every call in the log under base, newest first.

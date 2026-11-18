@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/secrets"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/step"
@@ -81,6 +82,12 @@ func hookStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) 
 	return hookCommand(ctx, in, out, os.Stderr, args)
 }
 
+// withSecrets gives ctx the resolver the binary installs at startup; the journal and activity
+// log refuse to record without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
+
 // hookCommand parses args the way the command line does, for the flags these tests pass:
 // the shell flags, -o and -q.
 func hookCommand(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
@@ -96,7 +103,7 @@ func hookCommand(ctx context.Context, in io.Reader, out, errOut io.Writer, args 
 		return err
 	}
 	call := HookCall{Flags: *sf, Output: opts, Operands: fset.Args(), Argv: append([]string{"shell"}, args...), Quiet: *quiet}
-	return testHookEnv().RunHook(ctx, call, in, out, errOut)
+	return testHookEnv().RunHook(withSecrets(ctx), call, in, out, errOut)
 }
 
 // reorderFlagsFirst moves the flags ahead of the operands, as the command line allows them
@@ -127,7 +134,7 @@ func reorderFlagsFirst(fset *flag.FlagSet, args []string) []string {
 func hookFleet(t *testing.T, leases ...jobtypes.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
 	root, cacheDir = fixture.SeedLeases(t, leases...)
-	return WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
+	return withSecrets(WithLocation(t.Context(), cacheDir, root, "")), root, cacheDir
 }
 
 // TestHookCmd covers the stdin-only guard boundary, the standard output arm,

@@ -68,7 +68,7 @@ func (s *BandSuite) handlerOn(w interface {
 }
 
 func (s *BandSuite) handle(h *PrettyHandler, msg string, attrs ...slog.Attr) {
-	s.Require().NoError(h.Handle(context.Background(), buildRecord(msg, attrs...)))
+	s.Require().NoError(h.Handle(withResolver(context.Background()), buildRecord(msg, attrs...)))
 }
 
 func (s *BandSuite) fail(h *PrettyHandler, project, target string, dur time.Duration) {

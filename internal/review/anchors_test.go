@@ -9,12 +9,19 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// withSecrets gives a context the resolver main installs in production; log
+// records and captured command output refuse to pass without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
 
 // TestChangedSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
 // anchors a symbol by its index id, so passing labels or paths would match nothing and the

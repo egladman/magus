@@ -347,7 +347,11 @@ func (c *Cache) logRemoteMiss(ctx context.Context, s *Step, hash string) {
 		var lines []string
 		// Skipped when the recomputed key differs: those lines describe another key.
 		if h, err := c.hashStepInputs(ctx, s, &lines); err == nil && h == hash {
-			for _, d := range ClassDigests(MaskKeyInputs(ctx, lines)) {
+			masked, err := MaskKeyInputs(ctx, lines)
+			if err != nil {
+				attrs = append(attrs, slog.String("inputs", err.Error()))
+			}
+			for _, d := range ClassDigests(masked) {
 				attrs = append(attrs, slog.String("inputs."+d.Class, fmt.Sprintf("%s (%d)", d.Digest, d.Count)))
 			}
 		}

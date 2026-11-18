@@ -23,11 +23,16 @@ func emitMagusHint(ctx context.Context, msg string) {
 // record the capture refused carries a "capture" attr saying why.
 func emitMagusLog(ctx context.Context, level slog.Level, msg string, fields map[string]string) {
 	keys := slices.Sorted(maps.Keys(fields))
-	attrs := make([]slog.Attr, 0, len(keys)+1)
+	attrs := make([]slog.Attr, 0, len(keys)+2)
 	for _, k := range keys {
 		// The redacting handler leaves keys alone because Go's are constants.
 		// These come from a script, so one can hold a secret.
-		attrs = append(attrs, slog.String(secrets.RedactString(ctx, k), fields[k]))
+		key, err := secrets.RedactString(ctx, k)
+		if err != nil {
+			attrs = append(attrs, slog.String("fields", "dropped: "+err.Error()))
+			break
+		}
+		attrs = append(attrs, slog.String(key, fields[k]))
 	}
 	r := slog.NewRecord(time.Now(), level, msg, 0)
 	r.AddAttrs(attrs...)

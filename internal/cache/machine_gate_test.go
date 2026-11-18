@@ -259,7 +259,7 @@ func TestMachineRefusalNamesTheOversizedClaimAndThatNoWaitSeatsIt(t *testing.T) 
 	b := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
 	})
 	require.Error(t, err)
@@ -303,7 +303,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 	for i := range profile.Curve {
 		profile.Curve[i] = 100
 	}
-	ctx := types.WithExecCost(t.Context())
+	ctx := types.WithExecCost(withResolver(t.Context()))
 	ctx = withOverrunWatch(ctx, admit, func() string { return "claim-1" }, profile)
 	watchOverrun(ctx)
 
@@ -330,7 +330,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, func() string { return "claim-2" }, budget.Profile{})
+	unwatched := withOverrunWatch(types.WithExecCost(withResolver(t.Context())), admit, func() string { return "claim-2" }, budget.Profile{})
 	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
 }
 
@@ -405,7 +405,7 @@ func TestAStepGroupRefusalWarnsOnceForManyChildren(t *testing.T) {
 	logs := captureLogs(t)
 	holder := &refusingHolder{}
 	hold := &machineHold{claim: budget.Claim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1"}
-	ctx := withMachineHold(t.Context(), hold)
+	ctx := withMachineHold(withResolver(t.Context()), hold)
 	ctx = withStepGroups(ctx, holder, hold.current)
 
 	spawnChildren(t, ctx, 3)
@@ -437,7 +437,7 @@ func TestAStepGroupStartedWhileTheClaimIsLentWarnsOfNothing(t *testing.T) {
 	logs := captureLogs(t)
 	holder := &refusingHolder{}
 	hold := &machineHold{claim: budget.Claim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1", release: func() {}}
-	ctx := withMachineHold(t.Context(), hold)
+	ctx := withMachineHold(withResolver(t.Context()), hold)
 	ctx = withStepGroups(ctx, holder, hold.current)
 
 	require.NoError(t, LendMachineClaim(ctx, func(ctx context.Context) error {
@@ -453,7 +453,7 @@ func TestAStepGroupStartedWhileTheClaimIsLentWarnsOfNothing(t *testing.T) {
 // the broker records and this process never releases; the hold runs uncancelled but
 // bounded. A release the broker does not answer says the group may still be held.
 func TestHoldStepGroupOutlivesACancelledRunAndWarnsOnAnUnansweredRelease(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(withResolver(t.Context()))
 	cancel()
 	holder := &unansweredHolder{}
 
@@ -474,11 +474,11 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b := testBudget(t, 10_000, 8)
 	admit := &groupAdmitter{budgetAdmitter: &budgetAdmitter{budget: b}}
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(admit, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(admit, 0))
 	require.NoError(t, err)
 
 	var pgid string
-	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "go-test"}},
+	_, err = c.RunAll(withResolver(t.Context()), []Step{{ProjectPath: ".", Target: "go-test"}},
 		func(ctx context.Context, _ Step) error {
 			res, err := spawn.Exec(ctx, "sh", []string{"-c", "echo $$"}, spawn.ExecOptions{Capture: true, Quiet: true})
 			pgid = strings.TrimSpace(res.Stdout)
@@ -494,7 +494,7 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 	}, admit.events)
 
 	admit.events = nil
-	_, err = spawn.Exec(t.Context(), "true", nil, spawn.ExecOptions{Quiet: true})
+	_, err = spawn.Exec(withResolver(t.Context()), "true", nil, spawn.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Empty(t, admit.events, "outside a claimed step there is no claim to ride")
 }
@@ -504,11 +504,11 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 func TestMachineGateRefusesWhatTheAdmitterRefused(t *testing.T) {
 	refusal := types.ExitError{Code: ExitCodeMachineDeclaration, Err: errors.New("jobs.max_validations is -1")}
 	g := &machineGate{admit: refusingAdmitter{err: refusal}, log: newLogger("", 0)}
-	_, err := g.acquire(t.Context(), budget.Claim{Target: "test"})
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{Target: "test"})
 	require.ErrorIs(t, err, refusal.Err)
 
 	g = &machineGate{admit: refusingAdmitter{err: errors.New("dial: no such file")}, log: newLogger("", 0)}
-	release, err := g.acquire(t.Context(), budget.Claim{Target: "test"})
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{Target: "test"})
 	require.NoError(t, err, "an unreachable broker still admits under best-effort")
 	release()
 }
@@ -540,7 +540,7 @@ func TestVerdictSaysItPackedByCurve(t *testing.T) {
 func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b := testBudget(t, 10_000, 1)
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	const hold = 300 * time.Millisecond
@@ -548,7 +548,7 @@ func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
 		{ProjectPath: ".", Target: "build", MemoryMB: 512},
 		{ProjectPath: ".", Target: "lint", MemoryMB: 512},
 	}
-	results, err := c.RunAll(t.Context(), steps, func(ctx context.Context, _ Step) error {
+	results, err := c.RunAll(withResolver(t.Context()), steps, func(ctx context.Context, _ Step) error {
 		types.RecordCPUMs(ctx, 40)
 		types.RecordPeakRSS(ctx, 1<<20)
 		time.Sleep(hold)
@@ -574,7 +574,7 @@ func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
 func TestAReplayedStepCarriesNoClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b := testBudget(t, 10_000, 8)
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	steps := []Step{{ProjectPath: ".", Target: "build", MemoryMB: 512}}
 	run := func(ctx context.Context, _ Step) error {
@@ -582,12 +582,12 @@ func TestAReplayedStepCarriesNoClaim(t *testing.T) {
 		return nil
 	}
 
-	first, err := c.RunAll(t.Context(), steps, run)
+	first, err := c.RunAll(withResolver(t.Context()), steps, run)
 	require.NoError(t, err)
 	require.False(t, first[0].Hit)
 	assert.Equal(t, 512, first[0].Claim.MemoryMB)
 
-	replayed, err := c.RunAll(t.Context(), steps, run)
+	replayed, err := c.RunAll(withResolver(t.Context()), steps, run)
 	require.NoError(t, err)
 	require.True(t, replayed[0].Hit)
 	assert.Zero(t, replayed[0].Claim)
@@ -631,10 +631,10 @@ func leaves(composer Step, members ...Step) composed {
 func composedRun(t *testing.T, b *budget.Machine, root composed) (int, error) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	lim := WithLimiter(NewLimiter(8))
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 10*time.Second)
 	defer cancel()
 
 	var mu sync.Mutex
@@ -743,10 +743,10 @@ func TestMembersWaitingOnASharedNeedLendTheirSeats(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	const members = 4
 	b := testBudget(t, 10_000, members)
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	lim := WithLimiter(NewLimiter(8))
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 10*time.Second)
 	defer cancel()
 
 	waiting := make(chan struct{}, members)
@@ -1011,11 +1011,11 @@ func TestGrantedSlotsFromABrokerWithoutGrantsAreTheFullWidthSaidOnce(t *testing.
 	g := &machineGate{log: slog.New(slog.NewTextHandler(&logged, nil))}
 	elastic := budget.Claim{Project: ".", Target: "test", Slots: 6, SlotsFloor: 1}
 
-	first := g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.1"})
-	second := g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.2"})
+	first := g.granted(withResolver(t.Context()), elastic, budget.Verdict{Granted: true, ID: "1.1"})
+	second := g.granted(withResolver(t.Context()), elastic, budget.Verdict{Granted: true, ID: "1.2"})
 	assert.Equal(t, [2]int{6, 6}, [2]int{first.slots, second.slots})
 	assert.Equal(t, 1, strings.Count(logged.String(), "the broker grants no elastic slots"))
-	assert.Equal(t, 2, g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.3", Slots: 2}).slots)
+	assert.Equal(t, 2, g.granted(withResolver(t.Context()), elastic, budget.Verdict{Granted: true, ID: "1.3", Slots: 2}).slots)
 }
 
 func TestAComposersRetakeAsksTheWidthItRunsWith(t *testing.T) {
@@ -1149,7 +1149,7 @@ func testGate(t *testing.T, b *budget.Machine) (*machineGate, *budgetAdmitter) {
 func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 	b := testBudget(t, 1000, 2)
 	adm := &budgetAdmitter{budget: b}
-	release, err := AdmitMachine(t.Context(), adm, budget.Claim{
+	release, err := AdmitMachine(withResolver(t.Context()), adm, budget.Claim{
 		Project: ".", Target: "session-brief", MemoryMB: 512,
 	}, false, 0)
 	require.NoError(t, err)
@@ -1174,10 +1174,10 @@ func TestABudgetWaitOfZeroRefusesAtOnceNamingTheHolder(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, adm := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
 
-	_, err = g.acquire(t.Context(), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	_, err = g.acquire(withResolver(t.Context()), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "the code is what maps to exit 75")
 	assert.Contains(t, err.Error(), "It did not wait")
@@ -1225,12 +1225,12 @@ func TestMachineGateWaitsOnClaimsOfItsOwnProcess(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
-	release, err := g.acquire(t.Context(), budget.Claim{
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Invocation: "100:inv-a",
 	})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 10*time.Second)
 	defer cancel()
 	done := acquireAsync(ctx, g, budget.Claim{
 		Project: "docs", Target: "ci", MemoryMB: 9000, PID: 100, Invocation: "100:inv-b",
@@ -1248,23 +1248,23 @@ func TestMachineGateWaitsOnItsOwnRunsSiblings(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "ci", MemoryMB: 1000, PID: 100, Invocation: root,
 	})
 	require.NoError(t, err, "the parent step")
-	releaseFirst, err := g.acquire(t.Context(), budget.Claim{
+	releaseFirst, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: "libs/shared", Target: "build", MemoryMB: 9000, PID: 200,
 		Invocation: "200:inv-child-a", Ancestors: []string{root},
 	})
 	require.NoError(t, err, "the first child is excused from its parent's claim")
 
-	_, err = g.acquire(t.Context(), budget.Claim{
+	_, err = g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: "x", Target: "build", MemoryMB: 9000, PID: 400, Invocation: "400:inv-stranger",
 	})
 	require.Error(t, err, "under budget_wait 0 a stranger is refused, not queued")
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 10*time.Second)
 	defer cancel()
 	done := acquireAsync(ctx, g, budget.Claim{
 		Project: "libs/shared", Target: "test", MemoryMB: 9000, PID: 300,
@@ -1280,10 +1280,10 @@ func TestMachineGateStopsWaitingWithItsContext(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 150*time.Millisecond)
 	defer cancel()
 	_, err = g.acquire(ctx, budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 100})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -1303,13 +1303,13 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
 	var out bytes.Buffer
-	c, err := Open(t.Context(), t.TempDir(),
+	c, err := Open(withResolver(t.Context()), t.TempDir(),
 		WithLogger(slog.New(prettyHandler(&out, slog.LevelInfo))),
 		WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
-	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx := recorder.WithSinks(withResolver(t.Context()), sink.Handle)
 	ctx = recorder.WithInvocationID(ctx, "invrefused")
 
 	var observed []error
@@ -1374,11 +1374,11 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	}, 0)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
-	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx := recorder.WithSinks(withResolver(t.Context()), sink.Handle)
 	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
 		func(context.Context) error {
 			t.Error("a refused step must not run")
@@ -1408,9 +1408,9 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
 	cdir := t.TempDir()
-	warm, err := Open(t.Context(), cdir, WithLocalWrite(true))
+	warm, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true))
 	require.NoError(t, err)
-	_, err = warm.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error { return nil })
+	_, err = warm.RunAll(withResolver(t.Context()), []Step{step}, func(context.Context, Step) error { return nil })
 	require.NoError(t, err, "warming the entry")
 
 	b := testBudget(t, 10_000, 8)
@@ -1419,7 +1419,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	}, 0)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 	adm := &budgetAdmitter{budget: b}
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm, 0))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true), WithMachineAdmission(adm, 0))
 	require.NoError(t, err)
 	return c, adm
 }
@@ -1436,11 +1436,11 @@ func TestRunAllReplaysALocalHitWithoutAMachineClaim(t *testing.T) {
 		return nil
 	}
 
-	results, err := c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error { return noRun(ctx) })
+	results, err := c.RunAll(withResolver(t.Context()), []Step{step}, func(ctx context.Context, _ Step) error { return noRun(ctx) })
 	require.NoError(t, err)
 	assert.True(t, results[0].Hit)
 
-	r, err := c.RunAside(t.Context(), step, noRun)
+	r, err := c.RunAside(withResolver(t.Context()), step, noRun)
 	require.NoError(t, err)
 	assert.True(t, r.Hit)
 
@@ -1466,7 +1466,7 @@ func TestRunAllClaimsForAStepThatWillExecute(t *testing.T) {
 			c, adm := cachedUnderFullBudget(t, step)
 			tc.edit(root, &step)
 
-			_, err := c.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error {
+			_, err := c.RunAll(withResolver(t.Context()), []Step{step}, func(context.Context, Step) error {
 				t.Error("a refused step must not run")
 				return nil
 			})
@@ -1479,9 +1479,9 @@ func TestRunAllClaimsForAStepThatWillExecute(t *testing.T) {
 // TestRunRefusesToExecuteAGoneLocalHit pins what keeps an evicted entry from running
 // unclaimed: under replayLocal, Run neither falls through to fn nor to another tier.
 func TestRunRefusesToExecuteAGoneLocalHit(t *testing.T) {
-	c, err := Open(t.Context(), t.TempDir(), WithLocalWrite(true))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithLocalWrite(true))
 	require.NoError(t, err)
-	_, err = c.Run(t.Context(), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
+	_, err = c.Run(withResolver(t.Context()), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
 		t.Error("a step admitted as a local hit must not execute")
 		return nil
 	}, replayLocal(strings.Repeat("0", 64), 0))
@@ -1492,7 +1492,7 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	b := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 64_000, PID: 100,
 	})
 	require.Error(t, err)
@@ -1519,7 +1519,7 @@ func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
 	b := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
 	})
 	require.Error(t, err)
@@ -1537,7 +1537,7 @@ func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
 	b := testBudget(t, 32_000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{
 		Project: ".", Target: "test", MemoryMB: 1000, Slots: 32, PID: 100,
 	})
 	require.Error(t, err)
@@ -1551,7 +1551,7 @@ func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
 	g, adm := testGate(t, b)
 	adm.fail = errors.New("dial: connection refused")
 
-	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err, "losing the arbiter must not fail a build that was going to run")
 	require.NotNil(t, release)
 	release()
@@ -1565,7 +1565,7 @@ func TestMachineGateRequiredRefusesWhenTheArbiterIsGone(t *testing.T) {
 	g.required = true
 	adm.fail = errors.New("dial: connection refused")
 
-	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.Error(t, err)
 	assert.Nil(t, release)
 	assert.ErrorIs(t, err, types.BrokerUnavailable)
@@ -1583,7 +1583,7 @@ func TestMachineGateNamesABrokerFromAnotherBuild(t *testing.T) {
 	g.log = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
 
-	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err, "best-effort runs on without the broker")
 	release()
 	assert.Contains(t, logged.String(), string(types.PeerFromAnotherBuild))
@@ -1597,7 +1597,7 @@ func TestMachineGateRequiredRefusesABrokerFromAnotherBuild(t *testing.T) {
 	g.required = true
 	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
 
-	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.ErrorIs(t, err, types.PeerFromAnotherBuild)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated)
@@ -1606,7 +1606,7 @@ func TestMachineGateRequiredRefusesABrokerFromAnotherBuild(t *testing.T) {
 
 func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
 	var g *machineGate
-	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000})
+	release, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000})
 	require.NoError(t, err)
 	assert.NotNil(t, release, "a library caller with no host to arbitrate behaves as before")
 }
@@ -1624,13 +1624,13 @@ func TestMachineGateRefusesANestedRunBlindToItsAncestry(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
-	held, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	held, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
 	defer held()
 
 	// Bounded, so a regression that admits this claim (instead of refusing it) fails in a
 	// second rather than hanging the package until the go test timeout.
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(withResolver(t.Context()), 2*time.Second)
 	defer cancel()
 	// No Ancestors on the claim, none on the context, none in the environment.
 	_, err = g.acquire(ctx, budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
@@ -1642,7 +1642,7 @@ func TestMachineGateRefusesANestedRunBlindToItsAncestry(t *testing.T) {
 
 func TestMachineGateNotBlindWhenNotNested(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
-	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
+	assert.False(t, blindToOwnAncestry(withResolver(t.Context())), "a top-level run has no ancestry to lose")
 }
 
 // The empty-ctx fallback has no producer on the run path: runResolved's first statement is
@@ -1730,12 +1730,12 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	b := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	_, err := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
-	_, busy := g.acquire(t.Context(), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	_, busy := g.acquire(withResolver(t.Context()), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, busy)
 
-	_, tooBig := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "ci", MemoryMB: 64_000, PID: 300})
+	_, tooBig := g.acquire(withResolver(t.Context()), budget.Claim{Project: ".", Target: "ci", MemoryMB: 64_000, PID: 300})
 	require.Error(t, tooBig)
 
 	// The code is per REFUSAL, not per package. A busy machine is EX_TEMPFAIL because the

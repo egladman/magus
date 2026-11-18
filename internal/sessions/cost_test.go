@@ -125,7 +125,7 @@ func (s *CostSuite) TestSummarizeCostReadsTheFactsAHookRecorded() {
 	t := s.T()
 	base := t.TempDir()
 	for range 2 {
-		recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
+		recorder.AppendAgentCommand(withSecrets(t.Context()), base, recorder.AgentCommand{
 			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: verdict.Defer,
 			AgentFacts: types.AgentFacts{
 				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",

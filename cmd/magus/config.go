@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -457,7 +458,9 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 func auditMint(action string, rec recorder.MintRecord) {
 	if root := resolveRootOrEmpty(""); root != "" {
 		if base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
-			recorder.AppendMint(context.Background(), base, action, rec)
+			// The config commands carry no context, and this one read no secret through
+			// a resolver, so an empty one masks all there is.
+			recorder.AppendMint(secrets.WithResolver(context.Background(), recorder.NewSecretResolver()), base, action, rec)
 			return
 		}
 	}

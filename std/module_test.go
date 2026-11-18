@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,12 @@ import (
 func TestMain(m *testing.M) {
 	// magusfile-api-generate rewrites the std API lock through this variable.
 	testkit.Main(m, "UPDATE_STD_API_LOCK")
+}
+
+// withSecrets gives a context the resolver main installs in production; output
+// capture refuses to run without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
 }
 
 // The covImpl* functions below are Method Impls and Field Resolvers of every shape

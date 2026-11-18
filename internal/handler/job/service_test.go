@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -117,6 +118,11 @@ func TestSubmit_ProcErrorIsInternal(t *testing.T) {
 
 // A name nobody registered is NotFound, not a SubmitState: the enum reports how a valid
 // submission resolved, and this never became one. Reachable only now that the RPC takes a name.
+// withSecrets gives the trail writers the resolver they refuse to run without.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
+
 func TestRunJob_UnknownNameIsNotFound(t *testing.T) {
 	s := newTestService(trailWorkspace{dir: t.TempDir()},
 		func(context.Context, string, []string, string) (string, error) { return "x", nil },
@@ -140,9 +146,9 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	dir := t.TempDir()
 	// A completed rotate-activities job in the trail, plus two more events so Stat has a count of 3.
 	start := time.UnixMilli(1_000_000).UnixMilli()
-	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start), Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK, Duration: 250 * time.Millisecond})
-	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
-	recorder.AppendCall(t.Context(), dir, journal.Call{Time: time.UnixMilli(start + 2), Kind: journal.CallKindMCPTool, Name: "explain", Outcome: journal.OutcomeOK})
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{Time: time.UnixMilli(start), Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK, Duration: 250 * time.Millisecond})
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{Time: time.UnixMilli(start + 1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{Time: time.UnixMilli(start + 2), Kind: journal.CallKindMCPTool, Name: "explain", Outcome: journal.OutcomeOK})
 
 	s := newTestService(trailWorkspace{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}

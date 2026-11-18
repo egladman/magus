@@ -355,5 +355,5 @@ func (s *ArchitectureJobReadSuite) TestASearchOfTheWorkspaceStillIs() {
 }
 
 func (s archSession) testContext() context.Context {
-	return WithLocation(s.t.Context(), s.at.cacheDir, s.at.workspace, s.at.dir)
+	return withSecrets(WithLocation(s.t.Context(), s.at.cacheDir, s.at.workspace, s.at.dir))
 }

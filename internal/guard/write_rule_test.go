@@ -41,7 +41,7 @@ func writeFixture(t *testing.T) (ctx context.Context, root, cacheDir string) {
 	w.Write("magus.yaml", "{}\n")
 	root = w.Root()
 	cacheDir = t.TempDir()
-	return WithLocation(t.Context(), cacheDir, root, root), root, cacheDir
+	return withSecrets(WithLocation(t.Context(), cacheDir, root, root)), root, cacheDir
 }
 
 // committedPolicyFixture is writeFixture as a git repository whose root magusfile is
@@ -50,7 +50,7 @@ func committedPolicyFixture(t *testing.T) (*testkit.Repo, context.Context) {
 	t.Helper()
 	testkit.Isolate(t)
 	repo := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"})
-	return repo, WithLocation(t.Context(), t.TempDir(), repo.Root(), repo.Root())
+	return repo, withSecrets(WithLocation(t.Context(), t.TempDir(), repo.Root(), repo.Root()))
 }
 
 // The rule is handed the text the host says the write carries, read by shape, and the

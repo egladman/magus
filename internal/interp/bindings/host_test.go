@@ -17,6 +17,12 @@ import (
 
 const testSecret = "hunter2-token"
 
+// testCtx is a context carrying a resolver: capturing a command's output
+// refuses to run without one, so a test that captures needs this.
+func testCtx() context.Context {
+	return secrets.WithResolver(context.Background(), secrets.NewResolver())
+}
+
 type emitMagusLogSuite struct {
 	suite.Suite
 	process  bytes.Buffer
@@ -132,7 +138,7 @@ func (s *emitMagusLogSuite) TestALogAfterItsStepEndedSaysSoOnTheConsole() {
 }
 
 func (s *emitMagusLogSuite) TestALogOutsideATargetGoesToTheProcessLoggerOnly() {
-	emitMagusLog(context.Background(), slog.LevelWarn, "loud", map[string]string{"k": "v"})
+	emitMagusLog(testCtx(), slog.LevelWarn, "loud", map[string]string{"k": "v"})
 
 	s.Equal("level=WARN msg=loud k=v\n", s.process.String())
 }

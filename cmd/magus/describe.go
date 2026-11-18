@@ -520,7 +520,10 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		}
 		// Masked as the store masks at write, so anything skipped here would read as a
 		// difference on every run rather than as drift.
-		lines = cache.MaskKeyInputs(ctx, lines)
+		lines, kerr = cache.MaskKeyInputs(ctx, lines)
+		if kerr != nil {
+			return kerr
+		}
 		r := cache.TargetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,

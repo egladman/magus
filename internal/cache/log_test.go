@@ -52,7 +52,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 	assertPlain := func(t *testing.T, rec slog.Record, mustContain string) {
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+		require.NoError(t, h.Handle(withResolver(context.Background()), rec), "Handle")
 		assert.Contains(t, buf.String(), mustContain)
 	}
 
@@ -89,7 +89,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.miss",
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(80*time.Millisecond)),
@@ -109,7 +109,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.error",
 			slog.String("project", "api"),
 			slog.String("label", "api"),
@@ -153,7 +153,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		// much what the line must NOT carry as what it must.
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.memory",
 			slog.String("msg", "this run has pushed 512MB into swap (2048MB used in total, 300MB of 16384MB memory available); paging is what makes a machine stop responding rather than a target fail; running: .:test"),
 			slog.Int64("available_mb", 300),
@@ -190,7 +190,7 @@ func TestPrettyHandlerUsesLabelForDisplay(t *testing.T) {
 	)
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+	require.NoError(t, h.Handle(withResolver(context.Background()), rec), "Handle")
 	out := buf.String()
 	assert.Contains(t, out, "[pass] magus (ran,", "status line should use the normalized label")
 	assert.NotContains(t, out, "[pass] . (ran", "status line must not show the bare '.'")
@@ -208,7 +208,7 @@ func TestPrettyHandlerNormalizesMissingRootLabel(t *testing.T) {
 		slog.Int64("duration", int64(time.Second)),
 		slog.String("error", "failed"),
 	)
-	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+	require.NoError(t, h.Handle(withResolver(context.Background()), rec), "Handle")
 	out := buf.String()
 	assert.Contains(t, out, "[fail] workspace ci (ran,", "root display must never fall back to a bare dot")
 	assert.NotContains(t, out, "[fail] . ", "root display must never use a bare dot")
@@ -222,7 +222,7 @@ func TestPrettyHandlerGenericMessage(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 	r := buildRecord("something happened", slog.String(attr.ComponentKey, "magus"), slog.String("key", "val"))
-	require.NoError(t, h.Handle(context.Background(), r), "Handle")
+	require.NoError(t, h.Handle(withResolver(context.Background()), r), "Handle")
 	out := buf.String()
 	assert.Equal(t, "[info] magus: something happened key=val\n", out,
 		"the component leads the message and stays out of the attr dump")
@@ -265,7 +265,7 @@ func TestPrettyHandlerNotice(t *testing.T) {
 			var buf bytes.Buffer
 			rec := slog.NewRecord(time.Now(), tc.level, "pass --force", 0)
 			rec.AddAttrs(tc.attrs...)
-			require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+			require.NoError(t, newTestHandler(&buf).Handle(withResolver(context.Background()), rec))
 			assert.Equal(t, tc.want, buf.String())
 		})
 	}
@@ -276,7 +276,7 @@ func TestPrettyHandlerNextUnderALogRecord(t *testing.T) {
 	var buf bytes.Buffer
 	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "symbol index not current", 0)
 	rec.AddAttrs(attr.Component("magus"), attr.Next("magus graph build"))
-	require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+	require.NoError(t, newTestHandler(&buf).Handle(withResolver(context.Background()), rec))
 	assert.Equal(t, "[warn] magus: symbol index not current\nnext:\n  magus graph build\n", buf.String())
 }
 
@@ -289,10 +289,10 @@ func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 	log := slog.New(h).With(attr.Component("knowledge")).WithGroup("g").With("path", "a.scip")
-	log.WarnContext(t.Context(), "cannot decode symbol index", "error", "EOF")
+	log.WarnContext(withResolver(t.Context()), "cannot decode symbol index", "error", "EOF")
 	assert.Equal(t, "[warn] knowledge: cannot decode symbol index path=a.scip error=EOF\n", buf.String())
 
-	slog.New(h).With("k", "v").InfoContext(t.Context(), "cache.miss", "label", "api", "duration", time.Second)
+	slog.New(h).With("k", "v").InfoContext(withResolver(t.Context()), "cache.miss", "label", "api", "duration", time.Second)
 	assert.Equal(t, 1, h.status.passed, "the derived handler counts into the original's status line")
 }
 
@@ -304,17 +304,17 @@ func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
 	rec.AddAttrs(attr.Component("magus"), attr.Why(why), slog.String("key", "val"))
 
 	var plain bytes.Buffer
-	require.NoError(t, newTestHandler(&plain).Handle(context.Background(), rec))
+	require.NoError(t, newTestHandler(&plain).Handle(withResolver(context.Background()), rec))
 	assert.Equal(t, "[warn] magus: symbol index not current key=val\n       "+why+"\n", plain.String())
 
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
-	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
+	require.NoError(t, newTerminalHandler(&term).Handle(withResolver(context.Background()), rec))
 	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 
 	var text bytes.Buffer
-	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
+	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(withResolver(context.Background()), rec))
 	assert.Contains(t, text.String(), `why="`+why+`"`)
 }
 
@@ -342,7 +342,7 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 		if quieted {
 			h = quiet.Wrap(h, verbose)
 		}
-		require.NoError(t, h.Handle(context.Background(), failureWithReason()))
+		require.NoError(t, h.Handle(withResolver(context.Background()), failureWithReason()))
 		return buf.String()
 	}
 	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
@@ -361,7 +361,7 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
-	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
+	require.NoError(t, newTerminalHandler(&term).Handle(withResolver(context.Background()), failureWithReason()))
 	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 }
 
@@ -380,8 +380,8 @@ func TestPrettyHandlerWaitByVerbosity(t *testing.T) {
 		if quieted {
 			h = quiet.Wrap(h, false)
 		}
-		require.NoError(t, h.Handle(context.Background(), wait(30*time.Second)))
-		require.NoError(t, h.Handle(context.Background(), wait(90*time.Second)))
+		require.NoError(t, h.Handle(withResolver(context.Background()), wait(30*time.Second)))
+		require.NoError(t, h.Handle(withResolver(context.Background()), wait(90*time.Second)))
 		return buf.String()
 	}
 	const (
@@ -408,7 +408,7 @@ func TestPrettyHandlerGenericLevels(t *testing.T) {
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
 		r := slog.NewRecord(time.Now(), tc.level, "msg", 0)
-		require.NoError(t, h.Handle(context.Background(), r), "Handle")
+		require.NoError(t, h.Handle(withResolver(context.Background()), r), "Handle")
 		assert.Truef(t, strings.HasPrefix(buf.String(), tc.tag+" "), "level %s: want prefix %q, got %q", tc.level, tc.tag, buf.String())
 	}
 }
@@ -419,14 +419,14 @@ func TestPrettyHandlerSkipsDirAttr(t *testing.T) {
 	t.Parallel()
 	var info bytes.Buffer
 	hi := newTestHandler(&info)
-	require.NoError(t, hi.Handle(context.Background(), buildRecord("msg", slog.String("dir", "/repo"))), "Handle")
+	require.NoError(t, hi.Handle(withResolver(context.Background()), buildRecord("msg", slog.String("dir", "/repo"))), "Handle")
 	assert.NotContains(t, info.String(), "dir=/repo", "dir attr should be hidden at info level")
 
 	var dbg bytes.Buffer
 	hd := newTestHandler(&dbg)
 	rec := slog.NewRecord(time.Now(), slog.LevelDebug, "msg", 0)
 	rec.AddAttrs(slog.String("dir", "/repo"))
-	require.NoError(t, hd.Handle(context.Background(), rec), "Handle")
+	require.NoError(t, hd.Handle(withResolver(context.Background()), rec), "Handle")
 	assert.Contains(t, dbg.String(), "dir=/repo", "dir attr should be shown at debug level")
 }
 
@@ -442,7 +442,7 @@ func TestPrettyHandlerReproLine(t *testing.T) {
 
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+	require.NoError(t, h.Handle(withResolver(context.Background()), rec), "Handle")
 	assert.Contains(t, buf.String(), "magus run test:debug web/studio", "output does not contain repro command")
 }
 
@@ -452,7 +452,7 @@ func TestPrettyHandlerFailureCardIgnoresHintsToggle(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf) // a bytes.Buffer is explicitly non-TTY.
 	// The renderer must not make an actionable failure depend on interactive mode.
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.error",
 		slog.String("project", "web"),
 		slog.String("target", "test"),
@@ -574,7 +574,7 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 	h := newTerminalHandler(&buf)
 	require.True(t, h.lease.Enabled(), "a TTY writer must be granted a band in the zone")
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.error",
 		slog.String("project", "api"),
 		slog.String("target", "build"),
@@ -603,7 +603,7 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.error",
 		slog.String("project", "api"),
 		slog.String("target", "build"),
@@ -616,7 +616,7 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 	// whole transcript would see that earlier reset and read it as a teardown
 	// the summary did not perform.
 	before := buf.Len()
-	require.NoError(t, h.EndRun(context.Background(), "Summary: 3 cached, 1 ran, 1 failed (2.0s)\n"), "EndRun")
+	require.NoError(t, h.EndRun(withResolver(context.Background()), "Summary: 3 cached, 1 ran, 1 failed (2.0s)\n"), "EndRun")
 
 	out := buf.String()[before:]
 	assert.Contains(t, out, "3 cached, 1 ran, 1 failed", "summary line present")
@@ -640,13 +640,13 @@ func TestPrettyHandlerSummaryReleasesACleanBand(t *testing.T) {
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.pool",
 		slog.Int("capacity", 8),
 		slog.Int("running", 2),
 		slog.Int("queued", 0),
 	)), "Handle cache.pool")
-	require.NoError(t, h.EndRun(context.Background(), "Summary: 4 cached, 0 ran, 0 failed (1.0s)\n"), "EndRun")
+	require.NoError(t, h.EndRun(withResolver(context.Background()), "Summary: 4 cached, 0 ran, 0 failed (1.0s)\n"), "EndRun")
 
 	assert.Contains(t, buf.String(), "\x1b[r", "no failures means nothing to hold the rows for")
 }
@@ -675,7 +675,7 @@ func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
 	h := prettyHandler(&buf, slog.LevelInfo)
 	assert.False(t, h.lease.Enabled(), "a non-TTY writer must be granted no rows")
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.error",
 		slog.String("project", "api"),
 		slog.String("target", "build"),
@@ -697,7 +697,7 @@ func TestPrettyHandlerPoolEventPaintsTheStatusRow(t *testing.T) {
 	s := screen.New(80, 24)
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.pool",
 		slog.Int("capacity", 8),
 		slog.Int("running", 3),
@@ -714,7 +714,7 @@ func TestPrettyHandlerPoolEventIsSilentOffATerminal(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 		"cache.pool",
 		slog.Int("capacity", 8),
 		slog.Int("running", 3),
@@ -752,7 +752,7 @@ func TestPrettyHandlerPrintsInspectHintEverywhere(t *testing.T) {
 
 			var buf bytes.Buffer
 			h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
-			require.NoError(t, h.Handle(context.Background(), buildRecord(
+			require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 				"cache.error",
 				slog.String("project", "api"),
 				slog.String("target", "build"),
@@ -823,7 +823,7 @@ func TestPrettyHandlerRedactsSecrets(t *testing.T) {
 func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 	var sink bytes.Buffer
 	h := prettyHandler(&sink, slog.LevelDebug)
-	slog.New(h).DebugContext(context.Background(), "run.exec",
+	slog.New(h).DebugContext(withResolver(context.Background()), "run.exec",
 		"cmd", "go", "args", []string{"build", "./..."}, "dir", ".")
 
 	assert.Contains(t, sink.String(), "$ go build ./...")
@@ -845,7 +845,7 @@ func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 	var sink bytes.Buffer
 	lg := slog.New(prettyHandler(&sink, slog.LevelInfo))
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(withResolver(t.Context()))
 	lg.InfoContext(ctx, "cache.warn", slog.String("msg", "before"))
 	cancel()
 	lg.InfoContext(ctx, "cache.warn", slog.String("msg", "after"))
@@ -922,7 +922,7 @@ const anchorsStale = "buzz: uncaught error: diagram anchors are stale: 2 finding
 // failEvent drives one cache.error through a handler.
 func failEvent(t *testing.T, h *PrettyHandler, project, target, cause string) {
 	t.Helper()
-	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
+	require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord("cache.error",
 		slog.String("project", project), slog.String("target", target),
 		slog.Int64("duration", int64(time.Second)),
 		slog.String("error", cause), slog.String("ref", "out177c63a16c3e"))), target)
@@ -930,7 +930,7 @@ func failEvent(t *testing.T, h *PrettyHandler, project, target, cause string) {
 
 func summaryEvent(t *testing.T, h *PrettyHandler, errors int) {
 	t.Helper()
-	require.NoError(t, h.EndRun(context.Background(),
+	require.NoError(t, h.EndRun(withResolver(context.Background()),
 		fmt.Sprintf("summary: 0 cached, 0 ran, %d failed (1.0s)\n", errors)), "summary")
 }
 
@@ -1215,7 +1215,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 	require.True(t, h.lease.Enabled())
 
 	for _, target := range []string{"build", "test"} {
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.error",
 			slog.String("project", "api"),
 			slog.String("target", target),
@@ -1265,7 +1265,7 @@ func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	h.BeginRun()
 	require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
@@ -1306,7 +1306,7 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 
 	var buf bytes.Buffer // no Fd(), so never a terminal
 	h := prettyHandler(&buf, slog.LevelInfo)
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	h.BeginRun()
 	for _, rec := range []slog.Record{
@@ -1345,7 +1345,7 @@ func TestBandHonoursNoColor(t *testing.T) {
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 	require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
 		slog.String("project", "api"), slog.String("target", "build"),
 		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
@@ -1379,7 +1379,7 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 	s := screen.New(80, 24)
 	fmt.Fprint(s, "$ magus affected ci\n")
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	targets := []string{"build", "test", "lint"}
 	for _, target := range targets {
@@ -1435,7 +1435,7 @@ func TestRecordBoolSurvivesAWrongType(t *testing.T) {
 	var buf bytes.Buffer
 	h := prettyHandler(&buf, slog.LevelInfo)
 	assert.NotPanics(t, func() {
-		_ = h.Handle(context.Background(), buildRecord("cache.remote.posture",
+		_ = h.Handle(withResolver(context.Background()), buildRecord("cache.remote.posture",
 			slog.String("backend", "gha"), slog.String("active", "not a bool")))
 	})
 	assert.Contains(t, buf.String(), "remote: gha (inactive here", "and still reports the posture")
@@ -1467,13 +1467,13 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.miss",
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(80*time.Millisecond)),
 			slog.String("ref", "out1a2b3c4d5e6f"),
 		)), "miss")
-		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		require.NoError(t, h.EndRun(withResolver(context.Background()), footer), "summary")
 
 		out := buf.String()
 		assert.Contains(t, out, "outputs: magus query output <ref>")
@@ -1487,7 +1487,7 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		require.NoError(t, h.EndRun(withResolver(context.Background()), footer), "summary")
 		assert.NotContains(t, buf.String(), "outputs:")
 	})
 
@@ -1497,13 +1497,13 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
+		require.NoError(t, h.Handle(withResolver(context.Background()), buildRecord(
 			"cache.miss",
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(80*time.Millisecond)),
 			slog.String("ref", "out1a2b3c4d5e6f"),
 		)), "miss")
-		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		require.NoError(t, h.EndRun(withResolver(context.Background()), footer), "summary")
 		for _, vendor := range []string{"claude", "codex", "cursor", "copilot"} {
 			assert.NotContains(t, strings.ToLower(buf.String()), vendor)
 		}
@@ -1519,7 +1519,7 @@ func TestPrettyHandlerFooterNamesFailedRefs(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		ctx := context.Background()
+		ctx := withResolver(context.Background())
 		for _, c := range []struct{ project, ref string }{{"api", "outfail00000001"}, {"web", "outfail00000002"}} {
 			require.NoError(t, h.Handle(ctx, buildRecord(
 				"cache.error",
@@ -1542,7 +1542,7 @@ func TestPrettyHandlerFooterNamesFailedRefs(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		require.NoError(t, h.EndRun(withResolver(context.Background()), footer), "summary")
 		assert.Equal(t, footer, buf.String())
 	})
 }
@@ -1604,7 +1604,7 @@ func (*countingTerm) Fd() uintptr                   { return 2 }
 // per sample), this is where it shows up.
 func BenchmarkStatusRowClockOnly(b *testing.B) {
 	const samples = 300
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 	var total int
 	b.ReportAllocs()
 	b.ResetTimer()

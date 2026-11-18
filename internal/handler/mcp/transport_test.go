@@ -122,7 +122,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	outR, outW := io.Pipe()
 	served := make(chan error, 1)
 	go func() {
-		served <- ServeStdio(context.Background(), Options{Magus: m, Logger: quietLogger(), Version: "test"}, inR, outW)
+		served <- ServeStdio(bgCtx(), Options{Magus: m, Logger: quietLogger(), Version: "test"}, inR, outW)
 		_ = outW.Close()
 	}()
 	lines := bufio.NewScanner(outR)

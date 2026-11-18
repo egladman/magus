@@ -194,5 +194,5 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerNeverDenies() 
 }
 
 func (f reworkFixture) testContext(t *testing.T) context.Context {
-	return WithLocation(t.Context(), f.at.cacheDir, f.at.workspace, f.at.dir)
+	return withSecrets(WithLocation(t.Context(), f.at.cacheDir, f.at.workspace, f.at.dir))
 }

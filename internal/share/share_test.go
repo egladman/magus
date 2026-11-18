@@ -32,6 +32,12 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// withSecrets is the call context a share carries into its listener: the "share link opened"
+// append refuses to run on a request context without a resolver.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
+
 func addr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
 func TestPickLANIPv4(t *testing.T) {
@@ -112,20 +118,20 @@ func TestStartRefusesWhatTheMintingRuleRefuses(t *testing.T) {
 	routes := statusRoutes(okHandler)
 
 	for _, ttl := range []time.Duration{10 * time.Second, 25 * time.Hour, 30 * 24 * time.Hour} {
-		_, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, routes, ttl)
+		_, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, routes, ttl)
 		assert.ErrorIs(t, err, auth.ErrShareLifetime, ttl.String())
 	}
 	for _, minter := range []auth.Access{{}, auth.AccessConnector()} {
-		_, err := m.Start(t.Context(), minter, consoleDir, routes, 0)
+		_, err := m.Start(withSecrets(t.Context()), minter, consoleDir, routes, 0)
 		assert.ErrorIs(t, err, auth.ErrExceedsGrant, minter.String())
 	}
 	_, active := m.Active()
 	assert.False(t, active, "a refused share opens nothing")
 
-	link, err := m.Start(t.Context(), auth.AccessViewer(), consoleDir, routes, 0)
+	link, err := m.Start(withSecrets(t.Context()), auth.AccessViewer(), consoleDir, routes, 0)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(15*time.Minute), link.ExpiresAt, 5*time.Second, "no preference takes the default")
-	link, err = m.Start(t.Context(), auth.AccessConsole(), consoleDir, routes, 24*time.Hour)
+	link, err = m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, routes, 24*time.Hour)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(24*time.Hour), link.ExpiresAt, 5*time.Second, "the lifetime asked for is the lifetime given")
 }
@@ -139,7 +145,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	defer cancel()
 	trailDir := t.TempDir()
 	m := newTestManager(t, ctx, WithTrailDir(trailDir))
-	link, err := m.Start(t.Context(), auth.AccessOperator(), consoleDirFixture(t), statusRoutes(okHandler), 0)
+	link, err := m.Start(withSecrets(t.Context()), auth.AccessOperator(), consoleDirFixture(t), statusRoutes(okHandler), 0)
 	require.NoError(t, err)
 	base := "http://" + hostOfURL(t, link.URL)
 
@@ -227,7 +233,7 @@ func TestStartRefusesARouteWithoutNeeds(t *testing.T) {
 		"zero need": {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]auth.Need{"/api/v1/status": {}}},
 		"mcp=read":  {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]auth.Need{"/api/v1/status": {Scope: auth.ScopeMCP, Level: auth.LevelRead}}},
 	} {
-		_, err := m.Start(t.Context(), auth.AccessConsole(), consoleDirFixture(t), map[string]Route{"/api/v1/status": r}, 0)
+		_, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDirFixture(t), map[string]Route{"/api/v1/status": r}, 0)
 		assert.Error(t, err, name)
 	}
 	_, active := m.Active()
@@ -257,7 +263,7 @@ func TestClosingALinkEndsItsOpenStreams(t *testing.T) {
 		}
 		<-release // a handler that never looks at its context
 	}))
-	link, err := m.Start(t.Context(), auth.AccessConsole(), consoleDirFixture(t), routes, 0)
+	link, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDirFixture(t), routes, 0)
 	require.NoError(t, err)
 	base := fmt.Sprintf("http://%s/api/v1/status", hostOfURL(t, link.URL))
 	token := tokenFromURL(t, link.URL)
@@ -347,7 +353,7 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -392,13 +398,13 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	first, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	first, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	oldToken := tokenFromURL(t, first.URL)
 
-	second, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	second, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -431,7 +437,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	if _, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0); err != nil {
+	if _, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0); err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	first, ok := m.Active()
@@ -440,7 +446,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// Supersede: the second Start replaces the first under the lock.
-	second, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	second, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -475,7 +481,7 @@ func TestManagerCloseKillsListener(t *testing.T) {
 	m := newTestManager(t, ctx)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -497,7 +503,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	}
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -539,7 +545,7 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	m := newTestManager(t, ctx, WithTrailDir(trailDir))
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(t.Context(), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
+	sess, err := m.Start(withSecrets(t.Context()), auth.AccessConsole(), consoleDir, statusRoutes(okHandler), 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}

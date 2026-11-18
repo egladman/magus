@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -21,6 +22,12 @@ import (
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// withSecrets gives a context the resolver main installs in production; the
+// activity trail refuses to record without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
 
 func TestCheckLanguageCoverage(t *testing.T) {
 	r := &runner{}

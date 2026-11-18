@@ -198,15 +198,31 @@ func DecodeAgentBlob(base, ref string, raw []byte, v any) error {
 
 // redactFailures redacts each failure's error text, which quotes workspace code and may
 // quote a command line.
-func redactFailures(ctx context.Context, in []RuleFailure) []RuleFailure {
+func redactFailures(ctx context.Context, in []RuleFailure) ([]RuleFailure, error) {
 	if len(in) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]RuleFailure, len(in))
 	for i, f := range in {
-		out[i] = RuleFailure{Side: f.Side, Error: secrets.RedactString(ctx, f.Error)}
+		red, err := secrets.RedactString(ctx, f.Error)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = RuleFailure{Side: f.Side, Error: red}
 	}
-	return out
+	return out, nil
+}
+
+// redactFields masks each field in place, stopping at the first that cannot be masked.
+func redactFields(ctx context.Context, fields ...*string) error {
+	for _, f := range fields {
+		red, err := secrets.RedactString(ctx, *f)
+		if err != nil {
+			return err
+		}
+		*f = red
+	}
+	return nil
 }
 
 // AppendAgentCommand writes one normalized agent-hook observation into the existing activity
@@ -226,10 +242,14 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	// A hook observes a shell command line, which is exactly where a credential passed as an
 	// argument shows up. Redacted here rather than in the blob alone, because these fields also
 	// reach Action and Preview on the event line.
-	command.Command = secrets.RedactString(ctx, command.Command)
-	command.Path = secrets.RedactString(ctx, command.Path)
-	command.Reason = secrets.RedactString(ctx, command.Reason)
-	command.Context = secrets.RedactString(ctx, command.Context)
+	// One that cannot be masked is not written.
+	if redactFields(ctx, &command.Command, &command.Path, &command.Reason, &command.Context) != nil {
+		return
+	}
+	failures, err := redactFailures(ctx, command.RuleFailures)
+	if err != nil {
+		return
+	}
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	requestBody, _ := codec.Marshal(AgentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
@@ -249,7 +269,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Context:         command.Context,
 		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
-		RuleFailures:    redactFailures(ctx, command.RuleFailures),
+		RuleFailures:    failures,
 	})
 	request := WritePayload(ctx, base, "agent", requestBody)
 	response := WritePayload(ctx, base, "agent", responseBody)
@@ -425,15 +445,19 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// connector token into a sub-agent's instructions is exactly the lease worth auditing
 	// WITHOUT persisting the token. Redacted before the marker scan so a redaction can never
 	// invent or destroy a lease id after the fact.
-	spawn.Context = secrets.RedactString(ctx, spawn.Context)
-	spawn.Child = secrets.RedactString(ctx, spawn.Child)
+	if redactFields(ctx, &spawn.Context, &spawn.Child) != nil {
+		return
+	}
 	// Clamped like the magus.spawner claim it sits beside (see MaxSpawnerLen): a model
 	// name is short, and an unbounded claim is a cost every later read of the
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
-	failures := redactFailures(ctx, spawn.RuleFailures)
+	failures, err := redactFailures(ctx, spawn.RuleFailures)
+	if err != nil {
+		return
+	}
 	body, _ := codec.Marshal(AgentSpawnRequest{
 		APIVersion:    agentSpawnAPIVersion,
 		Host:          spawn.Host,
@@ -742,7 +766,10 @@ func AppendCall(ctx context.Context, base string, c journal.Call) {
 	if base == "" {
 		return
 	}
-	c = redactCall(ctx, c)
+	c, err := redactCall(ctx, c)
+	if err != nil {
+		return
+	}
 	c.Origin = StampOrigin(ctx, c.Origin)
 	line, err := c.MarshalJSON()
 	if err != nil {
@@ -765,8 +792,12 @@ func WritePayload(ctx context.Context, base, prefix string, data []byte) journal
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
 	// stored. Blobs are the highest-risk data in this package: an MCP request/response pair
 	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
-	data = secrets.Redact(ctx, data)
 	unkept := journal.Payload{Bytes: int64(len(data))}
+	data, err := secrets.Redact(ctx, data)
+	if err != nil {
+		return unkept
+	}
+	unkept.Bytes = int64(len(data))
 	if base == "" || len(data) == 0 || !validPrefix(prefix) {
 		return unkept
 	}
@@ -1098,11 +1129,8 @@ func validPrefix(prefix string) bool {
 // redactCall masks every free-text field on a call. The structural fields stay
 // as written, since a reader matches them exactly. A lease comes from free
 // text, so every channel that stamps one checks it with [job.ValidID] first.
-func redactCall(ctx context.Context, c journal.Call) journal.Call {
-	c.Name = secrets.RedactString(ctx, c.Name)
-	c.Error = secrets.RedactString(ctx, c.Error)
-	c.Preview = secrets.RedactString(ctx, c.Preview)
-	return c
+func redactCall(ctx context.Context, c journal.Call) (journal.Call, error) {
+	return c, redactFields(ctx, &c.Name, &c.Error, &c.Preview)
 }
 
 type baseKey struct{}

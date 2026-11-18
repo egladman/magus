@@ -842,7 +842,7 @@ func tierFixture(t *testing.T, set *tier.Set, rows ...jobtypes.Job) context.Cont
 		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
+	return withSecrets(context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root}))
 }
 
 // judgeSpawn judges a Claude Code main-thread spawn of job scout on model, "" for none.

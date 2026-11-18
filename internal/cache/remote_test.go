@@ -45,7 +45,7 @@ func TestExportArtifactStreamsBlobsWithoutFullyBuffering(t *testing.T) {
 
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-	result, err := c.Run(context.Background(), step, func(context.Context) error {
+	result, err := c.Run(withResolver(context.Background()), step, func(context.Context) error {
 		return os.WriteFile(out, big, 0o644)
 	})
 	require.NoError(t, err, "Run")
@@ -56,7 +56,7 @@ func TestExportArtifactStreamsBlobsWithoutFullyBuffering(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 
-	require.NoError(t, c.exportArtifact(context.Background(), step.ProjectPath, result.Hash, io.Discard))
+	require.NoError(t, c.exportArtifact(withResolver(context.Background()), step.ProjectPath, result.Hash, io.Discard))
 
 	runtime.ReadMemStats(&after)
 	delta := after.TotalAlloc - before.TotalAlloc
@@ -77,7 +77,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	openWithRemote := func(t *testing.T) (root string, c *Cache) {
 		t.Helper()
 		root = t.TempDir()
-		c, err = Open(t.Context(),
+		c, err = Open(withResolver(t.Context()),
 			filepath.Join(t.TempDir(), ".magus"),
 			WithLocalWrite(true),
 			WithRemoteBackend(remote),
@@ -95,7 +95,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	spec1.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	runs := 0
-	r1, err := c1.Run(context.Background(), spec1, func(_ context.Context) error {
+	r1, err := c1.Run(withResolver(context.Background()), spec1, func(_ context.Context) error {
 		runs++
 		return os.WriteFile(out1, []byte("built"), 0o644)
 	})
@@ -111,7 +111,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	spec2 := makeStep(root2)
 	spec2.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
-	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
+	r2, err := c2.Run(withResolver(context.Background()), spec2, func(_ context.Context) error {
 		runs++ // must not be called
 		return os.WriteFile(out2, []byte("built"), 0o644)
 	})
@@ -138,7 +138,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 	openWithRemote := func(t *testing.T, platform string) (root string, c *Cache) {
 		t.Helper()
 		root = t.TempDir()
-		c, err = Open(t.Context(),
+		c, err = Open(withResolver(t.Context()),
 			filepath.Join(t.TempDir(), ".magus"),
 			WithLocalWrite(true),
 			WithRemoteBackend(remote),
@@ -157,7 +157,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 	spec1.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	runs := 0
-	r1, err := c1.Run(context.Background(), spec1, func(_ context.Context) error {
+	r1, err := c1.Run(withResolver(context.Background()), spec1, func(_ context.Context) error {
 		runs++
 		return os.WriteFile(out1, []byte("built"), 0o644)
 	})
@@ -172,7 +172,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 	spec2 := makeStep(root2)
 	spec2.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
-	r2, err := c2.Run(context.Background(), spec2, func(_ context.Context) error {
+	r2, err := c2.Run(withResolver(context.Background()), spec2, func(_ context.Context) error {
 		runs++
 		return os.WriteFile(out2, []byte("built"), 0o644)
 	})
@@ -262,7 +262,7 @@ func learnHash(t *testing.T) (project, hash string) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "learnHash run")
@@ -276,7 +276,7 @@ func learnHash(t *testing.T) (project, hash string) {
 func runAgainst(t *testing.T, backend types.CacheBackend) (hit bool, output string, ran bool) {
 	t.Helper()
 	root := t.TempDir()
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithLocalWrite(true), WithRemoteBackend(backend),
 		WithInsecureRemote()) // integrity-only path: no trust set
 	require.NoError(t, err, "cache.Open")
@@ -285,7 +285,7 @@ func runAgainst(t *testing.T, backend types.CacheBackend) (hit bool, output stri
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
@@ -350,7 +350,7 @@ func openSigned(t *testing.T, remote types.CacheBackend, seed []byte, trusted []
 	} else {
 		opts = append(opts, WithInsecureRemote()) // no trust set: unsigned-producer case
 	}
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opts...)
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), opts...)
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }
@@ -365,7 +365,7 @@ func buildCanonical(t *testing.T, root string, c *Cache) (Result, bool) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
@@ -440,10 +440,10 @@ func TestRemoteRejectsUntrustedSigner(t *testing.T) {
 func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
 	require.NoError(t, err, "NewFSRemoteBackend")
-	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithLocalWrite(true), WithRemoteBackend(remote))
 	assert.Error(t, err, "Open accepted a remote backend with no trust set and no opt-out")
-	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithLocalWrite(true), WithRemoteBackend(remote),
 		WithInsecureRemote())
 	require.NoError(t, err, "Open rejected remote + explicit opt-out")
@@ -521,7 +521,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	})
 
 	root := t.TempDir()
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithLocalWrite(true),
 		WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
 		WithInsecureRemote(),
@@ -533,7 +533,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	out := filepath.Join(root, "test", "pkg", "out.txt")
 	ran := false
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		ran = true
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
@@ -546,7 +546,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 // them, mirroring how Magus.Run installs them for a real run.
 func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteStats) {
 	t.Helper()
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	r, ran := buildIn(t, ctx, root, c)
 	return r, ran, remoteStatsFromContext(ctx)
 }
@@ -625,7 +625,7 @@ func TestRemoteTierWriteOffStillWritesTheLocalTier(t *testing.T) {
 	pub, seed := genKeypair(t)
 
 	root := t.TempDir()
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(remote), WithSigningKey(seed), WithTrustedKeys([][]byte{pub}),
 		WithRemoteWrite(false))
 	require.NoError(t, err, "cache.Open")
@@ -668,9 +668,11 @@ func TestRemoteTierMissIsCountedAndNamed(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	var lines []string
-	_, err = c.hashStepInputs(t.Context(), &step, &lines)
+	_, err = c.hashStepInputs(withResolver(t.Context()), &step, &lines)
 	require.NoError(t, err)
-	for _, d := range ClassDigests(MaskKeyInputs(t.Context(), lines)) {
+	masked, err := MaskKeyInputs(withResolver(t.Context()), lines)
+	require.NoError(t, err)
+	for _, d := range ClassDigests(masked) {
 		assert.Equal(t, fmt.Sprintf("%s (%d)", d.Digest, d.Count), miss["inputs."+d.Class], "class %s", d.Class)
 	}
 }
@@ -683,7 +685,7 @@ func TestRemoteTierMissSkipsDigestsForAMovedKey(t *testing.T) {
 	c.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	writeMain(t, root, "package main")
 	step := makeStep(root)
-	c.logRemoteMiss(t.Context(), &step, strings.Repeat("0", 64))
+	c.logRemoteMiss(withResolver(t.Context()), &step, strings.Repeat("0", 64))
 
 	miss := logRecord(t, &buf, "cache.remote.miss")
 	for k := range miss {
@@ -728,9 +730,9 @@ func (errRemote) HasArtifact(context.Context, string, string) (bool, error) {
 // Called on every run, and most runs have no remote at all.
 func TestRemoteSummaryToleratesNoBackendAndNoStats(t *testing.T) {
 	c := testCacheDir(t)
-	_, ok := c.RemoteSummary(ContextWithRemoteStats(t.Context()))
+	_, ok := c.RemoteSummary(ContextWithRemoteStats(withResolver(t.Context())))
 	assert.False(t, ok, "local-only run: backend nil")
-	_, ok = c.RemoteSummary(t.Context())
+	_, ok = c.RemoteSummary(withResolver(t.Context()))
 	assert.False(t, ok, "no stats on ctx: a caller outside Magus.Run")
 }
 
@@ -748,7 +750,7 @@ func TestImportTurnedAwayByItsManifestWritesNothing(t *testing.T) {
 
 	_, cB := openSigned(t, remote, nil, trusted)
 	var seen *Manifest
-	_, err = cB.importArtifact(t.Context(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash, accept: func(m *Manifest) bool {
+	_, err = cB.importArtifact(withResolver(t.Context()), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash, accept: func(m *Manifest) bool {
 		seen = m
 		return false
 	}})
@@ -796,14 +798,14 @@ func TestImportMaxBytesCapsTarBomb(t *testing.T) {
 	t.Parallel()
 
 	cdir := t.TempDir()
-	c, err := Open(t.Context(), cdir, WithMaxImportBytes(1024))
+	c, err := Open(withResolver(t.Context()), cdir, WithMaxImportBytes(1024))
 	require.NoError(t, err, "Open")
 
 	// Create a "bomb": a single entry that would be 1 MiB without the cap.
 	const entrySize = 1 << 20
 	archive := makeTar(t, "manifests/test/entry", entrySize)
 
-	err = c.Import(context.Background(), archive)
+	err = c.Import(withResolver(context.Background()), archive)
 	require.Error(t, err, "Import must reject an oversized entry rather than truncating it")
 	assert.ErrorIs(t, err, errImportTooLarge)
 
@@ -819,14 +821,14 @@ func TestImportDefaultCapApplied(t *testing.T) {
 	t.Parallel()
 
 	cdir := t.TempDir()
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "Open")
 
 	// A small legitimate entry — must pass through untruncated.
 	const entrySize = 4096
 	archive := makeTar(t, "manifests/test/small", entrySize)
 
-	require.NoError(t, c.Import(context.Background(), archive), "Import")
+	require.NoError(t, c.Import(withResolver(context.Background()), archive), "Import")
 
 	dest := filepath.Join(cdir, "manifests", "test", "small")
 	fi, err := os.Stat(dest)

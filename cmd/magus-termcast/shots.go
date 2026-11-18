@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -124,7 +123,7 @@ func runBand(t screen.Theme) (string, error) {
 	}
 	records = append(records, event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3)))
 	for _, r := range records {
-		if err := h.Handle(context.Background(), r); err != nil {
+		if err := h.Handle(background(), r); err != nil {
 			return "", err
 		}
 	}
@@ -149,7 +148,7 @@ func runWaits(t screen.Theme) (string, error) {
 	}
 	test, docs := ref("", "test"), ref("docs", "build")
 	console := ref("console", "build")
-	ctx := context.Background()
+	ctx := background()
 	records := make([]slog.Record, 0, 3)
 	records = append(records,
 		event("cache.plan", slog.Any("steps", []cache.PlannedStep{
@@ -198,7 +197,7 @@ func failurePrompt(t screen.Theme) (string, error) {
 	fmt.Fprint(s, "  cause: exit status 1\n")
 	fmt.Fprint(s, "  inspect: magus query output out7c21\n")
 
-	ctx := context.Background()
+	ctx := background()
 	for _, r := range []slog.Record{
 		event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3)),
 		event("cache.error", slog.String("project", "internal/sandbox"),

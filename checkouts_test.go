@@ -54,9 +54,10 @@ func persistedRunRef(t *testing.T, workspace string) string {
 	require.NoError(t, err)
 	store := cache.NewOutputStore(dir)
 	key := strings.Repeat("ab", 32)
-	d, err := store.Persist(context.Background(), key, []byte("lint log\n"), cache.OutputDescriptor{Project: ".", Target: "lint", Failed: true, ErrMsg: "findings"})
+	ctx := withSecrets(context.Background())
+	d, err := store.Persist(ctx, key, []byte("lint log\n"), cache.OutputDescriptor{Project: ".", Target: "lint", Failed: true, ErrMsg: "findings"})
 	require.NoError(t, err)
-	require.NoError(t, store.PersistKeyInputs(context.Background(), key, []string{"os:linux"}))
+	require.NoError(t, store.PersistKeyInputs(ctx, key, []string{"os:linux"}))
 	return d.Ref
 }
 
@@ -157,7 +158,7 @@ func TestOutputKeyInputsStopAtTheCheckoutWhoseDescriptorResolved(t *testing.T) {
 
 	dir, err := ResolveCacheDir(orchestrator)
 	require.NoError(t, err)
-	d, err := cache.NewOutputStore(dir).Persist(context.Background(), strings.Repeat("ab", 32), []byte("lint log\n"),
+	d, err := cache.NewOutputStore(dir).Persist(withSecrets(context.Background()), strings.Repeat("ab", 32), []byte("lint log\n"),
 		cache.OutputDescriptor{Project: ".", Target: "lint", Failed: true})
 	require.NoError(t, err)
 	require.Equal(t, ref, d.Ref, "the same key mints the same portable ref")
@@ -296,7 +297,7 @@ func TestOutputLookupsReadASiblingWorktree(t *testing.T) {
 	require.NoError(t, err)
 	idleCache, err := ResolveCacheDir(idle)
 	require.NoError(t, err)
-	verdict := recorder.WritePayload(t.Context(), judgeCache, "grd", []byte("the full verdict")).Ref
+	verdict := recorder.WritePayload(withSecrets(t.Context()), judgeCache, "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, verdict)
 
 	opened, err := Inspect(t.Context(), worker, WithSpawnRule(tier.Ceiling))

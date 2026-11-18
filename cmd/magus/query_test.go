@@ -123,7 +123,7 @@ func captureStderr(t *testing.T, fn func()) string {
 	return testkit.CaptureStderr(t, func() {
 		prev := slog.Default()
 		defer slog.SetDefault(prev)
-		slog.SetDefault(slog.New(cache.NewPlainHandler(os.Stderr, slog.LevelInfo)))
+		slog.SetDefault(slog.New(resolverHandler{cache.NewPlainHandler(os.Stderr, slog.LevelInfo)}))
 		fn()
 	})
 }
@@ -248,7 +248,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m := newQueryTestWorkspace(t)
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 	ref := recorder.WritePayload(ctx, m.CacheDir(), "grd", []byte("the full verdict")).Ref
 	require.NotEmpty(t, ref)
 
@@ -861,7 +861,7 @@ func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m := newQueryTestWorkspace(t)
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 
 	runCtx, finish := m.BeginInvocation(ctx, magus.Command{Arguments: []string{"run", "lint"}, Trigger: string(journal.TriggerRun)}, "v0.test")
 	id := recorder.InvocationIDFromContext(runCtx)
@@ -945,7 +945,7 @@ func TestOutputImportRoundTripPrintsTheSameBytes(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m, ref := newPrintingWorkspace(t, "ok 1\n\x1b[31mFAIL\x1b[0m: two\n")
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 
 	local := captureStdout(t, func() {
 		require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: output.Options{Format: outputText}}))
@@ -967,7 +967,7 @@ func TestQueryOutputTextPrintsAFailedRunsErrorToStderr(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m, ref := newRunningWorkspace(t, "", errors.New("generated files differ: run `magus run generate:rw`\x1b[31m"))
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 
 	var stdout string
 	stderr := captureStderr(t, func() {
@@ -990,7 +990,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 	const memberRef = "out0123456789ab"
 	member := cache.WrapNeedFailure(errors.New("golangci exited 1"), cache.NeedMember{Target: "lint-go", Ref: memberRef})
 	m, ref := newRunningWorkspace(t, "", fmt.Errorf("ctx.needs: %w", member))
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 	want := "magus query output " + memberRef
 
 	t.Run("text", func(t *testing.T) {
@@ -1084,7 +1084,7 @@ func TestQueryOutputTextPrintsNoErrorForAPassingRun(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m, ref := newPrintingWorkspace(t, "fine\n")
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 
 	stderr := captureStderr(t, func() {
 		out := captureStdout(t, func() {
@@ -1100,7 +1100,7 @@ func TestOutputImportWritesNothing(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	m, ref := newPrintingWorkspace(t, "hello\n")
-	ctx := withMagus(context.Background(), m)
+	ctx := withMagus(withSecrets(context.Background()), m)
 	jsonl := exportJSONL(t, ctx, ref)
 
 	root := filepath.Dir(m.CacheDir())

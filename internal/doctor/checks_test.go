@@ -1650,7 +1650,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		t.Helper()
 		base := (&runner{root: root}).cacheDir()
 		for i := range n {
-			recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
+			recorder.AppendAgentCommand(withSecrets(context.Background()), base, recorder.AgentCommand{
 				Host: "test",
 				Tool: tool,
 				Path: fmt.Sprintf("file-%d.go", i),

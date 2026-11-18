@@ -103,10 +103,19 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 		return "", err
 	}
 
+	meta, err = secrets.Redact(ctx, meta)
+	if err != nil {
+		return "", err
+	}
+	data, err = secrets.Redact(ctx, data)
+	if err != nil {
+		return "", err
+	}
+
 	pr, pw := io.Pipe()
 	errCh := make(chan error, 1)
 	go func() {
-		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, secrets.Redact(ctx, meta), bundleOutputName, secrets.Redact(ctx, data))
+		err := writeSignedPair(c.signer, pw, domainBundle, bundleManifestName, meta, bundleOutputName, data)
 		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
@@ -330,7 +339,9 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 		return
 	}
 	if meta, err := codec.Marshal(b.Descriptor); err == nil {
-		_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secrets.Redact(ctx, meta), 0o644)
+		if meta, err = secrets.Redact(ctx, meta); err == nil {
+			_ = file.ReplaceFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), meta, 0o644)
+		}
 	}
 	if len(b.KeyInputs) > 0 {
 		// Already masked and redacted by the publisher; PersistKeyInputs is idempotent

@@ -33,7 +33,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	writeMain(t, rootA, "package main")
 	stepA := makeStep(rootA)
 	stepA.Target = "build"
-	rA, err := cA.Run(context.Background(), stepA, func(ctx context.Context) error {
+	rA, err := cA.Run(withResolver(context.Background()), stepA, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		_, _ = stdout.Write([]byte("built on machine A\n"))
 		return nil
@@ -46,7 +46,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	writeMain(t, rootB, "package main")
 	stepB := makeStep(rootB)
 	stepB.Target = "build"
-	rB, err := cB.Run(context.Background(), stepB, func(context.Context) error {
+	rB, err := cB.Run(withResolver(context.Background()), stepB, func(context.Context) error {
 		t.Fatal("machine B rebuilt instead of replaying the remote entry")
 		return nil
 	})
@@ -120,7 +120,7 @@ func TestImportRejectsTamperedLog(t *testing.T) {
 	require.NoError(t, os.WriteFile(stored, poisoned, 0o644))
 
 	_, cB := openSigned(t, remote, nil, trusted)
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
+	_, err = cB.importArtifact(withResolver(context.Background()), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.Error(t, err, "a tampered log must fail verification")
 	assert.Contains(t, err.Error(), "signature")
 
@@ -156,7 +156,7 @@ func TestImportWithCorruptBlobKeepsTheStoredOne(t *testing.T) {
 	require.NoError(t, err)
 
 	_, cB := openSigned(t, remote, nil, trusted)
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
+	_, err = cB.importArtifact(withResolver(context.Background()), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.NoError(t, err, "the untampered artifact must import")
 	m, err := cB.readManifest("test/pkg", rA.Hash)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestImportWithCorruptBlobKeepsTheStoredOne(t *testing.T) {
 	poisoned := rewriteTarMember(t, stored, func(name string) bool {
 		return strings.HasPrefix(name, "cas/")
 	}, []byte("MALICIOUS: not the bytes this blob is named for\n"))
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
+	_, err = cB.importArtifact(withResolver(context.Background()), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.Error(t, err, "a blob whose content does not match its name must fail the import")
 	assert.Contains(t, err.Error(), "content hashes to")
 
@@ -201,30 +201,30 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 	step := makeStep(rootA)
 	step.Target = "test"
 	boom := errors.New("exit status 1")
-	_, err = cA.Run(context.Background(), step, func(ctx context.Context) error {
+	_, err = cA.Run(withResolver(context.Background()), step, func(ctx context.Context) error {
 		stdout, _ := spawn.OutputWriters(ctx)
 		_, _ = stdout.Write([]byte("FAIL: assertion failed on machine A\n"))
 		return boom
 	})
 	require.ErrorIs(t, err, boom)
 
-	hash, err := cA.hashStep(context.Background(), &step)
+	hash, err := cA.hashStep(withResolver(context.Background()), &step)
 	require.NoError(t, err)
 	ref := PortableRef(hash)
 
 	// Machine B cannot resolve it yet: a failure is never shared automatically.
 	_, cB := openSigned(t, remote, nil, trusted)
-	_, _, err = cB.OutputByRef(context.Background(), ref)
+	_, _, err = cB.OutputByRef(withResolver(context.Background()), ref)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	var missing *RefNotFoundError
 	require.ErrorAs(t, err, &missing, "a miss must name the stores consulted")
 	assert.Len(t, missing.Stores, 2)
 
-	published, err := cA.PublishOutput(context.Background(), ref)
+	published, err := cA.PublishOutput(withResolver(context.Background()), ref)
 	require.NoError(t, err, "publish")
 	assert.Equal(t, ref, published, "publishing does not change the ref")
 
-	data, desc, err := cB.OutputByRef(context.Background(), ref)
+	data, desc, err := cB.OutputByRef(withResolver(context.Background()), ref)
 	require.NoError(t, err, "machine B resolves the published ref")
 	assert.Contains(t, string(data), "FAIL: assertion failed on machine A")
 	assert.True(t, desc.Failed)
@@ -249,7 +249,7 @@ func TestPublishRequiresSigningKey(t *testing.T) {
 	r, _ := buildCanonical(t, rootA, cA)
 	require.NotEmpty(t, r.Ref)
 
-	_, err = cA.PublishOutput(context.Background(), r.Ref)
+	_, err = cA.PublishOutput(withResolver(context.Background()), r.Ref)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signing key")
 }
@@ -264,7 +264,7 @@ func TestBundleRejectsTamperedOutput(t *testing.T) {
 
 	rootA, cA := openSigned(t, remote, seed, trusted)
 	r, _ := buildCanonical(t, rootA, cA)
-	_, err = cA.PublishOutput(context.Background(), r.Ref)
+	_, err = cA.PublishOutput(withResolver(context.Background()), r.Ref)
 	require.NoError(t, err)
 
 	stored := findBackendArtifact(t, remote, bundleProject)
@@ -359,7 +359,7 @@ func TestImportDoesNotDependOnFixedStagingNames(t *testing.T) {
 		require.NoError(t, os.MkdirAll(p, 0o755))
 	}
 
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
+	_, err = cB.importArtifact(withResolver(context.Background()), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.NoError(t, err, "the import failed because a fixed staging path was taken")
 	_, err = cB.readManifest("test/pkg", rA.Hash)
 	require.NoError(t, err, "the imported manifest must be committed")
@@ -376,10 +376,10 @@ func TestStoreFetchedBundleReplacesByRename(t *testing.T) {
 	b := OutputBundle{Descriptor: OutputDescriptor{Key: "k1", Attempt: "a1"}}
 	blob := filepath.Join(c.outputs.outputsDir(), "k1", "a1"+outExt)
 
-	c.storeFetchedBundle(t.Context(), []byte("first"), b)
+	c.storeFetchedBundle(withResolver(t.Context()), []byte("first"), b)
 	before, err := os.Stat(blob)
 	require.NoError(t, err)
-	c.storeFetchedBundle(t.Context(), []byte("second"), b)
+	c.storeFetchedBundle(withResolver(t.Context()), []byte("second"), b)
 	after, err := os.Stat(blob)
 	require.NoError(t, err)
 
@@ -408,13 +408,13 @@ func TestFetchedBundleBindsRef(t *testing.T) {
 	trusted := [][]byte{pub}
 	rootA, cA := openSigned(t, remote, seed, trusted)
 	r, _ := buildCanonical(t, rootA, cA)
-	_, err = cA.PublishOutput(context.Background(), r.Ref)
+	_, err = cA.PublishOutput(withResolver(context.Background()), r.Ref)
 	require.NoError(t, err)
 
 	const asked = "out000000000000"
 	_, cB := openSigned(t, swappedRefBackend{CacheBackend: remote, asked: asked, served: r.Ref}, nil, trusted)
 
-	_, _, err = cB.OutputByRef(context.Background(), asked)
+	_, _, err = cB.OutputByRef(withResolver(context.Background()), asked)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), asked)
@@ -431,17 +431,17 @@ func TestBundleKeyIsOnePathSegment(t *testing.T) {
 
 	for _, bad := range []string{"..", "../escaped", "a/b", `a\b`, "/abs"} {
 		t.Run(bad, func(t *testing.T) {
-			c.storeFetchedBundle(t.Context(), []byte("x"), OutputBundle{
+			c.storeFetchedBundle(withResolver(t.Context()), []byte("x"), OutputBundle{
 				Descriptor: OutputDescriptor{Key: bad, Attempt: "a1"},
 				KeyInputs:  []string{"src:x"},
 			})
-			c.storeFetchedBundle(t.Context(), []byte("x"), OutputBundle{
+			c.storeFetchedBundle(withResolver(t.Context()), []byte("x"), OutputBundle{
 				Descriptor: OutputDescriptor{Key: "k1", Attempt: bad},
 			})
-			assert.Error(t, c.outputs.PersistKeyInputs(t.Context(), bad, []string{"src:x"}))
+			assert.Error(t, c.outputs.PersistKeyInputs(withResolver(t.Context()), bad, []string{"src:x"}))
 		})
 	}
-	assert.Error(t, c.outputs.PersistKeyInputs(t.Context(), "", []string{"src:x"}))
+	assert.Error(t, c.outputs.PersistKeyInputs(withResolver(t.Context()), "", []string{"src:x"}))
 
 	var files []string
 	_ = filepath.WalkDir(filepath.Dir(outputs), func(p string, d os.DirEntry, werr error) error {

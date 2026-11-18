@@ -38,7 +38,7 @@ func fleetFixture(t *testing.T, leases ...jobtypes.Job) (context.Context, string
 	t.Helper()
 	root, cacheDir := fixture.SeedLeases(t, leases...)
 	location := location{cacheDir: cacheDir, workspace: root}
-	return context.WithValue(t.Context(), locationKey{}, location), root
+	return withSecrets(context.WithValue(t.Context(), locationKey{}, location)), root
 }
 
 // TestGradeLeasedWriteDenies pins the two denials and the fact each one must carry:
@@ -1736,7 +1736,7 @@ func withoutVolatile(v verdict.Judgment) verdict.Judgment {
 type ctxLayers []func(context.Context) context.Context
 
 func (l ctxLayers) of(t *testing.T) context.Context {
-	ctx := t.Context()
+	ctx := withSecrets(t.Context())
 	for _, layer := range l {
 		ctx = layer(ctx)
 	}

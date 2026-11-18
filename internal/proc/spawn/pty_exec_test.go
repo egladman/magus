@@ -16,7 +16,7 @@ import (
 // Asserting that directly (by asking the child itself) is the only test that
 // cannot pass for the wrong reason: a pipe would make this print "pipe".
 func TestExecTTYChildSeesATerminal(t *testing.T) {
-	res, err := Exec(context.Background(), "sh",
+	res, err := Exec(withTestResolver(context.Background()), "sh",
 		[]string{"-c", "if [ -t 1 ]; then echo tty; else echo pipe; fi"},
 		ExecOptions{TTY: true, Capture: true, Quiet: true})
 	if err != nil {
@@ -30,7 +30,7 @@ func TestExecTTYChildSeesATerminal(t *testing.T) {
 // Without the option nothing changes, which is the half that keeps this from
 // being a behaviour change for every existing caller.
 func TestExecWithoutTTYChildSeesAPipe(t *testing.T) {
-	res, err := Exec(context.Background(), "sh",
+	res, err := Exec(withTestResolver(context.Background()), "sh",
 		[]string{"-c", "if [ -t 1 ]; then echo tty; else echo pipe; fi"},
 		ExecOptions{Capture: true, Quiet: true})
 	if err != nil {
@@ -45,7 +45,7 @@ func TestExecWithoutTTYChildSeesAPipe(t *testing.T) {
 // separately. Documented on the option; asserted here so the documentation cannot
 // quietly stop being true.
 func TestExecTTYMergesStderrIntoStdout(t *testing.T) {
-	res, err := Exec(context.Background(), "sh",
+	res, err := Exec(withTestResolver(context.Background()), "sh",
 		[]string{"-c", "printf out; printf err 1>&2"},
 		ExecOptions{TTY: true, Capture: true, Quiet: true})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestDrainPTYReturnsTheCopyResult(t *testing.T) {
 // read it as typed input, and that goroutine must be done before the master is
 // closed underneath it.
 func TestExecTTYReplaysStdinThroughTheMaster(t *testing.T) {
-	res, err := Exec(context.Background(), "sh", []string{"-c", "read line; echo got:$line"},
+	res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", "read line; echo got:$line"},
 		ExecOptions{TTY: true, Stdin: "hello\n", Capture: true, Quiet: true})
 	if err != nil {
 		t.Fatalf("Exec: %v", err)

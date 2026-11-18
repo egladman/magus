@@ -31,7 +31,7 @@ func claudeCodeBash(session, command string) string {
 func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
-	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
+	ctx := WithLocation(withSecrets(t.Context()), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	judge := func(host, transport, input string) string {
 		v := Judge(ctx, strict(testDependencies()), Request{Input: input, Host: host, Form: transport})
@@ -62,7 +62,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
-	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
+	ctx := WithLocation(withSecrets(t.Context()), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	head := `{"session_id":"` + session + `","transcript_path":"/Users/dev/.claude/projects/-Users-dev-repo/` +
 		session + `.jsonl","cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse",`
@@ -111,12 +111,12 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 
 	noStore := hint.NewGate("", "s1")
 	for range 2 {
-		got, ref, served := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, false)
+		got, ref, served := shapeDeny(withSecrets(t.Context()), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, false)
 		assert.Equal(t, "verdict."+note+"\nrationale."+see, got, "without a cache dir every firing speaks in full")
 		assert.Empty(t, ref)
 		assert.Nil(t, served)
 	}
-	got, ref, _ := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, true)
+	got, ref, _ := shapeDeny(withSecrets(t.Context()), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, true)
 	assert.Equal(t, "verdict."+note, got, "a preview shows what the call would, less the ref it stores nothing under")
 	assert.Empty(t, ref)
 
@@ -124,14 +124,14 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 	remedy := []types.NextStep{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
 	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate), workspaceCommandRule, workspaceWriteRule, workspaceSpawnRule} {
 		for range 2 {
-			got, ref, served := shapeDeny(t.Context(), gate, rule, "verdict.", "rationale.", note, remedy, false)
+			got, ref, served := shapeDeny(withSecrets(t.Context()), gate, rule, "verdict.", "rationale.", note, remedy, false)
 			assert.Equal(t, "verdict.\nrationale.", got, "%s is not a catalogued deny, so its reason is untouched", rule)
 			assert.Empty(t, ref)
 			assert.Nil(t, served, "a rule with no page serves nothing")
 		}
 	}
 
-	got, ref, _ = shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "verdict."+note, "", note, nil, false)
+	got, ref, _ = shapeDeny(withSecrets(t.Context()), gate, string(denyRuleWholeTree), "verdict."+note, "", note, nil, false)
 	require.NotEmpty(t, ref)
 	assert.Equal(t, fmt.Sprintf(`verdict.%s
 details: %s`, note, hint.NextForDenial(ref).Run), got, "a reason already carrying the note does not repeat it")
@@ -154,7 +154,7 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 		{"a Why field", "verdict.", "first reason.\nsecond reason."},
 		{"one string", "verdict.\nfirst reason.\nsecond reason.", ""},
 	} {
-		got, ref, served := shapeDeny(t.Context(), hint.NewGate(cacheDir, tc.name), string(denyRuleWholeTree), tc.reason, tc.why, note, remedy, false)
+		got, ref, served := shapeDeny(withSecrets(t.Context()), hint.NewGate(cacheDir, tc.name), string(denyRuleWholeTree), tc.reason, tc.why, note, remedy, false)
 		require.NotEmpty(t, ref, tc.name)
 		assert.Equal(t, fmt.Sprintf(`verdict.%s
 next:
@@ -179,7 +179,7 @@ next:
 // beside its verdict instead of behind the ref.
 func TestShapeDenyShowsEveryLineOfAVerdictWithAWhy(t *testing.T) {
 	cacheDir := t.TempDir()
-	got, ref, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), string(denyRuleSymbolSearch),
+	got, ref, _ := shapeDeny(withSecrets(t.Context()), hint.NewGate(cacheDir, "s1"), string(denyRuleSymbolSearch),
 		"verdict.\nIts answer (1 result):\n  a.go", "the reason.", "", nil, false)
 	require.NotEmpty(t, ref)
 	assert.Equal(t, "verdict.\nIts answer (1 result):\n  a.go\ndetails: "+hint.NextForDenial(ref).Run, got)
@@ -196,7 +196,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 		[]string{"./magus", "run", "go-build", ".", "-s"}, "-s stays quiet until something fails.")}
 
 	full := "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."
-	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
+	got, ref, served := shapeDeny(withSecrets(t.Context()), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref, "the first firing stores its verdict too")
 	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\ndetails: "+hint.NextForDenial(ref).Run, got)
 	stored, err := loggedPayload(cacheDir, ref)
@@ -205,7 +205,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-output-pipe", servedNextPreauthorizes(gate, "./magus run go-build . -s"))
 
-	got, ref, served = shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
+	got, ref, served = shapeDeny(withSecrets(t.Context()), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref)
 	doc, _ := Rule(string(denyRuleOutputPipe))
 	assert.Equal(t, fmt.Sprintf(`denied again [output-pipe]: %s
@@ -222,7 +222,7 @@ func TestShapeDenyRepeatsOnlyTheSameReason(t *testing.T) {
 	gate := hint.NewGate(t.TempDir(), "s1")
 	rule := string(denyRuleSpawnNamesModel)
 	deny := func(reason string) string {
-		got, _, _ := shapeDeny(t.Context(), gate, rule, reason, "", "", nil, false)
+		got, _, _ := shapeDeny(withSecrets(t.Context()), gate, rule, reason, "", "", nil, false)
 		return got
 	}
 	again := fmt.Sprintf("denied again [%s]: ", rule)
@@ -242,10 +242,10 @@ func TestWholeTreeStoresTheBackendsScratchCheckout(t *testing.T) {
 		"jj abandon":       "a throwaway clone",
 		"git reset --hard": "a throwaway `git worktree add`",
 	} {
-		v := Evaluate(t.Context(), strict(testDependencies()), command)
+		v := Evaluate(withSecrets(t.Context()), strict(testDependencies()), command)
 		require.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		cacheDir := t.TempDir()
-		shown, _, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), v.RuleName(), v.Deny, v.Why, "", nil, false)
+		shown, _, _ := shapeDeny(withSecrets(t.Context()), hint.NewGate(cacheDir, "s1"), v.RuleName(), v.Deny, v.Why, "", nil, false)
 		stored := storedVerdict(t, cacheDir, shown)
 		assert.Contains(t, shown, "destroys uncommitted work", command)
 		assert.NotContains(t, shown, "throwaway", "the scratch checkout is rationale: %s", command)
@@ -265,7 +265,7 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 	gate := hint.NewGate(cacheDir, "s1")
 	whys := map[string]string{"run the gate.": "it reaches every project."}
 
-	got, ref := shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.\n\nan aside.", whys, false)
+	got, ref := shapeAdvice(withSecrets(t.Context()), gate, string(advisoryPushGate), "run the gate.\n\nan aside.", whys, false)
 	require.NotEmpty(t, ref)
 	assert.Equal(t, "run the gate.\n\nan aside.\ndetails: "+hint.NextForDenial(ref).Run, got)
 	stored, err := loggedPayload(cacheDir, ref)
@@ -273,15 +273,15 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 	assert.Equal(t, "run the gate.\nit reaches every project.\n\nan aside."+see, string(stored))
 	assert.Equal(t, adviceVerdictID, servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 
-	got, ref = shapeAdvice(t.Context(), gate, string(advisoryPushGate), "a brief.", whys, false)
+	got, ref = shapeAdvice(withSecrets(t.Context()), gate, string(advisoryPushGate), "a brief.", whys, false)
 	assert.Equal(t, "a brief.", got, "no rationale, nothing to store")
 	assert.Empty(t, ref)
 
-	got, ref = shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.", whys, true)
+	got, ref = shapeAdvice(withSecrets(t.Context()), gate, string(advisoryPushGate), "run the gate.", whys, true)
 	assert.Equal(t, "run the gate.", got, "a preview stores nothing, so it cites nothing")
 	assert.Empty(t, ref)
 
-	got, ref = shapeAdvice(t.Context(), hint.Gate{}, string(advisoryPushGate), "run the gate.", whys, false)
+	got, ref = shapeAdvice(withSecrets(t.Context()), hint.Gate{}, string(advisoryPushGate), "run the gate.", whys, false)
 	assert.Equal(t, "run the gate.\nit reaches every project."+see, got, "with nowhere to store it, the advisory speaks in full")
 	assert.Empty(t, ref)
 }
@@ -297,7 +297,7 @@ func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, filepath.Join(realPath(r.main), ".magus"), primary)
 
-	ref := storeVerdict(t.Context(), cacheDir, "denied: a verdict")
+	ref := storeVerdict(withSecrets(t.Context()), cacheDir, "denied: a verdict")
 	require.NotEmpty(t, ref)
 	for _, dir := range []string{cacheDir, primary} {
 		got, err := loggedPayload(dir, ref)
@@ -341,7 +341,7 @@ func TestALapseDenyIsNeverWordedAsARepeat(t *testing.T) {
 	gate := hint.NewGate(t.TempDir(), "lapse")
 	const reason = "the guard did not finish reading this workspace's target policies."
 	for range 3 {
-		got, _, _ := shapeDeny(t.Context(), gate, string(advisoryUnfinished), reason, "", "", nil, false)
+		got, _, _ := shapeDeny(withSecrets(t.Context()), gate, string(advisoryUnfinished), reason, "", "", nil, false)
 		assert.Equal(t, reason, got)
 		assert.NotContains(t, got, "denied again")
 	}

@@ -38,7 +38,7 @@ func writeMagusfile(t *testing.T, dir, body string) {
 // return value.
 func runTargetIn(t *testing.T, dir, target string, args ...string) error {
 	t.Helper()
-	_, err := interp.RunDir(context.Background(), dir, target, args)
+	_, err := interp.RunDir(testCtx(), dir, target, args)
 	return err
 }
 
@@ -310,7 +310,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (fs.methods.len() == 0) { magus\fatal("fs module has no methods"); }
     if (fs.methods[0].buzz == "") { magus\fatal("fs method missing its Buzz signature"); }
 }`)
-	_, err := interp.RunDir(context.Background(), dir, "check", nil)
+	_, err := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, err, "magus.modules/module end-to-end")
 }
 
@@ -332,7 +332,7 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n" +
 		"    if (got != want) { magus\\fatal(\"renderPartials mismatch: got \" + got); }\n" +
 		"}")
-	_, err := interp.RunDir(context.Background(), dir, "check", nil)
+	_, err := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, err, "template.renderPartials end-to-end")
 }
 
@@ -1135,7 +1135,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
-	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
 	require.NoError(t, runErr)
 
 	src, err := interp.Find(dir)
@@ -1166,7 +1166,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1188,7 +1188,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1206,7 +1206,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     }
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1228,7 +1228,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1246,7 +1246,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     fs\removeAll("todelete");
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 	_, err := os.Stat(target)
 	assert.True(t, os.IsNotExist(err), "expected todelete to be removed")
@@ -1292,7 +1292,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (!sawMagusfile) { throw "status listed some other repo's files"; }
 }
 `)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1812,7 +1812,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     term\notify("plain");
     log\info("also logged");
 }`)
-	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
 	require.NoError(t, runErr, "term.notify with a LogLevel case")
 }
 

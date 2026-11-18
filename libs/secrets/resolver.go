@@ -67,8 +67,8 @@ type resolvedKey struct {
 // reference resolved to, and the endpoints opened for grants. A Resolver reads through
 // one provider, fixed for the value; [Resolver.WithProvider] derives a Resolver that
 // reads through another and shares this one's state. It is safe for concurrent use. A
-// nil *Resolver is usable: every method degrades to "nothing resolved, nothing to
-// redact", or errors where a value was asked for.
+// nil *Resolver reads, registers and redacts nothing: each of those is a
+// *[NoResolverError].
 type Resolver struct {
 	// provider is the provider this Resolver reads through; empty means the built-in.
 	provider string
@@ -418,7 +418,9 @@ func (r *Resolver) addRedactable(v Secret) {
 // Redact replaces every value this resolver has registered with the mask. It returns p
 // unchanged, without copying, when there is nothing to do: the overwhelmingly common
 // case on an output-capture hot path. Callers must not retain p after a no-op return: it
-// is the caller's own buffer, handed straight back.
+// is the caller's own buffer, handed straight back. A nil Resolver is a
+// *[NoResolverError] and returns nothing, because nothing it could return is known
+// to be masked.
 //
 // LIMITS, which callers must not overstate:
 //   - Only values read or registered through this resolver are known.
@@ -426,8 +428,15 @@ func (r *Resolver) addRedactable(v Secret) {
 //     registered alongside the raw value; ANY other transform (a different alphabet,
 //     compression, splitting the value across a delimiter) defeats it.
 //   - A secret straddling two calls is masked only if both halves land in one call.
-func (r *Resolver) Redact(p []byte) []byte {
-	if r == nil || len(p) == 0 {
+func (r *Resolver) Redact(p []byte) ([]byte, error) {
+	if r == nil {
+		return nil, &NoResolverError{}
+	}
+	return r.redact(p), nil
+}
+
+func (r *Resolver) redact(p []byte) []byte {
+	if len(p) == 0 {
 		return p
 	}
 	r.mu.RLock()
@@ -459,8 +468,15 @@ func (r *Resolver) hasSecrets() bool {
 }
 
 // RedactString is [Resolver.Redact] for text already in string form.
-func (r *Resolver) RedactString(s string) string {
-	if r == nil || s == "" {
+func (r *Resolver) RedactString(s string) (string, error) {
+	if r == nil {
+		return "", &NoResolverError{}
+	}
+	return r.redactString(s), nil
+}
+
+func (r *Resolver) redactString(s string) string {
+	if s == "" {
 		return s
 	}
 	r.mu.RLock()
@@ -472,10 +488,14 @@ func (r *Resolver) RedactString(s string) string {
 }
 
 // Redact redacts p using ctx's resolver, returning p unchanged (and UNCOPIED, still the
-// caller's own buffer) when there is no resolver or nothing matched.
-func Redact(ctx context.Context, p []byte) []byte { return ResolverFromContext(ctx).Redact(p) }
+// caller's own buffer) when nothing matched. A ctx with no resolver is a
+// *[NoResolverError].
+func Redact(ctx context.Context, p []byte) ([]byte, error) {
+	return ResolverFromContext(ctx).Redact(p)
+}
 
-// RedactString redacts s using ctx's resolver.
-func RedactString(ctx context.Context, s string) string {
+// RedactString redacts s using ctx's resolver. A ctx with no resolver is a
+// *[NoResolverError].
+func RedactString(ctx context.Context, s string) (string, error) {
 	return ResolverFromContext(ctx).RedactString(s)
 }

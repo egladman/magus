@@ -19,12 +19,19 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+// withSecrets gives a test context the resolver every production context carries;
+// redaction refuses to run without one.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
 
 // sinkEvents is one sample of every event an invocation emits through its sink.
 var sinkEvents = []any{
@@ -84,7 +91,7 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 				var stdout, stderr bytes.Buffer
 				s, err := NewSink(format, &stdout, &stderr, WithSinkLevel(slog.LevelDebug))
 				require.NoError(t, err)
-				s.emit(t.Context(), e)
+				s.emit(withSecrets(t.Context()), e)
 				require.NoError(t, s.Close())
 
 				if format != output.JSONL {
@@ -133,7 +140,7 @@ func TestAFormatIsOneEncoder(t *testing.T) {
 
 	s, err := NewSink(unreleased, io.Discard, io.Discard)
 	require.NoError(t, err)
-	ctx := t.Context()
+	ctx := withSecrets(t.Context())
 	s.EmitScope(ctx, "api", "magusfile", []string{"api"})
 	s.EmitCharms(ctx, "rw")
 	s.EmitCache(ctx, "local", "read+write", "")
@@ -180,7 +187,7 @@ func TestNewSinkRefusesMisconfiguration(t *testing.T) {
 // than vanishing: the classification test keeps real events off this path.
 func TestTextSinkPrintsAnUnrenderedEvent(t *testing.T) {
 	var out bytes.Buffer
-	textEncoder{term: &plainTerminal{w: &out}}.encode(t.Context(), report.TargetResult{Project: "api"})
+	textEncoder{term: &plainTerminal{w: &out}}.encode(withSecrets(t.Context()), report.TargetResult{Project: "api"})
 	assert.Contains(t, out.String(), unrenderedEvent)
 }
 
@@ -190,7 +197,7 @@ func TestTextSinkProse(t *testing.T) {
 		var out bytes.Buffer
 		s, err := NewSink(output.Text, io.Discard, &out)
 		require.NoError(t, err)
-		s.emit(t.Context(), e)
+		s.emit(withSecrets(t.Context()), e)
 		return out.String()
 	}
 	for _, c := range []struct {
@@ -238,7 +245,7 @@ func (s *TextSinkSummarySuite) render(e report.RunSummary) string {
 	var out bytes.Buffer
 	sink, err := NewSink(output.Text, io.Discard, &out)
 	s.Require().NoError(err)
-	sink.emit(s.T().Context(), e)
+	sink.emit(withSecrets(s.T().Context()), e)
 	return out.String()
 }
 
@@ -267,10 +274,11 @@ func (s *TextSinkSummarySuite) TestPlainFooterNamesFailedRefs() {
 	term := &plainTerminal{w: &out}
 	rec := slog.NewRecord(time.Now(), slog.LevelError, "cache.error", 0)
 	rec.AddAttrs(slog.String("project", "api"), slog.String("target", "test"), slog.String("ref", "outfail00000001"))
-	s.Require().NoError(term.Handle(s.T().Context(), rec))
+	ctx := withSecrets(s.T().Context())
+	s.Require().NoError(term.Handle(ctx, rec))
 	out.Reset()
 
-	s.Require().NoError(term.EndRun(s.T().Context(), "summary: 0 cached, 1 ran, 1 failed (1s)\n"))
+	s.Require().NoError(term.EndRun(ctx, "summary: 0 cached, 1 ran, 1 failed (1s)\n"))
 	s.Contains(out.String(), "summary: 0 cached, 1 ran, 1 failed (1s)\n[fail] api test  outfail00000001\n")
 	s.Contains(out.String(), "outputs: ")
 }
@@ -278,7 +286,7 @@ func (s *TextSinkSummarySuite) TestPlainFooterNamesFailedRefs() {
 func (s *TextSinkSummarySuite) TestPlainFooterWithoutFailureIsUnchanged() {
 	var out bytes.Buffer
 	term := &plainTerminal{w: &out}
-	s.Require().NoError(term.EndRun(s.T().Context(), "summary: 1 cached, 0 ran, 0 failed (1s)\n"))
+	s.Require().NoError(term.EndRun(withSecrets(s.T().Context()), "summary: 1 cached, 0 ran, 0 failed (1s)\n"))
 	s.Equal("summary: 1 cached, 0 ran, 0 failed (1s)\n", out.String())
 }
 
@@ -295,7 +303,7 @@ func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {
 	var out bytes.Buffer
 	s, err := NewSink(output.Text, io.Discard, &out, WithSinkLevel(slog.LevelError))
 	require.NoError(t, err)
-	ctx := t.Context()
+	ctx := withSecrets(t.Context())
 	s.EmitScope(ctx, "api", "", nil)
 	s.emit(ctx, report.RunSummary{Hits: 1})
 	s.EmitNotice(ctx, slog.LevelWarn, "", "silent-run notice")
@@ -319,12 +327,13 @@ func TestTextSinkRendersANoticeAsAHint(t *testing.T) {
 	var buf bytes.Buffer
 	s, err := NewSink(output.Text, io.Discard, &buf)
 	require.NoError(t, err)
-	s.EmitNotice(t.Context(), slog.LevelWarn, "MGS1028", "notice-one")
+	ctx := withSecrets(t.Context())
+	s.EmitNotice(ctx, slog.LevelWarn, "MGS1028", "notice-one")
 	assert.Equal(t, "hint: [MGS1028] notice-one\n", buf.String())
 
 	buf.Reset()
 	interactive.SetHintsEnabled(false)
-	s.EmitNotice(t.Context(), slog.LevelWarn, "", "notice-two")
+	s.EmitNotice(ctx, slog.LevelWarn, "", "notice-two")
 	assert.Empty(t, buf.String())
 }
 
@@ -334,10 +343,11 @@ func TestJSONLSinkRecordsHeaders(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	s, err := NewSink(output.JSONL, &stdout, &stderr)
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "magusfile", []string{"api"})
-	s.EmitBase(t.Context(), "git diff vs main")
-	s.EmitNotice(t.Context(), slog.LevelWarn, types.AffectedSetUncomputable, "full build")
-	s.EmitDiagnostic(t.Context(), "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
+	ctx := withSecrets(t.Context())
+	s.EmitScope(ctx, "api", "magusfile", []string{"api"})
+	s.EmitBase(ctx, "git diff vs main")
+	s.EmitNotice(ctx, slog.LevelWarn, types.AffectedSetUncomputable, "full build")
+	s.EmitDiagnostic(ctx, "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
 	require.NoError(t, s.Close())
 
 	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api","source":"magusfile","projects":["api"]}
@@ -354,8 +364,9 @@ func TestJSONLSinkOverOneWriter(t *testing.T) {
 	var both bytes.Buffer
 	s, err := NewSink(output.JSONL, &both, &both)
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "", nil)
-	s.EmitNotice(t.Context(), slog.LevelInfo, "", "same stream")
+	ctx := withSecrets(t.Context())
+	s.EmitScope(ctx, "api", "", nil)
+	s.EmitNotice(ctx, slog.LevelInfo, "", "same stream")
 	require.NoError(t, s.Close())
 	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api"}
 {"api_version":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"same stream"}
@@ -368,9 +379,10 @@ func TestJSONLSinkFilter(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	s, err := NewSink(output.JSONL, &stdout, &stderr, WithSinkFilter([]string{report.TypeShardTotal}))
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "", nil)
-	s.EmitShardTotal(t.Context(), "2", 4, 1500*time.Millisecond)
-	s.EmitNotice(t.Context(), slog.LevelInfo, "", "kept")
+	ctx := withSecrets(t.Context())
+	s.EmitScope(ctx, "api", "", nil)
+	s.EmitShardTotal(ctx, "2", 4, 1500*time.Millisecond)
+	s.EmitNotice(ctx, slog.LevelInfo, "", "kept")
 	require.NoError(t, s.Close())
 	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"shard.total","shard":"2","n_shards":4,"duration_ms":1500}
 `, stdout.String())
@@ -386,8 +398,9 @@ func TestTextSinkWithRecords(t *testing.T) {
 	var stdout, stderr, records bytes.Buffer
 	s, err := NewSink(output.Text, &stdout, &stderr, WithSinkRecords(&records))
 	require.NoError(t, err)
-	s.EmitScope(t.Context(), "api", "pipe", []string{"api"})
-	s.EmitNotice(t.Context(), slog.LevelInfo, "", "tee notice")
+	ctx := withSecrets(t.Context())
+	s.EmitScope(ctx, "api", "pipe", []string{"api"})
+	s.EmitNotice(ctx, slog.LevelInfo, "", "tee notice")
 	require.NoError(t, s.Close())
 
 	assert.Empty(t, stdout.String())
@@ -448,7 +461,7 @@ func TestJSONLSinkNeverDropsARecord(t *testing.T) {
 	go func() {
 		defer close(done)
 		for range n {
-			s.emit(context.Background(), report.RunStep{Label: "x", Status: "pass"})
+			s.emit(withSecrets(context.Background()), report.RunStep{Label: "x", Status: "pass"})
 		}
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -469,19 +482,20 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: types.MustParseGlobs("**/*.go")}
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
+	ctx := withSecrets(t.Context())
 	var text bytes.Buffer
 	ts, err := NewSink(output.Text, io.Discard, &text)
 	require.NoError(t, err)
-	checkOutputOverlap(t.Context(), steps, ts)
-	checkMissingDependencies(t.Context(), []*types.Project{consumer}, nil, written, ".", ts)
+	checkOutputOverlap(ctx, steps, ts)
+	checkMissingDependencies(ctx,[]*types.Project{consumer}, nil, written, ".", ts)
 	assert.Contains(t, text.String(), "["+string(types.OutputOverlapDetected)+"] declared output overlap")
 	assert.Contains(t, text.String(), "["+string(types.MissingDependencyDetected)+"] potential undeclared dependency")
 
 	var buf bytes.Buffer
 	js, err := NewSink(output.JSONL, &buf, io.Discard)
 	require.NoError(t, err)
-	checkOutputOverlap(t.Context(), steps, js)
-	checkMissingDependencies(t.Context(), []*types.Project{consumer}, nil, written, ".", js)
+	checkOutputOverlap(ctx, steps, js)
+	checkMissingDependencies(ctx,[]*types.Project{consumer}, nil, written, ".", js)
 	require.NoError(t, js.Close())
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	require.Len(t, lines, 2)

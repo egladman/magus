@@ -70,6 +70,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -161,6 +162,10 @@ func runCLI() int {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
 	}
+	// Redaction refuses a context with no resolver, so every path starts with one. It
+	// holds nothing until a workspace's own resolver replaces it or a read registers a
+	// value.
+	rootCtx = secrets.WithResolver(rootCtx, recorder.NewSecretResolver())
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = recorder.ContextWithEntryPoint(rootCtx, jobtypes.EntryPointCLI)
 	rootCtx = interactive.WithHints(rootCtx)

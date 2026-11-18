@@ -208,8 +208,8 @@ func (s *EndpointSuite) TestURLIsRedactable() {
 	require.NoError(t, err)
 
 	line := "OPENAI_BASE_URL=" + base
-	assert.NotContains(t, res.RedactString(line), base, "the endpoint token survived redaction")
-	assert.Contains(t, res.RedactString(line), mask)
+	assert.NotContains(t, res.redactString(line), base, "the endpoint token survived redaction")
+	assert.Contains(t, res.redactString(line), mask)
 }
 
 // TestRejectsInvalidGrant: the same validation grant() applies, because an
@@ -472,7 +472,7 @@ func (s *EndpointSuite) TestTokenAloneIsRedactable() {
 	require.NotEmpty(t, tok)
 
 	line := fmt.Sprintf("GET /%s/v1/models HTTP/1.1", tok)
-	assert.NotContains(t, res.RedactString(line), tok, "the endpoint token survived redaction")
+	assert.NotContains(t, res.redactString(line), tok, "the endpoint token survived redaction")
 }
 
 // TestRejectsNonLoopbackHost closes DNS rebinding categorically rather than
@@ -614,14 +614,14 @@ func (s *EndpointSuite) TestReclaimsRedactionOnShutdown() {
 	resp, err := http.Get(base + "/v1/models")
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	require.NotContains(t, res.RedactString(base), base, "the endpoint URL was never registered")
+	require.NotContains(t, res.redactString(base), base, "the endpoint URL was never registered")
 
 	cancel()
 	assert.Eventually(t, func() bool {
-		return res.RedactString(base) == base
+		return res.redactString(base) == base
 	}, 5*time.Second, 25*time.Millisecond, "the endpoint's redaction strings were never reclaimed")
 
-	assert.Equal(t, "***", res.RedactString("sk-upstream-value"),
+	assert.Equal(t, "***", res.redactString("sk-upstream-value"),
 		"a resolved credential was reclaimed along with the endpoint; it stays valid and must stay masked")
 	assert.Zero(t, res.endpointCount(), "the shut-down forwarder stayed in the endpoint map")
 }

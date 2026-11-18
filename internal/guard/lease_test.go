@@ -214,7 +214,7 @@ func verifyRepeatRepository(t *testing.T, runs int, outcome string) (context.Con
 	require.NoError(t, sessions.RecordGate(t.Context(), dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
 	}, session.InvocationStart{Workspace: repo.Root()}))
-	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
+	return withSecrets(context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()})), repo
 }
 
 // From the third gate in the window, a gate over a tree its newest verdict passed and that
@@ -4649,7 +4649,7 @@ func (s *LeaseBoundarySuite) SetupTest() {
 }
 
 func (s *LeaseBoundarySuite) leaseContext() context.Context {
-	return context.WithValue(s.T().Context(), locationKey{}, s.loc)
+	return withSecrets(context.WithValue(s.T().Context(), locationKey{}, s.loc))
 }
 
 func (s *LeaseBoundarySuite) deny(command string) string {

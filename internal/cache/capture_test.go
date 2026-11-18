@@ -32,7 +32,7 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 	lp := filepath.Join(blockedDir, "deadbeef.log")
 
 	fnCalled := false
-	_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(context.Context) error {
+	_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(context.Context) error {
 		fnCalled = true
 		return nil
 	})
@@ -61,7 +61,7 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 func TestLineTapIsSafeForConcurrentWriters(t *testing.T) {
 	t.Parallel()
 
-	tap := newLineEmitter(context.Background(), "proj", "ci").
+	tap := newLineEmitter(withResolver(context.Background()), "proj", "ci").
 		newLineTap(io.Discard, "stdout")
 
 	// Two writers, mirroring two fanned-out children sharing one tap. The payload is
@@ -92,7 +92,7 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 	t.Parallel()
 
 	var sink strings.Builder
-	tap := newLineEmitter(context.Background(), "proj", "build").
+	tap := newLineEmitter(withResolver(context.Background()), "proj", "build").
 		newLineTap(&sink, "stdout")
 
 	_, err := tap.Write([]byte("half"))

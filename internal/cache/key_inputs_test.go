@@ -61,7 +61,7 @@ func TestPersistKeyInputsStoresNoEnvValues(t *testing.T) {
 	s := NewOutputStore(dir)
 	const key = "d00dfeedd00dfeed"
 	ref := mustPersist(t, s, key, []byte("ok\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"env:TOKEN=sk-live-super-secret"}))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, []string{"env:TOKEN=sk-live-super-secret"}))
 
 	raw, err := os.ReadFile(filepath.Join(dir, "outputs", key, keyInputsName))
 	require.NoError(t, err)
@@ -80,16 +80,16 @@ func TestPersistKeyInputsSkipsAnIdenticalRewrite(t *testing.T) {
 	s := NewOutputStore(dir)
 	const key = "cafebabecafebabe"
 	path := filepath.Join(dir, "outputs", key, keyInputsName)
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:a"}))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, []string{"projectPath:a"}))
 	past := time.Now().Add(-time.Hour).Truncate(time.Second)
 	require.NoError(t, os.Chtimes(path, past, past))
 
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:a"}))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, []string{"projectPath:a"}))
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.True(t, fi.ModTime().Equal(past), "identical lines must not rewrite the file")
 
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:b"}))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, []string{"projectPath:b"}))
 	got, err := s.KeyInputsByKey(key)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"projectPath:b"}, got)
@@ -103,7 +103,7 @@ func TestKeyInputsRoundTripByRef(t *testing.T) {
 	lines := []string{"keyVersion:3", "projectPath:pkg/a", "src:pkg/a/main.go:abc123:0", "env:GOFLAGS=-trimpath"}
 
 	ref := mustPersist(t, s, key, []byte("ok\n"), OutputDescriptor{Project: "pkg/a", Target: "build"})
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, lines))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, lines))
 
 	// What comes back is the DIGESTED form (env values never reach disk); every other
 	// class round-trips verbatim.
@@ -134,7 +134,7 @@ func TestKeyInputsFileInvisibleToAttemptScanners(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	const key = "beefbeefbeefbeef"
 	ref := mustPersist(t, s, key, []byte("ok\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"keyVersion:3"}))
+	require.NoError(t, s.PersistKeyInputs(withResolver(context.Background()), key, []string{"keyVersion:3"}))
 
 	attempts, err := s.Attempts(ref)
 	require.NoError(t, err)
@@ -258,11 +258,11 @@ func TestHashStepLinesMatchesHash(t *testing.T) {
 	step.Target = "build"
 
 	var lines []string
-	withLines, err := c.hashStepInputs(context.Background(), &step, &lines)
+	withLines, err := c.hashStepInputs(withResolver(context.Background()), &step, &lines)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
-	plain, err := c.hashStep(context.Background(), &step)
+	plain, err := c.hashStep(withResolver(context.Background()), &step)
 	require.NoError(t, err)
 	assert.Equal(t, plain, withLines, "collecting lines must not change the key")
 
@@ -285,7 +285,7 @@ func TestRunPersistsKeyInputsAndAgainstDiffNamesTheDrift(t *testing.T) {
 	step.Target = "build"
 	step.EnvAllow = []string{"MAGUS_KEYLINE_PROBE"}
 
-	r, err := c.Run(context.Background(), step, func(ctx context.Context) error { return nil })
+	r, err := c.Run(withResolver(context.Background()), step, func(ctx context.Context) error { return nil })
 	require.NoError(t, err)
 
 	stored, err := c.outputs.KeyInputsByRef(r.Ref)
@@ -295,7 +295,7 @@ func TestRunPersistsKeyInputsAndAgainstDiffNamesTheDrift(t *testing.T) {
 	// digested exactly as the stored ones were, so the two sides stay comparable.
 	writeMain(t, root, "package main // edited")
 	t.Setenv("MAGUS_KEYLINE_PROBE", "after")
-	_, raw, err := c.StepKey(context.Background(), &step)
+	_, raw, err := c.StepKey(withResolver(context.Background()), &step)
 	require.NoError(t, err)
 	live := DigestEnvValues(raw)
 
@@ -365,7 +365,7 @@ func TestFirstKeyInputChangePairsAMovedToolVersion(t *testing.T) {
 // store persists them. Fixtures built this way cannot drift from the producer.
 func producedKeyInputs(t *testing.T, c *Cache, step *Step) []string {
 	t.Helper()
-	_, lines, err := c.StepKey(t.Context(), step)
+	_, lines, err := c.StepKey(withResolver(t.Context()), step)
 	require.NoError(t, err, "StepKey")
 	return DigestEnvValues(lines)
 }
@@ -512,7 +512,8 @@ func TestKeyInputsRedactBothSidesOfAComparison(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, strings.Join(stored, "\n"), token, "the stored side is redacted at write")
 
-	live := RedactKeyInputs(ctx, digested)
+	live, err := RedactKeyInputs(ctx, digested)
+	require.NoError(t, err)
 	assert.Empty(t, DiffKeyInputs(stored, live), "both sides redacted: nothing to diff")
 	assert.Empty(t, FirstKeyInputChange(stored, live))
 	assert.NotEmpty(t, DiffKeyInputs(stored, digested), "and the live-side redaction is what earns that")

@@ -77,8 +77,9 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.NoError(t, err, "NewSink")
 
 	obs := stageObserver{out: sink, label: "fixture", policies: targetPolicies(p)}
-	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
-	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
+	ctx := withSecrets(t.Context())
+	obs.TargetEnd(ctx, "security", time.Second, errors.New("govulncheck: exit 1"))
+	obs.TargetEnd(ctx, "test", time.Second, errors.New("go test: exit 1"))
 
 	assert.Contains(t, out.String(), "[advisory] fixture security")
 	assert.Contains(t, out.String(), "[fail] fixture test",

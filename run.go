@@ -296,10 +296,15 @@ func undeclaredScopeEvent(targets []types.Target) (journal.Scope, bool) {
 //
 // The chain is preserved through Unwrap, so errors.Is/As keep working.
 func (m *Magus) redactError(err error) error {
-	if err == nil || m.resolver == nil {
+	if err == nil {
 		return err
 	}
-	msg := m.resolver.RedactString(err.Error())
+	msg, rerr := m.resolver.RedactString(err.Error())
+	if rerr != nil {
+		// The message cannot be shown masked, so it is not shown: the chain still answers
+		// errors.Is and errors.As.
+		return redactedError{msg: rerr.Error(), err: err}
+	}
 	if msg == err.Error() {
 		return err
 	}

@@ -38,7 +38,9 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ci", user)
 	assert.Equal(t, "ghp_abcdef123456", pass.Reveal())
-	assert.Equal(t, "token=***", r.RedactString("token=ghp_abcdef123456"))
+	red, err := r.RedactString("token=ghp_abcdef123456")
+	require.NoError(t, err)
+	assert.Equal(t, "token=***", red)
 
 	_, _, err = registryCredential(t.Context(), spells, "docker.io", r)
 	require.ErrorContains(t, err, "no entry for docker.io")

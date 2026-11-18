@@ -82,7 +82,7 @@ func (h redactingHandler) WithGroup(n string) slog.Handler {
 func redactValue(r *Resolver, v slog.Value) slog.Value {
 	switch v.Kind() {
 	case slog.KindString:
-		return slog.StringValue(r.RedactString(v.String()))
+		return slog.StringValue(r.redactString(v.String()))
 	case slog.KindGroup:
 		as := v.Group()
 		out := make([]slog.Attr, len(as))
@@ -98,15 +98,15 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 		case []string:
 			out := make([]string, len(t))
 			for i, s := range t {
-				out[i] = r.RedactString(s)
+				out[i] = r.redactString(s)
 			}
 			return slog.AnyValue(out)
 		case []byte:
 			// Rendered by fmt as decimal bytes but base64'd by encoding/json, so the
 			// fallback below cannot see the secret in either form the reader gets.
-			return slog.AnyValue(r.Redact(t))
+			return slog.AnyValue(r.redact(t))
 		case error:
-			if red := r.RedactString(t.Error()); red != t.Error() {
+			if red := r.redactString(t.Error()); red != t.Error() {
 				return slog.StringValue(red)
 			}
 			return v
@@ -119,11 +119,11 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 		// cooperate. Reached only when the resolver holds something, so the marshal is off
 		// the ordinary path entirely.
 		rendered := v.String()
-		if red := r.RedactString(rendered); red != rendered {
+		if red := r.redactString(rendered); red != rendered {
 			return slog.StringValue(red)
 		}
 		if enc, err := json.Marshal(v.Any()); err == nil {
-			if red := r.RedactString(string(enc)); red != string(enc) {
+			if red := r.redactString(string(enc)); red != string(enc) {
 				// The value is unsafe in its own encoding, so hand the handler text it
 				// cannot re-expand: the redacted JSON, as a string.
 				return slog.StringValue(red)
@@ -172,7 +172,7 @@ func (h redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 		inner = inner.WithAttrs(redactAttrs(res, op.attrs))
 	}
 
-	out := slog.NewRecord(r.Time, r.Level, res.RedactString(r.Message), r.PC)
+	out := slog.NewRecord(r.Time, r.Level, res.redactString(r.Message), r.PC)
 	r.Attrs(func(a slog.Attr) bool {
 		a.Value = redactValue(res, a.Value)
 		out.AddAttrs(a)

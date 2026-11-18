@@ -382,7 +382,7 @@ func (s *PressureRetrySuite) refusedAgo(ago time.Duration) context.Context {
 	runsDir := filepath.Join(cacheDir, "runs")
 	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
 	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-ago), types.MemoryPressureHigh, "run", "lint", ".")
-	return context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
+	return withSecrets(context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir}))
 }
 
 func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() {
@@ -432,7 +432,7 @@ func TestDenyRefusedRetry(t *testing.T) {
 		require.NoError(t, os.MkdirAll(runsDir, 0o755))
 		writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-refusedAgo), refused, refusedArgv...)
 		writeRefusalLog(t, runsDir, "invother", time.Now().Add(-5*time.Second), false, "run", "lint", ".")
-		return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir})
+		return withSecrets(context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir}))
 	}
 
 	t.Run("a repeat inside the minute", func(t *testing.T) {

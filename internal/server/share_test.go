@@ -86,7 +86,7 @@ func TestShareMintIsAudited(t *testing.T) {
 
 	minter := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: auth.AccessConsole()}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
-	req = req.WithContext(recorder.ContextWithCredential(req.Context(), minter))
+	req = req.WithContext(recorder.ContextWithCredential(withSecrets(req.Context()), minter))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())

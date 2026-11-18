@@ -53,7 +53,7 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 	recordGuardDenial(t, base, "claude-code", "session-1")
 	recordGuardDenial(t, base, "claude-code", "session-1")
 	recordGuardDenial(t, base, "claude-code", "session-1")
-	recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
+	recorder.AppendAgentCommand(withSecrets(context.Background()), base, recorder.AgentCommand{
 		Host: "claude-code", Session: "session-1", Tool: "shell.command",
 		Command: "magus run test .", Decision: verdict.Defer,
 	})
@@ -93,7 +93,7 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 // the guard writes to the activity trail on a real deny.
 func recordGuardDenial(t *testing.T, base, host, session string) {
 	t.Helper()
-	recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
+	recorder.AppendAgentCommand(withSecrets(context.Background()), base, recorder.AgentCommand{
 		Host: host, Session: session, Tool: "shell.command", Command: "go test ./...",
 		Decision: verdict.Deny, Reason: "run through magus", Rule: "raw-tool",
 	})

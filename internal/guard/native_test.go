@@ -47,7 +47,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 	deps := strict(testDependencies())
 	deps.SymbolDefined = func(name string) (bool, bool) { return name == "HandleRequest", true }
 	deps.GraphIDs = kindLookup(map[string][]string{types.KindFile: {"file:internal/api/handler.go", "file:internal/api/gen/handler.go"}})
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})
+	ctx := withSecrets(context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root}))
 	envelope := func(tool string, input map[string]any) string {
 		raw, err := codec.Marshal(map[string]any{
 			"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": root, "tool_input": input,

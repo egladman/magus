@@ -21,7 +21,7 @@ import (
 // against children of a known size; here what matters is only that the fold picks
 // the larger and that a running command is sampled at all.
 func TestSamplerNeverReportsLessThanTheKernel(t *testing.T) {
-	res, err := Exec(context.Background(), "sh",
+	res, err := Exec(withTestResolver(context.Background()), "sh",
 		[]string{"-c", "sleep 0.6"}, ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	require.True(t, res.Started)
@@ -92,7 +92,7 @@ func TestOneTickReadsTheTableOnceForEveryRoot(t *testing.T) {
 // A command shorter than one sample tick still reports the kernel's figure: the
 // sampler contributes nothing and must not subtract anything either.
 func TestShortCommandStillReportsKernelFigure(t *testing.T) {
-	res, err := Exec(context.Background(), "sh", []string{"-c", "echo hi"}, ExecOptions{Capture: true})
+	res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", "echo hi"}, ExecOptions{Capture: true})
 	require.NoError(t, err)
 	require.True(t, res.Started)
 	assert.Positive(t, res.MaxRSSBytes, "the kernel figure survives when sampling finds nothing")

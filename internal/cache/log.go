@@ -423,7 +423,12 @@ func (h *PrettyHandler) printf(ctx context.Context, format string, args ...any) 
 	//
 	// The resolver comes from ctx, the record context Handle was called with, so
 	// the value being printed never has to know secrets exist.
-	_, err := fmt.Fprintf(h.w, "%s", secrets.RedactString(ctx, fmt.Sprintf(format, args...)))
+	line, err := secrets.RedactString(ctx, fmt.Sprintf(format, args...))
+	if err != nil {
+		h.fail(err)
+		return
+	}
+	_, err = fmt.Fprintf(h.w, "%s", line)
 	h.fail(err)
 }
 

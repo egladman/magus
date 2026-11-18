@@ -61,7 +61,7 @@ func (s *UnverifiedReaderSuite) newCheckout() *testkit.Repo {
 }
 
 func (s *UnverifiedReaderSuite) passed(repo *testkit.Repo, key, revision string) {
-	_, err := cache.NewOutputStore(filepath.Join(repo.Root(), ".magus")).Persist(s.T().Context(), key, []byte("ok\n"), cache.OutputDescriptor{
+	_, err := cache.NewOutputStore(filepath.Join(repo.Root(), ".magus")).Persist(withSecrets(s.T().Context()), key, []byte("ok\n"), cache.OutputDescriptor{
 		Project: ".", Target: "test", Revision: revision, TimestampMs: time.Now().UnixMilli(),
 	})
 	s.Require().NoError(err)
@@ -71,9 +71,9 @@ func (s *UnverifiedReaderSuite) TestTheReadIsAnsweredOncePerJudgment() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
 	read := guardUnverified(s.deps)
 
-	first, err := read(s.T().Context(), s.repo.Root(), head)
+	first, err := read(withSecrets(s.T().Context()), s.repo.Root(), head)
 	s.Require().NoError(err)
-	second, err := read(s.T().Context(), s.repo.Root(), head)
+	second, err := read(withSecrets(s.T().Context()), s.repo.Root(), head)
 	s.Require().NoError(err)
 
 	s.Equal(first, second)
@@ -88,7 +88,7 @@ func (s *UnverifiedReaderSuite) TestTheReadLocatesTheCheckoutHoldingDir() {
 	s.passed(other, strings.Repeat("a", 64), head)
 	read := guardUnverified(s.deps)
 
-	got, err := read(s.T().Context(), other.Root(), head)
+	got, err := read(withSecrets(s.T().Context()), other.Root(), head)
 	s.Require().NoError(err)
 	s.Empty(got.Unknown)
 	s.Empty(got.Unverified, "the run recorded in the other checkout's store reads its file")
@@ -102,7 +102,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 		<-release
 		return nil, os.ErrClosed
 	}
-	ctx, cancel := context.WithTimeout(s.T().Context(), judgeReserve+100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(withSecrets(s.T().Context()), judgeReserve+100*time.Millisecond)
 	defer cancel()
 	ctx = withPhaseLog(ctx, journal.Phase{})
 
@@ -116,7 +116,7 @@ func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed(
 
 func (s *UnverifiedReaderSuite) TestAnEarlierRulesLapsedOpenIsNamedAsThatAndNotAsThisRead() {
 	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
-	ctx := withPhaseLog(s.T().Context(), journal.Phase{})
+	ctx := withPhaseLog(withSecrets(s.T().Context()), journal.Phase{})
 	judgmentPhases(ctx).record(timedPhase(phaseInspect, 2*time.Second, 2*time.Second, true))
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
@@ -129,12 +129,12 @@ func (s *UnverifiedReaderSuite) TestAnEarlierRulesLapsedOpenIsNamedAsThatAndNotA
 
 func (s *UnverifiedReaderSuite) TestNoInspectorRaises() {
 	s.deps.Inspect = nil
-	_, err := guardUnverified(s.deps)(s.T().Context(), s.repo.Root(), s.base)
+	_, err := guardUnverified(s.deps)(withSecrets(s.T().Context()), s.repo.Root(), s.base)
 	s.Require().ErrorContains(err, "this caller cannot open the workspace")
 }
 
 func (s *UnverifiedReaderSuite) TestADirNoCheckoutHoldsIsUnknown() {
-	got, err := guardUnverified(s.deps)(s.T().Context(), s.T().TempDir(), s.base)
+	got, err := guardUnverified(s.deps)(withSecrets(s.T().Context()), s.T().TempDir(), s.base)
 	s.Require().NoError(err)
 	s.Contains(got.Unknown, "is unread: fatal: not a git repository")
 }
@@ -144,7 +144,7 @@ func (s *UnverifiedReaderSuite) TestAnotherRepositoryIsReadAsNoWorkspace() {
 	s.deps.VCS = types.VCSOptions{BaseRef: other.Head()}
 	head := other.Commit("change", map[string]string{"README.md": "changed\n"})
 
-	got, err := guardUnverified(s.deps)(s.T().Context(), other.Root(), head)
+	got, err := guardUnverified(s.deps)(withSecrets(s.T().Context()), other.Root(), head)
 	s.Require().NoError(err)
 	s.Empty(got.Unknown)
 	s.Equal([]types.UnverifiedFile{{Path: "README.md"}}, got.Unverified, "no target declares it")
@@ -172,7 +172,7 @@ func (s *UnverifiedBudgetSuite) budgetWithin(left time.Duration, dryRun bool) ti
 }
 
 func (s *UnverifiedBudgetSuite) TestAnUnboundedJudgmentGetsTheShare() {
-	s.Equal(unverifiedShare, unverifiedBudget(s.T().Context(), unverifiedShare))
+	s.Equal(unverifiedShare, unverifiedBudget(withSecrets(s.T().Context()), unverifiedShare))
 }
 
 func (s *UnverifiedBudgetSuite) TestAWholeHookBudgetGetsTheShare() {

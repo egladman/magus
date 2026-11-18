@@ -106,7 +106,7 @@ fun main() > void !> any {
 func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 	dir := adviceDirWith(t, map[string]string{"echo.buzz": echoAdvisor})
 
-	sections, notes, err := collectAdvice(context.Background(), dir, []string{"echo.buzz"}, "main")
+	sections, notes, err := collectAdvice(withSecrets(context.Background()), dir, []string{"echo.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 func TestCollectAdviceKeepsARetraction(t *testing.T) {
 	dir := adviceDirWith(t, map[string]string{"quiet.buzz": retractingAdvisor})
 
-	sections, _, err := collectAdvice(context.Background(), dir, []string{"quiet.buzz"}, "main")
+	sections, _, err := collectAdvice(withSecrets(context.Background()), dir, []string{"quiet.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 	// with it and look identical to one that had nothing to say.
 	order := []string{"echo.buzz", "broken.buzz", "quiet.buzz"}
 
-	sections, notes, err := collectAdvice(context.Background(), dir, order, "main")
+	sections, notes, err := collectAdvice(withSecrets(context.Background()), dir, order, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 		t.Fatalf("warnings = %v, want BZZ3002 from the fixture", warnings)
 	}
 
-	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
+	sections, notes, err := collectAdvice(withSecrets(context.Background()), dir, []string{"warned.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
 	dir := adviceDirWith(t, map[string]string{"broken.buzz": brokenAdvisor})
 
-	_, notes, err := collectAdvice(context.Background(), dir, []string{"broken.buzz"}, "main")
+	_, notes, err := collectAdvice(withSecrets(context.Background()), dir, []string{"broken.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 	want := strings.TrimSpace(string(out))
 
 	dir := adviceDirWith(t, map[string]string{"range.buzz": rangeAdvisor})
-	sections, notes, err := collectAdvice(context.Background(), dir, []string{"range.buzz"}, "main")
+	sections, notes, err := collectAdvice(withSecrets(context.Background()), dir, []string{"range.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
 	dir := adviceDirWith(t, map[string]string{"stale.buzz": staleBaseAdvisor})
 
-	sections, notes, err := collectAdvice(context.Background(), dir, []string{"stale.buzz"}, "main")
+	sections, notes, err := collectAdvice(withSecrets(context.Background()), dir, []string{"stale.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}

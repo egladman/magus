@@ -20,10 +20,16 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
+	"github.com/egladman/magus/libs/secrets"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 )
+
+// withSecrets gives the trail writers the resolver they refuse to run without.
+func withSecrets(ctx context.Context) context.Context {
+	return secrets.WithResolver(ctx, secrets.NewResolver())
+}
 
 func actions(events []*activityv1.ActivityEvent) []string {
 	out := make([]string, len(events))
@@ -57,29 +63,29 @@ var consoleCred = jobtypes.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Nam
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
 	dir = t.TempDir()
-	response := recorder.WritePayload(t.Context(), dir, "mcp", []byte("the result body"))
+	response := recorder.WritePayload(withSecrets(t.Context()), dir, "mcp", []byte("the result body"))
 	respRef = response.Ref
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(1), Kind: journal.CallKindMCPTool, UserAgent: "claude-code/1.2.3",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointMCP, Host: "claude"},
 		Name:   "client", Outcome: journal.OutcomeOK,
 		Response: response, Preview: "the result body", Duration: 12 * time.Millisecond,
 	})
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(2), Kind: journal.CallKindTokenLifecycle,
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointRPC, Credential: consoleCred},
 		Name:   "connector.create", Outcome: journal.OutcomeOK,
 	})
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(3), Kind: journal.CallKindJob, Workspace: "/ws/a",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Name:   "graph build", Outcome: journal.OutcomeError, Error: "boom", Duration: 40 * time.Millisecond,
 	})
 	agentReqBody := []byte(`{"api_version":"magus.agent-command/v1alpha1","tool":"Bash","command":"go test ./..."}`)
 	agentRespBody := []byte(`{"api_version":"safetyscissors.verdict/v1alpha1","decision":"deny","reason":"use magus"}`)
-	request := recorder.WritePayload(t.Context(), dir, "agent", agentReqBody)
-	verdict := recorder.WritePayload(t.Context(), dir, "agent", agentRespBody)
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	request := recorder.WritePayload(withSecrets(t.Context()), dir, "agent", agentReqBody)
+	verdict := recorder.WritePayload(withSecrets(t.Context()), dir, "agent", agentRespBody)
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(4), Kind: journal.CallKindAgentCommand, Workspace: "/ws/a",
 		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
 		Lease:  "fleet/a", LeaseFrom: jobtypes.LeaseSourceMarker,
@@ -170,7 +176,7 @@ func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
 // ledger without a GetPayload per row, and the handed context reachable only by its ref.
 func TestListActivityEvents_CarriesAgentSpawn(t *testing.T) {
 	dir := t.TempDir()
-	recorder.AppendAgentSpawn(t.Context(), dir, recorder.AgentSpawn{
+	recorder.AppendAgentSpawn(withSecrets(t.Context()), dir, recorder.AgentSpawn{
 		Workspace: "/ws/a", Host: "claude-code", Session: "abc", Tool: "Task", Child: "Explore",
 		Context: "lease: notes-store-6b\naudit the store",
 	})
@@ -301,7 +307,7 @@ func seedAt(t *testing.T, ts ...int64) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, at := range ts {
-		recorder.AppendCall(t.Context(), dir, journal.Call{
+		recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 			Time: time.UnixMilli(at), Kind: journal.CallKindJob, Workspace: "/ws" + dir,
 			Name: fmt.Sprintf("job-%d", at), Outcome: journal.OutcomeOK,
 		})
@@ -458,11 +464,11 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {
 	dir := t.TempDir()
 	// One matching event, then enough noise to bury it past any page.
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(1), Kind: journal.CallKindSandboxDenial, Name: "the-denial", Outcome: journal.OutcomeError,
 	})
 	for i := range 50 {
-		recorder.AppendCall(t.Context(), dir, journal.Call{
+		recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 			Time: time.UnixMilli(int64(i + 2)), Kind: journal.CallKindJob, Name: "noise", Outcome: journal.OutcomeOK,
 		})
 	}
@@ -514,7 +520,7 @@ func TestListActivityEvents_PageTokenOffsetsMatchesNotRows(t *testing.T) {
 		if i%2 == 0 {
 			kind, action = journal.CallKindSandboxDenial, fmt.Sprintf("denial-%d", i)
 		}
-		recorder.AppendCall(t.Context(), dir, journal.Call{
+		recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 			Time: time.UnixMilli(int64(i + 1)), Kind: kind, Name: action, Outcome: journal.OutcomeOK,
 		})
 	}
@@ -572,12 +578,12 @@ func watchClient(t *testing.T, dir string, rows []jobtypes.Job, files chan job.F
 // as "nothing happened"), then what lands next as it lands.
 func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 	dir := t.TempDir()
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(10), Kind: journal.CallKindAgentCommand, Name: "edit",
 		Lease: "pwa/job-watch", Origin: jobtypes.Origin{Session: "s1", Host: "claude-code"},
 		Outcome: journal.OutcomeOK, Preview: "guard: deny",
 	})
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(11), Kind: journal.CallKindAgentCommand, Name: "edit",
 		Lease: "pwa/elsewhere", Origin: jobtypes.Origin{Session: "s2"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})
@@ -626,7 +632,7 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 // terminal that asked for its backfill.
 func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	dir := t.TempDir()
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand,
 		Name: "already-here", Origin: jobtypes.Origin{Session: "s1"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})
@@ -643,7 +649,7 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	require.True(t, stream.Receive())
 	assert.Equal(t, "already-here", stream.Msg().GetAction())
 
-	recorder.AppendCall(t.Context(), dir, journal.Call{
+	recorder.AppendCall(withSecrets(t.Context()), dir, journal.Call{
 		Time: time.UnixMilli(2), Kind: journal.CallKindAgentCommand,
 		Name: "landed-while-watching", Origin: jobtypes.Origin{Session: "s1"}, Outcome: journal.OutcomeOK, Preview: "guard: pass",
 	})

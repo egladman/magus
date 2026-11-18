@@ -56,7 +56,7 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 // each default handler the CLI installs: pretty leads the message with it, as
 // the tag in the message text used to, and text keeps it an attribute.
 func TestDirHandlerRendersComponentByFormat(t *testing.T) {
-	ctx := std.WithCurrentWorkingDirectory(context.Background(), "/ws/api")
+	ctx := std.WithCurrentWorkingDirectory(withSecrets(context.Background()), "/ws/api")
 
 	var pretty bytes.Buffer
 	slog.New(dirHandler{cache.NewLogHandler(&pretty, "pretty", &slog.HandlerOptions{Level: slog.LevelInfo})}).
