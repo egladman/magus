@@ -151,7 +151,7 @@ type dollarEstimate struct {
 	FloorUSD float64            `json:"floor_usd"`
 }
 
-const noCallFacts = "the trail holds no per-call facts for this session"
+const noCallFacts = "the activity log holds no per-call facts for this session"
 
 // SummarizeCost folds one session's trail into the cost sections. tr is nil when this
 // checkout's trail holds nothing for the session, in which case no section is measured.
@@ -160,7 +160,7 @@ func SummarizeCost(tr *Activity, table model.Table) *Cost {
 	c := &Cost{NotMeasured: map[costSection]string{}}
 	if tr == nil {
 		for _, s := range costSections {
-			c.NotMeasured[s] = "this checkout's trail holds nothing for the session"
+			c.NotMeasured[s] = "this checkout's activity log holds nothing for the session"
 		}
 		return c
 	}

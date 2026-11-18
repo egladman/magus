@@ -67,6 +67,6 @@ func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
 	out := captureStdout(t, func() { require.NoError(t, sessionShow(t.Context(), root, []string{"s1"})) })
 
 	assert.Contains(t, out, "Cost, with the root as the main thread:")
-	assert.Contains(t, out, "root context     not measured: this checkout's trail holds nothing for the session")
+	assert.Contains(t, out, "root context     not measured: this checkout's activity log holds nothing for the session")
 	assert.NotContains(t, out, "$0.00")
 }
