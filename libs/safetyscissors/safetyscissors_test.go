@@ -129,6 +129,17 @@ func (s *NewSuite) TestWithDirsRefusesJobsAndSessionsInOneDirectory() {
 	s.Equal([]string{"WithDirs"}, s.optionProblems(err))
 }
 
+func (s *NewSuite) TestWithDirsRefusesEveryPairInOneDirectoryCleaned() {
+	shared := s.T().TempDir()
+	for _, d := range []Dirs{
+		{Activity: shared, Sessions: shared + "/"},
+		{Jobs: shared, Activity: shared + "/./"},
+	} {
+		_, err := New(s.T().Context(), s.dir, append(required(), WithDirs(d))...)
+		s.Equal([]string{"WithDirs"}, s.optionProblems(err), "%+v", d)
+	}
+}
+
 func (s *NewSuite) unconfigured(err error, option string) {
 	refused, ok := errors.AsType[*UnconfiguredError](err)
 	s.Require().True(ok, "got %v", err)

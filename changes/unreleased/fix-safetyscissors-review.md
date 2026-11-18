@@ -18,3 +18,6 @@
   took one.
 - **Breaking for SDK callers: `verdict.Decision("").Valid()` is false.** An unset
   decision is not a declared one; `UnmarshalText` still reads `""` as unset.
+- **`safetyscissors.New` refuses any two stores in one directory.** Jobs, Sessions and
+  Activity are compared pairwise after `filepath.Clean`, where only Jobs and Sessions
+  were compared, as written.

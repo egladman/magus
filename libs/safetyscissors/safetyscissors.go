@@ -54,9 +54,7 @@ func New(ctx context.Context, dir string, opts ...Option) (*SafetyScissors, erro
 	}
 	errs = append(errs, c.missing()...)
 	dirs := layout(dir, c.dirs)
-	if dirs.Jobs == dirs.Sessions {
-		errs = append(errs, &OptionError{Option: "WithDirs", Problem: "Jobs and Sessions name one directory, " + dirs.Jobs})
-	}
+	errs = append(errs, dirs.shared()...)
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}

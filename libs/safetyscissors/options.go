@@ -1,6 +1,7 @@
 package safetyscissors
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -54,18 +55,35 @@ type Dirs struct {
 	Activity string
 }
 
+// layout is the stores' places, each cleaned so two spellings of one directory compare
+// equal.
 func layout(dir string, over Dirs) Dirs {
 	d := Dirs{Jobs: filepath.Join(dir, "jobs"), Sessions: filepath.Join(dir, "sessions"), Activity: filepath.Join(dir, "activity")}
 	if over.Jobs != "" {
-		d.Jobs = over.Jobs
+		d.Jobs = filepath.Clean(over.Jobs)
 	}
 	if over.Sessions != "" {
-		d.Sessions = over.Sessions
+		d.Sessions = filepath.Clean(over.Sessions)
 	}
 	if over.Activity != "" {
-		d.Activity = over.Activity
+		d.Activity = filepath.Clean(over.Activity)
 	}
 	return d
+}
+
+// shared refuses each pair of stores laid out in one directory: each reader would read
+// the other's files as its own.
+func (d Dirs) shared() []error {
+	places := []struct{ name, dir string }{{"Jobs", d.Jobs}, {"Sessions", d.Sessions}, {"Activity", d.Activity}}
+	var errs []error
+	for i, a := range places {
+		for _, b := range places[i+1:] {
+			if a.dir == b.dir {
+				errs = append(errs, &OptionError{Option: "WithDirs", Problem: fmt.Sprintf("%s and %s name one directory, %s", a.name, b.name, a.dir)})
+			}
+		}
+	}
+	return errs
 }
 
 // WithInvocation names the invocation this process records sessions as, and the start
@@ -137,9 +155,9 @@ func WithJobOptions(opts ...job.StoreOption) Option {
 	}
 }
 
-// WithDirs replaces the places [New] lays the stores out at under its dir. Jobs and
-// Sessions may not name one directory, since the session reader would read the job
-// files as invocations.
+// WithDirs replaces the places [New] lays the stores out at under its dir. No two of
+// Jobs, Sessions and Activity may name one directory, compared cleaned, since each
+// reader would read the other's files as its own.
 func WithDirs(d Dirs) Option {
 	return func(c *config) error {
 		c.dirs = d
@@ -148,7 +166,7 @@ func WithDirs(d Dirs) Option {
 }
 
 // WithSlots configures a slot limiter of n slots (see [budget.NewLimiter]). n below 1
-// is refused: the limiter reads it as unlimited, which is not a slot count.
+// is refused, because it is not a slot count.
 func WithSlots(n int, opts ...budget.LimiterOption) Option {
 	return func(c *config) error {
 		if n < 1 {
