@@ -547,3 +547,21 @@ type Record struct {
 	s.Require().Error(err)
 	s.Contains(err.Error(), "Record.Check")
 }
+
+type RecordFieldSuite struct{ suite.Suite }
+
+func TestRecordFields(t *testing.T) { suite.Run(t, new(RecordFieldSuite)) }
+
+// An unexported field is no member of the record, so it needs no json tag and is never
+// published.
+func (s *RecordFieldSuite) TestAnUnexportedFieldIsNotPublished() {
+	decls, err := fixtureDecls(s.T(), "package fixture\nconst FixtureAPIVersion = \"magus.fixture/v1alpha1\"\n"+
+		"type Fixture struct {\n\tID string @json:\"id\"@\n\tunknown map[string]string\n}\n")
+	s.Require().NoError(err)
+
+	body, err := renderJobSchema(fixtureRecord, decls)
+
+	s.Require().NoError(err)
+	s.Contains(string(body), `"id"`)
+	s.NotContains(string(body), "unknown")
+}

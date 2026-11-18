@@ -569,6 +569,9 @@ keeps the typed `magus\LeaseCheck`.
   the host's interface: the module never compares validated bytes itself. Without a spec
   the store refuses every row write and every grading call, naming the option. A check
   the caller's `Validate` refuses fails the write with `*CheckRefusedError`.
+- `job.Schema` keeps the members a record does not declare unexported, as protobuf keeps
+  `unknownFields`. A record writes them back unchanged, and `Schema.Unknown()` names
+  them.
 - `types.LeaseCheck` and the views `types.Job`, `types.Goal`, `types.JobList` and
   `types.Declaration` embed the module type and override only the check members.
   `internal/job` holds the spec, the parse and the check-content faults.

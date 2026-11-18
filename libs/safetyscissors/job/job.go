@@ -188,7 +188,7 @@ func idRule(id string) string {
 // APIVersion is the job shape this module writes and the only one a
 // client may send, and the api_version of every line of jobs.jsonl and
 // attempts.jsonl (ADR 0044): a line stamped with another is refused. An added
-// field does not move it, since [Schema].Unknown carries unknown members
+// field does not move it, since a record's [Schema] carries unknown members
 // through a rewrite.
 const APIVersion apiversion.APIVersion = apigroup.Job
 
@@ -1102,11 +1102,15 @@ type Schema struct {
 	// usable. Set only for content an older reader would act on wrongly, never for an
 	// added field it can ignore.
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
-	// Unknown holds every member the record's type does not declare, re-emitted unchanged
+	// unknown holds every member the record's type does not declare, re-emitted unchanged
 	// when the record is written back. The record's MarshalJSON and UnmarshalJSON keep it,
-	// under encoding/json and encoding/json/v2 alike.
-	Unknown map[string]codec.RawMessage `json:"-" yaml:"-" buzz:"-" codec:"unknown"`
+	// under encoding/json and encoding/json/v2 alike; [Schema.Unknown] names them.
+	unknown map[string]codec.RawMessage `codec:"unknown"`
 }
+
+// Unknown names the members the record's type does not declare, sorted: what a newer
+// writer stored, which this build carries back out unchanged. Nil when there are none.
+func (s Schema) Unknown() []string { return slices.Sorted(maps.Keys(s.unknown)) }
 
 // Unmet returns the entries of Requires that known does not name, in record order, or
 // nil when this reader can act on the record.
@@ -1122,17 +1126,17 @@ func (s Schema) Unmet(known []string) []string {
 
 func (s Schema) clone() Schema {
 	s.Requires = slices.Clone(s.Requires)
-	s.Unknown = maps.Clone(s.Unknown)
+	s.unknown = maps.Clone(s.unknown)
 	return s
 }
 
-// MarshalJSON writes the result with the members it kept in Unknown.
+// MarshalJSON writes the result with the members it does not declare that it kept.
 func (r Result) MarshalJSON() ([]byte, error) {
 	type plain Result
-	return codec.MarshalWithUnknown(plain(r), r.Unknown)
+	return codec.MarshalWithUnknown(plain(r), r.unknown)
 }
 
-// UnmarshalJSON reads the result, keeping the members it does not declare in Unknown.
+// UnmarshalJSON reads the result, keeping the members it does not declare.
 func (r *Result) UnmarshalJSON(data []byte) error {
 	type plain Result
 	var p plain
@@ -1141,7 +1145,7 @@ func (r *Result) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*r = Result(p)
-	r.Unknown = unknown
+	r.unknown = unknown
 	return nil
 }
 

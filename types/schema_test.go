@@ -303,16 +303,15 @@ func TestSchemaUnknownRoundTrips(t *testing.T) {
 	in := `{"api_version":"safetyscissors.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
 	var result job.Result
 	require.NoError(t, codec.Unmarshal([]byte(in), &result))
-	// The bag's raw values are the decoder's own; its keys are checked below.
-	assert.Equal(t, job.Result{Schema: job.Schema{Version: "safetyscissors.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
-	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
+	assert.Equal(t, []string{"future_field"}, result.Unknown())
 
+	// The bag is the module's own, so the whole result is compared as the bytes it writes:
+	// the declared members as a result without the bag writes them, then the kept one.
+	declared, err := codec.Marshal(job.Result{Schema: job.Schema{Version: "safetyscissors.job-result/v1alpha99", Requires: []string{"x"}}, Job: "a"})
+	require.NoError(t, err)
 	out, err := codec.Marshal(result)
 	require.NoError(t, err)
-	var back map[string]any
-	require.NoError(t, codec.Unmarshal(out, &back))
-	assert.Equal(t, map[string]any{"x": float64(1)}, back["future_field"])
-	assert.Equal(t, "safetyscissors.job-result/v1alpha99", back["api_version"])
+	assert.Equal(t, string(declared[:len(declared)-1])+`,"future_field":{"x":1}}`, string(out))
 }
 
 func TestSchemaUnmet(t *testing.T) {

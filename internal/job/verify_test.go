@@ -844,7 +844,7 @@ func jsonFields(v any) []string {
 	var out []string
 	for _, f := range reflect.VisibleFields(reflect.TypeOf(v)) {
 		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if f.Anonymous || name == "-" || opts == "unknown" {
+		if f.Anonymous || !f.IsExported() || name == "-" || opts == "unknown" {
 			continue
 		}
 		out = append(out, name)

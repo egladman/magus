@@ -261,7 +261,9 @@ func collectFields(pkg, structName string, st *ast.StructType, d *goDecls, versi
 		}
 		field := f.Names[0].Name
 		switch {
-		case name == "-", name == "" && opts == "unknown":
+		// encoding/json never reads or writes an unexported field, so a record never
+		// carries one: a type's hidden state, such as the members a Schema keeps.
+		case !ast.IsExported(field), name == "-", name == "" && opts == "unknown":
 			continue
 		case name == "":
 			return nil, fmt.Errorf("%s.%s carries no json tag, so no schema can name it", structName, field)

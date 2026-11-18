@@ -219,13 +219,13 @@ func (s *jobSuite) TestADeclarationKeepsUnknownMembersThroughEncodingJSON() {
 	var d Declaration
 	s.Require().NoError(json.Unmarshal([]byte(declared), &d))
 	s.Equal("a", d.ID)
-	s.Equal(map[string]codec.RawMessage{"later": codec.RawMessage(`{"x":[1]}`)}, d.Unknown)
+	s.Equal([]string{"later"}, d.Unknown())
 	out, err := json.Marshal(d)
 	s.Require().NoError(err)
 	s.Contains(string(out), `"later":{"x":[1]}`)
 	var back Declaration
 	s.Require().NoError(codec.Unmarshal(out, &back))
-	s.Equal(d.Unknown, back.Unknown)
+	s.Equal(d, back)
 }
 
 func (s *jobSuite) TestAStrictDecodeRefusesAnAuthoredDeclarationsUnknownMember() {
@@ -235,13 +235,16 @@ func (s *jobSuite) TestAStrictDecodeRefusesAnAuthoredDeclarationsUnknownMember()
 		"a check is opaque here: the store's CheckSpec refuses what it does not declare")
 	s.JSONEq(`{"target":"t","x":1}`, d.Check.String())
 	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a"}`), &d))
-	s.Nil(d.Unknown)
+	s.Nil(d.Unknown())
 }
 
 func (s *jobSuite) TestAResultKeepsUnknownMembersToo() {
 	var r Result
 	s.Require().NoError(json.Unmarshal([]byte(`{"api_version":"v","job":"a","changed_paths":[],"unresolved_risks":[],"confidence":"high"}`), &r))
-	s.Equal(map[string]codec.RawMessage{"confidence": codec.RawMessage(`"high"`)}, r.Unknown)
+	s.Equal([]string{"confidence"}, r.Unknown())
+	out, err := codec.Marshal(r)
+	s.Require().NoError(err)
+	s.Contains(string(out), `"confidence":"high"`)
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(`{"api_version":"v","confidence":"high"}`), &r), codec.ErrUnknownField)
 }
 

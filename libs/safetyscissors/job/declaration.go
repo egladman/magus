@@ -19,8 +19,8 @@ import (
 // It is a DECLARATION and not a merge: an omitted field is cleared rather than
 // kept. A [Put] does the opposite: it merges.
 //
-// JSON only, so no yaml tags. The members it does not declare are kept in
-// Schema.Unknown by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
+// JSON only, so no yaml tags. The members it does not declare are kept in its
+// [Schema] by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
 // calls; libs/codec's UnmarshalStrict refuses them instead.
 type Declaration struct {
 	// Schema is the job shape this record is written in. The version is
@@ -522,14 +522,14 @@ func trimmedNonEmpty(in []string) []string {
 	return out
 }
 
-// MarshalJSON writes the declaration with the members it kept in Unknown.
+// MarshalJSON writes the declaration with the members it does not declare that it kept.
 func (d Declaration) MarshalJSON() ([]byte, error) {
 	type plain Declaration
-	return codec.MarshalWithUnknown(plain(d), d.Unknown)
+	return codec.MarshalWithUnknown(plain(d), d.unknown)
 }
 
-// UnmarshalJSON reads the declaration, keeping the members it does not declare in
-// Unknown. libs/codec's UnmarshalStrict refuses them instead.
+// UnmarshalJSON reads the declaration, keeping the members it does not declare.
+// libs/codec's UnmarshalStrict refuses them instead.
 func (d *Declaration) UnmarshalJSON(data []byte) error {
 	type plain Declaration
 	var p plain
@@ -538,6 +538,6 @@ func (d *Declaration) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = Declaration(p)
-	d.Unknown = unknown
+	d.unknown = unknown
 	return nil
 }

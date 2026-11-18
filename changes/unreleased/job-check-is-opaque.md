@@ -7,6 +7,8 @@
   `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` are gone. `job.Open`
   takes `WithCheckSpec(spec)`, a `CheckSpec` with `Validate`, `Equal` and `Render`, and
   without it every row write and grading call refuses.
+- **Breaking for SDK callers: `job.Schema` hides the members it keeps.** The bytes a
+  record does not declare still round-trip on write, and `Schema.Unknown()` names them.
 - **Breaking for SDK callers: `safetyscissors.New` requires `WithCheckSpec`.** It passes
   the spec to the job store and names the option when it is missing or nil.
 - **Breaking for SDK callers: the store judges only a check's shape.** `Faults` keeps

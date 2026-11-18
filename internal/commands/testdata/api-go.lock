@@ -1636,6 +1636,7 @@ github.com/egladman/magus/types.Declaration.Goals field []Goal "json:\"goals,omi
 github.com/egladman/magus/types.Declaration.MarshalJSON method func() ([]byte, error)
 github.com/egladman/magus/types.Declaration.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Declaration, error)
 github.com/egladman/magus/types.Declaration.Settles method func() bool
+github.com/egladman/magus/types.Declaration.Unknown method func() []string
 github.com/egladman/magus/types.Declaration.UnmarshalJSON method(ptr) func(data []byte) error
 github.com/egladman/magus/types.Declaration.Unmet method func(known []string) []string
 github.com/egladman/magus/types.DeclarationSchema var FormatLedger

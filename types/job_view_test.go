@@ -122,7 +122,7 @@ func (s *JobViewSuite) TestTheDeclarationReadsAndWritesAsTheModulesDoes() {
 
 	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
 	s.Equal("lint", view.Goals[0].Check.Target)
-	s.Contains(view.Unknown, "later", "a member the declaration does not declare is kept")
+	s.Equal([]string{"later"}, view.Unknown(), "a member the declaration does not declare is kept")
 
 	var module job.Declaration
 	s.Require().NoError(codec.Unmarshal([]byte(text), &module))
