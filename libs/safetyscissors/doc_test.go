@@ -85,6 +85,7 @@ func (s *DocSuite) TestGoModRequiresOnlyWhatTheDocAllows() {
 func (s *DocSuite) TestJournalImportsOnlyWhatItsDocNames() {
 	s.Equal([]string{
 		"github.com/egladman/magus/libs/codec",
+		"github.com/egladman/magus/libs/safetyscissors/job",
 	}, s.nonStandardImports("journal"))
 }
 
