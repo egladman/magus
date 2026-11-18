@@ -465,3 +465,5 @@ reference/rules/unjudged-tool/
 development/libs-cmdline/
 # libs/embed/train became libs/train; its generated development page went with the old path.
 development/libs-embed-train/
+# The goals tag became postconditions when a job's goal was renamed postcondition.
+tags/goals/

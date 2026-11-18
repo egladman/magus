@@ -679,7 +679,7 @@ counts the rest, and says that deletions are not listed, since a deleted file le
 nothing to compare. The list is a fact of the moment you ask, so only a read that
 evaluates the workspace names files; one answered from the verdict a graph build recorded
 names the projects alone. `magus describe job` uses the list: it grades a job's symbol
-goals against the built graph when none of the changed files falls inside the job's write
+postconditions against the built graph when none of the changed files falls inside the job's write
 paths, and leaves them ungraded, naming `magus graph build`, when one does or when the
 index names no files. Re-indexing stays whole-project: the list makes the staleness
 precise, it does not make indexing partial.

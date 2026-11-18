@@ -17,4 +17,4 @@
   the jobs again.
 - **Breaking for SDK callers: `internal/job.SetCheckGrader` is gone.** A store grades a
   declared check with `job.Location.Grader`; with none, the fork reports one MGS3039
-  problem and an offered gate goal is offered ungraded, never passed.
+  problem and an offered gate postcondition is offered ungraded, never passed.

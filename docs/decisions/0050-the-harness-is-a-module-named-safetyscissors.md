@@ -551,6 +551,25 @@ decided.
 
 ## Amendments
 
+### 2026-11-18: a goal is a postcondition
+
+Eli ruled that "goal" names the purpose of a job in plain English, so the graded
+condition takes the technical word. The sections above say goal where the module now says
+postcondition; they stand as written.
+
+- `job.Goal` is `job.Postcondition`, with `PostconditionKind`, `PostconditionExpect`,
+  `PrimaryPostconditionID`, `EffectivePostconditions`, `PostconditionGrade`,
+  `PostconditionError` and `FaultPostcondition`. `GateAttempt` is `PostconditionAttempt`,
+  its `GateID` `PostconditionID`.
+- The stored keys `goals`, `gate_attempts` and `gate_id` of an attempt are
+  `postconditions`, `postcondition_attempts` and `postcondition_id`. Migration 10 respells
+  them, and an added migration renames the `signature-goals` feature to
+  `signature-postconditions`. grades.jsonl has no migration and refuses a line spelling
+  goal.
+- The proto's `CompletionGate` and `JobGateAttempt` are `Postcondition` and
+  `JobPostconditionAttempt`; field numbers hold and the JSON names change.
+- A brief's goal, what a worker is to achieve, keeps its name.
+
 ### 2026-11-18: the job check is opaque JSON, read through magus's views (option B)
 
 The open question of the 2026-11-17 trim is settled as option B, Eli's ruling of
@@ -571,7 +590,8 @@ keeps the typed `magus\LeaseCheck`.
   the caller's `Validate` refuses fails the write with `*CheckRefusedError`.
 - `job.Schema` keeps the members a record does not declare unexported, as protobuf keeps
   `unknownFields`. A record writes them back unchanged, and `Schema.Unknown()` names
-  them.
+  them. `job.Rows` keeps the store header's the same way, with `Rows.Unknown()` and
+  `Rows.WithMember`.
 - `types.LeaseCheck` and the views `types.Job`, `types.Goal`, `types.JobList` and
   `types.Declaration` embed the module type and override only the check members.
   `internal/job` holds the spec, the parse and the check-content faults.

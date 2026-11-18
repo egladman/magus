@@ -65,7 +65,7 @@ piece:
 $ magus job wait upgrade/api
 verified upgrade/api, recorded pass
 its holder reports it ran magus run test api
-goal check: verified (out<hex>)
+postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
 ```
@@ -113,11 +113,11 @@ in his, claims the same page for the section he wants:
 
 ```console
 $ magus job fork fr/upgrading --instructions 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
-note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
-note: judged fr/upgrading's goals in 0ms
+note: judging fr/upgrading's postconditions; a postcondition naming a symbol loads the symbol graph
+note: judged fr/upgrading's postconditions in 0ms
 [error] 1 problem:
   1. [MGS3032] paths.write[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
-     fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply fr/install --release-write-path docs/fr/install.md`, which keeps its goals. Not granted: fr/upgrading wants docs/fr/install.md whole; a fork claiming only declarations fr/install has not touched is granted them
+     fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply fr/install --release-write-path docs/fr/install.md`, which keeps its postconditions. Not granted: fr/upgrading wants docs/fr/install.md whole; a fork claiming only declarations fr/install has not touched is granted them
 not checked:
   the symbol, claim, test, check and workspace checks and the write proof: not run, since this fork already contends with a live job; fork again once it does not
 ```
@@ -165,15 +165,15 @@ landed in, and a line in the other translator's section is named as a violation.
 
 ## A release checklist
 
-Each item on a release checklist is a job whose goal says what done means. A goal
-needs no target: `paths` goals read the diff and the tree.
+Each item on a release checklist is a job whose postcondition says what done means. A postcondition
+needs no target: `paths` postconditions read the diff and the tree.
 
 <!-- golden: job_people_release.txtar apply.out -->
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "safetyscissors.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resumed"}}, "paths": {"write": ["CHANGELOG.md"]}, "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
-{"api_version": "safetyscissors.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "paths": {"write": ["notes/1.3.md"]}, "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resumed"}}, "paths": {"write": ["CHANGELOG.md"]}, "postconditions": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "paths": {"write": ["notes/1.3.md"]}, "postconditions": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
@@ -222,7 +222,7 @@ Coming back is not being done. The person cutting the release checks each item:
 ```console
 $ magus job wait release-1.3/changelog
 verified release-1.3/changelog, recorded pass
-goal changelog: verified
+postcondition changelog: verified
 footprint: where its diff since the checkpoint landed
   CHANGELOG.md:3-6
 ```
@@ -234,9 +234,9 @@ $ magus job wait release-1.3/notes
 rejected release-1.3/notes
   job release-1.3/notes is not read-only and the result claims no changed paths at all
   nothing in the diff since 5f6b136f2721af3fb8a117fbf824b24a3a78b059 is inside its write paths (notes/1.3.md)
-  goal "notes": nothing matching "notes/1.3.md" is in the tree, so this goal is unmet
+  postcondition "notes": nothing matching "notes/1.3.md" is in the tree, so this postcondition is unmet
 release-1.3/notes is running again and holds its write paths again for its rework
-goal notes: rejected
+postcondition notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
   the notes need the final benchmark numbers

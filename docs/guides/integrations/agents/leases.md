@@ -25,7 +25,7 @@ says it intends, and shows a person the result: the same rule the rest of the
 deciding is the model's.
 
 Two nouns, and the difference decides how everything below reads. A **job** is
-the unit of delegated work: one row, with a goal, a checkpoint, the paths it may
+the unit of delegated work: one row, with a postcondition, a checkpoint, the paths it may
 write, and the one check it runs. A **lease** is the grant a holder takes on a
 job: the write and read paths that job declared, enforced in the checkout that
 took it. A job is the thing; a lease is permission over it.
@@ -154,10 +154,10 @@ spellings.
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `agent` (the model requested as `{id, tier}`, the `instructions` that are the
-prose half, the machine-checkable half being `goals`, and the `worker`, whose
+prose half, the machine-checkable half being `postconditions`, and the `worker`, whose
 `type` is `resumed` or `new` with a `reason`), `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `paths` (an object of `write`, `deny`
-and `read`), `depends_on`, `breaks`, `check`, `goals`,
+and `read`), `depends_on`, `breaks`, `check`, `postconditions`,
 `state`, `read_only`, and `max_attempts` (see
 [attempts and generations](#attempts-and-generations)). A record naming no
 `state` is stored `declared`. The store adds `api_version`, the actor that
@@ -177,7 +177,7 @@ empty list means the job breaks nothing on its own authority, so a break outside
 it is a finding to report, not a decision for the holder. Like every other
 field of the record, an `apply` that omits it clears it. A text `fork` also
 lists the unreferenced symbols its write paths cover (`deletion_candidates` in
-`-o json`): candidates to finish or delete, never goals. The graph cannot see
+`-o json`): candidates to finish or delete, never postconditions. The graph cannot see
 reflection, interface dispatch or a consumer outside the workspace, so confirm
 each before deleting it. Methods, fields and tests are left out.
 
@@ -206,7 +206,7 @@ session fork a NEW row that names its own job as `parent`, as flags, as a
 parent is refused there, once. The store grades a child only when it writes as
 that lease, which it reads from the checkout's binding; a worker the guard
 identified in a checkout bound to nobody may fork only a `--read-only` child
-that declares no paths or goals, and at most a script check. A child neither
+that declares no paths or postconditions, and at most a script check. A child neither
 read-only nor handed write paths is refused either way, since an empty write set
 scopes nothing; `magus job fork` refuses it for every caller.
 The guard also lets `magus job wait` through for the session's own
@@ -377,7 +377,7 @@ generation the evidence came from and names the check to run again, and
 `magus job fork <id>` on a job that ended starts its next attempt, and that is
 the only retry there is: keep the id, since a new one loses the history. The
 attempt that ended is folded into `prior`, newest last, three at most: how it
-ended and at which tier, its rework rounds and widenings, the goals and
+ended and at which tier, its rework rounds and widenings, the postconditions and
 violations of its last rejected wait (`rejection`), its unresolved risks, the
 guard's denials of its holder, and the refs of its failed runs. `attempts`
 numbers the live one, and its result, runs and counters start over, so the next
@@ -386,7 +386,7 @@ ending counts its own attempt alone. The next holder reads all of it in
 
 Nothing retries on its own. magus classifies each ended attempt and stops
 there: an attempt the guard denied a path outside the job's boundary needs a
-widening first, and a goal unmet in two attempts running needs a person. Either
+widening first, and a postcondition unmet in two attempts running needs a person. Either
 reads `not retryable until <change>: <reason>`. Make the change (`magus job
 apply` to widen, a config edit, a person's call) or do the job locally; never
 fork it again unchanged.
@@ -401,8 +401,8 @@ passes.
 
 The context a delegated agent receives should come from the row, not from the
 orchestrating model's recollection of it. `magus describe job <job>` renders
-that context and nothing else: the interface first (each symbol goal's name,
-expectation, frozen signature and description), then the goal and acceptance
+that context and nothing else: the interface first (each symbol postcondition's name,
+expectation, frozen signature and description), then the postcondition and acceptance
 criteria verbatim, what the job may break, the release stage (the workspace's
 newest root tag, and below 1.0 that a major floor ships as a minor release;
 nothing when no tag is visible), the deletion candidates, the
@@ -676,7 +676,7 @@ observes since the job's checkpoint: every claimed path must appear in it, at
 least one change in it must fall inside `paths.write`, and a diff magus cannot
 read fails the job rather than passing it. A read-only job has no diff to check.
 `wait` also refuses `pass` while any descendant (by `parent` chain) is still
-live, naming each, and grades a job against its ancestors' symbol goals as well
+live, naming each, and grades a job against its ancestors' symbol postconditions as well
 as its own.
 
 Two failing statuses, because they send a caller somewhere different. Exit 1 is
@@ -688,14 +688,14 @@ It checks what is mechanical. Whether the work is GOOD stays the reading of
 whoever forked it. How much of the job's acceptance criteria magus checks for
 you is the next section's subject.
 
-## Goals
+## Postconditions
 
-A job's acceptance criteria are prose a person grades. A **goal** is the part
+A job's acceptance criteria are prose a person grades. A **postcondition** is the part
 magus grades itself, and `magus job wait` does not record `pass` until every one
-verifies. Goals are data: they live in the job record's `goals`, which
+verifies. Postconditions are data: they live in the job record's `postconditions`, which
 `magus job fork --stdin`, the `client` tool's `magus\workspace().putJob` and a magusfile's `magus\workspace().putJob`
 all accept. There are no flags for them. `fork` refuses a job that writes and
-declares neither a `check` nor a goal, since `wait` would have nothing to grade
+declares neither a `check` nor a postcondition, since `wait` would have nothing to grade
 it by; a `read_only` job is exempt.
 
 ```sh
@@ -703,14 +703,14 @@ magus job fork --stdin <<'EOF'
 {"api_version": "safetyscissors.job/v1alpha1", "id": "api/migrate",
  "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
  "paths": {"write": ["db", "api"]}, "check": {"target": "go-test", "project": "api"},
- "goals": [
+ "postconditions": [
    {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
    {"id": "old-gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
  ]}
 EOF
 ```
 
-A goal names a **kind** (what it examines) and an **expect** (what must be true
+A postcondition names a **kind** (what it examines) and an **expect** (what must be true
 of it). Two fields rather than a kind per pair, so `absent` means the same thing
 of a file and of a symbol:
 
@@ -720,14 +720,14 @@ of a file and of a symbol:
 | `paths`  | `changed`, `present`, `absent`                              | the diff since the checkpoint, or the tree as it is now                     |
 | `symbol` | `changed`, `present`, `absent`, `unreferenced`, `signature` | the knowledge graph, at the granularity below a file                        |
 
-Each kind has a natural expectation, so the common goal declares only its kind
+Each kind has a natural expectation, so the common postcondition declares only its kind
 and subject: a check is asked whether it passed, files and symbols whether this
 job changed them. `kind` defaults to `check`. `magus job fork --schema` prints
 every field.
 
-Every kind reads something magus already holds, which is what separates a goal
+Every kind reads something magus already holds, which is what separates a postcondition
 from an attestation. There is deliberately no escape hatch for "this command
-exited 0": magus did not record that run and cannot attribute it, so such a goal
+exited 0": magus did not record that run and cannot attribute it, so such a postcondition
 would be the easiest of all to satisfy falsely. Declare a target and use `check`.
 
 `symbol` + `unreferenced` is the one worth knowing about: the symbol still
@@ -739,22 +739,22 @@ once it is deleted `unreferenced` fails rather than report a zero it cannot
 vouch for. The job that deletes it declares `absent` beside a check that builds
 the callers.
 
-A symbol goal takes the name the graph gives the symbol, and only that symbol
+A symbol postcondition takes the name the graph gives the symbol, and only that symbol
 answers for it: a deleted `Legacy` is absent even while `LegacyAdapter` exists.
 
-### Signature goals
+### Signature postconditions
 
 `symbol` + `signature` holds one symbol to a declaration, its `signature`, so a
 job handed an interface cannot change its shape and still pass. Go and Buzz
 compare the parsed shape (kind, name, receiver, parameter types, results), so a
 renamed parameter still holds; every other language compares the text with
-whitespace collapsed. A goal names exactly one symbol, and a job holds one
+whitespace collapsed. A postcondition names exactly one symbol, and a job holds one
 signature per symbol.
 
 Leave `signature` out and the fork records the one the symbol index holds. That
 is the stub flow: write the declaration with an empty body, run
-`magus graph build`, then fork the job with a `signature` goal beside a
-`changed` goal on the same name. A signature the fork cannot record is refused,
+`magus graph build`, then fork the job with a `signature` postcondition beside a
+`changed` postcondition on the same name. A signature the fork cannot record is refused,
 never skipped: the graph does not open, the index does not define the symbol
 yet, or it holds no signature for it. A later `magus job apply` of the same
 record keeps the signature the first one recorded.
@@ -763,30 +763,30 @@ record keeps the signature the first one recorded.
 {"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["AccountStore#Migrate"]}
 ```
 
-A goal that changes, removes or reshapes a symbol already defined in one file
+A postcondition that changes, removes or reshapes a symbol already defined in one file
 the write paths do not cover adds a claim on its declaration to `paths.write`
 (`db/accounts.go#AccountStore) Migrate`), and `fork` prints each one it added and
 lists them as `derived_claims` in its JSON. A read-only job claims nothing, and
-neither does a file with no diff driver. A row carrying a `signature` goal is
-stamped `requires: ["signature-goals"]`, so a magus too old to grade one leaves
+neither does a file with no diff driver. A row carrying a `signature` postcondition is
+stamped `requires: ["signature-postconditions"]`, so a magus too old to grade one leaves
 the row alone.
 
 `magus job wait --integration` grades the `present`, `absent`, `unreferenced`
-and `signature` symbol goals against the integrating checkout's graph, so a
+and `signature` symbol postconditions against the integrating checkout's graph, so a
 shape that drifts in the merge fails there. `changed` stays the holder's.
 
-The single `check` is one of these goals, under the id `check`.
+The single `check` is one of these postconditions, under the id `check`.
 
-A goal is graded against what magus observes and never against the result's own
-`changed_paths`. The holder's account of its work is the thing the goal
+A postcondition is graded against what magus observes and never against the result's own
+`changed_paths`. The holder's account of its work is the thing the postcondition
 replaces, so a result claiming a file the tree does not carry is rejected, and
-the refusal names each subject that failed rather than only that the goal
+the refusal names each subject that failed rather than only that the postcondition
 failed:
 
 ```text
 rejected api/migrate
-  goal "migration": nothing matching "db/migrations/**" changed since
-  4a1c0cc8, so this goal is unmet
+  postcondition "migration": nothing matching "db/migrations/**" changed since
+  4a1c0cc8, so this postcondition is unmet
 api/migrate is running again and holds its write paths again for its rework
 ```
 
@@ -798,10 +798,10 @@ The diff and the tree are read in the checkout that took the job, while it
 still exists, so an orchestrator can wait from its own tree before it
 integrates.
 
-An observation magus could not make FAILS the goal: an unreadable diff, a symbol
+An observation magus could not make FAILS the postcondition: an unreadable diff, a symbol
 graph that will not open, a name nobody asked the graph about. That is the
 opposite of how the guard treats an unanswerable question, and deliberately: a
-guard that cannot ask must not refuse a person's own command, while a goal that
+guard that cannot ask must not refuse a person's own command, while a postcondition that
 cannot verify must not certify, or the cheapest way past it is to break the
 observation.
 
@@ -814,42 +814,42 @@ anything:
 magus describe job api/migrate
 ```
 
-It always grades every goal against the evidence magus holds right now,
+It always grades every postcondition against the evidence magus holds right now,
 alongside the job's terms, and writes nothing. Because it runs the same grading
 `wait` does, the two cannot disagree; because it records nothing, an
 orchestrator may ask while the holder is still working, and asking never blocks
-that holder. The goals that read the tree and the graph answer even for a job
+that holder. The postconditions that read the tree and the graph answer even for a job
 that has filed no result at all.
 
-Below the goals it reports what the diff did beside them, and `wait` returns
+Below the postconditions it reports what the diff did beside them, and `wait` returns
 the same fields. None of them is a violation, and none decides `pass`:
 
 | field                          | what it says                                                                           |
 | ------------------------------ | -------------------------------------------------------------------------------------- |
 | `lines_added`, `lines_deleted` | the lines on each side of the footprint, when `footprint_known`                        |
-| `undeclared_exports`           | exported Go symbols the diff added that no symbol goal of the job or an ancestor names |
+| `undeclared_exports`           | exported Go symbols the diff added that no symbol postcondition of the job or an ancestor names |
 | `left_unreferenced`            | symbols that lost their last use in the diff and are still defined                     |
 | `symbol_delta_known`           | whether the two lists above were read; false reads as "not measured"                   |
 
 ```text
 net lines: +12 -40 (-28)
-exports no goal declares: none
+exports no postcondition declares: none
 left defined with no use: 1
   legacyAccountRow (db/accounts.go:88)
 ```
 
-Sequence goals with `depends_on` between them when one has to be cleared before
+Sequence postconditions with `depends_on` between them when one has to be cleared before
 another is approached. A failed prerequisite propagates, and the declaration
-refuses a cycle. Goals do not nest: one wanting children is a JOB wanting
+refuses a cycle. Postconditions do not nest: one wanting children is a JOB wanting
 splitting, which the multi-agent skill's "every level narrows" rule already
-covers, and keeping goals flat leaves the job tree as the only hierarchy with an
+covers, and keeping postconditions flat leaves the job tree as the only hierarchy with an
 owner.
 
-A `check` goal may not name the release gate. A `ci` check goal is refused by
+A `check` postcondition may not name the release gate. A `ci` check postcondition is refused by
 the same rule that refuses `--check ci`, for the same reason: the gate runs
 once, in the forking session's tree, after every job lands.
 
-### Declaring goals from Buzz
+### Declaring postconditions from Buzz
 
 A magusfile or a `magus buzz` script declares them through the same store:
 
@@ -862,7 +862,7 @@ fun declare() > void {
     magus\workspace().putJob("api/migrate", {
       "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
       "paths": {"write": ["db", "api"]},
-      "goals": [
+      "postconditions": [
         {"id": "green", "check": {"target": "go-test", "project": "api"}},
         {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
         {"id": "old-gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]},
@@ -875,8 +875,8 @@ fun declare() > void {
 ```
 
 `kind` defaults to `check` and `expect` to the kind's natural expectation, so
-the first goal above needs neither. The records are validated on the way in: a
-goal carrying both a check and paths is refused, and so is one naming nothing to
+the first postcondition above needs neither. The records are validated on the way in: a
+postcondition carrying both a check and paths is refused, and so is one naming nothing to
 examine.
 
 ## Watch it: the console jobs view

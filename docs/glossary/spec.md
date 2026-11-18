@@ -1,14 +1,14 @@
 ---
 title: Spec
 order: 12
-description: "The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the goals and the model). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored."
+description: "The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the postconditions and the model). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored."
 tags: [glossary, sessions-and-leases]
 ---
 
 # Spec
 
 The declared half of a job row: what the parent wrote and the store validated
-(criteria, checkpoint, write and read paths, the check, the goals and the
+(criteria, checkpoint, write and read paths, the check, the postconditions and the
 model). The child reads it with `magus describe job`, and a view renders it as
 Markdown at read time, never stored.
 

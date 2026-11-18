@@ -1,4 +1,4 @@
 ### Fixed
 
-- **A bound worker can no longer change its own goal's accept list or signature.**
-  `goalsEqual` compares both.
+- **A bound worker can no longer change its own postcondition's accept list or signature.**
+  `postconditionsEqual` compares both.

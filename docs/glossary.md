@@ -293,7 +293,7 @@ One read-only check from the advice suite: it reads the changeset through magus 
 
 ### Spec
 
-The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the goals and the model). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored. [Spec in full](glossary/spec.md).
+The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the postconditions and the model). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored. [Spec in full](glossary/spec.md).
 
 ## Console
 

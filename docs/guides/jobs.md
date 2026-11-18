@@ -46,7 +46,7 @@ upgrade, a translation, a release checklist.
   taken (`registered`) and last moved (`updated`), in Unix seconds, and every file
   a job gave up, with the time and the sha256 the file had at that moment.
 - **What done means.** A job names one check, a target to run, and may declare
-  goals. `magus job wait` grades evidence rather than anybody's word: a passing run
+  postconditions. `magus job wait` grades evidence rather than anybody's word: a passing run
   recorded no earlier than the second the job was declared, and the diff since the revision the job
   started from. When it says no, it exits 1 and names every rule that failed.
 
@@ -165,13 +165,13 @@ grouping history
 
 the only check you run
 magus run test .
-refactor/pricing: 0 of 1 goal(s) met
+refactor/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
 net lines: +0 -0 (+0)
-exports no goal declares: none
+exports no postcondition declares: none
 left defined with no use: none
-goal commands
+postcondition commands
   check: magus run test .
 the result `magus job exit refactor/pricing --stdin` reads
 {
@@ -248,7 +248,7 @@ Back in the main checkout, she checks the result against the job:
 $ magus job wait refactor/pricing
 verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .
-goal check: verified (out<hex>)
+postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 ```
@@ -428,13 +428,13 @@ grouping history
 
 the only check you run
 magus run test .
-currency: 0 of 1 goal(s) met
+currency: 0 of 1 postcondition(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
 net lines: +0 -0 (+0)
-exports no goal declares: none
+exports no postcondition declares: none
 left defined with no use: none
-goal commands
+postcondition commands
   check: magus run test .
 the result `magus job exit currency --stdin` reads
 {
@@ -460,7 +460,7 @@ waits. `--depends-on` is for two jobs on the same declaration.
 
 A fork refused with [MGS3032](../reference/codes/sandbox/MGS3032.md) prints the claim pair
 to use. It reads the declarations the holder has touched so far and the symbols the new
-job's goals name, and says whether the two are disjoint. It never writes a claim into
+job's postconditions name, and says whether the two are disjoint. It never writes a claim into
 either row; the person or orchestrator who declares the rows re-forks them with the pair.
 
 A claim names a declaration, and the word must name exactly one declaration of its file.
@@ -480,14 +480,14 @@ because every path the new entry names is one the glob matches. Going the other 
 from `internal/job/breadth.go` to `internal/job/*.go`, widens the claim: the fork checks
 it as a new claim, with the breadth and overlap checks that a new claim gets.
 
-### What a lint goal grades
+### What a lint postcondition grades
 
-A fork that writes Go source adds a `lint` goal over the files it writes. Test files the
+A fork that writes Go source adds a `lint` postcondition over the files it writes. Test files the
 fork added beside them on its own stay out of that list until the job changes one. A
 finding in a file the job did not change is not the job's to meet, and the integration's
 whole-tree lint still reports it.
 
-So a lint run counts when it read every file the job changed, whatever the goal's list
+So a lint run counts when it read every file the job changed, whatever the postcondition's list
 says now. Run `magus run lint . --no-default-charms -- <the files you changed>` and cite
 its ref; widening the job afterwards does not cost you the run. `magus job exit` checks the
 run against `changed_paths`, and `magus job wait` checks it against what the branch
@@ -499,7 +499,7 @@ args still have to match.
 
 A run is owed for one reason, `"no seat"`, and `magus job exit` refuses any other. An output
 regenerated outside the write paths files nothing, because the integrator regenerates it.
-A goal that is not the job's goes back to whoever forked it, to drop or to permit with a
+A postcondition that is not the job's goes back to whoever forked it, to drop or to permit with a
 deviation.
 
 ## Checking a record before you fork it
@@ -526,14 +526,14 @@ full.
 | Code                                             | Problem                                                                                                                                  | Fix                                                                                                   |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | [MGS3037](../reference/codes/sandbox/MGS3037.md) | A field cannot be read as declared: an id, a timeout, a path outside the workspace, an unknown member                                    | Edit each field the problem names                                                                     |
-| [MGS3038](../reference/codes/sandbox/MGS3038.md) | A goal no evidence could grade: a duplicate id, a dependency cycle, or a symbol the graph resolves to more than one declaration          | Name one symbol per goal, using the id `magus refs` prints for an ambiguous one                       |
-| [MGS3039](../reference/codes/sandbox/MGS3039.md) | The job writes and declares no check or goal, or names no write paths without being `read_only`                                          | Add the check that proves the change, or set `read_only`                                              |
+| [MGS3038](../reference/codes/sandbox/MGS3038.md) | A postcondition no evidence could grade: a duplicate id, a dependency cycle, or a symbol the graph resolves to more than one declaration          | Name one symbol per postcondition, using the id `magus refs` prints for an ambiguous one                       |
+| [MGS3039](../reference/codes/sandbox/MGS3039.md) | The job writes and declares no check or postcondition, or names no write paths without being `read_only`                                          | Add the check that proves the change, or set `read_only`                                              |
 | [MGS3040](../reference/codes/sandbox/MGS3040.md) | A check the worker cannot run: an unknown target, a command the guard denies, or arguments that skip the tests of the packages it writes | Name a target the workspace has, with arguments that still run those tests                            |
 | [MGS3041](../reference/codes/sandbox/MGS3041.md) | A checkpoint this checkout cannot place                                                                                                  | Fork where that revision is checked out, or name the checkpoint `magus vcs checkpoint -o name` prints |
 | [MGS3042](../reference/codes/sandbox/MGS3042.md) | A fork past `jobs.max_depth` or `jobs.max_live`                                                                                          | Fork under a shallower parent, end a live job first, or change the limit in `magus.yaml`              |
 | [MGS3043](../reference/codes/sandbox/MGS3043.md) | A glob write path too broad for `jobs.max_claim_files` or `jobs.max_claim_projects`                                                      | Name the files the job edits, or permit the path                                                      |
 | [MGS3044](../reference/codes/sandbox/MGS3044.md) | A target regenerates an output from sources the job may edit, and the output is outside its write paths                                  | Add the output to the write paths, or permit it when the root regenerates it                          |
-| [MGS3045](../reference/codes/sandbox/MGS3045.md) | A ci target reads files the job may write, and neither its check nor a goal runs it                                                      | Add a goal for the target, or permit it when the root runs it after integration                       |
+| [MGS3045](../reference/codes/sandbox/MGS3045.md) | A ci target reads files the job may write, and neither its check nor a postcondition runs it                                                      | Add a postcondition for the target, or permit it when the root runs it after integration                       |
 | [MGS3046](../reference/codes/sandbox/MGS3046.md) | A workspace file (a magusfile, `magus.yaml` or a spell source) is in the write paths while another live job works in this checkout       | Fork the job with `--checkout` into its own worktree, or leave the file out of its write paths        |
 
 The claim refusals from before this series keep their own pages:
@@ -579,9 +579,9 @@ Zero or a negative number is an error. Both keys are read from the workspace's o
 refuses the glob under MGS3043 and says the breadth was not judged, rather than
 passing it. A glob that begins with `**` is refused whatever it matches.
 
-The fix for an MGS3043 problem gives the narrowest write paths the job's symbol goals
+The fix for an MGS3043 problem gives the narrowest write paths the job's symbol postconditions
 and criteria name, as a ready `paths.write` array, then the deviation that keeps the glob.
-When the knowledge graph cannot answer the symbol goals, the fix says so; `magus graph
+When the knowledge graph cannot answer the symbol postconditions, the fix says so; `magus graph
 build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
 `jobs.max_live` the same way, and a zero limit is unlimited.
 
@@ -651,7 +651,7 @@ model tier: bounded (rank 1), default: "the declared default" at magus/modeltier
 ```console
 $ magus job wait release/pricing --integration --stdin < evidence.json
 integration: release/pricing passes in ~/src/shop; its state is unchanged
-release/pricing: 1 of 1 goal(s) met
+release/pricing: 1 of 1 postcondition(s) met
   [met] check
 ```
 
@@ -676,7 +676,7 @@ When the merge breaks the totals, the same step fails the build:
 ```console
 $ magus job wait release/pricing --integration --stdin < evidence.json
 integration: release/pricing fails in ~/src/shop; its state is unchanged
-release/pricing: 0 of 1 goal(s) met
+release/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       the run behind output ref "out<hex>" failed, so its check did not pass
 ```

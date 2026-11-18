@@ -9,7 +9,7 @@
   `EntryAdvice`, `Entries`, `ParsePauseUntil`, `ReleasedUnderPattern`, `OwedNoSeat` and
   `OwedRemoteCI` moved, and `*RecordVersionError` no longer carries magus's fix.
 - **Breaking for SDK callers: the module unexported what only it reads.** `Store.View`,
-  `ValidateID`, `WidensInPlace`, `Features`, `States`, `GoalKinds`, `GoalExpects`,
+  `ValidateID`, `WidensInPlace`, `Features`, `States`, `PostconditionKinds`, `PostconditionExpects`,
   `MaxUnattributedWrites` and `IDError` are gone from its API.
 - **A check renders once.** `CheckCommand` joins the check's argv, led by the binary as
   invoked.
