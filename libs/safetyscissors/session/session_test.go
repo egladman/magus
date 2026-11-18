@@ -86,6 +86,33 @@ func (s *WriterSuite) TestAppendReadRoundTrip() {
 	s.Equal(TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
 }
 
+// A line a dead writer left unfinished costs that line, never the record appended after.
+func (s *WriterSuite) TestAnAppendAfterAnUnfinishedLineStartsItsOwn() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "sess1.jsonl"), []byte(`{"v":"safetyscissors.session/v1alpha1","invo`), 0o600))
+
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{Command: "run build"})
+	s.Require().NoError(err)
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+
+	fold, err := ReadAll(s.T().Context(), dir)
+	s.Require().NoError(err)
+	s.Equal(1, fold.Skipped, "the unfinished line alone")
+	s.Len(fold.Records, 2)
+}
+
+// A load creates the store as Open does, owner-only, though its lock comes first.
+func (s *WriterSuite) TestALoadCreatesTheStorePrivate() {
+	dir := filepath.Join(s.T().TempDir(), "sessions")
+
+	_, err := loadAt(s.T(), dir, nil, InvocationStart{})
+	s.Require().NoError(err)
+
+	info, err := os.Stat(dir)
+	s.Require().NoError(err)
+	s.Equal(os.FileMode(0o700), info.Mode().Perm())
+}
+
 // The modes Open and Append create: an invocation records the commands its user ran.
 func (s *WriterSuite) TestStoreIsPrivateToItsOwner() {
 	dir := filepath.Join(s.T().TempDir(), "sessions")
@@ -260,6 +287,21 @@ func (s *ReadSuite) TestReadAllSkipsAnOversizedLineAndKeepsReading() {
 	s.Require().Len(fold.Records, 2)
 	s.Equal(uint64(1), fold.Records[0].Seq)
 	s.Equal(uint64(3), fold.Records[1].Seq, "the record after the oversized line is the one a scanner loses")
+}
+
+// A file the fold cannot open is missing history, not one damaged line.
+func (s *ReadSuite) TestAnUnreadableFileIsAnError() {
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	s.Require().NoError(os.WriteFile(path, []byte(`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1}`+"\n"), 0o000))
+
+	_, err := ReadAll(s.T().Context(), dir)
+
+	var store *StoreError
+	s.Require().ErrorAs(err, &store)
+	s.Equal(path, store.Path)
+	_, err = FoldKind(s.T().Context(), dir, "target_result")
+	s.Require().ErrorAs(err, &store)
 }
 
 // Two writers with distinct ids in one store are both visible to one fold. This is the

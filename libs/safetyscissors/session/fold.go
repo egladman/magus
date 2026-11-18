@@ -114,10 +114,14 @@ func FoldKind(ctx context.Context, dir, kind string) (Fold, error) {
 		entry, ok := prev.Files[e.Name()]
 		if !ok || !entry.sameFile(fi) {
 			path := filepath.Join(dir, e.Name())
-			records, skipped, legacy, retired, vanished := readFile(path)
-			if vanished {
+			read := decodeFile(path)
+			if read.vanished {
 				continue
 			}
+			if read.err != nil {
+				return Fold{}, &StoreError{Op: "read invocation", Path: path, Err: read.err}
+			}
+			records, skipped, legacy, retired := read.records, read.skipped, read.legacy, read.retired
 			if retired != "" {
 				return Fold{}, &RetiredGroupError{Path: path, Version: retired}
 			}

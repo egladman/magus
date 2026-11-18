@@ -336,11 +336,35 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on a CLI path is
 	// positioned to run.
-	if err := codec.AppendLines(w.path, [][]byte{line}, 0o600, codec.WithoutSync()); err != nil {
+	lines := [][]byte{line}
+	if unfinishedTail(w.path) {
+		// A writer died mid-line: end that line, so this record is not glued onto it.
+		lines = [][]byte{nil, line}
+	}
+	if err := codec.AppendLines(w.path, lines, 0o600, codec.WithoutSync()); err != nil {
 		return &StoreError{Op: "append " + kind + " record", Path: w.path, Err: err}
 	}
 	w.seq++
 	return nil
+}
+
+// unfinishedTail reports whether the file at path ends in bytes no newline closes. An
+// absent or unreadable file reports false: the append itself then says what is wrong.
+func unfinishedTail(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || info.Size() == 0 {
+		return false
+	}
+	last := make([]byte, 1)
+	if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+		return false
+	}
+	return last[0] != '\n'
 }
 
 // Fold is the union of every invocation file in one store, ordered.
@@ -374,8 +398,10 @@ type Fold struct {
 // line is skipped and counted in Skipped rather than failing the read, so one killed
 // process cannot make the whole history unreadable. A file listed by the directory but
 // gone by the time it is opened was pruned by another process mid-fold; it counts as
-// neither an invocation nor damage. Only an unreadable DIRECTORY is an error, a line
-// stamped with the group these records had before the module took them, which is a
+// neither an invocation nor damage. An unreadable directory, and a file that cannot be
+// opened or read to its end, are a [*StoreError]: a fold missing a file's records is not
+// the history. So is a line stamped with the group these records had before the module
+// took them, which is a
 // [*RetiredGroupError], and a loaded event holding a retired guard decision, which is a
 // [*RetiredDecisionError].
 //
@@ -400,6 +426,9 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 		read := decodeFile(path)
 		if read.vanished {
 			continue
+		}
+		if read.err != nil {
+			return Fold{}, &StoreError{Op: "read invocation", Path: path, Err: read.err}
 		}
 		if err := read.refusal(path); err != nil {
 			return Fold{}, err
@@ -562,8 +591,8 @@ func (r fileRead) refusal(path string) error {
 	return refuseRetiredDecision(path, r.records)
 }
 
-// readFile is [decodeFile]'s result as the fold and rotation read it, without the
-// failure that ended the file, which they count as a skipped line.
+// readFile is [decodeFile]'s result as pruning reads it, without the failure that ended
+// the file: a file it cannot read dates nothing, so pruning keeps it.
 func readFile(path string) (records []Record, skipped, legacy int, retired apiversion.APIVersion, vanished bool) {
 	r := decodeFile(path)
 	return r.records, r.skipped, r.legacy, r.retired, r.vanished
@@ -575,9 +604,8 @@ func readFile(path string) (records []Record, skipped, legacy int, retired apive
 // The vanished case is separated from the unreadable one because pruning can delete a
 // file between a caller's directory listing and this open. Nothing was lost that the
 // caller could have read, so counting it as damage would report corruption every time
-// housekeeping ran. Any OTHER open failure (a permission, a device error) is real: it is
-// err, and it counts as a skipped line, on the same reasoning as a corrupt tail: a fold
-// of the whole store keeps a partial history rather than refusing it.
+// housekeeping ran. Any OTHER open or read failure (a permission, a device error) is
+// real: it is err, which every reader of records returns.
 func decodeFile(path string) fileRead {
 	f, err := os.Open(path)
 	if err != nil {
@@ -874,6 +902,12 @@ func LoadEvents(ctx context.Context, cfg Config, events []LoadEvent, opts ...Opt
 	// against it, so two loaders that both read before either writes each believe the
 	// other's events are new and store them twice, permanently, because the dedup set is
 	// a snapshot.
+	//
+	// The store is made first, owner-only as Open makes it, because the lock would create
+	// it world-searchable.
+	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
+		return LoadResult{}, &StoreError{Op: "create store", Path: c.Dir, Err: err}
+	}
 	var result LoadResult
 	err := codec.WithLock(ctx, filepath.Join(c.Dir, loadLockName), loadLockTimeout, func() error {
 		var err error
