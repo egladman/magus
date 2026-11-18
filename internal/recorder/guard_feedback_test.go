@@ -9,12 +9,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
-func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
+type GuardFeedbackSuite struct{ suite.Suite }
+
+func TestGuardFeedback(t *testing.T) { suite.Run(t, new(GuardFeedbackSuite)) }
+
+func (s *GuardFeedbackSuite) TestRecentGuardFeedbackOnlyProposesRecurringEvidence() {
+	t := s.T()
 	base := t.TempDir()
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 
@@ -52,7 +58,8 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	assert.True(t, feedback[0].NeedsReview(), "three same-session repeats are enough to review")
 }
 
-func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t *testing.T) {
+func (s *GuardFeedbackSuite) TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess() {
+	t := s.T()
 	base := t.TempDir()
 	recordFeedbackCommand(t, base, "codex", "first", "go test ./...")
 	recordFeedbackCommand(t, base, "codex", "second", "go test ./...")
@@ -72,7 +79,8 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	assert.True(t, feedback[0].NeedsReview())
 }
 
-func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
+func (s *GuardFeedbackSuite) TestRecentGuardFeedbackIgnoresDenialsNoHostClaims() {
+	t := s.T()
 	base := t.TempDir()
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
 	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
@@ -99,9 +107,8 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 	assert.False(t, feedback[0].NeedsReview(), "one operator cannot manufacture the repeat that promotes a candidate")
 }
 
-func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
-	t.Parallel()
-
+func (s *GuardFeedbackSuite) TestLeaseDenialsReadsOneLeasesDenialsOldestFirst() {
+	t := s.T()
 	base := t.TempDir()
 	deny := func(lease, rule string, decision verdict.Decision) {
 		AppendAgentCommand(t.Context(), base, AgentCommand{
@@ -137,9 +144,8 @@ func TestLeaseDenialsReadsOneLeasesDenialsOldestFirst(t *testing.T) {
 
 // A full window with no agent command at or before since may have rotated the attempt's
 // denials away, so an empty answer is unknown.
-func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
-	t.Parallel()
-
+func (s *GuardFeedbackSuite) TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince() {
+	t := s.T()
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
 	line, err := journal.Call{Time: atMs(5_000_000), Kind: journal.CallKindJob, Name: "graph build", Outcome: journal.OutcomeOK}.MarshalJSON()
@@ -153,13 +159,20 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 	assert.False(t, known)
 }
 
-func TestIsMagusRunRequestReadsEverySpelling(t *testing.T) {
-	for _, cmd := range []string{"magus run test .", "./magus run test .", "/usr/local/bin/magus run ci", "MAGUS_X=1 ./magus -s run ci", "./magus --root /repo run ci"} {
-		assert.True(t, isMagusRunRequest(cmd), cmd)
-	}
-	for _, cmd := range []string{"magus query x", "./magus", "go run .", "magus --root run", ""} {
-		assert.False(t, isMagusRunRequest(cmd), cmd)
-	}
+func (s *GuardFeedbackSuite) TestIsMagusRunRequestReadsEverySpelling() {
+	s.True(isMagusRunRequest("magus run test ."))
+	s.True(isMagusRunRequest("./magus run test ."))
+	s.True(isMagusRunRequest("/usr/local/bin/magus run ci"))
+	s.True(isMagusRunRequest("MAGUS_X=1 ./magus -s run ci"))
+	s.True(isMagusRunRequest("./magus --root /repo run ci"))
+}
+
+func (s *GuardFeedbackSuite) TestIsMagusRunRequestRefusesWhatIsNotARun() {
+	s.False(isMagusRunRequest("magus query x"))
+	s.False(isMagusRunRequest("./magus"))
+	s.False(isMagusRunRequest("go run ."))
+	s.False(isMagusRunRequest("magus --root run"), "--root takes run as its value")
+	s.False(isMagusRunRequest(""))
 }
 
 func recordFeedbackCommand(t *testing.T, base, host, session, command string) {

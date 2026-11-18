@@ -8,49 +8,42 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-// The W3C shape is the whole contract, so the table is written against the spec's rules rather
-// than against magus's use of them: a value magus half-accepts is one it would record a
-// half-true trace from.
-func TestParseTraceparent(t *testing.T) {
-	const (
-		trace = "4bf92f3577b34da6a3ce929d0e0e4736"
-		span  = "00f067aa0ba902b7"
-	)
+type PropagationSuite struct{ suite.Suite }
 
-	for name, tc := range map[string]struct {
-		value string
-		want  Spawn
-	}{
-		"a sampled traceparent": {
-			"00-" + trace + "-" + span + "-01",
-			Spawn{TraceID: trace, ParentSpanID: span, Flags: "01"},
-		},
-		"an unsampled one is still a trace": {
-			"00-" + trace + "-" + span + "-00",
-			Spawn{TraceID: trace, ParentSpanID: span, Flags: "00"},
-		},
-		"unset":                {"", Spawn{}},
-		"a future version":     {"01-" + trace + "-" + span + "-01", Spawn{}},
-		"an all-zero trace id": {fmt.Sprintf("00-%s-%s-01", strings.Repeat("0", 32), span), Spawn{}},
-		"an all-zero span id":  {fmt.Sprintf("00-%s-%s-01", trace, strings.Repeat("0", 16)), Spawn{}},
-		"uppercase hex":        {fmt.Sprintf("00-%s-%s-01", strings.ToUpper(trace), span), Spawn{}},
-		"a short trace id":     {fmt.Sprintf("00-%s-%s-01", trace[:31], span), Spawn{}},
-		"a long span id":       {"00-" + trace + "-" + span + "0-01", Spawn{}},
-		"a missing field":      {"00-" + trace + "-" + span, Spawn{}},
-		"an extra field":       {"00-" + trace + "-" + span + "-01-x", Spawn{}},
-		"not hex at all":       {fmt.Sprintf("00-%s-%s-01", strings.Repeat("z", 32), span), Spawn{}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, parseTraceparent(tc.value))
-		})
-	}
+func TestPropagation(t *testing.T) { suite.Run(t, new(PropagationSuite)) }
+
+const (
+	testTrace = "4bf92f3577b34da6a3ce929d0e0e4736"
+	testSpan  = "00f067aa0ba902b7"
+)
+
+func (s *PropagationSuite) TestParseTraceparentReadsATrace() {
+	s.Equal(Spawn{TraceID: testTrace, ParentSpanID: testSpan, Flags: "01"}, parseTraceparent("00-"+testTrace+"-"+testSpan+"-01"))
+	s.Equal(Spawn{TraceID: testTrace, ParentSpanID: testSpan, Flags: "00"}, parseTraceparent("00-"+testTrace+"-"+testSpan+"-00"), "an unsampled one is still a trace")
+	s.Equal(Spawn{}, parseTraceparent(""), "unset")
+}
+
+// The W3C shape is the whole contract, so these are written against the
+// spec's rules: a value magus half-accepts would record a half-true trace.
+func (s *PropagationSuite) TestParseTraceparentRefusesWhatTheSpecRefuses() {
+	s.Zero(parseTraceparent("01-"+testTrace+"-"+testSpan+"-01"), "a future version")
+	s.Zero(parseTraceparent(fmt.Sprintf("00-%s-%s-01", strings.Repeat("0", 32), testSpan)), "an all-zero trace id")
+	s.Zero(parseTraceparent(fmt.Sprintf("00-%s-%s-01", testTrace, strings.Repeat("0", 16))), "an all-zero span id")
+	s.Zero(parseTraceparent(fmt.Sprintf("00-%s-%s-01", strings.ToUpper(testTrace), testSpan)), "uppercase hex")
+	s.Zero(parseTraceparent(fmt.Sprintf("00-%s-%s-01", testTrace[:31], testSpan)), "a short trace id")
+	s.Zero(parseTraceparent("00-"+testTrace+"-"+testSpan+"0-01"), "a long span id")
+	s.Zero(parseTraceparent("00-"+testTrace+"-"+testSpan), "a missing field")
+	s.Zero(parseTraceparent("00-"+testTrace+"-"+testSpan+"-01-x"), "an extra field")
+	s.Zero(parseTraceparent(fmt.Sprintf("00-%s-%s-01", strings.Repeat("z", 32), testSpan)), "not hex at all")
 }
 
 // A malformed value is dropped either way; only the note says why, and it must name the shape
 // rather than echo a string that failed the check that makes it safe to log.
-func TestParseTraceparent_NotesOnceAndNeverEchoesTheValue(t *testing.T) {
+func (s *PropagationSuite) TestParseTraceparent_NotesOnceAndNeverEchoesTheValue() {
+	t := s.T()
 	traceparentNoteOnce = sync.Once{}
 	t.Cleanup(func() { traceparentNoteOnce = sync.Once{} })
 
@@ -64,41 +57,39 @@ func TestParseTraceparent_NotesOnceAndNeverEchoesTheValue(t *testing.T) {
 	assert.NotContains(t, logged, "garbage-value")
 }
 
-func TestParseBaggage(t *testing.T) {
-	for name, tc := range map[string]struct {
-		value       string
-		wantLease   string
-		wantSpawner string
-	}{
-		"both members":              {"magus.lease=fleet/f3,magus.spawner=claude", "fleet/f3", "claude"},
-		"other tenants are skipped": {"userId=alice,magus.lease=fleet/f3,serverNode=DF28", "fleet/f3", ""},
-		"properties are ignored":    {"magus.lease=fleet/f3;prop=1,magus.spawner=claude;x", "fleet/f3", "claude"},
-		"whitespace is formatting":  {" magus.lease = fleet/f3 , magus.spawner = claude ", "fleet/f3", "claude"},
-		"the value is percent-decoded": {
-			"magus.spawner=claude%20code%2Fsession%201", "", "claude code/session 1",
-		},
-		"a plus is a plus, not a space": {"magus.spawner=wave+2", "", "wave+2"},
-		"a member with no = is skipped": {"broken,magus.lease=fleet/f3", "fleet/f3", ""},
-		"unset":                         {"", "", ""},
-		// The id rule every lease channel shares: an id magus cannot vouch for is dropped,
-		// because the trail exempts a lease from redaction.
-		"a lease that is not an id": {"magus.lease=two%20words", "", ""},
-		"an empty lease":            {"magus.lease=", "", ""},
-	} {
-		t.Run(name, func(t *testing.T) {
-			baggageLeaseNoteOnce = sync.Once{}
-			t.Cleanup(func() { baggageLeaseNoteOnce = sync.Once{} })
+// baggage is parseBaggage over v as one pair, so a case reads in one line.
+func baggage(v string) [2]string {
+	lease, spawner := parseBaggage(v)
+	return [2]string{lease, spawner}
+}
 
-			lease, spawner := parseBaggage(tc.value)
-			assert.Equal(t, tc.wantLease, lease)
-			assert.Equal(t, tc.wantSpawner, spawner)
-		})
-	}
+func (s *PropagationSuite) TestParseBaggageReadsBothMembers() {
+	s.Equal([2]string{"fleet/f3", "claude"}, baggage("magus.lease=fleet/f3,magus.spawner=claude"))
+	s.Equal([2]string{"fleet/f3", ""}, baggage("userId=alice,magus.lease=fleet/f3,serverNode=DF28"), "other tenants are skipped")
+	s.Equal([2]string{"fleet/f3", "claude"}, baggage("magus.lease=fleet/f3;prop=1,magus.spawner=claude;x"), "properties are ignored")
+	s.Equal([2]string{"fleet/f3", "claude"}, baggage(" magus.lease = fleet/f3 , magus.spawner = claude "), "whitespace is formatting")
+	s.Equal([2]string{"fleet/f3", ""}, baggage("broken,magus.lease=fleet/f3"), "a member with no = is skipped")
+	s.Equal([2]string{"", ""}, baggage(""), "unset")
+}
+
+func (s *PropagationSuite) TestParseBaggagePercentDecodesTheValue() {
+	s.Equal([2]string{"", "claude code/session 1"}, baggage("magus.spawner=claude%20code%2Fsession%201"))
+	s.Equal([2]string{"", "wave+2"}, baggage("magus.spawner=wave+2"), "a plus is a plus, not a space")
+}
+
+// The id rule every lease channel shares: an id magus cannot vouch for is
+// dropped, because the log exempts a lease from redaction.
+func (s *PropagationSuite) TestParseBaggageDropsALeaseThatIsNotAnID() {
+	baggageLeaseNoteOnce = sync.Once{}
+	s.T().Cleanup(func() { baggageLeaseNoteOnce = sync.Once{} })
+	s.Equal([2]string{"", ""}, baggage("magus.lease=two%20words"))
+	s.Equal([2]string{"", ""}, baggage("magus.lease="), "an empty lease")
 }
 
 // Each malformed shape has its own note: an oversized list first must not
 // silence the note for a bad lease id after it.
-func TestParseBaggage_NotesEachShapeOnce(t *testing.T) {
+func (s *PropagationSuite) TestParseBaggage_NotesEachShapeOnce() {
+	t := s.T()
 	baggageLengthNoteOnce, baggageLeaseNoteOnce = sync.Once{}, sync.Once{}
 	t.Cleanup(func() { baggageLengthNoteOnce, baggageLeaseNoteOnce = sync.Once{}, sync.Once{} })
 
@@ -112,14 +103,16 @@ func TestParseBaggage_NotesEachShapeOnce(t *testing.T) {
 
 // The label rides every session record this process writes, so an unbounded one is a cost every
 // later read of the repository pays.
-func TestParseBaggage_ClampsTheSpawnerLabel(t *testing.T) {
+func (s *PropagationSuite) TestParseBaggage_ClampsTheSpawnerLabel() {
+	t := s.T()
 	_, spawner := parseBaggage("magus.spawner=" + strings.Repeat("s", MaxSpawnerLen+50))
 	assert.Len(t, spawner, MaxSpawnerLen)
 }
 
 // The two channels are read independently: a host that exports one and not the other still
 // attributes what it can, and neither absence is an error.
-func TestSpawnFromEnv_ReadsTheTwoChannelsIndependently(t *testing.T) {
+func (s *PropagationSuite) TestSpawnFromEnv_ReadsTheTwoChannelsIndependently() {
+	t := s.T()
 	const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 	t.Setenv(EnvTraceparent, "  "+traceparent+"  ")
@@ -145,7 +138,8 @@ func TestSpawnFromEnv_ReadsTheTwoChannelsIndependently(t *testing.T) {
 
 // The one identity magus asserts rather than records. Distinct per call, because it is what a
 // child session points at when it names its parent.
-func TestNewSpanID(t *testing.T) {
+func (s *PropagationSuite) TestNewSpanID() {
+	t := s.T()
 	first, second := NewSpanID(), NewSpanID()
 	assert.Len(t, first, 16)
 	assert.True(t, lowerHex(first, 16), "a span id is 16 lowercase hex characters")

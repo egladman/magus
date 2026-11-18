@@ -10,16 +10,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
+type OriginSuite struct{ suite.Suite }
+
+func TestOrigin(t *testing.T) { suite.Run(t, new(OriginSuite)) }
+
 // Every event carries the OS account that wrote it, whatever the producer said, so a row
 // with no host session still says whose account acted instead of being read as "a person".
-func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
-	t.Parallel()
+func (s *OriginSuite) TestAppendStampsTheOSAccountAndTheEntryPoint() {
+	t := s.T()
 	dir := t.TempDir()
 	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
 
@@ -46,8 +51,8 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 
 // The credential a bearer guard verified rides the context and is stamped on every record
 // made under it, so no handler copies it by hand.
-func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
-	t.Parallel()
+func (s *OriginSuite) TestStampOriginReadsTheCredentialFromTheContext() {
+	t := s.T()
 	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: auth.AccessConsole()}
 	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), job.EntryPointRPC), cred)
 
@@ -63,7 +68,8 @@ func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
 
 // A failed passwd lookup records the uid alone. user.Current's pure-Go fallback reads
 // $USER, which any process sets, so it would put a forged name on every record.
-func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
+func (s *OriginSuite) TestAccountOfNeverReadsTheEnvironment() {
+	t := s.T()
 	t.Setenv("USER", "forged")
 	failing := func(string) (*user.User, error) { return nil, errors.New("no passwd entry") }
 	current := func() (*user.User, error) { return &user.User{Username: "forged", Uid: "0"}, nil }
@@ -78,8 +84,8 @@ func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
 	assert.Equal(t, "501", uid)
 }
 
-func TestEntryPointFromContextIsEmptyUntilRecorded(t *testing.T) {
-	t.Parallel()
+func (s *OriginSuite) TestEntryPointFromContextIsEmptyUntilRecorded() {
+	t := s.T()
 	assert.Empty(t, EntryPointFromContext(context.Background()))
 	ctx := ContextWithEntryPoint(context.Background(), job.EntryPointServer)
 	assert.Equal(t, job.EntryPointRPC, EntryPointFromContext(ContextWithEntryPoint(ctx, job.EntryPointRPC)), "the innermost entry point wins")

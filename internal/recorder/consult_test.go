@@ -6,7 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ConsultSuite struct{ suite.Suite }
+
+func TestConsult(t *testing.T) { suite.Run(t, new(ConsultSuite)) }
 
 // record writes one observation the way the guard hook does.
 func record(t *testing.T, base string, c AgentCommand) {
@@ -14,7 +19,8 @@ func record(t *testing.T, base string, c AgentCommand) {
 	AppendAgentCommand(t.Context(), base, c)
 }
 
-func TestConsultedJoinsQuestionsToTheWriteThroughTheLease(t *testing.T) {
+func (s *ConsultSuite) TestConsultedJoinsQuestionsToTheWriteThroughTheLease() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: `magus query "kind=target project=internal/trail"`})
 	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
@@ -36,7 +42,8 @@ func TestConsultedJoinsQuestionsToTheWriteThroughTheLease(t *testing.T) {
 
 // A work unit that fans out has one lease per worker. The reviewer is asking what backs the
 // changeset, so every lease that wrote into it contributes to one merged list.
-func TestConsultedMergesEveryLeaseThatWroteTheChangeset(t *testing.T) {
+func (s *ConsultSuite) TestConsultedMergesEveryLeaseThatWroteTheChangeset() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
 	record(t, base, AgentCommand{Session: "boss", Lease: "wave/orchestrator", Tool: ToolFileWrite, Path: "a.go"})
@@ -58,44 +65,46 @@ func TestConsultedMergesEveryLeaseThatWroteTheChangeset(t *testing.T) {
 // The four silences a reviewer must be able to tell apart. Three are facts about the record and
 // one is a fact about the change, and rendering them alike reports a fresh clone as unresearched
 // work.
-func TestConsultedNamesWhichSilenceItIs(t *testing.T) {
-	t.Run("nothing observed in this checkout", func(t *testing.T) {
-		_, gap, _ := Consulted(t.Context(), "", t.TempDir(), []string{"a.go"}, 100)
-		assert.Equal(t, ConsultGapUnobserved, gap)
-	})
+func (s *ConsultSuite) TestConsultedNamesNothingObservedInThisCheckout() {
+	_, gap, _ := Consulted(s.T().Context(), "", s.T().TempDir(), []string{"a.go"}, 100)
+	s.Equal(ConsultGapUnobserved, gap)
+}
 
-	t.Run("observed but unleased", func(t *testing.T) {
-		t.Setenv(EnvBaggage, "")
-		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
-		record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "a.go"})
+func (s *ConsultSuite) TestConsultedNamesObservedButUnleased() {
+	t := s.T()
+	t.Setenv(EnvBaggage, "")
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "a.go"})
 
-		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
-		assert.Equal(t, ConsultGapUnleased, gap)
-	})
+	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	s.Equal(ConsultGapUnleased, gap)
+}
 
-	t.Run("leased work that wrote other files", func(t *testing.T) {
-		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
-		record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolFileWrite, Path: "elsewhere.go"})
+func (s *ConsultSuite) TestConsultedNamesLeasedWorkThatWroteOtherFiles() {
+	t := s.T()
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolFileWrite, Path: "elsewhere.go"})
 
-		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
-		assert.Equal(t, ConsultGapUnmatched, gap)
-	})
+	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	s.Equal(ConsultGapUnmatched, gap)
+}
 
-	t.Run("the authors asked nothing", func(t *testing.T) {
-		base := t.TempDir()
-		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "go doc net/http"})
-		record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "a.go"})
+func (s *ConsultSuite) TestConsultedNamesAuthorsWhoAskedNothing() {
+	t := s.T()
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "go doc net/http"})
+	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "a.go"})
 
-		_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
-		assert.Equal(t, ConsultGapNoQuestions, gap)
-	})
+	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	s.Equal(ConsultGapNoQuestions, gap)
 }
 
 // A consultation that cannot be tied to a lease is not evidence about any changeset, so it is
 // dropped rather than attributed to whoever happens to have written nearby.
-func TestConsultedReportsNothingWithoutALease(t *testing.T) {
+func (s *ConsultSuite) TestConsultedReportsNothingWithoutALease() {
+	t := s.T()
 	// Explicit, because AppendAgentCommand falls back to this channel and these tests may
 	// themselves be run by an agent working under a lease.
 	t.Setenv(EnvBaggage, "")
@@ -110,7 +119,8 @@ func TestConsultedReportsNothingWithoutALease(t *testing.T) {
 
 // A lease that wrote somewhere else explains a different change, and its questions must not
 // travel to this one.
-func TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(t *testing.T) {
+func (s *ConsultSuite) TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "magus refs AppendAgentCommand"})
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
@@ -124,7 +134,8 @@ func TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(t *testing.T) {
 
 // The recorded path is absolute for every host observed so far, and the changeset speaks
 // workspace-relative. Replay closes the same vocabulary gap.
-func TestConsultedRelativizesTheWrittenPath(t *testing.T) {
+func (s *ConsultSuite) TestConsultedRelativizesTheWrittenPath() {
+	t := s.T()
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolShellCommand, Command: "magus describe target ci ."})
 	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolFileWrite, Path: "/repo/magusfile.buzz"})
@@ -134,40 +145,48 @@ func TestConsultedRelativizesTheWrittenPath(t *testing.T) {
 	assert.Equal(t, Consultation{Verb: "describe", Subject: "target ci .", Count: 1}, got[0])
 }
 
-func TestConsultationOfReadsTheVerbAndItsSubject(t *testing.T) {
-	for _, tc := range []struct {
-		cmd, verb, subject string
-		ok                 bool
-	}{
-		{cmd: "magus query kind=spell", verb: "query", subject: "kind=spell", ok: true},
-		{cmd: "./magus explain internal/cache", verb: "explain", subject: "internal/cache", ok: true},
-		{cmd: "/usr/local/bin/magus refs Open", verb: "refs", subject: "Open", ok: true},
-		{cmd: "magus where api gateway", verb: "where", subject: "api gateway", ok: true},
-		// Rule 1: the token is shared with `graph build`, which writes.
-		{cmd: "magus graph stats", ok: false},
-		// Rule 3: the subject sits in a second token, which this verb model cannot address.
-		{cmd: "magus notes get spawn-chain", ok: false},
-		// A flag that takes a separate value must not hand the value to the verb slot, and a
-		// trailing flag is not part of what was asked.
-		{cmd: "magus --root /repo -o json query kind=op -s", verb: "query", subject: "kind=op", ok: true},
-		{cmd: "MAGUS_ROOT=/repo magus explain a b", verb: "explain", subject: "a b", ok: true},
-		{cmd: "magus run test .", ok: false},
-		{cmd: "magus", ok: false},
-		// A value-taking flag with nothing after it walks the scan past the end of the line.
-		{cmd: "magus --root", ok: false},
-		{cmd: "rg query internal", ok: false},
-		{cmd: "", ok: false},
+// consultation is parseConsultation over cmd, which must read as one.
+func (s *ConsultSuite) consultation(cmd string) [2]string {
+	verb, subject, ok := parseConsultation(cmd)
+	s.Require().True(ok, cmd)
+	return [2]string{verb, subject}
+}
+
+func (s *ConsultSuite) TestConsultationOfReadsTheVerbAndItsSubject() {
+	s.Equal([2]string{"query", "kind=spell"}, s.consultation("magus query kind=spell"))
+	s.Equal([2]string{"explain", "internal/cache"}, s.consultation("./magus explain internal/cache"))
+	s.Equal([2]string{"refs", "Open"}, s.consultation("/usr/local/bin/magus refs Open"))
+	s.Equal([2]string{"where", "api gateway"}, s.consultation("magus where api gateway"))
+	s.Equal([2]string{"explain", "a b"}, s.consultation("MAGUS_ROOT=/repo magus explain a b"))
+}
+
+// A flag that takes a separate value must not hand the value to the verb slot, and a
+// trailing flag is not part of what was asked.
+func (s *ConsultSuite) TestConsultationOfSkipsFlags() {
+	s.Equal([2]string{"query", "kind=op"}, s.consultation("magus --root /repo -o json query kind=op -s"))
+}
+
+func (s *ConsultSuite) TestConsultationOfRefusesWhatIsNotAConsultation() {
+	for _, cmd := range []string{
+		"magus graph stats",           // rule 1: shared with `graph build`, which writes
+		"magus notes get spawn-chain", // rule 3: the subject sits in a second token
+		"magus run test .",
+		"magus",
+		"magus --root", // a value-taking flag with nothing after it
+		"rg query internal",
+		"",
 	} {
-		verb, subject, ok := parseConsultation(tc.cmd)
-		assert.Equal(t, tc.ok, ok, tc.cmd)
-		assert.Equal(t, tc.verb, verb, tc.cmd)
-		assert.Equal(t, tc.subject, subject, tc.cmd)
+		verb, subject, ok := parseConsultation(cmd)
+		s.False(ok, cmd)
+		s.Empty(verb, cmd)
+		s.Empty(subject, cmd)
 	}
 }
 
 // A subject is one line of a report, so an odd invocation cannot push an unbounded string into
 // it. The cut lands on a rune boundary.
-func TestConsultationOfBoundsTheSubject(t *testing.T) {
+func (s *ConsultSuite) TestConsultationOfBoundsTheSubject() {
+	t := s.T()
 	long := ""
 	for len(long) < maxSubjectLen*2 {
 		long += "ünïcödé"
@@ -179,7 +198,8 @@ func TestConsultationOfBoundsTheSubject(t *testing.T) {
 }
 
 // A blob that does not decode is named beside the consultations the rest give.
-func TestConsultedReturnsAnUndecodableBlob(t *testing.T) {
+func (s *ConsultSuite) TestConsultedReturnsAnUndecodableBlob() {
+	t := s.T()
 	base := t.TempDir()
 	ref := recordUndecodable(t, base)
 

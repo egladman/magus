@@ -22,9 +22,14 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+type CallsSuite struct{ suite.Suite }
+
+func TestCalls(t *testing.T) { suite.Run(t, new(CallsSuite)) }
 
 // captureWarnings installs a slog handler for the duration of fn and returns what it logged.
 // A producer here reports a fact it could not record through slog rather than an error (every
@@ -79,7 +84,8 @@ func seedEvents(t *testing.T, base string, n int) []journal.Call {
 	return events
 }
 
-func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
+func (s *CallsSuite) TestRecentCallsIsNewestFirst() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
@@ -99,9 +105,10 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	assert.Equal(t, want, events[0], "event not round-tripped")
 }
 
-// TestTrailIsPrivateToItsOwner pins the modes Append and WriteBlob create:
-// the trail records what an agent ran and what a tool returned.
-func TestTrailIsPrivateToItsOwner(t *testing.T) {
+// TestTrailIsPrivateToItsOwner pins the modes AppendCall and WritePayload
+// create: the log records what an agent ran and what a tool returned.
+func (s *CallsSuite) TestTrailIsPrivateToItsOwner() {
+	t := s.T()
 	dir := filepath.Join(t.TempDir(), "state")
 	for i := range 3 {
 		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
@@ -120,11 +127,13 @@ func TestTrailIsPrivateToItsOwner(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), perm(filepath.Join(blobsPath(dir), ref)))
 }
 
-func TestAppend_EmptyBaseIsNoop(t *testing.T) {
+func (s *CallsSuite) TestAppend_EmptyBaseIsNoop() {
+	t := s.T()
 	AppendCall(t.Context(), "", journal.Call{Name: "x"}) // must not panic or create anything
 }
 
-func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_NormalizesHookObservation() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
 		Workspace: "/repo/magus",
@@ -172,7 +181,8 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.Equal(t, AgentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: verdict.Defer}, gotResponse)
 }
 
-func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RequiresCommandOrPath() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
 	events, err := RecentCalls(t.Context(), dir, 1)
@@ -180,7 +190,8 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	require.Empty(t, events)
 }
 
-func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheGuardJudged() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
 
@@ -192,7 +203,8 @@ func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	assert.Zero(t, events[0].Duration, "guard time is not tool time")
 }
 
-func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheToolRan() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
 
@@ -207,7 +219,8 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 
 // A hook row names the magus that judged the call and the directory the host reported, and
 // leaves both off when the producer did not know them.
-func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
 		Tool: "Bash", Command: "ls", Decision: verdict.Defer,
@@ -265,7 +278,8 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	}), spawns[0])
 }
 
-func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
 
@@ -299,7 +313,8 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	}, gotResponse)
 }
 
-func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsTheCostFacts() {
+	t := s.T()
 	dir := t.TempDir()
 	chars := 9100
 	want := types.AgentFacts{
@@ -327,7 +342,8 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	}
 }
 
-func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_OmitsCostFactsItWasNotGiven() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
 
@@ -341,7 +357,8 @@ func TestAppendAgentCommand_OmitsCostFactsItWasNotGiven(t *testing.T) {
 }
 
 // A result of zero characters was observed, which is not the same as no observation.
-func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_KeepsAnObservedEmptyResult() {
+	t := s.T()
 	dir := t.TempDir()
 	empty := 0
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
@@ -356,7 +373,8 @@ func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
 	assert.Zero(t, *got.ResultChars)
 }
 
-func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentSpawn_RecordsTheCostFacts() {
+	t := s.T()
 	dir := t.TempDir()
 	want := types.AgentFacts{
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
@@ -380,7 +398,8 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 // TestAppendAgentSpawn_RecordsHandedContext is the lease-audit round trip: the event line
 // says who handed work to whom and which lease it belongs to, and the context itself is reachable
 // only through the blob, never inlined, because a lease prompt is routinely kilobytes.
-func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentSpawn_RecordsHandedContext() {
+	t := s.T()
 	dir := t.TempDir()
 	handed := "lease: notes-store-6b\n\nAudit the notes store write boundary and report back."
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
@@ -427,7 +446,8 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	}, gotRequest)
 }
 
-func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
 	events, err := RecentCalls(t.Context(), dir, 1)
@@ -447,62 +467,53 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	}), events[0])
 }
 
+// spawnName is the action AppendAgentSpawn records for spawn.
+func (s *CallsSuite) spawnName(spawn AgentSpawn) string {
+	dir := s.T().TempDir()
+	AppendAgentSpawn(s.T().Context(), dir, spawn)
+	events, err := RecentCalls(s.T().Context(), dir, 1)
+	s.Require().NoError(err)
+	s.Require().Len(events, 1)
+	return events[0].Name
+}
+
 // A continuation is recorded because the caller says so, not because it named a target: a
 // host may address an agent it cannot name, and a spawn may carry one.
-func TestAppendAgentSpawn_ContinueIsExplicit(t *testing.T) {
-	cases := []struct {
-		name  string
-		spawn AgentSpawn
-		want  string
-	}{
-		{"a continue naming no target", AgentSpawn{Continue: true, Context: "carry on"}, NameAgentContinue},
-		{"a spawn carrying a target", AgentSpawn{Child: "Explore", Target: "a1b2c3", Context: "audit"}, "Explore"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			AppendAgentSpawn(t.Context(), dir, tc.spawn)
-			events, err := RecentCalls(t.Context(), dir, 1)
-			require.NoError(t, err)
-			require.Len(t, events, 1)
-			assert.Equal(t, tc.want, events[0].Name)
-		})
-	}
+func (s *CallsSuite) TestAppendAgentSpawn_AContinueNamingNoTargetIsAContinue() {
+	s.Equal(NameAgentContinue, s.spawnName(AgentSpawn{Continue: true, Context: "carry on"}))
 }
 
-// TestLeaseFromContext pins the cooperative correlation marker: present, absent, and every shape
-// of malformed or misplaced. A marker that is not the first non-blank line yields no lease, and
-// neither does a malformed one, never a wrong one. The whole contract is that an uncorrelated
-// spawn is the designed outcome.
-func TestLeaseFromContext(t *testing.T) {
-	for name, tc := range map[string]struct {
-		context string
-		want    string
-	}{
-		"first line":           {"lease: mgs1021\nthen the work", "mgs1021"},
-		"indented":             {"  \tlease: feat/spawn-capture  \nrest", "feat/spawn-capture"},
-		"after leading blanks": {"\n  \n\nlease: a.b-1/c\n", "a.b-1/c"},
-		"the first line wins":  {"lease: one\nlease: two", "one"},
-		"absent":               {"just a prompt with no marker", ""},
-		"empty id":             {"lease:\nrest", ""},
-		"only whitespace id":   {"lease:   \nrest", ""},
-		"prose after the id":   {"lease: mgs1021 the notes one", ""},
-		"not at line start":    {"see lease: mgs1021 in the ledger", ""},
-		"wrong key":            {"leases: mgs1021", ""},
-		"illegal characters":   {"lease: mgs1021!", ""},
-		// The reason the marker has to LEAD: both of these carry a well-formed marker that
-		// this spawn did not write: one quoted below the prompt's own opening line, one
-		// pushed out of the head by a pathological first line. A wrong join is worse than none.
-		"below the first line": {"do this\nlease: a.b-1/c\n", ""},
-		"past the head cap":    {strings.Repeat(" ", leaseScanBytes) + "lease: mgs1021", ""},
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, leaseFromContext(tc.context))
-		})
-	}
+func (s *CallsSuite) TestAppendAgentSpawn_ASpawnCarryingATargetIsASpawn() {
+	s.Equal("Explore", s.spawnName(AgentSpawn{Child: "Explore", Target: "a1b2c3", Context: "audit"}))
 }
 
-func TestLeaseFromEnv_ReadsAValidID(t *testing.T) {
+func (s *CallsSuite) TestLeaseFromContextReadsAMarkerOnTheFirstLine() {
+	s.Equal("mgs1021", leaseFromContext("lease: mgs1021\nthen the work"))
+	s.Equal("feat/spawn-capture", leaseFromContext("  \tlease: feat/spawn-capture  \nrest"), "indented")
+	s.Equal("a.b-1/c", leaseFromContext("\n  \n\nlease: a.b-1/c\n"), "after leading blanks")
+	s.Equal("one", leaseFromContext("lease: one\nlease: two"), "the first line wins")
+}
+
+// A malformed marker yields no lease, never a wrong one.
+func (s *CallsSuite) TestLeaseFromContextRefusesAMalformedMarker() {
+	s.Empty(leaseFromContext("just a prompt with no marker"))
+	s.Empty(leaseFromContext("lease:\nrest"), "empty id")
+	s.Empty(leaseFromContext("lease:   \nrest"), "only whitespace id")
+	s.Empty(leaseFromContext("lease: mgs1021 the notes one"), "prose after the id")
+	s.Empty(leaseFromContext("see lease: mgs1021 in the ledger"), "not at line start")
+	s.Empty(leaseFromContext("leases: mgs1021"), "wrong key")
+	s.Empty(leaseFromContext("lease: mgs1021!"), "illegal characters")
+}
+
+// The marker has to LEAD: a well-formed one quoted below the opening line,
+// or pushed past the head by a pathological first line, is not this spawn's.
+func (s *CallsSuite) TestLeaseFromContextRefusesAMarkerThatDoesNotLead() {
+	s.Empty(leaseFromContext("do this\nlease: a.b-1/c\n"))
+	s.Empty(leaseFromContext(strings.Repeat(" ", leaseScanBytes) + "lease: mgs1021"))
+}
+
+func (s *CallsSuite) TestLeaseFromEnv_ReadsAValidID() {
+	t := s.T()
 	t.Setenv(EnvBaggage, BaggageLease+"=  feat/spawn-capture  ")
 	require.Equal(t, "feat/spawn-capture", LeaseFromEnv(), "surrounding whitespace is formatting, not part of the id")
 
@@ -512,7 +523,8 @@ func TestLeaseFromEnv_ReadsAValidID(t *testing.T) {
 
 // The note is what keeps a typo'd lease from looking like a fleet that simply never
 // attributed anything: the value is dropped either way, and only the note says why.
-func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
+func (s *CallsSuite) TestLeaseFromEnv_DropsAnInvalidIDWithANote() {
+	t := s.T()
 	t.Setenv(EnvBaggage, BaggageLease+"=not a lease id")
 	baggageLeaseNoteOnce = sync.Once{} // another test in this binary may already have spent it
 	t.Cleanup(func() { baggageLeaseNoteOnce = sync.Once{} })
@@ -529,7 +541,8 @@ func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 
 // The producer resolved the lease through job.LeaseQuery, so the trail records what it was
 // handed and never consults BAGGAGE itself: a second reading here would be a second order.
-func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_RecordsOnlyTheSuppliedLease() {
+	t := s.T()
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/from-env")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: job.LeaseSourceMarker})
@@ -554,7 +567,8 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	}), events[2])
 }
 
-func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
+func (s *CallsSuite) TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated() {
+	t := s.T()
 	t.Setenv(EnvBaggage, "")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
@@ -565,12 +579,13 @@ func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {
 	assert.Empty(t, events[0].Lease, "a missing join is the designed outcome, never an invented one")
 }
 
-func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
+func (s *CallsSuite) TestWritePayload_RoundTripAndDedup() {
+	t := s.T()
 	dir := t.TempDir()
 	p := WritePayload(t.Context(), dir, "mcp", []byte("payload one"))
 	ref, size := p.Ref, p.Bytes
 	if ref == "" || size != int64(len("payload one")) || ref[:3] != "mcp" {
-		t.Fatalf("WriteBlob = %q,%d", ref, size)
+		t.Fatalf("WritePayload = %q,%d", ref, size)
 	}
 	body, err := readBlob(dir, ref)
 	if err != nil || string(body) != "payload one" {
@@ -581,7 +596,8 @@ func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	}
 }
 
-func TestWriteBlob_RejectsBadPrefixOrEmpty(t *testing.T) {
+func (s *CallsSuite) TestWritePayload_RejectsBadPrefixOrEmpty() {
+	t := s.T()
 	dir := t.TempDir()
 	for _, bad := range []string{"", "m", "MCP", "toolong99", "a1"} {
 		if ref := WritePayload(t.Context(), dir, bad, []byte("x")).Ref; ref != "" {
@@ -604,7 +620,8 @@ func backdateBlob(t *testing.T, base, ref string, age time.Duration) {
 	require.NoError(t, os.Chtimes(filepath.Join(blobsPath(base), ref), old, old))
 }
 
-func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
+func (s *CallsSuite) TestRotate_CapsEventsAndGCsOrphanBlobs() {
+	t := s.T()
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
 	for i := 1; i <= 5; i++ {
@@ -630,7 +647,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		t.Errorf("orphaned blob not garbage-collected")
 	}
 
-	// A temp file left by an in-flight WriteBlob (its name fails ValidRef) survives GC.
+	// An in-flight WritePayload's temp file fails ValidPayloadRef and survives.
 	tmp := filepath.Join(blobsPath(dir), "mcp0123456789abcd.tmp999")
 	if err := os.WriteFile(tmp, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write temp: %v", err)
@@ -641,11 +658,10 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	}
 }
 
-// TestGCBlobs_ProtectsPendingBlob reproduces the T-1 window: WriteBlob finalizes a blob
-// before the producer's Append writes the event referencing it. A rotate landing in that
-// gap sees a fresh, unreferenced blob: exactly what gcBlobs must not collect. Bounded and
-// deterministic: no sleep, the blob's real age (just-created) is what protects it.
-func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
+// TestGCBlobs_ProtectsPendingBlob reproduces the window between WritePayload
+// and the AppendCall naming its blob: a rotate there must not collect it.
+func (s *CallsSuite) TestGCBlobs_ProtectsPendingBlob() {
+	t := s.T()
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("pending payload"))
 
@@ -656,11 +672,10 @@ func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	}
 }
 
-// TestWriteBlob_DedupHitReopensTheGraceWindow covers the T-1 window's second shape: the
-// second write of a payload already stored is still a fresh reference to that file, so
-// the dedup hit must reopen the window. Without it gcBlobs sees an old blob no kept event
-// names yet and deletes the payload the caller is about to Append a reference to.
-func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
+// TestWritePayload_DedupHitReopensTheGraceWindow: a second write of a stored
+// payload is a fresh reference, so it must reopen the grace window.
+func (s *CallsSuite) TestWritePayload_DedupHitReopensTheGraceWindow() {
+	t := s.T()
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -676,7 +691,8 @@ func TestWriteBlob_DedupHitReopensTheGraceWindow(t *testing.T) {
 
 // TestGCBlobs_CollectsOrphanPastGraceWindow pins the other half of the T-1 fix: the grace
 // window only delays collection, it must not disable it, or gcBlobs stops doing its job.
-func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
+func (s *CallsSuite) TestGCBlobs_CollectsOrphanPastGraceWindow() {
+	t := s.T()
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("truly orphaned"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -691,7 +707,8 @@ func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 // TestGCBlobs_KeepsTheVerdictARepeatDenyCites pins the third ref an event can name: a
 // repeated guard deny prints a grd ref, and collecting it would leave that line pointing at
 // nothing while the event that printed it is still kept.
-func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
+func (s *CallsSuite) TestGCBlobs_KeepsTheVerdictARepeatDenyCites() {
+	t := s.T()
 	dir := t.TempDir()
 	ref := writeBlobRef(t.Context(), dir, "grd", []byte("the full verdict"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
@@ -706,7 +723,8 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 	assert.True(t, journal.ValidPayloadRef(ref))
 }
 
-func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
+func (s *CallsSuite) TestRotate_UnderCapAndEmptyBaseAreNoops() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
 	require.NoError(t, rotate(t.Context(), dir, 10)) // under cap: no rewrite
@@ -716,22 +734,21 @@ func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	require.NoError(t, rotate(t.Context(), "", 2))
 }
 
-func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
+func (s *CallsSuite) TestRotateCalls_UnderCapKeepsAll() {
+	t := s.T()
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
 		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
 	}
 	require.NoError(t, RotateCalls(t.Context(), dir)) // maxEvents is 10000, so this is a no-op that must not lose events
 	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 3 {
-		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
+		t.Errorf("RotateCalls under cap changed the log: got %d events, want 3", len(evs))
 	}
 }
 
-// TestRotate_TrimsAnOverCapTrail covers that a rotate actually trims, and to the right window.
-// It reaches Rotate directly because the server's maintenance schedule is the only thing that
-// triggers one: there is no write-driven path, since a counter can only bound the producer that
-// owns it.
-func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
+// TestRotateCalls_TrimsAnOverCapTrail: a rotate trims to the right window.
+func (s *CallsSuite) TestRotateCalls_TrimsAnOverCapTrail() {
+	t := s.T()
 	dir := t.TempDir()
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
@@ -739,13 +756,14 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
-	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
+	// Whole-struct assertions on the window edges, newest first.
 	require.Equal(t, journal.Call{Time: atMs(int64(maxEvents + 5)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[0])
 	require.Equal(t, journal.Call{Time: atMs(6), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}, got[len(got)-1])
 }
 
 // A blob is a whole tool payload, so it stays private to its owner.
-func TestWriteBlob_IsOwnerOnly(t *testing.T) {
+func (s *CallsSuite) TestWritePayload_IsOwnerOnly() {
+	t := s.T()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX modes")
 	}
@@ -760,7 +778,8 @@ func TestWriteBlob_IsOwnerOnly(t *testing.T) {
 
 // A rotate writes the trail with the mode Append creates it with, so a trail
 // an older magus left world-readable becomes private.
-func TestRotate_WritesTheTrailPrivate(t *testing.T) {
+func (s *CallsSuite) TestRotateCalls_WritesTheTrailPrivate() {
+	t := s.T()
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX modes")
 	}
@@ -777,14 +796,11 @@ func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
-// TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an
-// hourly schedule affordable: a trail too small to hold maxEvents events is not read at all.
-//
-// The bound must stay SOUND rather than approximate (it may only skip when trimming is
-// impossible), so this asserts the arithmetic that makes it so: a full cap's worth of the
-// smallest event magus can serialize still exceeds the threshold, meaning no reachable trail is
-// ever skipped while over cap.
-func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
+// TestRotateCalls_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path,
+// and that its bound stays sound: the smallest serializable line is at least
+// minEventBytes, so no log over the cap is ever skipped.
+func (s *CallsSuite) TestRotateCalls_SkipsTheReadWhenTheFileIsTooSmall() {
+	t := s.T()
 	dir := t.TempDir()
 	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
 
@@ -805,7 +821,8 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	require.GreaterOrEqual(t, len(line)+1, minEventBytes, "minEventBytes must not exceed the smallest serializable event line")
 }
 
-func TestRotate_EmptyBaseIsNoop(t *testing.T) {
+func (s *CallsSuite) TestRotateCalls_EmptyBaseIsNoop() {
+	t := s.T()
 	require.NoError(t, RotateCalls(t.Context(), ""))
 }
 
@@ -813,7 +830,8 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 // able to evict a quiet one. Before the floor, rotation kept the newest N lines blind to kind, so
 // a burst of agent reads pushed every sandbox_denial out of the window, and gcBlobs then deleted
 // their payloads, which is not recoverable.
-func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
+func (s *CallsSuite) TestSelectKept_ReservesAFloorForEveryKind() {
+	t := s.T()
 	var lines []string
 	line := func(kind journal.CallKind, ts int) string {
 		b, err := journal.Call{Time: atMs(int64(ts)), Kind: kind, Name: "x", Outcome: journal.OutcomeOK}.MarshalJSON()
@@ -839,13 +857,14 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	}
 	assert.Equal(t, 3, denials, "every sandbox_denial survives: there are fewer of them than the floor")
 
-	// Order is preserved: the file is append-ordered and ReadRecent/LastRun depend on it.
+	// Order is preserved: the log's readers depend on it.
 	assert.True(t, strings.Contains(kept[0], string(journal.CallKindSandboxDenial)), "kept output stays oldest-first")
 }
 
 // TestSelectKept_SingleKindIsPlainTruncation pins that the floor changes nothing for a trail with
 // one producer: the common case must keep behaving exactly as it did before the policy existed.
-func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
+func (s *CallsSuite) TestSelectKept_SingleKindIsPlainTruncation() {
+	t := s.T()
 	var lines []string
 	for i := 1; i <= 100; i++ {
 		b, err := journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "t", Outcome: journal.OutcomeOK}.MarshalJSON()
@@ -864,8 +883,10 @@ func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 // Blobs are the sharpest edge: an MCP request/response pair is a whole tool payload,
 // persisted verbatim, and nothing else on that path scrubs it.
 //
-// Delete secrets.Redact in WriteBlob, or redactCall in Append, and this fails.
-func TestTrailRedactsThroughContext(t *testing.T) {
+// Delete secrets.Redact in WritePayload, or redactCall in AppendCall, and
+// this fails.
+func (s *CallsSuite) TestTrailRedactsThroughContext() {
+	t := s.T()
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
@@ -917,7 +938,8 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 // filters on by exact match. Those are enumerated values, identities and content
 // addresses; a credential cannot occupy them, and masking them would break the reader
 // to protect nothing.
-func TestTrailKeepsStructuralFields(t *testing.T) {
+func (s *CallsSuite) TestTrailKeepsStructuralFields() {
+	t := s.T()
 	base := t.TempDir()
 	res := secrets.NewResolver()
 	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
@@ -942,7 +964,8 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	assert.Contains(t, line, string(journal.CallKindAgentCommand))
 }
 
-func TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts(t *testing.T) {
+func (s *CallsSuite) TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts() {
+	t := s.T()
 	base := t.TempDir()
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Tool: ToolFileRead, Path: "a.go"})
 	request := WritePayload(t.Context(), base, "agent", []byte("not json"))
@@ -964,25 +987,25 @@ func recordUndecodable(t *testing.T, base string) string {
 	return request.Ref
 }
 
-func TestCommandProgramReducesToTheProgram(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"go test ./internal/cache/", "go"},
-		{"./magus run build .", "magus"},
-		{"/usr/local/bin/psql --password=hunter2", "psql"},
-		{`SECRET=abc TOKEN=def curl -H "Authorization: Bearer $TOKEN"`, "curl"},
-		{`sh -c "curl -H 'Authorization: Bearer x'"`, "sh"},
-		// A path that merely contains "=" is a program, not an assignment.
-		{"/opt/we=ird/tool --flag", "tool"},
-		// Nothing parseable reduces to empty and is dropped, not guessed at.
-		{"", ""},
-		{"ONLY=assignments HERE=too", ""},
-	} {
-		assert.Equal(t, tc.want, CommandProgram(tc.in), "input %q", tc.in)
-	}
+func (s *CallsSuite) TestCommandProgramReducesToTheProgram() {
+	s.Equal("go", CommandProgram("go test ./internal/cache/"))
+	s.Equal("magus", CommandProgram("./magus run build ."))
+	s.Equal("psql", CommandProgram("/usr/local/bin/psql --password=hunter2"))
+	s.Equal("curl", CommandProgram(`SECRET=abc TOKEN=def curl -H "Authorization: Bearer $TOKEN"`))
+	s.Equal("sh", CommandProgram(`sh -c "curl -H 'Authorization: Bearer x'"`))
+	// A path that merely contains "=" is a program, not an assignment.
+	s.Equal("tool", CommandProgram("/opt/we=ird/tool --flag"))
+}
+
+// Nothing parseable reduces to empty and is dropped, not guessed at.
+func (s *CallsSuite) TestCommandProgramOfNothingParseableIsEmpty() {
+	s.Empty(CommandProgram(""))
+	s.Empty(CommandProgram("ONLY=assignments HERE=too"))
 }
 
 // A log that does not read is not a job that never ran.
-func TestLastJobReturnsALogThatDoesNotRead(t *testing.T) {
+func (s *CallsSuite) TestLastJobReturnsALogThatDoesNotRead() {
+	t := s.T()
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(eventsPath(base), 0o700))
 	_, _, err := LastJob(t.Context(), base, "graph build")
@@ -991,14 +1014,16 @@ func TestLastJobReturnsALogThatDoesNotRead(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRelativizeCutsTheRootAtASeparator(t *testing.T) {
+func (s *CallsSuite) TestRelativizeCutsTheRootAtASeparator() {
+	t := s.T()
 	assert.Equal(t, "x/y.go", Relativize("/repo", "/repo/x/y.go"))
 	assert.Equal(t, "x/y.go", Relativize("/repo/", "/repo/x/y.go"))
 	assert.Equal(t, "/repo2/x", Relativize("/repo", "/repo2/x"), "a sibling sharing the prefix is outside the root")
 	assert.Equal(t, "x.go", Relativize("/repo", "x.go"))
 }
 
-func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
+func (s *CallsSuite) TestLastAgentActivityReadsTheNewestObservation() {
+	t := s.T()
 	base := t.TempDir()
 	_, ok := LastAgentActivity(t.Context(),base)
 	assert.False(t, ok, "an empty log has no activity to report")
@@ -1017,7 +1042,8 @@ func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
 
 // An observation is found however many calls sit on top of it, and one with
 // no time is not one: it would date the answer to 1970.
-func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
+func (s *CallsSuite) TestLastAgentActivityIsNotBoundedByAWindow() {
+	t := s.T()
 	base := t.TempDir()
 	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
 	for range 200 {
