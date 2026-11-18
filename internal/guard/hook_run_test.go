@@ -1407,15 +1407,16 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
-	tr, err := sessions.ReadActivity(ctx, cacheDir, "s1", 10)
+	tr, found, err := sessions.ActivityHere(ctx, cacheDir, "s1")
 	require.NoError(t, err)
-	calls := tr.Calls
-	require.Len(t, calls, 1)
-	calls[0].At = time.Time{}
-	assert.Equal(t, sessions.ActivityCall{
-		Action: "Bash", ToolMs: 420,
-		AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"},
-	}, calls[0])
+	require.True(t, found)
+	require.Len(t, tr.Calls, 1)
+	got := tr.Calls[0]
+	assert.Equal(t, "Bash", got.Action)
+	assert.Equal(t, int64(420), got.ToolMs)
+	assert.Empty(t, got.Worker)
+	assert.Empty(t, got.Rule)
+	assert.Equal(t, types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"}, got.AgentFacts)
 }
 
 func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {

@@ -169,8 +169,8 @@ func SummarizeCost(tr *Activity, table model.Table) *Cost {
 
 	// The root is the main thread; a call of unknown thread is never counted as the root's.
 	calls := slices.Clone(tr.Calls)
-	slices.SortStableFunc(calls, func(a, b ActivityCall) int { return a.At.Compare(b.At) })
-	var main []ActivityCall
+	slices.SortStableFunc(calls, func(a, b activityCall) int { return a.At.Compare(b.At) })
+	var main []activityCall
 	unknown := 0
 	for _, call := range calls {
 		switch call.Thread {
@@ -220,7 +220,7 @@ func SummarizeCost(tr *Activity, table model.Table) *Cost {
 		c.NotMeasured[costDollars] = why
 	}
 	c.Repeats = tr.Repeats
-	if !slices.ContainsFunc(calls, func(call ActivityCall) bool { return call.ToolMs > 0 && call.ResultDigest != "" }) {
+	if !slices.ContainsFunc(calls, func(call activityCall) bool { return call.ToolMs > 0 && call.ResultDigest != "" }) {
 		c.NotMeasured[costRepeats] = "no tool-time row carried a result digest, so a repeated answer cannot be told from a changed one"
 	}
 	if len(c.NotMeasured) == 0 {
@@ -245,7 +245,7 @@ func spawnsByModel(spawns []costSpawn) *spawnTally {
 	return &spawnTally{Total: len(spawns), ByModel: Counted(tally)}
 }
 
-func buildRootContext(main []ActivityCall) *rootContext {
+func buildRootContext(main []activityCall) *rootContext {
 	var sizes []tokens
 	models := map[string]bool{}
 	for _, call := range main {
@@ -270,7 +270,7 @@ func buildRootContext(main []ActivityCall) *rootContext {
 
 // sumDelegable sums the result sizes the main thread's calls observed, nil when none
 // observed one.
-func sumDelegable(main []ActivityCall) *delegableShare {
+func sumDelegable(main []activityCall) *delegableShare {
 	var total, delegable chars
 	observed := false
 	byClass := map[string]int{}
@@ -291,7 +291,7 @@ func sumDelegable(main []ActivityCall) *delegableShare {
 	return &delegableShare{Chars: delegable, Total: total, ByClass: Counted(byClass)}
 }
 
-func tallyAdvisories(main []ActivityCall, spawns []costSpawn) *advisoryOutcome {
+func tallyAdvisories(main []activityCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
 		if call.Decision != verdict.Advise || !slices.Contains(costAdviceRules, call.Rule) {
@@ -313,7 +313,7 @@ func tallyAdvisories(main []ActivityCall, spawns []costSpawn) *advisoryOutcome {
 
 // tallyShadow tallies each profile's decisions across the main thread's calls. An unset
 // decision is an allow, as a rule's zero verdict is.
-func tallyShadow(main []ActivityCall) []shadowTally {
+func tallyShadow(main []activityCall) []shadowTally {
 	byProfile := map[types.GuardProfile]map[verdict.Decision]int{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
@@ -337,7 +337,7 @@ func tallyShadow(main []ActivityCall) []shadowTally {
 // estimateDollars prices the main thread's context through [model.Table.PriceContext], the
 // arithmetic a job's recorded outcome is priced by too, and returns its reason instead when
 // the price would be a guess.
-func estimateDollars(main []ActivityCall, table model.Table) (*dollarEstimate, string) {
+func estimateDollars(main []activityCall, table model.Table) (*dollarEstimate, string) {
 	facts := make([]types.AgentFacts, len(main))
 	for i, call := range main {
 		facts[i] = call.AgentFacts

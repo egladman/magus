@@ -30,7 +30,7 @@ type FactHandler struct {
 	broken bool
 }
 
-// NewFactHandler builds the capture handler that records an invocation's target results
+// newFactHandler builds the capture handler that records an invocation's target results
 // as facts under root's store. start describes the invocation and is written as the
 // KindInvocationStart record ahead of the first fact.
 //
@@ -41,7 +41,7 @@ type FactHandler struct {
 // (cmd/magus/main.go dispatchAdopted), so "who produces an invocation's facts" is not a
 // CLI-only question. start.Lease is read by the CALLER for that reason; see
 // cmd/magus/journal_hook.go, which documents what the server gets wrong today.
-func NewFactHandler(root string, start session.InvocationStart) func(context.Context, journal.Record) {
+func newFactHandler(root string, start session.InvocationStart) func(context.Context, journal.Record) {
 	dir, err := Dir(root)
 	if err != nil {
 		return nil

@@ -273,7 +273,7 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "rm -rf", Decision: verdict.Deny})
 	recorder.AppendAgentSpawn(context.Background(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
-	got, err := ReadActivity(t.Context(), base, "s1", 100)
+	got, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
 	require.Len(t, got.Spawns, 1)
 	require.Len(t, got.Calls, 2)
@@ -281,17 +281,17 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 		Commands: 2,
 		Denied:   1,
 		Leases:   []string{"fleet/w1", "fleet/w1-child"},
-		Spawns:   []ActivitySpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
-		Calls: []ActivityCall{
+		Spawns:   []activitySpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
+		Calls: []activityCall{
 			{At: got.Calls[0].At, Decision: verdict.Defer, Action: recorder.ToolShellCommand, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
 			{At: got.Calls[1].At, Decision: verdict.Deny, Action: recorder.ToolShellCommand, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}},
 		},
 	}, got)
 
-	none, err := ReadActivity(t.Context(), base, "", 100)
+	none, err := readActivity(t.Context(), base, "", 100)
 	require.NoError(t, err)
 	assert.Zero(t, none.Commands, "no session id joins nothing")
-	absent, err := ReadActivity(t.Context(), t.TempDir(), "s1", 100)
+	absent, err := readActivity(t.Context(), t.TempDir(), "s1", 100)
 	require.NoError(t, err)
 	assert.Zero(t, absent.Commands, "an absent store is empty, not an error")
 }
@@ -304,7 +304,7 @@ func TestForSessionRefusesARetiredDecision(t *testing.T) {
 	ref := response.Ref
 	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
 
-	_, err := ReadActivity(t.Context(), base, "s1", 100)
+	_, err := readActivity(t.Context(), base, "s1", 100)
 	var retired *retiredDecisionError
 	require.ErrorAs(t, err, &retired)
 	assert.Equal(t, retiredDecisionError{Store: base, Ref: ref, Decision: "pass"}, *retired)
@@ -326,13 +326,13 @@ func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
 	recorder.AppendAgentSpawn(t.Context(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
-	got, err := ReadActivity(t.Context(), base, "s1", 100)
+	got, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
 	require.Len(t, got.Calls, 2, "another session's calls are not this one's")
-	assert.Equal(t, ActivityCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: recorder.ToolShellCommand, AgentFacts: advised}, got.Calls[0])
-	assert.Equal(t, ActivityCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: recorder.ToolShellCommand, AgentFacts: passed}, got.Calls[1])
+	assert.Equal(t, activityCall{At: got.Calls[0].At, Decision: verdict.Advise, Rule: "root-heavy-command", Action: recorder.ToolShellCommand, AgentFacts: advised}, got.Calls[0])
+	assert.Equal(t, activityCall{At: got.Calls[1].At, Decision: verdict.Defer, Action: recorder.ToolShellCommand, AgentFacts: passed}, got.Calls[1])
 	require.Len(t, got.Spawns, 1)
-	assert.Equal(t, ActivitySpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
+	assert.Equal(t, activitySpawn{Child: "Explore", At: got.Spawns[0].At}, got.Spawns[0], "a spawn's cost facts are the caller's, not the child's")
 }
 
 type RepeatsSuite struct {
@@ -345,19 +345,19 @@ func TestRepeatsSuite(t *testing.T) { suite.Run(t, new(RepeatsSuite)) }
 func (s *RepeatsSuite) SetupTest() { s.start = time.UnixMilli(1_700_000_000_000) }
 
 // poll is a tool-time row n seconds in.
-func (s *RepeatsSuite) poll(n int, worker, call, result string) ActivityCall {
-	return ActivityCall{
+func (s *RepeatsSuite) poll(n int, worker, call, result string) activityCall {
+	return activityCall{
 		At: s.start.Add(time.Duration(n) * time.Second), Action: "Bash", Worker: worker, ToolMs: 100,
 		AgentFacts: types.AgentFacts{CallDigest: call, ResultDigest: result},
 	}
 }
 
-func (s *RepeatsSuite) write(n int, worker string) ActivityCall {
-	return ActivityCall{At: s.start.Add(time.Duration(n) * time.Second), Action: recorder.ToolFileWrite, Worker: worker}
+func (s *RepeatsSuite) write(n int, worker string) activityCall {
+	return activityCall{At: s.start.Add(time.Duration(n) * time.Second), Action: recorder.ToolFileWrite, Worker: worker}
 }
 
 func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime() {
-	got := repeats([]ActivityCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
+	got := repeats([]activityCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
 	s.Equal([]RepeatRun{{
 		Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 3,
 		First: s.start, Last: s.start.Add(9 * time.Second), ToolMs: 300, SpanMs: 9000,
@@ -365,7 +365,7 @@ func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime(
 }
 
 func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
-	got := repeats([]ActivityCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
+	got := repeats([]activityCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
 	s.Equal([]RepeatRun{{
 		Tool: "Bash", CallDigest: "c", ResultDigest: "r1", Count: 2,
 		First: s.start, Last: s.start.Add(time.Second), ToolMs: 200, SpanMs: 1000,
@@ -373,31 +373,31 @@ func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
 }
 
 func (s *RepeatsSuite) TestAWriteByTheSameWorkerEndsTheRun() {
-	got := repeats([]ActivityCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
+	got := repeats([]activityCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnotherWorkersWriteLeavesTheRunAlone() {
-	got := repeats([]ActivityCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
+	got := repeats([]activityCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
 	s.Require().Len(got, 1)
 	s.Equal("w1", got[0].Worker)
 }
 
 func (s *RepeatsSuite) TestTwoWorkersRunningTheSameCallAreNotARepeat() {
-	got := repeats([]ActivityCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
+	got := repeats([]activityCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnUnobservedDigestJoinsNoRun() {
 	noResult := s.poll(0, "", "c", "")
 	noCall := s.poll(1, "", "", "r")
-	s.Empty(repeats([]ActivityCall{noResult, noResult, noCall, noCall}))
+	s.Empty(repeats([]activityCall{noResult, noResult, noCall, noCall}))
 }
 
 func (s *RepeatsSuite) TestRowsWithoutToolTimeAreNotCounted() {
 	pre := s.poll(0, "", "c", "r")
 	pre.ToolMs = 0
-	s.Empty(repeats([]ActivityCall{pre, pre}))
+	s.Empty(repeats([]activityCall{pre, pre}))
 }
 
 func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() {
@@ -408,7 +408,7 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	record(s.T(), base, recorder.AgentCommand{Session: "s1", Agent: "w1", Tool: "Bash", ToolMs: 5,
 		AgentFacts: types.AgentFacts{CallDigest: "c", Unobserved: []string{"result"}}})
 
-	got, err := ReadActivity(s.T().Context(), base, "s1", 100)
+	got, err := readActivity(s.T().Context(), base, "s1", 100)
 	s.Require().NoError(err)
 	s.Require().Len(got.Calls, 3)
 	s.Equal("w1", got.Calls[0].Worker)

@@ -30,16 +30,16 @@ func fixtureModels() model.Table {
 
 func at(sec int) time.Time { return costEpoch.Add(time.Duration(sec) * time.Second) }
 
-func mainCall(sec int, size int64, mdl string) ActivityCall {
-	return ActivityCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
+func mainCall(sec int, size int64, mdl string) activityCall {
+	return activityCall{At: at(sec), AgentFacts: types.AgentFacts{Thread: types.AgentThreadMain, ContextTokens: size, ContextModel: mdl}}
 }
 
 func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
-	tr := &Activity{Commands: 6, Spawns: []ActivitySpawn{
+	tr := &Activity{Commands: 6, Spawns: []activitySpawn{
 		{Child: "Explore", At: at(5), DeclaredModel: "claude-sonnet-5-5"},
 		{Child: "Explore", At: at(100), DeclaredModel: ""},
 	}}
-	var calls []ActivityCall
+	var calls []activityCall
 	for sec := 1; sec <= 30; sec++ {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
@@ -63,8 +63,8 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		calls = append(calls, c)
 	}
 	calls = append(calls,
-		ActivityCall{At: at(2), AgentFacts: types.AgentFacts{Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"}},
-		ActivityCall{At: at(3), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 50_000}})
+		activityCall{At: at(2), AgentFacts: types.AgentFacts{Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"}},
+		activityCall{At: at(3), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 50_000}})
 
 	tr.Calls = calls
 
@@ -101,7 +101,7 @@ func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
 }
 
 func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
-	tr := &Activity{Commands: 3, Spawns: []ActivitySpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
+	tr := &Activity{Commands: 3, Spawns: []activitySpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
 
 	got := SummarizeCost(tr, fixtureModels())
 
@@ -112,7 +112,7 @@ func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 	assert.NotContains(t, got.NotMeasured, costSpawns)
 }
 
-// The path `session show` takes: calls written by the hook, folded by ReadActivity, summarized.
+// The path `session show` takes: calls written by the hook, folded by readActivity, summarized.
 func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	base := t.TempDir()
 	for range 2 {
@@ -125,7 +125,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 			},
 		})
 	}
-	tr, err := ReadActivity(t.Context(), base, "s1", 100)
+	tr, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
 
 	got := SummarizeCost(&tr, fixtureModels())
@@ -141,7 +141,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 }
 
 func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
-	calls := []ActivityCall{{At: at(1), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}}
+	calls := []activityCall{{At: at(1), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}}
 
 	got := SummarizeCost(&Activity{Commands: 1, Calls: calls}, fixtureModels())
 
@@ -150,7 +150,7 @@ func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
 }
 
 func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
-	calls := []ActivityCall{mainCall(2, 1, "m"), mainCall(1, 1, "m")}
+	calls := []activityCall{mainCall(2, 1, "m"), mainCall(1, 1, "m")}
 
 	SummarizeCost(&Activity{Calls: calls}, fixtureModels())
 
@@ -160,23 +160,23 @@ func TestSummarizeCostLeavesItsCallersCallsInOrder(t *testing.T) {
 // No call observing a result is unmeasured; a call observing an empty one is a measured
 // zero.
 func TestDelegableTellsAnUnobservedResultFromAnEmptyOne(t *testing.T) {
-	assert.Nil(t, sumDelegable([]ActivityCall{mainCall(1, 1, "m")}))
+	assert.Nil(t, sumDelegable([]activityCall{mainCall(1, 1, "m")}))
 
 	empty := mainCall(1, 1, "m")
 	empty.ResultChars = new(0)
-	got := sumDelegable([]ActivityCall{empty})
+	got := sumDelegable([]activityCall{empty})
 	require.NotNil(t, got)
 	assert.Zero(t, got.Total)
 	assert.Zero(t, got.Share())
 }
 
 func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
-	metered := func(sec int, size int64, mdl string) ActivityCall {
+	metered := func(sec int, size int64, mdl string) activityCall {
 		c := mainCall(sec, size, mdl)
 		c.Billing = types.AgentBillingMetered
 		return c
 	}
-	calls := []ActivityCall{
+	calls := []activityCall{
 		metered(1, 500_000, "claude-opus-5-5"),
 		metered(2, 500_000, "claude-opus-5-5"), // a second tool of the same model call
 		metered(3, 600_000, "claude-opus-5-5"),
@@ -204,7 +204,7 @@ func TestDollarsAreWithheldWhenTheyWouldBeAGuess(t *testing.T) {
 			c := mainCall(1, 400_000, tc.model)
 			c.Billing = tc.billing
 
-			est, why := estimateDollars([]ActivityCall{c}, fixtureModels())
+			est, why := estimateDollars([]activityCall{c}, fixtureModels())
 
 			assert.Nil(t, est)
 			assert.Equal(t, tc.want, why)
@@ -216,7 +216,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	billed := mainCall(1, 400_000, "claude-opus-5-5")
 	billed.Billing = types.AgentBillingMetered
 
-	est, why := estimateDollars([]ActivityCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
+	est, why := estimateDollars([]activityCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, fixtureModels())
 
 	assert.Nil(t, est)
 	assert.Contains(t, why, "billing is unknown")
@@ -225,7 +225,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	adv := mainCall(0, 1, "m")
 	adv.Decision, adv.Rule = verdict.Advise, "root-heavy-command"
-	main := []ActivityCall{adv}
+	main := []activityCall{adv}
 	for i := 1; i <= followWithin+2; i++ {
 		main = append(main, mainCall(i, 1, "m"))
 	}
@@ -246,7 +246,7 @@ func TestShadowTallyPrintsEveryDecision(t *testing.T) {
 }
 
 func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
-	tr := &Activity{Commands: 2, Spawns: []ActivitySpawn{
+	tr := &Activity{Commands: 2, Spawns: []activitySpawn{
 		{Child: "Explore", At: at(9), DeclaredModel: "claude-sonnet-5-5"},
 		{Child: "Explore", At: at(10)},
 	}}
@@ -254,7 +254,7 @@ func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
 	c1.Billing = types.AgentBillingMetered
 	c1.ResultChars = new(1500)
 	c1.DelegableClass = types.DelegableSearch
-	tr.Calls = []ActivityCall{c1}
+	tr.Calls = []activityCall{c1}
 	got := SummarizeCost(tr, fixtureModels())
 
 	var buf bytes.Buffer

@@ -61,7 +61,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
 	require.NotNil(t, h)
 
 	emitFact(t, h, "inv1", journal.Run{Target: "build", Project: "api", Status: journal.StatusPass, Duration: 20 * time.Millisecond, Ref: "out1"})
@@ -109,7 +109,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
 	emitFact(t, h, "inv1", journal.Run{Target: "build", Project: "api", Status: journal.StatusPass, Duration: 20 * time.Millisecond, Ref: "out1"})
 	emitFact(t, h, "inv1", journal.Run{Target: "test", Project: "api", Status: journal.StatusFail})
@@ -135,7 +135,7 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
 	emitFact(t, h, "inv1", journal.Run{
 		Target: "build", Project: "api", Status: journal.StatusPass,
@@ -167,7 +167,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 	emitFact(t, h, "inv1", journal.Output{Text: "compiling"})
 	emitFact(t, h, "inv1", journal.Exec{Target: "build", Command: "go build"})
@@ -195,9 +195,9 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
 		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "feature"))), 0o644))
 
-	mainH := NewFactHandler(main, session.InvocationStart{Workspace: main, Command: "run build"})
+	mainH := newFactHandler(main, session.InvocationStart{Workspace: main, Command: "run build"})
 	require.NotNil(t, mainH)
-	linkedH := NewFactHandler(linked, session.InvocationStart{Workspace: linked, Command: "run test"})
+	linkedH := newFactHandler(linked, session.InvocationStart{Workspace: linked, Command: "run test"})
 	require.NotNil(t, linkedH)
 
 	emitFact(t, mainH, "invMain", journal.Run{Target: "build", Project: "api", Status: journal.StatusPass})
@@ -232,7 +232,7 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	// permission bit a test running as root would then ignore.
 	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o644))
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 
 	logged := captureFactWarnings(t, func() {
@@ -252,7 +252,7 @@ func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
+	h := newFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
 	require.NotNil(t, h)
 	emitFact(t, h, "inv1", journal.Run{Target: "build", Status: journal.StatusPass})
 	emitFact(t, h, "inv1", journal.Run{Target: "test", Status: journal.StatusPass})
@@ -280,5 +280,5 @@ func TestNewFactHandlerIsNilWithoutAStateDir(t *testing.T) {
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("LocalAppData", "")
 
-	assert.Nil(t, NewFactHandler(t.TempDir(), session.InvocationStart{}))
+	assert.Nil(t, newFactHandler(t.TempDir(), session.InvocationStart{}))
 }

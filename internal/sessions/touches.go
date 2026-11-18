@@ -246,11 +246,11 @@ type Activity struct {
 	// Leases are the ledger leases the observations were made under, first seen first.
 	Leases []string `json:"leases,omitempty"`
 	// Spawns are the subagents this session started, oldest first.
-	Spawns []ActivitySpawn `json:"spawns,omitempty"`
+	Spawns []activitySpawn `json:"spawns,omitempty"`
 	// Calls are the observations in the same order, with the cost facts each recorded. They
 	// feed the cost summary and stay out of the encoded form, which would otherwise carry
 	// one row per tool call.
-	Calls []ActivityCall `json:"-"`
+	Calls []activityCall `json:"-"`
 	// Repeats are facts, not a verdict: policy says which to report.
 	Repeats []RepeatRun `json:"repeats,omitempty"`
 }
@@ -275,9 +275,9 @@ type RepeatRun struct {
 
 // repeats folds calls into the runs of two or more. A call missing either
 // digest joins no run: an absent digest would equal every other.
-func repeats(calls []ActivityCall) []RepeatRun {
+func repeats(calls []activityCall) []RepeatRun {
 	ordered := slices.Clone(calls)
-	slices.SortStableFunc(ordered, func(a, b ActivityCall) int { return a.At.Compare(b.At) })
+	slices.SortStableFunc(ordered, func(a, b activityCall) int { return a.At.Compare(b.At) })
 	open := map[string]map[string]*RepeatRun{}
 	var out []RepeatRun
 	finish := func(run *RepeatRun) {
@@ -329,7 +329,7 @@ func sortRepeatRuns(runs []RepeatRun) {
 	})
 }
 
-func startRun(call ActivityCall) *RepeatRun {
+func startRun(call activityCall) *RepeatRun {
 	return &RepeatRun{
 		Worker: call.Worker, Thread: call.Thread, ThreadFrom: call.ThreadFrom,
 		Tool: call.Action, CallDigest: call.CallDigest, ResultDigest: call.ResultDigest,
@@ -337,12 +337,12 @@ func startRun(call ActivityCall) *RepeatRun {
 	}
 }
 
-// ActivityCall is one guard observation of a call and the cost facts recorded beside it.
+// activityCall is one guard observation of a call and the cost facts recorded beside it.
 // The facts are the caller's; see AgentCommand. A fact the record did not carry reads as
 // its zero value, except Thread, which reads as types.AgentThreadUnknown.
 //
 // Decision is the hook verdict's: defer, advise, ask or deny.
-type ActivityCall struct {
+type activityCall struct {
 	At       time.Time
 	Decision verdict.Decision
 	Rule     string
@@ -354,22 +354,22 @@ type ActivityCall struct {
 	types.AgentFacts
 }
 
-// ActivitySpawn is one recorded spawn: the label the host gave the callee,
+// activitySpawn is one recorded spawn: the label the host gave the callee,
 // the lease its context named, when, and the model the caller claimed.
 // DeclaredModel is "" both when none was named and when the payload could
 // not be read.
-type ActivitySpawn struct {
+type activitySpawn struct {
 	Child         string    `json:"child"`
 	Lease         string    `json:"lease,omitempty"`
 	At            time.Time `json:"at"`
 	DeclaredModel string    `json:"declared_model,omitempty"`
 }
 
-// ReadActivity folds the activity log at base for one host session, reading
+// readActivity folds the activity log at base for one host session, reading
 // at most limit recent calls. A missing log is an empty result and one that
 // cannot be read is the error. A payload that cannot be read is left out,
 // except one holding a retired guard decision, which is the error.
-func ReadActivity(ctx context.Context, base, session string, limit int) (Activity, error) {
+func readActivity(ctx context.Context, base, session string, limit int) (Activity, error) {
 	var out Activity
 	if session == "" {
 		return out, nil
@@ -387,7 +387,7 @@ func ReadActivity(ctx context.Context, base, session string, limit int) (Activit
 		switch e.Kind {
 		case journal.CallKindAgentCommand:
 			out.Commands++
-			call := ActivityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
+			call := activityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := recorder.ReadPayload(base, e.Response); err == nil {
 				var resp recorder.AgentCommandResponse
 				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
@@ -415,7 +415,7 @@ func ReadActivity(ctx context.Context, base, session string, limit int) (Activit
 			if e.Name == recorder.NameAgentContinue {
 				continue
 			}
-			sp := ActivitySpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
+			sp := activitySpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
 			if raw, err := recorder.ReadPayload(base, e.Request); err == nil {
 				var req recorder.AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {

@@ -30,7 +30,7 @@ func WithInvocationFacts(ctx context.Context, sinks []recorder.Sink, root, verb 
 		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", attr.Error(err))
 		lease, leaseFrom = "", ""
 	}
-	h := NewFactHandler(root, session.InvocationStart{
+	h := newFactHandler(root, session.InvocationStart{
 		Origin:       recorder.LocalOrigin(ctx),
 		Workspace:    root,
 		Command:      strings.Join(append([]string{verb}, args...), " "),

@@ -15,7 +15,7 @@ const activityCalls = 5000
 // reports false when it holds nothing: no log and a session that ran
 // elsewhere read the same. An error is a log that could not be read.
 func ActivityHere(ctx context.Context, cacheDir, session string) (Activity, bool, error) {
-	tr, err := ReadActivity(ctx, cacheDir, session, activityCalls)
+	tr, err := readActivity(ctx, cacheDir, session, activityCalls)
 	if err != nil {
 		return Activity{}, false, err
 	}

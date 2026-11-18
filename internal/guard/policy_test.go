@@ -210,15 +210,18 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
+	tr, found, err := sessions.ActivityHere(t.Context(), cacheDir, "s1")
 	require.NoError(t, err)
-	calls := tr.Calls
-	require.Len(t, calls, 1)
-	got := calls[0]
-	got.At = time.Time{}
-	assert.Equal(t, sessions.ActivityCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
+	require.True(t, found)
+	require.Len(t, tr.Calls, 1)
+	got := tr.Calls[0]
+	assert.Equal(t, "Bash", got.Action)
+	assert.Equal(t, int64(420), got.ToolMs)
+	assert.Empty(t, got.Worker)
+	assert.Empty(t, got.Rule)
+	assert.Equal(t, types.AgentFacts{
 		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
-	}}, got)
+	}, got.AgentFacts)
 }
 
 func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
@@ -227,7 +230,7 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
+	tr, _, err := sessions.ActivityHere(t.Context(), cacheDir, "s1")
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 2)
