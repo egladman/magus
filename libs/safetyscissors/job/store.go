@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -780,18 +781,41 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 
 // archive writes the rows a clear or a delete is about to drop beside the ledger, in the
 // ledger's own shape and named for the moment they were dropped, with their attempts. A
-// second drop within the same second overwrites the first archive.
+// second drop within the same second takes the next free "-<n>" suffix, because an
+// archive is a forced delete's only record. The caller holds the store's lock.
 func (s *Store) archive(ctx context.Context, f Rows) error {
 	lines, err := s.encodeJobs(f)
 	if err != nil {
 		return err
 	}
-	stamp := s.Now().UTC().Format("20060102T150405Z")
 	dir := filepath.Dir(s.path)
-	if err := s.archiveAttempts(ctx, filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
+	stem, err := reserveArchive(dir, s.Now().UTC().Format("20060102T150405Z"))
+	if err != nil {
 		return err
 	}
-	return codec.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
+	if err := s.archiveAttempts(ctx, filepath.Join(dir, stem+".attempts.jsonl"), f.Jobs); err != nil {
+		return err
+	}
+	return codec.RewriteLines(filepath.Join(dir, stem+".jsonl"), lines, 0o600)
+}
+
+// reserveArchive creates an empty jobs-<stamp>.jsonl, or jobs-<stamp>-<n>.jsonl for the
+// first n free, exclusively, and returns its name without the extension.
+func reserveArchive(dir, stamp string) (string, error) {
+	for n := 1; ; n++ {
+		stem := "jobs-" + stamp
+		if n > 1 {
+			stem = fmt.Sprintf("jobs-%s-%d", stamp, n)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, stem+".jsonl"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("job: archive: %w", err)
+		}
+		return stem, f.Close()
+	}
 }
 
 // Rewrite runs fn over the ledger as it stands, holding both of the Store's locks, so a

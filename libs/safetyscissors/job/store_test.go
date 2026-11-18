@@ -311,6 +311,38 @@ func (s *StoreSuite) TestClearArchivesWhatItDrops() {
 	s.Len(archives, 1)
 }
 
+func (s *StoreSuite) TestTwoDropsWithinASecondKeepBothArchives() {
+	ctx := s.T().Context()
+	st := s.open(WithClock(func() time.Time { return time.Unix(100, 0) }))
+	for _, id := range []string{"a", "b"} {
+		_, err := st.Update(ctx, id, func(*Job) {})
+		s.Require().NoError(err)
+		s.Require().NoError(st.AppendAttempts(ctx, Attempt{Job: id, N: 1}))
+		_, err = st.Delete(ctx, id, true)
+		s.Require().NoError(err)
+	}
+
+	rows, err := filepath.Glob(filepath.Join(s.dir, "jobs-19700101T000140Z*.jsonl"))
+	s.Require().NoError(err)
+	s.ElementsMatch([]string{
+		"jobs-19700101T000140Z.jsonl", "jobs-19700101T000140Z.attempts.jsonl",
+		"jobs-19700101T000140Z-2.jsonl", "jobs-19700101T000140Z-2.attempts.jsonl",
+	}, baseNames(rows))
+	for _, stem := range []string{"jobs-19700101T000140Z", "jobs-19700101T000140Z-2"} {
+		read, err := codec.ReadLines(filepath.Join(s.dir, stem+".jsonl"))
+		s.Require().NoError(err)
+		s.Len(read.Lines, 2, "%s holds its header and the one row it dropped", stem)
+	}
+}
+
+func baseNames(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, filepath.Base(p))
+	}
+	return out
+}
+
 func (s *StoreSuite) TestAnEntryIsRecordedOnceAndConsumed() {
 	st := s.open()
 	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.Paths.Write = []string{"internal/x"} })

@@ -7,3 +7,5 @@
   `grants.jsonl` and `grades.jsonl` fail with an `*UnknownMemberError`, as
   `attempts.jsonl` does, where an older build's compaction dropped the member and could
   widen a newer build's grant.
+- **Two job deletes or clears within one second keep both archives.** The second takes
+  a `-<n>` suffix, `jobs-<stamp>-2.jsonl`, where it overwrote the first.
