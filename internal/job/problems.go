@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -57,13 +56,13 @@ func goalCheckFaults(g job.Goal, prefix string) []job.Fault {
 	return checkFaults(job.FaultGoal, prefix+"check", g.Check)
 }
 
-// checkFaults is why raw, at field, is no lease check: it does not decode, or it names
+// checkFaults is why stored, at field, is no lease check: it does not decode, or it names
 // what [validateLeaseCheck] refuses. A field that declares no check has none.
-func checkFaults(kind job.FaultKind, field string, raw codec.RawMessage) []job.Fault {
-	if !job.HasCheck(raw) {
+func checkFaults(kind job.FaultKind, field string, stored job.Check) []job.Fault {
+	if stored.IsZero() {
 		return nil
 	}
-	c, err := types.DecodeLeaseCheck(raw)
+	c, err := types.DecodeLeaseCheck(stored)
 	if err != nil {
 		return []job.Fault{{Kind: kind, Field: field, Message: err.Error(),
 			Fix: "write the check as {target, project, args, no_default_charms} or {script, args, test}"}}

@@ -23,9 +23,9 @@ const (
 func (s *JobViewSuite) record() job.Job {
 	return job.Job{
 		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}},
-		Check: codec.RawMessage(viewCheck),
+		Check: storedJSON(viewCheck),
 		Goals: []job.Goal{
-			{ID: "lint", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: codec.RawMessage(viewGoalCheck), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "lint", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: storedJSON(viewGoalCheck), Accept: []job.Basis{job.BasisWitnessed}},
 			{ID: "names", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"X"}},
 		},
 	}
@@ -52,7 +52,7 @@ func (s *JobViewSuite) TestTheViewReadsEachCheck() {
 	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
 	s.Equal(LeaseCheck{Target: "lint", Project: "libs/x", NoDefaultCharms: true}, view.Goals[0].Check)
 	s.Equal(LeaseCheck{}, view.Goals[1].Check)
-	s.Nil(view.Job.Check, "the row's own member is hidden, never read twice")
+	s.True(view.Job.Check.IsZero(), "the row's own member is hidden, never read twice")
 }
 
 func (s *JobViewSuite) TestModuleGivesTheJobBack() {
@@ -63,16 +63,16 @@ func (s *JobViewSuite) TestModuleGivesTheJobBack() {
 	back, err := view.Module()
 
 	s.Require().NoError(err)
-	s.JSONEq(viewCheck, string(back.Check))
-	s.JSONEq(viewGoalCheck, string(back.Goals[0].Check))
-	s.Nil(back.Goals[1].Check, "a goal with no check stays one")
+	s.JSONEq(viewCheck, back.Check.String())
+	s.JSONEq(viewGoalCheck, back.Goals[0].Check.String())
+	s.True(back.Goals[1].Check.IsZero(), "a goal with no check stays one")
 	back.Check, back.Goals[0].Check = row.Check, row.Goals[0].Check
 	s.Equal(row, back)
 }
 
 func (s *JobViewSuite) TestACheckThatDoesNotReadIsRefusedNamingWhereItSits() {
 	row := s.record()
-	row.Goals[0].Check = codec.RawMessage(`{"target":"lint","noDefaultCharms":true}`)
+	row.Goals[0].Check = storedJSON(`{"target":"lint","noDefaultCharms":true}`)
 
 	_, err := NewJob(row)
 
@@ -82,12 +82,12 @@ func (s *JobViewSuite) TestACheckThatDoesNotReadIsRefusedNamingWhereItSits() {
 }
 
 func (s *JobViewSuite) TestAJobWithNoCheckHasANilOne() {
-	view, err := NewJob(job.Job{ID: "w", Check: codec.RawMessage("null")})
+	view, err := NewJob(job.Job{ID: "w"})
 	s.Require().NoError(err)
 	s.Nil(view.Check)
 	back, err := view.Module()
 	s.Require().NoError(err)
-	s.Nil(back.Check)
+	s.True(back.Check.IsZero())
 }
 
 func (s *JobViewSuite) TestAListReadsEveryJob() {
@@ -145,5 +145,13 @@ func (s *JobViewSuite) TestTheDeclarationRefusesACheckThatDoesNotRead() {
 func (s *JobViewSuite) TestAGoalWithNoCheckIsAModuleGoalWithNone() {
 	g, err := Goal{Goal: job.Goal{ID: "names", Kind: job.GoalKindSymbol}}.Module()
 	s.Require().NoError(err)
-	s.Nil(g.Check)
+	s.True(g.Check.IsZero())
+}
+
+// storedJSON is the check json spells, as a row stores it. Every json here is a literal
+// the test spells, so it reads.
+func storedJSON(json string) job.Check {
+	var c job.Check
+	_ = c.UnmarshalJSON([]byte(json))
+	return c
 }

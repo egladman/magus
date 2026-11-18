@@ -200,7 +200,7 @@ func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	require.Empty(t, declarationProblems(rec))
 	var row job.Job
 	rec.Apply(&row)
-	require.True(t, job.HasCheck(row.Check))
+	require.True(t, !row.Check.IsZero())
 	assert.True(t, checkIn(t, row.Check).Test, "the record's test reaches the row's check")
 }
 

@@ -245,7 +245,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 // The same record without the flag is still refused, and a record naming another checkout
 // is refused rather than one of the two being dropped.
 // storedCheck is c as a row stores it.
-func storedCheck(t testing.TB, c types.LeaseCheck) codec.RawMessage {
+func storedCheck(t testing.TB, c types.LeaseCheck) jobtypes.Check {
 	t.Helper()
 	raw, err := types.EncodeLeaseCheck(c)
 	require.NoError(t, err)

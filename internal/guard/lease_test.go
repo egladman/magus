@@ -1445,7 +1445,7 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	})
 	for name, change := range map[string]func(*jobtypes.Job){
 		"a terminal row":           func(j *jobtypes.Job) { j.State = jobtypes.StatePass },
-		"a row declaring no check": func(j *jobtypes.Job) { j.Check = nil },
+		"a row declaring no check": func(j *jobtypes.Job) { j.Check = jobtypes.Check{} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			row := figuresLease()

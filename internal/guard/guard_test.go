@@ -49,9 +49,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// rawCheck is the check a row stores for target in project: opaque JSON, as the store keeps it.
-func rawCheck(target, project string) codec.RawMessage {
-	return codec.RawMessage(fmt.Sprintf(`{"target":%q,"project":%q}`, target, project))
+// rawCheck is the check a row stores for target in project, as the store keeps it.
+func rawCheck(target, project string) jobtypes.Check {
+	return storedJSON(fmt.Sprintf(`{"target":%q,"project":%q}`, target, project))
+}
+
+// storedJSON is the check json spells, as a row stores it. Every json here is a literal
+// the test spells, so it reads, and a [jobtypes.Check] reads any JSON value: what a check says
+// is the spec's to refuse.
+func storedJSON(json string) jobtypes.Check {
+	var c jobtypes.Check
+	_ = c.UnmarshalJSON([]byte(json))
+	return c
 }
 
 // verdictWithRule is the verdict a rule reaches before any wording or lease attribution:

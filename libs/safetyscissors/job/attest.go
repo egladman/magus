@@ -16,13 +16,13 @@ import (
 type Statement struct {
 	Job  string `json:"job"`
 	Goal string `json:"goal"`
-	// Check is the check that ran, as opaque JSON the store's [CheckValidate] reads.
-	Check   codec.RawMessage `json:"check"`
-	Tree    string           `json:"tree"`
-	Exit    int              `json:"exit"`
-	Output  string           `json:"output,omitempty"`
-	Started time.Time        `json:"started"`
-	Ended   time.Time        `json:"ended"`
+	// Check is the check that ran, which the store reads through its [CheckSpec].
+	Check   Check     `json:"check"`
+	Tree    string    `json:"tree"`
+	Exit    int       `json:"exit"`
+	Output  string    `json:"output,omitempty"`
+	Started time.Time `json:"started"`
+	Ended   time.Time `json:"ended"`
 }
 
 // Verifier checks sig over payload and names who signed it, or fails. The store never
@@ -56,7 +56,7 @@ func (e *StatementError) Unwrap() error { return e.Err }
 // [*GradingUnconfiguredError] rather than record a statement unchecked or ungradable.
 // A signature the verifier refuses, or one it names no signer for, is a
 // [*SignatureError]; a payload that is not a Statement, or one whose check the store's
-// [CheckValidate] refuses, a [*StatementError]; one naming a goal its job does not
+// [CheckSpec] refuses, a [*StatementError]; one naming a goal its job does not
 // declare as a check a [*GoalError].
 func (s *Store) Attest(ctx context.Context, payload, sig []byte) (RunRef, error) {
 	if err := s.needTree("Attest"); err != nil {

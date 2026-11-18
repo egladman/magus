@@ -147,7 +147,7 @@ func (spec *checkSpec) gradeGoal(row Job, g Goal, ref RunRef, runs map[RunRef]ru
 	if !slices.Contains(g.Accept, r.basis) {
 		v = append(v, fmt.Sprintf("the run is %s and this goal accepts only %v", r.basis, g.Accept))
 	}
-	switch same, err := spec.equal(r.check, g.Check); {
+	switch same, err := spec.Equal(r.check, g.Check); {
 	case err != nil:
 		v = append(v, fmt.Sprintf("the run's check could not be compared with this goal's: %v", err))
 	case !same:
@@ -234,7 +234,7 @@ func (s *Store) goalError(row Job, goal string) error {
 type run struct {
 	job, goal      string
 	basis          Basis
-	check          codec.RawMessage
+	check          Check
 	argv           []string
 	dir            string
 	tree           string
@@ -382,27 +382,27 @@ func (e *gradesEntry) UnmarshalJSON(data []byte) error {
 // checkRunRecord is a [run] as grades.jsonl stores it. Started and Ended are unix milliseconds.
 type checkRunRecord struct {
 	apiversion.TypeMeta
-	Ref     RunRef           `json:"ref,omitempty"`
-	Job     string           `json:"job"`
-	Goal    string           `json:"goal"`
-	Basis   string           `json:"basis"`
-	Check   codec.RawMessage `json:"check"`
-	Argv    []string         `json:"argv,omitempty"`
-	Dir     string           `json:"dir,omitempty"`
-	Tree    string           `json:"tree"`
-	Exit    int              `json:"exit"`
-	Output  string           `json:"output,omitempty"`
-	Started int64            `json:"started"`
-	Ended   int64            `json:"ended"`
-	Moved   bool             `json:"moved,omitzero"`
-	Signer  string           `json:"signer,omitempty"`
-	By      string           `json:"by,omitempty"`
+	Ref     RunRef   `json:"ref,omitempty"`
+	Job     string   `json:"job"`
+	Goal    string   `json:"goal"`
+	Basis   string   `json:"basis"`
+	Check   Check    `json:"check"`
+	Argv    []string `json:"argv,omitempty"`
+	Dir     string   `json:"dir,omitempty"`
+	Tree    string   `json:"tree"`
+	Exit    int      `json:"exit"`
+	Output  string   `json:"output,omitempty"`
+	Started int64    `json:"started"`
+	Ended   int64    `json:"ended"`
+	Moved   bool     `json:"moved,omitzero"`
+	Signer  string   `json:"signer,omitempty"`
+	By      string   `json:"by,omitempty"`
 }
 
 func recordCheckRun(r run) checkRunRecord {
 	return checkRunRecord{
 		TypeMeta: runType(), Job: r.job, Goal: r.goal, Basis: string(r.basis),
-		Check: slices.Clone(r.check), Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
+		Check: r.check, Argv: slices.Clone(r.argv), Dir: r.dir, Tree: r.tree, Exit: r.exit,
 		Output: r.output, Started: r.started.UnixMilli(), Ended: r.ended.UnixMilli(), Moved: r.moved,
 		Signer: r.signer, By: r.by,
 	}

@@ -9,14 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
 // fixtureCheck is c as the job store keeps it, written out by hand so a fixture needs no error
 // path: the fixtures name ASCII targets and paths, which strconv.Quote spells as JSON does.
-func fixtureCheck(c types.LeaseCheck) codec.RawMessage {
+func fixtureCheck(c types.LeaseCheck) job.Check {
 	members := []string{`"target":` + strconv.Quote(c.Target)}
 	if c.Script != "" {
 		members = append(members, `"script":`+strconv.Quote(c.Script))
@@ -37,7 +36,16 @@ func fixtureCheck(c types.LeaseCheck) codec.RawMessage {
 	if c.Test {
 		members = append(members, `"test":true`)
 	}
-	return codec.RawMessage(fmt.Sprintf("{%s}", strings.Join(members, ",")))
+	return storedJSON(fmt.Sprintf("{%s}", strings.Join(members, ",")))
+}
+
+// storedJSON is the check json spells, as a row stores it. Every json here is a literal
+// the test spells, so it reads, and a [job.Check] reads any JSON value: what a check says
+// is the spec's to refuse.
+func storedJSON(json string) job.Check {
+	var c job.Check
+	_ = c.UnmarshalJSON([]byte(json))
+	return c
 }
 
 type LeaseCheckSuite struct{ suite.Suite }
@@ -75,30 +83,30 @@ func (s *LeaseCheckSuite) TestValidateDropsAScriptsProjectAndRefusesTwoSubjects(
 func (s *LeaseCheckSuite) TestRawCheckStoresTheCleanedProject() {
 	raw, err := rawCheck(types.LeaseCheck{Target: "lint", Project: "libs/x/", NoDefaultCharms: true})
 	s.Require().NoError(err)
-	s.JSONEq(`{"target":"lint","project":"libs/x","no_default_charms":true}`, string(raw))
+	s.JSONEq(`{"target":"lint","project":"libs/x","no_default_charms":true}`, raw.String())
 }
 
-// The spec's validate returns bytes it accepts again unchanged, which the store relies on
+// The spec's Validate returns a check it accepts again unchanged, which the store relies on
 // to validate a row on every write.
 func (s *LeaseCheckSuite) TestValidateIsAFixedPoint() {
-	once, err := validateStoredCheck(codec.RawMessage(`{"target":"test","project":"./a/"}`))
+	once, err := leaseChecks{}.Validate(storedJSON(`{"target":"test","project":"./a/"}`))
 	s.Require().NoError(err)
-	twice, err := validateStoredCheck(once)
+	twice, err := leaseChecks{}.Validate(once)
 	s.Require().NoError(err)
-	s.Equal(string(once), string(twice))
+	s.Equal(once.String(), twice.String())
 }
 
 func (s *LeaseCheckSuite) TestValidateRefusesAnUnknownMember() {
-	_, err := validateStoredCheck(codec.RawMessage(`{"target":"test","noDefaultCharms":true}`))
+	_, err := leaseChecks{}.Validate(storedJSON(`{"target":"test","noDefaultCharms":true}`))
 	var decode *types.CheckDecodeError
 	s.Require().ErrorAs(err, &decode)
 }
 
 func (s *LeaseCheckSuite) TestEqualReadsAnOmittedProjectAsTheRoot() {
-	same, err := equalStoredChecks(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}))
+	same, err := leaseChecks{}.Equal(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}))
 	s.Require().NoError(err)
 	s.True(same)
-	same, err = equalStoredChecks(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", NoDefaultCharms: true}))
+	same, err = leaseChecks{}.Equal(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", NoDefaultCharms: true}))
 	s.Require().NoError(err)
 	s.False(same)
 }
@@ -112,7 +120,7 @@ func (s *LeaseCheckSuite) TestTheWorkspaceRootRendersAsAll() {
 }
 
 func (s *LeaseCheckSuite) TestRenderIsTheCommandLine() {
-	line, err := renderStoredCheck(fixtureCheck(types.LeaseCheck{Target: "test", Project: "libs/x", Args: []string{"-run", "A"}}))
+	line, err := leaseChecks{}.Render(fixtureCheck(types.LeaseCheck{Target: "test", Project: "libs/x", Args: []string{"-run", "A"}}))
 	s.Require().NoError(err)
 	s.True(strings.HasSuffix(line, " run test libs/x -- -run A"), line)
 }
@@ -133,7 +141,7 @@ func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
 }
 
 func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
-	ps := declarationProblems(job.Declaration{ID: "w", Check: codec.RawMessage(`{"target":"test","bogus":1}`)})
+	ps := declarationProblems(job.Declaration{ID: "w", Check: storedJSON(`{"target":"test","bogus":1}`)})
 	s.Require().Len(ps, 1)
 	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 
@@ -143,10 +151,10 @@ func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
 	s.Equal(types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 }
 
-// checkIn is raw read as a lease check, failing t when it does not read.
-func checkIn(t testing.TB, raw codec.RawMessage) types.LeaseCheck {
+// checkIn is stored read as a lease check, failing t when it does not read.
+func checkIn(t testing.TB, stored job.Check) types.LeaseCheck {
 	t.Helper()
-	c, err := types.DecodeLeaseCheck(raw)
+	c, err := types.DecodeLeaseCheck(stored)
 	require.NoError(t, err)
 	return c
 }

@@ -515,7 +515,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 		}
 	}
 
-	if !job.HasCheck(row.Check) && len(row.Goals) == 0 && !row.Integrating() {
+	if row.Check.IsZero() && len(row.Goals) == 0 && !row.Integrating() {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no goal, so nothing magus can grade says it is done."+
 			" Declare one in the job record's check or goals; a fact no target checks can be shown by a script run with"+
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
@@ -963,7 +963,7 @@ func namedFiles(tree string, goals []job.Goal, changed []string) map[string]bool
 	}
 	named := map[string]bool{}
 	for _, g := range goals {
-		if g.Kind != job.GoalKindCheck || !job.HasCheck(g.Check) {
+		if g.Kind != job.GoalKindCheck || g.Check.IsZero() {
 			continue
 		}
 		check, err := GoalCheck(g)

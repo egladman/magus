@@ -791,7 +791,7 @@ func snakeChecks(e migrate.Entry) error {
 // snakeCheck is the stored check raw, at at, with noDefaultCharms respelled. A null check
 // is kept.
 func snakeCheck(raw codec.RawMessage, at string) (codec.RawMessage, error) {
-	if !job.HasCheck(raw) {
+	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return raw, nil
 	}
 	var check map[string]codec.RawMessage

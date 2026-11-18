@@ -61,10 +61,10 @@ type Declaration struct {
 	// checkout's revision when it names none.
 	// The job owns it: see [Worktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
-	// Check is the one check this lease runs, as opaque JSON the store reads through
-	// [WithCheckSpec], and acceptance binds a worker's evidence to it. Nil, empty or JSON
-	// null declares none.
-	Check codec.RawMessage `json:"check,omitzero"`
+	// Check is the one check this lease runs, which the store reads through
+	// [WithCheckSpec], and acceptance binds a worker's evidence to it. The zero Check
+	// declares none.
+	Check Check `json:"check,omitzero"`
 	// State is the job's lifecycle position, empty for a job that has not said
 	// where it stands. no_return is a lease that never reported, which is not
 	// a failure.
@@ -203,7 +203,7 @@ func pathOutsideWorkspace(p string) string {
 }
 
 // Faults is every fault the record shows on its own, without a workspace: each field's
-// shape, the deviations and the goals. What a check says is the store's [CheckValidate]'s
+// shape, the deviations and the goals. What a check says is the store's [CheckSpec]'s
 // to refuse, at write. It never stops at the first. A
 // deviation may permit only a code in permissible, the caller's own.
 func (d Declaration) Faults(permissible ...Code) []Fault {
@@ -326,7 +326,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalFaults(d.Goals, HasCheck(d.Check))...)
+	return append(ps, goalFaults(d.Goals, !d.Check.IsZero())...)
 }
 
 // claimFaults is every fault of a claim record: it carries only schema_version, id
@@ -471,10 +471,7 @@ func (d Declaration) Apply(j *Job) {
 	j.ParentHead = strings.TrimSpace(d.ParentHead)
 	j.Follows = strings.TrimSpace(d.Follows)
 	// The store validates the check when it writes the row; see [WithCheckSpec].
-	j.Check = nil
-	if HasCheck(d.Check) {
-		j.Check = slices.Clone(d.Check)
-	}
+	j.Check = d.Check
 	j.Goals = cloneGoals(d.Goals)
 	j.State = d.State
 	j.ReadOnly = d.ReadOnly
@@ -505,7 +502,7 @@ func cloneGoals(in []Goal) []Goal {
 		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
 		// job.PutMerge) clones them through here.
 		out[i] = goal.Resolve()
-		out[i].Check = slices.Clone(goal.Check)
+		out[i].Check = goal.Check
 		out[i].Paths = slices.Clone(goal.Paths)
 		out[i].Symbols = slices.Clone(goal.Symbols)
 		out[i].DependsOn = slices.Clone(goal.DependsOn)

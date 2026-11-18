@@ -31,7 +31,7 @@ type AttemptResolver func(context.Context, string) (job.CapturedRun, error)
 // nothing to grade it by, so the result its holder files is the grade, and [Exit] records
 // pass on it unless the result names an unresolved risk.
 func gradedByHolder(row job.Job) bool {
-	return row.ReadOnly && row.Check == nil && len(row.Goals) == 0
+	return row.ReadOnly && row.Check.IsZero() && len(row.Goals) == 0
 }
 
 // returnedReason is the end_reason of a row [gradedByHolder] passed.

@@ -1639,7 +1639,7 @@ github.com/egladman/magus/types.Declaration.Settles method func() bool
 github.com/egladman/magus/types.Declaration.UnmarshalJSON method(ptr) func(data []byte) error
 github.com/egladman/magus/types.Declaration.Unmet method func(known []string) []string
 github.com/egladman/magus/types.DeclarationSchema var FormatLedger
-github.com/egladman/magus/types.DecodeLeaseCheck func(raw github.com/egladman/magus/libs/codec.RawMessage) (LeaseCheck, error)
+github.com/egladman/magus/types.DecodeLeaseCheck func(c github.com/egladman/magus/libs/safetyscissors/job.Check) (LeaseCheck, error)
 github.com/egladman/magus/types.DefaultRefReporter type interface
 github.com/egladman/magus/types.DefaultRefReporter.DefaultRef imethod func(ctx context.Context, dir string) (string, error)
 github.com/egladman/magus/types.DefinitionChanged const KnowledgeDefinitionStatus = "changed"
@@ -1872,7 +1872,7 @@ github.com/egladman/magus/types.EditedFile.DigestBefore field string "json:\"dig
 github.com/egladman/magus/types.EditedFile.Path field string "json:\"path\"          yaml:\"path\""
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
 github.com/egladman/magus/types.Empty type struct
-github.com/egladman/magus/types.EncodeLeaseCheck func(c LeaseCheck) (github.com/egladman/magus/libs/codec.RawMessage, error)
+github.com/egladman/magus/types.EncodeLeaseCheck func(c LeaseCheck) (github.com/egladman/magus/libs/safetyscissors/job.Check, error)
 github.com/egladman/magus/types.EngineNotLinked const DiagnosticCode = "MGS1104"
 github.com/egladman/magus/types.EngineNotLinkedError type struct
 github.com/egladman/magus/types.EngineNotLinkedError.Error method(ptr) func() string

@@ -43,7 +43,7 @@ type jobSpec struct {
 	Deferred     []Deferred                  `json:"deferred,omitempty"`
 	LeftUnmerged string                      `json:"left_unmerged,omitempty"`
 	Weight       float64                     `json:"weight,omitzero"`
-	Check        codec.RawMessage            `json:"check,omitzero"`
+	Check        Check                       `json:"check,omitzero"`
 	Validation   string                      `json:"validation,omitempty"`
 	Goals        []goalRecord                `json:"goals,omitempty"`
 	ReadOnly     bool                        `json:"read_only,omitzero"`
@@ -179,7 +179,7 @@ func recordSpec(row Job, unknown map[string]codec.RawMessage) jobSpec {
 		Validation: row.Validation, ReadOnly: row.ReadOnly, Deviations: row.Deviations,
 		Unknown: unknown,
 	}
-	spec.Check = slices.Clone(row.Check)
+	spec.Check = row.Check
 	for _, g := range row.Goals {
 		spec.Goals = append(spec.Goals, recordGoal(g))
 	}
@@ -274,7 +274,7 @@ func (s jobSpec) job(bad *wireReads) Job {
 		Deferred: s.Deferred, LeftUnmerged: s.LeftUnmerged, Weight: s.Weight,
 		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
 	}
-	row.Check = slices.Clone(s.Check)
+	row.Check = s.Check
 	for _, g := range s.Goals {
 		row.Goals = append(row.Goals, g.goal(bad))
 	}
@@ -504,15 +504,15 @@ func (r *agentRecord) spec(bad *wireReads) *Agent {
 }
 
 type goalRecord struct {
-	ID          string           `json:"id"`
-	Description string           `json:"description,omitempty"`
-	DependsOn   []string         `json:"depends_on,omitempty"`
-	Kind        string           `json:"kind"`
-	Expect      string           `json:"expect,omitempty"`
-	Check       codec.RawMessage `json:"check,omitzero"`
-	Paths       []string         `json:"paths,omitempty"`
-	Symbols     []string         `json:"symbols,omitempty"`
-	Signature   string           `json:"signature,omitempty"`
+	ID          string   `json:"id"`
+	Description string   `json:"description,omitempty"`
+	DependsOn   []string `json:"depends_on,omitempty"`
+	Kind        string   `json:"kind"`
+	Expect      string   `json:"expect,omitempty"`
+	Check       Check    `json:"check,omitzero"`
+	Paths       []string `json:"paths,omitempty"`
+	Symbols     []string `json:"symbols,omitempty"`
+	Signature   string   `json:"signature,omitempty"`
 	// Accept is written by every build since [AcceptWitnessedMigration], which wrote it
 	// onto each check goal stored before it, so a reader never defaults it.
 	Accept []string `json:"accept,omitempty"`
@@ -520,7 +520,7 @@ type goalRecord struct {
 
 func recordGoal(g Goal) goalRecord {
 	r := goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
-		Kind: string(g.Kind), Expect: string(g.Expect), Check: slices.Clone(g.Check),
+		Kind: string(g.Kind), Expect: string(g.Expect), Check: g.Check,
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
 	for _, b := range g.Accept {
 		r.Accept = append(r.Accept, string(b))
@@ -530,7 +530,7 @@ func recordGoal(g Goal) goalRecord {
 
 func (r goalRecord) goal(bad *wireReads) Goal {
 	g := Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind().read(r.Kind, bad), Expect: wireGoalExpect().read(r.Expect, bad), Check: slices.Clone(r.Check),
+		Kind: wireGoalKind().read(r.Kind, bad), Expect: wireGoalExpect().read(r.Expect, bad), Check: r.Check,
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
 	bases := wireBasis()
 	for _, w := range r.Accept {

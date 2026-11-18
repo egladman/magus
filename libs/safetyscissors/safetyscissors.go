@@ -100,7 +100,7 @@ func (c *config) missing() []error {
 		errs = append(errs, &OptionError{Option: "WithNotices", Problem: "New requires it: the job store reports what it did there, and never prints"})
 	}
 	if c.checks == nil {
-		errs = append(errs, &OptionError{Option: "WithCheckSpec", Problem: "New requires it: the job store keeps a check as opaque JSON and reads it only through the caller's spec"})
+		errs = append(errs, &OptionError{Option: "WithCheckSpec", Problem: "New requires it: the job store keeps a check opaque and reads it only through the caller's spec"})
 	}
 	return errs
 }

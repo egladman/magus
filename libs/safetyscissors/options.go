@@ -105,12 +105,12 @@ func WithNotices(notices func(job.Notice)) Option {
 
 // WithCheckSpec is how the job store reads the checks a row and its goals carry (see
 // [job.WithCheckSpec]). Required: a store without one refuses every write.
-func WithCheckSpec(validate job.CheckValidate, equal job.CheckEqual, render job.CheckRender) Option {
+func WithCheckSpec(spec job.CheckSpec) Option {
 	return func(c *config) error {
-		if validate == nil || equal == nil || render == nil {
-			return &OptionError{Option: "WithCheckSpec", Problem: "a function is nil"}
+		if spec == nil {
+			return &OptionError{Option: "WithCheckSpec", Problem: "the spec is nil"}
 		}
-		c.checks = []job.StoreOption{job.WithCheckSpec(validate, equal, render)}
+		c.checks = []job.StoreOption{job.WithCheckSpec(spec)}
 		return nil
 	}
 }

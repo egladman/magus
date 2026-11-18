@@ -80,7 +80,7 @@ func authorizeRow(actor job.Actor, id string, kind job.WriteKind, prev, next job
 	if kind == job.AsClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}
-	if err := job.AuthorizeRow(actor, id, kind, prev, next, exists, rows, equalStoredChecks); err != nil {
+	if err := job.AuthorizeRow(actor, id, kind, prev, next, exists, rows, leaseChecks{}); err != nil {
 		return diagnose(err)
 	}
 	return authorizeGate(actor, id, next, exists, rows)
@@ -131,7 +131,7 @@ func checkLine(row job.Job) string {
 	}
 	lines := make([]string, 0, len(gates))
 	for _, gate := range gates {
-		if !job.HasCheck(gate.Check) {
+		if gate.Check.IsZero() {
 			continue
 		}
 		lines = append(lines, renderGoalCheck(gate))

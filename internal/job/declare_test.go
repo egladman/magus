@@ -345,7 +345,7 @@ func (s *narrowSuite) TestAReleasedPathLeavesTheRestOfTheSpec() {
 
 	s.Equal([]string{"a.go", "c.go#Run"}, rec.Paths.Write)
 	s.Len(rec.Goals, 1)
-	s.NotNil(rec.Check)
+	s.False(rec.Check.IsZero())
 }
 
 func (s *narrowSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {

@@ -68,7 +68,7 @@ func (s *jobSuite) TestAGoalResolvesItsKindAndExpectation() {
 	s.Equal(ExpectAbsent, Goal{Kind: GoalKindSymbol, Expect: ExpectAbsent}.Resolve().Expect)
 }
 
-// Only the store's CheckRender reads a check, so a check goal's subject is none here.
+// Only the store's CheckSpec reads a check, so a check goal's subject is none here.
 func (s *jobSuite) TestACheckGoalHasNoSubject() {
 	s.Nil(Goal{Kind: GoalKindCheck, Check: checkJSON("test", ".")}.Subject())
 	s.Equal([]string{"docs"}, Goal{Kind: GoalKindPaths, Paths: []string{"docs"}}.Subject())
@@ -80,9 +80,7 @@ func (s *jobSuite) TestEffectiveGoalsLeadWithThePrimaryCheck() {
 	s.Require().Len(goals, 2)
 	s.Equal(PrimaryGoalID, goals[0].ID)
 	s.Equal(row.Check, goals[0].Check)
-	goals[0].Check[0] = 'x'
-	s.Equal(checkJSON("test", "."), row.Check, "the primary goal's check is a copy")
-	s.Empty(Job{Check: codec.RawMessage("null")}.EffectiveGoals(), "a null check declares none")
+	s.Empty(Job{Check: rawCheck("null")}.EffectiveGoals(), "a null check declares none")
 	s.Equal(ExpectPassed, goals[0].Expect)
 	s.Equal([]Basis{BasisWitnessed}, goals[0].Accept, "the lease's own check is run by its holder's runner")
 	s.Equal(ExpectChanged, goals[1].Expect, "the declared goal comes back resolved")
@@ -108,12 +106,10 @@ func (s *jobSuite) TestCloneSharesNothing() {
 	}
 	c := row.Clone()
 	c.Paths.Write[0] = "b"
-	c.Check[0] = 'x'
 	c.ModelTier.Shared[0] = "y"
 	c.Attempt.ExtraArgs[0] = "-race"
 	c.Rejection.Violations[0] = "w"
 	s.Equal("a", row.Paths.Write[0])
-	s.Equal(checkJSON("test", "."), row.Check)
 	s.Equal("x", row.ModelTier.Shared[0])
 	s.Equal("-v", row.Attempt.ExtraArgs[0])
 	s.Equal("v", row.Rejection.Violations[0])
@@ -206,17 +202,15 @@ func (s *jobSuite) TestAReadOnlyJobWithNoCheckHoldsNoBuildSeat() {
 	s.False(Job{}.HoldsNoBuildSeat())
 }
 
-// Apply copies the check as declared: what it says is the store's CheckValidate's to read.
+// Apply copies the check as declared: what it says is the store's CheckSpec's to read.
 func (s *jobSuite) TestApplyLeavesTheCheckAndValidationToTheStore() {
 	row := Job{Validation: "kept"}
-	check := codec.RawMessage(`{"target":"test","project":"cmd/magus/"}`)
+	check := rawCheck(`{"target":"test","project":"cmd/magus/"}`)
 	Declaration{ID: "a", Check: check}.Apply(&row)
 	s.Equal(check, row.Check)
-	check[0] = ' '
-	s.Equal(byte('{'), row.Check[0], "the row holds its own copy")
 	s.Equal("kept", row.Validation)
-	Declaration{ID: "a", Check: codec.RawMessage("null")}.Apply(&row)
-	s.Nil(row.Check)
+	Declaration{ID: "a"}.Apply(&row)
+	s.True(row.Check.IsZero())
 }
 
 const declared = `{"api_version":"safetyscissors.job/v1alpha1","id":"a","later":{"x":[1]}}`
@@ -238,8 +232,8 @@ func (s *jobSuite) TestAStrictDecodeRefusesAnAuthoredDeclarationsUnknownMember()
 	var d Declaration
 	s.Require().ErrorIs(codec.UnmarshalStrict([]byte(declared), &d), codec.ErrUnknownField)
 	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a","check":{"target":"t","x":1}}`), &d),
-		"a check is opaque here: the store's CheckValidate refuses what it does not declare")
-	s.JSONEq(`{"target":"t","x":1}`, string(d.Check))
+		"a check is opaque here: the store's CheckSpec refuses what it does not declare")
+	s.JSONEq(`{"target":"t","x":1}`, d.Check.String())
 	s.Require().NoError(codec.UnmarshalStrict([]byte(`{"api_version":"safetyscissors.job/v1alpha1","id":"a"}`), &d))
 	s.Nil(d.Unknown)
 }

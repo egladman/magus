@@ -154,9 +154,9 @@ func landsRow(actor Actor, id string, rows []Job) bool {
 // An [AsClaim] write is the store's claim rule's to grade, so this refuses it: a claim
 // graded by nothing would be a widening anybody can make.
 //
-// equal compares the goals' checks, as [ChangedFields] does; an error from it refuses
+// spec compares the goals' checks, as [ChangedFields] does; an error from it refuses
 // the write.
-func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job, equal CheckEqual) error {
+func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists bool, rows []Job, spec CheckSpec) error {
 	if kind == AsClaim {
 		return refuse(actor, id, "no claim rule grades a claim on this store, so none is accepted")
 	}
@@ -173,7 +173,7 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 		return refuse(actor, id, "a caller the transport cannot name may be any row's holder or none, so it writes no row")
 	}
 	if kind == AsVerdict {
-		return authorizeVerdict(actor, id, prev, next, rows, equal)
+		return authorizeVerdict(actor, id, prev, next, rows, spec)
 	}
 	if id != actor.Lease {
 		return authorizeChild(actor, id, next, exists, rows)
@@ -181,7 +181,7 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 	if !exists {
 		return refuse(actor, id, "nothing declares that row, and a worker does not declare its own lease")
 	}
-	changed, err := ChangedFields(prev, next, equal)
+	changed, err := ChangedFields(prev, next, spec)
 	if err != nil {
 		return err
 	}
@@ -214,11 +214,11 @@ func AuthorizeRow(actor Actor, id string, kind WriteKind, prev, next Job, exists
 
 // authorizeVerdict grades a bound holder's verdict: on a row below its own lease (see
 // [Actor.Verifies]), the move to pass and no other change.
-func authorizeVerdict(actor Actor, id string, prev, next Job, rows []Job, equal CheckEqual) error {
+func authorizeVerdict(actor Actor, id string, prev, next Job, rows []Job, spec CheckSpec) error {
 	if !actor.Verifies(rows, id) {
 		return refuse(actor, id, "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's")
 	}
-	changed, err := ChangedFields(prev, next, equal)
+	changed, err := ChangedFields(prev, next, spec)
 	if err != nil {
 		return err
 	}
@@ -292,11 +292,11 @@ func authorizeClear(actor Actor) error {
 // the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
 // the registration verdict) are not here: nothing a caller sends decides them.
 //
-// equal compares two goals' checks, which only the caller can read (see [WithCheckSpec]);
-// an error from it is a [*CheckRefusedError], and a nil equal asked to compare two checks
+// spec compares two goals' checks, which only the caller can read (see [WithCheckSpec]);
+// an error from it is a [*CheckRefusedError], and a nil spec asked to compare two checks
 // an [*UnconfiguredError].
-func ChangedFields(prev, next Job, equal CheckEqual) ([]string, error) {
-	goals, err := goalsEqual(next.ID, prev.Goals, next.Goals, equal)
+func ChangedFields(prev, next Job, spec CheckSpec) ([]string, error) {
+	goals, err := goalsEqual(next.ID, prev.Goals, next.Goals, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -337,8 +337,8 @@ func ChangedFields(prev, next Job, equal CheckEqual) ([]string, error) {
 
 // SpecChanges names the spec fields that differ between prev and next, in the wire
 // spelling: [ChangedFields] less the ones a declaration never writes.
-func SpecChanges(prev, next Job, equal CheckEqual) ([]string, error) {
-	changed, err := ChangedFields(prev, next, equal)
+func SpecChanges(prev, next Job, spec CheckSpec) ([]string, error) {
+	changed, err := ChangedFields(prev, next, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -372,9 +372,9 @@ func changedAgentFields(prev, next *Agent) []string {
 // goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
 // bound worker mutation, and the model is small, typed, and stable. Every field counts: a
 // holder that could rewrite a goal's kind, expectation or subject could grade itself done.
-// The checks go through equal, the caller's reading of them; id names the row in its
+// The checks go through spec, the caller's reading of them; id names the row in its
 // refusal.
-func goalsEqual(id string, a, b []Goal, equal CheckEqual) (bool, error) {
+func goalsEqual(id string, a, b []Goal, spec CheckSpec) (bool, error) {
 	if len(a) != len(b) {
 		return false, nil
 	}
@@ -386,7 +386,7 @@ func goalsEqual(id string, a, b []Goal, equal CheckEqual) (bool, error) {
 			!slices.Equal(a[i].Accept, b[i].Accept) || a[i].Signature != b[i].Signature {
 			return false, nil
 		}
-		same, err := checksEqual(id, a[i], b[i], equal)
+		same, err := checksEqual(id, a[i], b[i], spec)
 		if err != nil || !same {
 			return false, err
 		}
@@ -394,18 +394,18 @@ func goalsEqual(id string, a, b []Goal, equal CheckEqual) (bool, error) {
 	return true, nil
 }
 
-// checksEqual compares a's and b's checks through equal. Two goals that declare none are
+// checksEqual compares a's and b's checks through spec. Two goals that declare none are
 // equal without it.
-func checksEqual(id string, a, b Goal, equal CheckEqual) (bool, error) {
-	switch has := HasCheck(a.Check); {
-	case has != HasCheck(b.Check):
+func checksEqual(id string, a, b Goal, spec CheckSpec) (bool, error) {
+	switch has := !a.Check.IsZero(); {
+	case has != !b.Check.IsZero():
 		return false, nil
 	case !has:
 		return true, nil
-	case equal == nil:
+	case spec == nil:
 		return false, &UnconfiguredError{Op: "ChangedFields", Option: "WithCheckSpec"}
 	}
-	same, err := equal(a.Check, b.Check)
+	same, err := spec.Equal(a.Check, b.Check)
 	if err != nil {
 		return false, &CheckRefusedError{Job: id, Field: goalCheckField(b.ID), Err: err}
 	}

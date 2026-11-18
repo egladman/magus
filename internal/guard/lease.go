@@ -26,7 +26,6 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
-	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -1431,11 +1430,11 @@ func (j rowJudge) runsOffCheck(r targetRun) bool {
 	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
-// readCheck reads the check a row or goal stores as opaque JSON. The store validated it when
-// it wrote the row, so an error here means a row that bypassed the store.
-func readCheck(raw codec.RawMessage) (types.LeaseCheck, error) {
+// readCheck reads the check a row or goal stores. The store validated it when it wrote the
+// row, so an error here means a row that bypassed the store.
+func readCheck(stored jobtypes.Check) (types.LeaseCheck, error) {
 	var c types.LeaseCheck
-	err := codec.UnmarshalStrict(raw, &c)
+	err := stored.Decode(&c)
 	return c, err
 }
 
@@ -2163,7 +2162,7 @@ func cliFork(args []string, stdin string) childFork {
 		if err != nil {
 			return childFork{}
 		}
-		hasCheck := jobtypes.HasCheck(row.Check)
+		hasCheck := !row.Check.IsZero()
 		// A check that cannot be read is not script-only, so the child counts as bounded.
 		declared, err := readCheck(row.Check)
 		scriptOnly := hasCheck && err == nil && declared.Target == "" && declared.Script != ""

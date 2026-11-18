@@ -92,7 +92,7 @@ var loadableFiles = map[string]string{
 
 // forkCheck is the check every writing fixture here declares, since a fork refuses a
 // writing job with nothing to grade it by.
-func forkCheck() codec.RawMessage {
+func forkCheck() job.Check {
 	return fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
 }
 

@@ -493,7 +493,7 @@ func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
 			DependsOn:   g.DependsOn,
 			Signature:   g.Signature,
 		}
-		if g.Kind == job.GoalKindCheck && job.HasCheck(g.Check) {
+		if g.Kind == job.GoalKindCheck && !g.Check.IsZero() {
 			wire.Check = renderGoalCheck(g)
 		}
 		out = append(out, wire)

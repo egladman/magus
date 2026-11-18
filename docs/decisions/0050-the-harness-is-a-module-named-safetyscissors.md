@@ -559,12 +559,16 @@ reads it through views in `types/`, and the generators reflect those views, so B
 keeps the typed `magus\LeaseCheck`.
 
 - `Job.Check`, `Goal.Check`, `Declaration.Check`, `Put.Check`, `Statement.Check` and
-  `Report.Check` are `codec.RawMessage`. `LeaseCheck`, `ParseLeaseCheck`, `CheckError`
-  and `SameLeaseCheck` leave the module.
-- The caller passes `job.WithCheckSpec(validate, equal, render)`, and `safetyscissors.New`
-  requires `WithCheckSpec`. Without it the store refuses every row write and every
-  grading call, naming the option. A check the caller's validate refuses fails the
-  write with `*CheckRefusedError`.
+  `Report.Check` are a `job.Check`, a struct whose bytes are unexported: `NewCheck`,
+  `Decode`, `IsZero` and `String` are the only ways in and out, so no caller aliases a
+  stored row or compares two checks by bytes. It holds the codec's canonical JSON, and
+  the line on disk is the one a `codec.RawMessage` wrote. `LeaseCheck`,
+  `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` leave the module.
+- The caller passes `job.WithCheckSpec(spec)`, one `CheckSpec` interface of `Validate`,
+  `Equal` and `Render`, and `safetyscissors.New` requires `WithCheckSpec`. Equal stays on
+  the host's interface: the module never compares validated bytes itself. Without a spec
+  the store refuses every row write and every grading call, naming the option. A check
+  the caller's `Validate` refuses fails the write with `*CheckRefusedError`.
 - `types.LeaseCheck` and the views `types.Job`, `types.Goal`, `types.JobList` and
   `types.Declaration` embed the module type and override only the check members.
   `internal/job` holds the spec, the parse and the check-content faults.

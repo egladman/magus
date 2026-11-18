@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -114,17 +113,17 @@ func sameLeaseCheck(a, b *types.LeaseCheck) bool {
 }
 
 // rawCheck is c as the job store keeps it: validated, then encoded.
-func rawCheck(c types.LeaseCheck) (codec.RawMessage, error) {
+func rawCheck(c types.LeaseCheck) (job.Check, error) {
 	valid, err := validateLeaseCheck(c)
 	if err != nil {
-		return nil, err
+		return job.Check{}, err
 	}
 	return types.EncodeLeaseCheck(valid)
 }
 
 // rowCheck is row's own check and whether it declares one.
 func rowCheck(row job.Job) (types.LeaseCheck, bool, error) {
-	if !job.HasCheck(row.Check) {
+	if row.Check.IsZero() {
 		return types.LeaseCheck{}, false, nil
 	}
 	c, err := types.DecodeLeaseCheck(row.Check)
@@ -144,20 +143,21 @@ func GoalCheck(g job.Goal) (types.LeaseCheck, error) {
 	return c, nil
 }
 
-// checkSpec is how magus's job store reads the checks it keeps: as [types.LeaseCheck].
-func checkSpec() job.StoreOption {
-	return job.WithCheckSpec(validateStoredCheck, equalStoredChecks, renderStoredCheck)
-}
+// leaseChecks is how magus's job store reads the checks it keeps: as [types.LeaseCheck].
+type leaseChecks struct{}
 
-func validateStoredCheck(raw codec.RawMessage) (codec.RawMessage, error) {
-	c, err := types.DecodeLeaseCheck(raw)
+// checkSpec is the store option that gives the job store [leaseChecks].
+func checkSpec() job.StoreOption { return job.WithCheckSpec(leaseChecks{}) }
+
+func (leaseChecks) Validate(stored job.Check) (job.Check, error) {
+	c, err := types.DecodeLeaseCheck(stored)
 	if err != nil {
-		return nil, err
+		return job.Check{}, err
 	}
 	return rawCheck(c)
 }
 
-func equalStoredChecks(a, b codec.RawMessage) (bool, error) {
+func (leaseChecks) Equal(a, b job.Check) (bool, error) {
 	ca, err := types.DecodeLeaseCheck(a)
 	if err != nil {
 		return false, err
@@ -169,8 +169,8 @@ func equalStoredChecks(a, b codec.RawMessage) (bool, error) {
 	return sameLeaseCheck(&ca, &cb), nil
 }
 
-func renderStoredCheck(raw codec.RawMessage) (string, error) {
-	c, err := types.DecodeLeaseCheck(raw)
+func (leaseChecks) Render(stored job.Check) (string, error) {
+	c, err := types.DecodeLeaseCheck(stored)
 	if err != nil {
 		return "", err
 	}
@@ -188,7 +188,7 @@ type goalCheck struct {
 func readGoalChecks(goals []job.Goal) ([]goalCheck, error) {
 	var out []goalCheck
 	for _, g := range goals {
-		if !job.HasCheck(g.Check) {
+		if g.Check.IsZero() {
 			continue
 		}
 		c, err := GoalCheck(g)
@@ -222,10 +222,10 @@ func renderGoalCheck(g job.Goal) string {
 // sameStoredCheck reports whether two stored checks declare the same one: two that
 // declare none are the same, and two that cannot be compared are not, so an unreadable
 // check is judged again.
-func sameStoredCheck(a, b codec.RawMessage) bool {
-	if !job.HasCheck(a) || !job.HasCheck(b) {
-		return job.HasCheck(a) == job.HasCheck(b)
+func sameStoredCheck(a, b job.Check) bool {
+	if a.IsZero() || b.IsZero() {
+		return a.IsZero() == b.IsZero()
 	}
-	same, err := equalStoredChecks(a, b)
+	same, err := leaseChecks{}.Equal(a, b)
 	return err == nil && same
 }

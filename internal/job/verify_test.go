@@ -520,7 +520,7 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.Check, row.Validation = nil, ""
+	row.Check, row.Validation = job.Check{}, ""
 
 	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
@@ -671,7 +671,7 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 	require.NoError(t, err)
 	var row job.Job
 	decl.Apply(&row)
-	require.True(t, job.HasCheck(row.Check))
+	require.True(t, !row.Check.IsZero())
 	assert.True(t, checkIn(t, row.Check).NoDefaultCharms)
 	assert.Equal(t, "magus run generate . --no-default-charms", validationLine(row))
 }

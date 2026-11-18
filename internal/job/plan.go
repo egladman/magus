@@ -107,12 +107,12 @@ func mergeBase(rows []job.Job, id string, merge func(*job.Job)) (job.Job, bool) 
 func addedChecks(prev, merged job.Job, checkChanged bool) job.Job {
 	added := merged
 	if !checkChanged {
-		added.Check = nil
+		added.Check = job.Check{}
 	}
 	held := prev.EffectiveGoals()
 	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal job.Goal) bool {
 		return goal.Kind != job.GoalKindCheck || slices.ContainsFunc(held, func(g job.Goal) bool {
-			same, err := equalStoredChecks(g.Check, goal.Check)
+			same, err := leaseChecks{}.Equal(g.Check, goal.Check)
 			return g.Kind == job.GoalKindCheck && err == nil && same
 		})
 	})
@@ -281,7 +281,7 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 		v := validateMerge(ctx, refusing, rows, rec.ID, merge, limits, read)
 		problems = append(problems, prefixed(rec.ID, append(ps, v.Problems...))...)
 		next.Releases = store.Releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != rec.ID)
-		changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+		changed, err := job.SpecChanges(prev, next, leaseChecks{})
 		if err != nil {
 			return nil, err
 		}

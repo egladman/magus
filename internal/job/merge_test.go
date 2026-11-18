@@ -3,7 +3,6 @@ package job
 import (
 	"testing"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -159,14 +158,14 @@ func TestMergeSetsOrClearsTheCheck(t *testing.T) {
 
 	base := job.Job{ID: "u1"}
 	set := applyMerge(t, map[string]any{"check": "test ."}, base)
-	require.NotNil(t, set.Check)
+	require.False(t, set.Check.IsZero())
 	assert.Equal(t, "test", checkIn(t, set.Check).Target)
 	assert.Equal(t, CheckCommand(checkIn(t, set.Check)), set.Validation, "the row stores both halves")
 
-	cleared := applyPut(t, job.Put{Check: codec.RawMessage("null")}, set)
-	assert.Nil(t, cleared.Check, "a check that declares none clears it")
+	cleared := applyPut(t, job.Put{Check: &job.Check{}}, set)
+	assert.True(t, cleared.Check.IsZero(), "a check that declares none clears it")
 	assert.Empty(t, cleared.Validation)
-	assert.Nil(t, applyMerge(t, map[string]any{"check": " "}, set).Check, "an empty check line clears it")
+	assert.True(t, applyMerge(t, map[string]any{"check": " "}, set).Check.IsZero(), "an empty check line clears it")
 
 	_, err := DecodePut(map[string]any{"check": "test .", "validation": "magus run test ."})
 	require.ErrorContains(t, err, "not both")

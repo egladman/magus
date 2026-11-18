@@ -1,7 +1,6 @@
 package safetyscissors
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox"
@@ -34,17 +32,19 @@ func required() []Option {
 		WithInvocation("inv1", session.InvocationStart{Command: "test"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
-		WithCheckSpec(keepCheck, sameCheck, renderCheck),
+		WithCheckSpec(keptChecks{}),
 	}
 }
 
-// keepCheck, sameCheck and renderCheck stand in for the caller's check spec: a check is
-// whatever JSON it is, compared byte for byte.
-func keepCheck(raw codec.RawMessage) (codec.RawMessage, error) { return raw, nil }
+// keptChecks stands in for the caller's check spec: a check is whatever JSON it is,
+// compared as written.
+type keptChecks struct{}
 
-func sameCheck(a, b codec.RawMessage) (bool, error) { return bytes.Equal(a, b), nil }
+func (keptChecks) Validate(c job.Check) (job.Check, error) { return c, nil }
 
-func renderCheck(raw codec.RawMessage) (string, error) { return string(raw), nil }
+func (keptChecks) Equal(a, b job.Check) (bool, error) { return a.String() == b.String(), nil }
+
+func (keptChecks) Render(c job.Check) (string, error) { return c.String(), nil }
 
 func (s *NewSuite) open(opts ...Option) *SafetyScissors {
 	ss, err := New(s.T().Context(), s.dir, append(required(), opts...)...)
@@ -93,7 +93,7 @@ func (s *NewSuite) TestNewNamesEveryMissingRequiredOptionAtOnce() {
 }
 
 func (s *NewSuite) TestNewRefusesACheckSpecWithANilFunction() {
-	_, err := New(s.T().Context(), s.dir, append(required(), WithCheckSpec(keepCheck, nil, renderCheck))...)
+	_, err := New(s.T().Context(), s.dir, append(required(), WithCheckSpec(nil))...)
 	s.Require().Error(err)
 	s.Equal([]string{"WithCheckSpec"}, s.optionProblems(err))
 }
@@ -276,7 +276,7 @@ func ExampleNew() {
 		WithInvocation("inv1", session.InvocationStart{Command: "example"}),
 		WithActor(func() job.Actor { return job.Actor{} }),
 		WithNotices(func(job.Notice) {}),
-		WithCheckSpec(keepCheck, sameCheck, renderCheck),
+		WithCheckSpec(keptChecks{}),
 		WithSlots(2),
 	)
 	if err != nil {

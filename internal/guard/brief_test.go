@@ -361,7 +361,7 @@ func TestBriefNamesItsRow(t *testing.T) {
 
 	for name, change := range map[string]func(*job.Job){
 		"a terminal row":           func(j *job.Job) { j.State = job.StatePass },
-		"a row declaring no check": func(j *job.Job) { j.Check = nil },
+		"a row declaring no check": func(j *job.Job) { j.Check = job.Check{} },
 	} {
 		r := figuresLease()
 		change(&r)

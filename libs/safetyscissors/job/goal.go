@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/egladman/magus/libs/codec"
 )
 
 // PrimaryGoalID names the job's singular check when it is projected into its goals. It
@@ -32,9 +30,9 @@ type Goal struct {
 	// Expect is optional and defaults to the kind's own: passed for check, changed for
 	// paths and symbol. The common goal names only its kind and its subject.
 	Expect GoalExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
-	// Check is the run a GoalKindCheck goal examines, as opaque JSON the store reads
-	// through [WithCheckSpec]. Nil on every other kind.
-	Check codec.RawMessage `json:"check,omitzero" yaml:"check,omitempty"`
+	// Check is the run a GoalKindCheck goal examines, which the store reads through
+	// [WithCheckSpec]. Zero on every other kind.
+	Check Check `json:"check,omitzero"`
 	// Paths are the globs a GoalKindPaths goal examines. Zero on every other kind.
 	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
 	// Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph
@@ -145,7 +143,7 @@ func (k GoalKind) defaultExpect() GoalExpect {
 }
 
 // Subject is the paths or symbols the goal examines, for a message that has to name them.
-// A check goal's subject is its check, which only the store's [CheckRender] renders, so
+// A check goal's subject is its check, which only the store's [CheckSpec] renders, so
 // it is nil here.
 func (g Goal) Subject() []string {
 	switch g.Kind {
@@ -179,10 +177,10 @@ func goalAccepts(kind GoalKind) ([]GoalExpect, bool) {
 // capability semantics while every verifier has one complete collection to grade.
 func (j Job) EffectiveGoals() []Goal {
 	goals := cloneGoals(j.Goals)
-	if HasCheck(j.Check) {
+	if !j.Check.IsZero() {
 		// The lease's own check is run by whoever holds the lease, through the runner that
 		// started it, so its run is witnessed; Check carries no accept list of its own.
-		primary := Goal{ID: PrimaryGoalID, Check: slices.Clone(j.Check), Accept: []Basis{BasisWitnessed}}.Resolve()
+		primary := Goal{ID: PrimaryGoalID, Check: j.Check, Accept: []Basis{BasisWitnessed}}.Resolve()
 		goals = append([]Goal{primary}, goals...)
 	}
 	return goals
@@ -309,7 +307,7 @@ func (g Goal) faults(field string) []Fault {
 	// Exactly one subject, named by the kind. A goal carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
-	if g.Kind != GoalKindCheck && HasCheck(g.Check) {
+	if g.Kind != GoalKindCheck && !g.Check.IsZero() {
 		bad("check", fmt.Sprintf("goal %q is a %s goal and also carries a check", g.ID, g.Kind), "a goal examines one subject: drop the check")
 	}
 	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
@@ -322,7 +320,7 @@ func (g Goal) faults(field string) []Fault {
 	subject := map[GoalKind]string{GoalKindCheck: "check", GoalKindPaths: "paths", GoalKindSymbol: "symbols"}[g.Kind]
 	names := len(trimmedNonEmpty(g.Subject())) > 0
 	if g.Kind == GoalKindCheck {
-		names = HasCheck(g.Check)
+		names = !g.Check.IsZero()
 	}
 	if subject != "" && !names {
 		bad(subject, fmt.Sprintf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind),

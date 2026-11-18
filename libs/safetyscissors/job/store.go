@@ -540,12 +540,12 @@ func requestsEntry(prev, next Job) bool {
 
 // authorizeEntry grades an entry: prev is the row before it and next carries the one
 // entry appended to it.
-func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job, equal CheckEqual) error {
+func authorizeEntry(actor Actor, id string, prev, next Job, exists bool, rows []Job, spec CheckSpec) error {
 	entry := next.Entries[len(next.Entries)-1]
 	if !exists {
 		return fmt.Errorf("%q: there is nothing to enter: %w", id, ErrUnknownJob)
 	}
-	changed, err := ChangedFields(prev, next, equal)
+	changed, err := ChangedFields(prev, next, spec)
 	switch {
 	case err != nil:
 		return err

@@ -173,7 +173,7 @@ func (s *RecordSuite) TestAnOlderBuildsCamelCaseNestedKeyIsRefused() {
 }
 
 // The byte-for-byte line jobs.jsonl stores: snake_case keys, Go enum values, and the check
-// as the bytes the caller's CheckValidate kept.
+// as the bytes the caller's CheckSpec kept.
 func (s *RecordSuite) TestARowsLineIsPinned() {
 	row := Job{ID: "a", State: StateRunning, Generation: 2, Created: 10, Updated: 20, Check: checkJSON("test", "."),
 		DependsOn: []string{"b"}, BriefFormat: BriefFormatBuzz, ReadOnly: true, MaxAttempts: 3,

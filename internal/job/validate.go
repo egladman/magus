@@ -170,7 +170,7 @@ func droppedProblems(prev, merged job.Job) types.JobProblems {
 	}
 	dropped("agent.instructions", prev.Instructions() != "", merged.Instructions() != "")
 	dropped("paths.write", len(prev.Paths.Write) > 0, len(merged.Paths.Write) > 0)
-	dropped("check", prev.Check != nil, merged.Check != nil)
+	dropped("check", !prev.Check.IsZero(), !merged.Check.IsZero())
 	dropped("goals", len(prev.Goals) > 0, len(merged.Goals) > 0)
 	return ps
 }
@@ -599,7 +599,7 @@ func workspaceProblems(ctx context.Context, store *Store, rows []job.Job, merged
 	writes := !judged.ReadOnly && len(judged.Paths.Write) > 0
 	if why != "" {
 		var unchecked []string
-		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && job.HasCheck(g.Check) }) {
+		if slices.ContainsFunc(judged.EffectiveGoals(), func(g job.Goal) bool { return g.Kind == job.GoalKindCheck && !g.Check.IsZero() }) {
 			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
@@ -785,7 +785,7 @@ func rowDeclaration(row job.Job) job.Declaration {
 	// A row stored before the check record carries only the rendered line; one it could not
 	// parse was refused at the door, so a line that fails here declares no check.
 	rec.Check = row.Check
-	if !job.HasCheck(row.Check) && strings.TrimSpace(row.Validation) != "" {
+	if row.Check.IsZero() && strings.TrimSpace(row.Validation) != "" {
 		if c, err := ParseCheckCommand(row.Validation); err == nil {
 			if raw, err := types.EncodeLeaseCheck(c); err == nil {
 				rec.Check = raw
@@ -852,7 +852,7 @@ func onRow(ps types.JobProblems, part, whole job.Job) types.JobProblems {
 // goalCheckField is the field of row that declares goal's check: `check` for the row's own,
 // `goals[i].check` for a goal's.
 func goalCheckField(row job.Job, goal job.Goal) string {
-	if goal.ID == job.PrimaryGoalID && row.Check != nil {
+	if goal.ID == job.PrimaryGoalID && !row.Check.IsZero() {
 		return "check"
 	}
 	if i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == goal.ID }); i >= 0 {
@@ -939,7 +939,7 @@ func branchLeaves(ctx context.Context, root string, integrates []string) map[str
 // JobUngraded: `job wait` could never pass it, so the row would end by `job exit` on the
 // holder's word. A read-only job writes nothing to grade and is exempt.
 func ungradedProblems(row job.Job) types.JobProblems {
-	if row.ReadOnly || len(row.Paths.Write) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 || !row.Check.IsZero() || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
 		return nil
 	}
 	return types.JobProblems{{

@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
-	"github.com/egladman/magus/libs/codec"
 )
 
 // specCheck is the check the tests' [WithCheckSpec] reads: a target and the project it
@@ -21,29 +19,32 @@ type specCheck struct {
 	Args    []string `json:"args,omitempty"`
 }
 
-func readSpecCheck(raw codec.RawMessage) (specCheck, error) {
-	var c specCheck
-	if err := codec.UnmarshalStrict(raw, &c); err != nil {
+func readSpecCheck(c Check) (specCheck, error) {
+	var sc specCheck
+	if err := c.Decode(&sc); err != nil {
 		return specCheck{}, err
 	}
-	if c.Target == "" {
+	if sc.Target == "" {
 		return specCheck{}, errors.New("names no target")
 	}
-	if c.Project == "" {
-		c.Project = "."
+	if sc.Project == "" {
+		sc.Project = "."
 	}
-	return c, nil
+	return sc, nil
 }
 
-func validateSpecCheck(raw codec.RawMessage) (codec.RawMessage, error) {
-	c, err := readSpecCheck(raw)
+// specChecks is the [CheckSpec] every test store is opened with.
+type specChecks struct{}
+
+func (specChecks) Validate(c Check) (Check, error) {
+	sc, err := readSpecCheck(c)
 	if err != nil {
-		return nil, err
+		return Check{}, err
 	}
-	return codec.Marshal(c)
+	return NewCheck(sc)
 }
 
-func equalSpecCheck(a, b codec.RawMessage) (bool, error) {
+func (specChecks) Equal(a, b Check) (bool, error) {
 	ca, err := readSpecCheck(a)
 	if err != nil {
 		return false, err
@@ -55,25 +56,27 @@ func equalSpecCheck(a, b codec.RawMessage) (bool, error) {
 	return reflect.DeepEqual(ca, cb), nil
 }
 
-func renderSpecCheck(raw codec.RawMessage) (string, error) {
-	c, err := readSpecCheck(raw)
+func (specChecks) Render(c Check) (string, error) {
+	sc, err := readSpecCheck(c)
 	if err != nil {
 		return "", err
 	}
-	line := c.Target + " " + c.Project
-	if len(c.Args) > 0 {
-		line += " -- " + strings.Join(c.Args, " ")
+	line := sc.Target + " " + sc.Project
+	if len(sc.Args) > 0 {
+		line += " -- " + strings.Join(sc.Args, " ")
 	}
 	return line, nil
 }
 
 // testCheckSpec is the [WithCheckSpec] every test store is opened with.
-func testCheckSpec() StoreOption {
-	return WithCheckSpec(validateSpecCheck, equalSpecCheck, renderSpecCheck)
-}
+func testCheckSpec() StoreOption { return WithCheckSpec(specChecks{}) }
 
-// checkJSON is a check as validateSpecCheck stores it, for names Go and JSON quote alike.
-func checkJSON(target, project string, args ...string) codec.RawMessage {
+// rawCheck is the Check json spells, as its author spelled it: the tests hand the store
+// spellings no decode would keep.
+func rawCheck(json string) Check { return storedCheck([]byte(strings.TrimSpace(json))) }
+
+// checkJSON is a check as specChecks stores it, for names Go and JSON quote alike.
+func checkJSON(target, project string, args ...string) Check {
 	line := `{"target":` + strconv.Quote(target) + `,"project":` + strconv.Quote(project)
 	if len(args) > 0 {
 		quoted := make([]string, len(args))
@@ -82,7 +85,7 @@ func checkJSON(target, project string, args ...string) codec.RawMessage {
 		}
 		line += `,"args":[` + strings.Join(quoted, ",") + `]`
 	}
-	return codec.RawMessage(line + "}")
+	return rawCheck(line + "}")
 }
 
 type CheckSpecSuite struct {
@@ -100,18 +103,11 @@ func (s *CheckSpecSuite) open(opts ...StoreOption) *Store {
 	return st
 }
 
-func (s *CheckSpecSuite) TestOpenRefusesANilFunction() {
-	for name, opt := range map[string]StoreOption{
-		"validate": WithCheckSpec(nil, equalSpecCheck, renderSpecCheck),
-		"equal":    WithCheckSpec(validateSpecCheck, nil, renderSpecCheck),
-		"render":   WithCheckSpec(validateSpecCheck, equalSpecCheck, nil),
-	} {
-		_, err := Open(s.dir, opt)
+func (s *CheckSpecSuite) TestOpenRefusesANilSpec() {
+	_, err := Open(s.dir, WithCheckSpec(nil))
 
-		refused, ok := errors.AsType[*CheckSpecError](err)
-		s.Require().True(ok, "%s: %v", name, err)
-		s.Equal(name, refused.Func)
-	}
+	_, ok := errors.AsType[*CheckSpecError](err)
+	s.True(ok, err)
 }
 
 func (s *CheckSpecSuite) TestAStoreWithNoCheckSpecRefusesARowWrite() {
@@ -140,23 +136,23 @@ func (s *CheckSpecSuite) TestAWriteStoresTheBytesValidateReturns() {
 	st := s.open()
 
 	row, err := st.Update(s.T().Context(), "a", func(j *Job) {
-		j.Check = codec.RawMessage(`{ "target": "test" }`)
-		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: codec.RawMessage(`{"project":"p","target":"lint"}`), Accept: []Basis{BasisWitnessed}}}
+		j.Check = rawCheck(`{ "target": "test" }`)
+		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: rawCheck(`{"project":"p","target":"lint"}`), Accept: []Basis{BasisWitnessed}}}
 	})
 
 	s.Require().NoError(err)
-	s.Equal(`{"target":"test","project":"."}`, string(row.Check))
-	s.Equal(`{"target":"lint","project":"p"}`, string(row.Goals[0].Check))
+	s.Equal(`{"target":"test","project":"."}`, row.Check.String())
+	s.Equal(`{"target":"lint","project":"p"}`, row.Goals[0].Check.String())
 	rows, err := st.List(s.T().Context())
 	s.Require().NoError(err)
-	s.Equal(`{"target":"test","project":"."}`, string(rows[0].Check))
+	s.Equal(`{"target":"test","project":"."}`, rows[0].Check.String())
 }
 
-func (s *CheckSpecSuite) TestACheckValidateRefusesIsNotWritten() {
+func (s *CheckSpecSuite) TestACheckTheSpecRefusesIsNotWritten() {
 	st := s.open()
 
 	_, err := st.Update(s.T().Context(), "a", func(j *Job) {
-		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: codec.RawMessage(`{"target":"lint","shell":"rm"}`), Accept: []Basis{BasisWitnessed}}}
+		j.Goals = []Goal{{ID: "lint", Kind: GoalKindCheck, Check: rawCheck(`{"target":"lint","shell":"rm"}`), Accept: []Basis{BasisWitnessed}}}
 	})
 
 	refused, ok := errors.AsType[*CheckRefusedError](err)
@@ -171,47 +167,40 @@ func (s *CheckSpecSuite) TestACheckValidateRefusesIsNotWritten() {
 func (s *CheckSpecSuite) TestARowCheckThatIsNullDeclaresNone() {
 	st := s.open()
 
-	row, err := st.Update(s.T().Context(), "a", func(j *Job) { j.Check = codec.RawMessage(" null ") })
+	row, err := st.Update(s.T().Context(), "a", func(j *Job) { j.Check = rawCheck(" null ") })
 
 	s.Require().NoError(err)
-	s.Nil(row.Check)
+	s.True(row.Check.IsZero())
 }
 
-func (s *CheckSpecSuite) TestHasCheck() {
-	s.False(HasCheck(nil))
-	s.False(HasCheck(codec.RawMessage("")))
-	s.False(HasCheck(codec.RawMessage(" null\n")))
-	s.True(HasCheck(codec.RawMessage(`{}`)))
-}
-
-func (s *CheckSpecSuite) TestChangedFieldsComparesChecksThroughEqual() {
+func (s *CheckSpecSuite) TestChangedFieldsComparesChecksThroughTheSpec() {
 	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
 	spelled := prev.Clone()
-	spelled.Goals[0].Check = codec.RawMessage(`{"target":"test"}`)
+	spelled.Goals[0].Check = rawCheck(`{"target":"test"}`)
 	other := prev.Clone()
 	other.Goals[0].Check = checkJSON("test", ".", "-run", "X")
 
-	same, err := ChangedFields(prev, spelled, equalSpecCheck)
+	same, err := ChangedFields(prev, spelled, specChecks{})
 	s.Require().NoError(err)
 	s.Empty(same, "one check spelled two ways is one check")
-	changed, err := ChangedFields(prev, other, equalSpecCheck)
+	changed, err := ChangedFields(prev, other, specChecks{})
 	s.Require().NoError(err)
 	s.Equal([]string{"goals"}, changed)
 }
 
-func (s *CheckSpecSuite) TestChangedFieldsRefusesACheckEqualCannotRead() {
+func (s *CheckSpecSuite) TestChangedFieldsRefusesACheckTheSpecCannotRead() {
 	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", ".")}}}
 	next := prev.Clone()
-	next.Goals[0].Check = codec.RawMessage(`{"target":"test","x":1}`)
+	next.Goals[0].Check = rawCheck(`{"target":"test","x":1}`)
 
-	_, err := ChangedFields(prev, next, equalSpecCheck)
+	_, err := ChangedFields(prev, next, specChecks{})
 
 	refused, ok := errors.AsType[*CheckRefusedError](err)
 	s.Require().True(ok, err)
 	s.Equal("goals[t].check", refused.Field)
 }
 
-func (s *CheckSpecSuite) TestChangedFieldsNeedsEqualOnlyToCompareTwoChecks() {
+func (s *CheckSpecSuite) TestChangedFieldsNeedsTheSpecOnlyToCompareTwoChecks() {
 	prev := Job{ID: "a", Goals: []Goal{{ID: "t", Kind: GoalKindPaths, Expect: ExpectChanged, Paths: []string{"x"}}}}
 
 	changed, err := ChangedFields(prev, prev.Clone(), nil)
@@ -226,7 +215,7 @@ func (s *CheckSpecSuite) TestChangedFieldsNeedsEqualOnlyToCompareTwoChecks() {
 }
 
 func (s *CheckSpecSuite) TestFaultsJudgeAChecksPresenceAndNeverItsContent() {
-	d := Declaration{Schema: Schema{Version: APIVersion}, ID: "a", Check: codec.RawMessage(`{"anything":1}`), Goals: []Goal{
+	d := Declaration{Schema: Schema{Version: APIVersion}, ID: "a", Check: rawCheck(`{"anything":1}`), Goals: []Goal{
 		{ID: "docs", Kind: GoalKindPaths, Paths: []string{"docs"}, Check: checkJSON("lint", ".")},
 		{ID: "unit", Kind: GoalKindCheck, Accept: []Basis{BasisWitnessed}},
 	}}

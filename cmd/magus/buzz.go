@@ -295,7 +295,7 @@ func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error)
 // goalChecksScript reports whether one of row's goals is a check that runs script.
 func goalChecksScript(row jobtypes.Job, script string) (bool, error) {
 	for _, g := range row.EffectiveGoals() {
-		if !jobtypes.HasCheck(g.Check) {
+		if g.Check.IsZero() {
 			continue
 		}
 		check, err := job.GoalCheck(g)

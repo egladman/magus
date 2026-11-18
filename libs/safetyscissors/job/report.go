@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/egladman/magus/libs/codec"
 )
 
 // Report is a run of a check goal's check the caller describes and the store did not see.
 type Report struct {
 	Job, Goal string
-	// Check is the check that ran, as opaque JSON the store's [CheckValidate] reads.
-	Check codec.RawMessage
+	// Check is the check that ran, which the store reads through its [CheckSpec].
+	Check Check
 	Exit  int
 	// By names who ran it. Required: a report nobody signs for is unattributable.
 	By string
@@ -30,7 +28,7 @@ func (e *ReportError) Error() string {
 // never as a pass. Named ReportRun so a caller's store that embeds this one keeps its own
 // Report.
 //
-// A report with no By is a [*ReportError], one whose check the store's [CheckValidate]
+// A report with no By is a [*ReportError], one whose check the store's [CheckSpec]
 // refuses a [*CheckRefusedError], one naming a goal its job does not declare as a check a
 // [*GoalError], and a store opened without [WithTree] or [WithCheckSpec] refuses with a
 // [*GradingUnconfiguredError].

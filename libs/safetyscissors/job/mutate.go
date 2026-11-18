@@ -225,7 +225,7 @@ func (w *rowWrite) declare() error {
 	if w.kind != AsDeclaration || !w.exists() {
 		return nil
 	}
-	widens, err := widensInPlace(w.prev, w.row, w.s.checks.equal)
+	widens, err := widensInPlace(w.prev, w.row, w.s.checks.host())
 	if err != nil {
 		return w.s.wrap(err)
 	}
@@ -245,11 +245,11 @@ func boundaryFields() []string { return []string{"paths.write", "paths.deny", "p
 // would hand the holder's job out again. A deadline may move with it. A re-fork that
 // changes no boundary still resets the state, which is how a rejected job is handed out
 // again.
-func widensInPlace(prev, next Job, equal CheckEqual) (bool, error) {
+func widensInPlace(prev, next Job, spec CheckSpec) (bool, error) {
 	if !prev.State.Live() || prev.State == StateDeclared || next.State != StateDeclared {
 		return false, nil
 	}
-	changed, err := ChangedFields(prev, next, equal)
+	changed, err := ChangedFields(prev, next, spec)
 	if err != nil {
 		return false, err
 	}
@@ -270,7 +270,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 	w.entering = w.kind == AsDeclaration && requestsEntry(w.prev, w.row)
 	switch {
 	case w.entering:
-		if err := authorizeEntry(w.actor, w.id, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.equal); err != nil {
+		if err := authorizeEntry(w.actor, w.id, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.host()); err != nil {
 			return w.s.wrap(err)
 		}
 		e := &w.row.Entries[len(w.row.Entries)-1]
@@ -278,7 +278,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 	case w.kind == AsClaim && w.s.hook != nil:
 		// Only the caller's claim rule grades a claim; see [AsClaim].
 	case w.kind.Graded():
-		if err := AuthorizeRow(w.actor, w.id, w.kind, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.equal); err != nil {
+		if err := AuthorizeRow(w.actor, w.id, w.kind, w.prev, w.row, w.exists(), w.f.Jobs, w.s.checks.host()); err != nil {
 			return w.s.wrap(err)
 		}
 	}
@@ -445,7 +445,7 @@ func (w *rowWrite) conclude(ctx context.Context) error {
 	row, prev := &w.row, w.prev
 	// The generation and the evidence are the store's too. Only a wait
 	// records a rejection.
-	generation, err := nextGeneration(prev, *row, w.exists(), w.kind, w.s.checks.equal)
+	generation, err := nextGeneration(prev, *row, w.exists(), w.kind, w.s.checks.host())
 	if err != nil {
 		return w.s.wrap(err)
 	}
@@ -495,7 +495,7 @@ func (w *rowWrite) place(ctx context.Context) error {
 // than prev's for a write that changes the declared spec ([SpecChanges]). An observation
 // declares nothing, and neither does a write that only widens the write paths: evidence
 // taken under the narrower set still asks what the wider one asks.
-func nextGeneration(prev, row Job, exists bool, kind WriteKind, equal CheckEqual) (int, error) {
+func nextGeneration(prev, row Job, exists bool, kind WriteKind, spec CheckSpec) (int, error) {
 	if !exists {
 		return 1, nil
 	}
@@ -503,7 +503,7 @@ func nextGeneration(prev, row Job, exists bool, kind WriteKind, equal CheckEqual
 	if kind == AsObservation {
 		return generation, nil
 	}
-	changed, err := changesSpec(prev, row, equal)
+	changed, err := changesSpec(prev, row, spec)
 	if changed {
 		generation++
 	}
@@ -512,8 +512,8 @@ func nextGeneration(prev, row Job, exists bool, kind WriteKind, equal CheckEqual
 
 // changesSpec reports whether row declares anything prev did not, other than write paths
 // that each hold every path prev held.
-func changesSpec(prev, row Job, equal CheckEqual) (bool, error) {
-	changes, err := SpecChanges(prev, row, equal)
+func changesSpec(prev, row Job, spec CheckSpec) (bool, error) {
+	changes, err := SpecChanges(prev, row, spec)
 	if err != nil {
 		return false, err
 	}

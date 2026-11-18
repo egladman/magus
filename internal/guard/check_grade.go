@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -162,11 +161,11 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 	}
 	baseline := row
 	compiling := job.CompilingCheck()
-	raw, err := codec.Marshal(compiling)
+	stored, err := jobtypes.NewCheck(compiling)
 	if err != nil {
 		return job.CheckVerdict{NotGraded: fmt.Sprintf("the compiling check could not be written to grade against: %v", err)}
 	}
-	baseline.Check = raw
+	baseline.Check = stored
 	baselineVerdict, lapsed := judge(baseline, compiling)
 	if baselineVerdict.Decision == verdict.Deny && lapsed {
 		return deferLapse(baselineVerdict)

@@ -272,7 +272,7 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	rows, _, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.NotNil(t, rows[0].Check)
+	require.False(t, rows[0].Check.IsZero())
 	assert.Equal(t, "go-test", checkIn(t, rows[0].Check).Target)
 
 	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, job.APIVersion)

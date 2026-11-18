@@ -128,7 +128,7 @@ func foldValidation(row *job.Declaration, line string) error {
 	switch {
 	case line == "":
 		return nil
-	case job.HasCheck(row.Check):
+	case !row.Check.IsZero():
 		return invalid("a job carries `check` or a rendered `validation` line, not both", "send `check` alone")
 	}
 	c, err := ParseCheckCommand(line)

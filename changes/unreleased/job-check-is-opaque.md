@@ -1,18 +1,19 @@
 ### Changed
 
-- **Breaking for SDK callers: a job's check is opaque JSON.** `Job`, `Goal`,
-  `Declaration`, `Put`, `Statement` and `Report` carry `Check` as `codec.RawMessage`;
-  `LeaseCheck`, `ParseLeaseCheck`, `CheckError` and `SameLeaseCheck` are gone.
-  `job.Open` takes `WithCheckSpec(validate, equal, render)`, and without it every row
-  write and grading call refuses.
+- **Breaking for SDK callers: a job's check is an opaque `job.Check`.** `Job`, `Goal`,
+  `Declaration`, `Statement` and `Report` carry `Check` as `job.Check`, and `Put` as
+  `*job.Check`. A `Check` hides its bytes: `NewCheck` makes one, `Decode` reads it,
+  `IsZero` says it declares none, and `String` is its JSON. `LeaseCheck`,
+  `ParseLeaseCheck`, `CheckError`, `SameLeaseCheck` and `HasCheck` are gone. `job.Open`
+  takes `WithCheckSpec(spec)`, a `CheckSpec` with `Validate`, `Equal` and `Render`, and
+  without it every row write and grading call refuses.
 - **Breaking for SDK callers: `safetyscissors.New` requires `WithCheckSpec`.** It passes
-  the spec to the job store and names the option when it is missing or holds a nil
-  function.
+  the spec to the job store and names the option when it is missing or nil.
 - **Breaking for SDK callers: the store judges only a check's shape.** `Faults` keeps
   the structural faults alone, a check the caller's spec refuses fails the write with
   `*CheckRefusedError`, and `Goal.Subject()` is nil for a check goal.
-- **Breaking for SDK callers: `ChangedFields`, `SpecChanges` and `AuthorizeRow` take a
-  `CheckEqual`.** A goal's check is compared through it, so a bound worker that changes
+- **Breaking for SDK callers: `ChangedFields`, `SpecChanges` and `AuthorizeRow` take the
+  `CheckSpec`.** A goal's check is compared through it, so a bound worker that changes
   any part of a goal's check changes its goals.
 - **Breaking: the job store migrates to snake_case.** Migration 10 respells every
   jobs.jsonl and attempts.jsonl line, header included: keys through an explicit table,

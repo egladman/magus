@@ -839,7 +839,7 @@ func authorizeClaim(actor job.Actor, id string, prev, next job.Job, exists bool,
 	case prev.State != job.StateRunning && prev.State != job.StateExited:
 		return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
 	}
-	fields, err := job.ChangedFields(prev, next, equalStoredChecks)
+	fields, err := job.ChangedFields(prev, next, leaseChecks{})
 	if err != nil {
 		return err
 	}

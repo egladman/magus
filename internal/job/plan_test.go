@@ -1397,7 +1397,7 @@ func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration"}
 	next := prev.Clone()
 	next.Integrates = []string{"worker"}
-	changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+	changed, err := job.SpecChanges(prev, next, leaseChecks{})
 	s.Require().NoError(err)
 	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"integrates"}, a.Changed)
@@ -1408,7 +1408,7 @@ func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
 	prev := job.Job{ID: "integration", Paths: job.Paths{Soft: []string{"old.go"}}}
 	next := prev.Clone()
 	next.Paths.Soft = []string{"new.go"}
-	changed, err := job.SpecChanges(prev, next, equalStoredChecks)
+	changed, err := job.SpecChanges(prev, next, leaseChecks{})
 	s.Require().NoError(err)
 	a := Applied{Prev: prev, Next: next, Changed: changed}
 	s.Equal([]string{"paths.soft"}, a.Changed)

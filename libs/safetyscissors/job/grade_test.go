@@ -37,7 +37,7 @@ func (s *gradingSuite) open(opts ...StoreOption) *Store {
 	return st
 }
 
-func testCheck() codec.RawMessage { return checkJSON("test", ".") }
+func testCheck() Check { return checkJSON("test", ".") }
 
 func checkGoalAccepting(id string, accept ...Basis) Goal {
 	return Goal{ID: id, Kind: GoalKindCheck, Expect: ExpectPassed, Check: testCheck(), Accept: accept}
@@ -48,7 +48,7 @@ func (s *gradingSuite) declare(goals ...Goal) {
 	s.Require().NoError(err)
 }
 
-func (s *gradingSuite) report(check codec.RawMessage) RunRef {
+func (s *gradingSuite) report(check Check) RunRef {
 	ref, err := s.store.ReportRun(s.T().Context(), Report{Job: "j1", Goal: "tests", Check: check, By: "worker"})
 	s.Require().NoError(err)
 	return ref

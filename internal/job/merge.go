@@ -87,19 +87,19 @@ func DecodePut(params map[string]any) (job.Put, error) {
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			put.Check = codec.RawMessage("null")
+			put.Check = &job.Check{}
 		default:
 			c, perr := parse(v)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			raw, perr := rawCheck(c)
+			stored, perr := rawCheck(c)
 			if perr != nil {
 				err = errors.Join(err, fmt.Errorf("encoding %s: %w", key, perr))
 				return
 			}
-			put.Check = raw
+			put.Check = &stored
 		}
 	}
 	_, hasCheck := params["check"]
@@ -237,19 +237,19 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		}
 	}
 	if p.Check != nil {
-		switch c, e := types.DecodeLeaseCheck(p.Check); {
-		case !job.HasCheck(p.Check):
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = nil, "" })
+		switch c, e := types.DecodeLeaseCheck(*p.Check); {
+		case p.Check.IsZero():
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = job.Check{}, "" })
 		case e != nil:
 			err = errors.Join(err, fmt.Errorf("job: check: %w", e))
 		default:
-			raw, e := rawCheck(c)
+			stored, e := rawCheck(c)
 			if e != nil {
 				err = errors.Join(err, fmt.Errorf("encoding the check: %w", e))
 				break
 			}
 			line := CheckCommand(c)
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = slices.Clone(raw), line })
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = stored, line })
 		}
 	}
 	if p.State != nil {

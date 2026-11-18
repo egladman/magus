@@ -66,7 +66,7 @@ func modelTierKind(row job.Job) types.JobKind {
 		g = g.Resolve()
 		switch g.Kind {
 		case job.GoalKindCheck:
-			if !job.HasCheck(g.Check) {
+			if g.Check.IsZero() {
 				continue
 			}
 			c, err := GoalCheck(g)

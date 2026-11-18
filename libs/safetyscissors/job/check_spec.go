@@ -1,72 +1,58 @@
 package job
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-
-	"github.com/egladman/magus/libs/codec"
 )
 
-// CheckValidate reads a check as the caller defines one and returns the bytes the store
-// keeps for it, or why raw is no check. The bytes it returns must validate to themselves,
-// since the store validates a check again each time it writes the row.
-type CheckValidate func(raw codec.RawMessage) (codec.RawMessage, error)
-
-// CheckEqual reports whether a and b declare the same check. The store calls it only on
-// checks [CheckValidate] accepted.
-type CheckEqual func(a, b codec.RawMessage) (bool, error)
-
-// CheckRender is a check as a message names it, such as the command line that runs it.
-type CheckRender func(raw codec.RawMessage) (string, error)
-
-// checkSpec is what [WithCheckSpec] gave the store.
-type checkSpec struct {
-	validate CheckValidate
-	equal    CheckEqual
-	render   CheckRender
+// CheckSpec is how a host reads the checks its store keeps. The store never interprets a
+// [Check]: it validates, compares and renders each one through the host's CheckSpec.
+type CheckSpec interface {
+	// Validate is c as the store keeps it, or why c is no check. The Check it returns must
+	// validate to itself, since the store validates a check again each time it writes the
+	// row.
+	Validate(c Check) (Check, error)
+	// Equal reports whether a and b declare the same check. The store calls it only on
+	// checks Validate accepted.
+	Equal(a, b Check) (bool, error)
+	// Render is c as a message names it, such as the command that runs it.
+	Render(c Check) (string, error)
 }
 
+// checkSpec is what [WithCheckSpec] gave the store.
+type checkSpec struct{ CheckSpec }
+
 // WithCheckSpec is how the store reads the checks a row and its goals carry: the store
-// keeps a check as opaque JSON and never interprets one. Open refuses a nil function with
-// a [*CheckSpecError].
+// keeps a check as an opaque [Check] and never interprets one. Open refuses a nil spec
+// with a [*CheckSpecError].
 //
 // Without it every row write refuses with an [*UnconfiguredError], and [Store.Grade],
 // [Store.Witness], [Store.Attest] and [Store.ReportRun] with a
 // [*GradingUnconfiguredError], each naming WithCheckSpec.
-func WithCheckSpec(validate CheckValidate, equal CheckEqual, render CheckRender) StoreOption {
-	return func(c *storeConfig) { c.checks = &checkSpec{validate: validate, equal: equal, render: render} }
+func WithCheckSpec(spec CheckSpec) StoreOption {
+	return func(c *storeConfig) { c.checks = &checkSpec{CheckSpec: spec} }
 }
 
-// CheckSpecError is a [WithCheckSpec] given a nil function.
-type CheckSpecError struct {
-	// Func is the nil one: "validate", "equal" or "render".
-	Func string
-}
+// CheckSpecError is a [WithCheckSpec] given a nil [CheckSpec].
+type CheckSpecError struct{}
 
 func (e *CheckSpecError) Error() string {
-	return fmt.Sprintf("job: WithCheckSpec needs a %s function, and it was given nil", e.Func)
+	return "job: WithCheckSpec needs a CheckSpec, and it was given nil"
 }
 
-// refusal is why spec cannot be used, nil when every function is set.
+// refusal is why spec cannot be used, nil when it can or when none was given.
 func (spec *checkSpec) refusal() error {
-	switch {
-	case spec == nil:
-		return nil
-	case spec.validate == nil:
-		return &CheckSpecError{Func: "validate"}
-	case spec.equal == nil:
-		return &CheckSpecError{Func: "equal"}
-	case spec.render == nil:
-		return &CheckSpecError{Func: "render"}
+	if spec != nil && spec.CheckSpec == nil {
+		return &CheckSpecError{}
 	}
 	return nil
 }
 
-// ErrNoCheck is a run recorded with no check: a run of nothing grades nothing.
+// ErrNoCheck is the zero [Check] where a check is needed: a run of nothing grades nothing,
+// and [Check.Decode] has nothing to read.
 var ErrNoCheck = errors.New("names no check")
 
-// CheckRefusedError is a check the store's [CheckValidate] or [CheckEqual] refused.
+// CheckRefusedError is a check the store's [CheckSpec] refused.
 type CheckRefusedError struct {
 	// Job is the row the check belongs to, and Field where it sits: "check",
 	// "goals[<id>].check", "statement.check" or "report.check".
@@ -80,12 +66,6 @@ func (e *CheckRefusedError) Error() string {
 
 func (e *CheckRefusedError) Unwrap() error { return e.Err }
 
-// HasCheck reports whether raw declares a check: nil, empty and JSON null declare none.
-func HasCheck(raw codec.RawMessage) bool {
-	trimmed := bytes.TrimSpace(raw)
-	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
-}
-
 // goalCheckField is where goal id's check sits, as a [CheckRefusedError] names it.
 func goalCheckField(id string) string {
 	if id == PrimaryGoalID {
@@ -94,24 +74,21 @@ func goalCheckField(id string) string {
 	return fmt.Sprintf("goals[%s].check", id)
 }
 
-// validateChecks runs the store's [CheckValidate] over row's check and every goal's, and
-// keeps the bytes it returns. A check field that declares none is cleared to nil.
+// validateChecks runs the store's [CheckSpec.Validate] over row's check and every goal's,
+// and keeps the checks it returns.
 func (spec *checkSpec) validateChecks(row *Job) error {
-	if !HasCheck(row.Check) {
-		row.Check = nil
-	} else {
-		valid, err := spec.validate(row.Check)
+	if !row.Check.IsZero() {
+		valid, err := spec.Validate(row.Check)
 		if err != nil {
 			return &CheckRefusedError{Job: row.ID, Field: "check", Err: err}
 		}
 		row.Check = valid
 	}
 	for i, g := range row.Goals {
-		if !HasCheck(g.Check) {
-			row.Goals[i].Check = nil
+		if g.Check.IsZero() {
 			continue
 		}
-		valid, err := spec.validate(g.Check)
+		valid, err := spec.Validate(g.Check)
 		if err != nil {
 			return &CheckRefusedError{Job: row.ID, Field: goalCheckField(g.ID), Err: err}
 		}
@@ -120,22 +97,22 @@ func (spec *checkSpec) validateChecks(row *Job) error {
 	return nil
 }
 
-// runCheck is the check a run of job's field records, as the store's [CheckValidate]
-// keeps it.
-func (spec *checkSpec) runCheck(job, field string, raw codec.RawMessage) (codec.RawMessage, error) {
-	if !HasCheck(raw) {
-		return nil, &CheckRefusedError{Job: job, Field: field, Err: ErrNoCheck}
+// runCheck is the check a run of job's field records, as the store's
+// [CheckSpec.Validate] keeps it.
+func (spec *checkSpec) runCheck(job, field string, c Check) (Check, error) {
+	if c.IsZero() {
+		return Check{}, &CheckRefusedError{Job: job, Field: field, Err: ErrNoCheck}
 	}
-	valid, err := spec.validate(raw)
+	valid, err := spec.Validate(c)
 	if err != nil {
-		return nil, &CheckRefusedError{Job: job, Field: field, Err: err}
+		return Check{}, &CheckRefusedError{Job: job, Field: field, Err: err}
 	}
 	return valid, nil
 }
 
-// renderCheck is raw as a message names it, or a sentence saying it would not render.
-func (spec *checkSpec) renderCheck(raw codec.RawMessage) string {
-	line, err := spec.render(raw)
+// renderCheck is c as a message names it, or a sentence saying it would not render.
+func (spec *checkSpec) renderCheck(c Check) string {
+	line, err := spec.Render(c)
 	if err != nil {
 		return fmt.Sprintf("(a check that does not render: %v)", err)
 	}
@@ -148,4 +125,12 @@ func (s *Store) needChecks(op string) error {
 		return s.wrap(&GradingUnconfiguredError{Op: op, Option: "WithCheckSpec"})
 	}
 	return nil
+}
+
+// host is the [CheckSpec] the store was given, nil when it was given none.
+func (spec *checkSpec) host() CheckSpec {
+	if spec == nil {
+		return nil
+	}
+	return spec.CheckSpec
 }

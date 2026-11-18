@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
-	"github.com/egladman/magus/libs/codec"
 )
 
 type AuthorizeSuite struct {
@@ -23,7 +21,7 @@ func (s *AuthorizeSuite) TestAnUnboundActorWritesAnything() {
 	next := prev
 	next.Paths.Write = append(next.Paths.Write, "b.go")
 
-	s.NoError(AuthorizeRow(Actor{}, "w", AsDeclaration, prev, next, true, []Job{prev}, equalSpecCheck))
+	s.NoError(AuthorizeRow(Actor{}, "w", AsDeclaration, prev, next, true, []Job{prev}, specChecks{}))
 }
 
 func (s *AuthorizeSuite) TestABoundWorkerShrinksButNeverWidensItsWritePaths() {
@@ -32,9 +30,9 @@ func (s *AuthorizeSuite) TestABoundWorkerShrinksButNeverWidensItsWritePaths() {
 	shrunk.Paths.Write = []string{"a.go"}
 	widened.Paths.Write = []string{"internal/x", "a.go", "b.go"}
 
-	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, shrunk, true, []Job{prev}, equalSpecCheck))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, shrunk, true, []Job{prev}, specChecks{}))
 	var refused *RefusedError
-	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, widened, true, []Job{prev}, equalSpecCheck), &refused)
+	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, widened, true, []Job{prev}, specChecks{}), &refused)
 	s.Contains(refused.Rule, "SHRINK")
 	s.Equal("ask your orchestrator to make this write", refused.Remedy)
 }
@@ -44,8 +42,8 @@ func (s *AuthorizeSuite) TestABoundWorkerEndsItsRowButNeverPassesIt() {
 	failed, passed := prev, prev
 	failed.State, passed.State = StateFail, StatePass
 
-	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, failed, true, []Job{prev}, equalSpecCheck))
-	s.Error(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, passed, true, []Job{prev}, equalSpecCheck))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, failed, true, []Job{prev}, specChecks{}))
+	s.Error(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, passed, true, []Job{prev}, specChecks{}))
 }
 
 func (s *AuthorizeSuite) TestAChildStaysInsideItsParentsBoundary() {
@@ -55,9 +53,9 @@ func (s *AuthorizeSuite) TestAChildStaysInsideItsParentsBoundary() {
 	dropsDeny := Job{ID: "c", Parent: "w", Paths: Paths{Write: []string{"a.go"}}}
 	actor, rows := Actor{Lease: "w"}, []Job{parent}
 
-	s.Require().NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, inside, false, rows, equalSpecCheck))
-	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, wider, false, rows, equalSpecCheck))
-	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, dropsDeny, false, rows, equalSpecCheck))
+	s.Require().NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, inside, false, rows, specChecks{}))
+	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, wider, false, rows, specChecks{}))
+	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, dropsDeny, false, rows, specChecks{}))
 }
 
 func (s *AuthorizeSuite) TestAVerdictPassesOnlyARowBelowTheHolder() {
@@ -66,31 +64,31 @@ func (s *AuthorizeSuite) TestAVerdictPassesOnlyARowBelowTheHolder() {
 	passed.State = StatePass
 	rows := []Job{parent, child}
 
-	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "c", AsVerdict, child, passed, true, rows, equalSpecCheck))
-	s.Error(AuthorizeRow(Actor{Lease: "c"}, "c", AsVerdict, child, passed, true, rows, equalSpecCheck), "a holder never grades its own row")
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "c", AsVerdict, child, passed, true, rows, specChecks{}))
+	s.Error(AuthorizeRow(Actor{Lease: "c"}, "c", AsVerdict, child, passed, true, rows, specChecks{}), "a holder never grades its own row")
 }
 
 func (s *AuthorizeSuite) TestAnUnstampedCallerWritesNoRow() {
 	prev := s.worker()
 
 	var refused *RefusedError
-	s.Require().ErrorAs(AuthorizeRow(Actor{Unstamped: true}, "w", AsDeclaration, prev, prev, true, []Job{prev}, equalSpecCheck), &refused)
+	s.Require().ErrorAs(AuthorizeRow(Actor{Unstamped: true}, "w", AsDeclaration, prev, prev, true, []Job{prev}, specChecks{}), &refused)
 	s.Equal(unstampedRemedy, refused.Remedy)
 }
 
 func (s *AuthorizeSuite) TestAClaimIsRefusedWithNoClaimRule() {
 	prev := s.worker()
 
-	s.Error(AuthorizeRow(Actor{}, "w", AsClaim, prev, prev, true, []Job{prev}, equalSpecCheck), "a claim graded by nothing is refused")
+	s.Error(AuthorizeRow(Actor{}, "w", AsClaim, prev, prev, true, []Job{prev}, specChecks{}), "a claim graded by nothing is refused")
 }
 
 func (s *AuthorizeSuite) TestOnlyTheRootOrItsIntegratorAdvancesAuthority() {
 	row, integrator := s.worker(), Job{ID: "i", State: StateRunning, Integrates: []string{"w"}}
 	rows := []Job{row, integrator}
 
-	s.NoError(AuthorizeRow(Actor{}, "w", AsAdvance, row, row, true, rows, equalSpecCheck))
-	s.NoError(AuthorizeRow(Actor{Lease: "i"}, "w", AsAdvance, row, row, true, rows, equalSpecCheck))
-	s.Error(AuthorizeRow(Actor{Lease: "w"}, "w", AsAdvance, row, row, true, rows, equalSpecCheck))
+	s.NoError(AuthorizeRow(Actor{}, "w", AsAdvance, row, row, true, rows, specChecks{}))
+	s.NoError(AuthorizeRow(Actor{Lease: "i"}, "w", AsAdvance, row, row, true, rows, specChecks{}))
+	s.Error(AuthorizeRow(Actor{Lease: "w"}, "w", AsAdvance, row, row, true, rows, specChecks{}))
 }
 
 func (s *AuthorizeSuite) TestChangedFieldsNamesTheDeclaredFieldsInWireSpelling() {
@@ -98,23 +96,23 @@ func (s *AuthorizeSuite) TestChangedFieldsNamesTheDeclaredFieldsInWireSpelling()
 	next := prev
 	next.Paths.Read, next.MaxAttempts = []string{"docs"}, 2
 
-	changed, err := ChangedFields(prev, next, equalSpecCheck)
+	changed, err := ChangedFields(prev, next, specChecks{})
 	s.Require().NoError(err)
 	s.Equal([]string{"paths.read", "max_attempts"}, changed)
 }
 
 // A worker that could rewrite its own goal's check could grade itself done, so a change
-// the caller's CheckEqual sees is a change to the goals.
+// the caller's CheckSpec sees is a change to the goals.
 func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsCheck() {
 	prev := s.worker()
 	prev.Goals = []Goal{{ID: "t", Kind: GoalKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}}
 	respelled, rewritten := prev.Clone(), prev.Clone()
-	respelled.Goals[0].Check = codec.RawMessage(`{"target":"test"}`)
+	respelled.Goals[0].Check = rawCheck(`{"target":"test"}`)
 	rewritten.Goals[0].Check = checkJSON("test", ".", "-run", "Nothing")
 
-	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, respelled, true, []Job{prev}, equalSpecCheck))
+	s.Require().NoError(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, respelled, true, []Job{prev}, specChecks{}))
 	var refused *RefusedError
-	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, rewritten, true, []Job{prev}, equalSpecCheck), &refused)
+	s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, rewritten, true, []Job{prev}, specChecks{}), &refused)
 	s.Contains(refused.Rule, "goals")
 }
 
@@ -132,10 +130,10 @@ func (s *AuthorizeSuite) TestAWorkerMayNotRewriteItsOwnGoalsAcceptOrSignature() 
 
 	for name, next := range map[string]Job{"accept": widened, "signature": reshaped} {
 		var refused *RefusedError
-		s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, next, true, []Job{prev}, equalSpecCheck), &refused, name)
+		s.Require().ErrorAs(AuthorizeRow(Actor{Lease: "w"}, "w", AsDeclaration, prev, next, true, []Job{prev}, specChecks{}), &refused, name)
 		s.Contains(refused.Rule, "goals", name)
 	}
-	changed, err := ChangedFields(prev, widened, equalSpecCheck)
+	changed, err := ChangedFields(prev, widened, specChecks{})
 	s.Require().NoError(err)
 	s.Equal([]string{"goals"}, changed)
 }

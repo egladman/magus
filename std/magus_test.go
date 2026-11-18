@@ -486,7 +486,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	check := rawLeaseCheck(t, "test .")
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: check, State: new(jobtypes.StateRunning)})
+		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: &check, State: new(jobtypes.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
@@ -576,7 +576,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	assert.Equal(t, jobtypes.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.Paths.Write)
-	require.True(t, jobtypes.HasCheck(got.Check), "the state advance must not erase the check")
+	require.True(t, !got.Check.IsZero(), "the state advance must not erase the check")
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
@@ -965,7 +965,8 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	root := t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &gradedWorkspace{ledgerWorkspace: &ledgerWorkspace{cacheDir: t.TempDir(), root: root}, grader: grader})
 	put := func(check string) error {
-		_, err := MagusPutJob(ctx, "w", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"run.go"})}, Check: rawLeaseCheck(t, check)})
+		stored := rawLeaseCheck(t, check)
+		_, err := MagusPutJob(ctx, "w", jobtypes.Put{Paths: jobtypes.PathsPut{Write: new([]string{"run.go"})}, Check: &stored})
 		return err
 	}
 
@@ -1001,7 +1002,7 @@ func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
 }
 
 // rawLeaseCheck is the stored form of a `<target> <project>` check, the way a put carries it.
-func rawLeaseCheck(t *testing.T, text string) codec.RawMessage {
+func rawLeaseCheck(t *testing.T, text string) jobtypes.Check {
 	t.Helper()
 	target, project, _ := strings.Cut(text, " ")
 	raw, err := types.EncodeLeaseCheck(types.LeaseCheck{Target: target, Project: project})

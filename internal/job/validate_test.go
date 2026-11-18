@@ -347,7 +347,7 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	require.NoError(t, err)
 
 	wiped := func(u *job.Job) {
-		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, nil, nil
+		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, job.Check{}, nil
 	}
 	v := validateMerge(t.Context(), s, rows, "w", wiped, config.Jobs{}, nil)
 	var subjects []string
