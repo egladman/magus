@@ -36,6 +36,11 @@ import (
 	"github.com/egladman/magus/types/daemon"
 )
 
+// buildInfo is the part of b the server status reports.
+func buildInfo(b types.MagusBuild) daemon.BuildInfo {
+	return daemon.BuildInfo{Version: b.Version, Commit: b.Commit, Date: b.Date}
+}
+
 // publishActivityBase publishes the server-wide activity log's base. It reads
 // config without a workspace load, so it runs ahead of the MCP gate. A root
 // that will not resolve leaves the base empty, and every writer drops its
@@ -139,7 +144,7 @@ func (h *Host) serveUnloadedBridge(ctx context.Context, cancel context.CancelFun
 	d := NewUnloaded(internalmcp.Options{
 		Logger:     slog.Default(),
 		Version:    h.Version,
-		Build:      daemon.BuildInfo(h.Build()),
+		Build:      buildInfo(h.Build()),
 		Config:     h.Config,
 		HTTPAddr:   addr,
 		StatusBase: h.StatusBase(),
@@ -241,7 +246,7 @@ func (h *Host) serveBridge(ctx context.Context, cancel context.CancelFunc, m *ma
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    h.Version,
-		Build:      daemon.BuildInfo(h.Build()),
+		Build:      buildInfo(h.Build()),
 		Config:     h.Config,
 		HTTPAddr:   addr,
 		StatusBase: h.StatusBase(),
@@ -703,7 +708,7 @@ func ServeMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 		Magus:    m,
 		Logger:   slog.Default(),
 		Version:  id.Version,
-		Build:    daemon.BuildInfo(id.Build()),
+		Build:    buildInfo(id.Build()),
 		Config:   id.Config,
 		HTTPAddr: addr,
 		// The store the server and `magus diff` use, so an agent joins the session a person

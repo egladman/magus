@@ -18,11 +18,11 @@ import (
 // them with the wrong code. Fingerprinting each dev build from its embedded VCS stamp
 // makes builds of different revisions (and every dirty build) refuse to adopt each other.
 
-// devVersionSentinel is the placeholder main.version carries in an unstamped dev build:
-// `go build`/`go run ./cmd/magus` without `-ldflags "-X main.version=..."`. Every RELEASE
-// build is stamped with a real version (git describe) by the magusfile, so any value
-// other than this exact string is a stamped release and passes the gate on its version as
-// before. Keep in sync with the default of `version` in cmd/magus/version.go.
+// devVersionSentinel is the placeholder buildinfo's version carries in an unstamped dev
+// build: `go build`/`go run ./cmd/magus` without `-ldflags "-X .../buildinfo.version=..."`.
+// Every RELEASE build is stamped with a real version (git describe) by the magusfile, so
+// any value other than this exact string is a stamped release and passes the gate on its
+// version as before. Keep in sync with buildinfo.UnknownVersion.
 const devVersionSentinel = "unknown"
 
 // adoptionIdentity maps a build's DISPLAY version to the identity used for the server

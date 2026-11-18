@@ -14,18 +14,49 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sync"
+
+	"github.com/egladman/magus/types"
 )
 
-// commit and commitDate are the linker's stamp, set by go-build:
+// version, commit and commitDate are the linker's stamp, set by go-build:
 //
-//	go build -ldflags "-X github.com/egladman/magus/internal/buildinfo.commit=abc123 ..."
+//	go build -ldflags "-X github.com/egladman/magus/internal/buildinfo.version=v0.1.0 -X github.com/egladman/magus/internal/buildinfo.commit=abc123 ..."
 var (
+	version    = unstamped
 	commit     = unstamped
 	commitDate = unstamped
 )
 
 // unstamped is a stamp field no build set.
 const unstamped = "unknown"
+
+// Version is the version go-build stamped, [UnknownVersion] when nothing stamped it.
+func Version() string { return version }
+
+// Self is this binary's build identity. It is the linker stamp when go-build set both the
+// version and the commit, which is what `magus version` prints. With no stamp it falls back
+// to the Go toolchain's VCS stamp and says so in Source, since a build in a linked git
+// worktree or a sandbox can record another revision and a modified tree there. With
+// neither, Source is [types.BuildSourceNone] and Commit is "unknown".
+func Self() types.MagusBuild { return identity(version, commit, commitDate, buildSettings()) }
+
+func identity(version, commit, date string, settings []debug.BuildSetting) types.MagusBuild {
+	if version != unstamped && commit != unstamped {
+		return types.StampedBuild(version, commit, date)
+	}
+	b := types.MagusBuild{Version: version, Commit: unstamped, Date: unstamped}
+	for _, s := range settings {
+		switch s.Key {
+		case "vcs.revision":
+			b.Commit, b.Source = s.Value, types.BuildSourceVCS
+		case "vcs.time":
+			b.Date = s.Value
+		case "vcs.modified":
+			b.Dirty = s.Value == "true"
+		}
+	}
+	return b
+}
 
 // Commit is the revision this binary was built from and that commit's date, RFC 3339,
 // each "unknown" when nothing stamped it. A bare `go build` passes no -X flags, so they
@@ -45,17 +76,6 @@ func Commit() (id, date string) {
 		}
 	}
 	return id, date
-}
-
-// Modified reports whether the VCS stamp says the tree held uncommitted changes. Only a
-// bare `go build` carries one; go-build marks a dirty tree in its version instead.
-func Modified() bool {
-	for _, s := range buildSettings() {
-		if s.Key == "vcs.modified" {
-			return s.Value == "true"
-		}
-	}
-	return false
 }
 
 func buildSettings() []debug.BuildSetting {

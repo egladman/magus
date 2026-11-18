@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/types"
 )
 
 // File is never empty (an empty identity would disable the version gate) and maps the
@@ -108,4 +112,47 @@ func TestCommitPrefersTheLinkerStamp(t *testing.T) {
 	id, date = Commit()
 	assert.NotEmpty(t, id, "an unstamped build falls back to the VCS stamp, or unstamped")
 	assert.NotEmpty(t, date)
+}
+
+// identitySuite pins where Self reads this binary's build identity from.
+type identitySuite struct {
+	suite.Suite
+}
+
+func TestIdentitySuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(identitySuite))
+}
+
+// vcsStamp is what a sandboxed link in a linked worktree embeds: another revision, and a
+// modified tree.
+var vcsStamp = []debug.BuildSetting{
+	{Key: "vcs.revision", Value: "4584cc73a"},
+	{Key: "vcs.time", Value: "2026-11-01T00:00:00Z"},
+	{Key: "vcs.modified", Value: "true"},
+}
+
+func (s *identitySuite) TestTheLinkerStampWinsOverTheVCSStamp() {
+	b := identity("v0.5.0-rc.3-205-g33268e391", "33268e391", "2026-11-17T00:00:00Z", vcsStamp)
+
+	s.Equal(types.MagusBuild{Version: "v0.5.0-rc.3-205-g33268e391", Commit: "33268e391", Date: "2026-11-17T00:00:00Z", Source: types.BuildSourceStamp}, b)
+}
+
+func (s *identitySuite) TestADirtyVersionStampIsADirtyBuild() {
+	b := identity("v0.5.0-dirty", "33268e391", "2026-11-17T00:00:00Z", nil)
+
+	s.True(b.Dirty)
+	s.Equal(types.BuildSourceStamp, b.Source)
+}
+
+func (s *identitySuite) TestNoVersionStampFallsBackToTheVCSStamp() {
+	b := identity(unstamped, "33268e391", unstamped, vcsStamp)
+
+	s.Equal(types.MagusBuild{Version: unstamped, Commit: "4584cc73a", Date: "2026-11-01T00:00:00Z", Source: types.BuildSourceVCS, Dirty: true}, b)
+}
+
+func (s *identitySuite) TestNoStampAtAllIsNoIdentity() {
+	b := identity(unstamped, unstamped, unstamped, nil)
+
+	s.Equal(types.MagusBuild{Version: unstamped, Commit: unstamped, Date: unstamped, Source: types.BuildSourceNone}, b)
 }

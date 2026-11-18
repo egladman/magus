@@ -14,18 +14,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// selfBuild is this binary's build identity: its version, and the commit [buildinfo.Commit]
-// names.
-func selfBuild() types.MagusBuild {
-	id, date := buildinfo.Commit()
-	return types.MagusBuild{Version: version, Commit: id, Date: date}
-}
+// selfBuild is this binary's build identity, [buildinfo.Self].
+func selfBuild() types.MagusBuild { return buildinfo.Self() }
 
-// version is injected by the linker at build time, beside buildinfo's commit stamp:
-//
-//	go build -ldflags "-X main.version=v0.1.0"
+// version is the version go-build stamped into buildinfo, beside its commit stamp. A var
+// so a test can name another.
 var (
-	version = buildinfo.UnknownVersion
+	version = buildinfo.Version()
 	// builtBy is the CI workflow that produced this binary, as the build was told it
 	// (release.yaml passes its workflow ref in BUILT_BY), empty for a local build. A CLAIM, not proof (a signature is what proves
 	// provenance), but empty is the honest default, so a local build never asserts a
