@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,11 +16,11 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -182,7 +181,7 @@ func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
 		start.Session = hostSession
 		h := sessions.NewFactHandler(root, start)
 		require.NotNil(t, h)
-		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "test", Project: ".", Status: journal.StatusPass})
+		emitJournalEvent(t, h, inv, journal.Run{Target: "test", Project: ".", Status: journal.StatusPass})
 	}
 	pause := func() { time.Sleep(3 * time.Millisecond) }
 
@@ -323,9 +322,8 @@ func seedFailingRun(t *testing.T, root, ref string) {
 	t.Helper()
 	handler := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run test"})
 	require.NotNil(t, handler)
-	emitJournalEvent(t, handler, journal.Event{
-		Kind: journal.KindResult, Inv: "invBrief", Target: "test",
-		Project: "internal/ledger", Status: journal.StatusFail, Ref: ref,
+	emitJournalEvent(t, handler, "invBrief", journal.Run{
+		Target: "test", Project: "internal/ledger", Status: journal.StatusFail, Ref: ref,
 	})
 }
 
@@ -337,15 +335,15 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 
 	refused := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "affected ci"})
 	require.NotNil(t, refused)
-	emitJournalEvent(t, refused, journal.Event{
-		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
+	emitJournalEvent(t, refused, "invRefused", journal.Run{
+		Target: "ci", Project: "pkg",
 		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
 	})
 	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
 	other := sessions.NewFactHandler(root, session.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
 	require.NotNil(t, other)
-	emitJournalEvent(t, other, journal.Event{
-		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
+	emitJournalEvent(t, other, "invOther", journal.Run{
+		Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
 	})
 
 	failures := lastRunFailures(t.Context(), testReaders(t, root), root)
@@ -725,9 +723,9 @@ func testReaders(t *testing.T, root string) Readers {
 	}
 }
 
-func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
+func emitJournalEvent[B journal.Body](t *testing.T, h func(context.Context, journal.Record), inv string, body B) {
 	t.Helper()
-	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
+	h(context.Background(), journal.NewRecord(time.Now(), inv, body))
 }
 
 // seedFiled files result as the job's first attempt, beside store's rows. The job package

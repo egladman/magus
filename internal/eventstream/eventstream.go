@@ -17,8 +17,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // fromJournal maps one journal event onto the stream envelope, reporting false
@@ -34,41 +34,34 @@ import (
 // workspace is stamped on every result because journal events carry an
 // invocation id but not a root, and a subscriber watching two repositories
 // cannot route an event without one.
-func fromJournal(workspace string, e journal.Event) (events.Event, bool) {
-	out := events.Event{Ts: e.Ts, Workspace: workspace, Inv: e.Inv}
-	switch e.Kind {
-	case journal.KindStarted:
-		b := events.Run{Phase: "started", MagusVersion: e.MagusVersion}
-		if e.Command != nil {
-			b.Command = e.Command.Arguments
-			b.Trigger = e.Command.Trigger
-		}
-		out.Body = b
-	case journal.KindFinished:
-		out.Body = events.Run{Phase: "finished", Status: e.Status}
-	case journal.KindResult:
-		status, cached := targetStatus(e.Status)
+func fromJournal(workspace string, r journal.Record) (events.Event, bool) {
+	out := events.Event{Ts: r.Time.UnixMilli(), Workspace: workspace, Inv: r.Invocation}
+	if b, ok := r.Started(); ok {
+		out.Body = events.Run{Phase: "started", MagusVersion: b.Version, Command: b.Command.Arguments, Trigger: string(b.Command.Trigger)}
+		return out, true
+	}
+	if b, ok := r.Finished(); ok {
+		out.Body = events.Run{Phase: "finished", Status: string(b.Status)}
+		return out, true
+	}
+	if b, ok := r.Run(); ok {
+		status, cached := targetStatus(b.Status)
 		out.Body = events.Target{
-			Project:    e.Project,
-			Target:     e.Target,
+			Project:    b.Project,
+			Target:     b.Target,
 			Status:     status,
 			CacheHit:   cached,
-			Ref:        e.Ref,
-			DurationMs: e.DurationMs,
-			// A failed result carries the run error in Text.
-			Error: e.Text,
+			Ref:        b.Ref,
+			DurationMs: b.Duration.Milliseconds(),
+			Error:      b.Error,
 		}
-	case journal.KindOutput:
-		out.Body = events.Output{
-			Project: e.Project,
-			Target:  e.Target,
-			Stream:  e.Stream,
-			Text:    e.Text,
-		}
-	default:
-		return events.Event{}, false
+		return out, true
 	}
-	return out, true
+	if b, ok := r.Output(); ok {
+		out.Body = events.Output{Project: b.Project, Target: b.Target, Stream: string(b.Stream), Text: b.Text}
+		return out, true
+	}
+	return events.Event{}, false
 }
 
 // targetStatus splits the journal's three-valued status into the envelope's two
@@ -80,14 +73,14 @@ func fromJournal(workspace string, e journal.Event) (events.Event, bool) {
 // a "replayed from cache" badge keys on execution. An unrecognized status maps to
 // failed rather than ok, so a status magus grows later cannot present as a
 // silent green.
-func targetStatus(journalStatus string) (status string, cacheHit bool) {
+func targetStatus(journalStatus journal.Status) (status string, cacheHit bool) {
 	switch journalStatus {
 	case journal.StatusPass:
 		return "ok", false
 	case journal.StatusCached:
 		return "ok", true
 	case journal.StatusPermitted:
-		return journal.StatusPermitted, false
+		return string(journal.StatusPermitted), false
 	default:
 		return "failed", false
 	}

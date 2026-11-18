@@ -1,18 +1,16 @@
 package magus
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -33,31 +31,32 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	ctx, finish := workspace.BeginInvocation(context.Background(), Command{
 		Arguments: []string{"test"},
 		Cwd:       root,
-		Trigger:   journal.TriggerRun,
+		Trigger:   string(journal.TriggerRun),
 	}, "v0.test")
-	id := journal.InvocationIDFromContext(ctx)
+	id := recorder.InvocationIDFromContext(ctx)
 	require.NotEmpty(t, id)
 	finish(errors.New("failed"))
 
-	body, err := os.ReadFile(filepath.Join(workspace.CacheDir(), "runs", id+".jsonl"))
-	require.NoError(t, err)
-	decoder := codec.NewDecoder(bytes.NewReader(body))
-	var events []journal.Event
-	for {
-		var event journal.Event
-		err := decoder.Decode(&event)
-		if errors.Is(err, io.EOF) {
-			break
-		}
+	var kinds []journal.Kind
+	var started journal.Started
+	var finished journal.Finished
+	for r, err := range journal.Records(t.Context(), workspace.runsDir(), id) {
 		require.NoError(t, err)
-		event.Ts = 0
-		event.Inv = ""
-		events = append(events, event)
+		assert.Equal(t, id, r.Invocation)
+		kinds = append(kinds, r.Kind())
+		if b, ok := r.Started(); ok {
+			started = b
+		}
+		if b, ok := r.Finished(); ok {
+			finished = b
+		}
 	}
-	assert.Equal(t, []journal.Event{
-		{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"test"}, Cwd: root, Trigger: journal.TriggerRun}, MagusVersion: "v0.test"},
-		{Kind: journal.KindFinished, Status: journal.StatusFail},
-	}, events)
+	assert.Equal(t, []journal.Kind{journal.KindStarted, journal.KindFinished}, kinds)
+	assert.Equal(t, journal.Started{
+		Command: journal.Command{Arguments: []string{"test"}, Cwd: root, Trigger: journal.TriggerRun},
+		Version: "v0.test",
+	}, started)
+	assert.Equal(t, journal.Finished{Status: journal.StatusFail}, finished)
 }
 
 // attributeRun is what keeps a run identifiable when the caller is not the CLI. The two
@@ -66,7 +65,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 func TestAttributeRunNamesAnAnonymousRun(t *testing.T) {
 	ctx := attributeRun(context.Background())
 
-	id := journal.InvocationIDFromContext(ctx)
+	id := recorder.InvocationIDFromContext(ctx)
 	require.NotEmpty(t, id, "a run reached the engine with no invocation identity")
 	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), id),
 		"the run is not its own ancestor, so a descendant cannot recognize the resources it holds")
@@ -86,17 +85,17 @@ func TestAttributeRunAdoptsAncestryFromTheEnvironment(t *testing.T) {
 	refs := types.InvocationAncestorsFromContext(ctx)
 	require.Len(t, refs, 2, "the parent's ancestry was dropped, so this run reads as its own root")
 	assert.Equal(t, parent, refs[0], "the adopted ancestor must stay ahead of self")
-	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), journal.InvocationIDFromContext(ctx)))
+	assert.True(t, types.HasInvocationAncestor(ctx, os.Getpid(), recorder.InvocationIDFromContext(ctx)))
 }
 
 // An identity already on the context is the CLI's or the server's, and taking a second one
 // would orphan the first: the journal file, the pool entry and the locks are all keyed on
 // it, and a descendant comparing ancestry would stop recognizing its parent.
 func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
-	given := journal.NewInvocationID()
-	ctx := attributeRun(journal.WithInvocationID(context.Background(), given))
+	given := recorder.NewInvocationID()
+	ctx := attributeRun(recorder.WithInvocationID(context.Background(), given))
 
-	assert.Equal(t, given, journal.InvocationIDFromContext(ctx))
+	assert.Equal(t, given, recorder.InvocationIDFromContext(ctx))
 }
 
 // The identity has to reach the WORK, not merely the context runResolved holds: a
@@ -126,7 +125,7 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}}), "Run")
 	require.NotNil(t, invoked, "the target never ran, so this proves nothing about its context")
 
-	id := journal.InvocationIDFromContext(invoked)
+	id := recorder.InvocationIDFromContext(invoked)
 	require.NotEmpty(t, id, "a library run reached the work anonymous: nothing it dispatches can be attributed")
 	assert.True(t, types.HasInvocationAncestor(invoked, os.Getpid(), id),
 		"the work does not carry this run as an ancestor, so a dispatch takes a second machine claim against the reservation the parent already holds")
@@ -149,10 +148,10 @@ func covInspect(t *testing.T) *Magus {
 // events BeginInvocation brackets the run with.
 func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	m := covInspect(t)
-	cmd := Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}
+	cmd := Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: string(journal.TriggerRun)}
 
 	ctx, finish := m.BeginInvocation(context.Background(), cmd, "v0.cov")
-	id := journal.InvocationIDFromContext(ctx)
+	id := recorder.InvocationIDFromContext(ctx)
 	require.NotEmpty(t, id)
 	finish(nil)
 
@@ -161,10 +160,10 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	// The clock fields are taken from inv and checked below; finish(nil) is a passing run.
 	assert.Equal(t, Invocation{
 		ID:           id,
-		Command:      Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun},
+		Command:      Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: string(journal.TriggerRun)},
 		StartedMs:    inv.StartedMs,
 		FinishedMs:   inv.FinishedMs,
-		Status:       journal.StatusPass,
+		Status:       string(journal.StatusPass),
 		MagusVersion: "v0.cov",
 	}, inv)
 	assert.Positive(t, inv.StartedMs)
@@ -178,8 +177,8 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	assert.Equal(t, Event{
 		Timestamp:    events[0].Timestamp, // wall clock
 		Invocation:   id,
-		Kind:         journal.KindStarted,
-		Command:      &Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun},
+		Kind:         string(journal.KindStarted),
+		Command:      &Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: string(journal.TriggerRun)},
 		MagusVersion: "v0.cov",
 	}, events[0])
 
@@ -187,8 +186,8 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	assert.Equal(t, Event{
 		Timestamp:  events[1].Timestamp, // wall clock
 		Invocation: id,
-		Kind:       journal.KindFinished,
-		Status:     journal.StatusPass,
+		Kind:       string(journal.KindFinished),
+		Status:     string(journal.StatusPass),
 	}, events[1])
 }
 
@@ -197,11 +196,11 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 // a second one here would break that link.
 func TestBeginInvocationReusesAnIDFromTheContext(t *testing.T) {
 	m := covInspect(t)
-	preset := journal.NewInvocationID()
+	preset := recorder.NewInvocationID()
 
-	ctx, finish := m.BeginInvocation(journal.WithInvocationID(context.Background(), preset),
-		Command{Arguments: []string{"run"}, Trigger: journal.TriggerDirect}, "v0.cov")
-	assert.Equal(t, preset, journal.InvocationIDFromContext(ctx))
+	ctx, finish := m.BeginInvocation(recorder.WithInvocationID(context.Background(), preset),
+		Command{Arguments: []string{"run"}, Trigger: string(journal.TriggerDirect)}, "v0.cov")
+	assert.Equal(t, preset, recorder.InvocationIDFromContext(ctx))
 	finish(nil)
 
 	inv, err := m.InvocationByID(preset)
@@ -211,7 +210,7 @@ func TestBeginInvocationReusesAnIDFromTheContext(t *testing.T) {
 
 // TestNewInvocationCarriesEveryField guards the caller-facing projection: a field
 // dropped here vanishes from the viewer and from `magus query output <ref> --meta`,
-// and the JSON tags match journal.Invocation's for wire compatibility.
+// so the two would disagree about one run.
 func TestNewInvocationCarriesEveryField(t *testing.T) {
 	got := newInvocation(journal.Invocation{
 		ID: "inv1",
@@ -220,33 +219,31 @@ func TestNewInvocationCarriesEveryField(t *testing.T) {
 			Cwd:       "/w",
 			Trigger:   journal.TriggerAffected,
 		},
-		StartedMs: 1700000000000, FinishedMs: 1700000001000,
-		Status: journal.StatusFail, MagusVersion: "v0.9.0",
+		Started: time.UnixMilli(1700000000000), Finished: time.UnixMilli(1700000001000),
+		Status: journal.StatusFail, Version: "v0.9.0",
 	})
 
 	assert.Equal(t, Invocation{
 		ID:        "inv1",
-		Command:   Command{Arguments: []string{"run", "build"}, Cwd: "/w", Trigger: journal.TriggerAffected},
+		Command:   Command{Arguments: []string{"run", "build"}, Cwd: "/w", Trigger: string(journal.TriggerAffected)},
 		StartedMs: 1700000000000, FinishedMs: 1700000001000,
-		Status: journal.StatusFail, MagusVersion: "v0.9.0",
+		Status: string(journal.StatusFail), MagusVersion: "v0.9.0",
 	}, got)
 
 	assert.Equal(t, Invocation{}, newInvocation(journal.Invocation{}))
 }
 
 func TestNewEventCarriesEveryField(t *testing.T) {
-	got := newEvent(journal.Event{
-		Ts: 1700000000000, Inv: "inv1", Project: "api", Target: "build:rw",
-		Kind: journal.KindResult, Stream: "stdout", Level: "info",
-		Status: journal.StatusCached, Ref: "outdeadbe", DurationMs: 42, Text: "done",
-		MagusVersion: "v0.9.0",
-	})
+	got, err := newEvent(journal.NewRecord(time.UnixMilli(1700000000000), "inv1", journal.Run{
+		Project: "api", Target: "build:rw", Level: "info",
+		Status: journal.StatusCached, Ref: "outdeadbe", Duration: 42 * time.Millisecond, Error: "done",
+	}))
+	require.NoError(t, err)
 
 	assert.Equal(t, Event{
 		Timestamp: 1700000000000, Invocation: "inv1", Project: "api", Target: "build:rw",
-		Kind: journal.KindResult, Stream: "stdout", Level: "info",
-		Status: journal.StatusCached, Ref: "outdeadbe", Duration: 42 * time.Millisecond, Text: "done",
-		MagusVersion: "v0.9.0",
+		Kind: string(journal.KindRun), Level: "info",
+		Status: string(journal.StatusCached), Ref: "outdeadbe", Duration: 42 * time.Millisecond, Text: "done",
 	}, got)
 }
 
@@ -259,7 +256,7 @@ func TestEventJSONKeepsTheWireForm(t *testing.T) {
 	require.NoError(t, codec.Unmarshal([]byte(line), &got))
 	assert.Equal(t, Event{
 		Timestamp: 1700000000000, Invocation: "inv1", Project: "api", Target: "build:rw",
-		Kind: journal.KindResult, Status: journal.StatusCached, Ref: "outdeadbe",
+		Kind: string(journal.KindRun), Status: string(journal.StatusCached), Ref: "outdeadbe",
 		Duration: 42 * time.Millisecond, Text: "done",
 	}, got)
 
@@ -267,40 +264,28 @@ func TestEventJSONKeepsTheWireForm(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, line, string(out))
 
-	out, err = codec.Marshal(Event{Kind: journal.KindOutput})
+	out, err = codec.Marshal(Event{Kind: string(journal.KindOutput)})
 	require.NoError(t, err)
-	assert.Equal(t, `{"ts":0,"kind":"output","duration_ms":0}`, string(out), "json/v2 omitempty keeps a zero duration_ms, as journal.Event writes it")
+	assert.Equal(t, `{"ts":0,"kind":"output","duration_ms":0}`, string(out), "json/v2 omitempty keeps a zero duration_ms, as the journal writes it")
 }
 
 // TestNewEventCopiesTheCommand: the projection must not alias the journal's own
 // Command, or a caller mutating what it read would reach back into the stream.
 func TestNewEventCopiesTheCommand(t *testing.T) {
-	src := journal.Event{
-		Kind:    journal.KindStarted,
-		Command: &journal.Command{Arguments: []string{"run"}, Cwd: "/w", Trigger: journal.TriggerWatch},
-	}
+	src := journal.NewRecord(time.Time{}, "", journal.Started{
+		Command: journal.Command{Arguments: []string{"run"}, Cwd: "/w", Trigger: journal.TriggerWatch},
+	})
 
-	got := newEvent(src)
+	got, err := newEvent(src)
+	require.NoError(t, err)
 	require.NotNil(t, got.Command)
-	assert.Equal(t, Command{Arguments: []string{"run"}, Cwd: "/w", Trigger: journal.TriggerWatch}, *got.Command)
+	assert.Equal(t, Command{Arguments: []string{"run"}, Cwd: "/w", Trigger: string(journal.TriggerWatch)}, *got.Command)
 
 	got.Command.Cwd = "/scribbled"
-	assert.Equal(t, "/w", src.Command.Cwd)
+	started, _ := src.Started()
+	assert.Equal(t, "/w", started.Command.Cwd)
 
-	assert.Nil(t, newEvent(journal.Event{Kind: journal.KindOutput}).Command,
-		"only the started event carries the lineage")
-}
-
-// TestNewEvents keeps nil distinct from empty: a stream that was never read and
-// one that held no events are different answers.
-func TestNewEvents(t *testing.T) {
-	assert.Nil(t, newEvents(nil))
-	assert.Empty(t, newEvents([]journal.Event{}))
-	assert.Equal(t, []Event{
-		{Kind: journal.KindStarted},
-		{Kind: journal.KindFinished, Status: journal.StatusPass},
-	}, newEvents([]journal.Event{
-		{Kind: journal.KindStarted},
-		{Kind: journal.KindFinished, Status: journal.StatusPass},
-	}))
+	output, err := newEvent(journal.NewRecord(time.Time{}, "", journal.Output{}))
+	require.NoError(t, err)
+	assert.Nil(t, output.Command, "only the started event carries the lineage")
 }

@@ -18,9 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/libs/secrets"
@@ -195,13 +196,11 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		case StepActionContinue, StepActionStep:
 		}
 	}
-	if project, target, ok := journal.StepFromContext(ctx); ok {
+	if project, target, ok := recorder.StepFromContext(ctx); ok {
 		// The argv can contain a credential when a magusfile passes one as an argument
-		// (`-p <token>`) instead of on stdin. journal.Emit redacts Text for every event
-		// kind, so this site does not repeat it; that centralization is the point.
-		journal.Emit(ctx, journal.Event{
-			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
-		})
+		// (`-p <token>`) instead of on stdin. Emit redacts the command,
+		// so this site does not repeat it; that centralization is the point.
+		recorder.Emit(ctx, journal.Exec{Project: project, Target: target, Command: commandLine(name, args)})
 	}
 	policy := sandbox.PolicyFromContext(ctx)
 	confined, err := policy.KernelConfines()

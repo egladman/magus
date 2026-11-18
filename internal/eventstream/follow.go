@@ -1,18 +1,16 @@
 package eventstream
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"github.com/egladman/magus/types/events"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // runLogExt is the suffix of one invocation's union event log.
@@ -30,8 +28,8 @@ const runLogExt = ".jsonl"
 //
 // Two properties bound what a follower sees, and both are deliberate:
 //
-//   - Output lines lag. journal.FileHandler flushes every kind EXCEPT output, so
-//     lifecycle and result events land immediately while output arrives when a
+//   - Output lines lag. The file sink flushes every kind but output, so
+//     lifecycle and result events land at once while output arrives when a
 //     bufio page fills or the run ends. A subscriber asking for output is opting
 //     into chunked delivery.
 //   - A partially written line is never emitted. An output-triggered page flush
@@ -58,7 +56,7 @@ func NewFollower(runsDir, workspace string) *Follower {
 // A limit of 0 or less replays every retained invocation. Ordering is by file
 // modification time rather than by the timestamps inside, because an invocation
 // still running has no final timestamp to sort on.
-func (f *Follower) Replay(limit int, emit func(events.Event) error) error {
+func (f *Follower) Replay(ctx context.Context, limit int, emit func(events.Event) error) error {
 	logs, err := f.logs()
 	if err != nil {
 		return err
@@ -70,7 +68,7 @@ func (f *Follower) Replay(limit int, emit func(events.Event) error) error {
 		logs = logs[len(logs)-limit:]
 	}
 	for _, name := range logs {
-		if err := f.drain(name, emit); err != nil {
+		if err := f.drain(ctx, name, emit); err != nil {
 			return err
 		}
 	}
@@ -127,7 +125,7 @@ func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func
 				continue
 			}
 			for _, name := range logs {
-				if err := f.drain(name, emit); err != nil {
+				if err := f.drain(ctx, name, emit); err != nil {
 					return err
 				}
 			}
@@ -170,53 +168,21 @@ func (f *Follower) logs() ([]string, error) {
 }
 
 // drain reads whatever is new in one log and emits it, advancing the stored
-// offset to the last COMPLETE line. Stopping short of a partial line is what
-// makes a concurrent writer safe to read.
-func (f *Follower) drain(name string, emit func(events.Event) error) error {
-	path := filepath.Join(f.dir, name)
-	info, err := os.Stat(path)
+// offset to the last COMPLETE line. A log that does not read is left for the
+// next poll.
+func (f *Follower) drain(ctx context.Context, name string, emit func(events.Event) error) error {
+	records, next, err := journal.RecordsSince(ctx, f.dir, strings.TrimSuffix(name, runLogExt), f.offsets[name])
 	if err != nil {
 		return nil
 	}
-	from := f.offsets[name]
-	if info.Size() <= from {
-		// A shrinking file means the id was reused after a cache clean; restart it
-		// rather than seeking past the end and reading nothing forever.
-		if info.Size() < from {
-			f.offsets[name] = 0
-		}
-		return nil
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = file.Close() }()
-	if _, err := file.Seek(from, io.SeekStart); err != nil {
-		return nil
-	}
-	chunk := make([]byte, info.Size()-from)
-	n, err := io.ReadFull(file, chunk)
-	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
-		return nil
-	}
-	chunk = chunk[:n]
-	end := bytes.LastIndexByte(chunk, '\n')
-	if end < 0 {
-		return nil
-	}
-	f.offsets[name] = from + int64(end) + 1
-	for _, line := range bytes.Split(chunk[:end], []byte{'\n'}) {
-		if len(bytes.TrimSpace(line)) == 0 {
+	f.offsets[name] = next
+	for r, err := range records {
+		// A line that does not decode is skipped here and nowhere else: magus
+		// doctor reads with Records and reports it.
+		if err != nil {
 			continue
 		}
-		// A torn line is a normal transient, not corruption: the log is read while
-		// it is written. Skip it and pick the rest up on the next poll.
-		var je journal.Event
-		if err := codec.Unmarshal(line, &je); err != nil {
-			continue
-		}
-		se, ok := fromJournal(f.workspace, je)
+		se, ok := fromJournal(f.workspace, r)
 		if !ok {
 			continue
 		}

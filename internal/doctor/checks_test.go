@@ -56,7 +56,7 @@ func ranNTimes(project, target string, n int) []map[string]any {
 	for range n {
 		out = append(out, map[string]any{
 			"kind": "result", "project": project, "target": target,
-			"status": "pass", "dur_ms": 3000, // above MinAvgMsForYield
+			"status": "pass", "duration_ms": 3000, // above MinAvgMsForYield
 		})
 	}
 	return out

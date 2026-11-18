@@ -481,8 +481,10 @@ func (h *Host) Start(ctx context.Context) {
 			}
 			// Fold this adopted run's journal into the live-run registry so the dashboard
 			// sees its per-target execution state. BeginInvocation (in run/affected) reads
-			// the sink off the context and attaches it as an extra capture handler.
-			hctx = console.WithRunSink(hctx, h.runs)
+			// the sink off the context and attaches it as an extra sink.
+			if h.runs != nil {
+				hctx = console.WithRunSink(hctx, h.runs.Handle)
+			}
 			return reg.dispatch(hctx, root, args)
 		},
 		Read:            graphReads(reg, h.ServeRead),

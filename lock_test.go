@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file/record"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -324,7 +324,7 @@ func TestASiblingOfTheSameRunIsAwaited(t *testing.T) {
 
 			ctx := types.AppendInvocationAncestor(
 				types.WithInvocationAncestors(context.Background(), []string{root}), os.Getpid(), "inv-sibling-b")
-			ctx, cancel := context.WithTimeout(journal.WithInvocationID(ctx, "inv-sibling-b"), 10*time.Second)
+			ctx, cancel := context.WithTimeout(recorder.WithInvocationID(ctx, "inv-sibling-b"), 10*time.Second)
 			defer cancel()
 
 			l := newProjectLocker(cacheDir, testWorkspaceRoot)
@@ -429,7 +429,7 @@ func TestHelperHold(t *testing.T) {
 	t.Setenv(spawn.AncestorsEnvVar, os.Getenv("LOCKTEST_ANCESTORS"))
 	ctx := types.WithInvocationAncestors(context.Background(), spawn.AncestorsFromEnv())
 	if inv := os.Getenv("LOCKTEST_INV"); inv != "" {
-		ctx = journal.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)
+		ctx = recorder.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)
 	}
 	opts := []lockerOption{withCommandLine(os.Args)}
 	if os.Getenv("LOCKTEST_GATE") == "1" {
@@ -498,7 +498,7 @@ func ancestryContext(t *testing.T, ids ...string) context.Context {
 	}
 	// The owner record's Inv comes from the journal, never from the ancestry, so a test
 	// that only stamped the ancestry would leave the owner record anonymous and prove nothing.
-	return journal.WithInvocationID(ctx, ids[len(ids)-1])
+	return recorder.WithInvocationID(ctx, ids[len(ids)-1])
 }
 
 // TestReentrantLockRefusedNotAwaited is the regression test for the nested-run deadlock:

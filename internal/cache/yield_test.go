@@ -21,7 +21,7 @@ func writeJournal(t *testing.T, cacheDir, name string, recs ...string) string {
 }
 
 func result(project, target, status string, durMs int) string {
-	return fmt.Sprintf(`{"kind":"result","project":%q,"target":%q,"status":%q,"dur_ms":%d}`,
+	return fmt.Sprintf(`{"kind":"result","project":%q,"target":%q,"status":%q,"duration_ms":%d}`,
 		project, target, status, durMs)
 }
 
@@ -197,7 +197,7 @@ func TestStalledTargetsNeedsTheSameWorkTwice(t *testing.T) {
 }
 
 func resultKeyed(project, target, status, key string, durMs int) string {
-	return fmt.Sprintf(`{"kind":"result","project":%q,"target":%q,"status":%q,"cache_key":%q,"dur_ms":%d}`,
+	return fmt.Sprintf(`{"kind":"result","project":%q,"target":%q,"status":%q,"cache_key":%q,"duration_ms":%d}`,
 		project, target, status, key, durMs)
 }
 

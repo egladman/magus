@@ -6,15 +6,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -295,41 +294,31 @@ func ReadAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 // A ci run under rw verifies more than once, so a later pass clears a
 // failure.
 type FailedResults struct {
-	mu     sync.Mutex
-	events []journal.Event
+	mu   sync.Mutex
+	runs []journal.Run
 }
 
-func (c *FailedResults) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *FailedResults) Handle(_ context.Context, r slog.Record) error {
-	if e, ok := journal.EventFromRecord(r); ok {
-		c.add(e)
-	}
-	return nil
-}
-
-// add keeps each target's newest result when it failed.
-func (c *FailedResults) add(e journal.Event) {
-	if e.Kind != journal.KindResult {
+// Handle keeps each target's newest result when it failed; it is a
+// recorder.Sink.
+func (c *FailedResults) Handle(_ context.Context, r journal.Record) {
+	run, ok := r.Run()
+	if !ok {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.events = slices.DeleteFunc(c.events, func(f journal.Event) bool {
-		return f.Project == e.Project && f.Target == e.Target
+	c.runs = slices.DeleteFunc(c.runs, func(f journal.Run) bool {
+		return f.Project == run.Project && f.Target == run.Target
 	})
-	if e.Status == journal.StatusFail {
-		c.events = append(c.events, e)
+	if run.Status == journal.StatusFail {
+		c.runs = append(c.runs, run)
 	}
 }
 
-func (c *FailedResults) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *FailedResults) WithGroup(string) slog.Handler      { return c }
-
-func (c *FailedResults) List() []journal.Event {
+func (c *FailedResults) List() []journal.Run {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return slices.Clone(c.events)
+	return slices.Clone(c.runs)
 }
 
 // gateOutcome is the verdict a finished gate records: session.OutcomePass when runErr
@@ -337,7 +326,7 @@ func (c *FailedResults) List() []journal.Event {
 // host lacks, and session.OutcomeFail otherwise. unrun names each target of an unrun
 // gate as "project:target: cause" and is nil for any other outcome. A run that failed
 // with no failed target failed: nothing showed a capability was missing.
-func gateOutcome(runErr error, failed []journal.Event) (outcome string, unrun []string) {
+func gateOutcome(runErr error, failed []journal.Run) (outcome string, unrun []string) {
 	if runErr == nil {
 		return session.OutcomePass, nil
 	}
@@ -345,7 +334,7 @@ func gateOutcome(runErr error, failed []journal.Event) (outcome string, unrun []
 		if !types.CapabilityAbsent(types.DiagnosticCode(e.DiagnosticCode)) {
 			return session.OutcomeFail, nil
 		}
-		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
+		cause, _, _ := strings.Cut(strings.TrimSpace(e.Error), "\n")
 		unrun = append(unrun, fmt.Sprintf("%s:%s: %s", e.Project, e.Target, cause))
 	}
 	if len(unrun) == 0 {

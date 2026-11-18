@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,23 +24,24 @@ func TestStitchDisplayEvents(t *testing.T) {
 	events := StitchDisplayEvents([]byte("lint: undefined symbol foo\n"), d)
 
 	require.Len(t, events, 2, "one output event + one result event")
-	assert.Equal(t, journal.Event{
-		Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "lint: undefined symbol foo",
-		Project: "svc/api", Target: "test", Inv: "inv123", Ts: 1_700_000_000_000,
-	}, events[0])
+	at := time.UnixMilli(1_700_000_000_000)
+	assert.Equal(t, journal.NewRecord(at, "inv123", journal.Output{
+		Project: "svc/api", Target: "test", Stream: journal.Stdout, Text: "lint: undefined symbol foo",
+	}), events[0])
 
-	assert.Equal(t, journal.Event{
-		Kind: journal.KindResult, Project: "svc/api", Target: "test",
-		Status: journal.StatusFail, Ref: "out1a2b3c", Inv: "inv123", DurationMs: 1200,
-		Ts: 1_700_000_000_000, Text: "boom",
-	}, events[1])
+	assert.Equal(t, journal.NewRecord(at, "inv123", journal.Run{
+		Project: "svc/api", Target: "test", Status: journal.StatusFail, Ref: "out1a2b3c",
+		Duration: 1200 * time.Millisecond, Error: "boom",
+	}), events[1])
 }
 
 // TestStitchDisplayEventsPass covers the passing-outcome result status.
 func TestStitchDisplayEventsPass(t *testing.T) {
 	events := StitchDisplayEvents([]byte("build ok\n"), cache.OutputDescriptor{Project: "p", Target: "build"})
 	require.Len(t, events, 2)
-	assert.Equal(t, journal.StatusPass, events[1].Status)
+	run, ok := events[1].Run()
+	require.True(t, ok)
+	assert.Equal(t, journal.StatusPass, run.Status)
 }
 
 // TestSplitOutputLines pins the display-only inverse of the verbatim write: one stdout event
@@ -49,18 +51,10 @@ func TestSplitOutputLines(t *testing.T) {
 	assert.Nil(t, splitOutputLines(nil), "empty input yields no events")
 	assert.Nil(t, splitOutputLines([]byte("")), "empty input yields no events")
 
-	evs := splitOutputLines([]byte("a\nb\nc\n"))
-	require.Len(t, evs, 3)
-	for i, want := range []string{"a", "b", "c"} {
-		assert.Equal(t, journal.KindOutput, evs[i].Kind)
-		assert.Equal(t, journal.StreamStdout, evs[i].Stream)
-		assert.Equal(t, want, evs[i].Text)
-	}
+	assert.Equal(t, []string{"a", "b", "c"}, splitOutputLines([]byte("a\nb\nc\n")))
 
 	// No trailing newline: the final partial line is still one event.
-	evs = splitOutputLines([]byte("done"))
-	require.Len(t, evs, 1)
-	assert.Equal(t, "done", evs[0].Text)
+	assert.Equal(t, []string{"done"}, splitOutputLines([]byte("done")))
 }
 
 // benchRaw builds a realistic target log: n lines (~80 bytes each) as verbatim bytes.

@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"errors"
@@ -23,12 +22,12 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
@@ -225,9 +224,9 @@ func workspaceRunsDir(cacheDir string) string {
 // the same run twice.
 func recentGateRuns(runsDir string, now time.Time) (runs int, spent time.Duration) {
 	cutoff := now.Add(-verifyRepeatWindow)
-	recentRunLogs(runsDir, cutoff, func(started journal.Event, modified time.Time, _ *bufio.Reader) {
-		start := time.UnixMilli(started.Ts)
-		if !isGateCommand(started.Command.Arguments) || start.Before(cutoff) {
+	recentRunLogs(runsDir, cutoff, func(inv journal.Invocation, modified time.Time) {
+		start := inv.Started
+		if !isGateCommand(inv.Command.Arguments) || start.Before(cutoff) {
 			return
 		}
 		runs++

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -27,7 +28,7 @@ import (
 // adopted run by calling runTarget/affected itself (main.go's dispatchAdopted), so a
 // forwarded run reaches this function in the server process. ctx is what tells the two
 // cases apart; see below.
-func WithInvocationJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, version string, checkoutLease func(ctx context.Context, root string) (string, job.LeaseSource, error)) []slog.Handler {
+func WithInvocationJournal(ctx context.Context, sinks []recorder.Sink, root, verb string, args []string, version string, checkoutLease func(ctx context.Context, root string) (string, job.LeaseSource, error)) []recorder.Sink {
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one
 	// invocation's facts across two leases, which is a history no producer could have meant.
@@ -54,7 +55,7 @@ func WithInvocationJournal(ctx context.Context, handlers []slog.Handler, root, v
 		Spawner:      spawn.Spawner,
 	})
 	if h == nil {
-		return handlers
+		return sinks
 	}
-	return append(handlers, h)
+	return append(sinks, h)
 }

@@ -1,24 +1,24 @@
-package journal
+package recorder
 
 import (
 	"context"
-	"log/slog"
 	"sync"
+
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
-// Broadcaster is a capture handler (slog.Handler) that fans each event out to any number of
-// live subscribers while retaining a backlog of everything seen so far. It is the engine
-// side of live log streaming: the invocation's capture logger includes one Broadcaster, and
-// the loopback SSE server (internal/handler/viewer) subscribes to it. A browser that connects mid-run
-// first replays the backlog (so it sees the run from the start) and then receives new events
-// as they are emitted, until [Broadcaster.Close] marks the run finished.
+// Broadcaster keeps what it has seen and fans each record out to live
+// subscribers. A subscriber that is behind misses a record rather than
+// blocking the run. internal/handler/viewer subscribes to it: a browser that
+// connects mid-run replays the backlog, then receives new records until
+// [Broadcaster.Close] marks the run finished.
 //
 // All methods are safe for concurrent use: events arrive from one goroutine per project
 // while subscribers come and go on HTTP handler goroutines.
 type Broadcaster struct {
 	mu      sync.Mutex
-	backlog []Event
-	subs    map[int]chan Event
+	backlog []journal.Record
+	subs    map[int]chan journal.Record
 	nextID  int
 	done    bool
 	doneCh  chan struct{}
@@ -26,56 +26,40 @@ type Broadcaster struct {
 
 // NewBroadcaster returns an empty Broadcaster ready to accept events and subscribers.
 func NewBroadcaster() *Broadcaster {
-	return &Broadcaster{subs: make(map[int]chan Event), doneCh: make(chan struct{})}
+	return &Broadcaster{subs: make(map[int]chan journal.Record), doneCh: make(chan struct{})}
 }
 
-// Enabled reports whether the broadcaster still accepts events (false once closed), letting
-// the capture logger skip building a record for a finished run.
-func (b *Broadcaster) Enabled(context.Context, slog.Level) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return !b.done
-}
-
-// Handle records the event a capture record carries into the backlog and delivers it to
-// every current subscriber. A subscriber whose buffer is full is skipped for that event
-// rather than blocking the run: capture must never slow execution.
-func (b *Broadcaster) Handle(_ context.Context, r slog.Record) error {
-	e, ok := capturedEvent(r)
-	if !ok {
-		return nil
-	}
+// Handle records r into the backlog and delivers it to every current
+// subscriber; it is a [Sink]. A subscriber whose buffer is full is skipped for
+// that record rather than blocking the run.
+func (b *Broadcaster) Handle(_ context.Context, r journal.Record) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.done {
-		return nil
+		return
 	}
-	b.backlog = append(b.backlog, e)
+	b.backlog = append(b.backlog, r)
 	for _, ch := range b.subs {
 		select {
-		case ch <- e:
+		case ch <- r:
 		default:
 			// Subscriber is behind; it will still get the backlog on reconnect.
 		}
 	}
-	return nil
 }
-
-func (b *Broadcaster) WithAttrs(attrs []slog.Attr) slog.Handler { return withAttrs(b, attrs) }
-func (b *Broadcaster) WithGroup(string) slog.Handler            { return b }
 
 // Subscribe registers a new live subscriber. It returns a snapshot of the backlog (the
 // events emitted before this call), a channel that receives events emitted after it, and an
 // unsubscribe function the caller must invoke when it stops reading. The channel is buffered
 // so a briefly-slow reader does not drop events under normal load.
-func (b *Broadcaster) Subscribe() (backlog []Event, ch <-chan Event, cancel func()) {
+func (b *Broadcaster) Subscribe() (backlog []journal.Record, ch <-chan journal.Record, cancel func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	snapshot := make([]Event, len(b.backlog))
+	snapshot := make([]journal.Record, len(b.backlog))
 	copy(snapshot, b.backlog)
 
-	c := make(chan Event, 256)
+	c := make(chan journal.Record, 256)
 	id := b.nextID
 	b.nextID++
 	b.subs[id] = c

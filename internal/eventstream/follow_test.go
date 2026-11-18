@@ -42,7 +42,7 @@ func TestFollowerReplaysRetainedRuns(t *testing.T) {
 
 	var got []events.Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(0, collect(&got)))
+	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
 
 	require.Len(t, got, 3)
 	assert.Equal(t, events.RunStarted, got[0].Body.StreamType())
@@ -59,11 +59,11 @@ func TestFollowerReplayDoesNotRepeatOnFollow(t *testing.T) {
 
 	var replayed []events.Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(0, collect(&replayed)))
+	require.NoError(t, f.Replay(t.Context(), 0, collect(&replayed)))
 	require.Len(t, replayed, 1)
 
 	var fresh []events.Event
-	require.NoError(t, f.drain("inv1.jsonl", collect(&fresh)))
+	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&fresh)))
 	assert.Empty(t, fresh)
 }
 
@@ -77,11 +77,11 @@ func TestFollowerSkipsPartialLines(t *testing.T) {
 
 	var got []events.Event
 	f := NewFollower(dir, "/repo")
-	require.NoError(t, f.Replay(0, collect(&got)))
+	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
 	require.Len(t, got, 1, "the torn line must not be emitted")
 
 	writeLog(t, dir, "inv1", `ult","project":"api","target":"build","status":"pass"}`+"\n")
-	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
+	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
 	require.Len(t, got, 2, "the completed line must be picked up, not lost")
 	assert.Equal(t, events.TargetResult, got[1].Body.StreamType())
 }
@@ -98,7 +98,7 @@ func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 	}
 
 	var got []events.Event
-	require.NoError(t, NewFollower(dir, "/repo").Replay(2, collect(&got)))
+	require.NoError(t, NewFollower(dir, "/repo").Replay(t.Context(), 2, collect(&got)))
 	require.Len(t, got, 2)
 	assert.Equal(t, "inv2", got[0].Inv)
 	assert.Equal(t, "inv3", got[1].Inv)
@@ -116,7 +116,7 @@ func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
 
 	f := NewFollower(dir, "/repo")
 	var replayed []events.Event
-	require.NoError(t, f.Replay(1, collect(&replayed)))
+	require.NoError(t, f.Replay(t.Context(), 1, collect(&replayed)))
 	require.Len(t, replayed, 1)
 
 	var followed []events.Event
@@ -136,11 +136,11 @@ func TestFollowerSkipDeliversOnlyWhatHappensNext(t *testing.T) {
 	require.NoError(t, f.Skip())
 
 	var got []events.Event
-	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
+	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
 	assert.Empty(t, got)
 
 	writeLog(t, dir, "inv1", `{"ts":2,"inv":"inv1","kind":"result","project":"api","target":"test","status":"fail"}`+"\n")
-	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
+	require.NoError(t, f.drain(t.Context(), "inv1.jsonl", collect(&got)))
 	require.Len(t, got, 1)
 	assert.Equal(t, events.Target{Project: "api", Target: "test", Status: "failed"}, got[0].Body)
 }
@@ -150,7 +150,7 @@ func TestFollowerSkipDeliversOnlyWhatHappensNext(t *testing.T) {
 func TestFollowerMissingDirectoryIsNotAnError(t *testing.T) {
 	f := NewFollower(filepath.Join(t.TempDir(), "absent"), "/repo")
 	var got []events.Event
-	require.NoError(t, f.Replay(0, collect(&got)))
+	require.NoError(t, f.Replay(t.Context(), 0, collect(&got)))
 	assert.Empty(t, got)
 }
 

@@ -9,8 +9,8 @@ import (
 	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
@@ -26,7 +26,7 @@ import (
 // connection details is never transmitted, so nothing about the run leaves the machine.
 // This is the run-time sibling of `magus query ref --open` (a finished run) and mirrors
 // `graph export --open --follow`, but streams over loopback SSE rather than the server bridge.
-func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func()) {
+func beginLive(ctx context.Context, enabled bool) (*recorder.Broadcaster, func()) {
 	if !enabled {
 		return nil, func() {}
 	}
@@ -47,7 +47,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 			attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, or set MAGUS_LOG_VIEWER_URL to a loopback mirror."))
 		return nil, func() {}
 	}
-	bc := journal.NewBroadcaster()
+	bc := recorder.NewBroadcaster()
 	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {
 		slog.WarnContext(ctx, "--open could not start the log stream server; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err))
@@ -68,12 +68,11 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	}
 }
 
-// liveHandlers lifts an optional broadcaster into the variadic capture-handler list
-// BeginInvocation accepts (empty when live streaming is off). The broadcaster is itself a
-// slog.Handler, so it joins the invocation's capture logger directly.
-func liveHandlers(bc *journal.Broadcaster) []slog.Handler {
+// liveSinks lifts an optional broadcaster into the sinks BeginInvocation
+// accepts, empty when live streaming is off.
+func liveSinks(bc *recorder.Broadcaster) []recorder.Sink {
 	if bc == nil {
 		return nil
 	}
-	return []slog.Handler{bc}
+	return []recorder.Sink{bc.Handle}
 }

@@ -114,11 +114,11 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	case ef.Limit < 0:
-		if err := f.Replay(0, emit); err != nil {
+		if err := f.Replay(ctx, 0, emit); err != nil {
 			return err
 		}
 	default:
-		if err := f.Replay(ef.Limit, emit); err != nil {
+		if err := f.Replay(ctx, ef.Limit, emit); err != nil {
 			return err
 		}
 	}

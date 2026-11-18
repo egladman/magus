@@ -27,11 +27,11 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
@@ -184,7 +185,7 @@ func writeQueryText(ctx context.Context, w io.Writer, nx nextGate, next []types.
 func checkQuerySearch(ctx context.Context, qf *flaggen.QueryFlags, pos []string) error {
 	// A graph search for an id magus printed would report `matches: 0`,
 	// which reads as "that run does not exist".
-	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
+	if len(pos) == 1 && recorder.LooksLikeInvocationID(pos[0]) {
 		slog.ErrorContext(ctx, fmt.Sprintf("%q is an invocation id, not a graph term. Read it with: %s",
 			pos[0], hint.QueryInvocation.With(pos[0])), attr.Notice("magus query"))
 		return exit.Reported(exit.Usage)
@@ -891,7 +892,7 @@ func queryInvocationCommand(ctx context.Context, root string, qf *flaggen.QueryF
 		return exit.Reported(exit.Usage)
 	}
 	inv := pos[1]
-	if !cache.LooksLikeInvocationID(inv) {
+	if !recorder.LooksLikeInvocationID(inv) {
 		slog.ErrorContext(ctx, fmt.Sprintf("%q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s",
 			inv, hint.QueryOutput.With("<ref> --identity")), attr.Notice("magus query invocation"))
 		return exit.Reported(exit.Usage)
@@ -1108,8 +1109,8 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out out
 }
 
 // invocationRecord is the machine-readable projection of one run: its header plus the events
-// an audit cares about. The events are already redacted (journal.Emit scrubs Text on the way
-// in), and a secret event carries only the reference and the provider by construction.
+// an audit cares about. recorder.Emit redacted the events on the way in, and a
+// secret event carries only the reference and the provider by construction.
 type invocationRecord struct {
 	magus.Invocation
 	Secrets []magus.Event `json:"secrets,omitempty"`
@@ -1141,7 +1142,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 
 	var secrets []magus.Event
 	for _, e := range events {
-		if e.Kind == journal.KindSecret {
+		if e.Kind == string(journal.KindSecret) {
 			secrets = append(secrets, e)
 		}
 	}
@@ -1207,11 +1208,11 @@ func printInvocationText(w io.Writer, header magus.Invocation, secrets, events [
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "events:  %d\n", len(events))
 	for _, e := range events {
-		if e.Kind == journal.KindOutput {
+		if e.Kind == string(journal.KindOutput) {
 			continue // the captured bytes belong to `query output <ref>`, not here
 		}
 		detail := e.Text
-		if e.Kind == journal.KindResult {
+		if e.Kind == string(journal.KindRun) {
 			// A result is the line a reader acts on: which target, and the ref that reads
 			// its output, so a failure never needs a second lookup to find its log.
 			first, _, _ := strings.Cut(e.Text, "\n")
@@ -1330,17 +1331,21 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
-func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events []journal.Event, inv magus.Invocation, keyDigests string, o outputRefOpts) error {
+func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events []journal.Record, inv magus.Invocation, keyDigests string, o outputRefOpts) error {
 	if err := hostedPageAllowed(ctx, "log viewer", "magus query output --open", o.viewerBase, o.printURL); err != nil {
 		return err
 	}
 	rawInv := journal.Invocation{
-		ID:           inv.ID,
-		Command:      journal.Command{Arguments: inv.Command.Arguments, Cwd: inv.Command.Cwd, Trigger: inv.Command.Trigger},
-		StartedMs:    inv.StartedMs,
-		FinishedMs:   inv.FinishedMs,
-		Status:       inv.Status,
-		MagusVersion: inv.MagusVersion,
+		ID:      inv.ID,
+		Command: journal.Command{Arguments: inv.Command.Arguments, Cwd: inv.Command.Cwd, Trigger: journal.Trigger(inv.Command.Trigger)},
+		Status:  journal.Status(inv.Status),
+		Version: inv.MagusVersion,
+	}
+	if inv.StartedMs != 0 {
+		rawInv.Started = time.UnixMilli(inv.StartedMs)
+	}
+	if inv.FinishedMs != 0 {
+		rawInv.Finished = time.UnixMilli(inv.FinishedMs)
 	}
 	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, rawInv, keyDigests)
 	if err != nil {

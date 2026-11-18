@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"fmt"
@@ -17,9 +16,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -113,7 +112,7 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 		if e.IsDir() {
 			continue
 		}
-		switch readGateOutcome(filepath.Join(runsDir, e.Name()), commit) {
+		switch readGateOutcome(runsDir, e.Name(), commit) {
 		case gatePassed:
 			return gatePassed
 		// A failure outranks an incomplete run when both are present: it is the more
@@ -222,58 +221,28 @@ func (h gateHistory) recordAt(commit string) (gateCoverage, sessions.GateRecord)
 	}
 }
 
-// gatePassStatus is the overall outcome a finished gate writes. Journal statuses are
-// plain strings on the wire (see journal.Invocation.Status), so this names the one value
-// that counts rather than comparing a literal at the call site.
-const gatePassStatus = "pass"
-
-// readGateOutcome reports whether one run log is a gate invocation built from commit that
-// finished passing, and whether it was a gate invocation at this commit at all.
-//
-// Folded through journal.InvocationFromEvents rather than by reading the two lifecycle
-// events here: that function already knows which event carries the command, the version
-// and the status, and a second reading of the same stream is a second thing to keep true.
-// It also supplies the interrupted case for free -- a run killed at the terminal writes no
-// finished event, so Status stays empty and reads as not-green, which is correct.
-//
-// The file is bounded before it is parsed. A run log holds every line a build emitted, so
-// the biggest here run to megabytes, and this is called once per log on a push.
-func readGateOutcome(path, commit string) gateCoverage {
-	f, err := os.Open(path)
-	if err != nil {
+// readGateOutcome reports whether the log name under runsDir is a passing gate
+// built from commit, or a gate at this commit at all. It reads the first line
+// and the last, so a log of megabytes costs two reads.
+func readGateOutcome(runsDir, name, commit string) gateCoverage {
+	id, ok := strings.CutSuffix(name, ".jsonl")
+	if !ok {
 		return gateUnknown
 	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64<<10), gateLogLineMax)
-	var events []journal.Event
-	for sc.Scan() {
-		var ev journal.Event
-		if codec.Unmarshal(sc.Bytes(), &ev) != nil {
-			continue
-		}
-		// The started event is the first line, so a log that is not this commit's gate
-		// is abandoned on line one instead of being read to the end.
-		if ev.Kind == journal.KindStarted {
-			if ev.Command == nil || !isGateCommand(ev.Command.Arguments) || !namesCommit(ev.MagusVersion, commit) {
-				return gateUnknown
-			}
-			// The log names the argv, not the affected set, so only `affected ci` is known
-			// to cover the branch; a `run ci` names its own selection.
-			if !isAffectedGateCommand(ev.Command.Arguments) {
-				return gateProjectScoped
-			}
-		}
-		if ev.Kind == journal.KindStarted || ev.Kind == journal.KindFinished {
-			events = append(events, ev)
-		}
-	}
-	if len(events) == 0 {
+	inv, err := journal.ReadInvocation(context.Background(), runsDir, id)
+	if err != nil || inv.Started.IsZero() {
 		return gateUnknown
 	}
-	switch journal.InvocationFromEvents("", events).Status {
-	case gatePassStatus:
+	if !isGateCommand(inv.Command.Arguments) || !namesCommit(inv.Version, commit) {
+		return gateUnknown
+	}
+	// The log names the argv, not the affected set, so only `affected ci` is known
+	// to cover the branch; a `run ci` names its own selection.
+	if !isAffectedGateCommand(inv.Command.Arguments) {
+		return gateProjectScoped
+	}
+	switch inv.Status {
+	case journal.StatusPass:
 		return gatePassed
 	// No status at all means no finished event: the run was killed, or is still going.
 	case "":
@@ -282,10 +251,6 @@ func readGateOutcome(path, commit string) gateCoverage {
 		return gateFailed
 	}
 }
-
-// gateLogLineMax bounds one line of a run log. A build's captured output lands here, so a
-// line can be long; past this it is not a journal event any reader here understands.
-const gateLogLineMax = 4 << 20
 
 // minRevisionPrefix is the shortest abbreviation a revision is matched by. git's describe
 // never abbreviates below it, and hg, Sapling and jj abbreviate to 12.

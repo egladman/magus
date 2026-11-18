@@ -3,17 +3,16 @@ package sessions
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"sync"
+	"time"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // FactHandler turns the execution journal's result events into durable session facts.
-// It is a slog.Handler so it can ride the capture fan-out magus already builds per
-// invocation, rather than threading a second observer down the run path.
+// Its Handle is a sink on the fan-out magus already builds per invocation.
 //
 // It writes NOTHING for a run that produces no result, and Handle never returns an
 // error: capture is best-effort by contract, and a store that can fail a build would be
@@ -35,75 +34,79 @@ type FactHandler struct {
 // as facts under root's store. start describes the invocation and is written as the
 // KindInvocationStart record ahead of the first fact.
 //
-// It returns nil (a nil slog.Handler interface, safe to compare) when the store cannot
-// be resolved, which the fan-out treats as "no handler": a machine with no usable state
-// directory still runs builds.
+// It returns nil when the store cannot be resolved, which the fan-out treats
+// as no sink: a machine with no usable state directory still runs builds.
 //
 // It lives HERE rather than in the CLI because the server executes adopted runs itself
 // (cmd/magus/main.go dispatchAdopted), so "who produces an invocation's facts" is not a
 // CLI-only question. start.Lease is read by the CALLER for that reason; see
 // cmd/magus/journal_hook.go, which documents what the server gets wrong today.
-func NewFactHandler(root string, start session.InvocationStart) slog.Handler {
+func NewFactHandler(root string, start session.InvocationStart) func(context.Context, journal.Record) {
 	dir, err := Dir(root)
 	if err != nil {
 		return nil
 	}
-	return &FactHandler{dir: dir, start: start}
+	return (&FactHandler{dir: dir, start: start}).Handle
 }
 
-func (h *FactHandler) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Target == "" {
-		return nil
+// Handle files r when it is a run's result; it is a recorder.Sink.
+func (h *FactHandler) Handle(ctx context.Context, r journal.Record) {
+	run, ok := r.Run()
+	if !ok || run.Target == "" {
+		return
 	}
 	// The journal's invocation id files the facts. Reusing it rather than minting a
 	// second identifier is what keeps a fact joinable to the execution journal that
 	// produced it; an event without one is unattributable, so it is dropped rather
 	// than filed under an invented id.
-	if e.Inv == "" {
-		return nil
+	if r.Invocation == "" {
+		return
 	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.broken {
-		return nil
+		return
 	}
 	if h.writer == nil {
-		w, err := openWriter(ctx, h.dir, e.Inv, h.start)
+		w, err := openWriter(ctx, h.dir, r.Invocation, h.start)
 		if err != nil {
 			h.stopRecording(ctx, err)
-			return nil
+			return
 		}
 		h.writer = w
 	}
 	if err := h.writer.Append(ctx, session.KindTargetResult, session.TargetResult{
-		Target:         e.Target,
-		Project:        e.Project,
-		Outcome:        factOutcome(e.Status),
-		DurationMs:     e.DurationMs,
-		Replayed:       e.Status == journal.StatusCached,
-		Permitted:      e.Status == journal.StatusPermitted,
-		Ref:            e.Ref,
-		DiagnosticCode: e.DiagnosticCode,
+		Target:         run.Target,
+		Project:        run.Project,
+		Outcome:        factOutcome(run.Status),
+		DurationMs:     run.Duration.Milliseconds(),
+		Replayed:       run.Status == journal.StatusCached,
+		Permitted:      run.Status == journal.StatusPermitted,
+		Ref:            run.Ref,
+		DiagnosticCode: run.DiagnosticCode,
 		Lease:          h.start.Lease,
 		LeaseFrom:      h.start.LeaseFrom,
-		StartedMs:      e.StartedMs,
-		Slots:          e.Slots,
-		MemoryMB:       e.MemoryMB,
-		Sizing:         e.Sizing,
-		WaitedMs:       e.WaitedMs,
-		MaxRSSBytes:    e.MaxRSSBytes,
-		CPUMs:          e.CPUMs,
+		StartedMs:      unixMilli(run.Started),
+		Slots:          run.Slots,
+		MemoryMB:       run.MemoryMB,
+		Sizing:         string(run.Sizing),
+		WaitedMs:       run.Waited.Milliseconds(),
+		MaxRSSBytes:    run.MaxRSSBytes,
+		CPUMs:          run.CPU.Milliseconds(),
 	}); err != nil {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per
 		// result and slow the run down to prove it.
 		h.stopRecording(ctx, err)
 	}
-	return nil
+}
+
+func unixMilli(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // stopRecording abandons the session store for the rest of this invocation, and says so
@@ -113,8 +116,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 // repository: nothing recorded, and `magus session` then reporting in good faith that
 // no session has run yet. The warning is what keeps that empty state honest.
 //
-// The caller holds h.mu. slog.WarnContext cannot re-enter it: a plain log record carries no
-// journal event, so Handle returns before it reaches the lock.
+// The caller holds h.mu.
 func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 	h.broken = true
 	slog.With(attr.Component("magus")).WarnContext(ctx, "this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
@@ -122,48 +124,12 @@ func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 		attr.Error(err))
 }
 
-// WithAttrs returns a handler writing to h's store with attrs ahead of each
-// record's own.
-func (h *FactHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	if len(attrs) == 0 {
-		return h
-	}
-	return factWithAttrs{h: h, attrs: slices.Clone(attrs)}
-}
-
-func (h *FactHandler) WithGroup(string) slog.Handler { return h }
-
-type factWithAttrs struct {
-	h     *FactHandler
-	attrs []slog.Attr
-}
-
-func (f factWithAttrs) Enabled(ctx context.Context, lvl slog.Level) bool {
-	return f.h.Enabled(ctx, lvl)
-}
-
-func (f factWithAttrs) Handle(ctx context.Context, r slog.Record) error {
-	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
-	nr.AddAttrs(f.attrs...)
-	r.Attrs(func(a slog.Attr) bool {
-		nr.AddAttrs(a)
-		return true
-	})
-	return f.h.Handle(ctx, nr)
-}
-
-func (f factWithAttrs) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return factWithAttrs{h: f.h, attrs: append(slices.Clip(f.attrs), attrs...)}
-}
-
-func (f factWithAttrs) WithGroup(string) slog.Handler { return f }
-
 // factOutcome maps the execution journal's three statuses onto the session store's
 // pass/fail axis. A cache hit is a PASS that was replayed, not a third outcome: "did
 // this target end up green" and "did work run" are different questions, and
 // [session.TargetResult.Replayed] answers the second. A permitted result is green on
 // the same axis, so a push gate and a job's owed check read it as covered.
-func factOutcome(status string) string {
+func factOutcome(status journal.Status) string {
 	if status == journal.StatusFail {
 		return session.OutcomeFail
 	}

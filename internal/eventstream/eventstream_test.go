@@ -6,61 +6,64 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func rec[B journal.Body](ms int64, body B) journal.Record {
+	return journal.NewRecord(time.UnixMilli(ms), "inv1", body)
+}
+
 func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 	cases := []struct {
 		name string
-		in   journal.Event
+		in   journal.Record
 		want events.Event
 	}{
 		{
 			name: "started carries command lineage",
-			in: journal.Event{
-				Ts: 100, Inv: "inv1", Kind: journal.KindStarted, MagusVersion: "0.5.0",
-				Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun},
-			},
+			in: rec(100, journal.Started{
+				Version: "0.5.0",
+				Command: journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun},
+			}),
 			want: events.Event{Ts: 100, Workspace: "/repo", Inv: "inv1", Body: events.Run{
 				Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0",
 			}},
 		},
 		{
 			name: "finished carries the outcome",
-			in:   journal.Event{Ts: 200, Inv: "inv1", Kind: journal.KindFinished, Status: journal.StatusFail},
+			in:   rec(200, journal.Finished{Status: journal.StatusFail}),
 			want: events.Event{Ts: 200, Workspace: "/repo", Inv: "inv1", Body: events.Run{
 				Phase: "finished", Status: "fail",
 			}},
 		},
 		{
 			name: "result carries the fetchable ref",
-			in: journal.Event{
-				Ts: 150, Inv: "inv1", Kind: journal.KindResult, Project: "api", Target: "test",
-				Status: journal.StatusPass, Ref: "out_abc", DurationMs: 1200,
-			},
+			in: rec(150, journal.Run{
+				Project: "api", Target: "test",
+				Status: journal.StatusPass, Ref: "out_abc", Duration: 1200 * time.Millisecond,
+			}),
 			want: events.Event{Ts: 150, Workspace: "/repo", Inv: "inv1", Body: events.Target{
 				Project: "api", Target: "test", Status: "ok", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
 			}},
 		},
 		{
 			name: "a permitted result never reads as ok",
-			in: journal.Event{
-				Ts: 155, Inv: "inv1", Kind: journal.KindResult, Project: "proto", Target: "ci",
-				Status: journal.StatusPermitted, Ref: "out_abc", DurationMs: 1200,
-			},
+			in: rec(155, journal.Run{
+				Project: "proto", Target: "ci",
+				Status: journal.StatusPermitted, Ref: "out_abc", Duration: 1200 * time.Millisecond,
+			}),
 			want: events.Event{Ts: 155, Workspace: "/repo", Inv: "inv1", Body: events.Target{
 				Project: "proto", Target: "ci", Status: "permitted", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
 			}},
 		},
 		{
 			name: "output carries the stream it came from",
-			in: journal.Event{
-				Ts: 160, Inv: "inv1", Kind: journal.KindOutput, Project: "api", Target: "test",
-				Stream: journal.StreamStderr, Text: "FAIL",
-			},
+			in:   rec(160, journal.Output{Project: "api", Target: "test", Stream: journal.Stderr, Text: "FAIL"}),
 			want: events.Event{Ts: 160, Workspace: "/repo", Inv: "inv1", Body: events.Output{
 				Project: "api", Target: "test", Stream: "stderr", Text: "FAIL",
 			}},
@@ -80,7 +83,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 // journal conflates "succeeded" and "ran" into one three-valued status, and a
 // subscriber asks those separately.
 func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
-	got, ok := fromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: journal.StatusCached})
+	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: journal.StatusCached}))
 	require.True(t, ok)
 	assert.Equal(t, events.Target{Status: "ok", CacheHit: true}, got.Body)
 }
@@ -88,7 +91,7 @@ func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
 // TestFromJournalUnknownStatusIsNotGreen: a status magus grows later must not
 // present as a silent pass to every existing subscriber.
 func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
-	got, ok := fromJournal("/repo", journal.Event{Kind: journal.KindResult, Status: "quarantined"})
+	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: "quarantined"}))
 	require.True(t, ok)
 	assert.Equal(t, events.Target{Status: "failed"}, got.Body)
 }
@@ -96,9 +99,16 @@ func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
 // TestFromJournalSkipsKindsWithNoStreamEquivalent: skipping is the designed
 // behavior, so a kind gaining a mapping by accident should fail here.
 func TestFromJournalSkipsKindsWithNoStreamEquivalent(t *testing.T) {
-	for _, kind := range []string{journal.KindExec, journal.KindScope, journal.KindWarn, journal.KindSecret} {
-		t.Run(kind, func(t *testing.T) {
-			_, ok := fromJournal("/repo", journal.Event{Kind: kind, Text: "x"})
+	var unknown journal.Record
+	require.NoError(t, codec.Unmarshal([]byte(`{"ts":1,"kind":"warn","text":"x"}`), &unknown))
+	for name, r := range map[string]journal.Record{
+		"exec":   rec(1, journal.Exec{Command: "x"}),
+		"scope":  rec(1, journal.Scope{}),
+		"secret": rec(1, journal.Secret{Text: "x"}),
+		"warn":   unknown,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, ok := fromJournal("/repo", r)
 			assert.False(t, ok)
 		})
 	}
@@ -158,13 +168,11 @@ func TestWriterIsConcurrencySafe(t *testing.T) {
 	}
 }
 
-// TestFromJournalCarriesTheFailureReason pins the run error onto the stream; the
-// journal carries it in Text.
+// TestFromJournalCarriesTheFailureReason pins the run error onto the stream.
 func TestFromJournalCarriesTheFailureReason(t *testing.T) {
-	got, ok := fromJournal("/repo", journal.Event{
-		Kind: journal.KindResult, Project: "api", Target: "build",
-		Status: journal.StatusFail, Text: "exit status 2",
-	})
+	got, ok := fromJournal("/repo", rec(1, journal.Run{
+		Project: "api", Target: "build", Status: journal.StatusFail, Error: "exit status 2",
+	}))
 	require.True(t, ok)
 	body, ok := got.Body.(events.Target)
 	require.True(t, ok)

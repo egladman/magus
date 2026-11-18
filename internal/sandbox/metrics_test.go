@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 )
 
@@ -119,14 +119,14 @@ func TestRecordEnvDroppedReportsOncePerTargetAndSetButCountsEveryExec(t *testing
 	ctx := WithMetrics(context.Background(), rec)
 	p := &Policy{EnvDropped: []string{"A_KEY", "B_TOKEN"}, withheld: &withheldReads{}}
 	got := logged(t, func() {
-		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), p, "go")
+		RecordEnvDropped(recorder.WithStep(ctx, ".", "test"), p, "go")
 		otherPolicy := *p
 		otherPolicy.EnvDropped = []string{"B_TOKEN", "A_KEY"}
-		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), &otherPolicy, "git")
-		RecordEnvDropped(journal.WithStep(ctx, "other", "test"), p, "go")
-		RecordEnvDropped(journal.WithStep(ctx, ".", "lint"), p, "go")
+		RecordEnvDropped(recorder.WithStep(ctx, ".", "test"), &otherPolicy, "git")
+		RecordEnvDropped(recorder.WithStep(ctx, "other", "test"), p, "go")
+		RecordEnvDropped(recorder.WithStep(ctx, ".", "lint"), p, "go")
 		otherPolicy.EnvDropped = []string{"C_TOKEN"}
-		RecordEnvDropped(journal.WithStep(ctx, ".", "test"), &otherPolicy, "go")
+		RecordEnvDropped(recorder.WithStep(ctx, ".", "test"), &otherPolicy, "go")
 	})
 	assert.Equal(t, 4, strings.Count(got, "[MGS2003]"))
 	assert.NotContains(t, got, "cmd=git")
@@ -137,11 +137,11 @@ func TestRecordEnvDroppedReportsOncePerTargetAndSetButCountsEveryExec(t *testing
 // run log.
 func TestRecordEnvWithheldLogsMGS2013OncePerTargetAndName(t *testing.T) {
 	p := &Policy{withheld: &withheldReads{}}
-	inTest := journal.WithStep(context.Background(), ".", "test")
+	inTest := recorder.WithStep(context.Background(), ".", "test")
 	got := logged(t, func() {
 		RecordEnvWithheld(inTest, p, "ACTIONS_RUNTIME_TOKEN")
 		RecordEnvWithheld(inTest, p, "ACTIONS_RUNTIME_TOKEN")
-		RecordEnvWithheld(journal.WithStep(context.Background(), ".", "lint"), p, "ACTIONS_RUNTIME_TOKEN")
+		RecordEnvWithheld(recorder.WithStep(context.Background(), ".", "lint"), p, "ACTIONS_RUNTIME_TOKEN")
 	})
 	assert.Contains(t, got, "MGS2013")
 	assert.Contains(t, got, "name=ACTIONS_RUNTIME_TOKEN")

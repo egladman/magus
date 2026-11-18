@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -653,155 +653,6 @@ func TestOutputStorePrefixAndAmbiguity(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
-// TestInvocationByID reads a union run log and rebuilds the invocation header (command +
-// outcome), covering InvocationByID and readEvents.
-func TestInvocationByID(t *testing.T) {
-	dir := t.TempDir()
-	runs := filepath.Join(dir, RunsDir)
-	require.NoError(t, os.MkdirAll(runs, 0o755))
-	f, err := os.Create(filepath.Join(runs, "inv123.jsonl"))
-	require.NoError(t, err)
-	enc := codec.NewEncoder(f)
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: "agent"}}))
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
-	require.NoError(t, f.Close())
-
-	inv, err := NewOutputStore(dir).InvocationByID("inv123")
-	require.NoError(t, err)
-	assert.Equal(t, "inv123", inv.ID)
-	assert.Equal(t, []string{"run", "build"}, inv.Command.Arguments)
-
-	_, err = NewOutputStore(dir).InvocationByID("missing")
-	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
-}
-
-// TestInvocationEventsByID pins the read side of the audit trail: the EVENTS survive, not
-// just the header InvocationByID reconstructs from them. journal.KindSecret is the reason:
-// a run's credential reads were recorded and then unreachable, so the trail had no reader.
-func TestInvocationEventsByID(t *testing.T) {
-	dir := t.TempDir()
-	runs := filepath.Join(dir, RunsDir)
-	require.NoError(t, os.MkdirAll(runs, 0o755))
-	f, err := os.Create(filepath.Join(runs, "invaudit1.jsonl"))
-	require.NoError(t, err)
-	enc := codec.NewEncoder(f)
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "image-login"}}}))
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindSecret, Project: ".", Target: "image-login", Text: `read secret "GHCR_TOKEN" via onepassword`}))
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
-	require.NoError(t, f.Close())
-
-	header, events, err := NewOutputStore(dir).InvocationEventsByID("invaudit1")
-	require.NoError(t, err)
-	// The header is still reconstructed.
-	assert.Equal(t, journal.Invocation{
-		ID:      "invaudit1",
-		Command: journal.Command{Arguments: []string{"run", "image-login"}},
-		Status:  journal.StatusPass,
-	}, header)
-	require.Len(t, events, 3, "every event is returned, not only the two lifecycle ones")
-
-	var secrets []journal.Event
-	for _, e := range events {
-		if e.Kind == journal.KindSecret {
-			secrets = append(secrets, e)
-		}
-	}
-	require.Len(t, secrets, 1, "the credential read is reachable")
-	assert.Contains(t, secrets[0].Text, "GHCR_TOKEN", "the reference is the auditable fact")
-	assert.Contains(t, secrets[0].Text, "onepassword", "so is the provider that served it")
-
-	_, _, err = NewOutputStore(dir).InvocationEventsByID("invmissing")
-	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
-}
-
-// TestInvocationReadsRefuseTraversal: the server's viewer RPCs pass a caller-supplied name
-// straight to these two readers, so an id that is not shaped like one must be refused before
-// it is joined onto the runs dir; otherwise "inv/../../<path>" serves any .jsonl on the
-// machine over the Connect API.
-func TestInvocationReadsRefuseTraversal(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, RunsDir), 0o755))
-
-	outside := filepath.Join(t.TempDir(), "secrets")
-	require.NoError(t, os.MkdirAll(outside, 0o755))
-	f, err := os.Create(filepath.Join(outside, "hosts.jsonl"))
-	require.NoError(t, err)
-	require.NoError(t, codec.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
-	require.NoError(t, f.Close())
-
-	// Relative to <runs>/inv, because the id's own leading segment is one of the levels the
-	// climb has to undo.
-	rel, err := filepath.Rel(filepath.Join(dir, RunsDir, "inv"), filepath.Join(outside, "hosts"))
-	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(rel, ".."), "sanity: %q must climb out of the runs dir", rel)
-	traversal := fmt.Sprintf("inv%s%s", string(filepath.Separator), rel)
-	// The refusal, not a missing file, is what has to stop this read: the id below joins onto
-	// a journal that exists and parses.
-	require.FileExists(t, filepath.Join(dir, RunsDir, traversal+runExt))
-
-	s := NewOutputStore(dir)
-	for _, id := range []string{traversal, "inv/../x", "../inv1", "inv 1", ""} {
-		_, _, err := s.InvocationEventsByID(id)
-		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsByID(%q) must refuse the id", id)
-
-		_, _, err = s.InvocationEventsSince(id, 0)
-		assert.ErrorIs(t, err, fs.ErrNotExist, "InvocationEventsSince(%q) must refuse the id", id)
-	}
-}
-
-// TestInvocationEventsFromTailsCompleteLines covers reading a journal that is still being written:
-// a resumed read returns only what arrived since, and a torn final line is held back rather than
-// dropped: the offset must stop at the last newline, so the rest of that line arrives whole on the
-// next read instead of being skipped as unparsable.
-func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
-	dir := t.TempDir()
-	runs := filepath.Join(dir, RunsDir)
-	require.NoError(t, os.MkdirAll(runs, 0o755))
-	path := filepath.Join(runs, "invtail1.jsonl")
-	f, err := os.Create(path)
-	require.NoError(t, err)
-	enc := codec.NewEncoder(f)
-	require.NoError(t, enc.Encode(journal.Event{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}))
-	require.NoError(t, f.Close())
-
-	store := NewOutputStore(dir)
-	events, next, err := store.InvocationEventsSince("invtail1", 0)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "compiling", events[0].Text)
-
-	// The writer appends a whole line plus the first half of the next one.
-	line, err := codec.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
-	require.NoError(t, err)
-	torn, err := codec.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
-	require.NoError(t, err)
-	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-	require.NoError(t, err)
-	_, err = f.Write(append(append(line, '\n'), torn[:len(torn)/2]...))
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
-	events, next, err = store.InvocationEventsSince("invtail1", next)
-	require.NoError(t, err)
-	require.Len(t, events, 1, "the torn line is held back, not parsed")
-	assert.Equal(t, "linking", events[0].Text)
-
-	// Completing the line makes it readable, and the read that skipped it picks it up whole.
-	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-	require.NoError(t, err)
-	_, err = f.Write(append(torn[len(torn)/2:], '\n'))
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
-	events, _, err = store.InvocationEventsSince("invtail1", next)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, journal.KindFinished, events[0].Kind)
-
-	_, _, err = store.InvocationEventsSince("invmissing", 0)
-	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
-}
-
 // TestListRunLogsReadsHeadAndTailOnly is the run browser's feed: the invocation list has to come off
 // bounded reads, because a journal holds every output line its run captured and listing hundreds of
 // them by parsing each in full would read hundreds of megabytes to paint a sidebar. The padding here
@@ -813,33 +664,34 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 	runs := filepath.Join(dir, RunsDir)
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 
-	write := func(name string, evs ...journal.Event) string {
+	write := func(name string, records ...journal.Record) string {
 		p := filepath.Join(runs, name+".jsonl")
 		f, err := os.Create(p)
 		require.NoError(t, err)
 		enc := codec.NewEncoder(f)
-		for _, e := range evs {
-			require.NoError(t, enc.Encode(e))
+		for _, r := range records {
+			require.NoError(t, enc.Encode(r))
 		}
 		require.NoError(t, f.Close())
 		return p
 	}
-	padding := make([]journal.Event, 0, 400)
+	ms := time.UnixMilli
+	padding := make([]journal.Record, 0, 400)
 	for i := 0; i < 400; i++ {
-		padding = append(padding, journal.Event{Kind: journal.KindOutput, Ts: 200, Text: strings.Repeat("x", 400)})
+		padding = append(padding, journal.NewRecord(ms(200), "invsweep", journal.Output{Text: strings.Repeat("x", 400)}))
 	}
 
-	sweep := append([]journal.Event{
-		{Kind: journal.KindStarted, Ts: 100, MagusVersion: "v9", Command: &journal.Command{Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI}},
+	sweep := append([]journal.Record{
+		journal.NewRecord(ms(100), "invsweep", journal.Started{Version: "v9", Command: journal.Command{Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI}}),
 	}, padding...)
-	sweep = append(sweep, journal.Event{Kind: journal.KindFinished, Ts: 900, Status: journal.StatusFail})
+	sweep = append(sweep, journal.NewRecord(ms(900), "invsweep", journal.Finished{Status: journal.StatusFail}))
 	sweepPath := write("invsweep", sweep...)
-	require.Greater(t, fileSize(t, sweepPath), int64(runTailWindow), "the padding must exceed the tail window")
+	require.Greater(t, fileSize(t, sweepPath), int64(64<<10), "the padding must exceed the tail window")
 
 	// An interrupted run: a started event and output, but no finished event to read an outcome from.
 	killedPath := write("invkilled",
-		journal.Event{Kind: journal.KindStarted, Ts: 10, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun}},
-		journal.Event{Kind: journal.KindOutput, Ts: 40, Text: "compiling"},
+		journal.NewRecord(ms(10), "invkilled", journal.Started{Command: journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun}}),
+		journal.NewRecord(ms(40), "invkilled", journal.Output{Text: "compiling"}),
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(runs, "notes.txt"), []byte("ignored"), 0o644))
 
@@ -847,25 +699,25 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 	require.NoError(t, os.Chtimes(killedPath, base, base))
 	require.NoError(t, os.Chtimes(sweepPath, base.Add(time.Minute), base.Add(time.Minute)))
 
-	got := NewOutputStore(dir).ListRunLogs(0)
+	got := NewOutputStore(dir).ListRunLogs(t.Context(), 0)
 	require.Len(t, got, 2, "only .jsonl journals list")
 	// Newest by modtime first. The interrupted run has no finished event, so no outcome to claim,
 	// and its last event still dates the run.
 	assert.Equal(t, []RunLog{
 		{
-			Inv: "invsweep", Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI,
-			StartedMs: 100, FinishedMs: 900, Status: journal.StatusFail, MagusVersion: "v9",
+			Inv: "invsweep", Arguments: []string{"affected", "ci"}, Trigger: string(journal.TriggerCI),
+			StartedMs: 100, FinishedMs: 900, Status: string(journal.StatusFail), MagusVersion: "v9",
 			SizeBytes: fileSize(t, sweepPath),
 		},
 		{
-			Inv: "invkilled", Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun,
+			Inv: "invkilled", Arguments: []string{"run", "build"}, Trigger: string(journal.TriggerRun),
 			StartedMs: 10, FinishedMs: 40,
 			SizeBytes: fileSize(t, killedPath),
 		},
 	}, got)
 
-	assert.Len(t, NewOutputStore(dir).ListRunLogs(1), 1, "a positive limit keeps the newest")
-	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(0), "a store with no runs dir lists nothing")
+	assert.Len(t, NewOutputStore(dir).ListRunLogs(t.Context(), 1), 1, "a positive limit keeps the newest")
+	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(t.Context(), 0), "a store with no runs dir lists nothing")
 }
 
 func fileSize(t *testing.T, path string) int64 {
@@ -883,28 +735,11 @@ func TestListRunLogsKeepsAJournalWithNoStartedEvent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runs, "invodd.jsonl"), []byte("not json\n"), 0o644))
 
-	got := NewOutputStore(dir).ListRunLogs(0)
+	got := NewOutputStore(dir).ListRunLogs(t.Context(), 0)
 	require.Len(t, got, 1)
 	assert.Equal(t, "invodd", got[0].Inv)
 	assert.Empty(t, got[0].Arguments)
 	assert.Zero(t, got[0].StartedMs)
-}
-
-// TestLooksLikeInvocationID pins the recognizer that keeps a pasted invocation id out of the
-// graph grammar, where it matched nothing and reported `matches: 0`, which reads as "no such
-// run" rather than "wrong command".
-func TestLooksLikeInvocationID(t *testing.T) {
-	for _, s := range []string{"invmsm3vcou1", "inv123", "invabc0z9"} {
-		assert.True(t, LooksLikeInvocationID(s), "%q should be recognized as an invocation id", s)
-	}
-	// "invoke"/"invalid" are the collisions that matter: they are plausible free-text search
-	// terms, and stealing them from the graph grammar would be a regression in itself. They
-	// are lowercase alphanumeric, so they DO match the shape; the router only reaches this
-	// check for a single positional, and a miss reports a missing run log rather than
-	// searching. Pin the shapes that must never match at all.
-	for _, s := range []string{"inv", "INV123", "inv-123", "inv 123", "kind:spell", "out1a2b3c", ""} {
-		assert.False(t, LooksLikeInvocationID(s), "%q must NOT be treated as an invocation id", s)
-	}
 }
 
 // TestAmbiguousRefErrorMessage covers AmbiguousRefError.Error's rendering.

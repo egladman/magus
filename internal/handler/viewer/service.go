@@ -2,14 +2,17 @@ package viewer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"iter"
 	"slices"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
@@ -24,15 +27,18 @@ const streamPollInterval = 250 * time.Millisecond
 type Service struct {
 	outputs outputSource
 	runs    runSource
+	// runsDir holds one journal per invocation.
+	runsDir string
 	poll    time.Duration
 	// sessionRoot is the workspace whose loaded session store GetSessionActivity reads, empty
 	// when the caller wired none.
 	sessionRoot string
 }
 
-// NewService builds the ViewerService Connect handler reading from the run and output stores.
-func NewService(outputs outputSource, runs runSource, opts ...Option) *Service {
-	s := &Service{outputs: outputs, runs: runs, poll: streamPollInterval}
+// NewService builds the ViewerService Connect handler reading from the run and
+// output stores and from the journals under runsDir.
+func NewService(outputs outputSource, runs runSource, runsDir string, opts ...Option) *Service {
+	s := &Service{outputs: outputs, runs: runs, runsDir: runsDir, poll: streamPollInterval}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -60,12 +66,12 @@ func (s *Service) resolveInvocation(name string) (string, error) {
 }
 
 // GetInvocation returns one run's header.
-func (s *Service) GetInvocation(_ context.Context, req *connect.Request[viewerv1.GetInvocationRequest]) (*connect.Response[viewerv1.Invocation], error) {
+func (s *Service) GetInvocation(ctx context.Context, req *connect.Request[viewerv1.GetInvocationRequest]) (*connect.Response[viewerv1.Invocation], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetName())
 	if err != nil {
 		return nil, err
 	}
-	header, _, err := s.runs.InvocationEventsByID(inv)
+	header, err := journal.ReadInvocation(ctx, s.runsDir, inv)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -73,16 +79,36 @@ func (s *Service) GetInvocation(_ context.Context, req *connect.Request[viewerv1
 }
 
 // GetJournal returns one run whole: header plus every event.
-func (s *Service) GetJournal(_ context.Context, req *connect.Request[viewerv1.GetJournalRequest]) (*connect.Response[viewerv1.Journal], error) {
+func (s *Service) GetJournal(ctx context.Context, req *connect.Request[viewerv1.GetJournalRequest]) (*connect.Response[viewerv1.Journal], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetName())
 	if err != nil {
 		return nil, err
 	}
-	header, events, err := s.runs.InvocationEventsByID(inv)
+	header, err := journal.ReadInvocation(ctx, s.runsDir, inv)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(journalToProto(header, events)), nil
+	records, err := collect(journal.Records(ctx, s.runsDir, inv))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(journalToProto(header, records)), nil
+}
+
+// collect reads every record seq yields. A line that does not decode is left
+// out; the viewer shows what the journal holds, and doctor reports the rest.
+func collect(seq iter.Seq2[journal.Record, error]) ([]journal.Record, error) {
+	var out []journal.Record
+	for r, err := range seq {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 // ListEvents returns a page of one run's events, narrowed by the request filter. The store returns
@@ -92,12 +118,12 @@ func (s *Service) GetJournal(_ context.Context, req *connect.Request[viewerv1.Ge
 // The filter runs BEFORE the page is cut, so page_size counts MATCHING events. Cutting first would
 // make a narrow filter over a long journal return an empty page while matches sat just past the
 // boundary, and a caller cannot tell that from "no such events".
-func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.ListEventsRequest]) (*connect.Response[viewerv1.ListEventsResponse], error) {
+func (s *Service) ListEvents(ctx context.Context, req *connect.Request[viewerv1.ListEventsRequest]) (*connect.Response[viewerv1.ListEventsResponse], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetParent())
 	if err != nil {
 		return nil, err
 	}
-	_, events, err := s.runs.InvocationEventsByID(inv)
+	events, err := collect(journal.Records(ctx, s.runsDir, inv))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -120,8 +146,8 @@ func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.Li
 //
 // It reads the journal rather than subscribing to a broadcaster because the server does not run
 // the build: every `magus` invocation is its own process appending to <cacheDir>/runs/<inv>.jsonl,
-// and that directory is the only place the server can observe a run from. journal.Broadcaster (the
-// SSE route in live.go) is the in-process path for the run that owns it, and is unreachable here.
+// and that directory is the only place the server can observe a run from.
+// recorder.Broadcaster, live.go's SSE route, is unreachable from here.
 //
 // The filter runs BEFORE each send, as ListEvents applies it before paging, so a narrow filter
 // makes a quiet stream rather than a stream of dropped frames. filter.time.since doubles as the
@@ -144,13 +170,17 @@ func (s *Service) StreamEvents(ctx context.Context, req *connect.Request[viewerv
 	defer ticker.Stop()
 	var offset int64
 	for {
-		events, next, err := s.runs.InvocationEventsSince(inv, offset)
+		since, next, err := journal.RecordsSince(ctx, s.runsDir, inv, offset)
 		if err != nil {
 			// On the first read the run is unknown; later it means the journal aged out from under
 			// the stream. Both leave the caller with no run to follow.
 			return connect.NewError(connect.CodeNotFound, err)
 		}
 		offset = next
+		events, err := collect(since)
+		if err != nil {
+			return connect.NewError(connect.CodeNotFound, err)
+		}
 		for _, e := range ApplyEventQuery(events, filter) {
 			if err := stream.Send(&viewerv1.StreamEventsResponse{Event: eventToProto(e)}); err != nil {
 				return err
@@ -158,7 +188,7 @@ func (s *Service) StreamEvents(ctx context.Context, req *connect.Request[viewerv
 		}
 		// Read the UNFILTERED batch for the terminal event: a filter that excludes it must not turn
 		// a finished run into a stream that never ends.
-		if slices.ContainsFunc(events, func(e journal.Event) bool { return e.Kind == journal.KindFinished }) {
+		if slices.ContainsFunc(events, func(r journal.Record) bool { return r.Kind() == journal.KindFinished }) {
 			return nil
 		}
 		select {
@@ -207,10 +237,10 @@ func (s *Service) GetOutput(_ context.Context, req *connect.Request[viewerv1.Get
 }
 
 // ListInvocations returns the retained run journals, newest first.
-func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewerv1.ListInvocationsRequest]) (*connect.Response[viewerv1.ListInvocationsResponse], error) {
+func (s *Service) ListInvocations(ctx context.Context, req *connect.Request[viewerv1.ListInvocationsRequest]) (*connect.Response[viewerv1.ListInvocationsResponse], error) {
 	// 0 is every journal kept. NOT cache.DefaultMaxRuns: that is the RETENTION bound, and
 	// borrowing it would change what this returns the day somebody tunes how much history to keep.
-	logs := s.runs.ListRunLogs(0)
+	logs := s.runs.ListRunLogs(ctx, 0)
 	from, to, next, err := page(len(logs), req.Msg.GetPageToken(), int(req.Msg.GetPageSize()))
 	if err != nil {
 		return nil, err
@@ -224,12 +254,12 @@ func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewer
 			Id: l.Inv,
 			Command: &viewerv1.Command{
 				Arguments: l.Arguments,
-				Trigger:   triggerToProto(l.Trigger),
+				Trigger:   triggerToProto(journal.Trigger(l.Trigger)),
 			},
 			StartTime:    tsFromMs(l.StartedMs),
 			EndTime:      tsFromMs(l.FinishedMs),
 			MagusVersion: l.MagusVersion,
-			Status:       statusToProto(l.Status),
+			Status:       statusToProto(journal.Status(l.Status)),
 			SizeBytes:    l.SizeBytes,
 		})
 	}

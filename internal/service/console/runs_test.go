@@ -6,16 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/require"
 )
 
-// emit sends one event to the registry through the same slog capture path production uses:
-// journal.Emit -> capture logger -> RunRegistry.Handle -> EventFromRecord -> fold.
-func emit(reg *RunRegistry, inv string, e journal.Event) {
-	ctx := journal.WithLogger(context.Background(), journal.NewLogger(reg))
-	ctx = journal.WithInvocationID(ctx, inv)
-	journal.Emit(ctx, e)
+// emit hands one record to the registry, as a run's sinks would, stamped at ms.
+func emit[B journal.Body](reg *RunRegistry, inv string, ms int64, body B) {
+	reg.Handle(context.Background(), journal.NewRecord(time.UnixMilli(ms), inv, body))
 }
 
 func TestRunRegistryFoldsTargetLifecycle(t *testing.T) {
@@ -25,14 +22,14 @@ func TestRunRegistryFoldsTargetLifecycle(t *testing.T) {
 	execAt := time.UnixMilli(2_000)
 	doneAt := time.UnixMilli(5_000)
 
-	emit(reg, "inv1", journal.Event{Ts: start.UnixMilli(), Kind: journal.KindStarted, Command: &journal.Command{Trigger: journal.TriggerRun}})
-	emit(reg, "inv1", journal.Event{Ts: execAt.UnixMilli(), Kind: journal.KindExec, Project: "svc/api", Target: "build"})
-	emit(reg, "inv1", journal.Event{Ts: doneAt.UnixMilli(), Kind: journal.KindResult, Project: "svc/api", Target: "build", Status: journal.StatusPass, Ref: "out1a2b3c", DurationMs: 3_000})
+	emit(reg, "inv1", start.UnixMilli(), journal.Started{Command: journal.Command{Trigger: journal.TriggerRun}})
+	emit(reg, "inv1", execAt.UnixMilli(), journal.Exec{Project: "svc/api", Target: "build"})
+	emit(reg, "inv1", doneAt.UnixMilli(), journal.Run{Project: "svc/api", Target: "build", Status: journal.StatusPass, Ref: "out1a2b3c", Duration: 3 * time.Second})
 
 	got := reg.Snapshot()
 	want := []daemon.Run{{
 		Inv:       "inv1",
-		Trigger:   journal.TriggerRun,
+		Trigger:   string(journal.TriggerRun),
 		StartedAt: start,
 		Targets: []daemon.TargetRun{{
 			Project:    "svc/api",
@@ -50,13 +47,13 @@ func TestRunRegistryFoldsTargetLifecycle(t *testing.T) {
 // A running (not yet finished) target reports RUNNING with a start but no end/ref.
 func TestRunRegistryRunningTarget(t *testing.T) {
 	reg := NewRunRegistry()
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted, Command: &journal.Command{Trigger: journal.TriggerAffected}})
-	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "svc/api", Target: "test"})
+	emit(reg, "inv1", 1_000, journal.Started{Command: journal.Command{Trigger: journal.TriggerAffected}})
+	emit(reg, "inv1", 2_000, journal.Exec{Project: "svc/api", Target: "test"})
 
 	got := reg.Snapshot()
 	want := []daemon.Run{{
 		Inv:       "inv1",
-		Trigger:   journal.TriggerAffected,
+		Trigger:   string(journal.TriggerAffected),
 		StartedAt: time.UnixMilli(1_000),
 		Targets: []daemon.TargetRun{{
 			Project:   "svc/api",
@@ -71,8 +68,8 @@ func TestRunRegistryRunningTarget(t *testing.T) {
 // A cache hit emits a result with no preceding exec: CACHED, start anchored to the result.
 func TestRunRegistryCachedResultAnchorsStart(t *testing.T) {
 	reg := NewRunRegistry()
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 4_000, Kind: journal.KindResult, Project: "svc/api", Target: "lint", Status: journal.StatusCached, Ref: "outcafe", DurationMs: 0})
+	emit(reg, "inv1", 1_000, journal.Started{})
+	emit(reg, "inv1", 4_000, journal.Run{Project: "svc/api", Target: "lint", Status: journal.StatusCached, Ref: "outcafe"})
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)
@@ -88,9 +85,9 @@ func TestRunRegistryCachedResultAnchorsStart(t *testing.T) {
 
 func TestRunRegistryFailedResult(t *testing.T) {
 	reg := NewRunRegistry()
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "p", Target: "t"})
-	emit(reg, "inv1", journal.Event{Ts: 3_000, Kind: journal.KindResult, Project: "p", Target: "t", Status: journal.StatusFail, DurationMs: 1_000})
+	emit(reg, "inv1", 1_000, journal.Started{})
+	emit(reg, "inv1", 2_000, journal.Exec{Project: "p", Target: "t"})
+	emit(reg, "inv1", 3_000, journal.Run{Project: "p", Target: "t", Status: journal.StatusFail, Duration: time.Second})
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)
@@ -101,12 +98,12 @@ func TestRunRegistryFailedResult(t *testing.T) {
 func TestRunRegistryOrdering(t *testing.T) {
 	reg := NewRunRegistry()
 
-	emit(reg, "invOld", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "invOld", journal.Event{Ts: 1_100, Kind: journal.KindExec, Project: "p", Target: "a"})
-	emit(reg, "invOld", journal.Event{Ts: 1_200, Kind: journal.KindExec, Project: "p", Target: "b"})
+	emit(reg, "invOld", 1_000, journal.Started{})
+	emit(reg, "invOld", 1_100, journal.Exec{Project: "p", Target: "a"})
+	emit(reg, "invOld", 1_200, journal.Exec{Project: "p", Target: "b"})
 
-	emit(reg, "invNew", journal.Event{Ts: 9_000, Kind: journal.KindStarted})
-	emit(reg, "invNew", journal.Event{Ts: 9_100, Kind: journal.KindExec, Project: "q", Target: "z"})
+	emit(reg, "invNew", 9_000, journal.Started{})
+	emit(reg, "invNew", 9_100, journal.Exec{Project: "q", Target: "z"})
 
 	got := reg.Snapshot()
 	require.Len(t, got, 2)
@@ -120,10 +117,10 @@ func TestRunRegistryOrdering(t *testing.T) {
 // A later exec (a target running several subprocesses) must not regress a terminal result.
 func TestRunRegistryResultNotRegressedByLaterExec(t *testing.T) {
 	reg := NewRunRegistry()
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "p", Target: "t"})
-	emit(reg, "inv1", journal.Event{Ts: 3_000, Kind: journal.KindResult, Project: "p", Target: "t", Status: journal.StatusPass, Ref: "r"})
-	emit(reg, "inv1", journal.Event{Ts: 4_000, Kind: journal.KindExec, Project: "p", Target: "t"})
+	emit(reg, "inv1", 1_000, journal.Started{})
+	emit(reg, "inv1", 2_000, journal.Exec{Project: "p", Target: "t"})
+	emit(reg, "inv1", 3_000, journal.Run{Project: "p", Target: "t", Status: journal.StatusPass, Ref: "r"})
+	emit(reg, "inv1", 4_000, journal.Exec{Project: "p", Target: "t"})
 
 	got := reg.Snapshot()
 	require.Equal(t, daemon.TargetRunPassed, got[0].Targets[0].State)
@@ -136,9 +133,9 @@ func TestRunRegistryPrunesAfterRetention(t *testing.T) {
 	reg.retain = 10 * time.Second
 	reg.nowFn = func() time.Time { return now }
 
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindResult, Project: "p", Target: "t", Status: journal.StatusPass})
-	emit(reg, "inv1", journal.Event{Ts: 3_000, Kind: journal.KindFinished, Status: journal.StatusPass})
+	emit(reg, "inv1", 1_000, journal.Started{})
+	emit(reg, "inv1", 2_000, journal.Run{Project: "p", Target: "t", Status: journal.StatusPass})
+	emit(reg, "inv1", 3_000, journal.Finished{Status: journal.StatusPass})
 
 	// Within retention: still visible.
 	require.Len(t, reg.Snapshot(), 1)
@@ -165,8 +162,8 @@ func TestRunRegistryPrunesStaleUnfinishedRun(t *testing.T) {
 	now := time.UnixMilli(100_000)
 	reg.nowFn = func() time.Time { return now }
 
-	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "p", Target: "t"})
+	emit(reg, "inv1", 1_000, journal.Started{})
+	emit(reg, "inv1", 2_000, journal.Exec{Project: "p", Target: "t"})
 
 	// Still in-flight and recent: visible.
 	require.Len(t, reg.Snapshot(), 1)
@@ -179,8 +176,6 @@ func TestRunRegistryPrunesStaleUnfinishedRun(t *testing.T) {
 // Events with no invocation id cannot be attributed and are dropped.
 func TestRunRegistryIgnoresEventsWithoutInv(t *testing.T) {
 	reg := NewRunRegistry()
-	// Emit through a logger but with no invocation id on ctx and an explicit empty Inv.
-	ctx := journal.WithLogger(context.Background(), journal.NewLogger(reg))
-	journal.Emit(ctx, journal.Event{Ts: 1_000, Kind: journal.KindExec, Project: "p", Target: "t"})
+	emit(reg, "", 1_000, journal.Exec{Project: "p", Target: "t"})
 	require.Empty(t, reg.Snapshot())
 }

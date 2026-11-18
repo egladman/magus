@@ -22,6 +22,8 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -571,8 +573,12 @@ func (w internals) LastRecordedRun(ctx context.Context, projectPath, target stri
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
 // the run log has aged out.
 func (m *Magus) InvocationByID(inv string) (Invocation, error) {
-	raw, err := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).InvocationByID(inv)
+	raw, err := journal.ReadInvocation(context.Background(), m.runsDir(), inv)
 	return newInvocation(raw), err
+}
+
+func (m *Magus) runsDir() string {
+	return filepath.Join(resolveCacheDir(m.ws.Root, m.cfg), cache.RunsDir)
 }
 
 // InvocationEventsByID resolves an invocation id to its run header AND the events behind it.
@@ -580,8 +586,26 @@ func (m *Magus) InvocationByID(inv string) (Invocation, error) {
 // which is what an audit of a run's credential reads needs. Returns fs.ErrNotExist when the run
 // log has aged out.
 func (m *Magus) InvocationEventsByID(inv string) (Invocation, []Event, error) {
-	raw, events, err := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).InvocationEventsByID(inv)
-	return newInvocation(raw), newEvents(events), err
+	ctx := context.Background()
+	raw, err := journal.ReadInvocation(ctx, m.runsDir(), inv)
+	if err != nil {
+		return Invocation{}, nil, err
+	}
+	var events []Event
+	for r, err := range journal.Records(ctx, m.runsDir(), inv) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return Invocation{}, nil, err
+		}
+		ev, err := newEvent(r)
+		if err != nil {
+			return Invocation{}, nil, err
+		}
+		events = append(events, ev)
+	}
+	return newInvocation(raw), events, nil
 }
 
 // TailLog returns the log-file path of the most recent cache entry for projectPath,

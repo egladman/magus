@@ -476,7 +476,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			if opts.Magus != nil {
 				viewerOpts = append(viewerOpts, viewer.WithSessionRoot(opts.Magus.Root()))
 			}
-			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, viewerOpts...), connectReadMax)
+			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, filepath.Join(opts.Magus.CacheDir(), cache.RunsDir), viewerOpts...), connectReadMax)
 			f.service(viewerPath, viewerConnectHandler)
 			shareGuarded[viewerPath] = serviceRoute(viewerPath, viewerConnectHandler)
 			bridgeLog.InfoContext(ctx, "viewer service mounted", slog.String("path", viewerPath))

@@ -31,14 +31,15 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -863,10 +864,10 @@ func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
 	m := newQueryTestWorkspace(t)
 	ctx := withMagus(context.Background(), m)
 
-	runCtx, finish := m.BeginInvocation(ctx, magus.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
-	id := journal.InvocationIDFromContext(runCtx)
-	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusFail, Project: "api", Target: "lint", Ref: "out9bddb214656e", Text: "exit status 1\nsecond line"})
-	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusPass, Project: "web", Target: "build", Ref: "out0123456789ab"})
+	runCtx, finish := m.BeginInvocation(ctx, magus.Command{Arguments: []string{"run", "lint"}, Trigger: string(journal.TriggerRun)}, "v0.test")
+	id := recorder.InvocationIDFromContext(runCtx)
+	recorder.Emit(runCtx, journal.Run{Status: journal.StatusFail, Project: "api", Target: "lint", Ref: "out9bddb214656e", Error: "exit status 1\nsecond line"})
+	recorder.Emit(runCtx, journal.Run{Status: journal.StatusPass, Project: "web", Target: "build", Ref: "out0123456789ab"})
 	finish(errors.New("lint failed"))
 
 	out := captureStdout(t, func() {

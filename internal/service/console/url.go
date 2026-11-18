@@ -11,7 +11,7 @@ import (
 
 	wire "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // KnownApps is every clean /console/<app>/ segment magus may mint a link to or present
@@ -38,15 +38,17 @@ func IsAppRoute(seg string) bool {
 // computes and reports WHICH CLASS differs. Digests are short and per-class, so this
 // costs a few dozen bytes of a fragment budget measured in tens of kilobytes. Empty
 // keyDigests omits the directive entirely.
-func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocation, keyDigests string) (string, error) {
-	j := journal.InvocationFromEvents(ref, events)
-	// A single ref's display events are output+result only (no `started`), so
-	// InvocationFromEvents yields no command lineage; graft the resolved run's Command so the
-	// viewer's lineage header shows which command (and trigger) produced this output.
+func LogViewerURL(base, ref string, records []journal.Record, inv journal.Invocation, keyDigests string) (string, error) {
+	// A single ref's display records carry no Started record. The resolved
+	// run's Command is grafted so the lineage header names what produced it.
+	j := journal.Invocation{ID: ref}
+	if len(records) > 0 {
+		j.Finished = records[len(records)-1].Time
+	}
 	if inv.ID != "" {
 		j.Command = inv.Command
 	}
-	encoded, err := wire.EncodeJournalFragment(j, events)
+	encoded, err := wire.EncodeJournalFragment(j, records)
 	if err != nil {
 		return "", err
 	}

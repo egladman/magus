@@ -38,11 +38,11 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/job/evidence"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -1144,7 +1144,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		}
 	}
 	ancestors := types.InvocationAncestorsFromContext(ctx)
-	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), types.WrapperInvocation(journal.NewInvocationID())))
+	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), types.WrapperInvocation(recorder.NewInvocationID())))
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

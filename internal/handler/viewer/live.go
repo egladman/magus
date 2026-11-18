@@ -17,8 +17,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // liveGrace is how long the server keeps accepting connections after the run finishes,
@@ -31,14 +32,14 @@ const liveGrace = 3 * time.Second
 // done.
 type LiveServer struct {
 	ts *httpx.TokenServer
-	bc *journal.Broadcaster
+	bc *recorder.Broadcaster
 }
 
 // StartLive starts a loopback SSE server on an ephemeral 127.0.0.1 port for bc in the
 // background and mints a random bearer token. origin is the page allowed to read the stream.
 // The caller owns bc and must add it to the invocation's capture logger so events flow, and
 // call [LiveServer.Stop] when the run is finished.
-func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
+func StartLive(origin string, bc *recorder.Broadcaster) (*LiveServer, error) {
 	ls := &LiveServer{bc: bc}
 	ts, err := httpx.StartTokenServer(origin, map[string]http.Handler{"/events": http.HandlerFunc(ls.streamEvents)})
 	if err != nil {
@@ -131,7 +132,7 @@ func (ls *LiveServer) streamEvents(w http.ResponseWriter, r *http.Request) {
 
 // writeEvent emits one event as an SSE data line (base64 protobuf). It returns a non-nil
 // error if the event could not be encoded or written, so the caller ends the stream.
-func writeEvent(w http.ResponseWriter, ev journal.Event) error {
+func writeEvent(w http.ResponseWriter, ev journal.Record) error {
 	payload, err := EncodeEvent(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)

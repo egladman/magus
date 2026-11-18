@@ -35,12 +35,12 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/spell"
@@ -668,7 +668,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
 	workspace.BindRegistry(m, m.wsReg)
-	m.resolver = journal.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
+	m.resolver = recorder.NewSecretResolver(append([]secrets.Option{secrets.WithTimeouts(secrets.Timeouts{
 		Interactive: m.cfg.Secret.Interactive,
 		Unattended:  m.cfg.Secret.Unattended,
 	})}, vo.secretsOpts...)...)
