@@ -298,16 +298,16 @@ describe("the Diagrams app", () => {
       eyebrow: "",
       desc: "focus app, depth 1",
       direction: "across",
-      unscopedWhy: "served from the workspace graph: focus app, depth 1",
-      graphEdges: false,
+      unscoped_why: "served from the workspace graph: focus app, depth 1",
+      graph_edges: false,
       boxes: [
         { ...box, actor: app },
         { ...box, actor: lib },
       ],
       scopes: [],
       exclusions: [],
-      hiddenEdges: [],
-      edgeMarks: [],
+      hidden_edges: [],
+      edge_marks: [],
       flows: [
         {
           src: { dir: null, actor: app },
@@ -345,10 +345,10 @@ describe("the Diagrams app", () => {
     await settle();
     assert.equal(rt.figures.length, 1);
     const f = rt.figures[0];
-    assert.equal(f?.graphEdges, true);
-    assert.equal(f?.unscopedWhy, "");
+    assert.equal(f?.graph_edges, true);
+    assert.equal(f?.unscoped_why, "");
     assert.deepEqual(
-      f?.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
+      f?.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.imports_indexed, b.actor]),
       [
         ["internal/a", "internal/a", ["internal/b"], true, null],
         ["internal/b", "internal/b", [], true, null],

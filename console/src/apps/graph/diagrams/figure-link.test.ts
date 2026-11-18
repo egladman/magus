@@ -192,8 +192,8 @@ test("the record is actors and flows carrying each edge's stroke and label, seed
     ],
   );
   assert.equal(f.title, "t");
-  assert.equal(f.graphEdges, false);
-  assert.notEqual(f.unscopedWhy, "", "an actor-only figure says why it draws no directory");
+  assert.equal(f.graph_edges, false);
+  assert.notEqual(f.unscoped_why, "", "an actor-only figure says why it draws no directory");
 });
 
 test("seeds past the figure's accent budget are tagged and left plain", () => {

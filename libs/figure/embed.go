@@ -52,13 +52,13 @@ type Figure struct {
 	Eyebrow     string        `json:"eyebrow"`
 	Desc        string        `json:"desc"`
 	Direction   Direction     `json:"direction"`
-	UnscopedWhy string        `json:"unscopedWhy"`
-	GraphEdges  bool          `json:"graphEdges"`
+	UnscopedWhy string        `json:"unscoped_why"`
+	GraphEdges  bool          `json:"graph_edges"`
 	Boxes       []Box         `json:"boxes"`
 	Scopes      [][]Dir       `json:"scopes"`
 	Exclusions  []Exclusion   `json:"exclusions"`
-	HiddenEdges []HiddenEdges `json:"hiddenEdges"`
-	EdgeMarks   []EdgeMark    `json:"edgeMarks"`
+	HiddenEdges []HiddenEdges `json:"hidden_edges"`
+	EdgeMarks   []EdgeMark    `json:"edge_marks"`
 	Flows       []Flow        `json:"flows"`
 	Zones       []Zone        `json:"zones"`
 	Alignments  []Alignment   `json:"alignments"`
@@ -151,10 +151,10 @@ type Dir struct {
 	Layer          string    `json:"layer"`
 	Language       string    `json:"language"`
 	Imports        []string  `json:"imports"`
-	ImportedBy     []string  `json:"importedBy"`
-	ImportsIndexed bool      `json:"importsIndexed"`
+	ImportedBy     []string  `json:"imported_by"`
+	ImportsIndexed bool      `json:"imports_indexed"`
 	Calls          []DirCall `json:"calls"`
-	CalledBy       []DirCall `json:"calledBy"`
+	CalledBy       []DirCall `json:"called_by"`
 	Children       []string  `json:"children"`
 	Files          int       `json:"files"`
 }
@@ -267,7 +267,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
     i = 0;
     while (i < f.edgeMarks.len()) {
         final m = f.edgeMarks[i];
-        marks.append(figure\EdgeMark{ src = m.src, dst = m.dst, label = m.label, stroke = stroke(m.stroke, at: "{at}edgeMarks[{i}].stroke") });
+        marks.append(figure\EdgeMark{ src = m.src, dst = m.dst, label = m.label, stroke = stroke(m.stroke, at: "{at}edge_marks[{i}].stroke") });
         i = i + 1;
     }
     final flows: mut [figure\Flow] = mut [<figure\Flow>];
