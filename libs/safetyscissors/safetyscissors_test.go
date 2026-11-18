@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -93,7 +94,7 @@ func (s *NewSuite) TestNewRefusesAnInvalidInvocationID() {
 
 func (s *NewSuite) TestNewLaysTheStoresOutUnderDir() {
 	ss := s.open()
-	s.Equal(Dirs{Jobs: filepath.Join(s.dir, "jobs"), Sessions: filepath.Join(s.dir, "sessions"), Trail: s.dir}, ss.Dirs())
+	s.Equal(Dirs{Jobs: filepath.Join(s.dir, "jobs"), Sessions: filepath.Join(s.dir, "sessions"), Activity: filepath.Join(s.dir, "activity")}, ss.Dirs())
 	path, err := ss.Jobs().Path()
 	s.Require().NoError(err)
 	s.Equal(filepath.Join(s.dir, "jobs", "jobs.jsonl"), path)
@@ -102,7 +103,7 @@ func (s *NewSuite) TestNewLaysTheStoresOutUnderDir() {
 func (s *NewSuite) TestWithDirsMovesOnlyTheFieldsItSets() {
 	elsewhere := s.T().TempDir()
 	ss := s.open(WithDirs(Dirs{Jobs: elsewhere}))
-	s.Equal(Dirs{Jobs: elsewhere, Sessions: filepath.Join(s.dir, "sessions"), Trail: s.dir}, ss.Dirs())
+	s.Equal(Dirs{Jobs: elsewhere, Sessions: filepath.Join(s.dir, "sessions"), Activity: filepath.Join(s.dir, "activity")}, ss.Dirs())
 }
 
 func (s *NewSuite) TestWithDirsRefusesJobsAndSessionsInOneDirectory() {
@@ -169,10 +170,13 @@ func (s *NewSuite) TestSessionsFoldWhatTheWriterAppended() {
 	s.Equal(at.UnixMilli(), fold.Records[1].Ts)
 }
 
-func (s *NewSuite) TestAnEmptyTrailReadsEmpty() {
-	events, err := s.open().Trail(s.T().Context(), 10)
-	s.Require().NoError(err)
-	s.Empty(events)
+func (s *NewSuite) TestAnEmptyActivityLogHasNoCalls() {
+	var calls []journal.Call
+	for c, err := range s.open().Calls(s.T().Context(), 10) {
+		s.Require().NoError(err)
+		calls = append(calls, c)
+	}
+	s.Empty(calls)
 }
 
 func (s *NewSuite) TestAChildRankedAboveItsParentIsRefused() {

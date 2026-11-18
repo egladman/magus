@@ -560,8 +560,9 @@ against its parent's model tier. buzzed, the first consumer outside magus, impor
 `verdict` alone rather than write that wiring. Asked for by Eli on 11-17.
 
 - `safetyscissors.New(ctx, dir, opts...)` returns a `*SafetyScissors`. It lays out
-  `jobs/`, `sessions/` and the trail's `activity/` under `dir`; `WithDirs` moves any of
-  them, and refuses `Jobs` and `Sessions` in one directory.
+  `jobs/`, `sessions/` and `activity/` under `dir`; `WithDirs` moves any of them, and
+  refuses `Jobs` and `Sessions` in one directory. `Calls` reads the activity log through
+  `journal.Calls` ([ADR 0051](0051-the-journal-is-one-package-shaped-like-log-slog.md)).
 - `WithInvocation`, `WithActor` and `WithNotices` are required, and `New` names every
   missing one at once as an `*OptionError`. `WithNotices` joins the two the proposal
   named because a job store without it refuses every write, and the module never prints.

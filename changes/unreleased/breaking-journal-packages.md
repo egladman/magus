@@ -19,6 +19,10 @@
   `LastJob`, and `Emit` hands each `Sink` a `journal.Record`. The session views are in
   `internal/sessions`: `SessionTrail` is `Activity`, `ForSession` is `ReadActivity`,
   `SessionCost` is `Cost` and `WithInvocationJournal` is `WithInvocationFacts`.
+- **Breaking for SDK callers: `(*SafetyScissors).Trail` is `Calls`.** It returns
+  `iter.Seq2[journal.Call, error]` over `journal.Calls`, and `Dirs.Trail` is
+  `Dirs.Activity`, the `activity/` directory itself rather than the one that holds it.
+  `New` still places it at `<dir>/activity`.
 - **Breaking for SDK callers: `internal/handler/trailrpc` is `activityrpc`.**
 - **The activity readers return what they cannot read.** `sessions.ReadActivity`,
   `recorder.Consulted`, `ObservedCounts` and the review's replay answer a store read
