@@ -71,8 +71,7 @@ func symbolShardsKey(man *manifest) string {
 	}
 	slices.Sort(names)
 	h := sha256.New()
-	_, _ = h.Write([]byte(routingFormat))
-	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(routingFormat + "\x00"))
 	for _, name := range names {
 		_, _ = h.Write([]byte(name))
 		_, _ = h.Write([]byte{0})
