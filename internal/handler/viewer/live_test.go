@@ -16,7 +16,8 @@ import (
 
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,14 +25,14 @@ import (
 // TestLiveServerStreamsBacklogAndLive connects to a running live server, and confirms it
 // replays a pre-subscribe backlog event, streams a live event, CORS-locks to the
 // origin, and ends with a `done` event when the broadcaster closes.
-// emit sends one event to bc through the real capture path (a logger fanning to it).
-func emit(bc *journal.Broadcaster, ev journal.Event) {
-	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(bc)), ev)
+// emit sends one output line to bc through Emit, the real capture path.
+func emit(bc *recorder.Broadcaster, text string) {
+	recorder.Emit(recorder.WithSinks(context.Background(), bc.Handle), journal.Output{Text: text})
 }
 
 func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
-	bc := journal.NewBroadcaster()
-	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "backlog-line"})
+	bc := recorder.NewBroadcaster()
+	emit(bc, "backlog-line")
 
 	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
@@ -71,7 +72,7 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 
 	assert.Equal(t, "backlog-line", recv(t, texts))
 
-	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "live-line"})
+	emit(bc, "live-line")
 	assert.Equal(t, "live-line", recv(t, texts))
 
 	bc.Close()
@@ -81,7 +82,7 @@ func TestLiveServerStreamsBacklogAndLive(t *testing.T) {
 // TestLiveServerRejectsBadToken confirms a wrong/absent token is rejected by the shared
 // bearer guard with a 401 challenge (the guard treats missing and wrong tokens alike).
 func TestLiveServerRejectsBadToken(t *testing.T) {
-	bc := journal.NewBroadcaster()
+	bc := recorder.NewBroadcaster()
 	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,7 +99,7 @@ func TestLiveServerRejectsBadToken(t *testing.T) {
 // TestLiveServerViewerURL confirms the viewer link carries the loopback addr and token in the
 // fragment.
 func TestLiveServerViewerURL(t *testing.T) {
-	bc := journal.NewBroadcaster()
+	bc := recorder.NewBroadcaster()
 	ls, err := StartLive("https://example.test", bc)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -129,7 +130,7 @@ func (n *nonFlusherRecorder) WriteHeader(code int)        { n.code = code }
 // TestStreamEventsRejectsNonFlusher confirms a ResponseWriter that cannot flush is turned away
 // with 500 before any subscription happens.
 func TestStreamEventsRejectsNonFlusher(t *testing.T) {
-	ls := &LiveServer{bc: journal.NewBroadcaster()}
+	ls := &LiveServer{bc: recorder.NewBroadcaster()}
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	w := &nonFlusherRecorder{header: make(http.Header)}
 	ls.streamEvents(w, req)
@@ -148,8 +149,8 @@ func (f *flushErrWriter) Flush()                    {}
 // TestStreamEventsAbortsOnBacklogWriteError confirms streamEvents returns early (does not hang)
 // when writing a backlog event fails, e.g. the browser hung up mid-replay.
 func TestStreamEventsAbortsOnBacklogWriteError(t *testing.T) {
-	bc := journal.NewBroadcaster()
-	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "backlog"})
+	bc := recorder.NewBroadcaster()
+	emit(bc, "backlog")
 	ls := &LiveServer{bc: bc}
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 
@@ -172,11 +173,11 @@ func (e *errWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 // TestWriteEventPropagatesWriteError confirms a failed write is returned so the stream loop can
 // end; a healthy writer returns nil.
 func TestWriteEventPropagatesWriteError(t *testing.T) {
-	err := writeEvent(&errWriter{header: make(http.Header)}, journal.Event{Kind: journal.KindOutput, Text: "x"})
+	err := writeEvent(&errWriter{header: make(http.Header)}, at(1, journal.Output{Text: "x"}))
 	require.Error(t, err)
 
 	var ok okWriter
-	require.NoError(t, writeEvent(&ok, journal.Event{Kind: journal.KindOutput, Text: "x"}))
+	require.NoError(t, writeEvent(&ok, at(1, journal.Output{Text: "x"})))
 }
 
 // okWriter accepts every write.

@@ -18,10 +18,10 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -177,28 +177,26 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		t.Errorf("stdout carried a line nobody asked for: %q", lines.Text())
 	}
 
-	events, err := trailtypes.ReadRecent(t.Context(), m.CacheDir(), 10)
+	events, err := loggedCalls(t.Context(), m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 	// The clock, the OS account, the response preview, the content-addressed refs and the sizes
 	// are copied across; this test pins who called and what.
-	assert.Equal(t, trailtypes.Event{
-		Ts:   ev.Ts,
-		Kind: trailtypes.KindMCPToolCall,
+	assert.Equal(t, journal.Call{
+		Time: ev.Time,
+		Kind: journal.CallKindMCPTool,
 		Origin: jobtypes.Origin{
 			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: auth.CredentialStdio().Recorded(),
 		},
-		Workspace:     ev.Workspace,
-		UserAgent:     ev.UserAgent,
-		Action:        hint.ToolConfig.String(),
-		Outcome:       trailtypes.OutcomeOK,
-		DurationMs:    ev.DurationMs,
-		RequestRef:    ev.RequestRef,
-		ResponseRef:   ev.ResponseRef,
-		Preview:       ev.Preview,
-		RequestBytes:  ev.RequestBytes,
-		ResponseBytes: ev.ResponseBytes,
+		Workspace: ev.Workspace,
+		UserAgent: ev.UserAgent,
+		Name:      hint.ToolConfig.String(),
+		Outcome:   journal.OutcomeOK,
+		Duration:  ev.Duration,
+		Request:   ev.Request,
+		Response:  ev.Response,
+		Preview:   ev.Preview,
 	}, ev)
 }
 
@@ -240,7 +238,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
 	with := func(c auth.Credential) func(context.Context) context.Context {
-		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
+		return func(ctx context.Context) context.Context { return recorder.ContextWithCredential(ctx, c) }
 	}
 
 	for name, tc := range map[string]struct {
@@ -283,7 +281,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	require.NoError(t, err)
 	connector := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
+		h.ServeHTTP(w, r.WithContext(recorder.ContextWithCredential(r.Context(), connector)))
 	}))
 	defer srv.Close()
 	post := func(baggage, session, body string) (http.Header, toolResult) {
@@ -354,7 +352,7 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 		"console":   {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))
+			h.ServeHTTP(w, r.WithContext(recorder.ContextWithCredential(r.Context(), tc.cred)))
 		}))
 		post := func(session, body string) (http.Header, []byte) {
 			req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(body))

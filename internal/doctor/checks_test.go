@@ -19,8 +19,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -56,7 +56,7 @@ func ranNTimes(project, target string, n int) []map[string]any {
 	for range n {
 		out = append(out, map[string]any{
 			"kind": "result", "project": project, "target": target,
-			"status": "pass", "dur_ms": 3000, // above MinAvgMsForYield
+			"status": "pass", "duration_ms": 3000, // above MinAvgMsForYield
 		})
 	}
 	return out
@@ -1656,7 +1656,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		t.Helper()
 		base := (&runner{root: root}).cacheDir()
 		for i := range n {
-			trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
+			recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
 				Host: "test",
 				Tool: tool,
 				Path: fmt.Sprintf("file-%d.go", i),

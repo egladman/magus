@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
@@ -431,7 +431,7 @@ func ServedIn(ctx context.Context, loc job.Location) NextServer {
 	cacheDir := loc.CacheDir
 	return func(next []types.NextStep) []types.NextStep {
 		role, writePaths := hint.RoleUnbound, []string(nil)
-		if id, _ := job.ActingLease(loc, trail.LeaseFromEnv()); id != "" {
+		if id, _ := job.ActingLease(loc, recorder.LeaseFromEnv()); id != "" {
 			role = hint.RoleWorker
 			if rows, err := job.NewStore(loc).List(ctx); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)

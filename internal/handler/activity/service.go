@@ -21,8 +21,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 )
@@ -116,7 +118,7 @@ func (s *Service) ListActivityEvents(ctx context.Context, req *connect.Request[a
 	}
 
 	filter := req.Msg.GetFilter()
-	matched := make([]trail.Event, 0, limit)
+	matched := make([]journal.Call, 0, limit)
 	for _, e := range readMerged(ctx, s.loaded(), maxWindow) {
 		if matchFilter(e, filter) {
 			matched = append(matched, e)
@@ -134,9 +136,9 @@ func (s *Service) ListActivityEvents(ctx context.Context, req *connect.Request[a
 // wireEvent maps one stored event onto the wire type. Its own function because the stream
 // sends the same events one at a time: a second copy of this mapping is how a field comes
 // to be served by the list and missing from the feed.
-func wireEvent(e trail.Event) *activityv1.ActivityEvent {
+func wireEvent(e journal.Call) *activityv1.ActivityEvent {
 	pe := &activityv1.ActivityEvent{
-		Time:          timestamppb.New(time.UnixMilli(e.Ts)),
+		Time:          timestamppb.New(e.Time),
 		Kind:          encodeKind(e.Kind),
 		Actor:         e.Label(),
 		User:          e.User,
@@ -146,19 +148,19 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 		Host:          encodeHost(e),
 		Session:       e.Session,
 		Workspace:     e.Workspace,
-		Action:        e.Action,
+		Action:        e.Name,
 		Unit:          e.Lease, // magus calls this a lease; the proto keeps the "unit" spelling, which is the console's wire
 		LeaseFrom:     string(e.LeaseFrom),
 		Outcome:       encodeOutcome(e.Outcome),
 		Error:         e.Error,
-		RequestRef:    e.RequestRef,
-		ResponseRef:   e.ResponseRef,
+		RequestRef:    e.Request.Ref,
+		ResponseRef:   e.Response.Ref,
 		Preview:       e.Preview,
-		RequestBytes:  e.RequestBytes,
-		ResponseBytes: e.ResponseBytes,
+		RequestBytes:  e.Request.Bytes,
+		ResponseBytes: e.Response.Bytes,
 	}
-	if e.DurationMs > 0 {
-		pe.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
+	if e.Duration > 0 {
+		pe.Duration = durationpb.New(e.Duration)
 	}
 	return pe
 }
@@ -208,10 +210,10 @@ func pageBounds(total, offset, limit int) (from, to int, next string) {
 //
 // limit is the READ WINDOW, not the page: the caller filters and pages what comes back, so cutting
 // here to a page size would starve a filtered page of matches sitting just past the boundary.
-func readMerged(ctx context.Context, workspaces []Workspace, limit int) []trail.Event {
-	merged := make([]trail.Event, 0, limit)
+func readMerged(ctx context.Context, workspaces []Workspace, limit int) []journal.Call {
+	merged := make([]journal.Call, 0, limit)
 	for _, w := range workspaces {
-		events, err := trail.ReadRecent(ctx, w.CacheDir, limit)
+		events, err := readCalls(ctx, w.CacheDir, limit)
 		if err != nil {
 			continue
 		}
@@ -234,11 +236,27 @@ func readMerged(ctx context.Context, workspaces []Workspace, limit int) []trail.
 	}
 	// Stable so events sharing a millisecond keep their per-trail order rather than shuffling
 	// between calls.
-	slices.SortStableFunc(merged, func(a, b trail.Event) int { return cmp.Compare(b.Ts, a.Ts) })
+	slices.SortStableFunc(merged, func(a, b journal.Call) int { return cmp.Compare(b.Time.UnixMilli(), a.Time.UnixMilli()) })
 	if len(merged) > limit {
 		merged = merged[:limit]
 	}
 	return merged
+}
+
+// readCalls is up to limit calls from the end of the log under cacheDir, newest
+// first. A line that does not decode is passed over.
+func readCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Call, error) {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), limit) {
+		if errors.Is(err, codec.ErrLineUndecodable) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // GetPayload serves a stored request or response body by its ref. Refs are content-addressed, so
@@ -249,7 +267,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 	var err error
 	for _, w := range s.loaded() {
 		var body []byte
-		if body, err = trail.ReadBlob(w.CacheDir, ref); err == nil {
+		if body, err = (journal.Payload{Ref: ref}).Read(recorder.CallsDir(w.CacheDir)); err == nil {
 			return connect.NewResponse(&activityv1.Payload{Body: body, SizeBytes: int64(len(body))}), nil
 		}
 	}
@@ -263,7 +281,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 // window, all ANDed; an empty or absent field does not constrain. An actors entry matches
 // an event whose origin names it in any one field (job.Origin.Names), never the rendered
 // label.
-func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
+func matchFilter(e journal.Call, q *activityv1.ActivityQuery) bool {
 	if q == nil {
 		return true
 	}
@@ -273,7 +291,7 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if actors := q.GetActors(); len(actors) > 0 && !slices.ContainsFunc(actors, e.Names) {
 		return false
 	}
-	if actions := q.GetActions(); len(actions) > 0 && !slices.Contains(actions, e.Action) {
+	if actions := q.GetActions(); len(actions) > 0 && !slices.Contains(actions, e.Name) {
 		return false
 	}
 	// The three narrowings a person watching one worker asks for. They are applied here
@@ -289,18 +307,18 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 		// A path names a FILE change and nothing else. A tool call and a run are attributed
 		// by lease, so serving them under a path filter would report reach nobody asked
 		// about; see ActivityQuery.paths.
-		if e.Kind != trail.Kind(kindFileChange) {
+		if e.Kind != journal.CallKind(kindFileChange) {
 			return false
 		}
-		if !slices.ContainsFunc(paths, func(p string) bool { return jobstore.Covers(p, e.Action) }) {
+		if !slices.ContainsFunc(paths, func(p string) bool { return jobstore.Covers(p, e.Name) }) {
 			return false
 		}
 	}
 	if window := q.GetTime(); window != nil {
-		if since := window.GetSince(); since != nil && e.Ts < since.AsTime().UnixMilli() {
+		if since := window.GetSince(); since != nil && e.Time.UnixMilli() < since.AsTime().UnixMilli() {
 			return false
 		}
-		if until := window.GetUntil(); until != nil && e.Ts > until.AsTime().UnixMilli() {
+		if until := window.GetUntil(); until != nil && e.Time.UnixMilli() > until.AsTime().UnixMilli() {
 			return false
 		}
 	}
@@ -313,48 +331,48 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 // The fallback lives at the wire boundary rather than in the store because the stored event
 // should keep saying exactly what its producer observed: a User-Agent is not a host name, it is
 // being READ as one.
-func encodeHost(e trail.Event) string {
+func encodeHost(e journal.Call) string {
 	if e.Host != "" {
 		return e.Host
 	}
-	if e.Kind == trail.KindMCPToolCall {
+	if e.Kind == journal.CallKindMCPTool {
 		return e.UserAgent
 	}
 	return ""
 }
 
-func encodeKind(k trail.Kind) activityv1.Kind {
+func encodeKind(k journal.CallKind) activityv1.Kind {
 	switch k {
-	case trail.KindMCPToolCall:
+	case journal.CallKindMCPTool:
 		return activityv1.Kind_KIND_MCP_TOOL_CALL
-	case trail.KindJob:
+	case journal.CallKindJob:
 		return activityv1.Kind_KIND_JOB
-	case trail.KindConfigChange:
+	case journal.CallKindConfigChange:
 		return activityv1.Kind_KIND_CONFIG_CHANGE
-	case trail.KindTokenLifecycle:
+	case journal.CallKindTokenLifecycle:
 		return activityv1.Kind_KIND_TOKEN_LIFECYCLE
-	case trail.KindSandboxDenial:
+	case journal.CallKindSandboxDenial:
 		return activityv1.Kind_KIND_SANDBOX_DENIAL
-	case trail.KindAgentCommand:
+	case journal.CallKindAgentCommand:
 		return activityv1.Kind_KIND_AGENT_COMMAND
-	case trail.KindAgentSpawn:
+	case journal.CallKindAgentSpawn:
 		return activityv1.Kind_KIND_AGENT_SPAWN
-	case trail.KindNotes:
+	case journal.CallKindNotes:
 		return activityv1.Kind_KIND_NOTES
-	case trail.KindGrantIssued:
+	case journal.CallKindCredentialGrant:
 		return activityv1.Kind_KIND_CREDENTIAL_GRANT
-	case trail.KindGuardPolicy:
+	case journal.CallKindGuardPolicy:
 		return activityv1.Kind_KIND_GUARD_POLICY
 	default:
 		return activityv1.Kind_KIND_UNSPECIFIED
 	}
 }
 
-func encodeOutcome(o string) activityv1.Outcome {
+func encodeOutcome(o journal.Outcome) activityv1.Outcome {
 	switch o {
-	case trail.OutcomeOK:
+	case journal.OutcomeOK:
 		return activityv1.Outcome_OUTCOME_OK
-	case trail.OutcomeError:
+	case journal.OutcomeError:
 		return activityv1.Outcome_OUTCOME_ERROR
 	default:
 		return activityv1.Outcome_OUTCOME_UNSPECIFIED

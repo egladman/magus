@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -16,7 +16,7 @@ import (
 // call records one guard observation of lease's holder in the trail at base.
 func call(t *testing.T, base, lease, tool string, tokens int64, decision verdict.Decision) {
 	t.Helper()
-	trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
+	recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
 		Host: "claude-code", Session: "s1", Lease: lease, Tool: tool, Path: "internal/job/x.go",
 		Decision: decision, AgentFacts: types.AgentFacts{ContextTokens: tokens},
 	})

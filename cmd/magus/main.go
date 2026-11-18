@@ -62,9 +62,9 @@ import (
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/server"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -156,9 +156,9 @@ func runCLI() int {
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
-	rootCtx = jobtypes.WithLease(rootCtx, trail.LeaseFromEnv())
+	rootCtx = jobtypes.WithLease(rootCtx, recorder.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
-	rootCtx = trail.ContextWithEntryPoint(rootCtx, jobtypes.EntryPointCLI)
+	rootCtx = recorder.ContextWithEntryPoint(rootCtx, jobtypes.EntryPointCLI)
 	rootCtx = interactive.WithHints(rootCtx)
 	// An agent host's hook judged this invocation before it ran, and a person typing it
 	// answers for it: the Run family must not judge it a second time in process.

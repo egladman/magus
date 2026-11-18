@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
@@ -371,7 +372,7 @@ func namesRef(w string) bool {
 		_, err := hex.DecodeString(tail)
 		return err == nil
 	}
-	return cache.LooksLikeInvocationID(w) && strings.ContainsAny(w, "0123456789")
+	return recorder.LooksLikeInvocationID(w) && strings.ContainsAny(w, "0123456789")
 }
 
 // contentBlock is one entry of a message's content: a tool call the model made, or the

@@ -11,11 +11,11 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/step"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -92,8 +92,8 @@ func sourcesAt(calls *int, pairs ...PolicySource) func(context.Context) []Policy
 func policyActions(t *testing.T, base string) []string {
 	t.Helper()
 	var out []string
-	for _, e := range trailEvents(t, base, trailtypes.KindGuardPolicy) {
-		out = append(out, e.Action)
+	for _, e := range trailEvents(t, base, journal.CallKindGuardPolicy) {
+		out = append(out, e.Name)
 	}
 	return out
 }
@@ -160,17 +160,18 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", SpawnRule: true, Sources: sourcesAt(&calls)}, false)
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", SpawnRule: true, Sources: sourcesAt(&calls, src)}, false)
 
-	events := trailEvents(t, base, trailtypes.KindGuardPolicy)
+	events := trailEvents(t, base, journal.CallKindGuardPolicy)
 	require.Len(t, events, 2)
-	var tightened trailtypes.Event
+	var tightened journal.Call
 	for _, e := range events {
-		if e.Action == PolicyTightened {
+		if e.Name == PolicyTightened {
 			tightened = e
 		}
 	}
-	require.NotEmpty(t, tightened.RequestRef)
-	assert.Equal(t, "d2", tightened.PolicyDigest)
-	body, err := trailtypes.ReadBlob(base, tightened.RequestRef)
+	require.NotEmpty(t, tightened.Request.Ref)
+	require.NotNil(t, tightened.Guard)
+	assert.Equal(t, "d2", tightened.Guard.PolicyDigest)
+	body, err := loggedPayload(base, tightened.Request.Ref)
 	require.NoError(t, err)
 	var got policyEvent
 	require.NoError(t, codec.Unmarshal(body, &got))
@@ -184,19 +185,23 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
 	assert.Equal(t, verdict.Defer, v.Decision)
-	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	got := commands[0]
-	got.Ts, got.Workspace, got.Binary, got.BinaryVersion, got.Cwd = 0, "", "", "", ""
-	got.User, got.UID, got.RequestRef, got.ResponseRef = "", "", "", ""
-	got.RequestBytes, got.ResponseBytes = 0, 0
-	assert.Equal(t, trailtypes.Event{
-		Kind:       trailtypes.KindAgentCommand,
-		Origin:     job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "s1"},
-		Action:     "Bash",
-		Outcome:    trailtypes.OutcomeOK,
-		DurationMs: 420,
-		Preview:    "observed",
+	got.Time, got.Workspace, got.User, got.UID = time.Time{}, "", "", ""
+	got.Request, got.Response = journal.Payload{}, journal.Payload{}
+	if got.Guard != nil {
+		g := *got.Guard
+		g.Binary, g.BinaryVersion, g.Cwd = "", "", ""
+		got.Guard = orNil(g)
+	}
+	assert.Equal(t, journal.Call{
+		Kind:     journal.CallKindAgentCommand,
+		Origin:   job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "s1"},
+		Name:     "Bash",
+		Outcome:  journal.OutcomeOK,
+		Duration: 420 * time.Millisecond,
+		Preview:  "observed",
 	}, got)
 }
 
@@ -205,13 +210,13 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 1)
 	got := calls[0]
 	got.At = time.Time{}
-	assert.Equal(t, trail.SessionCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
+	assert.Equal(t, sessions.ActivityCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
 		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 	}}, got)
 }
@@ -222,7 +227,7 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, err := trail.ForSession(t.Context(), cacheDir, "s1", 10)
+	tr, err := sessions.ReadActivity(t.Context(), cacheDir, "s1", 10)
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 2)
@@ -235,32 +240,33 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}
 
 	Judge(ctx, deps, Request{Input: "git stash", Host: "claude-code", Session: "s1"})
-	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 1)
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
 	e := commands[0]
-	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, job.Origin{}, "", 0
-	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
-	e.Preview, e.VerdictRef = "", ""
-	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")
-	assert.NotEmpty(t, e.Phases)
-	e.Cwd, e.Phases = "", nil
-	assert.Equal(t, trailtypes.Event{
-		Kind:         trailtypes.KindAgentCommand,
-		Action:       "shell.command",
-		Outcome:      trailtypes.OutcomeOK,
-		PolicyDigest: "d9",
-		DecidedBy:    decidedByBuiltin,
+	e.Time, e.Origin, e.Workspace = time.Time{}, job.Origin{}, ""
+	e.Request, e.Response, e.Preview = journal.Payload{}, journal.Payload{}, ""
+	require.NotNil(t, e.Guard)
+	g := *e.Guard
+	assert.NotEmpty(t, g.Cwd, "a bare command records the directory the judge ran in")
+	assert.NotEmpty(t, g.Phases)
+	g.Duration, g.Verdict, g.Binary, g.BinaryVersion, g.Cwd, g.Phases = 0, journal.Payload{}, "", "", "", nil
+	e.Guard = &g
+	assert.Equal(t, journal.Call{
+		Kind:    journal.CallKindAgentCommand,
+		Name:    "shell.command",
+		Outcome: journal.OutcomeOK,
+		Guard:   &journal.Guard{PolicyDigest: "d9", DecidedBy: decidedByBuiltin},
 	}, e)
 
 	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: verdict.Deny, Program: "curl", Reason: "not here"}}
 	Judge(ctx, deps, Request{Input: "curl https://example.com", Host: "claude-code", Session: "s1"})
-	commands = trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
+	commands = trailEvents(t, cacheDir, journal.CallKindAgentCommand)
 	require.Len(t, commands, 2)
 	var byWorkspace int
 	for _, e := range commands {
-		if e.DecidedBy == decidedByWorktree {
+		if e.Guard != nil && e.Guard.DecidedBy == decidedByWorktree {
 			byWorkspace++
 		}
 	}

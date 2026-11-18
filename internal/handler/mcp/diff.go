@@ -11,8 +11,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -283,7 +283,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 			Hunk:      hunk,
 			Body:      body,
 			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
-			Origin:    trail.StampOrigin(ctx, job.Origin{}),
+			Origin:    recorder.StampOrigin(ctx, job.Origin{}),
 		}, difftypes.AuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's

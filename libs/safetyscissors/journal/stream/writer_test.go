@@ -1,0 +1,179 @@
+package stream
+
+import (
+	"bytes"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func rec[B journal.Body](ms int64, body B) journal.Record {
+	return journal.NewRecord(time.UnixMilli(ms), "inv1", body)
+}
+
+func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
+	cases := []struct {
+		name string
+		in   journal.Record
+		want Event
+	}{
+		{
+			name: "started carries command lineage",
+			in: rec(100, journal.Started{
+				Version: "0.5.0",
+				Command: journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun},
+			}),
+			want: Event{Ts: 100, Workspace: "/repo", Inv: "inv1", Body: Run{
+				Phase: "started", Command: []string{"run", "build"}, Trigger: "run", MagusVersion: "0.5.0",
+			}},
+		},
+		{
+			name: "finished carries the outcome",
+			in:   rec(200, journal.Finished{Status: journal.StatusFail}),
+			want: Event{Ts: 200, Workspace: "/repo", Inv: "inv1", Body: Run{
+				Phase: "finished", Status: "fail",
+			}},
+		},
+		{
+			name: "result carries the fetchable ref",
+			in: rec(150, journal.Run{
+				Project: "api", Target: "test",
+				Status: journal.StatusPass, Ref: "out_abc", Duration: 1200 * time.Millisecond,
+			}),
+			want: Event{Ts: 150, Workspace: "/repo", Inv: "inv1", Body: Target{
+				Project: "api", Target: "test", Status: "ok", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
+			}},
+		},
+		{
+			name: "a permitted result never reads as ok",
+			in: rec(155, journal.Run{
+				Project: "proto", Target: "ci",
+				Status: journal.StatusPermitted, Ref: "out_abc", Duration: 1200 * time.Millisecond,
+			}),
+			want: Event{Ts: 155, Workspace: "/repo", Inv: "inv1", Body: Target{
+				Project: "proto", Target: "ci", Status: "permitted", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
+			}},
+		},
+		{
+			name: "output carries the stream it came from",
+			in:   rec(160, journal.Output{Project: "api", Target: "test", Stream: journal.Stderr, Text: "FAIL"}),
+			want: Event{Ts: 160, Workspace: "/repo", Inv: "inv1", Body: Output{
+				Project: "api", Target: "test", Stream: "stderr", Text: "FAIL",
+			}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := fromJournal("/repo", tc.in)
+			require.True(t, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestFromJournalSplitsCachedFromSucceeded is the point of the adapter: the
+// journal conflates "succeeded" and "ran" into one three-valued status, and a
+// subscriber asks those separately.
+func TestFromJournalSplitsCachedFromSucceeded(t *testing.T) {
+	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: journal.StatusCached}))
+	require.True(t, ok)
+	assert.Equal(t, Target{Status: "ok", CacheHit: true}, got.Body)
+}
+
+// TestFromJournalUnknownStatusIsNotGreen: a status magus grows later must not
+// present as a silent pass to every existing subscriber.
+func TestFromJournalUnknownStatusIsNotGreen(t *testing.T) {
+	got, ok := fromJournal("/repo", rec(1, journal.Run{Status: "quarantined"}))
+	require.True(t, ok)
+	assert.Equal(t, Target{Status: "failed"}, got.Body)
+}
+
+// TestFromJournalSkipsKindsWithNoStreamEquivalent: skipping is the designed
+// behavior, so a kind gaining a mapping by accident should fail here.
+func TestFromJournalSkipsKindsWithNoStreamEquivalent(t *testing.T) {
+	var unknown journal.Record
+	require.NoError(t, codec.Unmarshal([]byte(`{"ts":1,"kind":"warn","text":"x"}`), &unknown))
+	for name, r := range map[string]journal.Record{
+		"exec":   rec(1, journal.Exec{Command: "x"}),
+		"scope":  rec(1, journal.Scope{}),
+		"secret": rec(1, journal.Secret{Text: "x"}),
+		"warn":   unknown,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, ok := fromJournal("/repo", r)
+			assert.False(t, ok)
+		})
+	}
+}
+
+func TestWriterEmitsOneLinePerEvent(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, Filter{})
+	require.NoError(t, w.Write(Event{Ts: 1, Body: Run{Phase: "started"}}))
+	require.NoError(t, w.Write(Event{Ts: 2, Body: Run{Phase: "finished", Status: "pass"}}))
+	require.NoError(t, w.Close())
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 2)
+	for _, line := range lines {
+		_, err := decode([]byte(line))
+		require.NoError(t, err, "line %q", line)
+	}
+}
+
+// TestWriterDropsFilteredTypes: the default filter excludes target.output, and
+// the Writer is where that promise is kept for every transport.
+func TestWriterDropsFilteredTypes(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, Filter{})
+	require.NoError(t, w.Write(Event{Ts: 1, Body: Output{Stream: "stdout", Text: "noisy"}}))
+	require.NoError(t, w.Close())
+	assert.Empty(t, buf.String())
+}
+
+// TestWriterIsConcurrencySafe: a run fans out one goroutine per project, so an
+// unsynchronized write would interleave two objects on one line and every line
+// after it would fail to parse.
+func TestWriterIsConcurrencySafe(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, Filter{})
+
+	const writers, each = 8, 50
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < each; j++ {
+				_ = w.Write(Event{Ts: 1, Body: Target{Project: "p", Target: "build", Status: "ok"}})
+			}
+		}()
+	}
+	wg.Wait()
+	require.NoError(t, w.Close())
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, writers*each)
+	for _, line := range lines {
+		_, err := decode([]byte(line))
+		require.NoError(t, err, "interleaved line %q", line)
+	}
+}
+
+// TestFromJournalCarriesTheFailureReason pins the run error onto the stream.
+func TestFromJournalCarriesTheFailureReason(t *testing.T) {
+	got, ok := fromJournal("/repo", rec(1, journal.Run{
+		Project: "api", Target: "build", Status: journal.StatusFail, Error: "exit status 2",
+	}))
+	require.True(t, ok)
+	body, ok := got.Body.(Target)
+	require.True(t, ok)
+	assert.Equal(t, Target{Project: "api", Target: "build", Status: "failed", Error: "exit status 2"}, body)
+}

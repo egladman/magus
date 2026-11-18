@@ -13,10 +13,10 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // runSource is the workspace half a run needs: which targets the magusfile declares for a
@@ -168,14 +168,14 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 	// deliberately does not guess. A replay is not a stale answer: the cache key covers the
 	// target's sources, so a hit means THIS tree state passed. What can go stale is the reader's
 	// view moving on after the verdict, which as_of covers.
-	if ev, ok := trail.LastRun(ctx, h.cacheDir, job.ActionString(argv)); ok {
+	if ev, ok := recorder.LastJob(ctx, h.cacheDir, job.ActionString(argv)); ok {
 		out.State = "passed"
-		if ev.Outcome != trailtypes.OutcomeOK {
+		if ev.Outcome != journal.OutcomeOK {
 			out.State = "failed"
 			out.Error = ev.Error
 		}
-		out.FinishedMs = ev.Ts + ev.DurationMs
-		out.DurationMs = ev.DurationMs
+		out.FinishedMs = ev.Time.Add(ev.Duration).UnixMilli()
+		out.DurationMs = ev.Duration.Milliseconds()
 	}
 	handler.WriteJSON(w, r, out)
 }

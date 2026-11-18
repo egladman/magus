@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 func TestFeedbackWindow(t *testing.T) {
@@ -17,12 +17,12 @@ func TestFeedbackWindow(t *testing.T) {
 
 	w, err := feedbackWindow(trailtypes.ReadOptions{}, now)
 	require.NoError(t, err)
-	assert.Equal(t, trail.FeedbackWindow{Since: now.Add(-24 * time.Hour), Until: now}, w, "a window nobody names is the last day")
+	assert.Equal(t, recorder.FeedbackWindow{Since: now.Add(-24 * time.Hour), Until: now}, w, "a window nobody names is the last day")
 
 	w, err = feedbackWindow(trailtypes.ReadOptions{Session: "s1", Since: "6h", Until: "2026-09-30T20:00:00Z"}, now)
 	require.NoError(t, err)
 	// A duration counts back from until.
-	assert.Equal(t, trail.FeedbackWindow{
+	assert.Equal(t, recorder.FeedbackWindow{
 		Session: "s1",
 		Since:   time.Date(2026, 9, 30, 14, 0, 0, 0, time.UTC),
 		Until:   time.Date(2026, 9, 30, 20, 0, 0, 0, time.UTC),

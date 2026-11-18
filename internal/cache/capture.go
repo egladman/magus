@@ -5,17 +5,16 @@ import (
 	"context"
 	"io"
 	"sync"
-	"time"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 )
 
 // lineEmitter taps a step's subprocess output as it is written. Each tapped writer
 // redacts any resolved secret (see [lineTap.Write]) and otherwise passes bytes through
-// unchanged, then splits them into lines and emits one structured output
-// [journal.Event] per line (tagged with the owning project/target/stream) to the
-// capture logger on ctx (the invocation journal + live stream). The per-ref output
+// unchanged, then splits them into lines.
+// It emits one [journal.Output] per line to ctx's sinks. The per-ref output
 // store keeps the raw bytes, NOT these events, so nothing is stored twice.
 //
 // Redaction is the ONLY thing that alters what reaches the terminal and the raw log,
@@ -32,7 +31,7 @@ func newLineEmitter(ctx context.Context, project, target string) *lineEmitter {
 }
 
 // newLineTap wraps dest with a line tap tagged as the given stream ("stdout"/"stderr").
-func (c *lineEmitter) newLineTap(dest io.Writer, stream string) *lineTap {
+func (c *lineEmitter) newLineTap(dest io.Writer, stream journal.OutputStream) *lineTap {
 	return &lineTap{c: c, dest: dest, stream: stream}
 }
 
@@ -51,20 +50,13 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 }
 
 // emit builds one output event and emits it to the ctx capture logger (for the invocation
-// journal / live stream). journal.Emit is concurrency-safe, so the two taps need no extra lock.
-func (c *lineEmitter) emit(stream, text string) {
+// journal / live stream). Emit is concurrency-safe, so the taps need no lock.
+func (c *lineEmitter) emit(stream journal.OutputStream, text string) {
 	// A line of output is the finest-grained proof a target is alive, and the one that
 	// separates a slow target from a wedged one: the stall watchdog would otherwise fire
 	// on any target that runs longer than its threshold without finishing.
 	ProgressFromContext(c.ctx).Beat()
-	journal.Emit(c.ctx, journal.Event{
-		Ts:      time.Now().UnixMilli(),
-		Project: c.project,
-		Target:  c.target,
-		Kind:    journal.KindOutput,
-		Stream:  stream,
-		Text:    text,
-	})
+	recorder.Emit(c.ctx, journal.Output{Project: c.project, Target: c.target, Stream: stream, Text: text})
 }
 
 // lineTap redacts resolved secrets from each write, passes the result to dest, then
@@ -83,7 +75,7 @@ func (c *lineEmitter) emit(stream, text string) {
 type lineTap struct {
 	c      *lineEmitter
 	dest   io.Writer
-	stream string
+	stream journal.OutputStream
 
 	mu  sync.Mutex
 	buf []byte

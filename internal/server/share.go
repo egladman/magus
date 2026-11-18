@@ -15,9 +15,9 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
@@ -72,7 +72,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			}, log)
 			return
 		}
-		minter := trail.CredentialFromContext(r.Context())
+		minter := recorder.CredentialFromContext(r.Context())
 		link, err := mgr.Start(r.Context(), minter.Grant, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		switch {
 		case errors.Is(err, auth.ErrExceedsGrant):
@@ -92,7 +92,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			}, log)
 			return
 		}
-		trail.AppendMint(r.Context(), trailDir, "share.mint", trail.MintRecord{Minted: link.Credential, Expires: link.ExpiresAt, Minter: minter})
+		recorder.AppendMint(r.Context(), trailDir, "share.mint", recorder.MintRecord{Minted: link.Credential, Expires: link.ExpiresAt, Minter: minter})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := codec.NewEncoder(w).Encode(shareResponse{

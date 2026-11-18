@@ -17,11 +17,11 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -86,7 +86,7 @@ func TestShareMintIsAudited(t *testing.T) {
 
 	minter := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: auth.AccessConsole()}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
-	req = req.WithContext(trail.ContextWithCredential(req.Context(), minter))
+	req = req.WithContext(recorder.ContextWithCredential(req.Context(), minter))
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
@@ -95,30 +95,28 @@ func TestShareMintIsAudited(t *testing.T) {
 	_, secret, ok := strings.Cut(resp.URL, "#token=")
 	require.True(t, ok)
 
-	events, err := trailtypes.ReadRecent(t.Context(), trailDir, 10)
-	require.NoError(t, err)
+	events := loggedCalls(t, trailDir)
 	require.Len(t, events, 1)
 	e := events[0]
 	assert.Contains(t, e.Preview, "share link ")
 	assert.Contains(t, e.Preview, "console=read")
 	assert.NotContains(t, e.Preview, secret)
-	assert.Equal(t, trailtypes.Event{
-		Ts:           e.Ts,
-		Kind:         trailtypes.KindTokenLifecycle,
-		Origin:       e.Origin,
-		Action:       "share.mint",
-		Outcome:      trailtypes.OutcomeOK,
-		RequestRef:   e.RequestRef,
-		RequestBytes: e.RequestBytes,
-		Preview:      e.Preview,
+	assert.Equal(t, journal.Call{
+		Time:    e.Time,
+		Kind:    journal.CallKindTokenLifecycle,
+		Origin:  e.Origin,
+		Name:    "share.mint",
+		Outcome: journal.OutcomeOK,
+		Request: e.Request,
+		Preview: e.Preview,
 	}, e)
-	blob, err := trailtypes.ReadBlob(trailDir, e.RequestRef)
+	blob, err := e.Request.Read(recorder.CallsDir(trailDir))
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
-	var rec trail.MintRecord
+	var rec recorder.MintRecord
 	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
-	assert.Equal(t, trail.MintRecord{
+	assert.Equal(t, recorder.MintRecord{
 		Minted:  auth.Credential{Kind: auth.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: auth.AccessViewer()},
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  minter,

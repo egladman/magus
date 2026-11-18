@@ -9,9 +9,9 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
-	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -184,10 +184,10 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("service", buildService(obs))
 	guard := buildGuard(ctx, sess, obs, parseMode)
 	guard.MapSet("shape", directVal(obs, "magus.guard.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return ffi.StringVal(trail.CommandShape(ffi.String(args, 0))), nil
+		return ffi.StringVal(recorder.CommandShape(ffi.String(args, 0))), nil
 	}))
 	guard.MapSet("shapes", directVal(obs, "magus.guard.shapes", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		return ffi.StringSliceVal(trail.CommandShapes(ffi.String(args, 0))), nil
+		return ffi.StringSliceVal(recorder.CommandShapes(ffi.String(args, 0))), nil
 	}))
 	harness := buildHarness(ctx, obs)
 	magus.MapSet("guard", guard)

@@ -23,8 +23,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -2127,7 +2127,7 @@ func recursiveMagusEnv(ctx context.Context) []string {
 // leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
 func leaseEnv(ctx context.Context) []string {
 	if lease := jobtypes.LeaseFromContext(ctx); lease != "" {
-		return []string{fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease)}
+		return []string{fmt.Sprintf("%s=%s=%s", recorder.EnvBaggage, recorder.BaggageLease, lease)}
 	}
 	return nil
 }

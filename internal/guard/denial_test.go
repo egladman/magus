@@ -13,7 +13,6 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -161,7 +160,7 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 next:
   %s
 details: %s`, note, remedy[0].Run, hint.NextForDenial(ref).Run), got, tc.name)
-		stored, err := trail.ReadBlob(cacheDir, ref)
+		stored, err := loggedPayload(cacheDir, ref)
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`verdict.%s
 first reason.
@@ -200,7 +199,7 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref, "the first firing stores its verdict too")
 	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\ndetails: "+hint.NextForDenial(ref).Run, got)
-	stored, err := trail.ReadBlob(cacheDir, ref)
+	stored, err := loggedPayload(cacheDir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, full+see, string(stored))
 	assert.Equal(t, remedy, served)
@@ -269,7 +268,7 @@ func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
 	got, ref := shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.\n\nan aside.", whys, false)
 	require.NotEmpty(t, ref)
 	assert.Equal(t, "run the gate.\n\nan aside.\ndetails: "+hint.NextForDenial(ref).Run, got)
-	stored, err := trail.ReadBlob(cacheDir, ref)
+	stored, err := loggedPayload(cacheDir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, "run the gate.\nit reaches every project.\n\nan aside."+see, string(stored))
 	assert.Equal(t, adviceVerdictID, servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
@@ -301,7 +300,7 @@ func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
 	ref := storeVerdict(t.Context(), cacheDir, "denied: a verdict")
 	require.NotEmpty(t, ref)
 	for _, dir := range []string{cacheDir, primary} {
-		got, err := trail.ReadBlob(dir, ref)
+		got, err := loggedPayload(dir, ref)
 		require.NoError(t, err, dir)
 		assert.Equal(t, "denied: a verdict", string(got))
 	}

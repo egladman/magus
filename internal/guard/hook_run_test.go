@@ -24,12 +24,13 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/step"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -134,7 +135,7 @@ func hookFleet(t *testing.T, leases ...jobtypes.Job) (ctx context.Context, root,
 // and the fail-open contract for empty input. Host-specific event extraction
 // happens before the command is piped to magus.
 func TestHookCmd(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
@@ -194,7 +195,7 @@ func TestShellRefusesAnUnquotedCommand(t *testing.T) {
 // guard never saw as cleared. The manpage's exit table promises the same: deny and
 // unreadable input share code 2 so a host that blocks on 2 fails closed in both.
 func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 
@@ -227,28 +228,36 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 // hookCommandEvent is the trail event a shell hook is expected to append for one command or
 // path: everything the hook sets, with the clock, the content-addressed blobs and the verdict's
 // provenance, which other tests pin, taken from got so a new field still has to match.
-func hookCommandEvent(ctx context.Context, got trailtypes.Event, origin jobtypes.Origin, action, preview string) trailtypes.Event {
-	return trailtypes.Event{
-		Ts:            got.Ts,
-		Kind:          trailtypes.KindAgentCommand,
-		Origin:        trail.StampOrigin(ctx, origin),
-		Workspace:     "/repo/magus",
-		Action:        action,
-		Outcome:       trailtypes.OutcomeOK,
-		RequestRef:    got.RequestRef,
-		ResponseRef:   got.ResponseRef,
-		RequestBytes:  got.RequestBytes,
-		ResponseBytes: got.ResponseBytes,
-		Preview:       preview,
-		VerdictRef:    got.VerdictRef,
-		PolicyDigest:  got.PolicyDigest,
-		DecidedBy:     got.DecidedBy,
-		Binary:        got.Binary,
-		BinaryVersion: got.BinaryVersion,
-		Cwd:           got.Cwd,
-		Phases:        got.Phases,
-		GuardMs:       got.GuardMs,
+func hookCommandEvent(ctx context.Context, got journal.Call, origin jobtypes.Origin, action, preview string) journal.Call {
+	return journal.Call{
+		Time:      got.Time,
+		Kind:      journal.CallKindAgentCommand,
+		Origin:    recorder.StampOrigin(ctx, origin),
+		Workspace: "/repo/magus",
+		Name:      action,
+		Outcome:   journal.OutcomeOK,
+		Request:   got.Request,
+		Response:  got.Response,
+		Preview:   preview,
+		Guard:     got.Guard,
 	}
+}
+
+// loggedCalls is the newest limit calls in the log under base.
+func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(base), limit) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// loggedPayload is the payload ref names in the log under base.
+func loggedPayload(base, ref string) ([]byte, error) {
+	return journal.Payload{Ref: ref}.Read(recorder.CallsDir(base))
 }
 
 // A hook row times the rule load against the hook's deadline, which starts before it, and
@@ -258,10 +267,11 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	phases := events[0].Phases
+	require.NotNil(t, events[0].Guard)
+	phases := events[0].Guard.Phases
 	require.Len(t, phases, 4)
 	assert.Equal(t, "load_rules", phases[0].Name)
 	assert.Positive(t, phases[0].BudgetMs)
@@ -275,21 +285,47 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
 // version, and the phases it timed, and clears them from got so the rest of the row can be
 // compared whole.
-func assertJudgedBy(t *testing.T, got *trailtypes.Event) {
+func assertJudgedBy(t *testing.T, got *journal.Call) {
 	t.Helper()
-	assert.NotEmpty(t, got.Binary, "a hook row names the magus that judged it")
-	assert.Equal(t, testHookEnv().Version, got.BinaryVersion)
-	names := make([]string, len(got.Phases))
-	for i, p := range got.Phases {
+	require.NotNil(t, got.Guard, "a hook row names the magus that judged it")
+	g := *got.Guard
+	assert.NotEmpty(t, g.Binary, "a hook row names the magus that judged it")
+	assert.Equal(t, testHookEnv().Version, g.BinaryVersion)
+	names := make([]string, len(g.Phases))
+	for i, p := range g.Phases {
 		names[i] = p.Name
 	}
 	// A spawn is judged apart from the shell rules.
-	if got.Kind == trailtypes.KindAgentSpawn {
+	if got.Kind == journal.CallKindAgentSpawn {
 		assert.Equal(t, []string{"load_rules", "judge"}, names)
 	} else {
 		assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
 	}
-	got.Binary, got.BinaryVersion, got.Phases, got.GuardMs = "", "", nil, 0
+	g.Binary, g.BinaryVersion, g.Phases, g.Duration = "", "", nil, 0
+	got.Guard = orNil(g)
+}
+
+func callDecidedBy(c journal.Call) string {
+	if c.Guard == nil {
+		return ""
+	}
+	return c.Guard.DecidedBy
+}
+
+func phasesOf(c journal.Call) []journal.Phase {
+	if c.Guard == nil {
+		return nil
+	}
+	return c.Guard.Phases
+}
+
+// orNil is &g, or nil when g records nothing.
+func orNil(g journal.Guard) *journal.Guard {
+	if g.Duration == 0 && g.Verdict == (journal.Payload{}) && g.PolicyDigest == "" && g.DecidedBy == "" &&
+		g.Binary == "" && g.BinaryVersion == "" && g.Cwd == "" && len(g.Phases) == 0 {
+		return nil
+	}
+	return &g
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
@@ -304,17 +340,17 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	// A piped call is the hook's.
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "shell.command", "guard: deny"), got)
 
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
-	body, err = trailtypes.ReadBlob(dir, got.ResponseRef)
+	body, err = loggedPayload(dir, got.Response.Ref)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"api_version":"magus.agent-command/v1alpha1"`)
 	assert.Contains(t, string(body), `"decision":"deny"`)
@@ -322,19 +358,19 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 }
 
 func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name"}))
 	assert.Equal(t, "advise\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.write", "guard: advise"), got)
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
 
@@ -343,7 +379,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	out.Reset()
 	require.NoError(t, hookStdin(emptyCtx, strings.NewReader(""), &out, nil))
 	assert.Equal(t, "defer\n", out.String())
-	events, err = trailtypes.ReadRecent(ctx, emptyDir, 1)
+	events, err = loggedCalls(ctx, emptyDir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
@@ -362,35 +398,34 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 
 	// Whole-struct assertion with the content-addressed and clock-dependent fields lifted out
 	// first, so a new field on Event cannot be silently dropped by the hook producer.
-	requestRef, responseRef := got.RequestRef, got.ResponseRef
-	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
-	got.RequestBytes, got.ResponseBytes = 0, 0
+	requestRef, responseRef := got.Request.Ref, got.Response.Ref
+	got.Time, got.Request, got.Response = time.Time{}, journal.Payload{}, journal.Payload{}
 	assertJudgedBy(t, &got)
 	// A bare command names no directory, so the row records the one the judge ran in.
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	assert.Equal(t, trailtypes.Event{
-		Kind:      trailtypes.KindAgentCommand,
-		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+	assert.Equal(t, journal.Call{
+		Kind:      journal.CallKindAgentCommand,
+		Origin:    recorder.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
-		Action:    "shell.command",
-		Outcome:   trailtypes.OutcomeOK,
+		Name:      "shell.command",
+		Outcome:   journal.OutcomeOK,
 		Preview:   "guard: defer",
-		Cwd:       wd,
+		Guard:     &journal.Guard{Cwd: wd},
 	}, got)
 
-	body, err := trailtypes.ReadBlob(dir, requestRef)
+	body, err := loggedPayload(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
 		`"thread":"main","thread_from":"inferred","shadow":{"off":"defer","light":"defer","standard":"defer","strict":"defer"}}`, string(body))
-	body, err = trailtypes.ReadBlob(dir, responseRef)
+	body, err = loggedPayload(dir, responseRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":"defer"}`, string(body))
 }
@@ -398,14 +433,14 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
 // metadata, so a wrapper that supplies none still gets a verdict and still records an event.
 func TestHookCmd_AttributionIsOptional(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &out, []string{"-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -413,7 +448,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	assert.Empty(t, got.Session)
 
 	// Omitted rather than recorded empty: the blob says nothing was known, not that the host is "".
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
@@ -424,14 +459,14 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 // failing to fire. Without it, a hook wired to a host's read tool would advise "you are
 // editing a declared output" at a file the agent only opened.
 func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -441,10 +476,10 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	// exists to remove. The wire verdict the host reads is still defer.
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.read", "observed"), got)
 
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
-	body, err = trailtypes.ReadBlob(dir, got.ResponseRef)
+	body, err = loggedPayload(dir, got.Response.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":""}`, string(body))
 }
@@ -453,24 +488,24 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 // read event carries a file_path will send --observe alongside the envelope that sets --path,
 // and the observation must win. The reverse would silently restore the false advisory.
 func TestHookCmd_ObserveOutranksPath(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, "file.read", events[0].Action)
+	assert.Equal(t, "file.read", events[0].Name)
 }
 
 // TestHookCmd_RecordsTranscriptPath covers the session-to-transcript link. The id groups a
 // session's events; the path is what a reader follows to see the rest. magus records the
 // POINTER and never opens the file, which is what keeps the trail paths-and-timings.
 func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -478,13 +513,13 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, "s1", got.Session)
 
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
@@ -495,7 +530,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 // without the flag the transcript link exists only for hosts that pipe raw JSON, which is
 // none of the ones magus ships a template for.
 func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -503,7 +538,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -511,7 +546,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 		hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "s9"}, "file.read", "observed"),
 		got)
 
-	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
+	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
 }
@@ -520,14 +555,14 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 // has nothing to report, and an observation with no subject is dropped like any other empty
 // one rather than being invented as ".", which would claim a reach the host never described.
 func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events)
 }
@@ -545,7 +580,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // grades that. Without it the pass below would be a deny for an unrelated
 // reason; TestHookCmd_DeniesSpawnBeforeTheBrief carries that rule.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	loadSkillForTest(t, ctx, dir, "abc123")
@@ -558,24 +593,24 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 
-	requestRef := got.RequestRef
-	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
+	requestRef := got.Request.Ref
+	got.Time, got.Request = time.Time{}, journal.Payload{}
 	assertJudgedBy(t, &got)
-	assert.Equal(t, trailtypes.Event{
-		Kind:      trailtypes.KindAgentSpawn,
-		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+	assert.Equal(t, journal.Call{
+		Kind:      journal.CallKindAgentSpawn,
+		Origin:    recorder.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
-		Action:    "Explore",
+		Name:      "Explore",
 		Lease:     "notes-store-6b",
-		Outcome:   trailtypes.OutcomeOK,
+		Outcome:   journal.OutcomeOK,
 	}, got)
 
-	body, err := trailtypes.ReadBlob(dir, requestRef)
+	body, err := loggedPayload(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-spawn/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse",`+
 		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
@@ -589,7 +624,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 // read back as "" here, and it is [renderSessionShow]'s job to word that as "none declared"
 // rather than let it read as blank-looks-fine.
 func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 
@@ -598,24 +633,23 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 		&out, []string{"-o", "name"}))
 	assert.Equal(t, "defer\n", out.String())
 
-	events, err := trailtypes.ReadRecent(ctx, dir, 1)
+	events, err := loggedCalls(ctx, dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// No marker, so the spawn is uncorrelated: no lease.
 	uncorrelated := events[0]
 	assertJudgedBy(t, &uncorrelated)
-	assert.Equal(t, trailtypes.Event{
-		Ts:           events[0].Ts,
-		Kind:         trailtypes.KindAgentSpawn,
-		Origin:       trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}),
-		Workspace:    "/repo/magus",
-		Action:       "agent.spawn",
-		Outcome:      trailtypes.OutcomeOK,
-		RequestRef:   events[0].RequestRef,
-		RequestBytes: events[0].RequestBytes,
+	assert.Equal(t, journal.Call{
+		Time:      events[0].Time,
+		Kind:      journal.CallKindAgentSpawn,
+		Origin:    recorder.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}),
+		Workspace: "/repo/magus",
+		Name:      "agent.spawn",
+		Outcome:   journal.OutcomeOK,
+		Request:   events[0].Request,
 	}, uncorrelated)
 
-	body, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
+	body, err := loggedPayload(dir, events[0].Request.Ref)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "declared_model")
 }
@@ -656,7 +690,7 @@ func TestHookPathMode(t *testing.T) {
 // pinned by TestDecodeHookEnvelope in internal/guard/guard_test.go; this covers only the
 // end-to-end hookCmd path.
 func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	const payload = `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"TodoWrite",` +
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
 
@@ -673,7 +707,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 // call TodoWrite inert. It returns the verdict's name and the exit error.
 func shellStep(t *testing.T, step step.Step) (string, error) {
 	t.Helper()
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	t.Chdir(t.TempDir())
 	installHostRows(t, "claude-code", types.Limits{}, types.HarnessTool{Name: "TodoWrite", Capability: types.ToolInert})
 	raw, err := codec.Marshal(step)
@@ -707,7 +741,7 @@ func TestShellDeniesAStepOfAKindNoRowDeclares(t *testing.T) {
 // runs: a held advisory prints its verdict and the ref to its full text once per session,
 // and its brief after.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
 	ctx := WithLocation(t.Context(), base, root, "")
 	run := func(session string) string {
@@ -726,7 +760,7 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	assert.NotContains(t, first, "SCIP symbol indexes", "the rationale is behind the ref")
 	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[1])
-	stored, err := trailtypes.ReadBlob(base, ref[1])
+	stored, err := loggedPayload(base, ref[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "SCIP symbol indexes", "the ref holds the rationale")
 	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/source-read/"), "with the rule's page, got %q", stored)
@@ -776,7 +810,7 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[2])
 
-	stored, err := trailtypes.ReadBlob(base, ref[1])
+	stored, err := loggedPayload(base, ref[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "\nnothing ran (2 commands)\n", "the stored verdict is the full form of THIS command, got %q", stored)
 	assert.True(t, strings.HasSuffix(string(stored), see), "with the rule's page, got %q", stored)
@@ -794,7 +828,7 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 // pins the dedupe on the path input, where a suppressed advisory must leave silence
 // rather than let the next rung speak into it.
 func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	t.Chdir(root)
@@ -1021,7 +1055,7 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 
 	// --lease takes no default from the environment, so a BAGGAGE claim reaches the verdict
 	// as the claim it is rather than as a flag that would outrank every record.
-	t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, narrowLease().ID))
+	t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, narrowLease().ID))
 	var claimed bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &claimed, []string{"-o", "json"}))
 	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
@@ -1167,7 +1201,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	})
 
 	t.Run("the baggage claim answers when no record does", func(t *testing.T) {
-		t.Setenv(trail.EnvBaggage, "userId=alice,"+trail.BaggageLease+"=lease-b")
+		t.Setenv(recorder.EnvBaggage, "userId=alice,"+recorder.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent reportedExit
 		require.ErrorAs(t, err, &silent)
@@ -1177,7 +1211,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	// Baggage a magus member does not appear in is a fleet nobody enrolled: another tenant's
 	// members must never be read as a lease.
 	t.Run("baggage carrying no magus member enrolls nobody", func(t *testing.T) {
-		t.Setenv(trail.EnvBaggage, "userId=alice,serverNode=DF28")
+		t.Setenv(recorder.EnvBaggage, "userId=alice,serverNode=DF28")
 		_, err := run(owned, "--path", "-o", "name")
 		require.NoError(t, err, "an un-enrolled writer is advised, never blocked")
 	})
@@ -1186,7 +1220,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		// The path belongs to lease-a. Acting AS lease-a it is the writer's own ground,
 		// so a pass here proves the flag replaced the environment's lease-b rather than
 		// joining it.
-		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "--lease", "lease-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
 	})
@@ -1194,10 +1228,10 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	// The claim ranks below every record. Before, --lease defaulted to BAGGAGE, so the
 	// hook's inherited lease-b was passed in as a flag and outranked both of these.
 	t.Run("the session's binding outranks the baggage claim", func(t *testing.T) {
-		t.Setenv(trail.EnvBaggage, "")
+		t.Setenv(recorder.EnvBaggage, "")
 		require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
 			Bind(job.Caller{Session: "bound-session"}, "lease-a"))
-		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-b")
 		got, err := run(owned, "--path", "--session", "bound-session", "-o", "json")
 		require.NoError(t, err, "graded under the binding's lease-a, whose ground this is")
 		assert.Contains(t, got, `"lease": "lease-a"`)
@@ -1205,13 +1239,13 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	})
 
 	t.Run("a subagent's spawn record outranks the baggage claim", func(t *testing.T) {
-		t.Setenv(trail.EnvBaggage, "")
+		t.Setenv(recorder.EnvBaggage, "")
 		spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
 			`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
 			`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
 		_, err := run(spawned, "--agent-name", "claude-code", "-o", "name")
 		require.NoError(t, err)
-		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-b")
 		got, err := run(owned, "--path", "--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3", "-o", "json")
 		require.NoError(t, err, "graded under the spawn's lease-a, whose ground this is")
 		assert.Contains(t, got, `"lease": "lease-a"`)
@@ -1236,7 +1270,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		"flag": {args: []string{"--lease", "lease-a"}, want: `"lease_from": "flag"`},
 		"env": {
 			setup: func(t *testing.T, _ context.Context, _, _ string) {
-				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+				t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=lease-a")
 			},
 			want: `"lease_from": "env"`,
 		},
@@ -1309,7 +1343,7 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 // The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
 // so nothing about the handed context should change the verdict either way.
 func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"briefless","tool_name":"Task",` +
@@ -1373,12 +1407,12 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
-	tr, err := trail.ForSession(ctx, cacheDir, "s1", 10)
+	tr, err := sessions.ReadActivity(ctx, cacheDir, "s1", 10)
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 1)
 	calls[0].At = time.Time{}
-	assert.Equal(t, trail.SessionCall{
+	assert.Equal(t, sessions.ActivityCall{
 		Action: "Bash", ToolMs: 420,
 		AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"},
 	}, calls[0])
@@ -1396,12 +1430,12 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	require.NoError(t, codec.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, verdict.Defer, v.Decision)
 
-	events, err := trailtypes.ReadRecent(ctx, cacheDir, 1)
+	events, err := loggedCalls(ctx, cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, jobtypes.Origin{}, "", "", "", 0, 0
-	assert.Equal(t, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "Bash", Outcome: trailtypes.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
+	event.Time, event.Origin, event.Workspace, event.Request, event.Response = time.Time{}, jobtypes.Origin{}, "", journal.Payload{}, journal.Payload{}
+	assert.Equal(t, journal.Call{Kind: journal.CallKindAgentCommand, Name: "Bash", Outcome: journal.OutcomeOK, Duration: 420 * time.Millisecond, Preview: "observed"}, event)
 }
 
 // installHostRows writes the tool rows directory install writes for host under the working

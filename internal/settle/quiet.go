@@ -3,13 +3,13 @@ package settle
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // RunFunc runs one `<target>:rw <projects...>` invocation, the way Hook's run does.
@@ -22,12 +22,12 @@ type RunFunc func(ctx context.Context, inv []string) error
 // cause and output ref. A run that failed with no failed step on record (the workspace
 // did not resolve the target, say) gets what it printed back on stderr, since nothing
 // else would say why.
-func Quietly(run RunFunc, observe func(context.Context, slog.Handler) context.Context) RunFunc {
+func Quietly(run RunFunc, observe func(context.Context, recorder.Sink) context.Context) RunFunc {
 	return func(ctx context.Context, inv []string) error {
 		var steps failedSteps
 		var err error
 		captured, captureErr := silenced(func() error {
-			err = run(observe(ctx, &steps), inv)
+			err = run(observe(ctx, steps.Handle), inv)
 			return err
 		})
 		if err == nil {
@@ -63,32 +63,25 @@ func (f *StepFailure) Error() string {
 	return fmt.Sprintf("%s, read it with `%s`", msg, hint.QueryOutput.With(f.Ref))
 }
 
-// failedSteps is a slog.Handler over a run's invocation log that keeps the first failed
+// failedSteps is a sink over a run's journal that keeps the first failed
 // step result. Steps run concurrently, so Handle locks.
 type failedSteps struct {
 	mu     sync.Mutex
 	failed *StepFailure
 }
 
-func (h *failedSteps) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *failedSteps) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Status != journal.StatusFail {
-		return nil
+func (h *failedSteps) Handle(_ context.Context, r journal.Record) {
+	run, ok := r.Run()
+	if !ok || run.Status != journal.StatusFail {
+		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.failed == nil {
-		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
-		h.failed = &StepFailure{Project: e.Project, Target: e.Target, Cause: cause, Ref: e.Ref}
+		cause, _, _ := strings.Cut(strings.TrimSpace(run.Error), "\n")
+		h.failed = &StepFailure{Project: run.Project, Target: run.Target, Cause: cause, Ref: run.Ref}
 	}
-	return nil
 }
-
-func (h *failedSteps) WithAttrs([]slog.Attr) slog.Handler { return h }
-
-func (h *failedSteps) WithGroup(string) slog.Handler { return h }
 
 func (h *failedSteps) first() (*StepFailure, bool) {
 	h.mu.Lock()

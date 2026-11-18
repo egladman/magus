@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // A changed file belongs to exactly one job, and nothing the worker does decides it: the
@@ -129,7 +129,7 @@ func TestFeedFilterMatchesAContestedPathForEveryClaimant(t *testing.T) {
 		Ts:        5,
 		Kind:      FeedFile,
 		Action:    "internal/trail/trail.go",
-		Outcome:   trail.OutcomeOK,
+		Outcome:   journal.OutcomeOK,
 		Note:      "contested: pwa/job-watch and pwa/turns-capture both declare this path",
 		Contested: []string{"pwa/job-watch", "pwa/turns-capture"},
 	}, got, "nothing can say which of them wrote it")

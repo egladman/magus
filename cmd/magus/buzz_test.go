@@ -22,11 +22,12 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -90,10 +91,27 @@ func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	require.Error(t, err, "a write outside the workspace must be refused")
 	assert.ErrorContains(t, err, string(types.PathWriteDenied))
 
-	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
+	events, rerr := loggedCalls(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	require.Len(t, events, 1, "the refusal must be readable on the trail, as a target's is")
-	assert.Equal(t, trailtypes.KindSandboxDenial, events[0].Kind)
+	assert.Equal(t, journal.CallKindSandboxDenial, events[0].Kind)
+}
+
+// loggedCalls is the newest limit calls in the log under cacheDir.
+func loggedCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Call, error) {
+	var out []journal.Call
+	for c, err := range journal.Calls(ctx, recorder.CallsDir(cacheDir), limit) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// loggedPayload is the payload ref names in the log under cacheDir.
+func loggedPayload(cacheDir, ref string) ([]byte, error) {
+	return journal.Payload{Ref: ref}.Read(recorder.CallsDir(cacheDir))
 }
 
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
@@ -104,7 +122,7 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 	require.NoError(t, buzzCommand(ctx, "", []string{"-s", script}))
 
-	events, rerr := trailtypes.ReadRecent(ctx, m.CacheDir(), 10)
+	events, rerr := loggedCalls(ctx, m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	assert.Empty(t, events, "nothing was refused, so nothing belongs on the trail")
 }

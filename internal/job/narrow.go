@@ -11,8 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
@@ -199,7 +199,7 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 		return
 	}
 	// The row just answered that this request is new.
-	_ = sessions.AppendRequest(ctx, dir, holder, open, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+	_ = sessions.AppendRequest(ctx, dir, holder, open, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: s.root})
 }
 
 // FileReleaseRequest puts req on holder's row and stamps its time. It answers

@@ -22,7 +22,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -651,40 +652,30 @@ func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
 		"the error must name the variable, so the fix is obvious without reading the magusfile")
 }
 
-// eventRecorder captures the journal events emitted during a test.
+// eventRecorder captures the journal records emitted during a test.
 type eventRecorder struct {
-	slog.Handler
-	mu     sync.Mutex
-	events []journal.Event
+	mu      sync.Mutex
+	records []journal.Record
 }
 
-func (h *eventRecorder) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *eventRecorder) Handle(_ context.Context, r slog.Record) error {
-	if e, ok := journal.EventFromRecord(r); ok {
-		h.mu.Lock()
-		h.events = append(h.events, e)
-		h.mu.Unlock()
-	}
-	return nil
+func (h *eventRecorder) Handle(_ context.Context, r journal.Record) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
 }
 
-func (h *eventRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *eventRecorder) WithGroup(string) slog.Handler      { return h }
-
-// TestSecretReadIsAudited pins that reading a credential lands in the invocation
-// journal: the durable activity trail. A secret read is the moment a build reaches for
-// something privileged, which is exactly the question an audit answers.
-//
-// The event carries the REFERENCE and the PROVIDER, never the value. journal.Emit
-// redacts Text as a backstop, so this asserts the value is absent on both counts.
+// TestSecretReadIsAudited pins that reading a credential lands in the
+// invocation journal. A secret read is the moment a build reaches for
+// something privileged, which is the question an audit answers. The record
+// carries the reference and the provider, never the value; Emit redacts as a
+// backstop, so this asserts the value is absent on both counts.
 func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
 	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
-	ctx = journal.WithLogger(ctx, slog.New(rec))
-	ctx = journal.WithStep(ctx, "demo", "publish")
+	ctx = recorder.WithSinks(ctx, rec.Handle)
+	ctx = recorder.WithStep(ctx, "demo", "publish")
 
 	secretObj := buildSecret(ctx, nil)
 	// Called with the run ctx rather than through callSecret, which uses
@@ -698,17 +689,15 @@ func TestSecretReadIsAudited(t *testing.T) {
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	var found *journal.Event
-	for i := range rec.events {
-		if rec.events[i].Kind == journal.KindSecret {
-			found = &rec.events[i]
+	var found *journal.Secret
+	for _, r := range rec.records {
+		if b, ok := r.Secret(); ok {
+			found = &b
 		}
 	}
 	require.NotNil(t, found, "a secret read must be recorded in the journal")
 	// Emit stamps the clock and the invocation, and the text is checked by substring below.
-	assert.Equal(t, journal.Event{
-		Ts: found.Ts, Inv: found.Inv, Project: "demo", Target: "publish", Kind: journal.KindSecret, Text: found.Text,
-	}, *found)
+	assert.Equal(t, journal.Secret{Project: "demo", Target: "publish", Text: found.Text}, *found)
 	assert.Contains(t, found.Text, "MAGUS_TEST_AUDIT_TOKEN", "the reference is the auditable fact")
 	assert.Contains(t, found.Text, "built-in environment provider", "so is which backend served it")
 	assert.NotContains(t, found.Text, "ghp_audit_me_never", "the VALUE must never be recorded")

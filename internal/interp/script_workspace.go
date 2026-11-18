@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -38,7 +38,7 @@ func warnWorkspaceNotAttached(ctx context.Context, err error) {
 // lazyWorkspaceContext opens a script's workspace on the first read instead of at
 // startup: about 700ms in this repo, against 10ms for a script that never reads it.
 //
-// The readers are types.WorkspaceFromContext and trail.BaseFromContext, called from
+// The readers are types.WorkspaceFromContext and recorder.BaseFromContext, called from
 // bindings throughout std and internal/interp. Answering their context keys here keeps
 // every one of those call sites unchanged, where a lazy WorkspaceRepository would be
 // non-nil before the open and so could not raise MGS1022 the way a nil one does, and
@@ -59,7 +59,7 @@ type lazyWorkspaceContext struct {
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
-	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { trail.BaseFromContext(ctx) })
+	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { recorder.BaseFromContext(ctx) })
 	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 

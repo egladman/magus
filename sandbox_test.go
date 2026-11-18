@@ -16,8 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
-	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -62,7 +62,7 @@ func TestApplySandboxAttachesTheWorkspacePolicy(t *testing.T) {
 // nobody's lease, so the client's lease on ctx is the boundary the policy narrows to.
 func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	m := openSandboxed(t, types.SandboxModeBestEffort)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.ws.Root})
 	for _, id := range []string{"fleet/client", "fleet/daemon"} {
@@ -71,7 +71,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/daemon")
 	leaseOf := func(ctx context.Context) string {
 		t.Helper()
 		ctx, err := m.ApplySandbox(ctx)

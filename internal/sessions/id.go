@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/recorder"
 )
 
 // NewID mints an invocation id for a producer that has no journal invocation id to reuse.
@@ -18,7 +18,7 @@ import (
 // and only the attention producers (each its own short-lived process, with no run to
 // join to) mint here.
 //
-// It is [journal.NewInvocationID] plus a per-process suffix, and the suffix is the whole
+// It is [recorder.NewInvocationID] plus a per-process suffix, and the suffix is the whole
 // reason this function exists. That id is a millisecond stamp and a counter that resets
 // with the process, so two magus processes starting in the same millisecond both mint
 // the same first id. Attention producers hit exactly that case: `magus session notify` fires
@@ -30,7 +30,7 @@ import (
 // The result satisfies the rule [session.ValidFileID] enforces (alphanumeric with `-` and `_`),
 // because it names the invocation's file.
 func NewID() string {
-	return fmt.Sprintf("%s-%s", journal.NewInvocationID(), processSuffix())
+	return fmt.Sprintf("%s-%s", recorder.NewInvocationID(), processSuffix())
 }
 
 // processSuffix is derived once per process. Re-deriving it per call would defeat the

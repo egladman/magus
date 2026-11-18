@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/types"
 )
 
@@ -154,12 +154,12 @@ details: %s`, lead, note, command, next.Run), ref, remedy
 // session's checkout, and `magus query output` run from a worker's own checkout reads only
 // that checkout's store and the primary's.
 func storeVerdict(ctx context.Context, cacheDir, verdict string) string {
-	ref, _ := trail.WriteBlob(ctx, cacheDir, verdictRefPrefix, []byte(verdict))
+	ref := recorder.WritePayload(ctx, cacheDir, verdictRefPrefix, []byte(verdict)).Ref
 	if ref == "" {
 		return ""
 	}
 	if primary, ok := primaryCacheDir(cacheDir); ok {
-		_, _ = trail.WriteBlob(ctx, primary, verdictRefPrefix, []byte(verdict))
+		_ = recorder.WritePayload(ctx, primary, verdictRefPrefix, []byte(verdict))
 	}
 	return ref
 }

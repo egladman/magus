@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // Attribution is which job a changed path belongs to, and the declaration that decided it.
@@ -108,8 +108,8 @@ type FeedEvent struct {
 	// an observation the guard did not judge, which is what --observe records, and on the
 	// other two kinds.
 	Decision string
-	// Outcome is trail.OutcomeOK or trail.OutcomeError, and Error carries the text.
-	Outcome string
+	// Outcome is journal.OutcomeOK or journal.OutcomeError, and Error carries the text.
+	Outcome journal.Outcome
 	Error   string
 	// Ref is the output ref behind a run, so a reader can open the log the feed line names
 	// rather than going to find it.
@@ -136,7 +136,7 @@ func FileEvents(rows []job.Job, ts int64, paths []string) []FeedEvent {
 	out := make([]FeedEvent, 0, len(paths))
 	for _, p := range paths {
 		at, _ := AttributeWrite(rows, p)
-		e := FeedEvent{Ts: ts, Kind: FeedFile, Job: at.Job, WritePath: at.WritePath, Action: p, Outcome: trail.OutcomeOK}
+		e := FeedEvent{Ts: ts, Kind: FeedFile, Job: at.Job, WritePath: at.WritePath, Action: p, Outcome: journal.OutcomeOK}
 		if len(at.Ambiguous) > 0 {
 			e.Contested = at.Ambiguous
 			e.Note = fmt.Sprintf("contested: %s both declare this path", strings.Join(at.Ambiguous, " and "))
@@ -154,17 +154,17 @@ func FileEvents(rows []job.Job, ts int64, paths []string) []FeedEvent {
 // whichever row it happened to have written last. A missing join is a gap a reader can
 // see; a wrong one is a gap they cannot. Session stays on the event as something to FILTER
 // by, which is a question the caller asked rather than a claim magus made.
-func ToolEvents(events []trail.Event) []FeedEvent {
+func ToolEvents(events []journal.Call) []FeedEvent {
 	out := make([]FeedEvent, 0, len(events))
 	for _, e := range events {
-		if e.Kind != trail.KindAgentCommand && e.Kind != trail.KindSandboxDenial {
+		if e.Kind != journal.CallKindAgentCommand && e.Kind != journal.CallKindSandboxDenial {
 			continue
 		}
 		out = append(out, FeedEvent{
-			Ts:       e.Ts,
+			Ts:       e.Time.UnixMilli(),
 			Kind:     FeedTool,
 			Job:      e.Lease,
-			Action:   e.Action,
+			Action:   e.Name,
 			Origin:   e.Origin,
 			Decision: eventDecision(e),
 			Outcome:  e.Outcome,
@@ -178,7 +178,7 @@ func ToolEvents(events []trail.Event) []FeedEvent {
 // preview is written as "guard: <decision>" by the producer, and "observed" when the guard
 // judged nothing; a feed line that had to fetch a blob to say "deny" would cost one round
 // trip per row.
-func eventDecision(e trail.Event) string {
+func eventDecision(e journal.Call) string {
 	const prefix = "guard: "
 	if rest, ok := strings.CutPrefix(e.Preview, prefix); ok {
 		return rest
@@ -200,9 +200,9 @@ func RunEvents(row job.Job) []FeedEvent {
 		}
 	}
 	if run := row.LastRun; run != nil && run.Ended > 0 {
-		e := FeedEvent{Ts: run.Ended, Kind: FeedRun, Job: row.ID, Action: run.Invocation, Ref: run.Invocation, Outcome: trail.OutcomeOK, Note: "last run"}
+		e := FeedEvent{Ts: run.Ended, Kind: FeedRun, Job: row.ID, Action: run.Invocation, Ref: run.Invocation, Outcome: journal.OutcomeOK, Note: "last run"}
 		if !run.OK {
-			e.Outcome, e.Error = trail.OutcomeError, run.Error
+			e.Outcome, e.Error = journal.OutcomeError, run.Error
 		}
 		out = append(out, e)
 	}
@@ -210,9 +210,9 @@ func RunEvents(row job.Job) []FeedEvent {
 }
 
 func runEvent(id string, a job.CapturedRun, note string) FeedEvent {
-	e := FeedEvent{Ts: a.TimestampMs, Kind: FeedRun, Job: id, Action: recordedCommand(a), Ref: a.Ref, Outcome: trail.OutcomeOK, Note: note}
+	e := FeedEvent{Ts: a.TimestampMs, Kind: FeedRun, Job: id, Action: recordedCommand(a), Ref: a.Ref, Outcome: journal.OutcomeOK, Note: note}
 	if a.Failed {
-		e.Outcome = trail.OutcomeError
+		e.Outcome = journal.OutcomeError
 	}
 	return e
 }
@@ -263,7 +263,7 @@ func (f FeedFilter) Empty() bool {
 // Ascending reverses a newest-first trail read. A follower reads forward, and reversing at
 // the seam keeps the one sort in the reader rather than growing a second policy about what
 // "in order" means.
-func Ascending(events []trail.Event) []trail.Event {
+func Ascending(events []journal.Call) []journal.Call {
 	out := slices.Clone(events)
 	slices.Reverse(out)
 	return out
@@ -285,25 +285,25 @@ type TrailCursor struct {
 
 // CursorAt places a cursor at the end of asc, so a follower that skipped the backfill does
 // not receive the whole retained window on its first tick.
-func CursorAt(asc []trail.Event) *TrailCursor {
+func CursorAt(asc []journal.Call) *TrailCursor {
 	c := &TrailCursor{}
 	if len(asc) == 0 {
 		return c
 	}
-	c.ts = asc[len(asc)-1].Ts
+	c.ts = asc[len(asc)-1].Time.UnixMilli()
 	c.seen = countAt(asc, c.ts)
 	return c
 }
 
 // Next returns the events in asc this cursor has not yielded, and advances past them.
-func (c *TrailCursor) Next(asc []trail.Event) []trail.Event {
-	var out []trail.Event
+func (c *TrailCursor) Next(asc []journal.Call) []journal.Call {
+	var out []journal.Call
 	at := 0
 	for _, e := range asc {
-		if e.Ts < c.ts {
+		if e.Time.UnixMilli() < c.ts {
 			continue
 		}
-		if e.Ts == c.ts {
+		if e.Time.UnixMilli() == c.ts {
 			at++
 			if at <= c.seen {
 				continue
@@ -314,15 +314,15 @@ func (c *TrailCursor) Next(asc []trail.Event) []trail.Event {
 	if len(out) == 0 {
 		return nil
 	}
-	c.ts = out[len(out)-1].Ts
+	c.ts = out[len(out)-1].Time.UnixMilli()
 	c.seen = countAt(asc, c.ts)
 	return out
 }
 
-func countAt(asc []trail.Event, ts int64) int {
+func countAt(asc []journal.Call, ts int64) int {
 	n := 0
 	for _, e := range asc {
-		if e.Ts == ts {
+		if e.Time.UnixMilli() == ts {
 			n++
 		}
 	}

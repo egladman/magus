@@ -21,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
@@ -30,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
@@ -402,17 +402,17 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	defer stopLive()
 	// An adopted run (dispatched by the server) also feeds the server's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
-	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
+	sinks := append(liveSinks(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable invocation facts ride the same fan-out: one fact per target result, into a
 	// store every worktree of this repo shares (`magus session` reads it back).
-	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
+	sinks = withInvocationJournal(ctx, sinks, m.Root(), "run", args)
 	refs := &report.ResultRefs{}
 	statuses := report.NewResultStatuses(targetName)
 	failed := &failedResults{}
-	captureHandlers = append(captureHandlers, refs, statuses, failed)
+	sinks = append(sinks, refs.Handle, statuses.Handle, failed.Handle)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
-		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
-	}, version, captureHandlers...)
+		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: string(trigger),
+	}, version, sinks...)
 	defer func() { endInvocation(err) }()
 
 	// The sink rides the context down through the fan-out, so collecting return

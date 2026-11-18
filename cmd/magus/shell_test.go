@@ -25,12 +25,11 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/maintenance"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -58,7 +57,7 @@ func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string)
 // A -q that an earlier in-process command left in the process-global flags made a hook
 // case print "" for a deny, in a run narrowed so that no reset ran between them.
 func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	saved := global
 	t.Cleanup(func() { global = saved })
 	global.quiet = true
@@ -83,7 +82,7 @@ func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
 // on a command that was already supplied.
 func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	global = globalFlags{}
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 
@@ -99,7 +98,7 @@ func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
 // TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee: -o name was routed through the
 // process stdout, so a caller that handed in its own writer read an empty verdict.
 func TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 	tee := filepath.Join(t.TempDir(), "verdict")
 
@@ -125,7 +124,7 @@ func TestWriteGuardVerdictNameGoesToTheHandedWriterAndTheTee(t *testing.T) {
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	resetOpenedWorkspaces(t)
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
 
@@ -167,7 +166,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trailtypes.ReadRecent(t.Context(), cacheDir, 1)
+	events, err := loggedCalls(t.Context(), cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
 	assert.Equal(t, worker.ID, events[0].Lease)
@@ -472,7 +471,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	primaryCache, err := magus.ResolveCacheDir(primary)
 	require.NoError(t, err)
-	_, err = trailtypes.ReadBlob(primaryCache, ref)
+	_, err = loggedPayload(primaryCache, ref)
 	assert.NoError(t, err, "the primary checkout holds a copy, which every checkout's query output searches")
 }
 

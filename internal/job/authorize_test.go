@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -290,7 +290,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 // The server builds one Store at startup and serves every MCP caller from it, so an actor
 // frozen at construction grades a worker that bound its checkout afterwards as the server.
 func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 
 	loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir()}
 	s := NewStore(loc)
@@ -331,7 +331,7 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 			if tc.record != "" {
 				require.NoError(t, NewStore(loc).Bind(Caller{}, tc.record))
 			}
-			t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+			t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.claim))
 			t.Setenv(EnvStampedLease, tc.stamped)
 			assert.Equal(t, tc.want, ActingActor(loc))
 		})
@@ -341,7 +341,7 @@ func TestStampedLeaseOnlyDowngrades(t *testing.T) {
 // An unstamped caller reads the book and writes nothing in it: every row may be some other
 // caller's, and a new one would be a plan nobody can be held to.
 func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv(recorder.EnvBaggage, "")
 	t.Setenv(EnvStampedLease, "1")
 	// A checkout with a revision, so the exec below is refused for its caller and not for
 	// a missing base.
@@ -391,11 +391,11 @@ func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 
 	loc := tempLocation(t, t.TempDir())
 	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: auth.AccessConnector()}
-	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), job.EntryPointMCP), cred), "claude-code")
+	ctx := recorder.ContextWithHost(recorder.ContextWithCredential(recorder.ContextWithEntryPoint(t.Context(), job.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
 	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
 	require.NoError(t, err)
-	want := trail.LocalOrigin(t.Context())
+	want := recorder.LocalOrigin(t.Context())
 	want.EntryPoint, want.Credential, want.Host = job.EntryPointMCP, cred.Recorded(), "claude-code"
 	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
 	assert.Equal(t, want, stored.RegisteredBy, "the door's facts, plus the OS account the store read itself")
@@ -635,9 +635,9 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv(trail.EnvBaggage, "")
+			t.Setenv(recorder.EnvBaggage, "")
 			if tc.baggage != "" {
-				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.baggage))
+				t.Setenv(recorder.EnvBaggage, fmt.Sprintf("%s=%s", recorder.BaggageLease, tc.baggage))
 			}
 			cacheDir := t.TempDir()
 			if tc.bound != "" {

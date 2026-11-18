@@ -8,9 +8,9 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -136,7 +136,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req, err := sessions.DisposeRequest(r.Context(), dir, body.ID, body.Reason, session.InvocationStart{
-		Origin:    trail.StampOrigin(r.Context(), jobtypes.Origin{Host: consoleHost}),
+		Origin:    recorder.StampOrigin(r.Context(), jobtypes.Origin{Host: consoleHost}),
 		Workspace: h.root,
 		Version:   h.version,
 	})

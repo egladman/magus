@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -430,12 +430,12 @@ func PrintFeedLine(out io.Writer, e FeedEvent) {
 	case FeedTool:
 		verdict := e.Decision
 		if verdict == "" {
-			verdict = "observed" // the guard judged nothing; see trail.AppendAgentCommand
+			verdict = "observed" // the guard judged nothing; see recorder.AppendAgentCommand
 		}
 		fmt.Fprintf(out, "%s  tool  %-8s %s\n", stamp, verdict, e.Action)
 	default:
 		status := "ok"
-		if e.Outcome == trail.OutcomeError {
+		if e.Outcome == journal.OutcomeError {
 			status = "failed"
 		}
 		fmt.Fprintf(out, "%s  run   %-8s %s  %s\n", stamp, status, e.Action, e.Ref)

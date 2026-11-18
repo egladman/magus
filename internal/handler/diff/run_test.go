@@ -7,11 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,13 +125,13 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
-	trail.Append(context.Background(), dir, trailtypes.Event{
-		Ts:         1000,
-		Kind:       trailtypes.KindJob,
-		Action:     "run test libs/authkit",
-		Outcome:    trailtypes.OutcomeError,
-		Error:      "2 tests failed",
-		DurationMs: 4200,
+	recorder.AppendCall(context.Background(), dir, journal.Call{
+		Time:     time.UnixMilli(1000),
+		Kind:     journal.CallKindJob,
+		Name:     "run test libs/authkit",
+		Outcome:  journal.OutcomeError,
+		Error:    "2 tests failed",
+		Duration: 4200 * time.Millisecond,
 	})
 
 	rec := httptest.NewRecorder()

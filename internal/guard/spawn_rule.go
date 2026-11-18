@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -106,7 +106,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 
 	judged := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
 	decided := ""
-	var failures []trail.RuleFailure
+	var failures []recorder.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
 	// their turn.
 	var held heldAdvice

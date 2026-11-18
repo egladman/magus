@@ -2,12 +2,11 @@ package report
 
 import (
 	"context"
-	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 )
 
 // ResultRefs collects the output ref of every target result the invocation's journal
@@ -17,23 +16,18 @@ type ResultRefs struct {
 	refs []string
 }
 
-func (c *ResultRefs) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *ResultRefs) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Ref == "" {
-		return nil
+// Handle keeps r's output ref when r is a run; it is a recorder.Sink.
+func (c *ResultRefs) Handle(_ context.Context, r journal.Record) {
+	run, ok := r.Run()
+	if !ok || run.Ref == "" {
+		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !slices.Contains(c.refs, e.Ref) {
-		c.refs = append(c.refs, e.Ref)
+	if !slices.Contains(c.refs, run.Ref) {
+		c.refs = append(c.refs, run.Ref)
 	}
-	return nil
 }
-
-func (c *ResultRefs) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *ResultRefs) WithGroup(string) slog.Handler      { return c }
 
 // List is the refs collected so far, in arrival order.
 func (c *ResultRefs) List() []string {
@@ -55,25 +49,20 @@ func NewResultStatuses(target string) *ResultStatuses {
 	return &ResultStatuses{target: target, status: map[string]string{}}
 }
 
-func (c *ResultStatuses) Enabled(context.Context, slog.Level) bool { return true }
-
-func (c *ResultStatuses) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Status == "" {
-		return nil
+// Handle keeps the status of the asked target's run; it is a recorder.Sink.
+func (c *ResultStatuses) Handle(_ context.Context, r journal.Record) {
+	run, ok := r.Run()
+	if !ok || run.Status == "" {
+		return
 	}
 	// The journal names a charmed step "target:charm,...".
-	if name, _, _ := strings.Cut(e.Target, ":"); name != c.target {
-		return nil
+	if name, _, _ := strings.Cut(run.Target, ":"); name != c.target {
+		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.status[e.Project] = e.Status
-	return nil
+	c.status[run.Project] = string(run.Status)
 }
-
-func (c *ResultStatuses) WithAttrs([]slog.Attr) slog.Handler { return c }
-func (c *ResultStatuses) WithGroup(string) slog.Handler      { return c }
 
 // Of is the project's result status, empty when none arrived. A nil collector
 // reports nothing.

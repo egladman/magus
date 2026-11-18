@@ -16,8 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
@@ -281,7 +281,7 @@ func (s *Store) confirmEnd(ctx context.Context, ids []string, holding []descenda
 		return nil
 	}
 	if !s.dryRun {
-		if _, _, err := sessions.OpenRequest(ctx, dir, endSource, open, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root}); err != nil {
+		if _, _, err := sessions.OpenRequest(ctx, dir, endSource, open, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: s.root}); err != nil {
 			return fmt.Errorf("job: ending %s needs a person's confirmation, and the request for one cannot be filed: %w", open.Where, err)
 		}
 	}

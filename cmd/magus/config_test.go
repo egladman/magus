@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/trail"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -187,17 +187,17 @@ func TestCLIMintsAreAudited(t *testing.T) {
 
 	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	events, err := trail.ReadRecent(t.Context(), base, 10)
+	events, err := loggedCalls(t.Context(), base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	want := map[string]auth.Token{"cli.mint": rec, "link.code": codeRec}
 	for _, e := range events {
-		minted, ok := want[e.Action]
-		require.True(t, ok, e.Action)
-		assert.Equal(t, trail.KindTokenLifecycle, e.Kind)
+		minted, ok := want[e.Name]
+		require.True(t, ok, e.Name)
+		assert.Equal(t, journal.CallKindTokenLifecycle, e.Kind)
 		assert.Contains(t, e.Preview, minted.ID)
 		assert.Contains(t, e.Preview, minted.Grant.String())
-		blob, err := trail.ReadBlob(base, e.RequestRef)
+		blob, err := loggedPayload(base, e.Request.Ref)
 		require.NoError(t, err)
 		for _, s := range []string{secret, code} {
 			assert.NotContains(t, string(blob), s)

@@ -4,15 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	eventstypes "github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/journal/stream"
 )
 
 // eventsCommand implements `magus events`: the subscribe command third-party
@@ -39,7 +38,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "stream, so a run started in another terminal shows up here.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Event types:")
-			for _, t := range eventstypes.EventTypes() {
+			for _, t := range stream.EventTypes() {
 				fmt.Fprintf(os.Stderr, "  %s\n", t)
 			}
 			fmt.Fprintln(os.Stderr, "")
@@ -68,7 +67,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	filter, err := eventstream.ParseFilter(ef.Type)
+	filter, err := ParseFilter(ef.Type)
 	if err != nil {
 		return err
 	}
@@ -94,16 +93,16 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	w := eventstream.NewWriter(destination, filter)
+	w := stream.NewWriter(destination, filter)
 	defer func() { _ = w.Close() }()
-	emit := w.Emit
+	emit := w.Write
 	if opts.Format != outputText && opts.Format != outputJSONL {
-		emit = eventstream.RecordEmitter(filter, func(v any, names []string) error {
+		emit = RecordEmitter(filter, func(v any, names []string) error {
 			return emitRecord(opts, v, names)
 		})
 	}
 
-	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
+	f := stream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
 	// --limit 0 means replay NOTHING, which is what a notifier wants: waking up and
 	// announcing yesterday's failure is worse than staying quiet. Negative means
 	// replay everything. The library's Replay reads 0 as "no cap", so the mapping
@@ -114,11 +113,11 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	case ef.Limit < 0:
-		if err := f.Replay(0, emit); err != nil {
+		if err := f.Replay(ctx, 0, emit); err != nil {
 			return err
 		}
 	default:
-		if err := f.Replay(ef.Limit, emit); err != nil {
+		if err := f.Replay(ctx, ef.Limit, emit); err != nil {
 			return err
 		}
 	}

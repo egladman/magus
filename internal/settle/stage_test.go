@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/recorder"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -112,7 +112,7 @@ func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
 		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=mine")
+	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=mine")
 
 	held, err := heldForOtherLeases(context.Background(), func(string) (job.Location, error) { return loc, nil }, root, []string{"api/a.go", "web/b.ts"})
 	require.NoError(t, err)
