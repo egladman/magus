@@ -12,10 +12,8 @@ import (
 // envelope magus's several internal producers are mapped onto, so an integrator
 // learns one shape rather than five.
 //
-// It is the machine-facing sibling of [Event], and the split is by AUDIENCE, not
-// by content. [Event] is what magus emits when it needs a PERSON: it carries an
-// urgency tier and a situation class because a human renderer has to decide
-// whether to interrupt someone. A Event carries neither, because a program
+// An attention request is its sibling for a PERSON, with an urgency tier and
+// a situation class. An Event carries neither, because a program
 // subscribing to a build stream decides relevance by [EventType]. The two
 // do not meet on the wire today: every mapped type is a run or target fact, and
 // an attention request has no adapter onto this stream; see the const block.
@@ -52,7 +50,7 @@ type Event struct {
 	// Inv groups every event belonging to one magus invocation. Empty for events
 	// that belong to no run: a file change, an attention request, a guard verdict.
 	Inv string `json:"-"`
-	// Body carries the per-type fields and determines [Event.Type]. It is
+	// Body carries the per-type fields and determines [Body.EventType]. It is
 	// never nil on a well-formed event; a nil Body marshals as an error rather
 	// than as a typeless line.
 	Body Body `json:"-"`
@@ -94,7 +92,7 @@ const (
 	TargetOutput EventType = "target.output"
 )
 
-// Body is the per-type payload of a [Event]. Implementations are the
+// Body is the per-type payload of an [Event]. Implementations are the
 // body structs in this file; the interface is closed in practice, and
 // [Event.UnmarshalJSON] fails on a type it does not know rather than guessing.
 //
