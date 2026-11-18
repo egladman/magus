@@ -403,7 +403,7 @@ func (s *DescribeJobRecordSuite) SetupTest() {
 	s.out = DescribeOutput{Terms: Terms{Lease: job.Job{
 		ID:    "wave/a",
 		Paths: job.Paths{Write: []string{"a.go"}},
-		Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}),
+		Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}),
 		State: job.StateDeclared,
 	}}}
 }

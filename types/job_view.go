@@ -69,7 +69,7 @@ func (e *CheckDecodeError) Error() string {
 		at = "check"
 	}
 	if e.Job != "" {
-		at = e.Job + "'s " + at
+		at = fmt.Sprintf("%s's %s", e.Job, at)
 	}
 	return fmt.Sprintf("%s does not read as a lease check: %v", at, e.Err)
 }
@@ -209,8 +209,8 @@ func NewJob(row job.Job) (Job, error) {
 	return view, nil
 }
 
-// Row is j as the job module records it.
-func (j Job) Row() (job.Job, error) {
+// Module is j as the job module records it.
+func (j Job) Module() (job.Job, error) {
 	row := j.Job
 	row.Check = nil
 	if j.Check != nil {

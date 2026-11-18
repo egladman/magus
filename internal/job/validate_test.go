@@ -119,8 +119,8 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	v := validateMerge(t.Context(), s, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli", "cli/registry.go"}
-		u.Check = rawOf(types.LeaseCheck{Target: "nosuch", Project: "."})
-		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "nowhere"})}}
+		u.Check = fixtureCheck(types.LeaseCheck{Target: "nosuch", Project: "."})
+		u.Goals = []job.Goal{{ID: "elsewhere", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "nowhere"})}}
 	}, config.Jobs{}, nil)
 
 	got := codes(v.Problems)
@@ -412,7 +412,7 @@ func (s *ReforkGradeSuite) grade(_ context.Context, _ string, row job.Job) Check
 
 func (s *ReforkGradeSuite) declare(u *job.Job) {
 	u.State, u.Checkpoint = job.StateDeclared, s.head
-	u.Paths.Write, u.Check = []string{"a.txt"}, rawOf(*goTestCheck())
+	u.Paths.Write, u.Check = []string{"a.txt"}, fixtureCheck(*goTestCheck())
 }
 
 func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
@@ -574,7 +574,7 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 
 	row, note = resolve(func(u *job.Job) {
 		declare("cli/registry.go")(u)
-		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
+		u.Goals = []job.Goal{job.Goal{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})}.Resolve()}
 	})
 	assert.Len(t, row.Goals, 1, "a goal that runs lint is kept alone")
 	assert.Empty(t, note)
@@ -930,7 +930,7 @@ func (s *acceptValidationSuite) problems(accept ...job.Basis) types.JobProblems 
 	st, _ := validateWorkspace(s.T())
 	return validateMerge(s.T().Context(), st, nil, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), Accept: accept}}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), Accept: accept}}
 	}, config.Jobs{}, nil).Problems
 }
 
@@ -962,7 +962,7 @@ func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
 
 	plan, err := PlanFork(s.T().Context(), st, "w", func(u *job.Job) {
 		u.Paths.Write = []string{"cli/registry.go"}
-		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}}
+		u.Goals = []job.Goal{{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}}
 	}, config.Jobs{}, nil, true)
 
 	s.Require().NoError(err)

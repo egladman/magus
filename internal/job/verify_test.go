@@ -30,7 +30,7 @@ func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuit
 
 func (s *ScriptEvidenceSuite) SetupTest() {
 	s.row = job.Job{ID: "job-a"}
-	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}})}
+	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}})}
 }
 
 func (s *ScriptEvidenceSuite) attempt(lease string, args []string) job.CapturedRun {
@@ -69,7 +69,7 @@ func acceptRow() job.Job {
 	return job.Job{
 		ID:         "harness/ledger-accept",
 		Paths:      job.Paths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
-		Check:      rawOf(check),
+		Check:      fixtureCheck(check),
 		Validation: CheckCommand(check),
 		State:      job.StateRunning,
 	}
@@ -109,8 +109,8 @@ func goalRow() job.Job {
 		Paths: job.Paths{Write: []string{"internal/job"}},
 		State: job.StateRunning,
 		Goals: []job.Goal{
-			{ID: "unit", Description: "job package tests pass", Check: rawOf(types.LeaseCheck{Target: "go::go-test", Project: "."})},
-			{ID: "docs", Description: "docs checks pass", Check: rawOf(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"unit"}},
+			{ID: "unit", Description: "job package tests pass", Check: fixtureCheck(types.LeaseCheck{Target: "go::go-test", Project: "."})},
+			{ID: "docs", Description: "docs checks pass", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"unit"}},
 		},
 	}
 }
@@ -212,7 +212,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	ciRow := func(target, project string) job.Job {
 		row := acceptRow()
 		row.Created = 100
-		row.Check = rawOf(types.LeaseCheck{Target: target, Project: project})
+		row.Check = fixtureCheck(types.LeaseCheck{Target: target, Project: project})
 		return row
 	}
 	rep := passingResult()
@@ -278,7 +278,7 @@ func TestVerifyGoalDependenciesPropagate(t *testing.T) {
 
 	row := goalRow()
 	row.Goals = append(row.Goals, job.Goal{
-		ID: "publish", Check: rawOf(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"docs"},
+		ID: "publish", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "docs"}), DependsOn: []string{"docs"},
 	})
 	rep := goalResult()
 	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
@@ -447,7 +447,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.Check = rawOf(types.LeaseCheck{Target: "go::go-test", Project: "."})
+	row.Check = fixtureCheck(types.LeaseCheck{Target: "go::go-test", Project: "."})
 	scoped := passingRun
 	scoped.ExtraArgs = []string{"-run", "Spawn|Waiter"}
 
@@ -682,7 +682,7 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
 	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
 
 	status := verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "test:rw"}, seen)
@@ -700,7 +700,7 @@ func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
 	t.Parallel()
 
 	row := job.Job{ID: "fix/job-store"}
-	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
 	run := job.CapturedRun{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
 
 	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
@@ -863,7 +863,7 @@ func keys(m map[string]codec.RawMessage) []string {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go#executeStages"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go#executeStages"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) job.RegionChange {
 		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -897,7 +897,7 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) job.RegionChange {
 		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -1004,7 +1004,7 @@ func integrationRow(t *testing.T, state job.State) *Store {
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
 		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []job.Goal{
-			{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: "docs"})},
+			{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "docs"})},
 		}}.Apply(u)
 		u.State = state
 	})
@@ -1167,7 +1167,7 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	goals, err := integratorGoals(row)
 	require.NoError(t, err)
 	require.Len(t, goals, 1)
@@ -1238,15 +1238,15 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	t.Parallel()
 
 	scoped := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
-	worker := job.Job{ID: "a", Check: rawOf(scoped), Goals: []job.Goal{
-		{ID: "lint", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."})},
-		{ID: "buzz", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "docs"})},
+	worker := job.Job{ID: "a", Check: fixtureCheck(scoped), Goals: []job.Goal{
+		{ID: "lint", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."})},
+		{ID: "buzz", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"})},
 	}}
 	owed := &job.Result{
 		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: OwedNoSeat},
 		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", Owed: OwedNoSeat}, {GateID: "buzz", Owed: OwedNoSeat}},
 	}
-	paid := job.Job{ID: "b", Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "console"})}
+	paid := job.Job{ID: "b", Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "console"})}
 	elsewhere := worker
 	elsewhere.ID = "c"
 	tries := job.NewAttempts([]job.Attempt{
@@ -1261,7 +1261,7 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	got, err := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
 	require.NoError(t, err)
 	want := []job.Goal{
-		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "buzz-test", Project: "docs"}),
+		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "buzz-test", Project: "docs"}),
 			Accept: []job.Basis{job.BasisWitnessed}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
@@ -1279,7 +1279,7 @@ func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
 
 func (s *narrowedRunSuite) row(args ...string) job.Job {
 	row := acceptRow()
-	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: rawOf(types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args})}.Resolve()}
+	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args})}.Resolve()}
 	return row
 }
 
@@ -1369,7 +1369,7 @@ func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...stri
 		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
 	}
 	return func(c types.LeaseCheck, changed ...string) map[string]bool {
-		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: rawOf(c)}}, changed)
+		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: fixtureCheck(c)}}, changed)
 	}
 }
 

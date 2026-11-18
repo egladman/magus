@@ -49,10 +49,10 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 
 	check := func(target string) *types.LeaseCheck { return &types.LeaseCheck{Target: target, Project: "."} }
 	goal := func(target string) job.Goal {
-		return job.Goal{ID: "g-" + target, Check: rawOf(types.LeaseCheck{Target: target, Project: "."})}.Resolve()
+		return job.Goal{ID: "g-" + target, Check: fixtureCheck(types.LeaseCheck{Target: target, Project: "."})}.Resolve()
 	}
 	row := func(mutate func(*job.Job)) job.Job {
-		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: rawOf(*check("go-test"))}
+		r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(*check("go-test"))}
 		mutate(&r)
 		return r
 	}
@@ -75,12 +75,12 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 		},
 		{
 			name: "a check's chain members count as run",
-			row:  row(func(r *job.Job) { r.Check = rawOf(*check("build")) }),
+			row:  row(func(r *job.Job) { r.Check = fixtureCheck(*check("build")) }),
 			want: []string{".:lint", ".:go-test", ".:gen"},
 		},
 		{
 			name: "a script check covers nothing",
-			row:  row(func(r *job.Job) { r.Check = rawOf(types.LeaseCheck{Script: "hack/check.buzz"}) }),
+			row:  row(func(r *job.Job) { r.Check = fixtureCheck(types.LeaseCheck{Script: "hack/check.buzz"}) }),
 			want: []string{".:lint", ".:go-test", ".:build", ".:gen"},
 		},
 		{
@@ -136,7 +136,7 @@ func (s *owningProjectGateSuite) workspace() []*types.Project {
 func (s *owningProjectGateSuite) gates(check *types.LeaseCheck, write ...string) []string {
 	row := job.Job{ID: "j", Paths: job.Paths{Write: write}}
 	if check != nil {
-		row.Check = rawOf(*check)
+		row.Check = fixtureCheck(*check)
 	}
 	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil, nil))
 }
@@ -195,7 +195,7 @@ func (s *owningProjectGateSuite) reachingWorkspace() []*types.Project {
 }
 
 func (s *owningProjectGateSuite) reaching(write ...string) []UnrunGate {
-	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil, nil)
 }
 
@@ -225,7 +225,7 @@ func (s *owningProjectGateSuite) unresolvedStore() *Store {
 
 func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
 	v, err := validateDryFork(s.T().Context(), store, "j", func(u *job.Job) {
-		u.Paths.Write, u.Check, u.Agent = []string{write}, rawOf(*check), job.Instructed("c")
+		u.Paths.Write, u.Check, u.Agent = []string{write}, fixtureCheck(*check), job.Instructed("c")
 	})
 	s.Require().NoError(err)
 	return v
@@ -253,7 +253,7 @@ func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
 func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
-	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	r := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	assert.Empty(t, UnrunGates(t.TempDir(), r, []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}, nil, nil))
 	assert.Empty(t, UnrunGates(t.TempDir(), r, nil, nil, nil), "no root project")
 }
@@ -282,7 +282,7 @@ func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
 		{Path: "a/b", Sources: types.MustParseGlobs("**/*.go")},
 		{Path: "a-b", Sources: types.MustParseGlobs("**/*.go")},
 	}
-	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"a/b/x.go", "a-b/y.go", "z.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 
 	got := UnrunGates(t.TempDir(), row, projects, nil, nil)
 
@@ -308,7 +308,7 @@ func workerGrade(c types.LeaseCheck) CheckVerdict {
 func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: rawOf(types.LeaseCheck{Target: "compile", Project: "."})}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"internal/job/gates.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "compile", Project: "."})}
 
 	got, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
 

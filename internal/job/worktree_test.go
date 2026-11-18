@@ -293,7 +293,7 @@ func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	t.Parallel()
 	store, _ := validateWorkspace(t)
-	cold := job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: rawOf(types.LeaseCheck{Target: "site-generate", Project: "docs"})}
+	cold := job.Job{ID: "w", Paths: job.Paths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: fixtureCheck(types.LeaseCheck{Target: "site-generate", Project: "docs"})}
 	warm := cold.Clone()
 	warm.Paths.Write = append(warm.Paths.Write, "cli/registry_test.go")
 	warm.Paths.Soft = []string{"cli/registry_test.go"}

@@ -45,7 +45,7 @@ func (s *testSelectionSuite) TestNonGoTargetNamedTestDoesNotReadGoSelectors() {
 	s.Empty(dialect)
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	s.Empty(narrowedTestProblems(store, job.Job{ID: "node", Paths: job.Paths{Write: []string{"pkg/a.go"}}, Check: rawOf(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}})}))
+	s.Empty(narrowedTestProblems(store, job.Job{ID: "node", Paths: job.Paths{Write: []string{"pkg/a.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}})}))
 }
 func (s *testSelectionSuite) TestRenamedWrapperInheritsDeclaredDialect() {
 	ws := goCheckWorkspace(".")
@@ -55,7 +55,7 @@ func (s *testSelectionSuite) TestRenamedWrapperInheritsDeclaredDialect() {
 	p.TargetSpellOps = map[string][]types.TargetSpellUse{"check-cases": {{Spell: "go", Ops: []string{"go-test"}}}}
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	problems := narrowedTestProblems(store, job.Job{ID: "renamed", Paths: job.Paths{Write: []string{"pkg/a.go"}}, Check: rawOf(types.LeaseCheck{Target: "check-cases", Project: ".", Args: []string{"-run", "Alpha"}})})
+	problems := narrowedTestProblems(store, job.Job{ID: "renamed", Paths: job.Paths{Write: []string{"pkg/a.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "check-cases", Project: ".", Args: []string{"-run", "Alpha"}})})
 	s.Require().Len(problems, 1)
 	s.Contains(problems[0].Message, "TestBeta")
 }
@@ -90,7 +90,7 @@ func (s *testSelectionSuite) TestExplicitArgsWrapperIsUnknown() {
 	dialect, known := resolvedTestSelection(ws, check)
 	s.False(known)
 	s.Empty(dialect)
-	notes := uncheckedTestSelection(ws, job.Job{Check: rawOf(check)}, nil)
+	notes := uncheckedTestSelection(ws, job.Job{Check: fixtureCheck(check)}, nil)
 	s.Require().Len(notes, 1)
 	s.Contains(notes[0], "recorded evidence arguments must match exactly")
 	selection := tempStore(s.T(), s.T().TempDir()).InWorkspace(ws).testSelection()
@@ -110,9 +110,9 @@ func (s *testSelectionSuite) TestForwardingTargetWithNeedsReadsDeclaredDialect()
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
 	s.Empty(narrowedTestProblems(store, job.Job{ID: "scoped", Paths: job.Paths{Write: []string{"pkg/a.go"}},
-		Check: rawOf(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}})}), "scoped to the written package")
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}})}), "scoped to the written package")
 	s.Len(narrowedTestProblems(store, job.Job{ID: "unscoped", Paths: job.Paths{Write: []string{"pkg/a.go"}},
-		Check: rawOf(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"-run", "Alpha"}})}), 1, "-run alone still leaves tests out")
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"-run", "Alpha"}})}), 1, "-run alone still leaves tests out")
 }
 func (s *testSelectionSuite) TestNeedsCompositionDoesNotInheritSelector() {
 	ws := goCheckWorkspace(".")
@@ -128,7 +128,7 @@ func (s *testSelectionSuite) TestMissingWorkspaceKeepsEvidenceStrict() {
 	check := types.LeaseCheck{Target: "test", Project: "."}
 	attempt := job.CapturedRun{Project: ".", Target: "test", ExtraArgs: []string{"-run", "Alpha"}}
 	s.False(ranCheck(check, attempt, nil, store.testSelection()))
-	s.Empty(narrowedTestProblems(store, job.Job{Check: rawOf(check), Paths: job.Paths{Write: []string{"pkg/a.go"}}}))
+	s.Empty(narrowedTestProblems(store, job.Job{Check: fixtureCheck(check), Paths: job.Paths{Write: []string{"pkg/a.go"}}}))
 }
 func (s *testSelectionSuite) TestUnavailableWorkspaceKeepsEvidenceStrict() {
 	store := tempStore(s.T(), s.T().TempDir()).InWorkspace(Workspace{Unavailable: "load failed"})
@@ -144,7 +144,7 @@ func (s *testSelectionSuite) TestStoreValidationReportsUnavailableSelection() {
 	store := tempStore(s.T(), testRoot(s.T()).Root())
 	validation, err := validateDryFork(context.Background(), store, "unknown", func(row *job.Job) {
 		row.Paths.Write = []string{"pkg/a.go"}
-		row.Check = rawOf(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}})
+		row.Check = fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}})
 	})
 	s.Require().NoError(err)
 	s.Contains(validation.Unchecked, "the check's project, target and test-selection semantics: this door opened the job store without a workspace")

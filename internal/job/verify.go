@@ -344,7 +344,7 @@ func owedGoals(row job.Job, declared []job.Job, tries job.Attempts, held []job.G
 	for _, g := range held {
 		taken[g.ID] = true
 	}
-	heldChecks, err := checksOf(held)
+	heldChecks, err := readGoalChecks(held)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +539,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, gateAttempts 
 		return v
 	}
 	gates = append(gates, owedRuns...)
-	gateChecks, err := checksOf(gates)
+	gateChecks, err := readGoalChecks(gates)
 	if err != nil {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s: %v", row.ID, err))
 		return v

@@ -96,7 +96,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 			}
 			raw, perr := RawCheck(c)
 			if perr != nil {
-				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
+				err = errors.Join(err, fmt.Errorf("encoding %s: %w", key, perr))
 				return
 			}
 			put.Check = raw
@@ -245,7 +245,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		default:
 			raw, e := RawCheck(c)
 			if e != nil {
-				err = errors.Join(err, fmt.Errorf("job: check: %w", e))
+				err = errors.Join(err, fmt.Errorf("encoding the check: %w", e))
 				break
 			}
 			line := CheckCommand(c)

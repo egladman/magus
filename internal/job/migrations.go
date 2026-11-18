@@ -550,7 +550,7 @@ func snakeValue(keys map[string]string, opaque map[string]bool, path string, raw
 			}
 			if !opaque[k] {
 				var err error
-				if v, err = snakeValue(keys, opaque, path+"."+name, v); err != nil {
+				if v, err = snakeValue(keys, opaque, fmt.Sprintf("%s.%s", path, name), v); err != nil {
 					return nil, err
 				}
 			}
@@ -624,7 +624,7 @@ type enumMember struct {
 func recordEnums() []enumMember {
 	entry := newStoredEnum(job.EntryPointCLI, job.EntryPointHook, job.EntryPointMCP, job.EntryPointRPC, job.EntryPointServer)
 	creds := newStoredEnum(credentialKinds()...)
-	members := []enumMember{
+	fixed := []enumMember{
 		{"Job", []string{"spec", "brief_format"}, newStoredEnum(job.BriefFormatMarkdown, job.BriefFormatBuzz)},
 		{"Job", []string{"spec", "agent", "worker", "type"}, newStoredEnum(job.WorkerTypeResumed, job.WorkerTypeNew)},
 		{"Job", []string{"spec", "goals", "[]", "kind"}, newStoredEnum(job.GoalKindCheck, job.GoalKindPaths, job.GoalKindSymbol)},
@@ -643,18 +643,21 @@ func recordEnums() []enumMember {
 		{"Attempt", []string{"status", "retry", "change"}, newStoredEnum(job.RetryAfterConfig, job.RetryAfterWidening,
 			job.RetryAfterPerson, job.RetryAfterUpgrade)},
 	}
-	for _, at := range [][]string{{"status", "paused_by"}, {"status", "registered_by"}, {"status", "claims", "[]", "by"}, {"status", "entries", "[]", "by"}} {
-		members = append(members,
+	origins := [][]string{{"status", "paused_by"}, {"status", "registered_by"}, {"status", "claims", "[]", "by"}, {"status", "entries", "[]", "by"}}
+	by := make([]enumMember, 0, 2*len(origins))
+	for _, at := range origins {
+		by = append(by,
 			enumMember{"Job", append(slices.Clone(at), "entry_point"), entry},
 			enumMember{"Job", append(slices.Clone(at), "credential", "class"), creds})
 	}
-	return members
+	return slices.Concat(fixed, by)
 }
 
 // storedStates is every job state, as [job.StateVocabulary] lists them.
 func storedStates() []job.State {
-	var out []job.State
-	for _, s := range strings.Split(job.StateVocabulary(), ", ") {
+	words := strings.Split(job.StateVocabulary(), ", ")
+	out := make([]job.State, 0, len(words))
+	for _, s := range words {
 		out = append(out, job.State(s))
 	}
 	return out
@@ -712,7 +715,7 @@ func walkEnum(raw codec.RawMessage, at string, path []string, enum storedEnum) (
 	if !ok {
 		return raw, nil
 	}
-	next, err := walkEnum(member, at+"."+path[0], path[1:], enum)
+	next, err := walkEnum(member, fmt.Sprintf("%s.%s", at, path[0]), path[1:], enum)
 	if err != nil {
 		return nil, err
 	}

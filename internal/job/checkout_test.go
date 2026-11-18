@@ -92,7 +92,9 @@ var loadableFiles = map[string]string{
 
 // forkCheck is the check every writing fixture here declares, since a fork refuses a
 // writing job with nothing to grade it by.
-func forkCheck() codec.RawMessage { return rawOf(types.LeaseCheck{Target: "test", Project: "."}) }
+func forkCheck() codec.RawMessage {
+	return fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
+}
 
 // TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout is the refusal three workers in
 // one checkout were missing: one of them held the root magusfile in its write paths, saved

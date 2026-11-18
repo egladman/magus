@@ -2471,9 +2471,9 @@ github.com/egladman/magus/types.Job.Instructions method func() string
 github.com/egladman/magus/types.Job.Integrating method func() bool
 github.com/egladman/magus/types.Job.Job embedded github.com/egladman/magus/libs/safetyscissors/job.Job
 github.com/egladman/magus/types.Job.MarshalYAML method func() (any, error)
+github.com/egladman/magus/types.Job.Module method func() (github.com/egladman/magus/libs/safetyscissors/job.Job, error)
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.PausedAt method func(now int64) bool
-github.com/egladman/magus/types.Job.Row method func() (github.com/egladman/magus/libs/safetyscissors/job.Job, error)
 github.com/egladman/magus/types.Job.ServerRun method func() bool
 github.com/egladman/magus/types.Job.SpecChangedSince method func(observed int) bool
 github.com/egladman/magus/types.Job.Unmet method func() []string

@@ -1432,9 +1432,9 @@ func (j rowJudge) runsOffCheck(r targetRun) bool {
 	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
-// checkOf reads the check a row or goal stores as opaque JSON. The store validated it when
+// readCheck reads the check a row or goal stores as opaque JSON. The store validated it when
 // it wrote the row, so an error here means a row that bypassed the store.
-func checkOf(raw codec.RawMessage) (types.LeaseCheck, error) {
+func readCheck(raw codec.RawMessage) (types.LeaseCheck, error) {
 	var c types.LeaseCheck
 	err := codec.UnmarshalStrict(raw, &c)
 	return c, err
@@ -1448,7 +1448,7 @@ func rowChecks(row jobtypes.Job) []types.LeaseCheck {
 		if g.Kind != jobtypes.GoalKindCheck {
 			continue
 		}
-		if c, err := checkOf(g.Check); err == nil && c.Target != "" {
+		if c, err := readCheck(g.Check); err == nil && c.Target != "" {
 			out = append(out, c)
 		}
 	}
@@ -2166,7 +2166,7 @@ func cliFork(args []string, stdin string) childFork {
 		}
 		hasCheck := jobtypes.HasCheck(row.Check)
 		// A check that cannot be read is not script-only, so the child counts as bounded.
-		declared, err := checkOf(row.Check)
+		declared, err := readCheck(row.Check)
 		scriptOnly := hasCheck && err == nil && declared.Target == "" && declared.Script != ""
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
@@ -2580,7 +2580,7 @@ func LeaseGateSource(row jobtypes.Job) (string, bool) {
 		if gate.Kind != jobtypes.GoalKindCheck {
 			continue
 		}
-		check, err := checkOf(gate.Check)
+		check, err := readCheck(gate.Check)
 		if err != nil {
 			continue
 		}

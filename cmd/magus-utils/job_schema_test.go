@@ -474,14 +474,14 @@ type Check struct {
 	body, err := renderJobSchema(rec, decls)
 	s.Require().NoError(err)
 
-	var doc struct {
+	type schemaDoc struct {
 		Description string                    `json:"description"`
 		Required    []string                  `json:"required"`
 		Properties  map[string]map[string]any `json:"properties"`
 	}
+	var doc schemaDoc
 	s.Require().NoError(codec.Unmarshal(body, &doc))
-	s.Equal("Record is the view's.", doc.Description)
-	s.Equal([]string{"id", "name"}, doc.Required)
+	s.Equal(schemaDoc{Description: "Record is the view's.", Required: []string{"id", "name"}, Properties: doc.Properties}, doc)
 	s.Equal("object", doc.Properties["check"]["type"])
 	_, props, found := strings.Cut(string(body), `"properties"`)
 	s.Require().True(found)

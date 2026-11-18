@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,9 +14,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// rawOf is c as the job store keeps it, written out by hand so a fixture needs no error
+// fixtureCheck is c as the job store keeps it, written out by hand so a fixture needs no error
 // path: the fixtures name ASCII targets and paths, which strconv.Quote spells as JSON does.
-func rawOf(c types.LeaseCheck) codec.RawMessage {
+func fixtureCheck(c types.LeaseCheck) codec.RawMessage {
 	members := []string{`"target":` + strconv.Quote(c.Target)}
 	if c.Script != "" {
 		members = append(members, `"script":`+strconv.Quote(c.Script))
@@ -28,7 +29,7 @@ func rawOf(c types.LeaseCheck) codec.RawMessage {
 		for i, a := range c.Args {
 			quoted[i] = strconv.Quote(a)
 		}
-		members = append(members, `"args":[`+strings.Join(quoted, ",")+`]`)
+		members = append(members, fmt.Sprintf(`"args":[%s]`, strings.Join(quoted, ",")))
 	}
 	if c.NoDefaultCharms {
 		members = append(members, `"no_default_charms":true`)
@@ -36,7 +37,7 @@ func rawOf(c types.LeaseCheck) codec.RawMessage {
 	if c.Test {
 		members = append(members, `"test":true`)
 	}
-	return codec.RawMessage("{" + strings.Join(members, ",") + "}")
+	return codec.RawMessage(fmt.Sprintf("{%s}", strings.Join(members, ",")))
 }
 
 type LeaseCheckSuite struct{ suite.Suite }
@@ -94,10 +95,10 @@ func (s *LeaseCheckSuite) TestValidateRefusesAnUnknownMember() {
 }
 
 func (s *LeaseCheckSuite) TestEqualReadsAnOmittedProjectAsTheRoot() {
-	same, err := equalStoredChecks(rawOf(types.LeaseCheck{Target: "test"}), rawOf(types.LeaseCheck{Target: "test", Project: "."}))
+	same, err := equalStoredChecks(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}))
 	s.Require().NoError(err)
 	s.True(same)
-	same, err = equalStoredChecks(rawOf(types.LeaseCheck{Target: "test"}), rawOf(types.LeaseCheck{Target: "test", NoDefaultCharms: true}))
+	same, err = equalStoredChecks(fixtureCheck(types.LeaseCheck{Target: "test"}), fixtureCheck(types.LeaseCheck{Target: "test", NoDefaultCharms: true}))
 	s.Require().NoError(err)
 	s.False(same)
 }
@@ -111,7 +112,7 @@ func (s *LeaseCheckSuite) TestTheWorkspaceRootRendersAsAll() {
 }
 
 func (s *LeaseCheckSuite) TestRenderIsTheCommandLine() {
-	line, err := renderStoredCheck(rawOf(types.LeaseCheck{Target: "test", Project: "libs/x", Args: []string{"-run", "A"}}))
+	line, err := renderStoredCheck(fixtureCheck(types.LeaseCheck{Target: "test", Project: "libs/x", Args: []string{"-run", "A"}}))
 	s.Require().NoError(err)
 	s.True(strings.HasSuffix(line, " run test libs/x -- -run A"), line)
 }
@@ -125,7 +126,7 @@ func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
 	_, ok, err := RowCheck(job.Job{ID: "w"})
 	s.Require().NoError(err)
 	s.False(ok)
-	c, ok, err := RowCheck(job.Job{ID: "w", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})})
+	c, ok, err := RowCheck(job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})})
 	s.Require().NoError(err)
 	s.True(ok)
 	s.Equal("test", c.Target)
@@ -134,14 +135,12 @@ func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
 func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
 	ps := DeclarationProblems(job.Declaration{ID: "w", Check: codec.RawMessage(`{"target":"test","bogus":1}`)})
 	s.Require().Len(ps, 1)
-	s.Equal(types.JobRecordInvalid, ps[0].Code)
-	s.Equal("check", ps[0].Field)
+	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 
 	ps = DeclarationProblems(job.Declaration{ID: "w", Goals: []job.Goal{{ID: "g", Kind: job.GoalKindCheck,
-		Check: rawOf(types.LeaseCheck{Target: "test", Script: "p.buzz"}), Accept: []job.Basis{job.BasisWitnessed}}}})
+		Check: fixtureCheck(types.LeaseCheck{Target: "test", Script: "p.buzz"}), Accept: []job.Basis{job.BasisWitnessed}}}})
 	s.Require().Len(ps, 1)
-	s.Equal(types.JobGoalInvalid, ps[0].Code)
-	s.Equal("goals[0].check.script", ps[0].Field)
+	s.Equal(types.JobProblem{Code: types.JobGoalInvalid, Field: "goals[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
 }
 
 // checkIn is raw read as a lease check, failing t when it does not read.

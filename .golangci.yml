@@ -163,6 +163,10 @@ linters:
   settings:
     tagliatelle:
       case:
+        # An inlined unknown-members field (`json:",unknown"`) has no key of its own, so
+        # tagliatelle would read its Go name as one.
+        ignored-fields:
+          - Unknown
         rules:
           json: snake
           # magus's own YAML (magus.yaml, spell descriptors) is snake_case too; the default

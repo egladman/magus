@@ -23,7 +23,7 @@ func foregroundLimit(d time.Duration) ForegroundMax {
 func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "w", Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	asked := func(project, target string) (time.Duration, bool) {
 		assert.Equal(t, ".", project)
 		assert.Equal(t, "go-test", target)
@@ -48,7 +48,7 @@ func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 func TestOverrunsForegroundIsFalseWhenNothingOverruns(t *testing.T) {
 	t.Parallel()
 
-	row := job.Job{ID: "w", Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}
+	row := job.Job{ID: "w", Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
 	for name, tc := range map[string]struct {
 		row     job.Job
 		lastRun LastRun
@@ -73,8 +73,8 @@ func TestOverrunsForegroundLooksPastACheckWithNoRecordedRun(t *testing.T) {
 
 	row := job.Job{
 		ID:    "w",
-		Check: rawOf(types.LeaseCheck{Target: "go-vet", Project: "."}),
-		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "go-test", Project: "."})}},
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-vet", Project: "."}),
+		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}},
 	}
 	asked := 0
 	lastRun := func(_, target string) (time.Duration, bool) {

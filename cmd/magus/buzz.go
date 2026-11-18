@@ -256,7 +256,7 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	}
 	holder, err := scriptCheckHolder(rows, here, script)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus buzz: --record: a job row's check cannot be read (%v); the run is recorded without a lease\n", err)
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: no job row could be matched to the run (%v); it is recorded without a lease\n", err)
 		return "", nil
 	}
 	return holder, nil
@@ -269,7 +269,7 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 func scriptCheckHolder(rows []jobtypes.Job, root, script string) (string, error) {
 	here, err := resolvedDir(root)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("resolving %s: %w", root, err)
 	}
 	holder := ""
 	for _, row := range rows {

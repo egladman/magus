@@ -114,7 +114,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"max_attempts": func(u *job.Job) { u.MaxAttempts = 9 },
 		"max_claims":   func(u *job.Job) { u.MaxClaims = 9 },
 		"goals": func(u *job.Job) {
-			u.Goals = []job.Goal{{ID: "gate", Check: rawOf(types.LeaseCheck{Target: "ci", Project: "."})}}
+			u.Goals = []job.Goal{{ID: "gate", Check: fixtureCheck(types.LeaseCheck{Target: "ci", Project: "."})}}
 		},
 	}
 	for field, apply := range cases {
@@ -253,7 +253,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 			name: "a check the parent's does not name",
 			child: job.Job{
 				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: rawOf(types.LeaseCheck{Target: types.TargetCI, Project: "."}),
+				Check: fixtureCheck(types.LeaseCheck{Target: types.TargetCI, Project: "."}),
 			},
 			want: "only a lease whose parent runs the gate runs the gate",
 		},
@@ -261,7 +261,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 			name: "a check of its own that is not the gate",
 			child: job.Job{
 				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: rawOf(types.LeaseCheck{Target: "test", Project: "internal/ledger"}),
+				Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "internal/ledger"}),
 			},
 		},
 	}

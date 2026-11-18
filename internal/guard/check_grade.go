@@ -118,7 +118,7 @@ func (g gradingRules) unchanged() bool {
 // (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
 // A deny from a judgment that ran out of time defers too.
 func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtypes.Job) job.CheckVerdict {
-	check, err := checkOf(row.Check)
+	check, err := readCheck(row.Check)
 	if err != nil {
 		return job.CheckVerdict{NotGraded: fmt.Sprintf("job %s's check could not be read: %v", row.ID, err)}
 	}

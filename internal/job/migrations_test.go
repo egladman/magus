@@ -34,13 +34,18 @@ func (s *modelTierSourceJobSuite) entry(text string) migrate.Entry {
 }
 
 func (s *modelTierSourceJobSuite) source(e migrate.Entry) string {
-	var status struct {
-		ModelTier struct {
-			Source string `json:"source"`
-		} `json:"modelTier"`
-	}
+	// The entry is at the migration this one reads, before keys went snake_case.
+	var status map[string]codec.RawMessage
 	s.Require().NoError(codec.Unmarshal(e["status"], &status))
-	return status.ModelTier.Source
+	raw, ok := status["modelTier"]
+	if !ok {
+		return ""
+	}
+	var tier struct {
+		Source string `json:"source"`
+	}
+	s.Require().NoError(codec.Unmarshal(raw, &tier))
+	return tier.Source
 }
 
 func (s *modelTierSourceJobSuite) TestAStoredRowBecomesTheJobSpelling() {
@@ -561,9 +566,9 @@ func (s *snakeRecordSuite) snakeRowWant() string {
 	row := job.Job{ID: "a", Generation: 2, State: job.StateRunning, Created: 1, Updated: 2,
 		Agent: &job.Agent{Instructions: "x", Worker: job.Worker{Type: job.WorkerTypeResumed}},
 		Paths: job.Paths{Write: []string{"a.go"}}, DependsOn: []string{"b"}, BriefFormat: job.BriefFormatMarkdown, MaxAttempts: 2,
-		Check: rawOf(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}),
+		Check: fixtureCheck(types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}),
 		Goals: []job.Goal{
-			{ID: "g", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), Accept: []job.Basis{job.BasisWitnessed}},
+			{ID: "g", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), Accept: []job.Basis{job.BasisWitnessed}},
 			{ID: "s", Kind: job.GoalKindSymbol, Expect: job.ExpectUnreferenced, Symbols: []string{"X"}},
 		},
 		ModelTier:  &tier.Assignment{Name: "bounded", Rank: 1, Skills: tier.SkillVariantShort, Source: tier.SourceUserMatrix},
@@ -633,8 +638,7 @@ func (s *snakeRecordSuite) TestAValueNoListSpellsIsRefused() {
 
 	var unplaced *UnplacedEnumError
 	s.Require().ErrorAs(err, &unplaced)
-	s.Equal("status.write_proof", unplaced.Path)
-	s.Equal("Sideways", unplaced.Value)
+	s.Equal(&UnplacedEnumError{Path: "status.write_proof", Value: "Sideways", Values: unplaced.Values}, unplaced)
 	s.Contains(unplaced.Values, "disjoint")
 }
 
@@ -688,7 +692,7 @@ func (s *snakeStoreSuite) planted() (st *Store, jobs, attempts string) {
 	at := slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == keysSnaked })
 	s.Require().Positive(at)
 	header := strings.Replace(camelHeader, `"migration":9`, fmt.Sprintf(`"migration":%d`, at), 1)
-	jobs = plantRaw(s.T(), st, header+"\n"+camelRow)
+	jobs = plantRaw(s.T(), st, strings.Join([]string{header, camelRow}, "\n"))
 	attempts, err := st.AttemptsPath()
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(attempts, []byte(camelAttempt+"\n"), 0o600))
@@ -719,8 +723,8 @@ func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
 	tries, err := st.Attempts(ctx)
 	s.Require().NoError(err)
 	s.Require().Len(tries, 1)
-	s.Equal(job.AttemptEndHandback, tries[0].Status.End)
-	s.Equal(job.StateNoReturn, tries[0].Status.State)
+	s.Equal(job.AttemptStatus{Started: 1, Ended: 2, End: job.AttemptEndHandback, State: job.StateNoReturn, ObservedGeneration: 2,
+		Retry: job.RetryVerdict{Change: job.RetryAfterUpgrade}}, tries[0].Status)
 	raw, err := os.ReadFile(attempts)
 	s.Require().NoError(err)
 	s.NotContains(string(raw), "apiVersion")

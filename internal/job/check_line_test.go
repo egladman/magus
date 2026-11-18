@@ -54,5 +54,5 @@ func (s *CheckLineSuite) TestARecordedCommandQualifiesItsTargetWithTheSpell() {
 
 func (s *CheckLineSuite) TestAStoreWriteRendersValidationFromCheck() {
 	s.Empty(validationLine(job.Job{}))
-	s.Equal("magus run test .", validationLine(job.Job{Check: rawOf(types.LeaseCheck{Target: "test"})}))
+	s.Equal("magus run test .", validationLine(job.Job{Check: fixtureCheck(types.LeaseCheck{Target: "test"})}))
 }

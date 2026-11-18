@@ -20,7 +20,7 @@ const (
 	viewGoalCheck = `{"target":"lint","project":"libs/x","no_default_charms":true}`
 )
 
-func (s *JobViewSuite) row() job.Job {
+func (s *JobViewSuite) record() job.Job {
 	return job.Job{
 		ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}},
 		Check: codec.RawMessage(viewCheck),
@@ -33,8 +33,8 @@ func (s *JobViewSuite) row() job.Job {
 
 // The view's members hide the row's, so its JSON is the row's JSON exactly: a reader of
 // either sees one format.
-func (s *JobViewSuite) TestTheViewEncodesAsTheRowDoes() {
-	row := s.row()
+func (s *JobViewSuite) TestTheViewEncodesAsTheJobDoes() {
+	row := s.record()
 	view, err := NewJob(row)
 	s.Require().NoError(err)
 
@@ -46,7 +46,7 @@ func (s *JobViewSuite) TestTheViewEncodesAsTheRowDoes() {
 }
 
 func (s *JobViewSuite) TestTheViewReadsEachCheck() {
-	view, err := NewJob(s.row())
+	view, err := NewJob(s.record())
 	s.Require().NoError(err)
 
 	s.Equal(&LeaseCheck{Target: "test", Project: "."}, view.Check)
@@ -55,12 +55,12 @@ func (s *JobViewSuite) TestTheViewReadsEachCheck() {
 	s.Nil(view.Job.Check, "the row's own member is hidden, never read twice")
 }
 
-func (s *JobViewSuite) TestRowGivesTheRowBack() {
-	row := s.row()
+func (s *JobViewSuite) TestModuleGivesTheJobBack() {
+	row := s.record()
 	view, err := NewJob(row)
 	s.Require().NoError(err)
 
-	back, err := view.Row()
+	back, err := view.Module()
 
 	s.Require().NoError(err)
 	s.JSONEq(viewCheck, string(back.Check))
@@ -71,28 +71,27 @@ func (s *JobViewSuite) TestRowGivesTheRowBack() {
 }
 
 func (s *JobViewSuite) TestACheckThatDoesNotReadIsRefusedNamingWhereItSits() {
-	row := s.row()
+	row := s.record()
 	row.Goals[0].Check = codec.RawMessage(`{"target":"lint","noDefaultCharms":true}`)
 
 	_, err := NewJob(row)
 
 	var decode *CheckDecodeError
 	s.Require().ErrorAs(err, &decode)
-	s.Equal("w", decode.Job)
-	s.Equal("goals[lint].check", decode.Field)
+	s.Equal(&CheckDecodeError{Job: "w", Field: "goals[lint].check", Err: decode.Err}, decode)
 }
 
-func (s *JobViewSuite) TestARowWithNoCheckHasANilOne() {
+func (s *JobViewSuite) TestAJobWithNoCheckHasANilOne() {
 	view, err := NewJob(job.Job{ID: "w", Check: codec.RawMessage("null")})
 	s.Require().NoError(err)
 	s.Nil(view.Check)
-	back, err := view.Row()
+	back, err := view.Module()
 	s.Require().NoError(err)
 	s.Nil(back.Check)
 }
 
-func (s *JobViewSuite) TestAListReadsEveryRow() {
-	list, err := NewJobList(job.List{Jobs: []job.Job{s.row()}, Stale: []string{"w"}})
+func (s *JobViewSuite) TestAListReadsEveryJob() {
+	list, err := NewJobList(job.List{Jobs: []job.Job{s.record()}, Stale: []string{"w"}})
 	s.Require().NoError(err)
 
 	s.Require().Len(list.Jobs, 1)
@@ -104,7 +103,7 @@ func (s *JobViewSuite) TestAListReadsEveryRow() {
 // yaml cannot inline the row beside the members that hide its own, so a row prints
 // through its JSON: the check is an object, never the bytes of one.
 func (s *JobViewSuite) TestYAMLPrintsTheCheckAsAnObject() {
-	view, err := NewJob(s.row())
+	view, err := NewJob(s.record())
 	s.Require().NoError(err)
 	var buf bytes.Buffer
 	s.Require().NoError(yaml.NewEncoder(&buf).Encode(view))

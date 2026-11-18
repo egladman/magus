@@ -321,7 +321,7 @@ func embeddedRef(expr ast.Expr, pkg string) (string, string, bool) {
 
 // qualified is the key goDecls holds a package's struct and its docs under:
 // the job module and its types views declare structs of one name.
-func qualified(pkg, name string) string { return pkg + "." + name }
+func qualified(pkg, name string) string { return fmt.Sprintf("%s.%s", pkg, name) }
 
 func property(f *ast.Field, pkg, structName, field, name string, omitempty bool, d *goDecls, version string) (node, error) {
 	tag := ""
@@ -337,7 +337,7 @@ func property(f *ast.Field, pkg, structName, field, name string, omitempty bool,
 			return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
 		}
 	}
-	if doc := d.docs[qualified(pkg, structName)+"."+field]; doc != "" {
+	if doc := d.docs[qualified(qualified(pkg, structName), field)]; doc != "" {
 		prop = append(prop, member{"description", doc})
 	}
 	return prop, nil
@@ -614,7 +614,7 @@ func (d *goDecls) read(pkg string, gd *ast.GenDecl, spec ast.Spec) {
 		d.docs[qualified(pkg, s.Name.Name)] = firstParagraph(doc.Text())
 		for _, f := range st.Fields.List {
 			for _, name := range f.Names {
-				d.docs[qualified(pkg, s.Name.Name)+"."+name.Name] = firstParagraph(f.Doc.Text())
+				d.docs[qualified(qualified(pkg, s.Name.Name), name.Name)] = firstParagraph(f.Doc.Text())
 			}
 		}
 	case *ast.ValueSpec:

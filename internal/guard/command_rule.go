@@ -256,7 +256,7 @@ func actingRole(ctx context.Context, at location, lease, spawned string) (types.
 	}
 	view, err := types.NewJob(row)
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("job %s's check could not be read for the workspace rule, which sees the row with its ID alone: %v", lease, err), attr.Unchecked())
+		slog.WarnContext(ctx, fmt.Sprintf("job %s's check could not be read for the workspace rule, which sees the row with its ID alone", lease), attr.Error(err), attr.Unchecked())
 		view = types.Job{Job: job.Job{ID: lease}}
 	}
 	return role, &view

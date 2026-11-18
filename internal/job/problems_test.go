@@ -57,8 +57,8 @@ func TestDeclarationRejectsCyclicGoals(t *testing.T) {
 	err := ValidateDeclaration((job.Declaration{
 		ID: "gated",
 		Goals: []job.Goal{
-			{ID: "unit", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"publish"}},
-			{ID: "publish", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"unit"}},
+			{ID: "unit", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"publish"}},
+			{ID: "publish", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}), DependsOn: []string{"unit"}},
 		},
 	}))
 	require.Error(t, err)
@@ -168,7 +168,7 @@ func TestScriptCheckNamesOneSubject(t *testing.T) {
 
 	script := types.LeaseCheck{Script: "probes/key.buzz"}
 	gate := func(c types.LeaseCheck) job.Goal {
-		return job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: rawOf(c), Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
+		return job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: fixtureCheck(c), Accept: []job.Basis{job.BasisWitnessed}}.Resolve()
 	}
 	require.NoError(t, ValidateGoal(gate(script)))
 
@@ -188,15 +188,15 @@ func TestScriptCheckNamesOneSubject(t *testing.T) {
 func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	t.Parallel()
 
-	target := job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "test", Project: ".", Test: true})}.Resolve()
+	target := job.Goal{ID: "unit", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: ".", Test: true})}.Resolve()
 	require.ErrorContains(t, ValidateGoal(target), `check target "test" sets test`)
 
-	rec := job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "fix-parser", Check: rawOf(types.LeaseCheck{Target: "test", Test: true})}
+	rec := job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: "fix-parser", Check: fixtureCheck(types.LeaseCheck{Target: "test", Test: true})}
 	ps := DeclarationProblems(rec)
 	require.Len(t, ps, 1)
 	assert.Equal(t, "check.test", ps[0].Field)
 
-	rec.Check = rawOf(types.LeaseCheck{Script: "probes/key.buzz", Test: true})
+	rec.Check = fixtureCheck(types.LeaseCheck{Script: "probes/key.buzz", Test: true})
 	require.Empty(t, DeclarationProblems(rec))
 	var row job.Job
 	rec.Apply(&row)
@@ -216,7 +216,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Checkout:    "rel/dir",
 		Paths:       job.Paths{Write: []string{"a.go", "../b.go"}},
 		Breaks:      []string{" "},
-		Check:       rawOf(types.LeaseCheck{Target: "test", Project: "."}),
+		Check:       fixtureCheck(types.LeaseCheck{Target: "test", Project: "."}),
 		Deviations: []job.Deviation{
 			{Code: job.Code(types.JobRecordInvalid), Subject: "x", Reason: "r"},
 			{Code: job.Code(types.GateNotRun)},
@@ -262,7 +262,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 	d := job.Declaration{
 		ID:         "wave/a",
 		Paths:      job.Paths{Write: []string{"types/job.go"}},
-		Check:      rawOf(types.LeaseCheck{Target: "go-test", Project: "."}),
+		Check:      fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."}),
 		Deviations: []job.Deviation{{Code: job.Code(types.GateNotRun), Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []job.Goal{{ID: "names", Kind: job.GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{job.PrimaryGoalID}}},
 	}

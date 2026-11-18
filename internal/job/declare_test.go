@@ -270,7 +270,7 @@ func TestWidenSuite(t *testing.T) { suite.Run(t, new(widenSuite)) }
 func (s *widenSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go"}
-	row.Check = rawOf(types.LeaseCheck{Target: "test", Project: "."})
+	row.Check = fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
 	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
@@ -325,7 +325,7 @@ func TestNarrowSuite(t *testing.T) { suite.Run(t, new(narrowSuite)) }
 func (s *narrowSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = rawOf(types.LeaseCheck{Target: "test", Project: "."})
+	row.Check = fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})
 	row.Validation = CheckCommand(checkIn(s.T(), row.Check))
 	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
@@ -405,8 +405,8 @@ func TestResolveAccept(t *testing.T) { suite.Run(t, new(resolveAcceptSuite)) }
 
 func (s *resolveAcceptSuite) TestACheckGoalNamingNoBasisAcceptsWitnessed() {
 	in := []job.Goal{
-		{ID: "unit", Check: rawOf(types.LeaseCheck{Target: "test", Project: "."})},
-		{ID: "lint", Kind: job.GoalKindCheck, Check: rawOf(types.LeaseCheck{Target: "lint", Project: "."}), Accept: []job.Basis{job.BasisReported}},
+		{ID: "unit", Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})},
+		{ID: "lint", Kind: job.GoalKindCheck, Check: fixtureCheck(types.LeaseCheck{Target: "lint", Project: "."}), Accept: []job.Basis{job.BasisReported}},
 		{ID: "docs", Kind: job.GoalKindPaths, Paths: []string{"docs"}},
 	}
 

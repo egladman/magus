@@ -607,7 +607,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Agent:        job.Instructed("goal"),
 				Checkpoint:   head,
 				Paths:        job.Paths{Write: []string{"a.go"}},
-				Check:        rawOf(check),
+				Check:        fixtureCheck(check),
 				Validation:   CheckCommand(check),
 				State:        job.StateDeclared,
 				WriteProof:   tc.proof,

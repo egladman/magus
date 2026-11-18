@@ -53,8 +53,9 @@ type ObjectField struct {
 // declaration order, with buzzgen.MirroredFields' visibility rule. t must be a
 // struct.
 func ObjectFields(t reflect.Type) []ObjectField {
-	var out []ObjectField
-	for _, f := range buzzgen.MirroredFields(t) {
+	fields := buzzgen.MirroredFields(t)
+	out := make([]ObjectField, 0, len(fields))
+	for _, f := range fields {
 		out = append(out, ObjectField{StructField: f.StructField, Selector: f.Selector})
 	}
 	return out

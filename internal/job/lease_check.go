@@ -118,7 +118,7 @@ func SameLeaseCheck(a, b *types.LeaseCheck) bool {
 func Words(c types.LeaseCheck) string {
 	line := c.Script
 	if line == "" {
-		line = c.Target + " " + cmp.Or(c.Project, ".")
+		line = fmt.Sprintf("%s %s", c.Target, cmp.Or(c.Project, "."))
 	}
 	if len(c.Args) > 0 {
 		line += " -- " + strings.Join(c.Args, " ")
@@ -196,9 +196,9 @@ type goalCheck struct {
 	Check types.LeaseCheck
 }
 
-// checksOf is every goal of goals that carries a check, each check read. A check that
+// readGoalChecks is every goal of goals that carries a check, each check read. A check that
 // does not read refuses the whole set: the store keeps only checks that do.
-func checksOf(goals []job.Goal) ([]goalCheck, error) {
+func readGoalChecks(goals []job.Goal) ([]goalCheck, error) {
 	var out []goalCheck
 	for _, g := range goals {
 		if !job.HasCheck(g.Check) {
@@ -213,9 +213,9 @@ func checksOf(goals []job.Goal) ([]goalCheck, error) {
 	return out, nil
 }
 
-// effectiveChecks is checksOf row's effective goals, its own check first.
+// effectiveChecks is readGoalChecks row's effective goals, its own check first.
 func effectiveChecks(row job.Job) ([]goalCheck, error) {
-	checks, err := checksOf(row.EffectiveGoals())
+	checks, err := readGoalChecks(row.EffectiveGoals())
 	if err != nil {
 		return nil, fmt.Errorf("job %s: %w", row.ID, err)
 	}
