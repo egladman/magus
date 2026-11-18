@@ -426,7 +426,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	sinks = append(sinks, refs.Handle, statuses.Handle, failed.Handle)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: string(trigger),
-	}, version, sinks...)
+	}, version, sinkFuncs(sinks)...)
 	defer func() { endInvocation(err) }()
 
 	// The sink rides the context down through the fan-out, so collecting return

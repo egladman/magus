@@ -369,7 +369,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	sinks = append(sinks, failed.Handle, statuses.Handle)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: string(trigger),
-	}, version, sinks...)
+	}, version, sinkFuncs(sinks)...)
 	defer func() { endInvocation(err) }()
 
 	invCtx, readReturns := types.WithReturnCapture(invCtx)

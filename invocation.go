@@ -19,7 +19,11 @@ import (
 // cleanup takes the run's error and emits the Finished record before it
 // closes the file. An unopened journal still reaches extra, so a run never
 // fails on capture.
-func (m *Magus) BeginInvocation(ctx context.Context, cmd Command, magusVersion string, extra ...recorder.Sink) (context.Context, func(error)) {
+func (m *Magus) BeginInvocation(ctx context.Context, cmd Command, magusVersion string, extra ...func(context.Context, journal.Record)) (context.Context, func(error)) {
+	sinks := make([]recorder.Sink, 0, len(extra))
+	for _, s := range extra {
+		sinks = append(sinks, s)
+	}
 	// Reuse an id already threaded onto ctx (the server mints it in proc.service.run so the
 	// adopted call's pool entry can carry its inv and deep-link to this run's live log);
 	// otherwise mint a fresh one: the plain CLI path.
@@ -46,20 +50,20 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd Command, magusVersion s
 
 	dir := filepath.Join(resolveCacheDir(m.ws.Root, m.cfg), cache.RunsDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		ctx = recorder.WithSinks(ctx, extra...)
+		ctx = recorder.WithSinks(ctx, sinks...)
 		recorder.Emit(ctx, started)
 		return ctx, func(runErr error) { finish(ctx, runErr) }
 	}
 	f, err := os.Create(filepath.Join(dir, id+".jsonl"))
 	if err != nil {
-		ctx = recorder.WithSinks(ctx, extra...)
+		ctx = recorder.WithSinks(ctx, sinks...)
 		recorder.Emit(ctx, started)
 		return ctx, func(runErr error) { finish(ctx, runErr) }
 	}
 
 	// The file is the durable record; extra sinks see the same records.
 	file := recorder.NewFileSink(f)
-	ctx = recorder.WithSinks(ctx, append([]recorder.Sink{file.Handle}, extra...)...)
+	ctx = recorder.WithSinks(ctx, append([]recorder.Sink{file.Handle}, sinks...)...)
 	recorder.Emit(ctx, started)
 
 	return ctx, func(runErr error) {
