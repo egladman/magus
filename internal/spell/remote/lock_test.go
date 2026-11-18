@@ -52,7 +52,7 @@ func TestReadLock(t *testing.T) {
 		body, wantErr string
 	}{
 		"other version": {body: "version: magus.spell-lock/v1alpha2\n", wantErr: "magus.lock: record is magus.spell-lock/v1alpha2, newer than"},
-		"empty":         {body: "", wantErr: "magus.lock: record carries no apiVersion"},
+		"empty":         {body: "", wantErr: "magus.lock: record carries no api_version"},
 		"unknown field": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: %s\n    size: 3\n", d.String()), wantErr: "field size not found"},
 		"workspace key": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  spells/lint:\n    tag: v1\n    digest: %s\n", d.String()), wantErr: `"spells/lint" is not a registry path`},
 		"bad digest":    {body: "version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: sha256:abc\n", wantErr: "ghcr.io/team/lint"},

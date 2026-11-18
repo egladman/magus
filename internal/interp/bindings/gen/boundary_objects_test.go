@@ -267,6 +267,25 @@ func populateInbound(v reflect.Value) {
 				populateInbound(v.Field(i))
 			}
 		}
+		zeroHidden(v)
+	}
+}
+
+// zeroHidden zeroes each field of v's embedded structs that one of v's own fields hides:
+// the mirror carries only the shallower field, so the hidden one never crosses.
+func zeroHidden(v reflect.Value) {
+	for i := range v.NumField() {
+		embedded := v.Type().Field(i)
+		if !embedded.Anonymous || embedded.Type.Kind() != reflect.Struct {
+			continue
+		}
+		for j := range embedded.Type.NumField() {
+			name := embedded.Type.Field(j).Name
+			if own, ok := v.Type().FieldByName(name); ok && len(own.Index) == 1 {
+				inner := v.Field(i).Field(j)
+				inner.Set(reflect.Zero(inner.Type()))
+			}
+		}
 	}
 }
 
