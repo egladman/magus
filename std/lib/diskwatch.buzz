@@ -308,7 +308,7 @@ test "a line with no byte counts is refused" {
     final old = `\{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""\}`;
     var refused = false;
     try {
-        decode(old);
+        refused = decode(old).totalBytes < 0;
     } catch (err: any) {
         refused = true;
     }
