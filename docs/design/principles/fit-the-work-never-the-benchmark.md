@@ -7,13 +7,13 @@ tags: [design, principle, benchmarks, measurement, evidence]
 
 # Fit the work, never the benchmark
 
-A recipe that serves four does not serve twenty when every quantity is
+A dish written for four does not serve twenty when every quantity is
 multiplied by five. The salt is too much, the pan is too small, the water
 boils off at a different rate, and the cooking time was never a quantity at
-all. The recipe was right. What it left out was its own tolerance: the range
-of kitchens, pans and head counts it was tried in.
+all. The instructions were right. What they left out was their own
+tolerance: the range of kitchens, pans and head counts they were tried in.
 
-A benchmark is that recipe. It was run on one tree, on one machine, on one
+A benchmark is those instructions. It was run on one tree, on one machine, on one
 set of tasks, at one size, and its number is true there. Between that
 artificial result and the work people do with the tool there is a gap. It is
 never zero, and it is unknown until someone measures it. A benchmark cannot
@@ -28,8 +28,8 @@ The work is still what the tool is for, so three habits follow.
   record what the cache saved and what an agent spent on real work. A change
   justified by a benchmark alone is labelled as that: better on the
   benchmark, not yet seen in use. When the benchmark keeps improving and the
-  journals do not move, stop: the remaining work is on the recipe, not the
-  dinner.
+  journals do not move, stop: the remaining work is on the instructions, not
+  the dinner.
 - **A benchmark tuned against is spent.** Once a change is shaped by a
   benchmark's number, that number has stopped measuring the tool. Keep one
   benchmark nobody tunes against, or count the gain only where real runs show
