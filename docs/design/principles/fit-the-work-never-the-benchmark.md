@@ -26,7 +26,7 @@ The work is still what the tool is for, so three habits follow.
 
 - **A benchmark win needs a witness from real use.** The run journals already
   record what the cache saved and what an agent spent on real work. A change
-  justified by a benchmark alone is labelled as that: better on the
+  justified by a benchmark alone is labeled as that: better on the
   benchmark, not yet seen in use. When the benchmark keeps improving and the
   journals do not move, stop: the remaining work is on the recipe, not the
   dinner.
