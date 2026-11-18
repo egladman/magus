@@ -1726,7 +1726,7 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recorded yet would refuse exactly when a job has only just begun.
 func recentTrail(ctx context.Context, cacheDir string) []journal.Call {
 	var calls []journal.Call
-	for c, err := range recorder.Calls(ctx, cacheDir, jobWatchWindow) {
+	for c, err := range recorder.ReadCalls(ctx, cacheDir, jobWatchWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

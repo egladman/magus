@@ -119,7 +119,7 @@ func replayTrail(ctx context.Context, root, base string, paths []string, limit i
 		if e.Kind != journal.CallKindAgentCommand || e.Request.Ref == "" {
 			continue
 		}
-		raw, rerr := recorder.ReadPayload(base, e.Request)
+		raw, rerr := recorder.ReadCallPayload(base, e.Request)
 		if rerr != nil {
 			continue
 		}
@@ -388,7 +388,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 		case journal.CallKindAgentCommand:
 			out.Commands++
 			call := activityCall{At: e.Time, Action: e.Name, Worker: e.Agent, ToolMs: e.Duration.Milliseconds(), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := recorder.ReadPayload(base, e.Response); err == nil {
+			if raw, err := recorder.ReadCallPayload(base, e.Response); err == nil {
 				var resp recorder.AgentCommandResponse
 				switch err := decodeAgentBlob(base, e.Response.Ref, raw, &resp); {
 				case errors.As(err, &retired):
@@ -400,7 +400,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 					}
 				}
 			}
-			if raw, err := recorder.ReadPayload(base, e.Request); err == nil {
+			if raw, err := recorder.ReadCallPayload(base, e.Request); err == nil {
 				var req recorder.AgentCommandRequest
 				switch err := decodeAgentBlob(base, e.Request.Ref, raw, &req); {
 				case errors.As(err, &retired):
@@ -416,7 +416,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 				continue
 			}
 			sp := activitySpawn{Child: e.Name, Lease: e.Lease, At: e.Time}
-			if raw, err := recorder.ReadPayload(base, e.Request); err == nil {
+			if raw, err := recorder.ReadCallPayload(base, e.Request); err == nil {
 				var req recorder.AgentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
@@ -451,7 +451,7 @@ func readCalls(ctx context.Context, base string, limit int) ([]journal.Call, err
 		return nil, errors.New("sessions: read names no directory")
 	}
 	var out []journal.Call
-	for c, err := range recorder.Calls(ctx, base, limit) {
+	for c, err := range recorder.ReadCalls(ctx, base, limit) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

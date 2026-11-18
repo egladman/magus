@@ -27,13 +27,13 @@ func (m *Magus) PayloadByRef(ctx context.Context, ref string) ([]byte, error) {
 	}
 	payload := journal.Payload{Ref: ref}
 	searched := []string{m.CacheDir()}
-	data, err := recorder.ReadPayload(m.CacheDir(), payload)
+	data, err := recorder.ReadCallPayload(m.CacheDir(), payload)
 	if errors.Is(err, fs.ErrNotExist) {
 		// The session store records output refs only, so the primary checkout is the one
 		// other store searched.
 		_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
 			searched = append(searched, dir)
-			data, err = recorder.ReadPayload(dir, payload)
+			data, err = recorder.ReadCallPayload(dir, payload)
 			return err
 		})
 	}

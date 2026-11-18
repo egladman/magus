@@ -197,7 +197,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	if events[0].Preview != "token 3fa9c1d2" || events[0].Request.Ref == "" {
 		t.Fatalf("the subject was not recorded: %+v", events[0])
 	}
-	blob, err := recorder.ReadPayload(dir, events[0].Request)
+	blob, err := recorder.ReadCallPayload(dir, events[0].Request)
 	if err != nil || !strings.Contains(string(blob), "3fa9c1d2") {
 		t.Fatalf("subject blob = %q, %v", blob, err)
 	}
@@ -206,7 +206,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range recorder.Calls(ctx, base, limit) {
+	for c, err := range recorder.ReadCalls(ctx, base, limit) {
 		if err != nil {
 			return nil, err
 		}

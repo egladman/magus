@@ -81,7 +81,7 @@ func mcpCallTelemetry(t *testing.T) (*observabilitytest.MockProvider, *[]observa
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range recorder.Calls(ctx, base, limit) {
+	for c, err := range recorder.ReadCalls(ctx, base, limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -199,10 +199,10 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := recorder.ReadPayload(dir, ev.Response)
+	resp, err := recorder.ReadCallPayload(dir, ev.Response)
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := recorder.ReadPayload(dir, ev.Request)
+	reqBody, err := recorder.ReadCallPayload(dir, ev.Request)
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "query")
 }

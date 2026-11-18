@@ -438,9 +438,9 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	require.NotEqual(t, firstID, secondID)
 
 	var subjects []string
-	for e, err := range recorder.Calls(t.Context(), dir, 10) {
+	for e, err := range recorder.ReadCalls(t.Context(), dir, 10) {
 		require.NoError(t, err)
-		blob, err := recorder.ReadPayload(dir, e.Request)
+		blob, err := recorder.ReadCallPayload(dir, e.Request)
 		require.NoError(t, err)
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)

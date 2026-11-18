@@ -35,7 +35,7 @@ func attemptWork(ctx context.Context, base, lease string, since int64) (*types.J
 		return nil, nil
 	}
 	var events []journal.Call
-	for c, err := range recorder.Calls(ctx, base, workReadWindow) {
+	for c, err := range recorder.ReadCalls(ctx, base, workReadWindow) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}
@@ -99,7 +99,7 @@ func callFacts(base string, e journal.Call) (types.AgentFacts, bool) {
 	if e.Request.Ref == "" {
 		return types.AgentFacts{}, false
 	}
-	raw, err := recorder.ReadPayload(base, e.Request)
+	raw, err := recorder.ReadCallPayload(base, e.Request)
 	if err != nil {
 		return types.AgentFacts{}, false
 	}

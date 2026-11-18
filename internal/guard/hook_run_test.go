@@ -245,7 +245,7 @@ func hookCommandEvent(ctx context.Context, got journal.Call, origin jobtypes.Ori
 // loggedCalls is the newest limit calls in the log under base.
 func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, error) {
 	var out []journal.Call
-	for c, err := range recorder.Calls(ctx, base, limit) {
+	for c, err := range recorder.ReadCalls(ctx, base, limit) {
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +256,7 @@ func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 
 // loggedPayload is the payload ref names in the log under base.
 func loggedPayload(base, ref string) ([]byte, error) {
-	return recorder.ReadPayload(base, journal.Payload{Ref: ref})
+	return recorder.ReadCallPayload(base, journal.Payload{Ref: ref})
 }
 
 // A hook row times the rule load against the hook's deadline, which starts before it, and
@@ -316,14 +316,14 @@ func callDecidedBy(c journal.Call) string {
 func recordedRequest(t *testing.T, cacheDir string) recorder.AgentCommandRequest {
 	t.Helper()
 	var calls []journal.Call
-	for c, err := range recorder.Calls(t.Context(), cacheDir, 10) {
+	for c, err := range recorder.ReadCalls(t.Context(), cacheDir, 10) {
 		require.NoError(t, err)
 		if c.Kind == journal.CallKindAgentCommand {
 			calls = append(calls, c)
 		}
 	}
 	require.Len(t, calls, 1)
-	raw, err := recorder.ReadPayload(cacheDir, calls[0].Request)
+	raw, err := recorder.ReadCallPayload(cacheDir, calls[0].Request)
 	require.NoError(t, err)
 	var req recorder.AgentCommandRequest
 	require.NoError(t, codec.Unmarshal(raw, &req))

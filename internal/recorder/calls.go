@@ -551,15 +551,16 @@ func leaseFromContext(handed string) string {
 // journal.Calls and (journal.Payload).Read take.
 func callsDir(base string) string { return filepath.Join(base, dir) }
 
-// Calls returns up to limit calls from the end of the activity log under
-// base, newest first, by the error rule journal.Calls states.
-func Calls(ctx context.Context, base string, limit int) iter.Seq2[journal.Call, error] {
+// ReadCalls returns up to limit calls from the end of the activity log under
+// base, newest first, by the error rule journal.Calls states. It takes the
+// base; journal.Calls takes the directory under it.
+func ReadCalls(ctx context.Context, base string, limit int) iter.Seq2[journal.Call, error] {
 	return journal.Calls(ctx, callsDir(base), limit)
 }
 
-// ReadPayload returns the body p names in the activity log under base. A
+// ReadCallPayload returns the body p names in the activity log under base. A
 // ref journal.ValidPayloadRef refuses wraps fs.ErrNotExist.
-func ReadPayload(base string, p journal.Payload) ([]byte, error) {
+func ReadCallPayload(base string, p journal.Payload) ([]byte, error) {
 	return p.Read(callsDir(base))
 }
 
@@ -716,7 +717,7 @@ func recentCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 		return nil, errors.New("recorder: read names no directory")
 	}
 	var out []journal.Call
-	for c, err := range Calls(ctx, base, limit) {
+	for c, err := range ReadCalls(ctx, base, limit) {
 		if errors.Is(err, codec.ErrLineUndecodable) {
 			continue
 		}

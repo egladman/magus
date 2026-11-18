@@ -110,7 +110,7 @@ func TestShareMintIsAudited(t *testing.T) {
 		Request: e.Request,
 		Preview: e.Preview,
 	}, e)
-	blob, err := recorder.ReadPayload(trailDir, e.Request)
+	blob, err := recorder.ReadCallPayload(trailDir, e.Request)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec recorder.MintRecord
