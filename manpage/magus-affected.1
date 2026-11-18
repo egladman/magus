@@ -3,7 +3,7 @@
 magus\-affected \- Run a target for VCS\-diff affected projects
 .SH SYNOPSIS
 .B magus
-.RI "affected <target> [flags] [projects...]"
+.RI "affected <target> [flags]"
 .SH DESCRIPTION
 Run a named target for every project that is affected by changes in
 version control. The active VCS adapter is picked by autodetect from .git, .hg,
@@ -14,6 +14,10 @@ short\-circuits and falls back to the full project set with the source label
 .PP
 A project is affected if any of its source files changed directly, or if a
 project it depends on is affected (transitive closure over the dependency graph).
+.PP
+affected takes no project arguments, . and / included: the diff decides the set,
+and a named project would shrink the gate the diff sized. To pick the projects,
+run magus run <target> <projects>.
 .PP
 Use \-\-stdin to read changed paths from a pipe instead of running a VCS diff.
 This pairs with magus watch for continuous\-build workflows:

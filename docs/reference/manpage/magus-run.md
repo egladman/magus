@@ -11,14 +11,17 @@ Run a target for selected projects
 
 ## Synopsis
 
-**magus** run \<target\> [flags] [project...] | magus run [\<target\>] --stdin [--shard \<id\>] \< plan.json
+**magus** run \<target\> [flags] [project... | --all] | magus run [\<target\>] --stdin [--shard \<id\>] \< plan.json
 
 ## Description
 
 Run a named target for the selected projects. With no project
 arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
-command line select exactly those projects.
+command line select exactly those projects, and --all selects every project
+wherever the current directory is. --all takes no project arguments, and a /
+argument is refused for it: / is the filesystem root to a shell, and completes
+as /usr and /etc.
 
 --skip subtracts from whatever that selection resolved to, so a CI step can gate
 every project except a named few without any shell filtering. It takes the same
@@ -42,6 +45,9 @@ printed, and -o json, yaml or template renders the document as read, so a saved
 plan renders more than once without being computed again.
 
 ## Options
+
+**--[no-]all** (default: off)
+: Select every project in the workspace, wherever the current directory is; takes no project arguments
 
 **--[no-]cache** (default: on)
 : Replay a cache hit; --no-cache forces a fresh run, which still refreshes the entry
@@ -149,6 +155,12 @@ magus run test api/gateway
 
 ```sh
 magus run build api/gateway web/studio
+```
+
+*Lint every project, wherever the current directory is*
+
+```sh
+magus run lint --all
 ```
 
 *Every project that declares generate except two*
