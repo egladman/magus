@@ -176,7 +176,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Finding", Zero: types.Finding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFinding(v.(types.Finding)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), enums) }},
-	{Name: "Goal", Zero: job.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGoal(v.(job.Goal), enums) }},
+	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), enums)
 	}},
@@ -203,7 +203,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ImpactSymbol", Zero: types.ImpactSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactSymbol(v.(types.ImpactSymbol)) }},
 	{Name: "ImportGraph", Zero: types.ImportGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImportGraph(v.(types.ImportGraph)) }},
 	{Name: "InputRef", Zero: types.InputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInputRef(v.(types.InputRef)) }},
-	{Name: "Job", Zero: job.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(job.Job), enums) }},
+	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job), enums) }},
 	{Name: "JobAttempt", Zero: job.CapturedRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobCapturedRun(v.(job.CapturedRun)) }},
 	{Name: "JobBlock", Zero: job.Block{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(job.Block), enums) }},
 	{Name: "JobClaim", Zero: job.Claim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobClaim(v.(job.Claim), enums) }},
@@ -213,7 +213,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobForkFacts", Zero: job.ForkFacts{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobForkFacts(v.(job.ForkFacts)) }},
 	{Name: "JobGateAttempt", Zero: job.GateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(job.GateAttempt)) }},
 	{Name: "JobIntegration", Zero: job.Integration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(job.Integration)) }},
-	{Name: "JobList", Zero: job.List{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(job.List), enums) }},
+	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},
 	{Name: "JobModelTier", Zero: tier.Assignment{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectModelTierAssignment(v.(tier.Assignment), enums)
 	}},
@@ -268,7 +268,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "Layer", Zero: types.Layer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLayer(v.(types.Layer)) }},
 	{Name: "Layout", Zero: imagetypes.Layout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(imagetypes.Layout), enums) }},
-	{Name: "LeaseCheck", Zero: job.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobLeaseCheck(v.(job.LeaseCheck)) }},
+	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
 	{Name: "ListPullsRequest", Zero: types.ListPullsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectListPullsRequest(v.(types.ListPullsRequest)) }},

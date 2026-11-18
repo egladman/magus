@@ -1538,9 +1538,14 @@ func zeroDuration(word string) bool {
 func WorkerCheckCommand(c types.LeaseCheck) string { return checkCommand(c) }
 
 // checkCommand renders a check as the command that runs it, quoted for a shell.
-// It carries --budget-wait 0 because a worker never queues for a seat.
+// It carries --budget-wait 0 because a worker never queues for a seat. A check over
+// the workspace root, project `/`, runs as --all, since `run` refuses `/`.
 func checkCommand(c types.LeaseCheck) string {
-	args := []string{c.Target, cmp.Or(c.Project, "."), "--budget-wait", "0"}
+	project := cmp.Or(c.Project, ".")
+	if project == "/" {
+		project = "--all"
+	}
+	args := []string{c.Target, project, "--budget-wait", "0"}
 	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}

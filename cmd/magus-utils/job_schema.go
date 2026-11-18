@@ -204,6 +204,9 @@ func properties(pkg, structName string, st *ast.StructType, d *goDecls, version 
 	var props node
 	required := []string{}
 	for _, f := range fields {
+		if f.err != nil {
+			return nil, nil, f.err
+		}
 		props = append(props, member{f.name, f.prop})
 		if f.required {
 			required = append(required, f.name)
@@ -213,12 +216,14 @@ func properties(pkg, structName string, st *ast.StructType, d *goDecls, version 
 }
 
 // schemaField is one property a struct publishes, and how deep in embedded
-// structs it was declared.
+// structs it was declared. err is why its type has no schema, which matters only
+// if no shallower field hides it.
 type schemaField struct {
 	name     string
 	prop     node
 	required bool
 	depth    int
+	err      error
 }
 
 // collectFields lists st's properties in declaration order, an untagged
@@ -261,10 +266,7 @@ func collectFields(pkg, structName string, st *ast.StructType, d *goDecls, versi
 		omitempty := slices.Contains(tagOpts, "omitempty") || slices.Contains(tagOpts, "omitzero")
 
 		prop, err := property(f, pkg, structName, field, name, omitempty, d, version)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, schemaField{name: name, prop: prop, required: !omitempty, depth: depth})
+		out = append(out, schemaField{name: name, prop: prop, required: !omitempty, depth: depth, err: err})
 	}
 	return out, nil
 }

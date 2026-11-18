@@ -219,6 +219,7 @@
 {"group":"file:changes/unreleased/job-verbs-stay-scoped-ended.md","path":"changes/unreleased/job-verbs-stay-scoped-ended.md"}
 {"group":"file:changes/unreleased/job-wait-accepts-a-same-second-run.md","path":"changes/unreleased/job-wait-accepts-a-same-second-run.md"}
 {"group":"file:changes/unreleased/jobs-retain.md","path":"changes/unreleased/jobs-retain.md"}
+{"group":"file:changes/unreleased/json-keys-are-snake-case.md","path":"changes/unreleased/json-keys-are-snake-case.md"}
 {"group":"file:changes/unreleased/lapsed-judgment-passes-an-outside-append.md","path":"changes/unreleased/lapsed-judgment-passes-an-outside-append.md"}
 {"group":"file:changes/unreleased/latex-spell.md","path":"changes/unreleased/latex-spell.md"}
 {"group":"file:changes/unreleased/lease-commits-in-another-repo.md","path":"changes/unreleased/lease-commits-in-another-repo.md"}
@@ -327,6 +328,7 @@
 {"group":"file:changes/unreleased/run-document-carries-target-status.md","path":"changes/unreleased/run-document-carries-target-status.md"}
 {"group":"file:changes/unreleased/run-false-alarms.md","path":"changes/unreleased/run-false-alarms.md"}
 {"group":"file:changes/unreleased/runs-wait-for-the-budget.md","path":"changes/unreleased/runs-wait-for-the-budget.md"}
+{"group":"file:changes/unreleased/safetyscissors-new.md","path":"changes/unreleased/safetyscissors-new.md"}
 {"group":"file:changes/unreleased/safetyscissors-trail.md","path":"changes/unreleased/safetyscissors-trail.md"}
 {"group":"file:changes/unreleased/sandbox-launcher.md","path":"changes/unreleased/sandbox-launcher.md"}
 {"group":"file:changes/unreleased/sandbox-policy-grants.md","path":"changes/unreleased/sandbox-policy-grants.md"}
@@ -1878,7 +1880,11 @@
 {"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/README.md"}
 {"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/doc.go"}
 {"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/doc_test.go"}
+{"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/errors.go"}
 {"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/magusfile.buzz"}
+{"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/options.go"}
+{"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/safetyscissors.go"}
+{"group":"dir:libs/safetyscissors","path":"libs/safetyscissors/safetyscissors_test.go"}
 {"group":"dir:libs/safetyscissors/sandbox/filesystem","path":"libs/safetyscissors/sandbox/filesystem/expand.go"}
 {"group":"dir:libs/safetyscissors/sandbox/filesystem","path":"libs/safetyscissors/sandbox/filesystem/expand_test.go"}
 {"group":"dir:libs/safetyscissors/sandbox/filesystem","path":"libs/safetyscissors/sandbox/filesystem/filesystem.go"}

@@ -580,7 +580,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return bindgen.ObjectHistory(types.History{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("job", function("magus.job", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJob(types.Job{ID: firstStr(args)}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectJob(types.Job{Job: job.Job{ID: firstStr(args)}}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("session", function("magus.session", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectSession(types.Session{}, ffi.SessionEnums(ctx, sess, "magus")), nil

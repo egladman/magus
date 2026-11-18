@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	internaljob "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -284,12 +285,12 @@ func TestWritePathPatternMatchesTheValidator(t *testing.T) {
 		if !tc.accept {
 			continue
 		}
-		for _, p := range types.DeclarationProblems((job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}})) {
+		for _, p := range internaljob.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{tc.path}}}) {
 			assert.NotContains(t, p.Field, "paths.write", "%q: %s", tc.path, p.Message)
 		}
 	}
 	for _, refused := range []string{"~/x", "/abs/x", "../x"} {
-		problems := types.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
+		problems := internaljob.DeclarationProblems(job.Declaration{ID: "j", Paths: job.Paths{Write: []string{refused}}})
 		assert.NotEmpty(t, problems, "the validator accepts %q, and the pattern refuses it", refused)
 	}
 }
@@ -482,8 +483,10 @@ type Check struct {
 	s.Equal("Record is the view's.", doc.Description)
 	s.Equal([]string{"id", "name"}, doc.Required)
 	s.Equal("object", doc.Properties["check"]["type"])
-	s.Less(strings.Index(string(body), `"id"`), strings.Index(string(body), `"check"`))
-	s.Less(strings.Index(string(body), `"check"`), strings.Index(string(body), `"name"`))
+	_, props, found := strings.Cut(string(body), `"properties"`)
+	s.Require().True(found)
+	s.Less(strings.Index(props, `"id"`), strings.Index(props, `"check"`))
+	s.Less(strings.Index(props, `"check"`), strings.Index(props, `"name"`))
 }
 
 func (s *ViewSchemaSuite) TestSamePropertyAtOneDepthIsRefused() {
@@ -502,4 +505,45 @@ type Record struct {
 	_, err := renderJobSchema(rec, decls)
 	s.Require().Error(err)
 	s.Contains(err.Error(), `json name "name" is declared twice at one depth`)
+}
+
+// The module's check is opaque bytes, a type no schema can publish. The view hides it,
+// so the schema publishes the view's and never asks after the hidden one; left
+// unhidden, the opaque field is still refused.
+func (s *ViewSchemaSuite) TestAHiddenFieldNeedsNoSchema() {
+	const opaqueInner = `package inner
+
+const InnerAPIVersion = "magus.inner/v1alpha1"
+
+type Raw []byte
+
+type Record struct {
+	ID    string @json:"id"@
+	Check Raw    @json:"check,omitempty"@
+}
+`
+	rec := jobRecord{Struct: "Record", Pkg: "view", Title: "view", File: "view.schema.json", Version: "InnerAPIVersion"}
+	hidden := s.viewDecls(opaqueInner, `package view
+
+type Record struct {
+	inner.Record
+	Check *Check @json:"check,omitempty"@
+}
+
+type Check struct {
+	Target string @json:"target"@
+}
+`)
+	_, err := renderJobSchema(rec, hidden)
+	s.Require().NoError(err)
+
+	unhidden := s.viewDecls(opaqueInner, `package view
+
+type Record struct {
+	inner.Record
+}
+`)
+	_, err = renderJobSchema(rec, unhidden)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Record.Check")
 }

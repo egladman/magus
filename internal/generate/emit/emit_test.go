@@ -295,13 +295,13 @@ func (s *LibModulesSuite) TestSnakeSplitsAcronyms() {
 	s.Equal("new_zone", snake("NewZone"))
 }
 
-type shadowInner struct {
+type ShadowInner struct {
 	Check string
 	Name  string
 }
 
 type shadowView struct {
-	shadowInner
+	ShadowInner
 	Check []byte
 	Extra int
 }
@@ -317,5 +317,5 @@ func (s *ObjectFieldsSuite) TestShallowerFieldReplacesTheEmbeddedOneInPlace() {
 	for _, f := range ObjectFields(reflect.TypeFor[shadowView]()) {
 		got = append(got, f.Selector)
 	}
-	s.Equal([]string{"Check", "shadowInner.Name", "Extra"}, got)
+	s.Equal([]string{"Check", "ShadowInner.Name", "Extra"}, got)
 }

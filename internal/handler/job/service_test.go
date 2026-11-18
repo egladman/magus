@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -45,34 +44,11 @@ func seedFiled(t *testing.T, store *jobstore.Store, id string, result *job.Resul
 	// An attempt stores its result without the result's own api_version, as the store writes it.
 	delete(filed, "api_version")
 	line, err := codec.Marshal(map[string]any{
-		"apiVersion": job.APIVersion, "kind": "Attempt",
-		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
+		"api_version": job.APIVersion, "kind": "Attempt",
+		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": filed},
 	})
 	require.NoError(t, err)
 	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
-}
-
-// fixtureCamelKeys is v with every object key camelCased, as the
-// attempts.jsonl record spells them.
-func fixtureCamelKeys(v any) any {
-	switch v := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(v))
-		for k, x := range v {
-			parts := strings.Split(k, "_")
-			for i := 1; i < len(parts); i++ {
-				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
-			}
-			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
-		}
-		return out
-	case []any:
-		for i := range v {
-			v[i] = fixtureCamelKeys(v[i])
-		}
-		return v
-	}
-	return v
 }
 
 // trailWorkspace is a workspace whose trail lives at dir, whose cache reports a fixed size,

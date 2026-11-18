@@ -120,7 +120,11 @@ func gateWalk(name string, deps map[string][]string, seen map[string]bool) []str
 
 func gatesOnCI(row jobtypes.Job) bool {
 	return slices.ContainsFunc(row.EffectiveGoals(), func(g jobtypes.Goal) bool {
-		return g.Kind == jobtypes.GoalKindCheck && g.Check.Target == types.TargetCI
+		if g.Kind != jobtypes.GoalKindCheck {
+			return false
+		}
+		c, err := job.GoalCheck(g)
+		return err == nil && c.Target == types.TargetCI
 	})
 }
 
