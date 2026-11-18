@@ -112,8 +112,8 @@ type AgentCommand struct {
 	types.AgentFacts
 }
 
-// AgentCommandAPIVersion versions the two payloads an agent command keeps.
-const AgentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
+// agentCommandAPIVersion versions the two payloads an agent command keeps.
+const agentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
 
 // AgentCommandRequest is the request payload of an agent command: what the
 // host asked to run, restated by magus.
@@ -234,7 +234,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Context = secrets.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	requestBody, _ := codec.Marshal(AgentCommandRequest{
-		APIVersion: AgentCommandAPIVersion,
+		APIVersion: agentCommandAPIVersion,
 		Host:       command.Host,
 		Session:    command.Session,
 		Transcript: command.Transcript,
@@ -245,7 +245,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		AgentFacts: command.AgentFacts,
 	})
 	responseBody, _ := codec.Marshal(AgentCommandResponse{
-		APIVersion:      AgentCommandAPIVersion,
+		APIVersion:      agentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
 		Context:         command.Context,
@@ -380,8 +380,8 @@ type RuleFailure struct {
 	Error string `json:"error"`
 }
 
-// AgentSpawnAPIVersion versions an agent spawn's request payload.
-const AgentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
+// agentSpawnAPIVersion versions an agent spawn's request payload.
+const agentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
 
 // AgentSpawnRequest is the request payload of an agent spawn: the context
 // the caller handed its subagent.
@@ -406,8 +406,8 @@ type AgentSpawnRequest struct {
 }
 
 const (
-	// NameAgentSpawn is the action of an agent_spawn event whose host named no child.
-	NameAgentSpawn = "agent.spawn"
+	// nameAgentSpawn is the action of an agent_spawn event whose host named no child.
+	nameAgentSpawn = "agent.spawn"
 	// NameAgentContinue is the action of an agent_spawn event recording a message to a
 	// subagent that already exists.
 	NameAgentContinue = "agent.continue"
@@ -441,7 +441,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
 	body, _ := codec.Marshal(AgentSpawnRequest{
-		APIVersion:    AgentSpawnAPIVersion,
+		APIVersion:    agentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
 		Event:         spawn.Event,
@@ -465,7 +465,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	case spawn.Continue:
 		action = NameAgentContinue
 	case action == "":
-		action = NameAgentSpawn
+		action = nameAgentSpawn
 	}
 	AppendCall(ctx, base, journal.Call{
 		Time:      time.Now(),

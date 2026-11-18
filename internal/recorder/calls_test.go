@@ -157,7 +157,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	var gotRequest AgentCommandRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, AgentCommandRequest{
-		APIVersion: AgentCommandAPIVersion,
+		APIVersion: agentCommandAPIVersion,
 		Host:       "codex",
 		Session:    "abc123",
 		Event:      "PreToolUse",
@@ -169,7 +169,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.NoError(t, err)
 	var gotResponse AgentCommandResponse
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
-	require.Equal(t, AgentCommandResponse{APIVersion: AgentCommandAPIVersion, Decision: verdict.Defer}, gotResponse)
+	require.Equal(t, AgentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: verdict.Defer}, gotResponse)
 }
 
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
@@ -286,14 +286,14 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	require.NoError(t, err)
 	var gotRequest AgentCommandRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
-	require.Equal(t, AgentCommandRequest{APIVersion: AgentCommandAPIVersion, Path: "AGENTS.md"}, gotRequest)
+	require.Equal(t, AgentCommandRequest{APIVersion: agentCommandAPIVersion, Path: "AGENTS.md"}, gotRequest)
 
 	response, err := readBlob(dir, event.Response.Ref)
 	require.NoError(t, err)
 	var gotResponse AgentCommandResponse
 	require.NoError(t, codec.Unmarshal(response, &gotResponse))
 	require.Equal(t, AgentCommandResponse{
-		APIVersion: AgentCommandAPIVersion,
+		APIVersion: agentCommandAPIVersion,
 		Decision:   verdict.Advise,
 		Context:    "record the decision",
 	}, gotResponse)
@@ -416,7 +416,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	var gotRequest AgentSpawnRequest
 	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, AgentSpawnRequest{
-		APIVersion: AgentSpawnAPIVersion,
+		APIVersion: agentSpawnAPIVersion,
 		Host:       "claude-code",
 		Session:    "abc123",
 		Event:      "PreToolUse",
