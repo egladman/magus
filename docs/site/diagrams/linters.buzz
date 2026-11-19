@@ -1,0 +1,86 @@
+namespace linters;
+
+import "magus";
+import "magus/diagram";
+import "result";
+import "site/diagrams/packages" as packages;
+
+// lintersLoopDiagram draws the lint loop as the process a change meets, one level: its steps
+// link to linters-boundary, which draws the packages behind them.
+export fun lintersLoopDiagram() > diagram\Diagram {
+    final author = diagram\person("Author", sub: "a person or an agent");
+    final lint = diagram\step("magus run lint", sub: "scoped to the files", tag: "target");
+    final measure = diagram\step("magus measures", sub: "graph, conformance rows", link: "#diagram-linters-boundary");
+    final policy = diagram\step("analyzers.yaml", sub: "per project", look: diagram\Look.input);
+    final judge = diagram\step("Analyzers judge", sub: "libs/conventions, hack/lint", look: diagram\Look.focal,
+        link: "#diagram-linters-boundary");
+    final finding = diagram\step("Finding", sub: "message and fix");
+    final person = diagram\person("A person", sub: "the only one who excuses");
+    final format = diagram\step("magus run format", sub: "drops fixed entries", tag: "target");
+    return diagram\of("linters-loop",
+            title: "magus measures, the analyzers judge, and the finding says what to fix",
+            eyebrow: "linters",
+            desc: "magus run lint asks magus to measure the head and the base revision. The "
+                + "analyzers this repository writes judge those measures against analyzers.yaml, "
+                + "and each verdict is a finding with a message and a fix the author applies and "
+                + "reruns. Only a person adds a baseline entry or an exit; format drops the entries "
+                + "the code no longer needs.",
+            direction: diagram\Direction.down, level: diagram\Level.process)
+        .flowAcross(author, dst: lint, label: "runs")
+        .flowAcross(lint, dst: measure, label: "asks")
+        .flowAcross(measure, dst: judge, label: "measures")
+        .flowAcross(policy, dst: judge, label: "configures")
+        .flowAcross(judge, dst: finding, label: "verdict")
+        .flowAcross(finding, dst: author, label: "fix, rerun", stroke: diagram\Stroke.focal)
+        .flowAcross(person, dst: policy, label: "excuses")
+        .flowAcross(format, dst: policy, label: "shrinks")
+        .zone("magus: measures, never judges", actors: [measure])
+        .zone("this repository: judges", actors: [policy, judge, finding, format])
+        .legend(diagram\Look.focal, label: "where a verdict is made")
+        .legend(diagram\Look.input, label: "policy a person types")
+        .unscoped(why: "the lint loop is the steps a change meets in order; linters-boundary draws their packages");
+}
+
+// lintersBoundaryDiagram draws the packages on each side of the line between what magus
+// measures and what the analyzers judge. A directory the graph does not hold is the error.
+export fun lintersBoundaryDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final knowledge = magus\graph().dir("internal/graph/knowledge");
+        final hostModules = magus\graph().dir("std");
+        final records = magus\graph().dir("types");
+        final rules = diagram\external("hack/lint rules", sub: "Buzz, one file a rule");
+        final ceiling = diagram\external("Ceiling policy", sub: "conformance-ceiling.buzz");
+        final conventions = packages\goPackages("libs/conventions/**");
+        final pairing = [magus\graph().dir("libs/testpairing"), magus\graph().dir("libs/testpairing/plugin")];
+        final policy = diagram\external("analyzers.yaml", sub: "one per project", look: diagram\Look.input);
+        final d = diagram\of("linters-boundary",
+                title: "magus computes the measures; the analyzers import none of it",
+                eyebrow: "linters",
+                desc: "The knowledge graph measures conformance into the shared records, and the host "
+                    + "modules hand the measures to Buzz. The hack/lint rules and the ceiling policy "
+                    + "read them there and decide. The Go analyzers run inside golangci-lint and import "
+                    + "no magus package. A rule that takes a baseline or an exit reads the analyzers.yaml "
+                    + "of the project that owns the file.",
+                level: diagram\Level.package)
+            .box(knowledge, label: "Knowledge graph", sub: "conformance rows", focal: true)
+            .box(hostModules, label: "Host modules", sub: "magus\\change()")
+            .box(records, label: "Records", sub: "ConformanceReport")
+            .group(conventions, label: "libs/conventions", sub: "Go analyzers")
+            .group(pairing, label: "libs/testpairing", sub: "Go analyzers")
+            .actor(rules)
+            .actor(ceiling)
+            .actor(policy)
+            .edgesFromGraph()
+            .flowOut(hostModules, dst: rules, label: "measures")
+            .flowAcross(rules, dst: ceiling, label: "judges with")
+            .flowAcross(policy, dst: rules, label: "configures")
+            .flowIn(policy, dst: magus\graph().dir("libs/conventions/accessorclone"), label: "configures")
+            .boundary("magus", dirs: [knowledge, hostModules, records])
+            .legend(diagram\Look.focal, label: "where the measures are made")
+            .legend(diagram\Look.input, label: "policy a person types")
+            .scope(conventions + pairing);
+        return result\ok::<diagram\Diagram>(d);
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err, doing: "draw linters-boundary");
+    }
+}

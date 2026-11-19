@@ -1,0 +1,15 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 4,
+    "imports": 3
+  },
+  "diagram": "linters-boundary",
+  "findings": [],
+  "level": "package",
+  "stamp": "sha256:afdc6d6c0dc360af6a6b60811f873a742f79ec2f04c8024e474cee52de152815",
+  "undrilled": [
+    "libs/conventions",
+    "libs/testpairing"
+  ]
+}

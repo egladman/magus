@@ -49,6 +49,17 @@ error built into a message, and `error-attr` an error's text passed as an `error
 or `err` attribute; both belong in `attr.Error`, so the display names the error's
 origin once.
 
+## How it fits
+
+magus measures, these analyzers judge, and each project's `analyzers.yaml`
+configures them. [How the linters work](../../docs/concepts/linters.md) explains
+the order a finding is decided in.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="../../docs/assets/gen/diagram-linters-loop-light.svg">
+  <img alt="magus measures, the analyzers judge, and the finding says what to fix" src="../../docs/assets/gen/diagram-linters-loop.svg">
+</picture>
+
 ## Scope
 
 golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in

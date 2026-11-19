@@ -93,6 +93,7 @@ automates a decision and when it hands the decision to you.
 - [Fit the work, never the benchmark](design/principles/fit-the-work-never-the-benchmark.md): Between an artificial result and real work there is a gap that is never zero and is unknown until it is measured; a change tuned to a benchmark fits the benchmark, so a gain counts where real use shows it, at the size it was run.
 - [A file a person edits is YAML](design/principles/a-file-a-person-edits-is-yaml.md): A file a person adds to or edits is YAML, grouped and commented; JSON Lines is append-only state a machine writes. Analyzer policy is the repository's, on top of magus.
 - [Move fast, but leave nothing worse where it costs](design/principles/move-fast-leave-nothing-worse.md): Move as fast as you like inside a change, but a change may not make the codebase measurably worse where it is expensive, nor add debt nobody signed for.
+- [Measures in, verdicts out](design/principles/measures-in-verdicts-out.md): magus computes measures; a repository's own analyzers turn them into verdicts, under policy that repository types. No pass or fail is compiled into magus.
 
 ### Judgment
 
