@@ -32,7 +32,7 @@ import "flags";
 import "proc";
 import "result";
 import "encoding/json";
-import "diskwatch";
+import "magus/diskwatch";
 import "lib/hook" as hook;
 
 final AGENT_NAME_FLAG = "--agent-name";
@@ -76,16 +76,18 @@ fun tickSnippet() > str {
 
 // pending says what the store holds that nobody was told, and marks it told.
 fun pending(store: str, now: double) > result\Result::<str?> {
-    try {
-        final samples = diskwatch\read(store);
-        final said = diskwatch\pendingLine(samples, now: now);
-        if (said != null) {
-            diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
-        }
-        return result\ok::<str?>(said);
-    } catch (err: any) {
-        return result\caught::<str?>(err);
+    final samples = diskwatch\read(store);
+    if (samples.error -> err) {
+        return result\Result::<str?>{ error = err };
     }
+    final said = diskwatch\pendingLine(samples.value!, now: now);
+    if (said != null) {
+        final wrote = diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+        if (wrote.error -> err) {
+            return result\Result::<str?>{ error = err };
+        }
+    }
+    return result\ok::<str?>(said);
 }
 
 fun main(args: [str]) > void {
@@ -100,7 +102,7 @@ fun main(args: [str]) > void {
     var cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
     if (cwd == "") { cwd = "."; }
 
-    final store = diskwatch\storePath() catch "";
+    final store = diskwatch\storePath().value ?? "";
     if (store == "") { return; }
     final now = os\time();
     // The cheap path every turn takes: one stat, and nothing else, inside the floor.
