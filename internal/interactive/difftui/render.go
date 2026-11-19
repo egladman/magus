@@ -72,11 +72,10 @@ func Frame(m *Model, color bool) string {
 			b.WriteString("\n")
 		}
 	}
-	rows := m.Rows()
-	end := min(m.Top()+m.Height(), len(rows))
+	end := min(m.Top()+m.Height(), m.RowCount())
 	for i := m.Top(); i < end; i++ {
 		b.WriteString(gutter(i == m.CursorRow()))
-		b.WriteString(rowText(rows[i], color))
+		b.WriteString(rowText(m.RowAt(i), color))
 		b.WriteString("\n")
 	}
 	// Pad to a fixed height so the block does not change shape as the reader moves through a

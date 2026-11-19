@@ -231,7 +231,7 @@ func TestScrollClampsAtBothEnds(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
 	m.resize(4)
-	maxTop := len(m.Rows()) - 4
+	maxTop := m.RowCount() - 4
 	require.Positive(t, maxTop, "the fixture must be taller than the viewport for this to mean anything")
 
 	m.scroll(-10)
@@ -339,7 +339,7 @@ func TestFrameMarksExactlyOneRow(t *testing.T) {
 func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	t.Parallel()
 	m := New(Input{})
-	assert.Empty(t, m.Rows())
+	assert.Zero(t, m.RowCount())
 	assert.Equal(t, -1, m.CursorRow())
 	assert.Equal(t, diff.Cursor{Hunk: -1}, m.cursor())
 	assert.False(t, m.nextHunk())
@@ -865,7 +865,7 @@ func TestHostTextNeverReachesTheTerminalAsAControlSequence(t *testing.T) {
 // everyRowText is the visible text of every row, for asserting on order and presence. Named
 // away from render.go's rowText, which renders ONE row and is the package's real one.
 func everyRowText(m *Model) []string {
-	out := make([]string, 0, len(m.Rows()))
+	out := make([]string, 0, m.RowCount())
 	for _, r := range m.Rows() {
 		out = append(out, r.Text)
 	}
