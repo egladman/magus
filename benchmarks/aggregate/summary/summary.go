@@ -1,12 +1,9 @@
-// aggregate reads hyperfine JSON results and emits BENCHMARKS.md,
-// and results/summary.csv.
-//
-// Usage: go run ./aggregate/ <results-dir>
-// Writes BENCHMARKS.md to stdout; the csv alongside results-dir.
-package main
+package summary
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -345,17 +342,11 @@ func observedVersions(results []*benchResult) string {
 	return sb.String()
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: aggregate <results-dir>")
-		os.Exit(1)
-	}
-	resultsDir := os.Args[1]
-
+// Summarize prints resultsDir's Markdown to stdout and writes its summary.csv.
+func Summarize(stdout, stderr io.Writer, resultsDir string) error {
 	entries, err := os.ReadDir(resultsDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot read %s: %v\n", resultsDir, err)
-		os.Exit(1)
+		return fmt.Errorf("cannot read %s: %w", resultsDir, err)
 	}
 
 	var results []*benchResult
@@ -365,15 +356,14 @@ func main() {
 		}
 		r, err := loadResult(filepath.Join(resultsDir, e.Name()))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "skip %s: %v\n", e.Name(), err)
+			fmt.Fprintf(stderr, "skip %s: %v\n", e.Name(), err)
 			continue
 		}
 		results = append(results, r)
 	}
 
 	if len(results) == 0 {
-		fmt.Fprintln(os.Stderr, "no results found")
-		os.Exit(1)
+		return errors.New("no results found")
 	}
 
 	// Group by (fixture, size, scenario)
@@ -489,7 +479,7 @@ func main() {
 		}
 	}
 
-	fmt.Print(md.String())
+	fmt.Fprint(stdout, md.String())
 
 	// Write CSV
 	csvPath := filepath.Join(resultsDir, "summary.csv")
@@ -506,8 +496,9 @@ func main() {
 			)
 		}
 		csvF.Close()
-		fmt.Fprintf(os.Stderr, "wrote %s\n", csvPath)
+		fmt.Fprintf(stderr, "wrote %s\n", csvPath)
 	}
+	return nil
 }
 
 func scenarioIndex(s string) int {
