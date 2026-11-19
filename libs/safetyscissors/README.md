@@ -91,6 +91,10 @@ verdict.
 The store grades a postcondition from a run it witnessed, a run a signed payload
 attests, or a run the caller reports.
 
+A host that starts and ends its own attempts records each with `Store.RecordAttempt`.
+The store refuses an attempt for a job it does not hold, one whose `N` is not the next
+try, and one whose times or end do not read as a finished try.
+
 ## What it refuses
 
 - No driver. The module has no agent loop, no model client and no scheduler. It records
