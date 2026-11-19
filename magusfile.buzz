@@ -266,8 +266,11 @@ magus\project({
         // tests alone spend about seven minutes spawning those tools.
         // slots as go-test: its go-test ops run inline under this step's seat, so the seat
         // is what sizes their -p and GOMAXPROCS.
+        // A cold cache runs the composed targets (buzz-test 13m21s, symbol-digest-generate
+        // 8m1s, advice-test 3m44s in run 44535631777) and a red main never stores entries, so
+        // the first run after a red stretch needs the headroom.
         "test": {
-            "timeout": "25m",
+            "timeout": "40m",
             "memory_mb": 10240,
             "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
