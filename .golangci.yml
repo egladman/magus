@@ -500,7 +500,6 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          policy: hack/lint/analyzers.yaml
 
       blankerror:
         type: module

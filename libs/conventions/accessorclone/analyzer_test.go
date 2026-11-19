@@ -2,7 +2,6 @@ package accessorclone
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,10 +19,11 @@ func TestAccessorClone(t *testing.T) {
 	suite.Run(t, new(AnalyzerSuite))
 }
 
-func (s *AnalyzerSuite) policy(body string) string {
-	path := filepath.Join(s.T().TempDir(), "analyzers.yaml")
-	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
-	return path
+// policy writes body as analyzers.yaml in a fresh working directory, where an
+// analyzer with no module reads it.
+func (s *AnalyzerSuite) policy(body string) {
+	s.T().Chdir(s.T().TempDir())
+	s.Require().NoError(os.WriteFile(policyFile, []byte(body), 0o644))
 }
 
 const policyBody = `other:
@@ -43,23 +43,29 @@ accessorclone:
 // quiet (nothing to report), stale (a baseline entry to delete) and nolint
 // (a directive that excuses nothing).
 func (s *AnalyzerSuite) TestReportsAccessorsOutsideThePolicy() {
-	analyzer, err := New(Options{Policy: s.policy(policyBody)})
+	testdata := analysistest.TestData()
+	s.policy(policyBody)
+	analyzer, err := New(Options{})
 	s.Require().NoError(err)
-	analysistest.Run(s.T(), analysistest.TestData(), analyzer, "api", "quiet", "stale", "nolint")
+	analysistest.Run(s.T(), testdata, analyzer, "api", "quiet", "stale", "nolint")
 }
 
-func (s *AnalyzerSuite) TestNewRequiresAPolicy() {
+func (s *AnalyzerSuite) TestNoPolicyFileExcusesNothing() {
+	s.T().Chdir(s.T().TempDir())
 	_, err := New(Options{})
-	s.Require().ErrorContains(err, "no policy file")
+	s.Require().NoError(err)
+}
+
+func (s *AnalyzerSuite) TestAPolicyWithNoKeyExcusesNothing() {
+	s.policy("other: {}\n")
+	_, err := New(Options{})
+	s.Require().NoError(err)
 }
 
 func (s *AnalyzerSuite) rejects(body, want string) {
-	_, err := New(Options{Policy: s.policy(body)})
+	s.policy(body)
+	_, err := New(Options{})
 	s.Require().ErrorContains(err, want)
-}
-
-func (s *AnalyzerSuite) TestNewRejectsAPolicyWithNoKey() {
-	s.rejects("other: {}\n", "holds no accessorclone key")
 }
 
 func (s *AnalyzerSuite) TestNewRejectsAnEmptySymbol() {
@@ -83,17 +89,17 @@ func (s *AnalyzerSuite) TestNewRejectsAnExitThatRepeatsTheBaseline() {
 		"in accessorclone.baseline and accessorclone.exits")
 }
 
-func (s *AnalyzerSuite) TestNewRejectsAMovedFile() {
-	sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
-	path := s.policy("accessorclone:\n  baseline:\n    pkg/moved.go: [A]\n")
-	_, err := New(Options{Module: "example.com/m", Policy: path})
+func (s *AnalyzerSuite) TestNewReadsTheModuleRootsPolicy() {
+	root := sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
+	s.Require().NoError(os.WriteFile(root+"/"+policyFile, []byte("accessorclone:\n  baseline:\n    pkg/moved.go: [A]\n"), 0o644))
+	_, err := New(Options{Module: "example.com/m"})
 	s.Require().Error(err)
 	s.True(strings.Contains(err.Error(), "pkg/moved.go"), err.Error())
 }
 
 func (s *AnalyzerSuite) TestNewAcceptsAFileThatExists() {
-	sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
-	path := s.policy("accessorclone:\n  baseline:\n    pkg/pkg.go: [A]\n")
-	_, err := New(Options{Module: "example.com/m", Policy: path})
+	root := sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
+	s.Require().NoError(os.WriteFile(root+"/"+policyFile, []byte("accessorclone:\n  baseline:\n    pkg/pkg.go: [A]\n"), 0o644))
+	_, err := New(Options{Module: "example.com/m"})
 	s.Require().NoError(err)
 }

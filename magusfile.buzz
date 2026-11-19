@@ -2798,7 +2798,10 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                     ".gitattributes", "dprint-base.json",
-                    "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl", "hack/lint/analyzers.yaml",
+                    "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl", "analyzers.yaml",
+                    // each project's own analyzers.yaml: a root glob stops at a nested project.
+                    "libs/figure/analyzers.yaml", "libs/gopherbuzz/analyzers.yaml", "libs/kustomize/analyzers.yaml",
+                    "libs/ssg/analyzers.yaml", "libs/train/analyzers.yaml",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", ".gitignore",
                     "types/diagnostic.go",

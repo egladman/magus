@@ -1,7 +1,8 @@
 // no-throw: errors are values below the entry. A function returns one value
 // carrying its result and its error; only an entry throws. Three constructs
-// count per file against the no-throw baseline in hack/lint/analyzers.yaml,
-// whose counts may only fall:
+// count per file against the no-throw baseline in the analyzers.yaml of the
+// file's own project, whose counts may only fall. A project with no
+// analyzers.yaml, or one with no no-throw key, allows none:
 //
 //	throw                  a TS or JS throw below an entry
 //	async-no-result        an exported TS async function that returns no Promise of a Result
@@ -29,19 +30,19 @@ import "encoding/yaml";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-final POLICY = "hack/lint/analyzers.yaml";
-final CEILING = "no-throw.baseline in " + POLICY;
+final POLICY = "analyzers.yaml";
+final CEILING = "no-throw.baseline in its project's " + POLICY;
 final PARSER = "hack/lint/no-throw.mjs";
 
 final FIX = "Return an error value; throw only in the top-level entry. "
-    + "A count in " + CEILING + " may only fall.";
+    + "A count in the " + CEILING + " may only fall.";
 
 final FIX_ASYNC = "Return Promise<Result<T>> (types.Result from gen/magus/types) and let the caller read the failure. "
-    + "A count in " + CEILING + " may only fall.";
+    + "A count in the " + CEILING + " may only fall.";
 
 final FIX_BUZZ = "Return result\\Result::<T> (import \"result\") and drop `!>`. Only a script main, an exported "
     + "(ctx: magus\\Context, args: [str]) target or an exported lint check(files: [Path]) declares it. "
-    + "A count in " + CEILING + " may only fall.";
+    + "A count in the " + CEILING + " may only fall.";
 
 fun remedy(construct: str) > str {
     if (construct == "async-no-result") {
@@ -76,43 +77,75 @@ export object Site {
 }
 
 // Entry is a scope the host calls as its entry, where a throw is the only
-// answer the host reads: one of no-throw.exits.
+// answer the host reads: one of no-throw.exits. path is the workspace path;
+// file is the analyzers.yaml that names it.
 export object Entry {
     path: str,
     scope: str,
     reason: str,
+    file: str = POLICY,
 }
 
-// Ceiling is one count of the no-throw baseline.
+// Ceiling is one count of the no-throw baseline, at its workspace path.
 export object Ceiling {
     path: str,
     construct: str,
     count: int,
+    file: str = POLICY,
 }
 
-// Policy is the no-throw key of analyzers.yaml.
+// Policy is the no-throw key of one project's analyzers.yaml.
 export object Policy {
     ceilings: {str: Ceiling},
     exits: [Entry],
 }
 
 export fun reads() > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.buzz", POLICY, PARSER];
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.buzz", "**/" + POLICY, POLICY, PARSER];
+}
+
+// owner is the project holding path, as magus resolves one: the deepest
+// project root path sits under, or "." for the root project.
+export fun owner(path: str, projects: [str]) > str {
+    var best = ".";
+    foreach (p in projects) {
+        if (p != "." and path.startsWith(p + "/") and (best == "." or p.len() > best.len())) {
+            best = p;
+        }
+    }
+    return best;
+}
+
+// policyFile is the analyzers.yaml at project's root.
+export fun policyFile(project: str) > str {
+    return if (project == ".") POLICY else project + "/" + POLICY;
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    final policyFile = support\named(files, p: POLICY);
-    if (policyFile == null) {
-        return [support\missing(POLICY)];
+    final projects = mut [<str>];
+    foreach (p in support\projects().projects) {
+        projects.append(p.path);
     }
-    final rule = yaml\parse(support\read(policyFile!))["no-throw"];
-    if (rule == null) {
-        return [Finding{ path = POLICY, message = "holds no no-throw key", fix = "Restore the no-throw key: its baseline and exits." }];
-    }
+    final ceilings = mut {<str: Ceiling>};
+    final exits = mut [<Entry>];
     final sources = mut [<Path>];
     final found = mut [<Site>];
     foreach (f in files) {
-        if (scanned(f.value)) {
+        if (f.value == POLICY or f.value.endsWith("/" + POLICY)) {
+            final project = owner(f.value, projects: projects);
+            if (f.value == policyFile(project)) {
+                final rule = yaml\parse(support\read(f))["no-throw"];
+                if (rule != null) {
+                    final p = policy(rule, project: project);
+                    foreach (k, c in p.ceilings) {
+                        ceilings[k] = c;
+                    }
+                    foreach (e in p.exits) {
+                        exits.append(e);
+                    }
+                }
+            }
+        } else if (scanned(f.value)) {
             sources.append(f);
         } else if (scannedBuzz(f.value)) {
             foreach (s in buzzSites(f.value, src: support\read(f))) {
@@ -123,8 +156,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     foreach (s in sites(sources)) {
         found.append(s);
     }
-    final p = policy(rule);
-    return judge(found, ceilings: p.ceilings, entries: p.exits);
+    return judge(found, ceilings: ceilings, entries: exits, projects: projects);
 }
 
 // scannedBuzz reports whether the Buzz scan reads p. Generated declarations and
@@ -283,22 +315,26 @@ fun site(row: {str: any}) > Site {
         moduleScope = row["moduleScope"] ?? false, unreachable = row["unreachable"] ?? false };
 }
 
-// policy reads the no-throw key of analyzers.yaml, as yaml\parse answers it:
-// baseline maps a construct to {file: count}, and each exit names a path, a
-// scope and a reason.
-export fun policy(rule: any) > Policy {
+// policy reads the no-throw key of project's analyzers.yaml, as yaml\parse
+// answers it: baseline maps a construct to {file: count}, and each exit names a
+// path, a scope and a reason. Its paths are relative to project, and policy
+// answers them as workspace paths.
+export fun policy(rule: any, project: str) > Policy {
+    final file = policyFile(project);
+    final prefix = if (project == ".") "" else project + "/";
     final acc = mut {<str: Ceiling>};
     if (rule["baseline"] -> baseline) {
         foreach (construct, counts in baseline) {
             foreach (path, count in counts) {
-                acc[key(path, construct: construct)] = Ceiling{ path = path, construct = construct, count = std\toInt(count) };
+                final at = prefix + path;
+                acc[key(at, construct: construct)] = Ceiling{ path = at, construct = construct, count = std\toInt(count), file = file };
             }
         }
     }
     final exits = mut [<Entry>];
     if (rule["exits"] -> rows) {
         foreach (row in rows) {
-            exits.append(Entry{ path = row["path"] ?? "", scope = row["scope"] ?? "", reason = row["reason"] ?? "" });
+            exits.append(Entry{ path = prefix + (row["path"] ?? ""), scope = row["scope"] ?? "", reason = row["reason"] ?? "", file = file });
         }
     }
     return Policy{ ceilings = acc, exits = exits };
@@ -319,7 +355,7 @@ fun entryFor(s: Site, entries: [Entry]) > Entry? {
 
 // judge fails each site of a file over its count, a count above what its file
 // holds, and an entry no site uses.
-export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry]) > [Finding] {
+export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry], projects: [str]) > [Finding] {
     final counted = mut {<str: mut [Site]>};
     final used = mut {<str: bool>};
     foreach (s in sites) {
@@ -348,7 +384,7 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry]) > [F
         foreach (s in held) {
             found.append(Finding{ path = s.path, line = s.line, col = s.col,
                 message = "{subject(s)}, below the top-level entry: {s.path} holds {held.len()}, "
-                    + "over the {allowed} that {CEILING} allows",
+                    + "over the {allowed} that the no-throw.baseline of {policyFile(owner(s.path, projects: projects))} allows",
                 fix = remedy(s.construct) });
         }
     }
@@ -356,18 +392,18 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry]) > [F
         final c = ceilings[k]!;
         final held = counted[k]?.len() ?? 0;
         if (held < c.count) {
-            found.append(Finding{ path = POLICY,
+            found.append(Finding{ path = c.file,
                 message = "no-throw.baseline.{c.construct} records {c.count} for {c.path}, which holds {held}",
                 fix = if (held == 0) "Delete the entry: the count only falls." else "Lower it to {held}: the count only falls." });
         }
     }
     foreach (e in entries) {
         if (e.reason.trim() == "") {
-            found.append(Finding{ path = POLICY, message = "no-throw.exits names {e.scope} in {e.path} with no reason",
+            found.append(Finding{ path = e.file, message = "no-throw.exits names {e.scope} in {e.path} with no reason",
                 fix = "Give the exit a reason, or delete it." });
         }
         if (used[e.path + " " + e.scope] == null) {
-            found.append(Finding{ path = POLICY, message = "no-throw.exits names {e.scope} in {e.path}, and it holds no throw",
+            found.append(Finding{ path = e.file, message = "no-throw.exits names {e.scope} in {e.path}, and it holds no throw",
                 fix = "Delete the exit from no-throw.exits." });
         }
     }
@@ -412,16 +448,16 @@ fun lines(found: [Finding]) > [str] {
 
 test "a throw at the module's top level or in unreachable(x: never) passes" {
     final files = support\fixture({"entry.ts": ENTRY_TS});
-    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>])), want: [<str>],
+    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [<str>],
         message: "entry throws");
 }
 
 test "a throw in a function, an arrow, a method or a mistyped unreachable fails" {
     final files = support\fixture({"helper.ts": HELPER_TS});
-    final over = ", below the top-level entry: helper.ts holds 4, over the 0 that no-throw.baseline in hack/lint/analyzers.yaml allows";
-    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>])), want: [
+    final over = ", below the top-level entry: helper.ts holds 4, over the 0 that the no-throw.baseline of analyzers.yaml allows";
+    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [
         "helper.ts:5 exported async load returns no Result, below the top-level entry: helper.ts holds 1, "
-            + "over the 0 that no-throw.baseline in hack/lint/analyzers.yaml allows",
+            + "over the 0 that the no-throw.baseline of analyzers.yaml allows",
         "helper.ts:2 throw in parse" + over,
         "helper.ts:6 throw in load" + over,
         "helper.ts:10 throw in Store.get" + over,
@@ -437,25 +473,40 @@ test "tsx and mjs parse as their own kinds" {
 
 test "a file at its count passes, over it fails, and a count above the file fails" {
     final helper = Site{ path = "a.ts", line = 3, scope = "f" };
-    final at = policy(yaml\parse("baseline:\n  throw:\n    a.ts: 1\n")).ceilings;
-    final over = "a.ts:3 throw in f, below the top-level entry: a.ts holds 2, over the 1 that no-throw.baseline in hack/lint/analyzers.yaml allows";
-    assert\equal(lines(judge([helper], ceilings: at, entries: [<Entry>])), want: [<str>], message: "at its count");
-    assert\equal(lines(judge([helper, helper], ceilings: at, entries: [<Entry>])), want: [over, over], message: "over it");
-    assert\equal(lines(judge([<Site>], ceilings: at, entries: [<Entry>])),
-        want: ["hack/lint/analyzers.yaml:0 no-throw.baseline.throw records 1 for a.ts, which holds 0"], message: "a stale count");
+    final at = policy(yaml\parse("baseline:\n  throw:\n    a.ts: 1\n"), project: ".").ceilings;
+    final over = "a.ts:3 throw in f, below the top-level entry: a.ts holds 2, over the 1 that the no-throw.baseline of analyzers.yaml allows";
+    assert\equal(lines(judge([helper], ceilings: at, entries: [<Entry>], projects: ["."])), want: [<str>], message: "at its count");
+    assert\equal(lines(judge([helper, helper], ceilings: at, entries: [<Entry>], projects: ["."])), want: [over, over], message: "over it");
+    assert\equal(lines(judge([<Site>], ceilings: at, entries: [<Entry>], projects: ["."])),
+        want: ["analyzers.yaml:0 no-throw.baseline.throw records 1 for a.ts, which holds 0"], message: "a stale count");
 }
 
 test "a named exit passes, an exit with no throw fails, and an exit needs a reason" {
-    final exits = policy(yaml\parse("exits:\n  - path: plugin.ts\n    scope: Plugin.apply\n    reason: the host reads a throw\n")).exits;
+    final exits = policy(yaml\parse("exits:\n  - path: plugin.ts\n    scope: Plugin.apply\n    reason: the host reads a throw\n"), project: ".").exits;
     final s = Site{ path = "plugin.ts", line = 9, scope = "Plugin.apply" };
-    assert\equal(lines(judge([s], ceilings: {<str: Ceiling>}, entries: exits)), want: [<str>], message: "used");
-    assert\equal(lines(judge([<Site>], ceilings: {<str: Ceiling>}, entries: exits)),
-        want: ["hack/lint/analyzers.yaml:0 no-throw.exits names Plugin.apply in plugin.ts, and it holds no throw"],
+    assert\equal(lines(judge([s], ceilings: {<str: Ceiling>}, entries: exits, projects: ["."])), want: [<str>], message: "used");
+    assert\equal(lines(judge([<Site>], ceilings: {<str: Ceiling>}, entries: exits, projects: ["."])),
+        want: ["analyzers.yaml:0 no-throw.exits names Plugin.apply in plugin.ts, and it holds no throw"],
         message: "unused");
     final bare = Entry{ path = "plugin.ts", scope = "Plugin.apply", reason = "" };
-    assert\equal(lines(judge([s], ceilings: {<str: Ceiling>}, entries: [bare])),
-        want: ["hack/lint/analyzers.yaml:0 no-throw.exits names Plugin.apply in plugin.ts with no reason"],
+    assert\equal(lines(judge([s], ceilings: {<str: Ceiling>}, entries: [bare], projects: ["."])),
+        want: ["analyzers.yaml:0 no-throw.exits names Plugin.apply in plugin.ts with no reason"],
         message: "no reason");
+}
+
+test "a project's analyzers.yaml counts its own files and no other project's" {
+    final projects = [".", "libs/a"];
+    final at = policy(yaml\parse("baseline:\n  throw:\n    x.ts: 1\n"), project: "libs/a").ceilings;
+    final inside = Site{ path = "libs/a/x.ts", line = 2, scope = "f" };
+    final outside = Site{ path = "x.ts", line = 2, scope = "f" };
+    assert\equal(lines(judge([inside], ceilings: at, entries: [<Entry>], projects: projects)), want: [<str>], message: "its own file");
+    assert\equal(lines(judge([outside, inside], ceilings: at, entries: [<Entry>], projects: projects)),
+        want: ["x.ts:2 throw in f, below the top-level entry: x.ts holds 1, over the 0 that the no-throw.baseline of analyzers.yaml allows"],
+        message: "the root project's file has no count of its own");
+    assert\equal(lines(judge([<Site>], ceilings: at, entries: [<Entry>], projects: projects)),
+        want: ["libs/a/analyzers.yaml:0 no-throw.baseline.throw records 1 for libs/a/x.ts, which holds 0"], message: "stale in its project");
+    assert\equal(owner("libs/a/b/c.ts", projects: projects), want: "libs/a", message: "owner");
+    assert\equal(policyFile("."), want: "analyzers.yaml", message: "root file");
 }
 
 final BUZZ_SRC = `fun helper(path: str) > str !> any \{
@@ -495,7 +546,7 @@ test "generated and planted Buzz is not read" {
 
 test "an exported async function with no Result return is counted" {
     final src = "type Read = Result<number>;\nexport async function a(): Promise<Result<number>> \{ return x; }\nexport async function b(): Promise<Read> \{ return x; }\nexport async function c(): Promise<void> \{}\nexport const d = async () => 1;\nasync function e() \{}\n";
-    final got = lines(judge(sites(support\fixture({"a.ts": src})), ceilings: {<str: Ceiling>}, entries: [<Entry>]));
-    final over = " returns no Result, below the top-level entry: a.ts holds 2, over the 0 that no-throw.baseline in hack/lint/analyzers.yaml allows";
+    final got = lines(judge(sites(support\fixture({"a.ts": src})), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."]));
+    final over = " returns no Result, below the top-level entry: a.ts holds 2, over the 0 that the no-throw.baseline of analyzers.yaml allows";
     assert\equal(got, want: ["a.ts:4 exported async c" + over, "a.ts:5 exported async d" + over], message: "async sites");
 }

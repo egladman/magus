@@ -3,12 +3,12 @@
 // owner's state, so the accessor returns slices.Clone, maps.Clone or an
 // iterator.
 //
-// Most accessors in a tree predate the rule, so the repository's policy file
-// lists today's violations under its accessorclone key, and a violation outside
-// it fails at once. A baseline entry leaves when its accessor is fixed, and the
-// analyzer reports the entry stale until it does. An exit is an accessor a
-// person excused for good, with a reason. A //nolint naming the linter is
-// itself reported.
+// Most accessors in a tree predate the rule, so the linted module's own
+// analyzers.yaml lists today's violations under its accessorclone key, and a
+// violation outside it fails at once. A baseline entry leaves when its accessor
+// is fixed, and the analyzer reports the entry stale until it does. An exit is
+// an accessor a person excused for good, with a reason. A //nolint naming the
+// linter is itself reported.
 package accessorclone
 
 import (
@@ -18,6 +18,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -31,6 +32,9 @@ import (
 
 const name = "accessorclone"
 
+// policyFile is the policy file's name at the root of the linted module.
+const policyFile = "analyzers.yaml"
+
 const message = "%s returns its own %s %s: return slices.Clone or maps.Clone of it, or an iterator, " +
 	"so a caller never edits the owner's state"
 
@@ -41,21 +45,11 @@ const nolintMessage = "a //nolint cannot exempt " + name + ": clone what the acc
 
 // Options configures the analyzer returned by [New].
 type Options struct {
-	// Module is the module whose files the policy paths are relative to. A
-	// plugin run fills it from the linted tree's go.mod.
+	// Module is the module the analyzer lints. Its root holds the policy file
+	// and the policy's paths are relative to it. A plugin run fills it from the
+	// linted tree's go.mod; an empty Module reads the policy file from the
+	// working directory and checks no path against the tree.
 	Module string `json:"module"`
-
-	// Policy is the repository's analyzer policy file, relative to the root of
-	// Module, or absolute. New reads its accessorclone key:
-	//
-	//	accessorclone:
-	//	  settings:
-	//	    hint: <appended to every diagnostic>
-	//	  baseline:
-	//	    <file>: [<Recv.Name or Name>, ...]
-	//	  exits:
-	//	    - {path: <file>, symbol: <Recv.Name or Name>, reason: <why>}
-	Policy string `json:"policy"`
 }
 
 // Entry is one accessor the policy excuses: the file inside the module and
@@ -71,6 +65,15 @@ type exit struct {
 	Reason string `yaml:"reason"`
 }
 
+// policy is the accessorclone key of the module's analyzers.yaml:
+//
+//	accessorclone:
+//	  settings:
+//	    hint: <appended to every diagnostic>
+//	  baseline:
+//	    <file>: [<Recv.Name or Name>, ...]
+//	  exits:
+//	    - {path: <file>, symbol: <Recv.Name or Name>, reason: <why>}
 type policy struct {
 	Settings struct {
 		Hint string `yaml:"hint"`
@@ -90,16 +93,15 @@ type loaded struct {
 
 // New returns the analyzer configured by opts. It reports an exported function
 // or method of an exported type that returns a slice or map held by its
-// receiver or a package-level variable, whole or resliced, unless the policy
-// excuses it. It also reports an entry whose accessor is fixed or gone.
+// receiver or a package-level variable, whole or resliced, unless the module's
+// analyzers.yaml excuses it. It also reports an entry whose accessor is fixed
+// or gone.
 //
-// New errors on no policy file, an unreadable or malformed one, one with no
-// accessorclone key, an entry naming a file that does not exist, an accessor
-// listed twice, or an exit with no reason.
+// A module with no analyzers.yaml, or one with no accessorclone key, excuses
+// nothing. New errors on an unreadable or malformed file, an unknown field, an
+// entry naming a file that does not exist, an accessor listed twice, or an exit
+// with no reason.
 func New(opts Options) (*analysis.Analyzer, error) {
-	if opts.Policy == "" {
-		return nil, errors.New(name + ": no policy file: a rule with no baseline would charge every existing accessor")
-	}
 	l, err := load(opts)
 	if err != nil {
 		return nil, err
@@ -114,22 +116,20 @@ func New(opts Options) (*analysis.Analyzer, error) {
 }
 
 func load(opts Options) (loaded, error) {
-	path := opts.Policy
 	root := ""
+	dir := "."
 	if opts.Module != "" {
 		var err error
 		if root, err = source.Root(name, opts.Module); err != nil {
 			return loaded{}, err
 		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(root, filepath.FromSlash(path))
-		}
+		dir = root
 	}
-	p, err := decode(path)
+	p, err := decode(filepath.Join(dir, policyFile))
 	if err != nil {
-		return loaded{}, fmt.Errorf("%s: policy %s: %w", name, opts.Policy, err)
+		return loaded{}, fmt.Errorf("%s: policy %s: %w", name, policyFile, err)
 	}
-	l := loaded{module: opts.Module, policy: opts.Policy, hint: p.Settings.Hint, excused: map[Entry]string{}}
+	l := loaded{module: opts.Module, policy: policyFile, hint: p.Settings.Hint, excused: map[Entry]string{}}
 	for _, file := range slices.Sorted(maps.Keys(p.Baseline)) {
 		for _, symbol := range p.Baseline[file] {
 			if err := l.excuse(Entry{Path: file, Symbol: symbol}, "baseline", root); err != nil {
@@ -140,7 +140,7 @@ func load(opts Options) (loaded, error) {
 	for _, x := range p.Exits {
 		if strings.TrimSpace(x.Reason) == "" {
 			return loaded{}, fmt.Errorf("%s: policy %s: %s.exits names %s %s with no reason: an exit says why",
-				name, opts.Policy, name, x.Path, x.Symbol)
+				name, policyFile, name, x.Path, x.Symbol)
 		}
 		if err := l.excuse(Entry{Path: x.Path, Symbol: x.Symbol}, "exits", root); err != nil {
 			return loaded{}, err
@@ -170,9 +170,13 @@ func (l loaded) excuse(e Entry, list, root string) error {
 }
 
 // decode reads the accessorclone key strictly, so a misspelled field fails;
-// the other top-level keys belong to other analyzers and are not read.
+// the other top-level keys belong to other analyzers and are not read. A
+// missing file or key is the empty policy: the strict default.
 func decode(path string) (policy, error) {
 	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return policy{}, nil
+	}
 	if err != nil {
 		return policy{}, err
 	}
@@ -182,7 +186,7 @@ func decode(path string) (policy, error) {
 	}
 	node, ok := doc[name]
 	if !ok {
-		return policy{}, fmt.Errorf("holds no %s key", name)
+		return policy{}, nil
 	}
 	raw, err := yaml.Marshal(&node)
 	if err != nil {

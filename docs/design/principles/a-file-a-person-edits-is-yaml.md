@@ -22,9 +22,15 @@ refuses a misspelled field or a repeated key.
 Analyzer policy follows from this. What a repository excuses (an analyzer's
 settings, its baseline, its exits, its engineered zones) is that repository's
 call, kept in a file the repository owns. It is layered on top of magus and
-never compiled into the binary or carried in `magus.yaml`. In this repository
-the file is `hack/lint/analyzers.yaml`:
+never compiled into the binary or carried in `magus.yaml`. Like every other
+tool's config, it is contextual: each project root holds its own
+`analyzers.yaml`, and an analyzer judges a file by the `analyzers.yaml` of the
+project that owns it, resolved the way magus resolves a project. There is no
+repository-wide file, and no fallback to another project's: a project with no
+`analyzers.yaml` has no baseline and no exits, and gets the strict defaults.
+One file for every project would hide which rules apply where.
 
+- Paths in a project's file are relative to that project's root.
 - One top-level key per analyzer, holding `settings`, a `baseline` of today's
   violations that may only shrink, and `exits`, each with a required `reason`.
 - One top-level `zones` list: a path whose complexity a measurement licenses,
@@ -49,10 +55,12 @@ edited by a person too.
 
 ## Enforced by
 
-- `accessorclone` decodes its key strictly: an unknown field, an accessor listed
-  twice, an exit with no reason or a stale baseline entry fails.
-- `no-throw` fails a count above what a file holds, an exit with no reason and
-  an exit that matches no throw.
+- `accessorclone` reads the `analyzers.yaml` at the root of the module it lints
+  and decodes its key strictly: an unknown field, an accessor listed twice, an
+  exit with no reason or a stale baseline entry fails.
+- `no-throw` judges each file against its own project's `analyzers.yaml` only,
+  and fails a count above what a file holds, an exit with no reason and an exit
+  that matches no throw.
 - Nothing refuses a new person-edited `.jsonl` file yet, so the format holds in
   review alone.
 
