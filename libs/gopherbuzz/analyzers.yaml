@@ -6,20 +6,6 @@ exhaustive-switch:
   # Functions that may still hold a switch over a closed set that misses a member or keeps a default
   # arm. A count may only shrink; a function holding fewer switches than its row fails.
   baseline:
-    - {path: buzzgen/reach.go, symbol: flip}
-    - {path: checker.go, symbol: collectionSelfMethodMut}
-    - {path: compiler.go, symbol: checkCode}
-    - {path: observer.go, symbol: String, count: 2}
-    - {path: session.go, symbol: builtinResolve}
-    - {path: session.go, symbol: builtinResume}
-    - {path: session.go, symbol: importUsageIsReliable}
-    - {path: vm/fault.go, symbol: String}
-    - {path: vm/ffi_purego.go, symbol: buzzToReflectArg}
-    - {path: vm/ffi_purego.go, symbol: cTypeToReflect}
-    - {path: vm/ffi_purego.go, symbol: loadExternVar}
-    - {path: vm/ffi_purego.go, symbol: reflectRetToValue}
-    - {path: vm/value.go, symbol: buzzKind}
-    - {path: vm/value.go, symbol: stringPath, count: 2}
     - {path: vm/vm.go, symbol: Exec}
   # Switches a person accepted, each with the reason it stays.
   exits:
