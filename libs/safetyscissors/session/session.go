@@ -510,13 +510,14 @@ func (e *RetiredGroupError) Error() string {
 	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s)", e.Path, e.Version, APIVersion)
 }
 
-// RemoveRetired deletes every invocation file under dir holding a record stamped
-// [retiredGroup] and returns their paths. Such a file is derived state from before the
-// rename that this build cannot read, so no group it names can be held: nothing says it
-// must stay. A file it cannot remove is a [*StoreError] and the rest are still tried.
+// SetAsideRetired renames every invocation file under dir holding a record stamped
+// [retiredGroup] to <id>.retired-<group> beside it and returns the new paths, so the
+// records stay on disk and no reader sees an invocation. The new name drops [FileExt]
+// because the readers list by that suffix: a name that kept it would be refused again.
+// A file it cannot rename is a [*StoreError] and the rest are still tried.
 //
 // It stops early and returns ctx.Err() as is once ctx is done.
-func RemoveRetired(ctx context.Context, dir string) ([]string, error) {
+func SetAsideRetired(ctx context.Context, dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -524,11 +525,11 @@ func RemoveRetired(ctx context.Context, dir string) ([]string, error) {
 		}
 		return nil, &StoreError{Op: "read store", Path: dir, Err: err}
 	}
-	var removed []string
+	var aside []string
 	var errs []error
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
-			return removed, err
+			return aside, err
 		}
 		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
 			continue
@@ -537,15 +538,16 @@ func RemoveRetired(ctx context.Context, dir string) ([]string, error) {
 		if decodeFile(path).retired == "" {
 			continue
 		}
-		if err := os.Remove(path); err != nil {
+		to := filepath.Join(dir, strings.TrimSuffix(e.Name(), FileExt)+".retired-"+retiredGroup)
+		if err := os.Rename(path, to); err != nil {
 			if !os.IsNotExist(err) {
-				errs = append(errs, &StoreError{Op: "remove retired", Path: path, Err: err})
+				errs = append(errs, &StoreError{Op: "set aside retired", Path: path, Err: err})
 			}
 			continue
 		}
-		removed = append(removed, path)
+		aside = append(aside, to)
 	}
-	return removed, errors.Join(errs...)
+	return aside, errors.Join(errs...)
 }
 
 // RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names

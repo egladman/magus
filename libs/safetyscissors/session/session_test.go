@@ -464,22 +464,25 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 	}
 }
 
-// RemoveRetired deletes a file holding a magus.sessions record and leaves a current one.
-func (s *ReadSuite) TestRemoveRetiredDeletesOnlyOldGroupFiles() {
+// SetAsideRetired renames a file holding a magus.sessions record, keeping its bytes, and
+// leaves a current one.
+func (s *ReadSuite) TestSetAsideRetiredRenamesOnlyOldGroupFiles() {
 	dir := s.T().TempDir()
 	old := filepath.Join(dir, "old.jsonl")
 	s.Require().NoError(os.WriteFile(old, []byte(`{"v":"magus.sessions/v1alpha1","invocation":"old","seq":1,"kind":"target_result","ts":10}`+"\n"), 0o644))
 	current := filepath.Join(dir, "new.jsonl")
 	s.Require().NoError(os.WriteFile(current, []byte(`{"v":"`+string(APIVersion)+`","invocation":"new","seq":1,"kind":"target_result","ts":10,"payload":{}}`+"\n"), 0o644))
 
-	removed, err := RemoveRetired(s.T().Context(), dir)
+	aside, err := SetAsideRetired(s.T().Context(), dir)
 	s.Require().NoError(err)
-	s.Equal([]string{old}, removed)
+	set := filepath.Join(dir, "old.retired-magus.sessions")
+	s.Equal([]string{set}, aside)
 	s.NoFileExists(old)
+	s.FileExists(set, "the records stay on disk")
 	s.FileExists(current)
 
 	_, err = ReadAll(s.T().Context(), dir)
-	s.Require().NoError(err, "the store reads once the old file is gone")
+	s.Require().NoError(err, "the store reads once the old file is set aside")
 }
 
 // A record from before the module took the store carries magus.sessions, and the store

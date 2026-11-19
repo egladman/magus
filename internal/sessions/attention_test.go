@@ -333,8 +333,8 @@ func (s *AppendRequestSuite) TestARepeatAppendsAndCollapsesInTheFold() {
 }
 
 // A session file from before the group rename must not stop a reclaim's request: the file
-// is removed and the request opens.
-func (s *AttentionSuite) TestOpenRequestRemovesAFilePredatingTheGroupRename() {
+// is set aside and the request opens.
+func (s *AttentionSuite) TestOpenRequestSetsAsideAFilePredatingTheGroupRename() {
 	t := s.T()
 	dir := t.TempDir()
 	old := filepath.Join(dir, "old.jsonl")
@@ -346,6 +346,7 @@ func (s *AttentionSuite) TestOpenRequestRemovesAFilePredatingTheGroupRename() {
 	assert.True(t, opened)
 	assert.Equal(t, []string{id}, queueIDs(t, dir))
 	assert.NoFileExists(t, old)
+	assert.FileExists(t, filepath.Join(dir, "old.retired-magus.sessions"))
 }
 
 func (s *AttentionSuite) TestOpenRequestWritesOneRequestAndReportsIt() {
