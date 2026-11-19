@@ -340,11 +340,11 @@ func TestJSONLSinkRecordsHeaders(t *testing.T) {
 	s.EmitDiagnostic(t.Context(), "api", types.UndeclaredSeedingFile, "seeded by LICENSE")
 	require.NoError(t, s.Close())
 
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"run.scope","label":"api","source":"magusfile","projects":["api"]}
-{"schema":"magus.report/v1alpha1","type":"run.base","base":"git diff vs main"}
-{"schema":"magus.report/v1alpha1","type":"run.diagnostic","unit":"api","code":"`+string(types.UndeclaredSeedingFile)+`","message":"seeded by LICENSE"}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api","source":"magusfile","projects":["api"]}
+{"api_version":"magus.report/v1alpha1","type":"run.base","base":"git diff vs main"}
+{"api_version":"magus.report/v1alpha1","type":"run.diagnostic","unit":"api","code":"`+string(types.UndeclaredSeedingFile)+`","message":"seeded by LICENSE"}
 `, stdout.String())
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"run.notice","level":"warn","code":"`+string(types.AffectedSetUncomputable)+`","msg":"full build"}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"warn","code":"`+string(types.AffectedSetUncomputable)+`","msg":"full build"}
 `, stderr.String())
 }
 
@@ -357,8 +357,8 @@ func TestJSONLSinkOverOneWriter(t *testing.T) {
 	s.EmitScope(t.Context(), "api", "", nil)
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "same stream")
 	require.NoError(t, s.Close())
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"run.scope","label":"api"}
-{"schema":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"same stream"}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api"}
+{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"same stream"}
 `, both.String())
 }
 
@@ -372,7 +372,7 @@ func TestJSONLSinkFilter(t *testing.T) {
 	s.EmitShardTotal(t.Context(), "2", 4, 1500*time.Millisecond)
 	s.EmitNotice(t.Context(), slog.LevelInfo, "", "kept")
 	require.NoError(t, s.Close())
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"shard.total","shard":"2","n_shards":4,"duration_ms":1500}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"shard.total","shard":"2","n_shards":4,"duration_ms":1500}
 `, stdout.String())
 	assert.Contains(t, stderr.String(), `"msg":"kept"`)
 }
@@ -392,7 +392,7 @@ func TestTextSinkWithRecords(t *testing.T) {
 
 	assert.Empty(t, stdout.String())
 	assert.Equal(t, "projects: api (pipe)\nhint: tee notice\n", stderr.String())
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"run.scope","label":"api","source":"pipe","projects":["api"]}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api","source":"pipe","projects":["api"]}
 `, records.String())
 
 	var o run
@@ -413,8 +413,8 @@ func TestSinkRecordsValues(t *testing.T) {
 	require.NoError(t, err)
 	s.RecordValues("describe", returns)
 	require.NoError(t, s.Close())
-	assert.Equal(t, `{"schema":"magus.report/v1alpha1","type":"run.target.value","project":"api","target":"describe","value":"1.2.3"}
-{"schema":"magus.report/v1alpha1","type":"run.target.value","project":"web","target":"describe","value":["a","b"]}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.target.value","project":"api","target":"describe","value":"1.2.3"}
+{"api_version":"magus.report/v1alpha1","type":"run.target.value","project":"web","target":"describe","value":["a","b"]}
 `, records.String())
 	assert.Empty(t, stderr.String())
 

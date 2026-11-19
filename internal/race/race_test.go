@@ -38,7 +38,7 @@ func TestFlush_WritesEmptyReportWhenNoRaces(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(root, ".magus", "cache", "race-report.json"))
 	require.NoError(t, err)
-	assert.Equal(t, "{\"schema\":3,\"summary\":{\"total\":0},\"findings\":[]}\n", string(data))
+	assert.Equal(t, "{\"api_version\":\"magus.race-report/v1alpha1\",\"summary\":{\"total\":0},\"findings\":[]}\n", string(data))
 }
 
 func TestFlush_CreatesCacheDir(t *testing.T) {
@@ -87,7 +87,7 @@ var t0 = time.Unix(0, 0).UTC()
 func TestWriteReportJSON_Empty(t *testing.T) {
 	var sb strings.Builder
 	writeReportJSON(&sb, nil)
-	assert.Equal(t, "{\"schema\":3,\"summary\":{\"total\":0},\"findings\":[]}\n", sb.String())
+	assert.Equal(t, "{\"api_version\":\"magus.race-report/v1alpha1\",\"summary\":{\"total\":0},\"findings\":[]}\n", sb.String())
 }
 
 func TestWriteReportJSON_SortsByPathAndRendersEveryField(t *testing.T) {
@@ -114,7 +114,7 @@ func TestWriteReportJSON_SortsByPathAndRendersEveryField(t *testing.T) {
 	var sb strings.Builder
 	writeReportJSON(&sb, findings)
 
-	want := `{"schema":3,"summary":{"total":2},"findings":[
+	want := `{"api_version":"magus.race-report/v1alpha1","summary":{"total":2},"findings":[
   {"path":"/repo/a.txt","project_a":"docs","project_b":"cli","target":"gen","overlap_start_ns":1000000,"overlap_end_ns":5000000},
   {"path":"/repo/z.txt","project_a":"web","project_b":"api","target":"build","overlap_start_ns":0,"overlap_end_ns":2000000}
 ]}

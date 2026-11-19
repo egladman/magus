@@ -3194,7 +3194,7 @@ func ObjectMarkdownSection(v types.MarkdownSection) vm.Value {
 
 func ObjectPipeRecord(v types.PipeRecord) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("schema", vm.StringValue(v.Schema))
+	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
 	out.MapSet("type", vm.StringValue(v.Type))
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("target", vm.StringValue(v.Target))

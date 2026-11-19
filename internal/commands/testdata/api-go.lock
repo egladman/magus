@@ -3425,12 +3425,12 @@ github.com/egladman/magus/types.Person.Email field string
 github.com/egladman/magus/types.Person.Name field string
 github.com/egladman/magus/types.PipeCycle const DiagnosticCode = "MGS3023"
 github.com/egladman/magus/types.PipeRecord type struct
+github.com/egladman/magus/types.PipeRecord.APIVersion field string
 github.com/egladman/magus/types.PipeRecord.Body field string
 github.com/egladman/magus/types.PipeRecord.Error field string
 github.com/egladman/magus/types.PipeRecord.Project field string
 github.com/egladman/magus/types.PipeRecord.Projects field []string
 github.com/egladman/magus/types.PipeRecord.Ref field string
-github.com/egladman/magus/types.PipeRecord.Schema field string
 github.com/egladman/magus/types.PipeRecord.Status field string
 github.com/egladman/magus/types.PipeRecord.Target field string
 github.com/egladman/magus/types.PipeRecord.Type field string

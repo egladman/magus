@@ -443,7 +443,7 @@ func parsePipeRecord(line report.Line) (types.PipeRecord, error) {
 		return types.PipeRecord{}, fmt.Errorf("%s record: %w", line.Type, err)
 	}
 	return types.PipeRecord{
-		Schema: line.Schema.String(), Type: line.Type,
+		APIVersion: line.APIVersion.String(), Type: line.Type,
 		Project: f.Project, Target: f.Target, Status: f.Status, Error: f.Error, Ref: f.Ref,
 		Projects: f.Projects, Body: string(line.Raw),
 	}, nil
@@ -459,7 +459,7 @@ func encodePipeLine(record map[string]any) (report.Line, error) {
 	if typ == "" {
 		return report.Line{}, errors.New("a record needs a type, like run.scope")
 	}
-	// The envelope's schema and type open the line, the way every record magus writes
+	// The envelope's api_version and type open the line, the way every record magus writes
 	// does, which is what a reader recognizes a record by.
 	fields := map[string]any{}
 	for _, k := range []string{"project", "target", "status", "error", "ref"} {
@@ -474,7 +474,7 @@ func encodePipeLine(record map[string]any) (report.Line, error) {
 	if err != nil {
 		return report.Line{}, err
 	}
-	head := fmt.Sprintf(`{"schema":%q,"type":%q`, report.Schema, typ)
+	head := fmt.Sprintf(`{"api_version":%q,"type":%q`, report.APIVersion, typ)
 	if len(body) > 2 {
 		head += "," + string(body[1:len(body)-1])
 	}

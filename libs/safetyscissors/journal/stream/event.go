@@ -33,7 +33,7 @@ import (
 // On the wire it is one JSON object per line. The envelope fields come first and
 // the body's fields are spliced in flat beside them, so a line reads:
 //
-//	{"schema":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,"workspace":"/repo",
+//	{"api_version":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,"workspace":"/repo",
 //	 "inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"fail",...}
 //
 // Flat rather than nested under a "data" key because that is the shape
@@ -57,14 +57,14 @@ type Event struct {
 	Body Body `json:"-"`
 }
 
-// Schema is the envelope version, stamped on every line as "schema".
+// APIVersion is the envelope version, stamped on every line as "api_version".
 //
 // Move it to a new version when a field is renamed or removed, or when an existing field changes
 // meaning. Adding a new [EventType], or a new optional field to a body, is
 // additive and does NOT bump it: a subscriber is required to ignore types and
 // fields it does not recognize, which is what lets magus grow the taxonomy
 // without breaking every client.
-const Schema apiversion.APIVersion = "safetyscissors.journal-stream/v1alpha1"
+const APIVersion apiversion.APIVersion = "safetyscissors.journal-stream/v1alpha1"
 
 // EventType names the class of fact an event carries. A subscriber
 // switches on it; an unrecognized value must be skipped, not treated as an error.
@@ -192,11 +192,11 @@ func (Output) EventType() EventType { return TargetOutput }
 // [Event.MarshalJSON] can encode the fixed fields with the standard
 // marshaller and splice the body beside them, rather than hand-writing JSON.
 type streamHead struct {
-	Schema    apiversion.APIVersion `json:"schema"`
-	Type      EventType             `json:"type"`
-	Ts        int64                 `json:"ts"`
-	Workspace string                `json:"workspace"`
-	Inv       string                `json:"inv,omitempty"`
+	APIVersion apiversion.APIVersion `json:"api_version"`
+	Type       EventType             `json:"type"`
+	Ts         int64                 `json:"ts"`
+	Workspace  string                `json:"workspace"`
+	Inv        string                `json:"inv,omitempty"`
 }
 
 // MarshalJSON encodes the event as one flat JSON object: the envelope fields
@@ -211,11 +211,11 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("marshal event: no body")
 	}
 	head, err := codec.Marshal(streamHead{
-		Schema:    Schema,
-		Type:      e.Body.EventType(),
-		Ts:        e.Ts,
-		Workspace: e.Workspace,
-		Inv:       e.Inv,
+		APIVersion: APIVersion,
+		Type:       e.Body.EventType(),
+		Ts:         e.Ts,
+		Workspace:  e.Workspace,
+		Inv:        e.Inv,
 	})
 	if err != nil {
 		return nil, err

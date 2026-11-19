@@ -8,7 +8,7 @@ import (
 )
 
 // envelope is the wire-format wrapper; drain goroutine marshals body and splices
-// "schema" and "type" fields so every line starts with `{"schema":"magus.report/v1alpha1","type":"...",`.
+// "api_version" and "type" fields so every line starts with `{"api_version":"magus.report/v1alpha1","type":"...",`.
 type envelope struct {
 	Type string
 	Body any
@@ -28,8 +28,8 @@ func (e envelope) appendJSONL(dst []byte) []byte {
 		// A Notice of strings always encodes.
 		body, _ = e.body()
 	}
-	dst = append(dst, `{"schema":"`...)
-	dst = append(dst, Schema...)
+	dst = append(dst, `{"api_version":"`...)
+	dst = append(dst, APIVersion...)
 	dst = append(dst, `","type":"`...)
 	dst = append(dst, e.Type...)
 	dst = append(dst, '"')

@@ -163,7 +163,10 @@ const releaseIndexAPIVersion = "magus.release-index/v1alpha1"
 // and read by `magus self update`. The URL and schema are frozen at birth;
 // additive changes only.
 type ReleaseIndex struct {
-	SchemaVersion string   `json:"schema_version"`
+	APIVersion string `json:"api_version"`
+	// compat(until: no supported release reads schema_version): the number a client through
+	// v0.4.3 reads to accept the file.
+	SchemaVersion int      `json:"schema_version"`
 	KeyID         string   `json:"key_id"`
 	Revoked       []string `json:"revoked,omitzero"`
 	// ExpiresAt is how long a client may trust this file. It is the bound on replaying
@@ -206,7 +209,8 @@ type IndexRelease struct {
 // order it preserves is loadManifests's, which is a total order over the manifest set.
 func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []string) ReleaseIndex {
 	idx := ReleaseIndex{
-		SchemaVersion: releaseIndexAPIVersion,
+		APIVersion:    releaseIndexAPIVersion,
+		SchemaVersion: 1,
 		KeyID:         keyID,
 		Revoked:       revoked,
 		ExpiresAt:     expiresAt,

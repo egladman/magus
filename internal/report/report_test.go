@@ -57,7 +57,7 @@ func TestRecordSurfacesDrainErrorViaStats(t *testing.T) {
 }
 
 // TestSchemaFieldOnEveryLine asserts that every emitted JSONL line
-// carries "schema":3 as the first key.
+// carries "api_version" as the first key.
 func TestSchemaFieldOnEveryLine(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
@@ -71,18 +71,18 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 		line := sc.Bytes()
 		var head envelopeHead
 		require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
-		assert.Equal(t, envelopeHead{Schema: string(Schema), Type: TypeTargetResult}, head, "line %q", line)
+		assert.Equal(t, envelopeHead{APIVersion: string(APIVersion), Type: TypeTargetResult}, head, "line %q", line)
 	}
 }
 
-// envelopeHead is the schema and type every line of a report carries.
+// envelopeHead is the api_version and type every line of a report carries.
 type envelopeHead struct {
-	Schema string `json:"schema"`
-	Type   string `json:"type"`
+	APIVersion string `json:"api_version"`
+	Type       string `json:"type"`
 }
 
 // TestRoundTripAllTypes writes one of every registered event type and
-// reads them back. Asserts schema + type + body fidelity.
+// reads them back. Asserts api_version + type + body fidelity.
 func TestRoundTripAllTypes(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run.jsonl")
@@ -126,7 +126,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		require.Less(t, i, len(wantTypes), "got more lines than expected")
 		var head envelopeHead
 		require.NoError(t, codec.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
-		assert.Equal(t, envelopeHead{Schema: string(Schema), Type: wantTypes[i]}, head, "line %d", i)
+		assert.Equal(t, envelopeHead{APIVersion: string(APIVersion), Type: wantTypes[i]}, head, "line %d", i)
 	}
 }
 
@@ -560,10 +560,10 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			var head envelopeHead
 			line := bytes.TrimSpace(buf.Bytes())
 			require.NoError(t, codec.Unmarshal(line, &head), "unmarshal %q", line)
-			assert.Equal(t, envelopeHead{Schema: string(Schema), Type: tc.wantType}, head)
+			assert.Equal(t, envelopeHead{APIVersion: string(APIVersion), Type: tc.wantType}, head)
 
 			// Whole-struct: decode the SAME line back into the event's own type
-			// (the envelope's extra "schema"/"type" keys are ignored by the
+			// (the envelope's extra "api_version"/"type" keys are ignored by the
 			// target struct, which has no fields for them) and compare against
 			// the original value field by field in one assertion.
 			got := reflect.New(reflect.TypeOf(tc.event)).Interface()

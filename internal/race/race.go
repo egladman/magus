@@ -178,10 +178,10 @@ type finding struct {
 
 // writeReportJSON writes findings as a JSON object with a summary and per-finding
 // details, without pulling in encoding/json for this diagnostic file.
-// Schema 3: removes tier/flipped/suppression_snippet fields.
+// The api_version member names the report shape.
 func writeReportJSON(w io.Writer, findings []finding) {
 	if len(findings) == 0 {
-		_, _ = io.WriteString(w, "{\"schema\":3,\"summary\":{\"total\":0},\"findings\":[]}\n")
+		_, _ = io.WriteString(w, "{\"api_version\":\"magus.race-report/v1alpha1\",\"summary\":{\"total\":0},\"findings\":[]}\n")
 		return
 	}
 	slices.SortFunc(findings, func(a, b finding) int {
@@ -194,7 +194,7 @@ func writeReportJSON(w io.Writer, findings []finding) {
 		return 0
 	})
 
-	fmt.Fprintf(w, "{\"schema\":3,\"summary\":{\"total\":%d},\"findings\":[\n", len(findings))
+	fmt.Fprintf(w, "{\"api_version\":\"magus.race-report/v1alpha1\",\"summary\":{\"total\":%d},\"findings\":[\n", len(findings))
 	for i, f := range findings {
 		comma := ","
 		if i == len(findings)-1 {

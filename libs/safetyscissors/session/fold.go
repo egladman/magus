@@ -25,15 +25,15 @@ func foldCachePath(dir, kind string) string {
 	return filepath.Join(dir, fmt.Sprintf(".fold-%s.json", kind))
 }
 
-// foldCacheFormat moves to a new version whenever the cached shape or what decides an entry's validity
+// foldCacheAPIVersion moves to a new version whenever the cached shape or what decides an entry's validity
 // does, so an older cache is refolded rather than read under a new meaning.
-const foldCacheFormat apiversion.APIVersion = "safetyscissors.fold-cache/v1alpha1"
+const foldCacheAPIVersion apiversion.APIVersion = "safetyscissors.fold-cache/v1alpha1"
 
 type foldCache struct {
-	Format apiversion.APIVersion `json:"format"`
-	Schema apiversion.APIVersion `json:"schema"`
-	Kind   string                `json:"kind"`
-	Files  map[string]foldEntry  `json:"files"`
+	APIVersion apiversion.APIVersion `json:"api_version"`
+	Schema     apiversion.APIVersion `json:"schema"`
+	Kind       string                `json:"kind"`
+	Files      map[string]foldEntry  `json:"files"`
 }
 
 // foldEntry is one invocation file's contribution to a kind's fold, valid while the file
@@ -95,7 +95,7 @@ func FoldKind(ctx context.Context, dir, kind string) (Fold, error) {
 	}
 	cachePath := foldCachePath(dir, kind)
 	prev := readFoldCache(cachePath, kind)
-	next := foldCache{Format: foldCacheFormat, Schema: APIVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
+	next := foldCache{APIVersion: foldCacheAPIVersion, Schema: APIVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
 	changed := false
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
@@ -155,7 +155,7 @@ func readFoldCache(path, kind string) foldCache {
 		return foldCache{}
 	}
 	var c foldCache
-	if codec.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
+	if codec.Unmarshal(b, &c) != nil || c.APIVersion != foldCacheAPIVersion || c.Schema != APIVersion || c.Kind != kind {
 		return foldCache{}
 	}
 	return c

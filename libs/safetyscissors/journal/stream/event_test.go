@@ -40,7 +40,7 @@ func (s *EventSuite) TestMarshalsFlat() {
 	got, err := codec.Marshal(e)
 	s.Require().NoError(err)
 	s.JSONEq(`{
-		"schema":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,
+		"api_version":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,
 		"workspace":"/repo","inv":"inv1a2b3c",
 		"project":"cmd/magus","target":"build","status":"failed",
 		"cache_hit":false,"ref":"out_abc","duration_ms":1200,"error":"exit 1"
@@ -113,7 +113,7 @@ func (s *EventSuite) TestFilterZeroValueExcludesOutput() {
 // zero body it would have to test for. Line-oriented clients skip instead, which
 // is what lets the taxonomy grow without a schema bump.
 func (s *EventSuite) TestDecodeRefusesAnUnknownType() {
-	_, err := decode([]byte(`{"schema":"safetyscissors.journal-stream/v1alpha1","type":"target.reslut","ts":1}`))
+	_, err := decode([]byte(`{"api_version":"safetyscissors.journal-stream/v1alpha1","type":"target.reslut","ts":1}`))
 	s.ErrorContains(err, `unknown type "target.reslut"`)
 }
 
@@ -121,7 +121,7 @@ func (s *EventSuite) TestDecodeRefusesAnUnknownType() {
 // additive changes keep old fields meaning what they meant, so a client built
 // against v1alpha1 must not refuse a later line.
 func (s *EventSuite) TestDecodeAcceptsANewerSchema() {
-	got, err := decode([]byte(`{"schema":"safetyscissors.journal-stream/v99","type":"run.finished","ts":7,"phase":"finished","status":"pass","future_field":true}`))
+	got, err := decode([]byte(`{"api_version":"safetyscissors.journal-stream/v99","type":"run.finished","ts":7,"phase":"finished","status":"pass","future_field":true}`))
 	s.Require().NoError(err)
 	s.Equal(Run{Phase: "finished", Status: "pass"}, got.Body)
 	s.Equal(int64(7), got.Ts)

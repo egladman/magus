@@ -29,14 +29,14 @@ const (
 	ScriptEffectWrite = "write"
 )
 
-// scriptsIndexFormat moves to a new version whenever ScriptsIndex changes shape. An index in any
+// scriptsIndexAPIVersion moves to a new version whenever ScriptsIndex changes shape. An index in any
 // other format serves nothing until the next graph build rewrites it.
-const scriptsIndexFormat = "magus.scripts-index/v1alpha1"
+const scriptsIndexAPIVersion = "magus.scripts-index/v1alpha1"
 
 // ScriptsIndex is the content of scripts.idx: which scripts serve which situation,
 // stamped so a reader can tell when an entry no longer describes its file.
 type ScriptsIndex struct {
-	Format string `json:"format"`
+	APIVersion string `json:"api_version"`
 	// Root is the absolute workspace root every Path is relative to.
 	Root string `json:"root"`
 	// Serves maps a situation (see ValidateSituation) to the scripts serving it, in
@@ -71,7 +71,7 @@ func ScriptsIndexPath(cacheDir string) string {
 // WriteScriptsIndex atomically replaces scripts.idx with x, stamped in this
 // magus's format.
 func WriteScriptsIndex(cacheDir string, x ScriptsIndex) error {
-	x.Format = scriptsIndexFormat
+	x.APIVersion = scriptsIndexAPIVersion
 	data, err := codec.Marshal(x)
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func readScriptsIndex(cacheDir string) (ScriptsIndex, bool) {
 	if err != nil {
 		return x, false
 	}
-	if err := codec.Unmarshal(data, &x); err != nil || x.Format != scriptsIndexFormat || x.Root == "" {
+	if err := codec.Unmarshal(data, &x); err != nil || x.APIVersion != scriptsIndexAPIVersion || x.Root == "" {
 		return x, false
 	}
 	return x, true

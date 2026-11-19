@@ -13,7 +13,7 @@ import (
 // and encodes it on enc, so a log record reaches a -o jsonl reader through the same
 // encoder as a notice a sink emits. It is the fallback for log records no typed event
 // converts: a caller parsing the run meets one record shape on both streams instead of
-// slog's {time,level,msg} beside {schema,type,...}.
+// slog's {time,level,msg} beside {api_version,type,...}.
 //
 // The record's attributes land under "attrs", so an attribute named like an envelope
 // field cannot collide with it.

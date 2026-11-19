@@ -1,8 +1,8 @@
 package bindgen
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"reflect"
 	"testing"
 	"time"

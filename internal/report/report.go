@@ -1,5 +1,6 @@
 // Package report writes per-task JSONL events for post-processing.
-// Each line has stable "schema" and "type" fields; bump Schema when a field change breaks parsers.
+// Each line has stable "api_version" and "type" fields; move APIVersion to a new version
+// when a field change breaks parsers.
 // Use [RunOptions] to wire into cache.RunAll and [GraphObserver] for graph events.
 // Writes are async (drop+count under load); use [WithBlockOnFull] for lossless capture.
 package report
@@ -18,9 +19,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Schema is the version stamped on every line as "schema"; bump it on field renames or
-// removals.
-const Schema types.APIVersion = "magus.report/v1alpha1"
+// APIVersion is the version stamped on every line as "api_version"; move it to a new
+// version on field renames or removals.
+const APIVersion types.APIVersion = "magus.report/v1alpha1"
 
 // Type values stamped on every event line; stable across versions.
 const (

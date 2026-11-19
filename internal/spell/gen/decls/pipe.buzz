@@ -7,7 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export object PipeRecord {
-    schema: str = "",
+    apiVersion: str = "",
     @"type": str = "",
     project: str = "",
     target: str = "",
