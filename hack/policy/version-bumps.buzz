@@ -48,8 +48,8 @@ export final counters = [
     Counter{ name = "provider-cache-version", file = "internal/workspace/provider_cache.go", declaration = "const providerCacheVersion = " },
     Counter{ name = "buzz-bytecode-version", file = "libs/gopherbuzz/vm/marshal.go", declaration = "const BytecodeVersion uint16 = " },
     Counter{ name = "buzz-bytecode-record-version", file = "libs/gopherbuzz/bytecode_cache.go", declaration = "const bytecodeRecordVersion uint16 = " },
-    Counter{ name = "proofread-baseline-version", file = "libs/proofread/cmd/proofread/baseline.go", declaration = "const baselineVersion = " },
-    Counter{ name = "proofread-outcomes-version", file = "libs/proofread/cmd/proofread/outcomes.go", declaration = "outcomesVersion = " },
+    Counter{ name = "proofread-baseline-version", file = "libs/proofread/cmd/proofread/baseline.go", declaration = "const baselineAPIVersion = " },
+    Counter{ name = "proofread-outcomes-version", file = "libs/proofread/cmd/proofread/outcomes.go", declaration = "outcomesAPIVersion = " },
 ];
 
 // Edit is a write as the guard hands it over: content for a whole file, oldText and newText

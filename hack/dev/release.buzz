@@ -6,7 +6,7 @@
 // `release:cd` with the same arguments. It never pushes: the target tags locally and says
 // what to push.
 //
-//	magus buzz --embedded hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]
+//	magus buzz hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]
 //
 // Every choice has a flag, and with no terminal a missing one fails naming it. Without
 // --yes and without a terminal the run ends after the dry run, with the command that
@@ -22,7 +22,7 @@ import "std";
 import "hack/lib/prompt";
 import "hack/magusfile/releases" as releases;
 
-final USAGE = "usage: magus buzz --embedded hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]";
+final USAGE = "usage: magus buzz hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]";
 final HELP = "cost: one dry run of `magus run release`\n{USAGE}";
 final LEVELS = ["patch", "minor", "major"];
 final CHECK = std\pattern(`release: (OK|FAIL|NOTE)\s+(.+?) - (.*)$`);

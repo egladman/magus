@@ -167,18 +167,18 @@ export fun matchesGlob(pattern: str, name: str) > bool !> any {
 }
 
 test "a glob star stays inside one path segment" {
-    std\assert(matchesGlob("dist/magus_*.tar.gz", "dist/magus_v0.4.0_linux_amd64_static.tar.gz"),
+    std\assert(matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_v0.4.0_linux_amd64_static.tar.gz"),
         message: "the name a healthy release writes");
     std\assert(!matchesGlob("dist/magus_*.tar.gz",
-        "dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz"),
+        name: "dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz"),
         message: "the name the v0.4.0 release wrote, which the upload never found");
-    std\assert(!matchesGlob("dist/magus_*.tar.gz", "dist/SHA256SUMS"), message: "a different asset");
-    std\assert(!matchesGlob("dist/magus_*.tar.gz", "dist/magus_.tar.gz.other"), message: "trailing text");
-    std\assert(matchesGlob("dist/magus_*.tar.gz", "dist/magus_.tar.gz"), message: "an empty star");
-    std\assert(matchesGlob("v*", "v0.4.0"), message: "the workflow's tag trigger");
-    std\assert(!matchesGlob("v*", "libs/gopherbuzz/v0.1.0"), message: "a nested tag starts no release run");
-    std\assert(matchesGlob("exact", "exact"), message: "a starless pattern is equality");
-    std\assert(!matchesGlob("exact", "exactly"), message: "a starless pattern is not a prefix test");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", name: "dist/SHA256SUMS"), message: "a different asset");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_.tar.gz.other"), message: "trailing text");
+    std\assert(matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_.tar.gz"), message: "an empty star");
+    std\assert(matchesGlob("v*", name: "v0.4.0"), message: "the workflow's tag trigger");
+    std\assert(!matchesGlob("v*", name: "libs/gopherbuzz/v0.1.0"), message: "a nested tag starts no release run");
+    std\assert(matchesGlob("exact", name: "exact"), message: "a starless pattern is equality");
+    std\assert(!matchesGlob("exact", name: "exactly"), message: "a starless pattern is not a prefix test");
 }
 
 // toSlash rewrites a path's separators to "/", as Go's filepath.ToSlash does.
@@ -196,13 +196,13 @@ export fun toSlash(path: str) > str {
 test "a windows-joined asset path matches the upload glob" {
     // The v0.4.1 windows job, which refused this exact name.
     std\assert(matchesGlob("dist/magus_*.tar.gz",
-        toSlash("dist\\magus_v0.4.1_windows_amd64_static.tar.gz")),
+        name: toSlash("dist\\magus_v0.4.1_windows_amd64_static.tar.gz")),
         message: "a backslash-joined asset is what the uploader collects");
     std\assert(matchesGlob("dist/magus_*.tar.gz",
-        toSlash("dist/magus_v0.4.1_linux_amd64_static.tar.gz")),
+        name: toSlash("dist/magus_v0.4.1_linux_amd64_static.tar.gz")),
         message: "a slash-joined asset is unchanged");
     std\assert(!matchesGlob("dist/magus_*.tar.gz",
-        toSlash("dist\\magus_libs/diagnostics/v0.1.0_windows_amd64_static.tar.gz")),
+        name: toSlash("dist\\magus_libs/diagnostics/v0.1.0_windows_amd64_static.tar.gz")),
         message: "normalizing the join still refuses a version carrying a separator");
     std\assert(toSlash("a\\b\\c") == "a/b/c", message: "every separator, not the first");
     std\assert(toSlash("") == "", message: "the empty path");
@@ -249,9 +249,9 @@ test "a release ships proofread beside magus under names that never collide" {
     final magus = "dist/" + assetName("magus", version: "v1.0.0", goos: "linux", goarch: "amd64", suffix: "_static");
     assert\equal(proofread, want: "dist/proofread_v1.0.0_linux_amd64_static.tar.gz", message: "the proofread asset");
     assert\equal(magus, want: "dist/magus_v1.0.0_linux_amd64_static.tar.gz", message: "the name self update asks for");
-    std\assert(matchesGlob(assetGlob("proofread"), proofread), message: "the upload collects proofread");
-    std\assert(!matchesGlob(assetGlob("magus"), proofread), message: "magus's glob never sees proofread");
-    std\assert(!matchesGlob(assetGlob("proofread"), magus), message: "proofread's glob never sees magus");
+    std\assert(matchesGlob(assetGlob("proofread"), name: proofread), message: "the upload collects proofread");
+    std\assert(!matchesGlob(assetGlob("magus"), name: proofread), message: "magus's glob never sees proofread");
+    std\assert(!matchesGlob(assetGlob("proofread"), name: magus), message: "proofread's glob never sees magus");
 }
 
 test "every static platform ships proofread" {
