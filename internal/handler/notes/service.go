@@ -326,7 +326,7 @@ func anchorToProto(a store.Anchor, status store.IssueCode, res *knowledge.NoteRe
 	case store.StatusUngraded:
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
 		out.Detail = "The knowledge graph would not load, so this anchor was not checked."
-	default:
+	case store.CodeInvalidEntry, store.CodeMissingNote, store.CodeStoreTruncated:
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_UNVERIFIED
 		out.Detail = fmt.Sprintf("notes graded this anchor %q, which this service does not render.", status)
 	}
@@ -390,9 +390,10 @@ func anchorKind(k store.AnchorKind) (notesv1.AnchorKind, error) {
 		return notesv1.AnchorKind_ANCHOR_KIND_NOTE, nil
 	case store.AnchorDiagnostic:
 		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, fmt.Errorf("notes: anchor kind %s: %w", k, errAnchorKindOffAPI)
-	default:
-		return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, nil
+
 	}
+	return notesv1.AnchorKind_ANCHOR_KIND_UNSPECIFIED, nil
+
 }
 
 func scopeName(s notesv1.Scope) string {

@@ -307,9 +307,10 @@ func Dir(root string, scope Scope, declared string) (string, error) {
 		return sharedDir(root, declared)
 	case ScopePrivate:
 		return privateDir(root, declared)
-	default:
-		return "", fmt.Errorf("notes: unknown scope %q (want %q or %q)", scope, ScopeShared, ScopePrivate)
+
 	}
+	return "", fmt.Errorf("notes: unknown scope %q (want %q or %q)", scope, ScopeShared, ScopePrivate)
+
 }
 
 // sharedDir resolves the TEAM's notes directory, which must stay inside the checkout.
@@ -414,9 +415,7 @@ func validateBody(n Note) error {
 		return errors.New("notes: a note needs at least one anchor, an unanchored note is a diary entry, not workspace knowledge that anyone will find again")
 	}
 	for _, a := range n.Anchors {
-		switch a.Kind {
-		case AnchorSymbol, AnchorFile, AnchorProject, AnchorTarget, AnchorNote, AnchorDiagnostic:
-		default:
+		if !a.Kind.known() {
 			return fmt.Errorf("notes: anchor kind must be one of symbol, file, project, target, note, diagnostic (got %q)", a.Kind)
 		}
 		target := strings.TrimSpace(a.Target)
@@ -907,4 +906,13 @@ func marshalNote(path string, n Note) ([]byte, error) {
 		b.WriteString("\n")
 	}
 	return []byte(b.String()), nil
+}
+
+// known reports whether k is one of the anchor kinds.
+func (k AnchorKind) known() bool {
+	switch k {
+	case AnchorSymbol, AnchorFile, AnchorProject, AnchorTarget, AnchorNote, AnchorDiagnostic:
+		return true
+	}
+	return false
 }

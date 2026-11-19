@@ -419,7 +419,7 @@ func readActivity(ctx context.Context, base, session string, limit int) (Activit
 				}
 			}
 			out.Spawns = append(out.Spawns, sp)
-		default:
+		case journal.CallKindConfigChange, journal.CallKindCredentialGrant, journal.CallKindGuardPolicy, journal.CallKindJob, journal.CallKindMCPTool, journal.CallKindNotes, journal.CallKindSandboxDenial, journal.CallKindTokenLifecycle:
 			continue
 		}
 		if e.Lease != "" && !slices.Contains(out.Leases, e.Lease) {

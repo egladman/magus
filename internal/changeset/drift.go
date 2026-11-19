@@ -222,7 +222,7 @@ func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string 
 	case driftUnpushedNotHead:
 		fmt.Fprintf(&b, "Then fold it into %s (unpushed, but no longer HEAD):\n  git commit --fixup=%s && GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash %s^",
 			hash, hash, hash)
-	default: // driftPushed
+	case driftPushed: // driftPushed
 		fmt.Fprintf(&b, "%s is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead.", hash)
 	}
 	return b.String()

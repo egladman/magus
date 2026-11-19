@@ -476,6 +476,7 @@ func (g *GateRedundancy) Evaluate(ctx context.Context, disabled bool) error {
 	case gateAdvise:
 		slog.InfoContext(ctx, fmt.Sprintf("this %s gate re-verifies one that already passed; running anyway.\n%s\n  machine pool: %s",
 			g.target, g.renderFinding(finding), pool), attr.Notice(""), attr.Component("magus"))
+	case gateRun:
 	}
 	return nil
 }

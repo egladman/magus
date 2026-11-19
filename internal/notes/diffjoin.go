@@ -40,9 +40,10 @@ func (m MatchStrength) rank() int {
 		return 2
 	case MatchNeighbor:
 		return 1
-	default:
-		return 0
+
 	}
+	return 0
+
 }
 
 // ResolvedAnchor is one anchor, the note that declares it, and what checking it found.
@@ -178,6 +179,7 @@ func (r ResolvedAnchor) hit(files, symbols map[string]bool) (AnchorHit, bool) {
 		case r.File != "" && files[r.File]:
 			matched, strength = r.File, MatchNeighbor
 		}
+	case AnchorDiagnostic, AnchorNote, AnchorProject, AnchorTarget:
 	}
 	if strength == "" {
 		return AnchorHit{}, false

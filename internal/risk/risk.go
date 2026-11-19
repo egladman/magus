@@ -53,6 +53,7 @@ func (c Class) String() string {
 		return "prose"
 	case ClassCommentOnly:
 		return "comment-only"
+	case ClassCode:
 	}
 	return "code"
 }

@@ -14,7 +14,7 @@ func ResolutionNote(asked string, out types.KnowledgeExplainOutput) string {
 		return fmt.Sprintf("%q resolved by path to %s\n", asked, out.Node.ID)
 	case types.ResolvedFuzzy:
 		return fmt.Sprintf("%q matched no node exactly; showing the closest, %s (explain it by ID to be sure)\n", asked, out.Node.ID)
-	default:
-		return ""
+	case types.ResolvedID:
 	}
+	return ""
 }

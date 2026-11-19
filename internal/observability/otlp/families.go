@@ -207,6 +207,7 @@ func (p *otelProvider) RecordBuzzSessionPool(ctx context.Context, ev observabili
 		p.buzz.sessionPoolIdle.Add(ctx, -1)
 	case observability.PoolReturned:
 		p.buzz.sessionPoolIdle.Add(ctx, 1)
+	case observability.PoolCold, observability.PoolEvicted:
 	}
 }
 

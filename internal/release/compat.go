@@ -122,6 +122,9 @@ func checkSpells(ctx context.Context, tree string, report *CompatReport) error {
 // Judge refuses a bump the report does not allow. A patch must load cleanly. A minor
 // may break only in ways announced by code. A major is never refused.
 func (r CompatReport) Judge(b Bump, announced []diagnostics.Code) error {
+	if !b.known() {
+		return fmt.Errorf("release: unknown bump %v", b)
+	}
 	var bad []string
 	switch b {
 	case BumpMajor:
@@ -132,8 +135,6 @@ func (r CompatReport) Judge(b Bump, announced []diagnostics.Code) error {
 		bad = countCodes(slices.DeleteFunc(slices.Clone(r.Codes), func(c diagnostics.Code) bool {
 			return slices.Contains(announced, c)
 		}))
-	default:
-		return fmt.Errorf("release: unknown bump %v", b)
 	}
 	// An uncoded failure cannot be announced, so no minor covers it.
 	for _, u := range r.Uncoded {
@@ -224,4 +225,13 @@ func exportRevision(ctx context.Context, repoRoot, rev, dir string) error {
 		return fmt.Errorf("release: export %s: %w", rev, err)
 	}
 	return nil
+}
+
+// known reports whether b is one of the bump sizes.
+func (b Bump) known() bool {
+	switch b {
+	case BumpPatch, BumpMinor, BumpMajor:
+		return true
+	}
+	return false
 }

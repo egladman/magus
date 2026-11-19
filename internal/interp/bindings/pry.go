@@ -102,6 +102,7 @@ func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume inter
 			if cur >= startDepth {
 				return
 			}
+		case interp.ResumeContinue:
 		}
 		// Suspend stepping while the REPL is open so nested evals don't re-fire.
 		stepper.SetStepHook(0, nil)

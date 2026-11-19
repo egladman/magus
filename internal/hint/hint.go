@@ -291,9 +291,9 @@ func (v Variant) String() string {
 		return "gnu"
 	case VariantBSD:
 		return "bsd"
-	default:
-		return "unknown"
+	case VariantUnknown:
 	}
+	return "unknown"
 }
 
 // gnuOnlyFlags are spellings only coreutils accepts. Long options are the strongest

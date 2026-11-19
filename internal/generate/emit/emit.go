@@ -762,6 +762,7 @@ func (e *moduleEmitter) bindings() error {
 			if err := e.record(t); err != nil {
 				return err
 			}
+		case kindBasic:
 		}
 	}
 	for _, fn := range e.lib.allFuncs(e.p) {
@@ -909,11 +910,12 @@ func (e *moduleEmitter) encode(c *conv, src string) string {
 			return fmt.Sprintf("%s(%s)", basicGo(c.t.basic), src)
 		case kindRecord:
 			return fmt.Sprintf("%sEncode%s(%s)", e.genAlias(c.t.pkg), c.t.name, src)
-		default:
+		case kindHandle, kindIface:
 			return fmt.Sprintf("%s%sHandles.Put(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
 	case convSlice:
 		return fmt.Sprintf("convert.EncodeList(%s, func(x %s) any { return %s })", src, e.goExpr(c.elem), e.encode(c.elem, "x"))
+	case convContext, convStderr, convStdin:
 	}
 	return src
 }
@@ -947,11 +949,12 @@ func (e *moduleEmitter) decode(c *conv, src string) string {
 			return fmt.Sprintf("convert.IntAs[%s](%s)", e.goType(c.t, false), src)
 		case kindRecord:
 			return fmt.Sprintf("%sDecode%s(%s)", e.genAlias(c.t.pkg), c.t.name, src)
-		default:
+		case kindHandle, kindIface:
 			return fmt.Sprintf("convert.Handle(%s%sHandles, %s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
 	case convSlice:
 		return fmt.Sprintf("convert.DecodeSlice(%s, func(x any) (%s, error) { return %s })", src, e.goExpr(c.elem), e.decode(c.elem, "x"))
+	case convContext, convError, convStderr, convStdin:
 	}
 	return src
 }
@@ -972,6 +975,7 @@ func (e *moduleEmitter) goExpr(c *conv) string {
 		return "[]" + e.goExpr(c.elem)
 	case convError:
 		return "error"
+	case convContext, convStderr, convStdin:
 	}
 	return "any"
 }
@@ -1006,8 +1010,10 @@ func tag(c *conv) string {
 			return "std.TypeInt"
 		case kindRecord:
 			return "std.TypeAnyMap"
+		case kindHandle, kindIface:
 		}
 		return "std.TypeInt"
+	case convContext, convError, convStderr, convStdin:
 	}
 	return "std.TypeAny"
 }
@@ -1108,6 +1114,7 @@ func (e *moduleEmitter) arguments(fn *libFunc, b *binding) error {
 			e.use("os", "os")
 			b.call = append(b.call, "os.Stdin")
 			continue
+		case convBytes, convDuration, convError, convNamed, convPrim, convSlice:
 		}
 		t := tag(c)
 		b.args = append(b.args, fmt.Sprintf("{Name: %q}", prm.name))
@@ -1254,7 +1261,7 @@ func (e *moduleEmitter) value(v *libValue) error {
 	switch c.kind {
 	case convError:
 		goT, val = "string", src+".Error()"
-	default:
+	case convBytes, convContext, convDuration, convNamed, convPrim, convSlice, convStderr, convStdin:
 		goT = implementationParam(tag(c))
 		val = e.encodeTop(c, src, goT)
 	}

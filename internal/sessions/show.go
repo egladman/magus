@@ -97,7 +97,7 @@ func SummarizeSession(hostSession string, events []session.AgentEvent) ShowSumma
 				g.WouldDeny++
 			case verdict.Advise:
 				g.Advise++
-			default:
+			case verdict.Ask, verdict.Defer:
 				g.Defer++
 			}
 			if ev.Denied {

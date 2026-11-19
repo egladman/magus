@@ -96,7 +96,7 @@ func toEngineEvent(ev vm.StepEvent) engine.StepEvent {
 		return engine.StepCall
 	case vm.StepReturn:
 		return engine.StepReturn
-	default:
-		return engine.StepLine
+	case vm.StepLine:
 	}
+	return engine.StepLine
 }

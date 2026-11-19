@@ -234,6 +234,7 @@ func (g *Graph) describeMember(site types.DuplicationSite, callees, shared map[s
 			if !slices.Contains(fileNS[e.Source], n.Attrs[attrNamespace]) {
 				foreign[file] = true
 			}
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
 		}
 	}
 	site.Callers = len(callers)

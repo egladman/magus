@@ -160,9 +160,10 @@ func kindToProto(k journal.Kind) viewerv1.Kind {
 		return viewerv1.Kind_KIND_SCOPE
 	case journal.KindSecret:
 		return viewerv1.Kind_KIND_SECRET
-	default:
-		return viewerv1.Kind_KIND_UNSPECIFIED
+
 	}
+	return viewerv1.Kind_KIND_UNSPECIFIED
+
 }
 
 func streamToProto(s journal.OutputStream) viewerv1.Stream {
@@ -171,9 +172,10 @@ func streamToProto(s journal.OutputStream) viewerv1.Stream {
 		return viewerv1.Stream_STREAM_STDOUT
 	case journal.Stderr:
 		return viewerv1.Stream_STREAM_STDERR
-	default:
-		return viewerv1.Stream_STREAM_UNSPECIFIED
+
 	}
+	return viewerv1.Stream_STREAM_UNSPECIFIED
+
 }
 
 func statusToProto(s journal.Status) viewerv1.Status {
@@ -186,9 +188,10 @@ func statusToProto(s journal.Status) viewerv1.Status {
 		return viewerv1.Status_STATUS_CACHED
 	case journal.StatusPermitted:
 		return viewerv1.Status_STATUS_PERMITTED
-	default:
-		return viewerv1.Status_STATUS_UNSPECIFIED
+
 	}
+	return viewerv1.Status_STATUS_UNSPECIFIED
+
 }
 
 func triggerToProto(t journal.Trigger) viewerv1.Trigger {
@@ -205,7 +208,8 @@ func triggerToProto(t journal.Trigger) viewerv1.Trigger {
 		return viewerv1.Trigger_TRIGGER_WATCH
 	case journal.TriggerDirect:
 		return viewerv1.Trigger_TRIGGER_DIRECT
-	default:
-		return viewerv1.Trigger_TRIGGER_UNSPECIFIED
+
 	}
+	return viewerv1.Trigger_TRIGGER_UNSPECIFIED
+
 }

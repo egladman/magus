@@ -137,7 +137,7 @@ func PrintStatusText(w io.Writer, r daemon.Snapshot, v StatusView) {
 					}
 				case daemon.WorkspaceLoading:
 					fmt.Fprintf(w, "  %s  (loading)\n", ws.Root)
-				default:
+				case daemon.WorkspaceActive:
 					idle := time.Since(ws.LastAccess).Round(time.Second)
 					fmt.Fprintf(w, "  %s  (idle %s)\n", ws.Root, idle)
 				}

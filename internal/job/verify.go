@@ -211,18 +211,19 @@ func (o Observed) holds(kind job.PostconditionKind, expect job.PostconditionExpe
 				return true, ""
 			}
 			return false, fmt.Sprintf("nothing matching %q is in the tree, so this postcondition is unmet", declared)
-		default:
+		case job.ExpectAbsent, job.ExpectPassed, job.ExpectSignature, job.ExpectUnreferenced:
 			if !o.covering(declared, o.Present) {
 				return true, ""
 			}
 			return false, fmt.Sprintf("%q is still in the tree, and this postcondition expects it gone", declared)
 		}
-	default:
+	case job.PostconditionKindCheck, job.PostconditionKindSymbol:
 		if expect == job.ExpectSignature {
 			return o.signatureHolds(declared, signature)
 		}
 		return o.symbolHolds(expect, declared, from)
 	}
+	return false, fmt.Sprintf("postcondition kind %q with expectation %q is not one magus grades, so it is unmet", kind, expect)
 }
 
 // signatureHolds grades a signature postcondition. Every answer short of a compared match is unmet:
@@ -274,7 +275,7 @@ func (o Observed) symbolHolds(expect job.PostconditionExpect, declared, from str
 			return true, ""
 		}
 		return false, fmt.Sprintf("%d place(s) still reference %q, and this postcondition expects none", fact.ReferenceCount, declared)
-	default:
+	case job.ExpectChanged, job.ExpectPassed, job.ExpectSignature:
 		if !fact.Defined() {
 			return false, fmt.Sprintf("%q is defined nowhere the graph can see, so nothing of it could have changed", declared)
 		}
@@ -287,6 +288,7 @@ func (o Observed) symbolHolds(expect job.PostconditionExpect, declared, from str
 		}
 		return false, fmt.Sprintf("%q is defined in %s, and none of that changed since %s", declared, strings.Join(fact.DefinedIn, ", "), from)
 	}
+	return false, fmt.Sprintf("expectation %q is not one magus grades for a symbol, so this postcondition is unmet", expect)
 }
 
 // integratorTargets are the root targets an integrator runs over every merged tree.

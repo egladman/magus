@@ -905,7 +905,7 @@ func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []
 	}
 	switch ans.Tier {
 	case types.CarryGenerated, types.CarryProse, types.CarryCommentOnly, types.CarryCode:
-	default:
+	case types.CarryRebase:
 		code.Why = fmt.Sprintf("the classify_edit hook answered tier %q", ans.Tier)
 		return code, nil
 	}

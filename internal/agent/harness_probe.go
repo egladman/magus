@@ -274,7 +274,7 @@ func probeHarnessCommands(ctx context.Context, root string, config map[string]an
 		case HarnessVerified:
 		case HarnessUnprobed:
 			unprobed = append(unprobed, fmt.Sprintf("%q: %s", command, reason))
-		default:
+		case HarnessInvalid, HarnessPluginBehind, HarnessPluginDisabled, HarnessPluginUninstalled, HarnessSkillsOnly, HarnessUncovered, harnessSkipped:
 			uncovered = append(uncovered, fmt.Sprintf("%q: %s", command, reason))
 		}
 	}

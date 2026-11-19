@@ -46,9 +46,9 @@ func (in Source) RiskBase() string {
 		return "HEAD"
 	case SourceRevRange:
 		return in.Base
-	default:
-		return ""
+	case SourceFile, SourceStdin:
 	}
+	return ""
 }
 
 // revRange resolves --rev, which is written base...head the way git and the branch-overlap

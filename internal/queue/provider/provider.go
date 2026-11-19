@@ -246,9 +246,7 @@ func (p *Script) RequiredChecks(ctx context.Context, c types.Change, commit stri
 		return nil, err
 	}
 	for _, ch := range checks {
-		switch ch.State {
-		case types.StatePending, types.StateSuccess, types.StateFailure:
-		default:
+		if !checkStateKnown(ch.State) {
 			return nil, fmt.Errorf("%s: check %q has state %q, want pending, success or failure", p.where(op.Name), ch.Name, ch.State)
 		}
 	}
@@ -346,4 +344,13 @@ func (p *Script) Reviews(ctx context.Context, c types.Change) (types.Reviews, er
 // DismissReview calls dismiss_review.
 func (p *Script) DismissReview(ctx context.Context, c types.Change, rv types.Review, message string) error {
 	return acknowledged(ctx, p, providerops.QueueDismissReview, types.DismissReviewRequest{Change: c, Review: rv, Message: message})
+}
+
+// checkStateKnown reports whether s is one of the states a required check may carry.
+func checkStateKnown(s types.CommitState) bool {
+	switch s {
+	case types.StatePending, types.StateSuccess, types.StateFailure:
+		return true
+	}
+	return false
 }

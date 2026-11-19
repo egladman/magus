@@ -127,6 +127,7 @@ func ReadFeedback(ctx context.Context, bases []string, w FeedbackWindow) (feedba
 				}
 			}
 			out.Spawns = append(out.Spawns, sp)
+		case journal.CallKindConfigChange, journal.CallKindCredentialGrant, journal.CallKindGuardPolicy, journal.CallKindJob, journal.CallKindMCPTool, journal.CallKindNotes, journal.CallKindSandboxDenial, journal.CallKindTokenLifecycle:
 		}
 	}
 	slices.Sort(out.Checkouts)

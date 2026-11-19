@@ -134,6 +134,9 @@ func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
 		s.RecentOutcomes = s.RecentOutcomes[len(s.RecentOutcomes)-forecast.OutcomeWindow:]
 	}
 	pass, fail, volatileCount := 0, 0, 0
+	// A history file written by a newer magus, or a hand-edited one, can hold a verdict this
+	// version cannot read. The row stays in RecentOutcomes and out of every counter: scoring a
+	// target on it would be a number nobody could account for.
 	for _, ro := range s.RecentOutcomes {
 		switch ro.Result {
 		case forecast.OutcomePass:
@@ -142,11 +145,6 @@ func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
 			fail++
 		case forecast.OutcomeVolatile:
 			volatileCount++
-		default:
-			// A history file written by a newer magus, or a hand-edited one. The row stays
-			// in RecentOutcomes and out of every counter: scoring a target on a verdict
-			// this version cannot read would be a number nobody could account for. Written
-			// out rather than left implicit so the next case added here is not silent.
 		}
 	}
 	s.PassCount = pass

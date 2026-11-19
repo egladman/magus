@@ -479,7 +479,7 @@ func frozenSignature(name string, hasReader, read bool, fact SymbolFact) (string
 func derivedClaim(row job.Job, expect job.PostconditionExpect, read bool, fact SymbolFact) string {
 	switch expect {
 	case job.ExpectChanged, job.ExpectAbsent, job.ExpectSignature:
-	default:
+	case job.ExpectPassed, job.ExpectPresent, job.ExpectUnreferenced:
 		return ""
 	}
 	if row.ReadOnly || !read || len(fact.DefinedIn) != 1 || len(fact.SameNameDefinitions) > 1 {

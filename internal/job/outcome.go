@@ -97,7 +97,7 @@ func ModelTierRecords(outcomes []types.JobOutcome, set *tier.Set) []types.ModelT
 			f.rec.Pass++
 		case job.StateFail:
 			f.rec.Fail++
-		default:
+		case job.StateDeclared, job.StateExited, job.StateNoReturn, job.StateRunning:
 			f.rec.NoReturn++
 		}
 		// An outcome recorded before attempts were numbered was a first attempt.

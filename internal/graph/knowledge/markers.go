@@ -346,6 +346,7 @@ func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages 
 				if _, ok := callProv[k]; !ok {
 					callProv[k] = prov
 				}
+			case types.MarkerHarness, types.MarkerObserved, types.MarkerSkills:
 			}
 			if unresolved != "" {
 				attrs[attrMarkerUnresolved] = unresolved

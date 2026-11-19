@@ -53,6 +53,7 @@ func PrintVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			if ans.IndexCause == nil {
 				fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
 			}
+		case types.ReasonSymbolIndexMissing:
 		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
