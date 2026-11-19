@@ -11,6 +11,7 @@ import { createFilterField } from "./filterField";
 import { buildSection, createSection, setSectionOpen } from "./sections";
 import { timeEl } from "./time";
 import { attachTreeKeys } from "./treeKeys";
+import { rejected } from "../lib/rejected";
 
 const notices: NotifyInput[] = [];
 const onNotify = (e: Event): void => {
@@ -107,8 +108,7 @@ test("a copy that fails is a toast, not a label that flickers", async () => {
   const realClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
-    // platform double: navigator.clipboard.writeText
-    value: { writeText: () => new Promise<void>((_, reject) => reject(new Error("denied"))) },
+    value: { writeText: () => rejected(new Error("denied")) },
   });
   try {
     const btn = document.createElement("button");

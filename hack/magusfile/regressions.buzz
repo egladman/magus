@@ -93,22 +93,26 @@ fun jobState(conclusions: [str]) > str {
 
 // parseJobs reads `gh run view --json jobs` into one state per check key.
 // Jobs that share a key fold: any failure fails it.
-export fun parseJobs(body: str, keyOf: fun (name: str) > str) > {str: str} !> any {
-    final grouped = mut {<str: [str]>};
-    foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
-        final key = keyOf(job.q("name").stringValue());
-        final seen = mut [<str>];
-        foreach (c in grouped[key] ?? [<str>]) {
-            seen.append(c);
+export fun parseJobs(body: str, keyOf: fun (name: str) > str) > result\Result::<{str: str}> {
+    try {
+        final grouped = mut {<str: [str]>};
+        foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
+            final key = keyOf(job.q("name").stringValue());
+            final seen = mut [<str>];
+            foreach (c in grouped[key] ?? [<str>]) {
+                seen.append(c);
+            }
+            seen.append(job.q("conclusion").stringValue());
+            grouped[key] = seen;
         }
-        seen.append(job.q("conclusion").stringValue());
-        grouped[key] = seen;
+        final acc = mut {<str: str>};
+        foreach (key, conclusions in grouped) {
+            acc[key] = jobState(conclusions);
+        }
+        return result\ok::<{str: str}>(acc);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "regressions: read the run's jobs");
     }
-    final acc = mut {<str: str>};
-    foreach (key, conclusions in grouped) {
-        acc[key] = jobState(conclusions);
-    }
-    return acc;
 }
 
 // parseMainRuns reads `gh run list --json databaseId,headSha,status`,
@@ -449,7 +453,7 @@ test "the reader stops once every red check has a passing run, and attributes ea
 test "jobs fold by key: a failed shard fails it and a cancelled one judges nothing" {
     final keyed = parseJobs(`{"jobs": [{"name": "a 0", "conclusion": "success"}, {"name": "a 1", "conclusion": "failure"},
         {"name": "b", "conclusion": "cancelled"}, {"name": "c", "conclusion": "success"}]}`,
-        keyOf: fun (name: str) > str => name.sub(0, len: 1));
+        keyOf: fun (name: str) > str => name.sub(0, len: 1)).value!;
     assert\equal(keyed["a"], want: "fail", message: "failure");
     assert\equal(keyed["b"], want: "none", message: "cancelled");
     assert\equal(keyed["c"], want: "pass", message: "success");

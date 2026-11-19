@@ -58,7 +58,11 @@ final GLUE = ["cursor-hook.buzz", "magus-buzz-check.buzz", "magus-checkpoint.buz
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // Hashed by name before the generators run, so a dirty tree does not disarm the check.
     // vcs\status names paths from the repository root, which this directory cannot match.
-    final before = drift\hashes(generatedOutputs());
+    final hashed = drift\hashes(generatedOutputs());
+    if (hashed.error != null) {
+        throw hashed.error!.message;
+    }
+    final before = hashed.value!;
 
     ctx.needs(cursor_schemas_generate, index_generate);
     ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz",

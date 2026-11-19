@@ -12,6 +12,7 @@ import {
 import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { activate } from "./main";
 import type { DiffTouch } from "./session";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 
@@ -179,8 +180,7 @@ test("fetchSessionActivity asks the viewer service for one session and path", as
 
 test("the showcase touch row renders Ran and its Session panel states reasoning is unavailable", async () => {
   globalThis.fetch = (() =>
-    // platform double: fetch
-    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
+    rejected(new Error("demo mode must not reach the network"))) as typeof fetch;
   location.hash = "#demo";
   const dispose = activate(document.body);
   for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 0));

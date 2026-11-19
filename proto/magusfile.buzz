@@ -34,7 +34,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // The root generate gate never runs buf, so this gates all three trees itself.
     final GENERATED = ["gen", fs\join("..", "docs", "src", "gen"),
                        fs\join("..", "console", "src", "gen")];
-    final before = drift\hashes(GENERATED);
+    final hashed = drift\hashes(GENERATED);
+    if (hashed.error != null) {
+        throw hashed.error!.message;
+    }
+    final before = hashed.value!;
     buf["buf-generate"](ctx);
     buf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
     if (ctx.hasCharm("rw")) { return; }

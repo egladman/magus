@@ -12,6 +12,7 @@ import {
   renderDiagram,
 } from "./api";
 import { ok } from "../../../gen/magus/types";
+import { rejected } from "../../../lib/rejected";
 
 const HOST = "127.0.0.1:7391";
 
@@ -87,8 +88,7 @@ test("an envelope body reaches the view as its message, not as JSON", async () =
 
 // A fetch that fails the way the browser's does: its promise rejects.
 function rejecting(reason: unknown): typeof fetch {
-  // platform double: fetch
-  return () => new Promise((_, reject) => reject(reason));
+  return () => rejected(reason);
 }
 
 test("a network failure is unreadable and an abort is not a failure", async () => {

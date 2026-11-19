@@ -106,9 +106,13 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Both projects name their files src/..., so textsearch's paths get a prefix before the merge.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
         .replace("SF:src/", "SF:libs/textsearch/src/");
-    final pct = lcov\mergePercent(
+    final merged = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
+    if (merged.error != null) {
+        throw merged.error!.message;
+    }
+    final pct = merged.value!;
     fs\writeFile("coverage.txt", content: pct + "\n");
     // Two points of headroom: the figure moves a little with the Node patch version.
     final floor = 67;

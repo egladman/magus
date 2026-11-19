@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { createQueryBuilder, type GraphCapabilities, type QueryBuilder } from "./querybuilder";
+import { rejected } from "../../lib/rejected";
 
 const NOTIFY = "magus:notify";
 
@@ -166,8 +167,7 @@ describe("the question builder", () => {
   test("a failed copy is said in the panel and sent as a notification", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      // platform double: navigator.clipboard.writeText
-      value: { writeText: () => new Promise((_, reject) => reject(new Error("denied"))) },
+      value: { writeText: () => rejected(new Error("denied")) },
     });
     const heard: Array<{ message: string; kind?: string; toast?: boolean }> = [];
     const listen = (e: Event) => heard.push((e as CustomEvent).detail);

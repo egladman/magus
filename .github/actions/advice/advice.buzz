@@ -16,6 +16,7 @@ import "time";
 import "serialize";
 import "std";
 import "magus";
+import "result";
 import "vcs";
 // Used by the test blocks; advice_test runs this file.
 import "assert";
@@ -115,23 +116,31 @@ export fun pullRequest() > PullRequest !> any {
 
 // decodeInputs parses the action's inputs as the composite step passes them, toJSON of the
 // inputs context. "" decodes to no inputs. Throws on anything but an object of strings.
-export fun decodeInputs(text: str) > {str: str} !> any {
-    final inputs = mut {<str: str>};
-    if (text == "") { return inputs; }
-    final decoded = serialize\jsonDecode(text).map();
-    if (decoded == null) { throw "advice: ADVICE_INPUTS is not a JSON object"; }
-    foreach (name, value in decoded!) {
-        final s = value.string();
-        if (s == null) { throw "advice: input " + name + " is not a string"; }
-        inputs[name] = s!;
+export fun decodeInputs(text: str) > result\Result::<{str: str}> {
+    try {
+        final inputs = mut {<str: str>};
+        if (text == "") { return result\ok::<{str: str}>(inputs); }
+        final decoded = serialize\jsonDecode(text).map();
+        if (decoded == null) { return result\fail::<{str: str}>("advice: ADVICE_INPUTS is not a JSON object"); }
+        foreach (name, value in decoded!) {
+            final s = value.string();
+            if (s == null) { return result\fail::<{str: str}>("advice: input " + name + " is not a string"); }
+            inputs[name] = s!;
+        }
+        return result\ok::<{str: str}>(inputs);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "advice: decode ADVICE_INPUTS");
     }
-    return inputs;
 }
 
 // input returns the named action input, or "" when it was not passed. Unset ADVICE_INPUTS
 // passes none, so an advisor run on its own falls back to its defaults.
 export fun input(name: str) > str !> any {
-    return decodeInputs(os\env("ADVICE_INPUTS") ?? "")[name] ?? "";
+    final decoded = decodeInputs(os\env("ADVICE_INPUTS") ?? "");
+    if (decoded.error != null) {
+        throw decoded.error!.message;
+    }
+    return decoded.value![name] ?? "";
 }
 
 // fetchBase brings refs/remotes/origin/<base> up to date before an advisor compares
@@ -1079,21 +1088,19 @@ test "eventPullRequest refuses a payload it cannot read" {
 }
 
 test "decodeInputs reads the inputs context" {
-    final inputs = decodeInputs(serialize\jsonEncode({"doctor": "true", "fanout-share": "0.5"}));
+    final inputs = decodeInputs(serialize\jsonEncode({"doctor": "true", "fanout-share": "0.5"})).value!;
     assert\equal(inputs["doctor"] ?? "", want: "true", message: "a switch");
     assert\equal(inputs["fanout-share"] ?? "", want: "0.5", message: "a tuning value");
     std\assert(inputs["pr-number"] == null, message: "an input not passed is absent");
 }
 
 test "decodeInputs reads no inputs as none" {
-    std\assert(decodeInputs("").len() == 0, message: "an advisor run on its own uses its defaults");
+    std\assert(decodeInputs("").value!.len() == 0, message: "an advisor run on its own uses its defaults");
 }
 
 test "decodeInputs refuses anything but an object of strings" {
-    final notObject = decodeInputs("[\"doctor\"]") catch {"refused": "yes"};
-    std\assert(notObject["refused"] != null, message: "a list is not the inputs context");
-    final notString = decodeInputs(serialize\jsonEncode({"doctor": true})) catch {"refused": "yes"};
-    std\assert(notString["refused"] != null, message: "an action input is always a string");
+    std\assert(decodeInputs("[\"doctor\"]").error != null, message: "a list is not the inputs context");
+    std\assert(decodeInputs(serialize\jsonEncode({"doctor": true})).error != null, message: "an action input is always a string");
 }
 
 test "CI diffs the pull request's commits" {

@@ -122,27 +122,30 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > result\Result::<[str]
 // `release` had just written - the two-owner hazard MGS1020 reports.
 //
 // go is a parameter because a spell file cannot import another spell.
-export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-    ctx.writesFiles(["go.mod"], editsExistingSource: true);
-    final projects: Projects = magus\describe.project();
-    var modules: mut [any] = mut [<any>];
-    foreach (workspaceProject in projects.projects) {
-        if (fs\exists(workspaceProject.dir + "/go.mod")) {
-            final described = go["go-mod-json"](ctx.withCwd(workspaceProject.dir));
-            modules.append({"dir": workspaceProject.dir, "json": described.stdout});
+export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > result\Result::<bool> {
+    try {
+        ctx.writesFiles(["go.mod"], editsExistingSource: true);
+        final projects: Projects = magus\describe.project();
+        var modules: mut [any] = mut [<any>];
+        foreach (workspaceProject in projects.projects) {
+            if (fs\exists(workspaceProject.dir + "/go.mod")) {
+                final described = go["go-mod-json"](ctx.withCwd(workspaceProject.dir));
+                modules.append({"dir": workspaceProject.dir, "json": described.stdout});
+            }
         }
-    }
-    final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: modules);
-    if (flags.error -> err) {
-        //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-        throw err.message;
-    }
-    if (flags.value!.len() == 0) { return; }
-    final edited = go["go-mod-edit"](ctx, {"args": flags.value!});
-    if (ctx.hasCharm("rw")) { return; }
-    if (edited.stdout != fs\readFile("go.mod")) {
-        //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-        throw "MGS1016: go.mod has workspace-local replace drift; re-run this target with the rw charm (`magus run <target>:rw " + project + "`) to apply the derived replacements";
+        final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: modules);
+        if (flags.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        if (flags.value!.len() == 0) { return result\ok::<bool>(true); }
+        final edited = go["go-mod-edit"](ctx, {"args": flags.value!});
+        if (ctx.hasCharm("rw")) { return result\ok::<bool>(true); }
+        if (edited.stdout != fs\readFile("go.mod")) {
+            return result\fail::<bool>("MGS1016: go.mod has workspace-local replace drift; re-run this target with the rw charm (`magus run <target>:rw " + project + "`) to apply the derived replacements");
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "gomod: replace the workspace modules of {project}");
     }
 }
 

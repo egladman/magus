@@ -24,6 +24,7 @@ import {
   runOverviewLine,
   runPlanUrl,
 } from "./run";
+import { rejected } from "../../../lib/rejected";
 
 // The plan every assembly test reads, in the contract's exact shape: lint and build both wait on
 // generate, and test waits on build. from is the DEPENDENCY, to is the DEPENDENT.
@@ -365,8 +366,7 @@ test("any other failure is unreadable, and says which", async () => {
 
 test("a refused connection is unreadable rather than absent", async () => {
   const real = globalThis.fetch;
-  // platform double: fetch
-  globalThis.fetch = (() => Promise.reject(new Error("Failed to fetch"))) as typeof fetch;
+  globalThis.fetch = (() => rejected(new Error("Failed to fetch"))) as typeof fetch;
   try {
     const read = runPlanRead(await loadRunPlan("127.0.0.1:7391", ""));
     assert.deepEqual(read, { kind: "unreadable", detail: "Failed to fetch" });

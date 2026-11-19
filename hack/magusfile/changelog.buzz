@@ -501,25 +501,29 @@ test "only markdown files under the fragment directory are fragments" {
 
 // cases splits the shared fixture into its named files. cmd/magus-utils reads the same one
 // with go-internal's txtar, so this follows that format: a "-- name --" line opens a file.
-fun cases() > {str: str} !> any {
-    final files = mut {<str: str>};
-    var name = "";
-    var lines = mut [<str>];
-    foreach (line in fs\readFile("changes/testdata/fragments.txtar").split("\n")) {
-        if (line.startsWith("-- ") and line.endsWith(" --") and line.len() > 6) {
-            if (name != "") { files[name] = lines.join("\n"); }
-            name = line.sub(3, len: line.len() - 6);
-            lines = mut [<str>];
-        } else if (name != "") {
-            lines.append(line);
+fun cases() > result\Result::<{str: str}> {
+    try {
+        final files = mut {<str: str>};
+        var name = "";
+        var lines = mut [<str>];
+        foreach (line in fs\readFile("changes/testdata/fragments.txtar").split("\n")) {
+            if (line.startsWith("-- ") and line.endsWith(" --") and line.len() > 6) {
+                if (name != "") { files[name] = lines.join("\n"); }
+                name = line.sub(3, len: line.len() - 6);
+                lines = mut [<str>];
+            } else if (name != "") {
+                lines.append(line);
+            }
         }
+        if (name != "") { files[name] = lines.join("\n"); }
+        return result\ok::<{str: str}>(files);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "changelog: read the fragment fixtures");
     }
-    if (name != "") { files[name] = lines.join("\n"); }
-    return files;
 }
 
 test "every valid fixture parses and every invalid one names its problem" {
-    final files = cases() catch mut {<str: str>};
+    final files = cases().value!;
     var valid = 0;
     var invalid = 0;
     foreach (name, text in files) {
@@ -538,7 +542,7 @@ test "every valid fixture parses and every invalid one names its problem" {
 }
 
 test "parse keeps the group and the entry as written" {
-    final text = (cases() catch mut {<str: str>})["valid/removed-breaking.md"] ?? "";
+    final text = cases().value!["valid/removed-breaking.md"] ?? "";
     final got = parse("f.md", text: text).value ?? Fragment{ path = "", group = "", entry = "" };
     std\assert(got.path == "f.md" and got.group == "Removed", message: "{got.path} {got.group}");
     std\assert(got.entry == "- **Breaking: the `exclusive` option.** Delete\n  the key.", message: got.entry);

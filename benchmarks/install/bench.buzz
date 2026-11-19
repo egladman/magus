@@ -43,6 +43,7 @@ import "env";
 import "encoding/json";
 import "strings";
 import "magus";
+import "result";
 
 final PROJECTS = ["console", "docs", "docs/guides/integrations/agents", "libs/textsearch"];
 final LOCK = "console/pnpm-lock.yaml";
@@ -275,38 +276,42 @@ fun noPrepare() > void !> any {}
 // fresh / noop / lockfile for each, `runs` times per case. It never touches the
 // filesystem outside scratch and the checkout's own node_modules/lockfile, both of
 // which cleanup() restores regardless of how run() returns.
-fun run(root: str, scratch: str, runs: int) > {str: any} !> any {
-    buildFixture(root, scratch: scratch, projects: PROJECTS);
-    final pnpmArgs = ["-C", scratch, "install", "-r", "--frozen-lockfile", "--prefer-offline"];
-    final magusArgs = magusInstallArgs(PROJECTS);
-    final scratchLock = joinPath([scratch, "console", "pnpm-lock.yaml"]);
+fun run(root: str, scratch: str, runs: int) > result\Result::<{str: any}> {
+    try {
+        buildFixture(root, scratch: scratch, projects: PROJECTS);
+        final pnpmArgs = ["-C", scratch, "install", "-r", "--frozen-lockfile", "--prefer-offline"];
+        final magusArgs = magusInstallArgs(PROJECTS);
+        final scratchLock = joinPath([scratch, "console", "pnpm-lock.yaml"]);
 
-    final pnpm = fun () > void !> any { _ = proc\exec("pnpm", args: pnpmArgs, opts: proc\ExecOptions{ quiet = true }); };
-    final magusInstall = fun () > void !> any { _ = magus\run(magusArgs, opts: magus\CommandOptions{ quiet = true }); };
+        final pnpm = fun () > void !> any { _ = proc\exec("pnpm", args: pnpmArgs, opts: proc\ExecOptions{ quiet = true }); };
+        final magusInstall = fun () > void !> any { _ = magus\run(magusArgs, opts: magus\CommandOptions{ quiet = true }); };
 
-    // Warm the pnpm store, the scratch trees, and magus's own install entries, so the
-    // measured runs are not paying for a cold store on top of what each case tests.
-    pnpm();
-    magusInstall();
+        // Warm the pnpm store, the scratch trees, and magus's own install entries, so the
+        // measured runs are not paying for a cold store on top of what each case tests.
+        pnpm();
+        magusInstall();
 
-    final pnpmFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(scratch, projects: PROJECTS); }, contender: pnpm);
-    final magusFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(root, projects: PROJECTS); }, contender: magusInstall);
+        final pnpmFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(scratch, projects: PROJECTS); }, contender: pnpm);
+        final magusFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(root, projects: PROJECTS); }, contender: magusInstall);
 
-    final pnpmNoop = timeRuns(runs, prepare: noPrepare, contender: pnpm);
-    final magusNoop = timeRuns(runs, prepare: noPrepare, contender: magusInstall);
+        final pnpmNoop = timeRuns(runs, prepare: noPrepare, contender: pnpm);
+        final magusNoop = timeRuns(runs, prepare: noPrepare, contender: magusInstall);
 
-    final pnpmLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(scratchLock); }, contender: pnpm);
-    final magusLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(LOCK); }, contender: magusInstall);
+        final pnpmLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(scratchLock); }, contender: pnpm);
+        final magusLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(LOCK); }, contender: magusInstall);
 
-    return {
-        "runs": runs,
-        "projects": PROJECTS,
-        "unit": "seconds",
-        "fresh": {"pnpm": median(pnpmFresh) / 1000.0, "magus": median(magusFresh) / 1000.0},
-        "noop": {"pnpm": median(pnpmNoop) / 1000.0, "magus": median(magusNoop) / 1000.0},
-        "lockfile": {"pnpm": median(pnpmLockfile) / 1000.0, "magus": median(magusLockfile) / 1000.0},
-        "load_average": loadAverage(),
-    };
+        return result\ok::<{str: any}>({
+            "runs": runs,
+            "projects": PROJECTS,
+            "unit": "seconds",
+            "fresh": {"pnpm": median(pnpmFresh) / 1000.0, "magus": median(magusFresh) / 1000.0},
+            "noop": {"pnpm": median(pnpmNoop) / 1000.0, "magus": median(magusNoop) / 1000.0},
+            "lockfile": {"pnpm": median(pnpmLockfile) / 1000.0, "magus": median(magusLockfile) / 1000.0},
+            "load_average": loadAverage(),
+        });
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "bench: time the install cases");
+    }
 }
 
 // cleanup restores everything run() may have left disturbed: the console lockfile's
@@ -328,10 +333,11 @@ fun main() > void !> any {
     final scratch = fs\tempDir(prefix: "magus-install-bench-ws-") catch ".";
     var report: {str: any} = {};
     var failed = false;
-    try {
-        report = run(root, scratch: scratch, runs: runs);
-    } catch (e) {
+    final timed = run(root, scratch: scratch, runs: runs);
+    if (timed.error != null) {
         failed = true;
+    } else {
+        report = timed.value!;
     }
     try {
         cleanup(root, scratch: scratch, lockOriginal: lockOriginal);

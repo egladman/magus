@@ -7,5 +7,13 @@ fun main(args: [str]) > void !> any {
     if (args.len() != 2) {
         throw "usage: magus buzz manifests.buzz <kustomization dir> <file>";
     }
-    fs\writeFile(args[1], content: kustomize\manifests(kustomize\build(args[0])));
+    final built = kustomize\build(args[0]);
+    if (built.error != null) {
+        throw built.error!.message;
+    }
+    final stream = kustomize\manifests(built.value!);
+    if (stream.error != null) {
+        throw stream.error!.message;
+    }
+    fs\writeFile(args[1], content: stream.value!);
 }

@@ -1,9 +1,0 @@
-# This project's analyzer policy, typed by a person. An analyzer reads it for
-# this project's files only, and paths are relative to this directory; the
-# root analyzers.yaml describes the shape.
-
-no-throw:
-  # construct: {file: count}
-  baseline:
-    buzz-error-signature:
-      kustomize.buzz: 6

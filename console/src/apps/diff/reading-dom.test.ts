@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
 import { NOTIFY_EVENT } from "../../lib/notifications";
 import { setReading } from "./session";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 
@@ -79,8 +80,7 @@ test("setReading says the status when a refusal carries no words", async () => {
 });
 
 test("setReading toasts a server that cannot be reached", async () => {
-  // platform double: fetch
-  globalThis.fetch = (() => Promise.reject(new TypeError("fetch failed"))) as typeof fetch;
+  globalThis.fetch = (() => rejected(new TypeError("fetch failed"))) as typeof fetch;
   const { result, toasts } = await withToasts(() =>
     setReading("127.0.0.1:7391", true, new AbortController().signal),
   );

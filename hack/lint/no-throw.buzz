@@ -16,8 +16,8 @@
 //
 // no-throw.mjs parses TS and JS. Buzz is scanned here by line, and a signature
 // split over lines is joined up to its opening brace. gen/ and testdata/ are
-// not read. No marker comment waives a site: the only exits are a count or an
-// exit a person types into analyzers.yaml, and a count above the real one fails.
+// not read. No comment waives a site; one that tries is itself a finding.
+// The only exits are a count or an exit typed into analyzers.yaml.
 //
 // Tier 2, measured shape: no file holds more of a construct than its recorded count.
 namespace nothrow;
@@ -34,6 +34,13 @@ import "hack/lint/support" as support;
 final POLICY = "analyzers.yaml";
 final CEILING = "no-throw.baseline in its project's " + POLICY;
 final PARSER = "hack/lint/no-throw.mjs";
+
+// EXEMPTING are comment texts that claim to waive a site. Each is split in two
+// so this file does not trip its own rule.
+final EXEMPTING = ["nolint:" + "no-throw", "platform " + "double:", "platform " + "contract:"];
+
+final FIX_MARKER = "Delete the comment and return an error value at the site. No comment waives no-throw; "
+    + "a count in the " + CEILING + " may only fall.";
 
 final FIX = "Return an error value; throw only in the top-level entry. "
     + "A count in the " + CEILING + " may only fall.";
@@ -135,6 +142,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final exits = mut [<Entry>];
     final sources = mut [<Path>];
     final found = mut [<Site>];
+    final marked = mut [<Finding>];
     foreach (f in files) {
         if (f.value == POLICY or f.value.endsWith("/" + POLICY)) {
             final project = owner(f.value, projects: projects);
@@ -156,6 +164,13 @@ export fun check(files: [Path]) > [Finding] !> any {
             }
         } else if (scanned(f.value)) {
             sources.append(f);
+            final readResult3 = support\read(f);
+            if (readResult3.error != null) {
+                throw readResult3.error!.message;
+            }
+            foreach (m in exemptions(f.value, src: readResult3.value!)) {
+                marked.append(m);
+            }
         } else if (scannedBuzz(f.value)) {
             final readResult2 = support\read(f);
             if (readResult2.error != null) {
@@ -163,6 +178,9 @@ export fun check(files: [Path]) > [Finding] !> any {
             }
             foreach (s in buzzSites(f.value, src: readResult2.value!)) {
                 found.append(s);
+            }
+            foreach (m in exemptions(f.value, src: readResult2.value!)) {
+                marked.append(m);
             }
         }
     }
@@ -173,7 +191,35 @@ export fun check(files: [Path]) > [Finding] !> any {
     foreach (s in ran.value!) {
         found.append(s);
     }
-    return judge(found, ceilings: ceilings, entries: exits, projects: projects);
+    final judged = mut [<Finding>];
+    foreach (j in judge(found, ceilings: ceilings, entries: exits, projects: projects)) {
+        judged.append(j);
+    }
+    foreach (m in marked) {
+        judged.append(m);
+    }
+    return judged;
+}
+
+// exemptions answers each comment in src that tries to waive no-throw.
+// A comment is the text after the first `//` on a line.
+export fun exemptions(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        if (line.indexOf("//") -> at) {
+            final comment = line.sub(at + 2, len: line.len() - at - 2);
+            foreach (m in EXEMPTING) {
+                if (comment.indexOf(m) != null) {
+                    found.append(Finding{ path = path, line = n, col = at + 1,
+                        message = "a comment tries to exempt no-throw (`{m}`), and no comment does", fix = FIX_MARKER });
+                    break;
+                }
+            }
+        }
+    }
+    return found;
 }
 
 // scannedBuzz reports whether the Buzz scan reads p. Generated declarations and
@@ -194,8 +240,70 @@ object Signature {
     errs: bool,
 }
 
-// declaration is the text of the named function line `at` opens, from its name to its
-// opening brace or `=>`, or null when the line opens none.
+// closeParen is the index of the paren closing the one at text[start],
+// or -1 while the text ends before it.
+fun closeParen(text: str, start: int) > int {
+    var depth = 0;
+    var i = start;
+    while (i < text.len()) {
+        final ch = text.sub(i, len: 1);
+        if (ch == "(") {
+            depth = depth + 1;
+        } else if (ch == ")") {
+            depth = depth - 1;
+            if (depth == 0) {
+                return i;
+            }
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// bodyBrace is the index of the brace that opens a function body.
+// A brace after an arrow, colon, bracket, comma or `<` opens a map type.
+fun bodyBrace(tail: str) > int? {
+    var prev = "";
+    var i = 0;
+    while (i < tail.len()) {
+        final ch = tail.sub(i, len: 1);
+        if (ch == "\{" and (prev == "" or ">:[(,<".indexOf(prev) == null)) {
+            return i;
+        }
+        if (ch != " ") {
+            prev = ch;
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+// afterParams is the declaration past its parameter list,
+// or null while the parameters are open.
+fun afterParams(text: str) > str? {
+    final open = text.indexOf("(");
+    if (open == null) {
+        return null;
+    }
+    final close = closeParen(text, start: open!);
+    if (close < 0) {
+        return null;
+    }
+    return text.sub(close + 1, len: text.len() - close - 1);
+}
+
+// declared reports whether text holds a whole signature: closed parameters,
+// then a body, a `=>` or an extern `;`.
+fun declared(text: str) > bool {
+    final tail = afterParams(text);
+    if (tail == null) {
+        return false;
+    }
+    return bodyBrace(tail!) != null or tail!.indexOf("=>") != null or tail!.trim().endsWith(";");
+}
+
+// declaration is the signature the line `at` opens, from its name on,
+// or null when the line opens none.
 fun declaration(lines: [str], at: int) > str? {
     final head = lines[at].trim();
     var start = -1;
@@ -209,7 +317,7 @@ fun declaration(lines: [str], at: int) > str? {
     }
     var text = head.sub(start, len: head.len() - start);
     var next = at + 1;
-    while (text.indexOf("\{") == null and text.indexOf("=>") == null and next < lines.len() and next < at + 6) {
+    while (!declared(text) and next < lines.len() and next < at + 6) {
         text = text + " " + lines[next].trim();
         next = next + 1;
     }
@@ -222,29 +330,17 @@ fun signature(text: str) > Signature? {
         return null;
     }
     final paren = open!;
-    var depth = 0;
-    var close = -1;
-    var i = paren;
-    while (i < text.len() and close < 0) {
-        final ch = text.sub(i, len: 1);
-        if (ch == "(") {
-            depth = depth + 1;
-        } else if (ch == ")") {
-            depth = depth - 1;
-            if (depth == 0) {
-                close = i;
-            }
-        }
-        i = i + 1;
-    }
+    final close = closeParen(text, start: paren);
     final name = text.sub(0, len: paren).trim();
     if (close < 0 or name == "" or name.indexOf(" ") != null) {
         return null;
     }
-    final rest = text.sub(close + 1, len: text.len() - close - 1);
-    var tail = rest;
-    if (rest.indexOf("\{") -> b) {
-        tail = rest.sub(0, len: b);
+    var tail = text.sub(close + 1, len: text.len() - close - 1);
+    if (bodyBrace(tail) -> b) {
+        tail = tail.sub(0, len: b);
+    }
+    if (tail.indexOf("=>") -> arrow) {
+        tail = tail.sub(0, len: arrow);
     }
     return Signature{ name = name, params = text.sub(paren + 1, len: close - paren - 1).trim(),
         errs = tail.indexOf("!>") != null };
@@ -548,6 +644,15 @@ final BUZZ_SRC = "fun helper(path: str) > str !> any \{\n"
     + "    b: int\n"
     + ") > int !> str \{\n"
     + "    return a;\n"
+    + "}\n"
+    + "fun table() > \{str: int} !> any \{\n"
+    + "    return \{};\n"
+    + "}\n"
+    + "fun wide(\n"
+    + "    m: \{str: int}\n"
+    + ") > \{str: [int]}? !> any \{}\n"
+    + "fun clean(m: \{str: int}) > \{str: int} \{\n"
+    + "    return m;\n"
     + "}\n";
 
 test "a Buzz function declaring !> fails unless it is an entry" {
@@ -555,7 +660,7 @@ test "a Buzz function declaring !> fails unless it is an entry" {
     foreach (s in buzzSites("a.buzz", src: BUZZ_SRC)) {
         names.append("{s.scope}:{s.line}");
     }
-    assert\equal(names, want: ["helper:1", "inner:5", "split:14"], message: "non-entries with !>");
+    assert\equal(names, want: ["helper:1", "inner:5", "split:14", "table:20", "wide:23"], message: "non-entries with !>");
 }
 
 test "generated and planted Buzz is not read" {
@@ -569,4 +674,18 @@ test "an exported async function with no Result return is counted" {
     final got = lines(judge(sites(support\fixture({"a.ts": src}).value!).value!, ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."]));
     final over = " returns no Result, below the top-level entry: a.ts holds 2, over the 0 that the no-throw.baseline of analyzers.yaml allows";
     assert\equal(got, want: ["a.ts:4 exported async c" + over, "a.ts:5 exported async d" + over], message: "async sites");
+}
+
+test "a comment that tries to exempt the rule is reported, in Buzz and TypeScript alike" {
+    final nolint = "nolint:" + "no-throw";
+    final stub = "platform " + "double: fetch";
+    final src = "fun a() > void !> any \{} //" + nolint + " a reason\n"
+        + "const x = 1;\n"
+        + "// " + stub + "\n"
+        + "// an ordinary comment about throw\n";
+    final got = exemptions("a.ts", src: src);
+    assert\equal(got.len(), want: 2, message: "two exempting comments");
+    assert\equal(got[0].line, want: 1, message: "the trailing marker");
+    assert\equal(got[1].line, want: 3, message: "the standalone marker");
+    assert\equal(got[0].message, want: "a comment tries to exempt no-throw (`" + nolint + "`), and no comment does", message: "message");
 }

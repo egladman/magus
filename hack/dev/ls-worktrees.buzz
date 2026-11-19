@@ -88,7 +88,11 @@ export fun worktrees(dirtyOnly: bool) > result\Result::<[Row]> {
         final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
         final main = if (trees.len() > 0) trees[0].path else "";
         foreach (t in trees) {
-            final st = reclaim\status(t.path, deadline: 0.0);
+            final read = reclaim\status(t.path, deadline: 0.0);
+            if (read.error != null) {
+                throw read.error!.message;
+            }
+            final st = read.value!;
             if (!dirtyOnly or st.dirty != 0) {
                 found.append(Row{ path = reclaim\displayPath(t.path, main: main), dirty = st.dirty, unpushed = st.unpushed, job = jobs.value![t.path] ?? "" });
             }
