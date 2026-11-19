@@ -44,6 +44,22 @@ func callbackStringBoolReturnsWalkStep(sess *buzz.Session, args []vm.Value, n in
 	}
 }
 
+// callbackStringReturnsAny adapts a Buzz function value as a Go func.
+func callbackStringReturnsAny(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context, filter string) (any, error) {
+	fn, ok := ffi.Fun(args, n)
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context, filter string) (any, error) {
+		res, err := sess.CallValue(ctx, fn, []vm.Value{ffi.StringVal(filter)})
+		if err != nil {
+			var zero any
+			return zero, err
+		}
+		return ffi.ResultAny(res), nil
+	}
+}
+
 // callbackStringReturnsBool adapts a Buzz function value as a Go func.
 func callbackStringReturnsBool(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context, s string) (bool, error) {
 	fn, ok := ffi.Fun(args, n)
