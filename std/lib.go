@@ -4,6 +4,8 @@ import (
 	_ "embed"
 
 	diagramsrc "github.com/egladman/magus/libs/diagram"
+	diskmod "github.com/egladman/magus/internal/disk"
+	jobsrc "github.com/egladman/magus/internal/job"
 	resultsrc "github.com/egladman/magus/libs/result"
 )
 
@@ -14,15 +16,6 @@ import (
 
 //go:embed lib/lcov.buzz
 var lcovSource string
-
-//go:embed lib/modeltiers.buzz
-var modelTiersSource string
-
-//go:embed lib/diskwatch.buzz
-var diskWatchSource string
-
-//go:embed lib/reclaimdisk.buzz
-var reclaimDiskSource string
 
 var sourceBuiltin = []SourceModule{
 	{
@@ -40,20 +33,19 @@ var sourceBuiltin = []SourceModule{
 		Name:   "modeltiers",
 		Path:   "magus/modeltiers",
 		Doc:    "The default model-tier declaration: the ModelTier enum, cheapest first, its default, and the bounds and skill variant of each tier.",
-		Source: modelTiersSource,
+		Source: jobsrc.ModelTiersSource,
 	},
 	{
-		// No magus/ path: the reclaim hook imports it, and a hook may import nothing under
-		// magus/, since that namespace is where the workspace readers live.
 		Name:   "diskwatch",
+		Path:   "magus/diskwatch",
 		Doc:    "The cheap half of disk reclaiming: the per-user store of free-space samples, what a sample asks for, the fence a cache trim keeps, and the lines a person reads.",
-		Source: diskWatchSource,
+		Source: diskmod.WatchSource,
 	},
 	{
 		Name:   "reclaimdisk",
 		Path:   "magus/reclaimdisk",
 		Doc:    "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every disk trigger calls, and trims only what a spell gives a budget.",
-		Source: reclaimDiskSource,
+		Source: diskmod.ReclaimSource,
 	},
 	{
 		Name:   resultsrc.ModulePath,

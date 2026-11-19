@@ -13,7 +13,7 @@ import "os";
 import "proc";
 import "vcs";
 import "magus";
-import "diskwatch";
+import "magus/diskwatch";
 import "result";
 import "time";
 
