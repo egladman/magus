@@ -203,7 +203,7 @@ One process (`magus server start`) exposes the workspace through two standing li
 one per audience, and every browser page is a separate static asset; the binary serves no
 HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN
 listener that serves the read-only console to a phone on the same network, then tears
-itself down. Four figures show the system, one subject each.
+itself down. Four diagrams show the system, one subject each.
 
 ### The HTTP routes
 
@@ -236,7 +236,7 @@ token, and serves no MCP, share or mutating route at all.
 
 <!--diagram:server-share-->
 
-### Reading the figures
+### Reading the diagrams
 
 The colors group the system by role, and each region is tagged with the Go package or
 project that owns it: the runtime is the root module (`cmd/magus` plus `internal/*`), the

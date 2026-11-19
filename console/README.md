@@ -22,7 +22,7 @@ Where a new piece goes:
   that owns the data.
 - A **view** is a lens inside the app that owns the data. It lives in that app's directory and is
   one of its modes, never a tile: the Dashboard's Jobs view (`apps/dashboard/plan/`), the Graph's
-  Figures (`apps/graph/diagrams/`). A manifest's `modes` map a served segment to one, so
+  Diagrams (`apps/graph/diagrams/`). A manifest's `modes` map a served segment to one, so
   `/console/plan/` and `/console/diagrams/` still open them.
 
 The directory is the list. The build bundles every `apps/*/main.ts` except a shell-loaded app's
@@ -330,31 +330,31 @@ There are two tiers, not one radius:
 On Apple platforms (`data-platform="apple"` on the root, set by `theme.ts`) the whole scale
 is a step rounder, same tiers.
 
-### Diagram figures (`--magus-diagram-*`)
+### Diagram colours (`--magus-diagram-*`)
 
-magus/figure writes only concrete values in SVG attributes, because `var()` is invalid there.
+magus/diagram writes only concrete values in SVG attributes, because `var()` is invalid there.
 Theming goes through a `<style>` block whose role classes read `var(--magus-diagram-<role>, <hex>)`.
 The block at the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
-accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
+accent-tint, link) onto theme-aware slots, so a diagram follows the console's light and dark themes
 with no per-theme copy. `apps/graph/diagrams/view-dom.test.ts` fails if a role goes missing.
 
-## Figures mode in the graph app (`src/apps/graph/diagrams/`)
+## Diagrams mode in the graph app (`src/apps/graph/diagrams/`)
 
 A view inside the Graph app, bundled into `gen/graph/graph.js` and `graph.css`, over
-`GET /api/v1/diagrams`. The Graph's Figures button, the `graph.figures.toggle` command and
+`GET /api/v1/diagrams`. The Graph's Diagrams button, the `graph.diagrams.toggle` command and
 `/console/diagrams/` open it in the explorer's place. The server's SVG is the page: it is inlined the moment it arrives, every
 anchored node is a real `<a href>` to its source, and the node list beside it says the same thing
 in words. `interact.ts` then only adds listeners:
 
-- `f` fits, `+` `-` zoom, `0` is the figure's own size, Esc clears focus. Keys are read on the
-  figure's frame, never on document, and a modified key is always the browser's.
+- `f` fits, `+` `-` zoom, `0` is the diagram's own size, Esc clears focus. Keys are read on the
+  diagram's frame, never on document, and a modified key is always the browser's.
 - ctrl/cmd+wheel and pinch zoom about the pointer; a plain wheel scrolls the page; drag pans.
 - Double-click (or Focus) keeps a node, its declared edges and one-hop neighbours, and dims the
-  rest. Hover lights the declared edges. Nothing shows a relation the figure does not draw.
+  rest. Hover lights the declared edges. Nothing shows a relation the diagram does not draw.
 - Tab walks the nodes in reading order, one tabbable at a time; Enter follows the link.
 - Reduced motion (the OS setting or the console's own) snaps instead of gliding.
 
-The lens form (Figure, Scope, Center on, Depth) re-requests the figure and rides in the `#fragment`
+The lens form (Diagram, Scope, Center on, Depth) re-requests the diagram and rides in the `#fragment`
 (`diagram=`, `scope=`, `focus=`, `depth=`). A 422 (over budget), 409 (no symbol index) or 400
 (bad lens) is the server's own sentence in an inline notice, and a toast, from `api.ts`.
 
@@ -362,9 +362,9 @@ The lens form (Figure, Scope, Center on, Depth) re-requests the figure and rides
 The build copies `../docs/gen/playground/{buzz.wasm,wasm_exec.js}` into `gen/wasm/` when docs'
 `build_playground` has run, and says so when it has not. Once loaded, a lens change cuts the
 declaration the server served (its nodes plus the SVG's `data-edge` set), builds the same
-`figure\Figure` record `internal/handler/diagram` builds (Dir boxes for the import figure, actors
-for the others), and hands it to `buzz.drawFigure`, which calls `figure\draw` in the wasm's own
-magus/figure. The page writes no Buzz. It swaps the SVG in place with the zoom kept. The server's
+`diagram\Diagram` record `internal/handler/diagram` builds (Dir boxes for the import diagram, actors
+for the others), and hands it to `buzz.drawDiagram`, which calls `diagram\draw` in the wasm's own
+magus/diagram. The page writes no Buzz. It swaps the SVG in place with the zoom kept. The server's
 CSP allows it with `'wasm-unsafe-eval'`. `wasm-real.test.ts` drives that path on the built wasm and
 skips until `magus run build_playground docs` has run.
 

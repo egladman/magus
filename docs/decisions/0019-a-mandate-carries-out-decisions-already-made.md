@@ -142,7 +142,7 @@ toward deny:
 | `git push`, `gh pr merge`, `magus job grant`             | as the other rules say | deny: reserved                        |
 | the root's stop with forkable rows and no worker running | deny once, then allow  | deny, until three refusals over a row |
 
-The figure cannot draw a two-column matrix, so it draws only the tier bar and the table
+The diagram cannot draw a two-column matrix, so it draws only the tier bar and the table
 carries the comparison.
 
 ### 5. What stays reserved

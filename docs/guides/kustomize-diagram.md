@@ -1,7 +1,7 @@
 ---
 title: Run the daemon on Kubernetes for development
-description: A kustomize base that runs the magus daemon under the restricted pod security profile, a dev overlay, kubeconform validation against vendored schemas, and a figure read from the same YAML.
-tags: [kubernetes, kustomize, kubeconform, daemon, figure, security]
+description: A kustomize base that runs the magus daemon under the restricted pod security profile, a dev overlay, kubeconform validation against vendored schemas, and a diagram read from the same YAML.
+tags: [kubernetes, kustomize, kubeconform, daemon, diagram, security]
 ---
 
 # Run the daemon on Kubernetes for development
@@ -16,7 +16,7 @@ kubectl apply -k deploy/kustomize/overlays/dev
 kubectl -n magus-dev port-forward svc/magus 7391
 ```
 
-The figure below is drawn from the overlay's YAML on every docs build, so it cannot
+The diagram below is drawn from the overlay's YAML on every docs build, so it cannot
 describe a manifest that no longer exists.
 
 <!--diagram:kustomize-architecture-->
@@ -49,10 +49,10 @@ each against the Kubernetes v1.35.0 JSON schemas in `libs/kustomize/schemas/`,
 with `kubeconform -strict`, so an unknown field fails. The schemas are vendored,
 so validation runs offline. kubeconform is pinned in `mise.toml`.
 
-`magus run test libs/kustomize` needs `lint`, so the figure is never laid out from
+`magus run test libs/kustomize` needs `lint`, so the diagram is never laid out from
 a manifest kubeconform rejects.
 
-## How the figure reads the YAML
+## How the diagram reads the YAML
 
 `libs/kustomize/kustomize.buzz` builds a kustomization in Buzz, without the
 kustomize binary, in the order `kustomize build` applies its transformers. It reads
@@ -60,16 +60,16 @@ kustomize binary, in the order `kustomize build` applies its transformers. It re
 `commonLabels`, `commonAnnotations`, the ConfigMap and Secret generators,
 `images`, and JSON6902 patches. A field it does not read raises, naming it.
 
-A strategic-merge patch is applied only when it touches nothing the figure draws:
+A strategic-merge patch is applied only when it touches nothing the diagram draws:
 names, selectors, pod labels, volumes, env references, the service account, Service
 ports, or a NetworkPolicy's spec. Its list semantics are kustomize's own, so the
 reader refuses the patch, naming it, rather than draw a guess. Write such a change
 as a JSON6902 patch.
 
 A generated ConfigMap or Secret is drawn under its plain name. `kustomize build`
-appends a content hash, which would move the figure on every edit to the data.
+appends a content hash, which would move the diagram on every edit to the data.
 
-Each object is a `figure\external` actor, joined by `flowAcross` edges:
+Each object is a `diagram\external` actor, joined by `flowAcross` edges:
 
 - a Service to each workload its selector picks;
 - a workload to its ServiceAccount, claims, ConfigMaps and Secrets;
@@ -78,9 +78,9 @@ Each object is a `figure\external` actor, joined by `flowAcross` edges:
 - a policy type with no rules as the policy denying the workloads it selects.
 
 An object a pod names that the build does not hold, such as a Secret created out of
-band, is drawn as named but not built. No directory holds any of it, so the figure
+band, is drawn as named but not built. No directory holds any of it, so the diagram
 is `.unscoped(why:)`.
 
-To draw another kustomization, call `kustomize\figureOf(kustomize\build(dir), id:,
-title:)` from a figure file and register it in `docs/site/diagrams/all.buzz`. See
+To draw another kustomization, call `kustomize\diagram(kustomize\build(dir), id:,
+title:)` from a diagram file and register it in `docs/site/diagrams/all.buzz`. See
 [Writing diagrams](diagrams.md).

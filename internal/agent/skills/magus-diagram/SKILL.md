@@ -1,60 +1,60 @@
-{{if .Full}}# Drawing architecture figures with magus/figure{{else}}# magus/figure{{end}}
+{{if .Full}}# Drawing architecture diagrams with magus/diagram{{else}}# magus/diagram{{end}}
 
-{{if .Full}}`magus/figure`, a Buzz module embedded in the binary, lays out an architecture figure
+{{if .Full}}`magus/diagram`, a Buzz module embedded in the binary, lays out an architecture diagram
 from the knowledge graph's records. A box is a directory the graph holds; a group is
 a set of them. Edges between code boxes are the imports and declared calls those
 records carry.
 
 You never place anything or type an edge between two packages. The
-module places the figure, or refuses with a finding naming the call to change.{{else}}`magus/figure`: Buzz module in binary; lays out architecture figure from knowledge graph records.
+module places the diagram, or refuses with a finding naming the call to change.{{else}}`magus/diagram`: Buzz module in binary; lays out architecture diagram from knowledge graph records.
 Box: directory graph holds. Group: set of them.
 Edges between code boxes: imports and declared calls those records carry.
 Never place anything or type edge between two packages.
-Module places figure, or refuses with finding naming call to change.{{end}}
+Module places diagram, or refuses with finding naming call to change.{{end}}
 
 {{if .Full}}## When to reach for it{{else}}## When{{end}}
 {{if .Full}}
-Draw ONE claim per figure: a subsystem, a process, or a package scope, stated in the
-title, with the boxes and connectors as its evidence. A figure that
-needs more than the budgets below is two figures, an overview and a detail, each
-its own `figure\of()`; the budgets are the design system's, and past them nobody
+Draw ONE claim per diagram: a subsystem, a process, or a package scope, stated in the
+title, with the boxes and connectors as its evidence. A diagram that
+needs more than the budgets below is two diagrams, an overview and a detail, each
+its own `diagram\of()`; the budgets are the design system's, and past them nobody
 reads the picture.
 {{end}}
 {{if .Full}}- Use it when prose keeps restating how parts connect, or a doc page describes a
   request path or a pipeline. Use it when a reviewer needs to see which packages a
   change crosses.
-- Never draw everything. A figure of the whole workspace blows every budget and
+- Never draw everything. A diagram of the whole workspace blows every budget and
   proves nothing; the console already draws the whole project graph
   through a lens, so a hand-written copy of it is a second answer.
-- Before writing one, look for a figure of the same scope with
-  `{{cmd "query"}} diagrams`; two figures of one subsystem drift apart.{{else}}One claim per figure: subsystem, process, or package scope, stated in title; boxes and connectors are evidence.
+- Before writing one, look for a diagram of the same scope with
+  `{{cmd "query"}} diagrams`; two diagrams of one subsystem drift apart.{{else}}One claim per diagram: subsystem, process, or package scope, stated in title; boxes and connectors are evidence.
 - Use when prose keeps restating how parts connect, or doc page describes request path or pipeline.
 - Use when reviewer needs packages change crosses.
-- Never draw everything: whole-workspace figure blows every budget, proves nothing.
-- Before writing: find same-scope figure via `{{cmd "query"}} diagrams`.{{end}}
+- Never draw everything: whole-workspace diagram blows every budget, proves nothing.
+- Before writing: find same-scope diagram via `{{cmd "query"}} diagrams`.{{end}}
 
 {{if .Full}}Budgets: at most 9 boxes, 12 connectors, 3 zones, 2 accented elements, and 14
 characters per connector label.{{else}}Max: 9 boxes, 12 connectors, 3 zones, 2 accented elements, 14 characters per connector label.{{end}}
 
-{{if .Full}}## The first figure{{else}}## First figure{{end}}
+{{if .Full}}## The first diagram{{else}}## First diagram{{end}}
 
-{{if .Full}}A figure is one exported function returning a `figure\Figure`. Both imports resolve
-in any workspace; nothing needs a copy on disk:{{else}}Figure: one exported function returning `figure\Figure`.
+{{if .Full}}A diagram is one exported function returning a `diagram\Diagram`. Both imports resolve
+in any workspace; nothing needs a copy on disk:{{else}}Diagram: one exported function returning `diagram\Diagram`.
 Both imports resolve in any workspace; nothing needs copy on disk:{{end}}
 
 ```buzz
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun serverHttpFigure() > figure\Figure !> any {
+export fun serverHttpDiagram() > diagram\Diagram !> any {
     final guard = magus\graph().dir("internal/httpx");
     final mcp = magus\graph().dir("internal/handler/mcp");
     final handlers = magus\graph().layer("handler").dirs;
-    final agent = figure\external("AI agents", look: figure\Look.plain);
-    return figure\of("server-http", title: "The HTTP routes")
+    final agent = diagram\external("AI agents", look: diagram\Look.plain);
+    return diagram\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(figure\without(handlers, drop: [mcp]), label: "Console routes")
+        .group(diagram\without(handlers, drop: [mcp]), label: "Console routes")
         .edgesFromGraph()
         .flowIn(agent, dst: guard)
         .scope(handlers + [guard]);
@@ -63,19 +63,19 @@ export fun serverHttpFigure() > figure\Figure !> any {
 
 {{if .Full}}- `magus\graph().dir(path)` raises MGS7005 on a directory the graph does not hold, naming
   the nearest one. `magus\graph().layer(name)` raises MGS7006 on a layer nothing declares.
-  A typo fails the figure at the line that made it.
-- `.diagram()` lays it out and raises every finding at once;
-  `figure\draw(f, theme: figure\Theme.light)` does the same and paints it.
-- Prove a figure draws before you register it: call it from a scratch `main()`
+  A typo fails the diagram at the line that made it.
+- `.layout()` lays it out and raises every finding at once;
+  `diagram\draw(f, theme: diagram\Theme.light)` does the same and paints it.
+- Prove a diagram draws before you register it: call it from a scratch `main()`
   inside `try`/`catch` and run `{{cmd "buzz"}} <file>`.{{else}}- `magus\graph().dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
 - `magus\graph().layer(name)`: raises MGS7006 on layer nothing declares.
-- Typo fails figure at its line.
-- `.diagram()`: lays out, raises every finding at once.
-- `figure\draw(f, theme: figure\Theme.light)`: same, and paints.
-- Prove figure draws before registering: call from scratch `main()` inside `try`/`catch`, run `{{cmd "buzz"}} <file>`.{{end}}{{if .Full}}
+- Typo fails diagram at its line.
+- `.layout()`: lays out, raises every finding at once.
+- `diagram\draw(f, theme: diagram\Theme.light)`: same, and paints.
+- Prove diagram draws before registering: call from scratch `main()` inside `try`/`catch`, run `{{cmd "buzz"}} <file>`.{{end}}{{if .Full}}
 
 `title` is the claim, `desc` the sentence under it, `eyebrow` the small label
-above, all arguments of `figure\of`. `direction: figure\Direction.down` lays ranks top to
+above, all arguments of `diagram\of`. `direction: diagram\Direction.down` lays ranks top to
 bottom instead of left to right.{{end}}
 
 {{if .Full}}## Boxes, groups and actors{{else}}## Boxes, groups, actors{{end}}
@@ -84,36 +84,36 @@ bottom instead of left to right.{{end}}
 | --- | --- |
 | `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\graph().refs` result |
 | `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
-| `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |{{else}}- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\graph().refs` result
+| `diagram\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |{{else}}- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\graph().refs` result
 - `.group(dirs, label:, ...)`: every directory in list of `magus\Dir` as one box
-- `figure\external(name, sub:, tag:, link:, look:)`: actor: person, vendor, step, Buzz file, decision{{end}}
+- `diagram\external(name, sub:, tag:, link:, look:)`: actor: person, vendor, step, Buzz file, decision{{end}}
 
 {{if .Full}}Take directories as records, never as path strings:
 
 - `magus\graph().layer("handler").dirs` is every directory a declared layer covers.
 - `magus\graph().dirs("internal/queue/*")` is every directory a glob matches.
-- `+` joins two lists. `figure\without(dirs, drop: [...])` leaves some out, and
+- `+` joins two lists. `diagram\without(dirs, drop: [...])` leaves some out, and
   raises when one it drops is not there.{{else}}Directories as records, never path strings:
 - `magus\graph().layer("handler").dirs`: every directory declared layer covers.
 - `magus\graph().dirs("internal/queue/*")`: every directory glob matches.
 - `+` joins two lists.
-- `figure\without(dirs, drop: [...])` leaves some out; raises when one it drops is not there.{{end}}
+- `diagram\without(dirs, drop: [...])` leaves some out; raises when one it drops is not there.{{end}}
 
-{{if .Full}}A package that joins the layer joins the group, and the figure needs no change.
+{{if .Full}}A package that joins the layer joins the group, and the diagram needs no change.
 Layers are declared under `"layers"` in `magus\project`: a workspace-relative
 directory or glob to a lowercase name.
 
 A directory is drawn once: a box inside a group's dirs is refused, so drop it with
-`figure\without`. Files of one package are one box, or actors when they are steps.{{else}}Package joining layer joins group; figure needs no change.
+`diagram\without`. Files of one package are one box, or actors when they are steps.{{else}}Package joining layer joins group; diagram needs no change.
 Layers declared under `"layers"` in `magus\project`: workspace-relative directory or glob -> lowercase name.
-Directory drawn once: box inside group's dirs refused -> drop it with `figure\without`.
+Directory drawn once: box inside group's dirs refused -> drop it with `diagram\without`.
 Files of one package: one box, or actors when they are steps.{{end}}
 
-{{if .Full}}`look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or
+{{if .Full}}`look:` takes `diagram\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or
 `decision` (actors only, at most three exits). Spend the two accents on the one point
-the title makes. Give every look you use a `.legend(figure\Look.x, label:)` line.{{else}}`look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or `decision` (actors only, at most three exits).
+the title makes. Give every look you use a `.legend(diagram\Look.x, label:)` line.{{else}}`look:` takes `diagram\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or `decision` (actors only, at most three exits).
 Spend two accents on one point title makes.
-Every look used gets `.legend(figure\Look.x, label:)` line.{{end}}
+Every look used gets `.legend(diagram\Look.x, label:)` line.{{end}}
 
 {{if .Full}}## Edges come from the graph{{else}}## Edges{{end}}
 
@@ -140,51 +140,51 @@ by hand. The marker becomes a calls edge `edgesFromGraph()` draws.{{end}}
 
 ## Scope
 
-{{if .Full}}`.scope(dirs)` names the directories the figure answers for. A box or a group must
+{{if .Full}}`.scope(dirs)` names the directories the diagram answers for. A box or a group must
 draw each one, or `.except(dirs, why:)` leaves it out. `.except` is for a true
 exclusion, not a list of packages the picture did not fit: narrow the scope
-instead. A figure with no code behind it (a decision process, a CI arrangement) says
-so with `.unscoped(why:)`.{{else}}`.scope(dirs)`: directories figure answers for; box or group must draw each one, or `.except(dirs, why:)` leaves it out.
+instead. A diagram with no code behind it (a decision process, a CI arrangement) says
+so with `.unscoped(why:)`.{{else}}`.scope(dirs)`: directories diagram answers for; box or group must draw each one, or `.except(dirs, why:)` leaves it out.
 `.except`: true exclusion only, not packages picture did not fit -> narrow scope instead.
-Figure with no code behind it (decision process, CI arrangement): `.unscoped(why:)`.{{end}}
+Diagram with no code behind it (decision process, CI arrangement): `.unscoped(why:)`.{{end}}
 
 {{if .Full}}## Findings name the call to change{{else}}## Findings{{end}}{{if .Full}}
 
-Nothing is drawn until the figure is clean. Real ones:{{end}}{{if .Full}}
+Nothing is drawn until the diagram is clean. Real ones:{{end}}{{if .Full}}
 
 ```text
-figure "server-http": "internal/server" is in scope("internal/**") but nothing draws it; add it to a box or a group, or except([...], why:)
-figure "t": draws 2 boxes of code and no edge between them; call edgesFromGraph()
-figure "t": "a" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`
+diagram "server-http": "internal/server" is in scope("internal/**") but nothing draws it; add it to a box or a group, or except([...], why:)
+diagram "t": draws 2 boxes of code and no edge between them; call edgesFromGraph()
+diagram "t": "a" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`
 ```{{end}}
 
 {{if .Full}}Do what the finding says, at the call it names. A finding ending `layout bug, report
-it` is not yours to fix: reorder declarations or split the figure, and report it.{{else}}Nothing drawn until figure clean.
+it` is not yours to fix: reorder declarations or split the diagram, and report it.{{else}}Nothing drawn until diagram clean.
 Do what finding says, at call it names.
-Finding ending `layout bug, report it`: not yours to fix -> reorder declarations or split figure, and report it.{{end}}
+Finding ending `layout bug, report it`: not yours to fix -> reorder declarations or split diagram, and report it.{{end}}
 
 {{if .Full}}## Register and embed{{else}}## Register, embed{{end}}
 {{if .Full}}
-A figure nobody registers is checked by nothing.
+A diagram nobody registers is checked by nothing.
 {{end}}
 {{if .Full}}- Find the workspace's registry with `{{cmd "query"}} diagrams`. In magus's own tree
-  it is `docs/site/diagrams/all.buzz`: one import plus one entry.{{else}}Unregistered figure: checked by nothing.
+  it is `docs/site/diagrams/all.buzz`: one import plus one entry.{{else}}Unregistered diagram: checked by nothing.
 - Find registry: `{{cmd "query"}} diagrams`. magus's own tree: `docs/site/diagrams/all.buzz`: one import, one entry.{{end}}
-{{if .Full}}- `{{cmd "run"}} diagrams-generate docs` lays every figure out from the symbol index.
+{{if .Full}}- `{{cmd "run"}} diagrams-generate docs` lays every diagram out from the symbol index.
   It writes the light, dark and page SVGs, each with a JSON receipt: the
-  figure id, the stamp, the claim counts and the findings; no index digest.{{else}}- `{{cmd "run"}} diagrams-generate docs`: lays out every figure from symbol index -> light, dark, page SVGs, each with JSON receipt.{{end}}
-{{if .Full}}- A docs page embeds a figure by id with `<!--diagram:<id>-->`.{{else}}- Docs page embeds figure by id: `<!--diagram:<id>-->`.{{end}}
+  diagram id, the stamp, the claim counts and the findings; no index digest.{{else}}- `{{cmd "run"}} diagrams-generate docs`: lays out every diagram from symbol index -> light, dark, page SVGs, each with JSON receipt.{{end}}
+{{if .Full}}- A docs page embeds a diagram by id with `<!--diagram:<id>-->`.{{else}}- Docs page embeds diagram by id: `<!--diagram:<id>-->`.{{end}}
 
-{{if .Full}}Source code can point back at a figure with a `magus:diagram <id>` comment beside the
-code a box depicts. A marker whose figure is gone is a finding.{{else}}Source can point back at figure: `magus:diagram <id>` comment beside code box depicts.
-Marker whose figure is gone: finding.{{end}}
+{{if .Full}}Source code can point back at a diagram with a `magus:diagram <id>` comment beside the
+code a box depicts. A marker whose diagram is gone is a finding.{{else}}Source can point back at diagram: `magus:diagram <id>` comment beside code box depicts.
+Marker whose diagram is gone: finding.{{end}}
 
 {{if .Full}}## The console{{else}}## Console{{end}}
 
-{{if .Full}}The console's Diagrams page draws the workspace itself, with no figure file. It shows
+{{if .Full}}The console's Diagrams page draws the workspace itself, with no diagram file. It shows
 the project graph, one project's targets, and the package import graph. Each view
 goes through a declared lens of scope, focus and depth.
-{{else}}Console Diagrams page draws workspace itself, no figure file: project graph, one project's targets, package import graph.
+{{else}}Console Diagrams page draws workspace itself, no diagram file: project graph, one project's targets, package import graph.
 Each view through declared lens of scope, focus, depth.{{end}}
 {{if .Full}}- It needs a running server (`{{cmd "server start"}}`); the import view needs the
   symbol index.{{else}}- Needs running server (`{{cmd "server start"}}`); import view needs symbol index.{{end}}
@@ -194,7 +194,7 @@ Each view through declared lens of scope, focus, depth.{{end}}
 {{if .Full}}## What this skill refuses{{else}}## Refused{{end}}
 
 {{if .Full}}- **Coordinates, weights, pins.** A layout knob grows into a second language. Shape
-  a figure with `rank`, `row`, `zone` and `boundary`, or split it.{{else}}- Coordinates, weights, pins: layout knob grows into second language. Shape with `rank`, `row`, `zone`, `boundary`, or split.{{end}}
+  a diagram with `rank`, `row`, `zone` and `boundary`, or split it.{{else}}- Coordinates, weights, pins: layout knob grows into second language. Shape with `rank`, `row`, `zone`, `boundary`, or split.{{end}}
 {{if .Full}}- **Hand-drawn code edges and path strings.** An edge no code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.{{else}}- Hand-drawn code edges, path strings: edge no code holds asserts what nobody checked; path string goes stale day package moves.{{end}}
 

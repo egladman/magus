@@ -467,7 +467,7 @@ source -> token.Tokenize -> []token.Token -> parser -> ast.Program
        -> VM.Run -> baseline JIT if eligible, else VM.Exec -> Value
 ```
 
-The magus docs walk the same path with figures:
+The magus docs walk the same path with diagrams:
 [How gopherbuzz runs Buzz](../../docs/concepts/buzz.md).
 
 - `Instr` is `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
