@@ -2,7 +2,6 @@ package buzz
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -199,8 +198,8 @@ func TestBytecodeVersionGuard(t *testing.T) {
 
 	t.Run("version mismatch", func(t *testing.T) {
 		bad := append([]byte(nil), data...)
-		// Version is a length-prefixed string after the 4-byte magic: flip its first byte.
-		bad[8] ^= 0xFF
+		// Version is the 2 bytes immediately after the 4-byte magic.
+		bad[4] ^= 0xFF
 		_, err := UnmarshalChunk(bad)
 		assert.Error(t, err, "expected error for version mismatch")
 	})
@@ -214,11 +213,10 @@ func TestBytecodeVersionGuard(t *testing.T) {
 		// Valid header + empty Name, then Params count = 0xFFFFFFFF.
 		// checkCount must reject this before make([]string, n) fires.
 		var buf []byte
-		buf = append(buf, 'B', 'Z', 'B', 'C')                                               // magic
-		buf = binary.LittleEndian.AppendUint32(buf, uint32(len(vmpackage.BytecodeVersion))) // version length
-		buf = append(buf, vmpackage.BytecodeVersion...)                                     // version
-		buf = append(buf, 0, 0, 0, 0)                                                       // Name: u32(0) = ""
-		buf = append(buf, 0xFF, 0xFF, 0xFF, 0xFF)                                           // Params count = 0xFFFFFFFF
+		buf = append(buf, 'B', 'Z', 'B', 'C')                                                  // magic
+		buf = append(buf, byte(vmpackage.BytecodeVersion), byte(vmpackage.BytecodeVersion>>8)) // version LE
+		buf = append(buf, 0, 0, 0, 0)                                                          // Name: u32(0) = ""
+		buf = append(buf, 0xFF, 0xFF, 0xFF, 0xFF)                                              // Params count = 0xFFFFFFFF
 		_, err := UnmarshalChunk(buf)
 		assert.Error(t, err, "expected error for huge count")
 	})

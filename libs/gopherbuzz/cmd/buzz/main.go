@@ -77,7 +77,7 @@ func run(argv []string) error {
 		return nil
 	}
 	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz %s, commit %s, built %s, upstream %s, bytecode %s)\n", buzz.LanguageVersion, version, commit, buildDate, buzz.UpstreamRef, vm.BytecodeVersion)
+		fmt.Printf("buzz %s (gopherbuzz %s, commit %s, built %s, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, version, commit, buildDate, buzz.UpstreamRef, vm.BytecodeVersion)
 		return nil
 	}
 

@@ -303,7 +303,7 @@ func TestBytecodeStoreCorruptBlobCompiles(t *testing.T) {
 // A count is checked against the bytes left before anything is allocated for it.
 func TestDecodeBytecodeRecordRejectsAnOversizedCount(t *testing.T) {
 	blob := append([]byte{}, bytecodeRecordMagic[:]...)
-	blob = appendString(blob, bytecodeRecordVersion)
+	blob = binary.LittleEndian.AppendUint16(blob, bytecodeRecordVersion)
 	blob = binary.LittleEndian.AppendUint32(blob, 0xFFFFF)
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
