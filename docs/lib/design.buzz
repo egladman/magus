@@ -1,5 +1,6 @@
 namespace design;
 
+import "result";
 import "std";
 import "lib/adr" as _;        // fenceRun
 
@@ -205,16 +206,16 @@ export fun designIndex(pages: [DesignPage]) > str {
 
 // replaceIndex swaps the block between INDEX_BEGIN and INDEX_END in md for block, and
 // raises when either marker line is missing.
-export fun replaceIndex(md: str, block: str) > str !> str {
+export fun replaceIndex(md: str, block: str) > result\Result::<str> {
     final lines = md.split("\n");
     final begin = lines.indexOf(INDEX_BEGIN);
     final end = lines.indexOf(INDEX_END);
     if (begin == null or end == null or end! < begin!) {
-        throw "design.md has no `{INDEX_BEGIN}` ... `{INDEX_END}` block to regenerate";
+        return result\fail::<str>("design.md has no `{INDEX_BEGIN}` ... `{INDEX_END}` block to regenerate");
     }
     final before = lines.sub(0, len: begin!);
     final after = lines.sub(end! + 1);
-    return before.join("\n") + (if (before.len() > 0) "\n" else "") + block + (if (after.len() > 0) "\n" + after.join("\n") else "");
+    return result\ok::<str>(before.join("\n") + (if (before.len() > 0) "\n" else "") + block + (if (after.len() > 0) "\n" + after.join("\n") else ""));
 }
 
 final GOOD_PAGE = "---\ntitle: A rule\norder: 1\ndescription: The rule in one sentence.\ntags: [design, principle]\n---\n\n"
@@ -256,6 +257,6 @@ test "the index lists each group in order and replaces only its block" {
     final block = designIndex(pages);
     std\assert(block.indexOf("- [A](design/principles/a.md): First.\n- [B]") != null, message: block);
     final md = "# Design\n\nIntro.\n\n{INDEX_BEGIN}\nstale\n{INDEX_END}\n\nAfter.\n";
-    final got = replaceIndex(md, block: block) catch "";
+    final got = replaceIndex(md, block: block).value ?? "";
     std\assert(got.startsWith("# Design\n\nIntro.\n\n{INDEX_BEGIN}") and got.endsWith("{INDEX_END}\n\nAfter.\n") and got.indexOf("stale") == null, message: got);
 }
