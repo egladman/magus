@@ -244,25 +244,32 @@ func MagusChangeAffected(ctx context.Context, c types.Change) (types.AffectedRes
 	return MagusAffected(ctx, c.Base)
 }
 
-// MagusChangeConformance is Change.conformance(checks): the conformance
-// lens, with the ceilings checks crossed since c's base when checks is set.
-func MagusChangeConformance(ctx context.Context, c types.Change, checks []string) (types.ConformanceReport, error) {
-	ws, err := heldChange(ctx, c, "conformance")
-	if err != nil {
+// MagusChangeConformance is Change.conformance(): the conformance lens over
+// the working tree.
+func MagusChangeConformance(ctx context.Context, c types.Change) (types.ConformanceReport, error) {
+	if _, err := heldChange(ctx, c, "conformance"); err != nil {
 		return types.ConformanceReport{}, err
 	}
-	if len(checks) == 0 {
-		return MagusConformance(ctx, nil, "")
+	return MagusConformance(ctx)
+}
+
+// MagusChangeConformanceBase is Change.conformanceBase(): the measure
+// mergeBase kept of the merge base of c's base and HEAD, and the files
+// changed since it.
+func MagusChangeConformanceBase(ctx context.Context, c types.Change) (types.ConformanceBase, error) {
+	ws, err := heldChange(ctx, c, "conformanceBase")
+	if err != nil {
+		return types.ConformanceBase{}, err
 	}
 	base, err := changeBase(ctx, ws, c)
 	if err != nil {
-		return types.ConformanceReport{}, fmt.Errorf("magus\\Change.conformance: %w", err)
+		return types.ConformanceBase{}, fmt.Errorf("magus\\Change.conformanceBase: %w", err)
 	}
-	return MagusConformance(ctx, checks, base)
+	return MagusKeptConformanceBase(ctx, base)
 }
 
 // MagusChangeMergeBase is Change.mergeBase(): measures the merge base of
-// c's base and HEAD for conformance's ceilings and returns the commit.
+// c's base and HEAD for conformanceBase and returns the commit.
 func MagusChangeMergeBase(ctx context.Context, c types.Change) (string, error) {
 	ws, err := heldChange(ctx, c, "mergeBase")
 	if err != nil {

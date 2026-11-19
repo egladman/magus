@@ -35,11 +35,11 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// noBaseIndex is why a touched file of an externally indexed language has no ceiling.
-const noBaseIndex = "no in-process index; ceiling not applied"
+// noBaseIndex is why a touched file of an externally indexed language has no base measure.
+const noBaseIndex = "no in-process index, so the base holds no measure"
 
-// projectNewAtHead is why a file of a project the base lacks has no ceiling.
-const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
+// projectNewAtHead is why a file of a project the base lacks has no base measure.
+const projectNewAtHead = "its project is new at head, so the base holds no measure"
 
 // baseMeasureVersion keys the kept measures; replace it when measureTree measures differently.
 // Replace it too when the kept entry's JSON shape changes: an old entry decodes
@@ -48,57 +48,49 @@ const projectNewAtHead = "its project is new at head, so the base holds no measu
 // binary and lint reads under the checkout's own.
 const baseMeasureVersion = "magus.base-measure/v1alpha1"
 
-// ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
-// changed since c.Base whose count of violations of a metric in c.Checks rose past its count
-// there. It reads the measure MeasureConformanceBase kept and never measures one itself; a base
-// with none is an error naming that step. A touched file only an external indexer reads is
-// listed in Unmeasured.
-func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head types.Conformance) (types.Conformance, error) {
-	if err := c.Validate(); err != nil {
-		return types.Conformance{}, fmt.Errorf("conformance: %w", err)
-	}
-	if c.Base == "" {
-		return head, nil
-	}
-	v, commit, err := m.conformanceBaseCommit(ctx, c.Base)
+// ConformanceBase is the kept measure of the merge base of base and HEAD, with the files changed
+// since it: a touched file only an external indexer reads, or inside a project the base lacks,
+// is listed in Unmeasured and not in Touched. It reads the measure MeasureConformanceBase kept
+// and never measures one itself; a base with none is an error naming that step.
+func (m *Magus) ConformanceBase(ctx context.Context, base string) (types.ConformanceBase, error) {
+	v, commit, err := m.conformanceBaseCommit(ctx, base)
 	if err != nil {
-		return types.Conformance{}, err
+		return types.ConformanceBase{}, err
 	}
-	touched, err := v.ChangedFiles(ctx, m.ws.Root, c.Base)
+	touched, err := v.ChangedFiles(ctx, m.ws.Root, base)
 	if err != nil {
-		return types.Conformance{}, fmt.Errorf("conformance: files changed since %s: %w", c.Base, err)
+		return types.ConformanceBase{}, fmt.Errorf("conformance: files changed since %s: %w", base, err)
 	}
 	plan, err := m.baseIndexPlan(ctx, m.ws.Root)
 	if err != nil {
-		return types.Conformance{}, err
+		return types.ConformanceBase{}, err
 	}
 	entry, err := m.conformanceEntry(commit, plan)
 	if err != nil {
-		return types.Conformance{}, err
+		return types.ConformanceBase{}, err
 	}
-	base, ok, err := readConformanceEntry(entry)
+	kept, ok, err := readConformanceEntry(entry)
 	if err != nil {
-		return types.Conformance{}, err
+		return types.ConformanceBase{}, err
 	}
 	if !ok {
-		return types.Conformance{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration (%s), "+
+		return types.ConformanceBase{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration (%s), "+
 			"which magus\\change().mergeBase measures and `magus run conformance-base .` runs here", commit, whyRemeasure(entry))
 	}
-	judged := touched[:0:0]
+	out := types.ConformanceBase{Commit: commit, Distributions: kept.Distributions, Packages: kept.Packages,
+		Touched: []string{}, Unmeasured: []types.ConformanceUnmeasured{}}
 	for _, p := range touched {
 		if lang, ok := plan.unmeasured(p); ok {
-			head.Unmeasured = append(head.Unmeasured, types.ConformanceUnmeasured{File: p, Language: lang, Reason: noBaseIndex})
+			out.Unmeasured = append(out.Unmeasured, types.ConformanceUnmeasured{File: p, Language: lang, Reason: noBaseIndex})
 			continue
 		}
-		if project, ok := insideAbsentProject(base.Unmeasured, p); ok {
-			head.Unmeasured = append(head.Unmeasured, types.ConformanceUnmeasured{File: p, Language: project.Language, Reason: project.Reason})
+		if project, ok := insideAbsentProject(kept.Unmeasured, p); ok {
+			out.Unmeasured = append(out.Unmeasured, types.ConformanceUnmeasured{File: p, Language: project.Language, Reason: project.Reason})
 			continue
 		}
-		judged = append(judged, p)
+		out.Touched = append(out.Touched, p)
 	}
-	head.Base = commit
-	head.Ceilings = types.ConformanceCeilings(base, head, judged, c.Checks)
-	return head, nil
+	return out, nil
 }
 
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
@@ -123,7 +115,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 		return "", err
 	}
 	defer os.RemoveAll(tree)
-	// Keyed by the indexers as head runs them, so ConformanceCeilings finds the entry: a Go
+	// Keyed by the indexers as head runs them, so ConformanceBase finds the entry: a Go
 	// indexer's version is the toolchain its directory resolves.
 	head, err := m.baseIndexPlan(ctx, m.ws.Root)
 	if err != nil {

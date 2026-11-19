@@ -77,8 +77,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CommitAuthor", Zero: types.CommitAuthor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitAuthor(v.(types.CommitAuthor)) }},
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
 	{Name: "Conformance", Zero: types.Conformance{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformance(v.(types.Conformance), enums) }},
-	{Name: "ConformanceCeiling", Zero: types.ConformanceCeiling{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectConformanceCeiling(v.(types.ConformanceCeiling), enums)
+	{Name: "ConformanceBase", Zero: types.ConformanceBase{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceBase(v.(types.ConformanceBase), enums)
 	}},
 	{Name: "ConformanceDistribution", Zero: types.ConformanceDistribution{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceDistribution(v.(types.ConformanceDistribution), enums)

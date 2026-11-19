@@ -711,12 +711,22 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		checks := ffi.StringSlice(bzArgs, 1)
-		ret0, err := std.MagusChangeConformance(ctx, recv, checks)
+		ret0, err := std.MagusChangeConformance(ctx, recv)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectConformanceReport(ret0, enums), nil
+	}))
+	m.MapSet("magus__Change__conformanceBase", vm.DirectValue("magus.magus__Change__conformanceBase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__conformanceBase", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusChangeConformanceBase(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectConformanceBase(ret0, enums), nil
 	}))
 	m.MapSet("magus__Change__mergeBase", vm.DirectValue("magus.magus__Change__mergeBase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Change__mergeBase", "recv", bzArgs, 0, decode.DecodeChange)

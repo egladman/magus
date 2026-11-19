@@ -536,7 +536,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 		conformance:         conformanceAtAnchor(),
 	}
 
-	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
 	report := decodeConformanceReport(t, got)
 	wantReport := report
@@ -559,7 +559,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 func TestConformanceWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 	t.Parallel()
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
-	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
 	answer := decodeConformanceReport(t, got).Answer
 	wantAnswer := answer
@@ -574,11 +574,8 @@ func TestConformanceMisconfigurationIsAnError(t *testing.T) {
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}}
 
 	ws.conformanceErr = errors.New("min_sample 0: want at least 1")
-	_, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
+	_, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
 	assert.ErrorContains(t, err, "min_sample", "a policy the workspace refuses is an error")
-
-	_, err = MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "origin/main")
-	assert.ErrorContains(t, err, "name the checks", "a base with no checks is refused before anything is measured")
 }
 
 // Every query names the weights it ranked under, and a reader context that could not be

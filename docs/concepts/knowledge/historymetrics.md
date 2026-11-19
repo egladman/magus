@@ -93,20 +93,20 @@ Each metric is its own answer type:
   `magus.yaml`, and the commit is the review. Nothing here edits the configuration, and a
   policy it cannot honor is an error rather than a quiet fallback.
 
-  Asked for `checks` and a `base` revision, `magus\change().conformance(checks)` also
-  returns `ceilings`: each file changed since the base whose count of violations of a
-  metric in `checks` rose past its count there, with both counts. This is the
-  conformance ceiling. A drop is progress, and a file that holds as many as before
-  passes, so violations that predate a change never fail it, and a file absent at the
-  base has a ceiling of 0. No count is stored in the workspace. `magus\change(base).mergeBase()`
+  The lens judges no change. `magus\change(base).conformanceBase()` returns the measure a
+  change is judged against: the merge base's rows and packages, under today's policy, and
+  the files changed since it. No count is stored in the workspace. `magus\change(base).mergeBase()`
   exports the base and runs magus's in-process indexers (Go, Buzz, shell) over it with this
   workspace's configuration, as a library call that opens no second workspace and starts no
-  run, so a count depends only on the base's bytes, today's policy and the indexer versions.
+  run, so a measure depends only on the base's bytes, today's policy and the indexer versions.
   The measure is kept in the user cache per commit, policy, indexer versions and magus build, where every
-  checkout on the machine reuses it. `magus\change().conformance` only reads it, and a base with none
+  checkout on the machine reuses it. `conformanceBase` only reads it, and a base with none
   is an error naming the step. A language only an external SCIP indexer reads has no base
-  measure: each touched file of it is listed in `unmeasured` with its language and why, and
-  holds no ceiling. A base source an in-process indexer cannot read is an error, never a pass.
+  measure: each touched file of it is listed in `unmeasured` with its language and why. A
+  base source an in-process indexer cannot read is an error, never a pass. Comparing the two
+  measures is the analyzer's: this repository's conformance ceiling, in
+  `hack/magusfile/conformance-ceiling.buzz`, holds a changed file to the violations it held at
+  the base, and an item already past its anchor to its size there.
 
 - `grouping`: what splitting work across workers cost in this workspace, read from the
   job outcomes in the history file, not git. Each job is `chained` (one worker whose
