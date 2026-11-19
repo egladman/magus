@@ -287,6 +287,68 @@ fun renderGeneratedChips(generatedFrom: str, root: str, site: Site) > str {
         + htmlcodec\escape(first) + "</a>";
 }
 
+// PAGE_TMPL is the document shell renderPage fills in; the comment inside renderPage says how.
+final PAGE_TMPL = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
+  <title>{{fullTitle}}</title>
+{{#hasDescription}}
+  <meta name="description" content="{{description}}">
+{{/hasDescription}}
+{{#hasSiteUrl}}
+  <link rel="canonical" href="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:type" content="{{ogType}}">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="{{fullTitle}}">
+{{#hasDescription}}
+  <meta property="og:description" content="{{description}}">
+{{/hasDescription}}
+  <meta property="og:url" content="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:image" content="{{siteUrl}}assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+{{/hasSiteUrl}}
+{{#hasReleasesFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="{{root}}public/atom/releases.atom.xml">
+{{/hasReleasesFeed}}
+{{#hasBlogFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus blog" href="{{root}}public/atom/blog.atom.xml">
+{{/hasBlogFeed}}
+{{#preloadHero}}
+  <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
+{{/preloadHero}}
+  <!-- SVG first: Chrome, Edge and Firefox render it and honor its
+       prefers-color-scheme, so the mark inverts with the browser theme. Safari
+       ignores SVG favicons and falls back to the PNG below. -->
+  <link rel="icon" type="image/svg+xml" href="{{root}}assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
+  <link rel="manifest" href="{{root}}manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e6e2da">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2a2e34">
+  <link rel="stylesheet" href="{{root}}assets/pico.min.css">
+  <link rel="stylesheet" href="{{root}}theme.css">
+  <link rel="stylesheet" href="{{root}}site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs pages load this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="{{root}}ui-panels.css">
+  <script src="{{root}}theme.js"></script>
+</head>
+<body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+{{{announcement}}}{{{nav}}}  <main id="main-content" class="container" tabindex="-1">
+{{{breadcrumb}}}    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
+{{{secondaryRow}}}{{{contentBlock}}}{{{pager}}}  </main>
+{{{related}}}{{{provenance}}}{{{refdrawer}}}{{{footer}}}  <script type="module" src="{{root}}main.js"></script>
+</body>
+</html>
+`;
+
 export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], generatedFrom: str, site: Site) > result\Result::<str> {
     try {
         final root = rootPrefix(srcRel, site);
@@ -369,16 +431,13 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         // section nav, a page with fewer than three headings has no on-page list. The aside (and
         // the .with-toc two-column grid) appears when at least one is present; else the article
         // goes full-width.
-        final r15 = site.renderSectionNav(srcRel, canonUrl, root);
-        if (r15.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r15 = site.renderSectionNav(srcRel, canonUrl, root); if (r15.error -> failed) { return result\Result::<str>{ error = failed }; }
         final sectionNav = r15.value!;
         // The whole branch beneath this page, when there is more of it than the
         // direct children sectionNav already lists.
-        final r16 = site.renderSubtree(canonUrl, root);
-        if (r16.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r16 = site.renderSubtree(canonUrl, root); if (r16.error -> failed) { return result\Result::<str>{ error = failed }; }
         final subtree = r16.value!;
-        final r17 = renderTocList(content);
-        if (r17.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r17 = renderTocList(content); if (r17.error -> failed) { return result\Result::<str>{ error = failed }; }
         final tocList = r17.value!;
 
         // Record which KINDS of route reach this page, for the post-walk axis report. Computed here
@@ -460,8 +519,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         // Per-page provenance strip (footer tags + "Last updated" commit line). The search
         // page has no source commit, so renderCommitFooter would fall back to HEAD and drift
         // every commit, tripping the drift gate - omit the strip there.
-        final r18 = renderCommitFooter(srcRel, site);
-        if (r18.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r18 = renderCommitFooter(srcRel, site); if (r18.error -> failed) { return result\Result::<str>{ error = failed }; }
         var provenance = "  <div class=\"page-provenance container\">\n"
             + tagsHtml
             + "    " + r18.value! + "\n"
@@ -474,83 +532,17 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         // provenance, footer) inject raw via {{{...}}}. Notes: favicon reuses the hat mark (PNG
         // + apple-touch); the <noscript> explains the missing search box; one deferred main.js,
         // with head-critical theme.js separate above.
-        final pageTmpl = `<!DOCTYPE html>
-<html lang="en" class="no-js">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="generator" content="magus">
-  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
-  <title>{{fullTitle}}</title>
-{{#hasDescription}}
-  <meta name="description" content="{{description}}">
-{{/hasDescription}}
-{{#hasSiteUrl}}
-  <link rel="canonical" href="{{siteUrl}}{{canonUrl}}">
-  <meta property="og:type" content="{{ogType}}">
-  <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="{{fullTitle}}">
-{{#hasDescription}}
-  <meta property="og:description" content="{{description}}">
-{{/hasDescription}}
-  <meta property="og:url" content="{{siteUrl}}{{canonUrl}}">
-  <meta property="og:image" content="{{siteUrl}}assets/gopher.png">
-  <meta name="twitter:card" content="summary_large_image">
-{{/hasSiteUrl}}
-{{#hasReleasesFeed}}
-  <link rel="alternate" type="application/atom+xml" title="magus releases" href="{{root}}public/atom/releases.atom.xml">
-{{/hasReleasesFeed}}
-{{#hasBlogFeed}}
-  <link rel="alternate" type="application/atom+xml" title="magus blog" href="{{root}}public/atom/blog.atom.xml">
-{{/hasBlogFeed}}
-{{#preloadHero}}
-  <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
-{{/preloadHero}}
-  <!-- SVG first: Chrome, Edge and Firefox render it and honor its
-       prefers-color-scheme, so the mark inverts with the browser theme. Safari
-       ignores SVG favicons and falls back to the PNG below. -->
-  <link rel="icon" type="image/svg+xml" href="{{root}}assets/favicon.svg">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
-  <link rel="manifest" href="{{root}}manifest.webmanifest">
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e6e2da">
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#2a2e34">
-  <link rel="stylesheet" href="{{root}}assets/pico.min.css">
-  <link rel="stylesheet" href="{{root}}theme.css">
-  <link rel="stylesheet" href="{{root}}site.css">
-  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs pages load this and
-       NOT console.css (that is the console-app-only shell). -->
-  <link rel="stylesheet" href="{{root}}ui-panels.css">
-  <script src="{{root}}theme.js"></script>
-</head>
-<body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-{{{announcement}}}{{{nav}}}  <main id="main-content" class="container" tabindex="-1">
-{{{breadcrumb}}}    <div class="page-tools"></div>
-    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
-{{{secondaryRow}}}{{{contentBlock}}}{{{pager}}}  </main>
-{{{related}}}{{{provenance}}}{{{refdrawer}}}{{{footer}}}  <script type="module" src="{{root}}main.js"></script>
-</body>
-</html>
-`;
-        final r19 = renderAnnouncementBar(root, site);
-        if (r19.error -> failed) { return result\Result::<str>{ error = failed }; }
-        final r20 = renderSiteNav(root, active, true, site.inputs.config);
-        if (r20.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r19 = renderAnnouncementBar(root, site); if (r19.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r20 = renderSiteNav(root, active, true, site.inputs.config); if (r20.error -> failed) { return result\Result::<str>{ error = failed }; }
         var breadcrumb = "";
         if (canonUrl != "" and srcRel != DOWNLOAD_SRC) {
-            final r21 = site.renderBreadcrumb(srcRel, title, root);
-            if (r21.error -> failed) { return result\Result::<str>{ error = failed }; }
+            final r21 = site.renderBreadcrumb(srcRel, title, root); if (r21.error -> failed) { return result\Result::<str>{ error = failed }; }
             breadcrumb = r21.value!;
         }
-        final r22 = site.renderRelated(srcRel, root);
-        if (r22.error -> failed) { return result\Result::<str>{ error = failed }; }
-        final r23 = renderReferenceDrawer(root, canonUrl, content, site);
-        if (r23.error -> failed) { return result\Result::<str>{ error = failed }; }
-        final r24 = renderSiteFooter(root, site);
-        if (r24.error -> failed) { return result\Result::<str>{ error = failed }; }
-        return result\ok::<str>(template\render(pageTmpl, {
+        final r22 = site.renderRelated(srcRel, root); if (r22.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r23 = renderReferenceDrawer(root, canonUrl, content, site); if (r23.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r24 = renderSiteFooter(root, site); if (r24.error -> failed) { return result\Result::<str>{ error = failed }; }
+        return result\ok::<str>(template\render(PAGE_TMPL, {
             "fullTitle": fullTitle,
             "csp": pageCsp,
             "description": description,

@@ -114,18 +114,8 @@ fun recentPosts(site: Site) > result\Result::<str> {
     }
 }
 
-// renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path
-// every "is this the home page" test in renderPage keys off; it maps to the empty clean
-// URL, so the chrome resolves at gen's root and no breadcrumb is drawn.
-//
-// Every link here is relative and points at a page this render also writes - the asset
-// gate proves that, and the orphan gate walks outward from exactly this page, so the four
-// sections below are what make the rest of the site reachable at all.
-export fun renderLanding(site: Site) > result\Result::<bool> {
-    try {
-        final recent = recentPosts(site);
-        if (recent.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        var html = template\render(`  <section class="landing-hero">
+// LANDING_TMPL is the front door's markup; renderLanding fills in the terminal session and the recent posts.
+final LANDING_TMPL = `  <section class="landing-hero">
     <div class="landing-intro">
       <h1 class="landing-title landing-rotator">
         <span class="landing-rotate">Made to be debuggable at 2am.</span>
@@ -562,7 +552,20 @@ std&#92;print(yaml);</code></pre>
     </div>
     <p class="landing-humans-body">Already working with an agent? <a href="guides/agents/">Pointing an agent at it</a> covers the structured output, the installed skills and the graph queries it can use, and what it deliberately does not get.</p>
   </section>
-`, {"session": TERMINAL_SESSION, "recent": recent.value!});
+`;
+
+// renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path
+// every "is this the home page" test in renderPage keys off; it maps to the empty clean
+// URL, so the chrome resolves at gen's root and no breadcrumb is drawn.
+//
+// Every link here is relative and points at a page this render also writes - the asset
+// gate proves that, and the orphan gate walks outward from exactly this page, so the four
+// sections below are what make the rest of the site reachable at all.
+export fun renderLanding(site: Site) > result\Result::<bool> {
+    try {
+        final recent = recentPosts(site);
+        if (recent.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        var html = template\render(LANDING_TMPL, {"session": TERMINAL_SESSION, "recent": recent.value!});
 
         // Same cross-linking the docs pages get: auto-link the first mention of each
         // glossary term (definition baked into the popover) and link inline-code domain
@@ -576,8 +579,7 @@ std&#92;print(yaml);</code></pre>
         // the search result heading.
         final title = "magus";
         final desc = site.inputs.config.description;
-        final r1 = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site);
-        if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r1 = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site); if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r1.value!;
         fs\writeFile(site.inputs.outDir + "/index.html", doc);
         // The plain-text body the search index carries. The HTML above is mostly layout, so

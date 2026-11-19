@@ -137,6 +137,32 @@ fun renderDocs(site: Site) > result\Result::<bool> {
 
 
 
+// bundleAssets writes the minified styles, theme.js and the main.js bundle into gen/.
+fun bundleAssets(site: Site) > result\Result::<bool> {
+    // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
+    // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
+    // of every feature module). hljs is a lazy dynamic import() of the same-origin
+    // gen/assets/hljs.js bundle (built by build-hljs); esbuild leaves dynamic
+    // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
+    // byte-stable output, so the drift gate holds.
+    final r6 = esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.inputs.outDir + "/site.css"]); if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
+    // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
+    // the docs pages. Minified to gen root, enumerated in the precache/allowlist next to
+    // site.css.
+    final r7 = esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.inputs.outDir + "/console.css"]); if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
+    // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
+    // pages can load only this. Gen-root, precached like the others.
+    final r8 = esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.inputs.outDir + "/ui-panels.css"]); if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    final r9 = esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.inputs.outDir + "/theme.css"]); if (r9.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    // The console apps (graph/logs/dashboard/activity) live in the standalone console/
+    // project (its own build, deployed to /console/); the docs site renders none of them.
+    final r10 = esbuild(["src/theme.ts", "--minify", "--outfile=" + site.inputs.outDir + "/theme.js"]); if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    final r11 = esbuild(["src/site/main.ts", "--bundle", "--minify", "--format=esm", "--outfile=" + site.inputs.outDir + "/main.js"]); if (r11.error -> failed) { return result\Result::<bool>{ error = failed }; }
+    return result\ok::<bool>(true);
+}
+
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
 export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\ProjectGraph) > result\Result::<Site> {
@@ -155,12 +181,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         site.inputs.docs = docs;
         site.inputs.blog = blog;
         site.inputs.outDir = outDir;
-        final r4 = loadMeta(site);
-        if (r4.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r4 = loadMeta(site); if (r4.error -> failed) { return result\Result::<Site>{ error = failed }; }
         if (isDirectory(site.inputs.root + "/" + site.inputs.blog)) {
             foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
-                final r5 = isPublishablePost(site, name);
-                if (r5.error -> failed) { return result\Result::<Site>{ error = failed }; }
+                final r5 = isPublishablePost(site, name); if (r5.error -> failed) { return result\Result::<Site>{ error = failed }; }
                 if (r5.value!) {
                     site.inputs.hasBlogPosts = true;
                 }
@@ -201,33 +225,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
             fs\copyDir(site.inputs.root + "/assets", site.inputs.outDir + "/assets");
         }
 
-        // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
-        // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
-        // of every feature module). hljs is a lazy dynamic import() of the same-origin
-        // gen/assets/hljs.js bundle (built by build-hljs); esbuild leaves dynamic
-        // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
-        // byte-stable output, so the drift gate holds.
-        final r6 = esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.inputs.outDir + "/site.css"]);
-        if (r6.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
-        // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
-        // the docs pages. Minified to gen root, enumerated in the precache/allowlist next to
-        // site.css.
-        final r7 = esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.inputs.outDir + "/console.css"]);
-        if (r7.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
-        // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
-        // pages can load only this. Gen-root, precached like the others.
-        final r8 = esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.inputs.outDir + "/ui-panels.css"]);
-        if (r8.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r9 = esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.inputs.outDir + "/theme.css"]);
-        if (r9.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        // The console apps (graph/logs/dashboard/activity) live in the standalone console/
-        // project (its own build, deployed to /console/); the docs site renders none of them.
-        final r10 = esbuild(["src/theme.ts", "--minify", "--outfile=" + site.inputs.outDir + "/theme.js"]);
-        if (r10.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r11 = esbuild(["src/site/main.ts", "--bundle", "--minify", "--format=esm", "--outfile=" + site.inputs.outDir + "/main.js"]);
-        if (r11.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final bundled = bundleAssets(site); if (bundled.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // The playground's wasm and its TinyGo glue are the only published bytes nothing here
         // can produce: TinyGo builds them and CI has none. They are committed under vendor/ as
@@ -241,21 +239,17 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
         // "Related" cards resolve titles/URLs against the full docPages set. collectDocPages reads only
         // frontmatter, so it is free of the render state below.
-        final r12 = site.collectDocPages();
-        if (r12.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r12 = site.collectDocPages(); if (r12.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
-        final r13 = site.collectGlossaryTerms();
-        if (r13.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r13 = site.collectGlossaryTerms(); if (r13.error -> failed) { return result\Result::<Site>{ error = failed }; }
         site.collectConventions();
         // Record which glossary terms each page mentions (native, fast) so renderRelated can rank
         // neighbors by shared vocabulary. Needs docPages + glossaryTerms.
         site.collectPageTerms();
         // Catalog inline-code entities (diagnostic codes + CLI commands) for auto-linking.
-        final r14 = site.collectEntities();
-        if (r14.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r14 = site.collectEntities(); if (r14.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // Map each concept to the tour step that demos it, for the "see the demo" callout.
-        final r15 = collectDemos(site);
-        if (r15.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r15 = collectDemos(site); if (r15.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // A directory with pages but no page of its own is a URL you cannot visit.
         // Synthesize one before anything renders, so breadcrumbs, the section nav,
@@ -267,55 +261,44 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         // section's navigation points both ways: the landing (README.md) lists its children and
         // each child links back to the landing, so neither can be registered at render time
         // without the other having rendered first. See collectDevelopmentPages.
-        final r16 = collectDevelopmentPages(site);
-        if (r16.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r16 = collectDevelopmentPages(site); if (r16.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // After the last pass that adds a page, and before any page renders.
         site.collectDocIndex();
         // Pre-walk, and after the synthesized overviews join docPages: a tag chip renders during the
         // walk and has to know whether its /tags/<slug>/ destination will be written.
         collectTagIndex(site);
 
-        final r17 = renderPlayground(site);
-        if (r17.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r17 = renderPlayground(site); if (r17.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Load release manifests from releases/*.yaml BEFORE the walk so renderPage() knows
         // whether the releases Atom feed exists and can gate its <link rel=alternate> discovery
         // tag (advertising a missing feed would trip the asset check). Changelog parsing runs
         // only at release-cut time (cmd/magus-utils cut), not here.
-        final r18 = loadReleases(site);
-        if (r18.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r18 = loadReleases(site); if (r18.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // Resolve the newest release's blog post now, for the same reason: the announcement bar
         // is part of every page's chrome, starting with the landing below, and walkBlog has not
         // run yet.
-        final r19 = findReleasePost(site);
-        if (r19.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r19 = findReleasePost(site); if (r19.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // The front door, then the README as the /development/ landing. renderLanding writes
         // gen/index.html; renderRoot writes gen/development/index.html.
-        final r20 = renderLanding(site);
-        if (r20.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r21 = renderRoot(site);
-        if (r21.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r22 = renderDocs(site);
-        if (r22.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r23 = walkBlog(site);
-        if (r23.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r20 = renderLanding(site); if (r20.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r21 = renderRoot(site); if (r21.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r22 = renderDocs(site); if (r22.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r23 = walkBlog(site); if (r23.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Build /development/ before writeAliases so its pages are in site.pageUrls for the
         // collision guard, and its collectAlias redirects (retired /development/projects/ URLs)
         // get stubs in the same pass.
         // After the walk: every child's title and description is known by now.
-        final r24 = renderSectionIndexes(site);
-        if (r24.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r24 = renderSectionIndexes(site); if (r24.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // After the section indexes: both index the same page set, and a tag page's cards are drawn
         // from docPages, which the synthesized overviews have finished contributing to by here.
         // Which tags get a page was already decided pre-walk by collectTagIndex, so the chips
         // rendered during the walk and the pages written here cannot disagree.
-        final r25 = renderTagPages(site);
-        if (r25.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r25 = renderTagPages(site); if (r25.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
-        final r26 = renderDevelopment(site);
-        if (r26.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r26 = renderDevelopment(site); if (r26.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Emit a redirect stub per frontmatter alias (after the walk, so every real page URL is
         // known for the collision guard). Aliases stay out of the search index/sitemap/feeds -
@@ -323,34 +306,22 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         // so a stub lands at gen/console/index.html, keeping internal links to /console/ resolving
         // for the asset gate. The console SPA is a separate project copied over gen/console/ at
         // deploy (.github/workflows/cd.yaml), so the app wins there.
-        final r27 = site.writeAliases();
-        if (r27.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r27 = site.writeAliases(); if (r27.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
-        final r28 = writeSEOFiles(site);
-        if (r28.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r29 = renderBlogAtom(site);
-        if (r29.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r30 = renderReleasesAtom(site);
-        if (r30.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r31 = renderPublic(site);
-        if (r31.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r32 = render404(site);
-        if (r32.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r33 = writeOffline(site);
-        if (r33.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r34 = renderSearchPage(site);
-        if (r34.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r35 = renderTourPage(site);
-        if (r35.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r36 = renderDownloadPage(site);
-        if (r36.error -> failed) { return result\Result::<Site>{ error = failed }; }
-        final r37 = writeManifest(site);
-        if (r37.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r28 = writeSEOFiles(site); if (r28.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r29 = renderBlogAtom(site); if (r29.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r30 = renderReleasesAtom(site); if (r30.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r31 = renderPublic(site); if (r31.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r32 = render404(site); if (r32.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r33 = writeOffline(site); if (r33.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r34 = renderSearchPage(site); if (r34.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r35 = renderTourPage(site); if (r35.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r36 = renderDownloadPage(site); if (r36.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r37 = writeManifest(site); if (r37.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown
         // at <url>index.md. A post-walk aggregate over docPages, like search-index.json below.
-        final r38 = writeLLMsIndex(site);
-        if (r38.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r38 = writeLLMsIndex(site); if (r38.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Flat {url, title, text, tags, description?} record per page; search.js fetches it
         // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
@@ -359,14 +330,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
 
         // Built last: the cache version digests the precached assets (incl. search-index.json
         // just above), so every one of them must already exist.
-        final r39 = buildServiceWorker(site);
-        if (r39.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r39 = buildServiceWorker(site); if (r39.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Delete anything on disk from a previous render whose source is gone (see
         // pruneStaleOutputs' doc). Runs before the gates below so neither trips on a stale
         // page's dangling reference to content removed with it.
-        final r40 = pruneStaleOutputs(site);
-        if (r40.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r40 = pruneStaleOutputs(site); if (r40.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // writeSiteManifest is NOT called here: generate() (magusfile.buzz) still writes
         // gen/assets/hljs.js - a served asset - AFTER site_render returns,
@@ -376,21 +345,17 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         // Reproducibility guard: throw on any dangling href/src. Runs after every asset + page
         // is written, so a missing file (renamed bundle, deleted image, forgotten alias) fails
         // the build here instead of shipping a 404. See docs/engines.md.
-        final r41 = assetIntegrityCheck(site);
-        if (r41.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r41 = assetIntegrityCheck(site); if (r41.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Orphan gate: prove each docs page is reachable by clicking from the front door. Runs
         // after assetIntegrityCheck so link targets are already known-good.
-        final r42 = orphanCheck(site);
-        if (r42.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r42 = orphanCheck(site); if (r42.error -> failed) { return result\Result::<Site>{ error = failed }; }
         // Reports, never throws - see axisReport. orphanCheck above is the objective floor
         // (reachable at all); this is the editorial one (reachable three different ways).
-        final r43 = axisReport(site);
-        if (r43.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r43 = axisReport(site); if (r43.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // Parity gate: no previously-shipped URL may silently start 404-ing.
-        final r44 = abandonedLinkCheck(site);
-        if (r44.error -> failed) { return result\Result::<Site>{ error = failed }; }
+        final r44 = abandonedLinkCheck(site); if (r44.error -> failed) { return result\Result::<Site>{ error = failed }; }
 
         // A count, not a line per page: the per-page listing was ~250 lines every render,
         // repeated once per target that reaches generate, and it said nothing a failure

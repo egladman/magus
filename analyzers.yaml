@@ -371,8 +371,6 @@ no-throw:
       spells/github/review/spell.buzz: 5
       spells/golang/golangci.buzz: 2
       spells/golang/gomod.buzz: 1
-      spells/harness/opencode/runtime/lib/hook.buzz: 2
-      spells/harness/opencode/runtime/magus-reclaim-disk.buzz: 1
       spells/onepassword/spell.buzz: 1
       spells/python/spell.buzz: 1
       spells/system-keychain/spell.buzz: 1
