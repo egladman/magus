@@ -9,13 +9,11 @@ import (
 )
 
 // BytecodeVersion is the current bytecode format version; UnmarshalChunk rejects
-// blobs with a different version. This module compares it by equality only. Replace
-// it with the next v1alphaN whenever any of the following
+// blobs with a different version. Increment it whenever any of the following
 // change: opcode numbering (opcode.go), Chunk/Instr/UpvalInfo layout (chunk.go),
 // the serializable Value constant subset, or AST node types (ast.go) — the decoder
-// rejects mismatched blobs rather than mis-executing stale bytecode.
-//
-// The v2..v22 notes below record the numbered format that preceded the string.
+// rejects mismatched blobs rather than mis-executing stale bytecode. The version stays
+// a number because it follows upstream Buzz.
 //
 // v2 adds the per-chunk Exports list, so a session-compiled (SharedGlobals)
 // module recovered from bytecode re-declares its exported names — without it a
@@ -101,7 +99,7 @@ import (
 // v22 adds FunDecl's IsExtern flag, read before the body, and an extern object method
 // encodes no body. OpNewObject's B now counts only the methods that emit a closure. A
 // v21 reader would take the flag for the body's tag and desynchronize.
-const BytecodeVersion = "gopherbuzz.bytecode/v1alpha1"
+const BytecodeVersion uint16 = 22
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -203,7 +201,7 @@ type enc struct{ buf []byte }
 
 func (e *enc) header(magic [4]byte) {
 	e.raw(magic[:])
-	e.string(BytecodeVersion)
+	e.u16(BytecodeVersion)
 }
 
 func (e *enc) raw(b []byte) { e.buf = append(e.buf, b...) }
@@ -816,12 +814,12 @@ func (d *dec) header(magic [4]byte) error {
 	if [4]byte(m) != magic {
 		return fmt.Errorf("invalid magic")
 	}
-	ver, err := d.string()
+	ver, err := d.u16()
 	if err != nil {
 		return err
 	}
 	if ver != BytecodeVersion {
-		return fmt.Errorf("version mismatch: got %q, want %q", ver, BytecodeVersion)
+		return fmt.Errorf("version mismatch: got %d, want %d", ver, BytecodeVersion)
 	}
 	return nil
 }
