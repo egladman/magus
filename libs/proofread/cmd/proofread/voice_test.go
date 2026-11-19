@@ -388,16 +388,17 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 		t.Errorf("review-reply with no voice = %s, want no finding", stdout)
 	}
 
-	bad := writeFile(t, dir, "bad.json", `{"schema":"other"}`)
+	bad := writeFile(t, dir, "bad.json", `{"api_version":"other"}`)
 	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", bad); code != exitError ||
-		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/4\n" {
+		stderr != "proofread: voice "+bad+": api_version \"other\" is not proofread.voice/v1alpha1\n" {
 		t.Errorf("a bad voice file: code %d stderr %q", code, stderr)
 	}
 
 	old := writeFile(t, dir, "old.json", `{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`)
-	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", old); code != exitError ||
-		!strings.Contains(stderr, "rerun `proofread voice build`") {
-		t.Errorf("a voice file from an earlier proofread: code %d stderr %q, want the command that rebuilds it", code, stderr)
+	code, stdout, stderr = runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", old, "-only", "voice-drift")
+	if code != exitOK || stdout != "[]\n" || !strings.Contains(stderr, old) ||
+		!strings.Contains(stderr, "author-voice rules are off for this run") || !strings.Contains(stderr, "proofread voice build") {
+		t.Errorf("a voice file from an earlier proofread: code %d stdout %s stderr %q, want it set aside with a warning", code, stdout, stderr)
 	}
 }
 

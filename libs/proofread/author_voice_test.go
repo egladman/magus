@@ -79,7 +79,7 @@ func TestBuildVoiceKeepsAggregatesAlone(t *testing.T) {
 	}
 
 	k := v.Kinds[KindReviewReply]
-	if v.Schema != VoiceSchema || k.Texts != 60 || k.Words < MinVoiceWords || k.FirstPerson == 0 {
+	if v.APIVersion != VoiceSchema || k.Texts != 60 || k.Words < MinVoiceWords || k.FirstPerson == 0 {
 		t.Fatalf("BuildVoice = %+v, want schema %s, 60 texts, %d words or more and a first-person rate", v, VoiceSchema,
 			MinVoiceWords)
 	}
@@ -176,13 +176,13 @@ func TestVoiceDriftIsOffWithoutAVoice(t *testing.T) {
 }
 
 func TestAVoiceRelaxesTenseOnChangeDescriptionsAlone(t *testing.T) {
-	writesI := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	writesI := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts, Words: 600, FirstPerson: 21, Future: 4},
 	}}
-	tooFew := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	tooFew := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts - 1, Words: 600, FirstPerson: 21, Future: 4},
 	}}
-	noFuture := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	noFuture := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts, Words: 600, FirstPerson: 21, Future: 1},
 	}}
 	deny := WithDecisions(map[Rule]Decision{RuleTense: DecisionDeny})
@@ -248,19 +248,24 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 		t.Fatalf("ReadVoice = %+v, %v, want the voice back", v, err)
 	}
 
-	issue := func(body string) string { return `{"schema":"proofread-voice/4","kinds":{"issue":` + body + `}}` }
-	rebuild := "is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"
+	issue := func(body string) string {
+		return `{"api_version":"proofread.voice/v1alpha1","kinds":{"issue":` + body + `}}`
+	}
+	rebuild := func(schema string) string {
+		return "voice file is from an earlier proofread: schema " + schema + ": rerun `proofread voice build` to rebuild the voice file"
+	}
 
 	cases := map[string]struct{ body, want string }{
 		"the first version": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`,
-			`schema "proofread-voice/1" ` + rebuild},
+			rebuild(`"proofread-voice/1"`)},
 		"one cut for every window": {
 			`{"schema":"proofread-voice/2","kinds":{"issue":{"windows":{"count":1,"values":{},"cut":1}}}}`,
-			`schema "proofread-voice/2" ` + rebuild,
+			rebuild(`"proofread-voice/2"`),
 		},
-		"windows without ranges": {`{"schema":"proofread-voice/3","kinds":{}}`, `schema "proofread-voice/3" ` + rebuild},
-		"another schema":         {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/4`},
-		"an unknown kind": {`{"schema":"proofread-voice/4","kinds":{"guide":{}}}`,
+		"windows without ranges":   {`{"schema":"proofread-voice/3","kinds":{}}`, rebuild(`"proofread-voice/3"`)},
+		"the last numbered schema": {`{"schema":"proofread-voice/4","kinds":{}}`, rebuild(`"proofread-voice/4"`)},
+		"another schema":           {`{"api_version":"proofread.voice/v9","kinds":{}}`, `api_version "proofread.voice/v9" is not proofread.voice/v1alpha1`},
+		"an unknown kind": {`{"api_version":"proofread.voice/v1alpha1","kinds":{"guide":{}}}`,
 			"a voice measures change-description, review-reply, commit-message and issue, not guide"},
 		"an unknown feature": {issue(`{"windows":[{"punctuation.comma":1,"typos":1}]}`),
 			`issue: unknown feature "typos"`},
@@ -270,9 +275,9 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 			"issue: window 1 has 1 features, want 2 or more"},
 		"a subject length off commits": {issue(`{"subject_chars_p95":40}`),
 			"issue: only commit messages keep a subject length"},
-		"windows on commits": {`{"schema":"proofread-voice/4","kinds":{"commit-message":{"windows":[{}]}}}`,
+		"windows on commits": {`{"api_version":"proofread.voice/v1alpha1","kinds":{"commit-message":{"windows":[{}]}}}`,
 			"commit-message: commit messages keep no windows"},
-		"an unknown field": {`{"schema":"proofread-voice/4","text":"hi"}`, `voice file: json: unknown field "text"`},
+		"an unknown field": {`{"api_version":"proofread.voice/v1alpha1","text":"hi"}`, `voice file: json: unknown field "text"`},
 		"a range of an unknown feature": {issue(`{"ranges":{"typos":{"p5":0,"p95":1,"windows":9}}}`),
 			`issue: no range is kept of feature "typos"`},
 		"a range from too few windows": {issue(`{"ranges":{"triads_per_1000":{"p5":0,"p95":1,"windows":4}}}`),

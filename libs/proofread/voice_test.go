@@ -297,7 +297,7 @@ func TestAFutureSectionEndsAtTheNextHeadingOfItsLevel(t *testing.T) {
 // triadVoice is a voice whose change descriptions run to p95 triads per 1000
 // words.
 func triadVoice(p95 float64) *Voice {
-	return &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	return &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Ranges: map[Feature]Range{"triads_per_1000": {P95: p95, Windows: 9}}},
 	}}
 }
@@ -332,7 +332,7 @@ func TestTriadKeepsItsDefaultUnderAVoiceThatWritesFewer(t *testing.T) {
 }
 
 func TestTriadKeepsItsDefaultWhenTheVoiceHasNoRange(t *testing.T) {
-	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{KindChangeDescription: {}}}
+	v := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{KindChangeDescription: {}}}
 
 	if got := JudgeText(twoTriads, KindChangeDescription, WithOnly(RuleTriad), WithVoice(v)); len(got) != 2 {
 		t.Errorf("triad = %v, want the default two findings", got)

@@ -11,16 +11,9 @@ import (
 	"strings"
 )
 
-// VoiceSchema names the shape of a voice file, so a file written by another
-// version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/4"
-
-// olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
-// in one is refused with the command that rebuilds it.
-//
-// compat(until: no voice file in proofread-voice/1, /2 or /3 is still read):
-// naming the rebuild beats the bare "not proofread-voice/4" refusal.
-var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2", "proofread-voice/3"}
+// VoiceSchema is the api_version naming the shape of a voice file, so a file
+// written by another version of proofread is refused rather than misread.
+const VoiceSchema = "proofread.voice/v1alpha1"
 
 // MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
 // rule from.
@@ -52,8 +45,8 @@ var voiceKinds = func() []Kind {
 // alone: counts, rates and window measures, never a text, a word the author
 // chose or a path.
 type Voice struct {
-	Schema string              `json:"schema"`
-	Kinds  map[Kind]VoiceStats `json:"kinds"`
+	APIVersion string              `json:"api_version"`
+	Kinds      map[Kind]VoiceStats `json:"kinds"`
 }
 
 // VoiceStats is a [Voice] over the texts of one kind.
@@ -105,7 +98,7 @@ const (
 // error, and so are texts with no prose word among them. A text with no prose
 // word is not counted.
 func BuildVoice(texts map[Kind][]string) (*Voice, error) {
-	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{}}
+	v := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{}}
 
 	for kind, list := range texts {
 		if !slices.Contains(voiceKinds, kind) {
@@ -204,9 +197,14 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[lo] + (rank-float64(lo))*(sorted[lo+1]-sorted[lo])
 }
 
-// ReadVoice decodes a voice file. A schema an earlier proofread wrote is an
-// error that names `proofread voice build`, which rebuilds the file. So is
-// any other schema than [VoiceSchema], a field, kind or feature proofread does
+// ErrOldVoice marks a voice file in the form earlier proofread versions wrote,
+// which carried a schema key. A caller that can judge without a voice sets the
+// file aside on it, since `proofread voice build` rebuilds the file from history.
+var ErrOldVoice = errors.New("voice file is from an earlier proofread")
+
+// ReadVoice decodes a voice file. A file in the form an earlier proofread wrote
+// is an [ErrOldVoice] error that names `proofread voice build`, which rebuilds
+// it. A newer or other api_version than [VoiceSchema] is an error, so is a field, kind or feature proofread does
 // not know, a feature voice-drift does not rank on its kind, a window with
 // fewer than two features, a negative subject length, and a reference on a
 // kind that cannot hold it.
@@ -217,19 +215,21 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 	}
 
 	var head struct {
-		Schema string `json:"schema"`
+		APIVersion string `json:"api_version"`
+		// Schema is the key earlier proofread versions wrote.
+		Schema *string `json:"schema"`
 	}
 
 	if err := json.Unmarshal(data, &head); err != nil {
-		return nil, fmt.Errorf("voice file schema: %w", err)
+		return nil, fmt.Errorf("voice file api_version: %w", err)
 	}
 
 	switch {
-	case slices.Contains(olderVoiceSchemas, head.Schema):
-		return nil, fmt.Errorf("schema %q is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file",
-			head.Schema)
-	case head.Schema != VoiceSchema:
-		return nil, fmt.Errorf("schema %q is not %s", head.Schema, VoiceSchema)
+	case head.Schema != nil:
+		return nil, fmt.Errorf("%w: schema %q: rerun `proofread voice build` to rebuild the voice file",
+			ErrOldVoice, *head.Schema)
+	case head.APIVersion != VoiceSchema:
+		return nil, fmt.Errorf("api_version %q is not %s", head.APIVersion, VoiceSchema)
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))

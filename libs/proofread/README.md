@@ -229,7 +229,7 @@ FILE...|--stdin` measures the author's own texts, one per file, NUL-separated on
 stdin, or as JSON lines with `--field` (and `--kind-field` for a kind per line),
 and writes the file to `--out`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
 (under the OS config directory when unset, as magus resolves its own). It refuses that default inside a
-git work tree. The file, schema `proofread-voice/4`, holds aggregates alone, per
+git work tree. The file, `api_version` `proofread.voice/v1alpha1`, holds aggregates alone, per
 kind: the texts and words counted, the first-person and future-tense rates, the
 features `voice-drift` ranks on for each 200-word window of the author's pooled
 texts, a commit subject's 95th percentile in characters, and the 5th and 95th

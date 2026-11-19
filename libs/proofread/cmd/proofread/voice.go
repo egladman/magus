@@ -501,8 +501,8 @@ func readVoiceFile(path string) (*proofread.Voice, error) {
 }
 
 // voiceOptions reads the voice file -voice names. The name default is the
-// file voice build writes with no --out. With none there, it says so on
-// stderr and returns no option.
+// file voice build writes with no --out. With none there, or one from an
+// earlier proofread, it says so on stderr and returns no option.
 func voiceOptions(name string, stderr io.Writer) ([]proofread.Option, error) {
 	path := name
 	if name == "default" {
@@ -518,6 +518,11 @@ func voiceOptions(name string, stderr io.Writer) ([]proofread.Option, error) {
 	case name == "default" && errors.Is(err, os.ErrNotExist):
 		fmt.Fprintf(stderr, "proofread: no voice file at %s, so this text is judged with no voice; "+
 			"proofread voice build writes one\n", path)
+
+		return []proofread.Option{}, nil
+	case errors.Is(err, proofread.ErrOldVoice):
+		fmt.Fprintf(stderr, "proofread: voice file %s is from an earlier proofread, so the author-voice rules are off for this run; "+
+			"proofread voice build rebuilds it\n", path)
 
 		return []proofread.Option{}, nil
 	case err != nil:

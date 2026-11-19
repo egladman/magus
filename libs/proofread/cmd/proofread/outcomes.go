@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	outcomesVersion = 1
+	outcomesAPIVersion = "proofread.outcomes/v1alpha1"
 
 	// statusOpen marks a finding the last -record run reported once, and
 	// statusReported one a later run reported again.
@@ -38,7 +38,7 @@ const (
 // outcomeState is the file -record keeps. It lives on this machine and
 // holds fingerprints and counts only, never the judged text.
 type outcomeState struct {
-	Version int `json:"version"`
+	APIVersion string `json:"api_version"`
 	// Pending maps a text's absolute path, then a rule's name, then a
 	// finding's fingerprint to its status.
 	Pending map[string]map[string]map[string]string `json:"pending"`
@@ -82,7 +82,7 @@ func outcomesPath() (string, error) {
 
 // loadOutcomes reads the state at path; a missing file is an empty state.
 func loadOutcomes(path string) (outcomeState, error) {
-	empty := outcomeState{Version: outcomesVersion, Pending: map[string]map[string]map[string]string{}, Tally: map[string]outcomeTally{}}
+	empty := outcomeState{APIVersion: outcomesAPIVersion, Pending: map[string]map[string]map[string]string{}, Tally: map[string]outcomeTally{}}
 
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -98,8 +98,16 @@ func loadOutcomes(path string) (outcomeState, error) {
 		return empty, fmt.Errorf("outcomes %s: %w", path, err)
 	}
 
-	if s.Version != outcomesVersion {
-		return empty, fmt.Errorf("outcomes %s is version %d, want %d", path, s.Version, outcomesVersion)
+	var legacy struct {
+		Version *int `json:"version"`
+	}
+
+	if err := json.Unmarshal(data, &legacy); err == nil && legacy.Version != nil && s.APIVersion == "" {
+		return empty, fmt.Errorf("outcomes %s is in the numeric version form: delete it, and --record starts the counts again", path)
+	}
+
+	if s.APIVersion != outcomesAPIVersion {
+		return empty, fmt.Errorf("outcomes %s is api_version %q, want %q", path, s.APIVersion, outcomesAPIVersion)
 	}
 
 	if s.Pending == nil {

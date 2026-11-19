@@ -19,7 +19,7 @@ func evenCommits() []string {
 }
 
 func commitVoice() *Voice {
-	return &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
+	return &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindCommitMessage: {Ranges: map[Feature]Range{
 			"item_words_sd":        {P5: 2, P95: 9, Windows: 9},
 			"item_opener_share":    {P5: 0.2, P95: 0.5, Windows: 9},

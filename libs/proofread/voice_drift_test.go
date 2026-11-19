@@ -58,7 +58,7 @@ func TestVoiceDriftAbstains(t *testing.T) {
 	v := authorVoice(t)
 	words := strings.Fields(agentDraft)
 	punctuationOnly := map[Feature]float64{"punctuation.paren": 0, "punctuation.comma": 1}
-	shortWindows := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{KindReviewReply: {
+	shortWindows := &Voice{APIVersion: VoiceSchema, Kinds: map[Kind]VoiceStats{KindReviewReply: {
 		Windows: Windows{punctuationOnly, punctuationOnly, punctuationOnly},
 	}}}
 
