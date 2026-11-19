@@ -6,6 +6,7 @@ import "std";
 import "fs";
 import "proc";
 import "image";
+import "result";
 
 // The OCI platform values are Go's GOOS and GOARCH, so one Platform drives the
 // compiler and the manifest.
@@ -13,21 +14,29 @@ final PLATFORM = image\Platform{ os = image\OS.linux, architecture = image\Archi
 
 // go build for p without cgo. A project with the go spell calls
 // go["go-build"](ctx.withEnv(image\goEnv(p)), ...) instead; see README.md.
-fun goBuild(p: image\Platform, output: str, pkg: str) > void !> any {
+fun goBuild(p: image\Platform, output: str, pkg: str) > result\Result::<bool> {
     final argv: mut [str] = mut [];
-    foreach (key, value in image\goEnv(p)) {
-        argv.append("{key}={value}");
+    try {
+        foreach (key, value in image\goEnv(p)) {
+            argv.append("{key}={value}");
+        }
+        foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, pkg]) {
+            argv.append(arg);
+        }
+        _ = proc\exec("env", args: argv);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, pkg]) {
-        argv.append(arg);
-    }
-    _ = proc\exec("env", args: argv);
+    return result\ok::<bool>(true);
 }
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/linux-amd64/app"]);
-    goBuild(PLATFORM, output: "out/linux-amd64/app", pkg: "./cmd/app");
+    final built = goBuild(PLATFORM, output: "out/linux-amd64/app", pkg: "./cmd/app");
+    if (built.error -> e) {
+        throw e.message;
+    }
 }
 
 // The image keys on the sources that decide the binary, never on build's output:
