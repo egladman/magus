@@ -253,7 +253,7 @@ func TestWriteReportJSON_Schema3(t *testing.T) {
 	writeReportJSON(&buf, findings)
 	out := buf.String()
 	for _, want := range []string{
-		`"schema":3`,
+		`"api_version":"magus.race-report/v1alpha1"`,
 		`"total":1`,
 		`"path":"/ws/shared/bundle.js"`,
 		`"project_a":"api"`,
@@ -272,7 +272,7 @@ func TestWriteReportJSON_EmptySchema3(t *testing.T) {
 	var buf strings.Builder
 	writeReportJSON(&buf, nil)
 	out := buf.String()
-	assert.Contains(t, out, `"schema":3`, "empty findings should still emit schema:3")
+	assert.Contains(t, out, `"api_version":"magus.race-report/v1alpha1"`, "empty findings should still emit the api_version")
 	assert.Contains(t, out, `"total":0`, "empty findings should emit total:0")
 }
 

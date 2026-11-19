@@ -210,8 +210,8 @@ func TestStdioRidesTheContext(t *testing.T) {
 func TestReadRecordsRelaysWhatIsNotARecord(t *testing.T) {
 	r, w := shellPipe(t)
 	go func() {
-		_, _ = w.WriteString(`{"schema":5,"type":"run.scope","label":"a","projects":["a"]}` + "\npayload-1\n\n" +
-			`{"schema":5,"type":"run.target.result","project":"a","target":"emit","status":"ok","cache_hit":false}` + "\npayload-2")
+		_, _ = w.WriteString(`{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"a","projects":["a"]}` + "\npayload-1\n\n" +
+			`{"api_version":"magus.report/v1alpha1","type":"run.target.result","project":"a","target":"emit","status":"ok","cache_hit":false}` + "\npayload-2")
 		_ = w.Close()
 	}()
 	in, err := readRecords(r)

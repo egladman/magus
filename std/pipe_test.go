@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	pipeScopeLine  = `{"schema":5,"type":"run.scope","label":"api","projects":["api"]}`
-	pipeFailedLine = `{"schema":5,"type":"run.target.result","project":"api","target":"test","status":"failed","cache_hit":false,"error":"exit 1","ref":"out0123456789ab"}`
+	pipeScopeLine  = `{"api_version":"magus.report/v1alpha1","type":"run.scope","label":"api","projects":["api"]}`
+	pipeFailedLine = `{"api_version":"magus.report/v1alpha1","type":"run.target.result","project":"api","target":"test","status":"failed","cache_hit":false,"error":"exit 1","ref":"out0123456789ab"}`
 )
 
 func pipeContext(t *testing.T, upstream string) (context.Context, *bytes.Buffer) {
@@ -36,12 +36,12 @@ func TestPipeReadsRecordsInOrder(t *testing.T) {
 	require.True(t, more)
 	first, err := PipeNext(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, types.PipeRecord{Schema: 5, Type: "run.scope", Projects: []string{"api"}, Body: pipeScopeLine}, first)
+	assert.Equal(t, types.PipeRecord{APIVersion: "magus.report/v1alpha1", Type: "run.scope", Projects: []string{"api"}, Body: pipeScopeLine}, first)
 
 	rest, err := PipeAll(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []types.PipeRecord{{
-		Schema: 5, Type: "run.target.result", Project: "api", Target: "test", Status: "failed",
+		APIVersion: "magus.report/v1alpha1", Type: "run.target.result", Project: "api", Target: "test", Status: "failed",
 		Error: "exit 1", Ref: "out0123456789ab", Body: pipeFailedLine,
 	}}, rest)
 
@@ -71,8 +71,8 @@ func TestPipeValue(t *testing.T) {
 		body string
 		want any
 	}{
-		{`{"schema":5,"type":"run.target.value","project":".","target":"describe","value":"v1.2.3"}`, "v1.2.3"},
-		{`{"schema":5,"type":"run.target.value","project":".","target":"listy","value":["alpha","beta"]}`, []any{"alpha", "beta"}},
+		{`{"api_version":"magus.report/v1alpha1","type":"run.target.value","project":".","target":"describe","value":"v1.2.3"}`, "v1.2.3"},
+		{`{"api_version":"magus.report/v1alpha1","type":"run.target.value","project":".","target":"listy","value":["alpha","beta"]}`, []any{"alpha", "beta"}},
 	} {
 		got, err := PipeValue(t.Context(), map[string]any{"type": report.TypeTargetValue, "body": tc.body})
 		require.NoError(t, err)
@@ -128,14 +128,14 @@ func TestExportArtifact(t *testing.T) {
 }
 
 // A record read upstream passes through byte for byte; one a script builds is written as
-// magus writes a record, schema and type first, so the next stage reads it as one.
+// magus writes a record, api_version and type first, so the next stage reads it as one.
 func TestPipeEmit(t *testing.T) {
 	ctx, out := pipeContext(t, "")
 	require.NoError(t, PipeEmit(ctx, map[string]any{"type": "run.target.result", "body": pipeFailedLine}))
 	require.NoError(t, PipeEmit(ctx, map[string]any{
-		"schema": int64(0), "type": "run.scope", "project": "", "projects": []any{"libs/x", "."},
+		"apiVersion": "", "type": "run.scope", "project": "", "projects": []any{"libs/x", "."},
 	}))
-	assert.Equal(t, pipeFailedLine+"\n"+`{"schema":5,"type":"run.scope","projects":["libs/x","."]}`+"\n", out.String())
+	assert.Equal(t, pipeFailedLine+"\n"+`{"api_version":"magus.report/v1alpha1","type":"run.scope","projects":["libs/x","."]}`+"\n", out.String())
 
 	assert.ErrorContains(t, PipeEmit(ctx, map[string]any{"project": "api"}), "needs a type")
 	assert.ErrorContains(t, PipeEmit(ctx, map[string]any{"body": "not json"}), "not a record")

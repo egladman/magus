@@ -24,8 +24,8 @@ func TestNoticeHandlerWritesNoticeEnvelopes(t *testing.T) {
 		slog.String("msg", "push failed"), slog.Int("failures", 2), slog.Any("err", errors.New("unreachable")))
 	log.Info("cache.notice")
 
-	assert.Equal(t, `{"schema":5,"type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"project":"api","remote":{"err":"unreachable","failures":2,"msg":"push failed"}}}
-{"schema":5,"type":"run.notice","level":"info","msg":"cache.notice"}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"project":"api","remote":{"err":"unreachable","failures":2,"msg":"push failed"}}}
+{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"cache.notice"}
 `, buf.String())
 }
 
@@ -37,8 +37,8 @@ func TestNoticeLevelsAreTheDocumentedNames(t *testing.T) {
 	log := slog.New(NewNoticeHandler(NewLineEncoder(&buf), slog.LevelDebug-4))
 	log.Log(context.Background(), slog.LevelDebug-4, "trace")
 	log.Log(context.Background(), slog.LevelError+4, "fatal")
-	assert.Equal(t, `{"schema":5,"type":"run.notice","level":"debug","msg":"trace"}
-{"schema":5,"type":"run.notice","level":"error","msg":"fatal"}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"debug","msg":"trace"}
+{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"error","msg":"fatal"}
 `, buf.String())
 }
 
@@ -66,7 +66,7 @@ func TestNoticeHandlerKeepsARecordItCannotEncode(t *testing.T) {
 	var buf bytes.Buffer
 	slog.New(NewNoticeHandler(NewLineEncoder(&buf), slog.LevelInfo)).Warn("cache.warn", slog.Any("fn", func() {}))
 	line := buf.String()
-	assert.True(t, strings.HasPrefix(line, `{"schema":5,"type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"encode_error":`), line)
+	assert.True(t, strings.HasPrefix(line, `{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"encode_error":`), line)
 }
 
 // Output written outside any capture becomes one info record per line, past the
@@ -77,7 +77,7 @@ func TestLineNoticesRecordsEachLine(t *testing.T) {
 	w := NewLineNotices(context.Background(), NewNoticeHandler(NewLineEncoder(&buf), slog.LevelError), "stdout")
 	_, _ = fmt.Fprint(w, "one\ntw")
 	_, _ = fmt.Fprint(w, "o\n")
-	assert.Equal(t, `{"schema":5,"type":"run.notice","level":"info","msg":"one","attrs":{"stream":"stdout"}}
-{"schema":5,"type":"run.notice","level":"info","msg":"two","attrs":{"stream":"stdout"}}
+	assert.Equal(t, `{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"one","attrs":{"stream":"stdout"}}
+{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"info","msg":"two","attrs":{"stream":"stdout"}}
 `, buf.String())
 }

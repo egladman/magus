@@ -39,7 +39,7 @@ func TestWriter_RecordAndClose(t *testing.T) {
 	require.NoError(t, Record(w, TargetResult{Status: "ok", CacheHit: true, Project: "p", Target: "build"}))
 	require.NoError(t, w.Close())
 	out := buf.String()
-	assert.Contains(t, out, `"schema"`, "output missing schema field")
+	assert.Contains(t, out, `"api_version"`, "output missing api_version field")
 	assert.Contains(t, out, TypeTargetResult, "output missing event type")
 }
 
@@ -68,5 +68,5 @@ func TestWriter_CloseRecordsTheDropCount(t *testing.T) {
 	dropped := w.Stats().Dropped
 	require.NotZero(t, dropped)
 	lines := strings.Split(strings.TrimSpace(g.buf.String()), "\n")
-	assert.Equal(t, fmt.Sprintf(`{"schema":5,"type":"run.notice","level":"error","msg":"%d events dropped","attrs":{"component":"report"}}`, dropped), lines[len(lines)-1])
+	assert.Equal(t, fmt.Sprintf(`{"api_version":"magus.report/v1alpha1","type":"run.notice","level":"error","msg":"%d events dropped","attrs":{"component":"report"}}`, dropped), lines[len(lines)-1])
 }

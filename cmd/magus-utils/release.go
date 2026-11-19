@@ -155,10 +155,17 @@ type ReleaseArtifact struct {
 	SHA256 string `yaml:"sha256" json:"sha256"`
 }
 
+// releaseIndexAPIVersion is the constant of that name in internal/selfupdate, spelled again because this
+// command does not import the client; a test pins the pair.
+const releaseIndexAPIVersion = "magus.release-index/v1alpha1"
+
 // ReleaseIndex is the machine-readable index served at public/release/index.json
 // and read by `magus self update`. The URL and schema are frozen at birth;
 // additive changes only.
 type ReleaseIndex struct {
+	APIVersion string `json:"api_version"`
+	// compat(until: no supported release reads schema_version): the number a client through
+	// v0.4.3 reads to accept the file.
 	SchemaVersion int      `json:"schema_version"`
 	KeyID         string   `json:"key_id"`
 	Revoked       []string `json:"revoked,omitzero"`
@@ -202,6 +209,7 @@ type IndexRelease struct {
 // order it preserves is loadManifests's, which is a total order over the manifest set.
 func buildIndex(manifests []ReleaseManifest, keyID, expiresAt string, revoked []string) ReleaseIndex {
 	idx := ReleaseIndex{
+		APIVersion:    releaseIndexAPIVersion,
 		SchemaVersion: 1,
 		KeyID:         keyID,
 		Revoked:       revoked,

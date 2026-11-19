@@ -13,7 +13,7 @@ const APIVersion types.APIVersion = "magus.broker/v1alpha1"
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
 // a connection that cannot say it is a broker client is closed before it can send one.
-const helloMagic = "magus-broker-v1"
+const helloMagic = "magus.broker-hello/v1alpha1"
 
 // Frame types. A request carries a non-zero ID and its reply echoes it, so one
 // connection carries any number of requests at once. A request the broker parks gets a
@@ -198,7 +198,7 @@ type shutdownRequest struct {
 }
 
 // shutdownMagic is the value shutdownRequest.Magic must carry.
-const shutdownMagic = "magus-broker-shutdown-v1"
+const shutdownMagic = "magus.broker-shutdown/v1alpha1"
 
 // crashWatchRequest asks the broker to watch this process for a crash. The frame carries
 // two file descriptors beside it: the read end of the pipe the process's runtime copies

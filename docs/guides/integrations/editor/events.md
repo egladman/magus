@@ -26,12 +26,12 @@ mid-edit, which is exactly when someone wants it.
 Envelope fields and the event's own fields sit at one level:
 
 ```json
-{"schema":1,"type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
+{"api_version":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
 ```
 
 | field       | meaning                                                           |
 | ----------- | ----------------------------------------------------------------- |
-| `schema`    | envelope version; see [Compatibility](#compatibility)             |
+| `api_version` | envelope version; see [Compatibility](#compatibility)             |
 | `type`      | what kind of fact this is                                         |
 | `ts`        | unix milliseconds                                                 |
 | `workspace` | absolute repository root, so a subscriber can watch more than one |
@@ -51,7 +51,7 @@ attention requests and guard verdicts are all facts magus records somewhere, and
 each is a candidate, but a type you can name and never receive is worse than one
 that does not exist, because a silent stream and a wrong filter look identical.
 They arrive when their producer does. Adding a type is additive and does not bump
-`schema`, so nothing you write today breaks when they land.
+`api_version`, so nothing you write today breaks when they land.
 
 `run.finished` carries no duration. Correlate it with its `run.started` by `inv`
 and subtract the two `ts` values; you are holding the pair anyway.
@@ -116,9 +116,9 @@ the next run starts.
 what lets magus add an event type without breaking clients built against an
 earlier release, and it is the only thing asked of an integration.
 
-`schema` is bumped when a field is renamed or removed, or when an existing field
+`api_version` moves to a new version string (`v1alpha1` to `v1alpha2`) when a field is renamed or removed, or when an existing field
 changes meaning. Adding a type, or adding an optional field to an existing type,
-is additive and does not bump it.
+is additive and keeps it.
 
 ## What the stream is not
 

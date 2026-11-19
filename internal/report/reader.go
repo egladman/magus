@@ -11,12 +11,13 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/types"
 )
 
 // Line is one record as another magus stage wrote it.
 type Line struct {
-	Schema int
-	Type   string
+	APIVersion types.APIVersion
+	Type       string
 	// Raw is the record's JSON object, without its newline.
 	Raw []byte
 }
@@ -26,18 +27,18 @@ func (l Line) Decode(v any) error { return codec.Unmarshal(l.Raw, v) }
 
 // recordPrefix opens every line a magus writes as a record (see envelope.appendJSONL).
 // Requiring it keeps a JSON line some other program printed from reading as a record.
-const recordPrefix = `{"schema":`
+const recordPrefix = `{"api_version":`
 
 // ParseLine reads one record line. A line that is not a record as magus writes one, a
-// JSON object opening with its schema and carrying a type, is an error.
+// JSON object opening with its api_version and carrying a type, is an error.
 func ParseLine(b []byte) (Line, error) {
 	b = bytes.TrimSpace(b)
 	if !bytes.HasPrefix(b, []byte(recordPrefix)) {
 		return Line{}, fmt.Errorf("report: not a record: no leading %s", recordPrefix)
 	}
 	var head struct {
-		Schema int    `json:"schema"`
-		Type   string `json:"type"`
+		APIVersion types.APIVersion `json:"api_version"`
+		Type       string           `json:"type"`
 	}
 	if err := codec.Unmarshal(b, &head); err != nil {
 		return Line{}, fmt.Errorf("report: not a record: %w", err)
@@ -45,7 +46,7 @@ func ParseLine(b []byte) (Line, error) {
 	if head.Type == "" {
 		return Line{}, errors.New("report: not a record: no type")
 	}
-	return Line{Schema: head.Schema, Type: head.Type, Raw: bytes.Clone(b)}, nil
+	return Line{APIVersion: head.APIVersion, Type: head.Type, Raw: bytes.Clone(b)}, nil
 }
 
 // EncodeLine writes l as it was read, so a record passed through a stage reaches the
