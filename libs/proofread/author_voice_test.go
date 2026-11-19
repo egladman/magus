@@ -251,17 +251,19 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 	issue := func(body string) string {
 		return `{"api_version":"proofread.voice/v1alpha1","kinds":{"issue":` + body + `}}`
 	}
-	rebuild := ": voice file is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"
+	rebuild := func(schema string) string {
+		return "voice file is from an earlier proofread: schema " + schema + ": rerun `proofread voice build` to rebuild the voice file"
+	}
 
 	cases := map[string]struct{ body, want string }{
 		"the first version": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`,
-			`schema "proofread-voice/1"` + rebuild},
+			rebuild(`"proofread-voice/1"`)},
 		"one cut for every window": {
 			`{"schema":"proofread-voice/2","kinds":{"issue":{"windows":{"count":1,"values":{},"cut":1}}}}`,
-			`schema "proofread-voice/2"` + rebuild,
+			rebuild(`"proofread-voice/2"`),
 		},
-		"windows without ranges":   {`{"schema":"proofread-voice/3","kinds":{}}`, `schema "proofread-voice/3"` + rebuild},
-		"the last numbered schema": {`{"schema":"proofread-voice/4","kinds":{}}`, `schema "proofread-voice/4"` + rebuild},
+		"windows without ranges":   {`{"schema":"proofread-voice/3","kinds":{}}`, rebuild(`"proofread-voice/3"`)},
+		"the last numbered schema": {`{"schema":"proofread-voice/4","kinds":{}}`, rebuild(`"proofread-voice/4"`)},
 		"another schema":           {`{"api_version":"proofread.voice/v9","kinds":{}}`, `api_version "proofread.voice/v9" is not proofread.voice/v1alpha1`},
 		"an unknown kind": {`{"api_version":"proofread.voice/v1alpha1","kinds":{"guide":{}}}`,
 			"a voice measures change-description, review-reply, commit-message and issue, not guide"},

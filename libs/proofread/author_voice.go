@@ -226,8 +226,8 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 
 	switch {
 	case head.Schema != nil:
-		return nil, fmt.Errorf("schema %q: %w: rerun `proofread voice build` to rebuild the voice file",
-			*head.Schema, ErrOldVoice)
+		return nil, fmt.Errorf("%w: schema %q: rerun `proofread voice build` to rebuild the voice file",
+			ErrOldVoice, *head.Schema)
 	case head.APIVersion != VoiceSchema:
 		return nil, fmt.Errorf("api_version %q is not %s", head.APIVersion, VoiceSchema)
 	}
