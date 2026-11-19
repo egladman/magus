@@ -125,6 +125,7 @@ linters:
     - hostagnostic
     - hostvocab
     - ruletext
+    - accessorclone
     - asciistrings
     - benchbeside
     - blankerror
@@ -492,6 +493,15 @@ linters:
             - std/archive.go
             - std/buzz_signature.go
             - internal/cache/output.go
+
+      accessorclone:
+        type: module
+        description: reports an exported accessor that returns its own slice or map instead of a copy
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          baseline: hack/lint/accessor-clone.jsonl
+          hint: "do not add a line to hack/lint/accessor-clone.jsonl or a //nolint: only a person types a baseline line"
 
       blankerror:
         type: module

@@ -1,0 +1,16 @@
+{"path":"internal/interactive/difftui/model.go","symbol":"Model.Rows"}
+{"path":"internal/job/evidence/graph.go","symbol":"Graph.StaleIndexes"}
+{"path":"internal/selfupdate/keyring.go","symbol":"Keyring.Without"}
+{"path":"spells/spell.go","symbol":"Spell.DeclarationDirGlobs"}
+{"path":"spells/spell.go","symbol":"Spell.DeclarationFiles"}
+{"path":"spells/spell.go","symbol":"Spell.DocRequiredTargets"}
+{"path":"spells/spell.go","symbol":"Spell.IgnoreDirs"}
+{"path":"spells/spell.go","symbol":"Spell.LanguageExtensions"}
+{"path":"spells/spell.go","symbol":"Spell.Manifests"}
+{"path":"spells/spell.go","symbol":"Spell.Outputs"}
+{"path":"spells/spell.go","symbol":"Spell.ScriptRunners"}
+{"path":"spells/spell.go","symbol":"Spell.Sources"}
+{"path":"spells/spell.go","symbol":"Spell.TargetSources"}
+{"path":"spells/spell.go","symbol":"Spell.Targets"}
+{"path":"types/describe.go","symbol":"Chain.Needs"}
+{"path":"types/output.go","symbol":"StoredOutput.Bytes"}
