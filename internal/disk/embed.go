@@ -2,12 +2,12 @@ package disk
 
 import _ "embed"
 
-// ReclaimDiskSource is the magus/reclaimdisk module's Buzz source.
+// ReclaimSource is the magus/reclaimdisk module's Buzz source.
 //
 //go:embed reclaimdisk.buzz
-var ReclaimDiskSource string
+var ReclaimSource string
 
-// DiskWatchSource is the magus/diskwatch module's Buzz source.
+// WatchSource is the magus/diskwatch module's Buzz source.
 //
 //go:embed diskwatch.buzz
-var DiskWatchSource string
+var WatchSource string

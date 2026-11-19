@@ -39,13 +39,13 @@ var sourceBuiltin = []SourceModule{
 		Name:   "diskwatch",
 		Path:   "magus/diskwatch",
 		Doc:    "The cheap half of disk reclaiming: the per-user store of free-space samples, what a sample asks for, the fence a cache trim keeps, and the lines a person reads.",
-		Source: diskmod.DiskWatchSource,
+		Source: diskmod.WatchSource,
 	},
 	{
 		Name:   "reclaimdisk",
 		Path:   "magus/reclaimdisk",
 		Doc:    "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every disk trigger calls, and trims only what a spell gives a budget.",
-		Source: diskmod.ReclaimDiskSource,
+		Source: diskmod.ReclaimSource,
 	},
 	{
 		Name:   resultsrc.ModulePath,
