@@ -1,5 +1,6 @@
 import "magus";
 import "proc";
+import "result";
 import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/toolchain-policy" as policy;
 import "../hack/magusfile/index" as index;
@@ -131,23 +132,33 @@ final SHELL_CSS = ["console.css"];
 // appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
 // gen/<id>/<id>.js, the path the shell loads it from. An app whose manifest (app.ts) says
 // kind: "shell" ships inside console.js, so it gets none. apps.test.ts pins the pairing.
-fun appBundles() > [[str]] !> any {
-    final bundles = mut [<[str]>];
-    foreach (entry in fs\glob("src/apps/*/main.ts")) {
-        final dir = fs\dirname(entry.value);
-        if (fs\readFile(fs\join(dir, "app.ts")).indexOf("kind: \"shell\"") != null) { continue; }
-        final id = fs\basename(dir);
-        bundles.append([entry.value, "gen/" + id + "/" + id + ".js"]);
+fun appBundles() > result\Result::<[[str]]> {
+    try {
+        final bundles = mut [<[str]>];
+        foreach (entry in fs\glob("src/apps/*/main.ts")) {
+            final dir = fs\dirname(entry.value);
+            if (fs\readFile(fs\join(dir, "app.ts")).indexOf("kind: \"shell\"") != null) { continue; }
+            final id = fs\basename(dir);
+            bundles.append([entry.value, "gen/" + id + "/" + id + ".js"]);
+        }
+        return result\ok::<[[str]]>(bundles);
+    } catch (err: any) {
+        return result\caught::<[[str]]>(err, doing: "list the app bundles");
     }
-    return bundles;
 }
 
-fun copyInto(files: [str], dir: str) > void !> any {
-    fs\mkdirAll(dir);
-    foreach (f in files) {
-        fs\copyFile(f, fs\join(dir, fs\basename(f)));
+fun copyInto(files: [str], dir: str) > result\Result::<bool> {
+    try {
+        fs\mkdirAll(dir);
+        foreach (f in files) {
+            fs\copyFile(f, fs\join(dir, fs\basename(f)));
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "copy into {dir}");
     }
 }
+
 
 // build bundles the app into gen/ with esbuild, copies the static shell beside it, and
 // stamps the service worker.
@@ -166,10 +177,13 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
         "gen/wasm/buzz.wasm", "gen/wasm/wasm_exec.js",
         "gen/*/index.html"]);
     // Copied before the bundles: stamp-build.mjs hashes every precached file.
-    copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
-             dir: fs\join("gen", "graph"));
+    final copy1 = copyInto([fs\join("..", "gen", "knowledge-graph.json"), fs\join("..", "gen", "target-graph.json")],
+           dir: fs\join("gen", "graph"));
+    if (copy1.error != null) { throw copy1.error!.message; }
 
-    foreach (b in [["src/desktop/main.ts", "gen/console.js"]] + appBundles()) {
+    final apps = appBundles();
+    if (apps.error != null) { throw apps.error!.message; }
+    foreach (b in [["src/desktop/main.ts", "gen/console.js"]] + apps.value!) {
         typescript["esbuild"](ctx, {"args": [b[0], "--bundle", "--minify", "--format=esm", "--outfile=" + b[1]]});
     }
     typescript["esbuild"](ctx, {"args": ["src/theme.ts", "--minify", "--outfile=gen/theme.js"]});
@@ -188,16 +202,20 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
         typescript["esbuild"](ctx, {"args": [c.value, "--bundle", "--minify", "--outfile=" + outfile]});
     }
 
-    copyInto(["index.html", "manifest.webmanifest", "sw.js"], dir: "gen");
+    final copy2 = copyInto(["index.html", "manifest.webmanifest", "sw.js"], dir: "gen");
+    if (copy2.error != null) { throw copy2.error!.message; }
     final assets = mut [<str>];
     foreach (a in fs\glob("src/assets/*")) { assets.append(a.value); }
-    copyInto(assets, dir: fs\join("gen", "assets"));
+    final copy3 = copyInto(assets, dir: fs\join("gen", "assets"));
+    if (copy3.error != null) { throw copy3.error!.message; }
     foreach (scaffold in fs\glob("src/apps/*/scaffold.html")) {
-        copyInto([scaffold.value], dir: fs\join("gen", fs\basename(fs\dirname(scaffold.value))));
+        final copy4 = copyInto([scaffold.value], dir: fs\join("gen", fs\basename(fs\dirname(scaffold.value))));
+        if (copy4.error != null) { throw copy4.error!.message; }
     }
-    copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
-              fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
-             dir: fs\join("gen", "wasm"));
+    final copy5 = copyInto([fs\join("..", "docs", "gen", "playground", "buzz.wasm"),
+            fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
+           dir: fs\join("gen", "wasm"));
+    if (copy5.error != null) { throw copy5.error!.message; }
 
     _ = proc\exec("node", ["scripts/app-stubs.mjs"], ".");
     // Last: it hashes every file above into sw.js's precache stamp.
@@ -221,35 +239,40 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
     _ = proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".");
-    judgeCssComments();
+    final judged = judgeCssComments();
+    if (judged.error != null) { throw judged.error!.message; }
     _ = proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".");
 }
 
 // judgeCssComments holds the comments of every stylesheet to proofread's stylesheet rules
 // under this repository's decisions table (the comment budget, a comment that repeats its
 // code, banned words and the writing rules of docs/conventions.md) and fails on a deny.
-fun judgeCssComments() > void !> any {
-    final args = mut ["stylesheet", "--decisions","../hack/policy/gen/proofread-decisions.json"];
-    foreach (f in fs\glob("src/**/*.css")) {
-        args.append(f.value);
+fun judgeCssComments() > result\Result::<bool> {
+    try {
+        final args = mut ["stylesheet", "--decisions","../hack/policy/gen/proofread-decisions.json"];
+        foreach (f in fs\glob("src/**/*.css")) {
+            args.append(f.value);
+        }
+        final run = proc\exec("../libs/proofread/gen/proofread", args: args, dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        if (run.code != 0) {
+            return result\fail::<bool>("lint: proofread exited {run.code} on the stylesheets: " + run.stderr.trim());
+        }
+        final found: [any] = json\parse(run.stdout);
+        final rows = found.filter(fun (i: int, r: any) > bool => (r["decision"] ?? "") == "deny");
+        if (rows.len() == 0) {
+            return result\ok::<bool>(true);
+        }
+        final lines = mut [<str>];
+        foreach (r in rows) {
+            final source: str = r["source"] ?? "";
+            final said: str = r["message"] ?? "";
+            final rule: str = r["rule"] ?? "";
+            lines.append("{source}: {said} [{rule}]");
+        }
+        return result\fail::<bool>("lint: {rows.len()} CSS comment finding(s) against the proofread rules (docs/conventions.md):\n  " + lines.join("\n  "));
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "judge the stylesheet comments");
     }
-    final run = proc\exec("../libs/proofread/gen/proofread", args: args, dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
-    if (run.code != 0) {
-        throw "lint: proofread exited {run.code} on the stylesheets: " + run.stderr.trim();
-    }
-    final found: [any] = json\parse(run.stdout);
-    final rows = found.filter(fun (i: int, r: any) > bool => (r["decision"] ?? "") == "deny");
-    if (rows.len() == 0) {
-        return;
-    }
-    final lines = mut [<str>];
-    foreach (r in rows) {
-        final source: str = r["source"] ?? "";
-        final said: str = r["message"] ?? "";
-        final rule: str = r["rule"] ?? "";
-        lines.append("{source}: {said} [{rule}]");
-    }
-    throw "lint: {rows.len()} CSS comment finding(s) against the proofread rules (docs/conventions.md):\n  " + lines.join("\n  ");
 }
 
 // `format:rw` maintains declared source inputs.

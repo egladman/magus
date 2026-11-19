@@ -19,8 +19,19 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// stampBuild rewrites <dir>/sw.js in place and returns the digest it stamped.
+// stampBuild rewrites <dir>/sw.js in place and returns {value: digest}, or {error} when the worker
+// cannot be stamped. Every failure is an error rather than a silent no-op: a worker left on
+// "unstamped" forever is the bug this replaced.
 export function stampBuild(dir) {
+  try {
+    return stamp(dir);
+  } catch (error) {
+    return { error };
+  }
+}
+
+// stamp holds the fs boundary stampBuild catches: a missing sw.js or precached file rejects here.
+function stamp(dir) {
   const swPath = join(dir, "sw.js");
   const sw = readFileSync(swPath, "utf8");
 
@@ -28,11 +39,13 @@ export function stampBuild(dir) {
   // copy here. Two lists would drift, and the one that matters is the worker's.
   const listMatch = sw.match(/const PRECACHE = \[([\s\S]*?)\];/);
   if (!listMatch) {
-    throw new Error("stamp-build: no PRECACHE array in " + swPath);
+    return { error: new Error("stamp-build: no PRECACHE array in " + swPath) };
   }
   const files = [...listMatch[1].matchAll(/BASE \+ "([^"]+)"/g)].map((m) => m[1]).sort();
   if (files.length === 0) {
-    throw new Error("stamp-build: PRECACHE names no files; refusing to stamp a digest of nothing");
+    return {
+      error: new Error("stamp-build: PRECACHE names no files; refusing to stamp a digest of nothing"),
+    };
   }
 
   const h = createHash("sha256");
@@ -46,13 +59,17 @@ export function stampBuild(dir) {
 
   const stamped = sw.replace(/const BUILD_ID = "[^"]*";/, 'const BUILD_ID = "' + id + '";');
   if (stamped === sw) {
-    throw new Error("stamp-build: no BUILD_ID assignment in " + swPath);
+    return { error: new Error("stamp-build: no BUILD_ID assignment in " + swPath) };
   }
   writeFileSync(swPath, stamped);
-  return id;
+  return { value: id };
 }
 
 // Entry point when run as a script from console/ (see package.json copy-static).
 if (process.argv[1] && process.argv[1].endsWith("stamp-build.mjs")) {
-  stampBuild(process.argv[2] || "gen");
+  const stamped = stampBuild(process.argv[2] || "gen");
+  if (stamped.error) {
+    process.stderr.write(`${stamped.error.message}\n`);
+    process.exitCode = 1;
+  }
 }

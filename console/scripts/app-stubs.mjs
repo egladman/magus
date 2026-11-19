@@ -16,23 +16,39 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// appSegments lists every clean path segment the app manifests under appsDir declare.
-export async function appSegments(appsDir = "src/apps") {
-  const segments = [];
-  for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const mod = await import(pathToFileURL(resolve(appsDir, entry.name, "app.ts")).href);
-    const [app] = Object.values(mod);
-    if (app.path) segments.push(app.path);
-    segments.push(...Object.keys(app.modes ?? {}));
+// appSegments lists every clean path segment the app manifests under appsDir declare, as
+// {value: segments} or {error} when a manifest cannot be read or loaded. It is not itself async so
+// that its answer is the one the caller awaits: the import and fs boundaries are caught in listSegments.
+export function appSegments(appsDir = "src/apps") {
+  return listSegments(appsDir);
+}
+
+async function listSegments(appsDir) {
+  try {
+    const segments = [];
+    for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const mod = await import(pathToFileURL(resolve(appsDir, entry.name, "app.ts")).href);
+      const [app] = Object.values(mod);
+      if (app.path) segments.push(app.path);
+      segments.push(...Object.keys(app.modes ?? {}));
+    }
+    return { value: segments.sort() };
+  } catch (error) {
+    return { error };
   }
-  return segments.sort();
 }
 
 if (process.argv[1]?.endsWith("app-stubs.mjs")) {
   const shell = readFileSync("index.html", "utf8").replace("<head>", '<head>\n  <base href="../">');
-  for (const segment of await appSegments()) {
-    mkdirSync(join("gen", segment), { recursive: true });
-    writeFileSync(join("gen", segment, "index.html"), shell);
+  const listed = await appSegments();
+  if (listed.error) {
+    process.stderr.write(`app-stubs: cannot list the app segments: ${listed.error.message}\n`);
+    process.exitCode = 1;
+  } else {
+    for (const segment of listed.value) {
+      mkdirSync(join("gen", segment), { recursive: true });
+      writeFileSync(join("gen", segment, "index.html"), shell);
+    }
   }
 }
