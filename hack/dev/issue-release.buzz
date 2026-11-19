@@ -136,13 +136,7 @@ fun at(m: Mod) > str {
 
 // rehearse runs the target without the cd charm, so it changes nothing.
 fun rehearse(release: [str]) > magus\ExecResult !> any {
-    final dry = fun () > any !> any {
-        return magus\run(["release", ".", "--"] + release, opts: magus\CommandOptions{ quiet = true, allowFailure = true });
-    };
-    if (term\isInteractive()) {
-        return term\spin("dry run: magus run release", dry);
-    }
-    return dry();
+    return magus\run(["release", ".", "--"] + release, opts: magus\CommandOptions{ quiet = true, allowFailure = true });
 }
 
 export fun main(args: [str]) > void !> any {
@@ -210,7 +204,10 @@ export fun main(args: [str]) > void !> any {
     }
 
     std\print("releasing: {release.join(" ")}");
-    final dry = rehearse(release);
+    final spun = fun () > any !> any {
+        return rehearse(release);
+    };
+    final dry: magus\ExecResult = if (term\isInteractive()) term\spin("dry run: magus run release", run: spun) else rehearse(release);
     final checks = parseChecks(dry.stdout + "\n" + dry.stderr);
     foreach (line in renderTable(checks)) {
         std\print(line);
