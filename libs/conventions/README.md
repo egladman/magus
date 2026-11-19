@@ -10,7 +10,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                                                    |
 | `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                                   |
 | `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                              |
-| `accessorclone` | an exported accessor returning its own slice or map instead of `slices.Clone`, `maps.Clone` or an iterator; today's cases sit in a baseline that only shrinks |
+| `accessorclone` | an exported accessor returning its own slice or map instead of `slices.Clone`, `maps.Clone` or an iterator; today's cases sit in the `policy` file's baseline, which only shrinks |
 | `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                                        |
 | `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                                           |
 | `stutter`       | an exported package-level name opening with its package's name                                                                              |
@@ -29,7 +29,10 @@ Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
 policy. No diagnostic names this repository's identifiers or paths on its own: an
 analyzer whose remedy is repository-specific takes a `hint` setting, appended to
-each of its diagnostics.
+each of its diagnostics. An analyzer with a baseline or exits a person types
+(`accessorclone`) reads them, with its `hint`, from its own key of a YAML policy
+file the `policy` setting names; in this repository that file is
+`hack/lint/analyzers.yaml`.
 
 `diagmsg` holds a `log/slog` message to the tag rule alone, and never lets an
 allowlist exempt one: a record names what logged it with `attr.Component`, not a

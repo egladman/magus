@@ -500,8 +500,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
-          baseline: hack/lint/accessor-clone.jsonl
-          hint: "do not add a line to hack/lint/accessor-clone.jsonl or a //nolint: only a person types a baseline line"
+          policy: hack/lint/analyzers.yaml
 
       blankerror:
         type: module
