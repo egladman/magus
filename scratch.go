@@ -60,9 +60,9 @@ func fileNamed(files []coverage.File, name string) coverage.File {
 	return files[i]
 }
 
-// baseProfileVersion keys the kept base profiles; bump it when what a
+// baseProfileVersion keys the kept base profiles; replace it when what a
 // profile holds changes meaning.
-const baseProfileVersion = "2"
+const baseProfileVersion = "magus.base-profile/v1alpha1"
 
 // keptProfilesDir holds the base profiles inside the workspace store, which
 // every checkout shares.

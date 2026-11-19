@@ -15,8 +15,8 @@ import (
 	"unicode/utf8"
 )
 
-// Version is hashed into every seed. Changing a mix below means a new version.
-const Version = "fim/v1"
+// Version is hashed into every seed. Changing a mix below means a new version string.
+const Version = "train.fim/v1alpha1"
 
 const (
 	// PrefixWindow and SuffixWindow match what the editor sends: 6,000 B before the

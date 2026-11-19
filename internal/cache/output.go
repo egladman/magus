@@ -98,7 +98,7 @@ type OutputDescriptor struct {
 	// Ref is the key-derived portable id shared by every attempt of the step; the
 	// fields below carry the identity it derives from.
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
-	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
+	KeyVersion   string `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 	// PersistedNs orders attempts that share a TimestampMs: unix nanoseconds at Persist,

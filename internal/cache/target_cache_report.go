@@ -22,7 +22,7 @@ type TargetCacheReport struct {
 	Target       string        `json:"target"`
 	Charms       []string      `json:"charms,omitempty"`
 	Key          string        `json:"key"`
-	KeyVersion   int           `json:"key_version"`
+	KeyVersion   string        `json:"key_version"`
 	Ref          string        `json:"ref"`
 	ClassDigests []ClassDigest `json:"class_digests"`
 	// KeyInputs is the masked line-by-line key, present only with --inputs. The class
@@ -193,7 +193,7 @@ func WriteTargetCacheReports(w io.Writer, reports []TargetCacheReport) {
 		if len(r.Charms) > 0 {
 			fmt.Fprintf(w, "  charms: %s\n", strings.Join(r.Charms, ","))
 		}
-		fmt.Fprintf(w, "  key:    %s (keyVersion %d)\n", r.Key, r.KeyVersion)
+		fmt.Fprintf(w, "  key:    %s (keyVersion %s)\n", r.Key, r.KeyVersion)
 		fmt.Fprintf(w, "  ref:    %s (what a run of these exact inputs prints)\n", r.Ref)
 		fmt.Fprintln(w, "  components:")
 		for _, d := range r.ClassDigests {

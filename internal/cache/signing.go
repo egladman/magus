@@ -63,9 +63,9 @@ type sigEnvelope struct {
 // the first thing hashed, so a signature made in one domain can never verify in the
 // other.
 const (
-	domainArtifact = "magus-cache-artifact-v1\x00"
-	domainBundle   = "magus-output-bundle-v1\x00"
-	domainObject   = "magus-remote-object-v1\x00" // a RemoteNamespace object, e.g. a knowledge shard
+	domainArtifact = "magus.cache-artifact/v1alpha1\x00"
+	domainBundle   = "magus.output-bundle/v1alpha1\x00"
+	domainObject   = "magus.remote-object/v1alpha1\x00" // a RemoteNamespace object, e.g. a knowledge shard
 )
 
 // signedPayload renders the exact bytes a signature covers: the domain tag, the

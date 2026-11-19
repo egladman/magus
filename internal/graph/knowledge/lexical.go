@@ -39,7 +39,7 @@ const lexicalSidecarDir = "lexical"
 
 // lexicalFormat versions lexicalShardsKey, so an index written under another layout or
 // tokenization never binds.
-const lexicalFormat = 1
+const lexicalFormat = "magus.lexical-index/v1alpha1"
 
 // lexicalIndexHeader is the index file's first line.
 type lexicalIndexHeader struct {
@@ -178,7 +178,7 @@ func lexicalShardsKey(man *manifest) string {
 		return ""
 	}
 	slices.Sort(names)
-	buf := []byte{lexicalFormat}
+	buf := appendField(nil, lexicalFormat)
 	for _, name := range names {
 		buf = appendField(buf, name)
 		buf = appendField(buf, man.Shards[name].Fingerprint)

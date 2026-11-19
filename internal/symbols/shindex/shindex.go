@@ -21,7 +21,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "shindex 3"
+const formatVersion = "magus.shindex/v1alpha1"
 
 // scheme is the SCIP scheme of every symbol the indexer names, the Go indexer's too.
 const scheme = "magus"

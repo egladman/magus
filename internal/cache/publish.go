@@ -55,13 +55,13 @@ const bundleManifestName = "output.json"
 // OutputBundle is the metadata half of a published output: the run's descriptor plus
 // the key inputs behind it. The captured bytes travel beside it as a separate member.
 type OutputBundle struct {
-	Schema     int              `json:"schema"`
+	Schema     string           `json:"schema"`
 	Descriptor OutputDescriptor `json:"descriptor"`
 	KeyInputs  []string         `json:"key_inputs,omitempty"`
 }
 
 // bundleSchema is the OutputBundle wire version.
-const bundleSchema = 1
+const bundleSchema = "magus.output-bundle/v1alpha1"
 
 // bundleOutputName is the member holding the captured output bytes verbatim.
 const bundleOutputName = "output.log"
@@ -266,7 +266,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 		return nil, OutputBundle{}, fmt.Errorf("output bundle: parse: %w", err)
 	}
 	if b.Schema != bundleSchema {
-		return nil, OutputBundle{}, fmt.Errorf("output bundle: unsupported schema %d (this magus reads %d)", b.Schema, bundleSchema)
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: unsupported schema %q (this magus reads %q)", b.Schema, bundleSchema)
 	}
 	if b.Descriptor.Ref == "" {
 		return nil, OutputBundle{}, errors.New("output bundle: descriptor carries no ref")

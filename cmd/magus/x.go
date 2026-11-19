@@ -9,7 +9,6 @@ import (
 	"os"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -302,8 +301,8 @@ func reportForeignMachine(ctx context.Context, m *magus.Magus, sink *magus.Sink,
 	}
 
 	add("platform", d.Platform, runtime.GOOS+"/"+runtime.GOARCH)
-	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
-		rows = append(rows, row{"key version", strconv.Itoa(d.KeyVersion), strconv.Itoa(magus.CacheKeyVersion)})
+	if d.KeyVersion != "" && d.KeyVersion != magus.CacheKeyVersion {
+		rows = append(rows, row{"key version", d.KeyVersion, magus.CacheKeyVersion})
 	}
 	add("magus", d.MagusVersion, version)
 	vcsName, head, _ := m.CurrentRevision(ctx)
@@ -324,7 +323,7 @@ func reportForeignMachine(ctx context.Context, m *magus.Magus, sink *magus.Sink,
 	if d.Platform != "" && d.Platform != runtime.GOOS+"/"+runtime.GOARCH {
 		b.WriteString("  sources hash identically across platforms, so the artifact would be refused on import\n")
 	}
-	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
+	if d.KeyVersion != "" && d.KeyVersion != magus.CacheKeyVersion {
 		b.WriteString("  the two keys were computed by different key versions and can never match\n")
 	}
 

@@ -291,7 +291,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 	got := newOutputDescriptor(cache.OutputDescriptor{
 		Ref: "outdeadbe", Project: "api", Target: "build", Inv: "inv1",
 		Failed: true, ErrMsg: "exit 1", TimestampMs: 1700000000000, DurationMs: 1234,
-		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
+		Key: "abc123", KeyVersion: "magus.cache-key/v1alpha0", Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
 		Lease: "wave/api",
@@ -300,7 +300,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 	assert.Equal(t, OutputDescriptor{
 		Ref: "outdeadbe", Project: "api", Target: "build", Inv: "inv1",
 		Failed: true, ErrMsg: "exit 1", TimestampMs: 1700000000000, DurationMs: 1234,
-		Key: "abc123", KeyVersion: 7, Attempt: "att1", MagusVersion: "v0.9.0",
+		Key: "abc123", KeyVersion: "magus.cache-key/v1alpha0", Attempt: "att1", MagusVersion: "v0.9.0",
 		Revision: "cafebabe", Dirty: true,
 		Spell: "go::go-build", ExtraArgs: []string{"-race"}, VCSName: "git", Platform: "darwin/arm64",
 		Lease: "wave/api",

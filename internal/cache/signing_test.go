@@ -218,9 +218,9 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 
 	assert.Equal(t, h1, h2, "hashStep not deterministic")
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
-	// The current KeyVersion is always mixed in; bumping it must change the
+	// The current KeyVersion is always mixed in; replacing it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 8
+	const wantKeyVersion = "magus.cache-key/v1alpha1"
 	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
@@ -276,7 +276,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 
 	// Reconstruct the expected byte stream independently, in hashStep's field order.
 	var want bytes.Buffer
-	fmt.Fprintf(&want, "keyVersion:%d\n", KeyVersion)
+	fmt.Fprintf(&want, "keyVersion:%s\n", KeyVersion)
 	fmt.Fprintf(&want, "os:%s\narch:%s\n", runtime.GOOS, runtime.GOARCH)
 	want.WriteString("projectPath:pkg/x\n")
 	want.WriteString("target:build\n")
@@ -306,7 +306,7 @@ func TestHashKeyWritesTheCatalogsLineOnlyForABinaryAnswer(t *testing.T) {
 
 	layout := func(catalogs string) string {
 		var b bytes.Buffer
-		fmt.Fprintf(&b, "keyVersion:%d\n", KeyVersion)
+		fmt.Fprintf(&b, "keyVersion:%s\n", KeyVersion)
 		b.WriteString("projectPath:docs\ntarget:content-generate\nspellDefVersion:v1\n")
 		b.WriteString(catalogs)
 		b.WriteString("tool:go:1.25\n")
@@ -401,7 +401,7 @@ func TestVerifyRejectsCrossDomainSignature(t *testing.T) {
 	s, _ := newSigner(seed)
 	v, _ := newVerifier([][]byte{pub})
 
-	meta := []byte(`{"schema":1,"descriptor":{"ref":"outdeadbeefcafe"}}`)
+	meta := []byte(`{"schema":"magus.output-bundle/v1alpha1","descriptor":{"ref":"outdeadbeefcafe"}}`)
 	sig, err := s.sign(domainBundle, meta, nil)
 	require.NoError(t, err)
 

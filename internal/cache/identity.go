@@ -53,7 +53,7 @@ func PrintOutputIdentityText(w io.Writer, desc types.OutputDescriptor, invArgs [
 		fmt.Fprintln(w)
 	}
 	if desc.Key != "" {
-		fmt.Fprintf(w, "key:     %s (keyVersion %d)\n", desc.Key, desc.KeyVersion)
+		fmt.Fprintf(w, "key:     %s (keyVersion %s)\n", desc.Key, desc.KeyVersion)
 	}
 	if desc.MagusVersion != "" {
 		fmt.Fprintf(w, "magus:   %s\n", desc.MagusVersion)

@@ -50,11 +50,9 @@ func symbolRefKey(symbolID string) string {
 
 // routingFormat versions what the routing file and the symbol names index hold. It is folded
 // into symbolShardsKey, so a file written in an older format never matches and is rebuilt
-// on the next sync.
-//
-//	2: Labels.
-//	3: the symbol names index.
-const routingFormat = 3
+// on the next sync. The numbered formats before the string were 2 (Labels) and 3 (the
+// symbol names index).
+const routingFormat = "magus.symbol-routing/v1alpha1"
 
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
 // manifest, the identity the routing index is bound to. Empty when there are none.
@@ -73,7 +71,7 @@ func symbolShardsKey(man *manifest) string {
 	}
 	slices.Sort(names)
 	h := sha256.New()
-	_, _ = h.Write([]byte{routingFormat})
+	_, _ = h.Write([]byte(routingFormat + "\x00"))
 	for _, name := range names {
 		_, _ = h.Write([]byte(name))
 		_, _ = h.Write([]byte{0})

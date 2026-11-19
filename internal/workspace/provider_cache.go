@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -55,12 +54,13 @@ import (
 // providerCacheVersion is the entry format, folded into the fingerprint rather than
 // compared separately. A field added, retyped or RE-TAGGED in a later magus would
 // otherwise decode silently zeroed against a fingerprint that still matched, a wrong
-// project set that looks fresh. Bumping this makes every existing entry miss.
+// project set that looks fresh. Replacing this makes every existing entry miss.
 //
-// v2: spells.ProvidedProject carries json tags. Before them the record encoded under
-// its Go field names, so a v1 file would decode to empty projects under the tagged
-// names, the exact silently-zeroed hit this constant exists to prevent.
-const providerCacheVersion = 2
+// The number 2 it replaces was the bump that gave spells.ProvidedProject json tags.
+// Before them the record encoded under its Go field names, so an older file would
+// decode to empty projects under the tagged names, the exact silently-zeroed hit this
+// constant exists to prevent.
+const providerCacheVersion = "magus.provider-cache/v1alpha1"
 
 // ProviderCache says where a provider's answer is remembered between commands. A
 // zero value (empty Dir) disables the cache and re-runs every provider.
@@ -145,9 +145,9 @@ func readProviderCache(path string, entry any) bool {
 // providerDigest is the fingerprint every provider cache shares: the entry format, the
 // root, the spell name, the built-in registry's hash, then the caller's own inputs, one
 // line each. See providerFingerprint for why each of the first four is there.
-func providerDigest(format int, root, spellName string, inputs ...[]string) string {
+func providerDigest(format string, root, spellName string, inputs ...[]string) string {
 	h := sha256.New()
-	_, _ = h.Write([]byte(strconv.Itoa(format) + "\n"))
+	_, _ = h.Write([]byte(format + "\n"))
 	// The root, because cache.dir may be absolute and shared: two workspaces both
 	// wiring a spell named "nx" would otherwise overwrite each other's entry on every
 	// command and neither would ever hit.

@@ -78,7 +78,7 @@ func main() {
 
 // textsSalt orders the training texts by hash, so each teacher shard samples the whole
 // mix and the first shard's rate projects the run.
-const textsSalt = "embed-texts/v1:"
+const textsSalt = "train.embed-texts/v1alpha1:"
 
 // sourceRecord is one line of libs/train/embed/gen/sources.jsonl, as far as texts reads it.
 type sourceRecord struct {

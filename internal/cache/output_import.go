@@ -113,8 +113,8 @@ func checkImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	default:
 		return fmt.Errorf("vcs %q is not a provider magus drives", d.VCSName)
 	}
-	if d.KeyVersion < 0 || d.TimestampMs < 0 || d.DurationMs < 0 {
-		return errors.New("key_version, timestamp_ms and duration_ms must not be negative")
+	if d.TimestampMs < 0 || d.DurationMs < 0 {
+		return errors.New("timestamp_ms and duration_ms must not be negative")
 	}
 	if d.Project == "" {
 		return errors.New("project is empty")

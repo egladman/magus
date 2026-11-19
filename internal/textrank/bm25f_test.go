@@ -170,12 +170,13 @@ func TestIndexRoundTrip(t *testing.T) {
 
 func TestIndexRoundTripRefusesAnotherVersion(t *testing.T) {
 	data := append([]byte{}, indexMagic[:]...)
-	data = binary.AppendUvarint(data, indexFormat+1)
+	data = binary.AppendUvarint(data, uint64(len(indexFormat)+1))
+	data = append(data, indexFormat+"x"...)
 	ix, err := ReadIndex(bytes.NewReader(data))
 	require.Error(t, err)
 	assert.Nil(t, ix)
-	assert.Contains(t, err.Error(), "version 2")
-	assert.Contains(t, err.Error(), "version 1")
+	assert.Contains(t, err.Error(), indexFormat+"x")
+	assert.Contains(t, err.Error(), indexFormat)
 }
 
 func TestIndexRoundTripRefusesATruncatedIndex(t *testing.T) {

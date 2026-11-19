@@ -808,7 +808,7 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 
 	// A file in the PREVIOUS shape, written under the previous format's key.
 	prev := sha256.New()
-	fmt.Fprintf(prev, "f%d\x00%s\x00%d\x00", vcsHistoryFormat-1, repo.Head(), vcsDefaultMaxCommits)
+	fmt.Fprintf(prev, "f%s\x00%s\x00%d\x00", "magus.vcs-history/v1alpha0", repo.Head(), vcsDefaultMaxCommits)
 	stale := fmt.Sprintf(`{"fingerprint":%q,"entries":[{"path":"a.buzz","last_unix":1700000000}]}`,
 		hex.EncodeToString(prev.Sum(nil)))
 	require.NoError(t, os.WriteFile(path, []byte(stale), 0o644))

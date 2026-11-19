@@ -15,7 +15,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "buzzindex 1"
+const formatVersion = "magus.buzzindex/v1alpha1"
 
 // Indexer indexes the Buzz files under Dir in this process, one unit per file: a Buzz
 // module is a file, and an import names one. Symbols are named against WorkspaceRoot

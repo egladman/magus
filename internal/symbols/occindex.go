@@ -107,7 +107,7 @@ func IndexOccurrences(ctx context.Context, idx *Index, projectPath string) (map[
 // The directory maps each key to its record's offset and length within the records, and a
 // record is one key's KeyOccurrences in the compact form below. The stamp is the caller's
 // identity for the index the file was built from; a file whose stamp differs is not read.
-const occurrenceFileMagic = "magus-occurrences/1\n"
+const occurrenceFileMagic = "magus.occurrences/v1alpha1\n"
 
 // occurrenceRecord is KeyOccurrences on disk: each site as [line, column, end line, end
 // column, definition], which keeps a hot symbol's record a fraction of its JSON size.

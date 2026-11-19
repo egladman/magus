@@ -123,7 +123,7 @@ func TestTableRoundTrip(t *testing.T) {
 // same digest on every architecture, and a layout change must bump tableFormat.
 func TestTableGolden(t *testing.T) {
 	data := encode(t, testSpec(probeVocab(), 64))
-	const want = "bf02e8edb121f77d890e4ea3a9c2af88ae049764b378f12795c36cb1192752f6"
+	const want = "5a38669c087ec64884bec1658f2d56f4f2b48a8d767e6ca1a6f43b4b2c08d132"
 	if got := read(t, data).Digest(); got != want {
 		t.Errorf("probe table digest = %s, want %s", got, want)
 	}
@@ -171,7 +171,7 @@ func TestTableEncodeRefuses(t *testing.T) {
 		{"no teacher", func(s *TableSpec) { s.Prov.Teacher = "" }, "provenance teacher is empty"},
 		{"no run", func(s *TableSpec) { s.Prov.Run = "" }, "provenance run is empty"},
 		{"no goarch", func(s *TableSpec) { s.Prov.GOARCH = "" }, "provenance goarch is empty"},
-		{"other format", func(s *TableSpec) { s.Prov.Format = 3 }, "provenance names format 3, but this build writes format 2"},
+		{"other format", func(s *TableSpec) { s.Prov.Format = "embed.table/v1alpha0" }, `provenance names format "embed.table/v1alpha0", but this build writes format "embed.table/v1alpha1"`},
 		{"other tokenizer", func(s *TableSpec) { s.Prov.TokenizerDigest = "feed" }, "tokenizer digest feed, but embed.Tokens"},
 	}
 	for _, tt := range tests {
@@ -215,7 +215,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errWrite }
 // layout splits a valid encoding into its header and the sections between the header
 // and the trailer.
 func layout(data []byte) (hdr, rest []byte) {
-	_, k := binary.Uvarint(data[4:])
+	_, k := parseFormat(data[4:])
 	hlen, k2 := binary.Uvarint(data[4+k:])
 	start := 4 + k + k2
 	return data[start : start+int(hlen)], data[start+int(hlen) : len(data)-sha256.Size]
@@ -225,7 +225,7 @@ func layout(data []byte) (hdr, rest []byte) {
 // whatever corruption they carry.
 func resign(hdr, rest []byte) []byte {
 	out := append([]byte{}, tableMagic[:]...)
-	out = binary.AppendUvarint(out, tableFormat)
+	out = appendFormat(out, tableFormat)
 	out = binary.AppendUvarint(out, uint64(len(hdr)))
 	out = append(out, hdr...)
 	out = append(out, rest...)
@@ -263,7 +263,7 @@ func TestTableReadRefuses(t *testing.T) {
 		{"empty", nil, "no MSET magic"},
 		{"other magic", append([]byte("MTRX"), data[4:]...), "no MSET magic"},
 		{"magic only", data[:4], "truncated table"},
-		{"other format", append(append([]byte("MSET"), 3), data[5:]...), "format 3, but this build reads only format 2"},
+		{"other format", append(appendFormat([]byte("MSET"), "embed.table/v1alpha0"), data[len(tableMagic)+1+len(tableFormat):]...), `format "embed.table/v1alpha0", but this build reads only format "embed.table/v1alpha1"`},
 		{"no trailer", data[:len(data)-sha256.Size], "sha256 trailer does not match"},
 		{"flipped row byte", func() []byte { d := slices.Clone(data); d[len(d)-40] ^= 1; return d }(), "sha256 trailer does not match"},
 		{"flipped trailer", func() []byte { d := slices.Clone(data); d[len(d)-1] ^= 1; return d }(), "sha256 trailer does not match"},
@@ -483,5 +483,17 @@ func TestShippedGoldenRanking(t *testing.T) {
 		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("query %q:\n got %+v\nwant %+v", got[i].Query, got[i], want[i])
 		}
+	}
+}
+
+func TestTableReadMarksANumberedFormatLegacy(t *testing.T) {
+	data := append([]byte("MSET"), 2, 0)
+	_, err := ReadTable(data)
+	if !errors.Is(err, ErrLegacyFormat) {
+		t.Fatalf("ReadTable(format number 2) = %v, want ErrLegacyFormat", err)
+	}
+	_, err = ReadTable(appendFormat([]byte("MSET"), "embed.table/v1alpha2"))
+	if err == nil || errors.Is(err, ErrLegacyFormat) {
+		t.Fatalf("ReadTable(newer format) = %v, want a refusal that is not ErrLegacyFormat", err)
 	}
 }

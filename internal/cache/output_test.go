@@ -235,7 +235,7 @@ func TestOutputStoreV2DescriptorResolvesWithEmptyRevision(t *testing.T) {
 	keyDir := filepath.Join(dir, "outputs", key)
 	require.NoError(t, os.MkdirAll(keyDir, 0o755))
 	const attempt = "out22222222" // shaped like a real attempt id
-	v2 := []byte(fmt.Sprintf("{\"ref\":\"%s\",\"project\":\"pkg/a\",\"target\":\"build\",\"failed\":false,\"timestamp_ms\":100,\"duration_ms\":5,\"schema\":2,\"key\":\"%s\",\"key_version\":1,\"attempt\":\"%s\"}", PortableRef(key), key, attempt))
+	v2 := []byte(fmt.Sprintf("{\"ref\":\"%s\",\"project\":\"pkg/a\",\"target\":\"build\",\"failed\":false,\"timestamp_ms\":100,\"duration_ms\":5,\"schema\":2,\"key\":\"%s\",\"key_version\":\"magus.cache-key/v1alpha0\",\"attempt\":\"%s\"}", PortableRef(key), key, attempt))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+outExt), []byte("v2 bytes\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(keyDir, attempt+descExt), v2, 0o644))
 

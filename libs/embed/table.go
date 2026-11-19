@@ -15,9 +15,10 @@ import (
 	"sync"
 )
 
-// tableFormat is the version EncodeTable stamps and ReadTable requires. Bump it on any
+// tableFormat is the version EncodeTable stamps and ReadTable requires. This module
+// compares it by equality only. Replace it with the next v1alphaN on any
 // change to the layout or the header.
-const tableFormat = 2
+const tableFormat = "embed.table/v1alpha1"
 
 var tableMagic = [4]byte{'M', 'S', 'E', 'T'}
 
@@ -74,7 +75,7 @@ type Table struct {
 // TokenizerDigest are the codec's own: EncodeTable fills them when empty and refuses a
 // value that differs from its own.
 type Provenance struct {
-	Format                         int
+	Format                         string
 	Teacher, TeacherRevision       string
 	TextsDigest, PairsDigest       string
 	TokenizerDigest, Pipeline, Run string
@@ -91,7 +92,7 @@ type TableSpec struct {
 }
 
 // tableHeader is the JSON header. Its fields mirror Provenance except Format, which
-// the uvarint after the magic carries.
+// the format string after the magic carries.
 type tableHeader struct {
 	Dims            int    `json:"dims"`
 	Tokens          int    `json:"tokens"`
@@ -149,8 +150,8 @@ func checkDims(dims int) error {
 	return nil
 }
 
-// EncodeTable validates spec and writes it as one MSET table: the magic, a uvarint
-// format, a uvarint-length JSON header, uint32 token offsets, the uvarint-length
+// EncodeTable validates spec and writes it as one MSET table: the magic, a uvarint-length
+// format string, a uvarint-length JSON header, uint32 token offsets, the uvarint-length
 // tokens, w16[V], q8[V][dims], then a sha256 trailer over everything before it.
 // Integers are little-endian, so the bytes depend only on spec. An invalid spec writes
 // nothing.
@@ -171,8 +172,8 @@ func (spec TableSpec) header() ([]byte, error) {
 		return nil, err
 	}
 	prov := spec.Prov
-	if prov.Format != 0 && prov.Format != tableFormat {
-		return nil, fmt.Errorf("provenance names format %d, but this build writes format %d", prov.Format, tableFormat)
+	if prov.Format != "" && prov.Format != tableFormat {
+		return nil, fmt.Errorf("provenance names format %q, but this build writes format %q", prov.Format, tableFormat)
 	}
 	if prov.TokenizerDigest == "" {
 		prov.TokenizerDigest = tokenizerDigest()
@@ -238,7 +239,7 @@ func (spec TableSpec) checkVocabulary() (dims int, err error) {
 // layoutTable lays out a table without validating it.
 func layoutTable(hdr []byte, spec TableSpec) []byte {
 	buf := append([]byte{}, tableMagic[:]...)
-	buf = binary.AppendUvarint(buf, tableFormat)
+	buf = appendFormat(buf, tableFormat)
 	buf = binary.AppendUvarint(buf, uint64(len(hdr)))
 	buf = append(buf, hdr...)
 	var toks []byte
@@ -275,16 +276,43 @@ func ReadTable(data []byte) (*Table, error) {
 
 var errTruncated = errors.New("truncated table")
 
+// ErrLegacyFormat marks a table written before formats were strings, when the format was
+// the number 1 or 2. It is an older table, to be retrained, not a corrupt or newer one:
+// a caller may treat it as an absent table.
+var ErrLegacyFormat = errors.New("table is in the numbered format that preceded the version strings")
+
+// maxFormat bounds a format string, so a corrupt length cannot ask for a large read.
+const maxFormat = 64
+
+// appendFormat writes format as a uvarint length and its bytes.
+func appendFormat(buf []byte, format string) []byte {
+	buf = binary.AppendUvarint(buf, uint64(len(format)))
+	return append(buf, format...)
+}
+
+// parseFormat reads what appendFormat wrote and returns it with the bytes it took. It
+// returns 0 bytes when b is truncated or the length is over maxFormat.
+func parseFormat(b []byte) (format string, n int) {
+	size, k := binary.Uvarint(b)
+	if k <= 0 || size > maxFormat || uint64(len(b)-k) < size {
+		return "", 0
+	}
+	return string(b[k : k+int(size)]), k + int(size)
+}
+
 func readTable(data []byte) (*Table, error) {
 	if !bytes.HasPrefix(data, tableMagic[:]) {
 		return nil, errors.New("not an embedding table (no MSET magic)")
 	}
-	format, k := binary.Uvarint(data[len(tableMagic):])
+	if n := data[len(tableMagic):]; len(n) > 0 && (n[0] == 1 || n[0] == 2) {
+		return nil, fmt.Errorf("%w: it names format number %d", ErrLegacyFormat, n[0])
+	}
+	format, k := parseFormat(data[len(tableMagic):])
 	if k <= 0 {
 		return nil, errTruncated
 	}
 	if format != tableFormat {
-		return nil, fmt.Errorf("format %d, but this build reads only format %d", format, tableFormat)
+		return nil, fmt.Errorf("format %q, but this build reads only format %q", format, tableFormat)
 	}
 	start := len(tableMagic) + k
 	if len(data) < start+sha256.Size {

@@ -147,7 +147,7 @@ func isolatedClosure(files []bytecodeFile) []bytecodeFile {
 	return out
 }
 
-const bytecodeRecordVersion uint16 = 2
+const bytecodeRecordVersion = "gopherbuzz.bytecode-record/v1alpha1"
 
 var bytecodeRecordMagic = [4]byte{'B', 'Z', 'G', 'R'}
 
@@ -157,9 +157,7 @@ var bytecodeRecordMagic = [4]byte{'B', 'Z', 'G', 'R'}
 // version alone cannot tell them apart.
 func (s *Session) bytecodeKey(code string) string {
 	h := sha256.New()
-	var ver [2]byte
-	binary.LittleEndian.PutUint16(ver[:], vmpackage.BytecodeVersion)
-	h.Write(ver[:])
+	writeKeyString(h, vmpackage.BytecodeVersion)
 	h.Write([]byte{s.bytecodeFlags()})
 	writeKeyString(h, s.entryFilterID)
 	writeKeyString(h, s.sourceFile)
@@ -354,7 +352,7 @@ func restoreChunkTree(c *vmpackage.Chunk, docs []string, sourceFile string) ([]s
 func (r bytecodeRecord) encode() []byte {
 	buf := make([]byte, 0, 64+len(r.debug)+len(r.bo))
 	buf = append(buf, bytecodeRecordMagic[:]...)
-	buf = binary.LittleEndian.AppendUint16(buf, bytecodeRecordVersion)
+	buf = appendString(buf, bytecodeRecordVersion)
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(r.imports)))
 	for _, n := range r.imports {
 		buf = appendString(buf, n.path)
@@ -411,13 +409,17 @@ var errTruncatedRecord = errors.New("buzz: bytecode record: truncated")
 
 func decodeBytecodeRecord(blob []byte) (bytecodeRecord, error) {
 	var rec bytecodeRecord
-	if len(blob) < 4+2 || [4]byte(blob[:4]) != bytecodeRecordMagic {
+	if len(blob) < 4 || [4]byte(blob[:4]) != bytecodeRecordMagic {
 		return rec, errors.New("buzz: bytecode record: bad magic")
 	}
-	if binary.LittleEndian.Uint16(blob[4:6]) != bytecodeRecordVersion {
+	ver, body, err := takeString(blob[4:])
+	if err != nil {
+		return rec, err
+	}
+	if ver != bytecodeRecordVersion {
 		return rec, errors.New("buzz: bytecode record: bad version")
 	}
-	n, rest, err := takeCount(blob[6:], minImportSize)
+	n, rest, err := takeCount(body, minImportSize)
 	if err != nil {
 		return rec, err
 	}

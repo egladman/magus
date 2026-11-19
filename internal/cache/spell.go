@@ -37,13 +37,13 @@ import (
 // a single file is written, and checks each file against it as it streams.
 
 const (
-	domainSpellCache = "magus-spell-cache-v1\x00"
+	domainSpellCache = "magus.spell-cache/v1alpha1\x00"
 
 	// spellCacheNamespace keeps bundles out of every project's key space: no project
 	// path begins with "@".
 	spellCacheNamespace = "@spell-cache"
 	spellCacheIndexName = "index.json"
-	spellCacheSchema    = 1
+	spellCacheSchema    = "magus.spell-cache/v1alpha1"
 
 	// spellCacheLookback is how many daily keys a reader probes, newest first. The store
 	// cannot be listed, so "newest" is found by asking for each day in turn.
@@ -136,7 +136,7 @@ func (r SpellCacheRoot) skips(rel string) bool {
 const spellCacheStaging = ".magus-spell-cache-"
 
 type spellCacheIndex struct {
-	Schema  int              `json:"schema"`
+	Schema  string           `json:"schema"`
 	Key     SpellCacheKey    `json:"key"`
 	Name    string           `json:"name,omitempty"` // the remote key it was stored under
 	Created time.Time        `json:"created"`
@@ -443,7 +443,7 @@ func readSpellCacheBundle(ctx context.Context, r io.Reader, v *verifier, want sp
 func (w spellCacheWant) check(idx spellCacheIndex) error {
 	switch {
 	case idx.Schema != spellCacheSchema:
-		return fmt.Errorf("unsupported bundle schema %d (this magus reads %d)", idx.Schema, spellCacheSchema)
+		return fmt.Errorf("unsupported bundle schema %q (this magus reads %q)", idx.Schema, spellCacheSchema)
 	case idx.Key.Spell != w.key.Spell || idx.Key.Tools != w.key.Tools:
 		return fmt.Errorf("bundle is for %s-%s, not %s-%s", idx.Key.Spell, short(idx.Key.Tools), w.key.Spell, short(w.key.Tools))
 	case !w.anyLocks && idx.Key.Locks != w.key.Locks:

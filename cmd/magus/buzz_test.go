@@ -423,7 +423,7 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Require().NoError(err)
 	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(interp.ScriptRunKey("p.buzz", "code", lease, args)))
 	s.Require().NoError(err)
-	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", 0, ""
+	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", "", ""
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
 }
 

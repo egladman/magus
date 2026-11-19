@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": "magus.textrank-weights/v1alpha1",
   "bm25f": {
     "k1": 1.2,
     "fields": {

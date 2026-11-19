@@ -9,9 +9,10 @@ import (
 	"io"
 )
 
-// indexFormat is the version WriteTo stamps and ReadIndex requires. Bump it on any
+// indexFormat is the version WriteTo stamps and ReadIndex requires. This module
+// compares it by equality only. Replace it with the next v1alphaN on any
 // change to the layout or the header.
-const indexFormat = 2
+const indexFormat = "embed.index/v1alpha1"
 
 var indexMagic = [4]byte{'M', 'S', 'E', 'I'}
 
@@ -59,8 +60,8 @@ func NewIndex(t *Table, docs [][]Field) *Index {
 // Len is the number of documents, including those with no Vector.
 func (ix *Index) Len() int { return ix.n }
 
-// WriteTo writes the index as one MSEI file: the magic, a uvarint format, a
-// uvarint-length JSON header {table_digest, docs, dims}, InvNorm[N] as little-endian
+// WriteTo writes the index as one MSEI file: the magic, a uvarint-length
+// format string, a uvarint-length JSON header {table_digest, docs, dims}, InvNorm[N] as little-endian
 // uint32s, a sha256 of everything so far, then the rows, N·dims int8s. The rows sit
 // outside the digest so ReadIndex need not read them. The bytes depend only on the
 // table and the documents.
@@ -93,7 +94,7 @@ func (ix *Index) head() ([]byte, error) {
 		return nil, err
 	}
 	buf := append([]byte{}, indexMagic[:]...)
-	buf = binary.AppendUvarint(buf, indexFormat)
+	buf = appendFormat(buf, indexFormat)
 	buf = binary.AppendUvarint(buf, uint64(len(hdr)))
 	buf = append(buf, hdr...)
 	for _, x := range ix.invNorm {
@@ -147,19 +148,19 @@ func readIndexHeader(r io.ReaderAt, size int64, t *Table) (h indexHeader, headLe
 	if size < 0 {
 		return h, 0, fmt.Errorf("size %d is negative", size)
 	}
-	pre := make([]byte, min(size, int64(len(indexMagic)+2*binary.MaxVarintLen64)))
+	pre := make([]byte, min(size, int64(len(indexMagic)+binary.MaxVarintLen64+maxFormat+binary.MaxVarintLen64)))
 	if err := readAt(r, pre, 0); err != nil {
 		return h, 0, err
 	}
 	if !bytes.HasPrefix(pre, indexMagic[:]) {
 		return h, 0, errors.New("not an embedding index (no MSEI magic)")
 	}
-	format, k := binary.Uvarint(pre[len(indexMagic):])
+	format, k := parseFormat(pre[len(indexMagic):])
 	if k <= 0 {
 		return h, 0, errTruncatedIndex
 	}
 	if format != indexFormat {
-		return h, 0, fmt.Errorf("format %d, but this build reads only format %d", format, indexFormat)
+		return h, 0, fmt.Errorf("format %q, but this build reads only format %q", format, indexFormat)
 	}
 	hlen, k2 := binary.Uvarint(pre[len(indexMagic)+k:])
 	if k2 <= 0 || hlen > maxHeader {

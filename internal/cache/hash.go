@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -23,12 +22,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
+// KeyVersion is replaced when the set of hashed fields changes, forcing a full rebuild.
 // It is the ONLY version in this system: the output descriptor carries no schema of
 // its own, because a descriptor is stored under a key that already contains this
-// number, and magus reads no descriptor it did not write.
+// string, and magus reads no descriptor it did not write.
 //
-// 8 respells the manifest's JSON keys in snake_case; a manifest in the old spelling
+// Retired numbers: 8 respells the manifest's JSON keys in snake_case; a manifest in the old spelling
 // decodes to empty values, so the bump evicts every entry before it can be read.
 //
 // 7 drops that descriptor schema and evicts every entry predating the change, so no
@@ -38,7 +37,7 @@ import (
 // 6 added the spell: line for explicit spell::op runs, emitted only when the filter
 // is set, but a pre-6 store could already hold entries an op-form run recorded under
 // the plain target's key, and only a bump evicts that poison class.
-const KeyVersion = 8
+const KeyVersion = "magus.cache-key/v1alpha1"
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
@@ -106,7 +105,7 @@ func (c *Cache) hashStepInputsWithSources(ctx context.Context, s *Step, lines *[
 	}
 
 	buf = append(buf, "keyVersion:"...)
-	buf = strconv.AppendInt(buf, KeyVersion, 10)
+	buf = append(buf, KeyVersion...)
 	buf = append(buf, '\n')
 	_, _ = h.Write(buf)
 	if lines != nil {
