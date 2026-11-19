@@ -398,6 +398,7 @@ func Needs(refs ...string) Chain { return Chain(nil).Needs(refs...) }
 
 // Needs appends one more ctx.needs call, ordered after every call before it.
 func (c Chain) Needs(refs ...string) Chain {
+	c = slices.Clone(c)
 	index := 0
 	if len(c) > 0 {
 		index = c[len(c)-1].CallIndex + 1
