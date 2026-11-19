@@ -97,7 +97,7 @@ var modules = []Module{
 			{Name: "step", Doc: "step is one step of a process no directory holds: a CI job, a decision, a role. It is", Sig: "diagram\\step(name, [sub], [tag], [link], [look]) -> Actor"},
 			{Name: "stage", Doc: "stage is a step that lives inside one package, named by the symbol that carries it out:", Sig: "diagram\\stage(dir, refs, [name], [sub], [tag], [look]) -> Actor"},
 			{Name: "of", Doc: "of starts an empty diagram. direction defaults to Direction.across. level is the one level", Sig: "diagram\\of(id, [title], [eyebrow], [desc], [direction], [level]) -> mut Diagram"},
-			{Name: "draw", Doc: "draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a", Sig: "diagram\\draw(f, theme, [anchorHref]) -> str"},
+			{Name: "draw", Doc: "draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a", Sig: "diagram\\draw(f, theme, [anchorHref]) -> result\\Result::<str>"},
 			{Name: "drawLayout", Doc: "drawLayout paints d, a Diagram's layout(), with theme, as draw", Sig: "diagram\\drawLayout(d, theme, [anchorHref], [drillHref]) -> str"},
 			{Name: "nodeFact", Doc: "nodeFact is the line a diagram's stamp records for n. A box anchoring a symbol records the", Sig: "diagram\\nodeFact(n) -> str"},
 			{Name: "drillLinks", Doc: "drillLinks maps the id of each box in d that drills down to the diagram it links to.", Sig: "diagram\\drillLinks(d) -> {str:str}"},

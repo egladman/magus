@@ -6,4 +6,4 @@ no-throw:
   # construct: {file: count}
   baseline:
     buzz-error-signature:
-      diagram.buzz: 8
+      diagram.buzz: 3
