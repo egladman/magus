@@ -5,7 +5,7 @@
 // in a module one of them imports would raise there, or wait on a key that never
 // comes. hack/lib/prompt.buzz is the one module that may prompt outside a main; its
 // callers are held to main like a direct call, and only a script may import it. The
-// scripts that run unattended (bootstrap-*, hack/ci) take no prompt at all.
+// bootstrap scripts (bootstrap-*) run unattended and take no prompt at all.
 //
 // Tier 1, mechanical: the fix moves the call into main behind the guard, or replaces it
 // with the flag it stands for.
@@ -19,9 +19,10 @@ import "hack/lint/support" as support;
 // HELPER is the shared flag-or-prompt-or-error module.
 final HELPER = "hack/lib/prompt.buzz";
 
-// UNATTENDED are the path prefixes of scripts nobody answers: the workspace bootstrap,
-// the worker bootstrap, and everything CI and the merge queue run.
-final UNATTENDED = ["hack/dev/bootstrap-", "hack/ci/"];
+// UNATTENDED are the path prefixes of scripts nobody answers: the workspace bootstrap and
+// the worker bootstrap. A hack/ci script runs unattended in a workflow, but a person runs
+// it too, so it may prompt behind the guard in main like a hack/dev script.
+final UNATTENDED = ["hack/dev/bootstrap-"];
 
 final GUARD = "term\\isInteractive()";
 final PROMPT = std\pattern(`\bterm\\(pick|pickMany|confirm|spin)\s*\(`);
@@ -212,4 +213,10 @@ test "fixtures, generated code and doc fragments are not judged" {
     assert\equal(judged("std/examples/term/pick.buzz"), want: false, message: "doc fragments");
     assert\equal(judged("internal/spell/gen/decls/term.buzz"), want: false, message: "generated");
     assert\equal(judged("hack/dev/reclaim-disk-space.buzz"), want: true, message: "a script");
+}
+
+test "a hack/ci script may prompt behind the guard in its main" {
+    final src = "import \"hack/lib/prompt\";\nimport \"term\";\n\nfun main(args: [str]) > void \{\n"
+        + "    if (term\\isInteractive()) \{\n        _ = prompt\\choose(null, flag: \"--x\", items: [\"a\"], question: \"x\");\n    }\n}\n";
+    assert\equal(judge("hack/ci/pick-things.buzz", src: src).len(), want: 0, message: "guarded in main");
 }

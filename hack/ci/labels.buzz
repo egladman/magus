@@ -3,6 +3,9 @@
 //
 //	magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]
 //
+// On a terminal, a missing --repo is asked for: the repository gh is in, or the default.
+// Unattended it stays the default.
+//
 // Two families, told apart by prefix and color: a person's intent (`merge-queue:
 // <method>`, `advice: silence[ <advisor>]`) and the queue's answer (`queue: <state>`).
 // The queue's labels mirror MARK_LABELS, MARK_COLORS and MARK_DESCRIPTIONS in
@@ -11,7 +14,11 @@
 namespace labels;
 
 import "flags";
+import "proc";
+import "result";
 import "std";
+import "term";
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -80,12 +87,42 @@ export fun commands(repo: str) > [str] {
     return acc;
 }
 
+// REPO is the repository the commands target when no flag or answer names one.
+final REPO = "egladman/magus";
+
+// repoChoices is the repositories worth offering: the one gh is run in, then REPO.
+fun repoChoices() > result\Result::<[str]> {
+    try {
+        final here = proc\exec("gh", args: ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+            opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        final name = here.stdout.trim();
+        if (!here.ok or name == "" or name == REPO) {
+            return result\ok::<[str]>([REPO]);
+        }
+        return result\ok::<[str]>([name, REPO]);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "gh repo view");
+    }
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: [<str>], valued: ["--repo"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "labels: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\nusage: magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]";
     }
-    foreach (c in commands(parsed.values["--repo"] ?? "egladman/magus")) {
+    var repo = parsed.values["--repo"] ?? REPO;
+    if (term\isInteractive() and parsed.values["--repo"] == null) {
+        final choices = repoChoices();
+        if (choices.error != null) {
+            throw choices.error!.message;
+        }
+        final asked = prompt\choose(null, flag: "--repo", items: choices.value!, question: "Repository to print the label commands for");
+        if (asked.error != null) {
+            throw asked.error!.message;
+        }
+        repo = asked.value!;
+    }
+    foreach (c in commands(repo)) {
         std\print(c);
     }
 }
@@ -125,4 +162,11 @@ test "the commands delete, then edit the intent labels, then create the answers"
     assert\equal(got[got.len() - 1],
         want: `gh label create -R o/r "advice: silence" --color e4e669 --description "Mutes every advisor on this pull request; advice: silence <name> mutes one" --force`,
         message: "the mute");
+}
+
+test "with no terminal an absent --repo is the default and nothing asks" {
+    if (!term\isInteractive()) {
+        main([<str>]);
+        assert\equal(commands(REPO)[0].indexOf("-R {REPO}") != null, want: true, message: "main returned: no prompt blocked it");
+    }
 }

@@ -5,9 +5,12 @@ import "fs";
 import "io";
 import "os";
 import "proc";
+import "result";
 import "serialize";
 import "std";
+import "term";
 import "vcs";
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -119,10 +122,53 @@ fun reportFallback(run: str, fallback: str, sink: fun (line: str) > void) > void
     sink(fallback);
 }
 
+// THIS_COMMIT is the first thing a person is offered: the run of --commit, as an unasked run takes it.
+final THIS_COMMIT = "the run of this commit";
+
+// recentRuns lists the newest runs of the CI workflow, one "<id> <title> (<conclusion>)" line each.
+fun recentRuns() > result\Result::<[str]> {
+    try {
+        final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--workflow", WORKFLOW, "--limit", "20",
+            "--json", "databaseId,displayTitle,conclusion,status"])).listValue();
+        final lines = mut [<str>];
+        foreach (r in listed) {
+            var state = r.q("conclusion").stringValue();
+            if (state == "") { state = r.q("status").stringValue(); }
+            lines.append("{r.q("databaseId").integerValue()} {r.q("displayTitle").stringValue()} ({state})");
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "gh run list");
+    }
+}
+
+// runOf is the run id a recentRuns line starts with.
+export fun runOf(line: str) > str {
+    return line.split(" ")[0];
+}
+
+// hasFlag says whether argv passes name, as "--name v" or "--name=v".
+export fun hasFlag(argv: [str], name: str) > bool {
+    foreach (a in argv) {
+        if (a == name or a.startsWith(name + "=")) { return true; }
+    }
+    return false;
+}
+
 // main copies the records in the run's artifacts to stdout untouched, for
 // `magus query output --stdin`; a commit with no CI run exits 3.
 export fun main(args: [str]) > void !> any {
-    final want = parseFilter(args);
+    final given = parseFilter(args);
+    var want = given;
+    if (term\isInteractive() and given.run == "" and !hasFlag(args, name: "--commit")) {
+        final runs = recentRuns();
+        if (runs.error != null) { throw runs.error!.message; }
+        final asked = prompt\choose(null, flag: "--run", items: [THIS_COMMIT] + runs.value!, question: "CI run to show failures of");
+        if (asked.error != null) { throw asked.error!.message; }
+        if (asked.value! != THIS_COMMIT) {
+            want = Filter{ commit = given.commit, run = runOf(asked.value!) };
+        }
+    }
     var run = want.run;
     if (run == "") {
         final parsed = vcs\cmd(["rev-parse", "--verify", "{want.commit}^\{commit}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
@@ -226,4 +272,22 @@ test "the run id must be a number" {
     assert\equal(f.commit, want: "HEAD", message: "default commit");
     final bad = parseFilter(["--run", "abc"]) catch Filter{ run = "refused" };
     assert\equal(bad.run, want: "refused", message: "non-numeric run");
+}
+
+test "a run id leads each listed run, and a flag is found with or without its value attached" {
+    assert\equal(runOf("37808757097 fix(cache) (failure)"), want: "37808757097", message: "run id");
+    assert\equal(hasFlag(["--commit=abc"], name: "--commit"), want: true, message: "attached");
+    assert\equal(hasFlag(["--run", "1"], name: "--commit"), want: false, message: "absent");
+}
+
+test "with no terminal a bad --run is still refused and nothing asks" {
+    if (!term\isInteractive()) {
+        var failure = "";
+        try {
+            main(["--run", "abc"]);
+        } catch (err: str) {
+            failure = err;
+        }
+        assert\equal(failure.startsWith("failures: --run \"abc\" is not a run id"), want: true, message: "refusal");
+    }
 }
