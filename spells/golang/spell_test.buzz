@@ -222,6 +222,14 @@ test "golangci-lint keys on the platform and the Go toolchain selectors" {
     }
 }
 
+test "an op that rewrites in place declares the files it edits" {
+    std\assert(command("go-fmt").edits.indexOf("**/*.go") != null, message: "gofmt -w rewrites Go sources");
+    std\assert(command("golangci-lint").edits.indexOf("**/*.go") != null, message: "--fix rewrites Go sources");
+    std\assert(command("go-mod-tidy").edits.join(" ") == "go.mod go.sum", message: "tidy rewrites the module files");
+    std\assert(command("go-mod-edit").edits.join(" ") == "go.mod", message: "edit rewrites go.mod alone");
+    std\assert(command("go-vet").edits.len() == 0, message: "a check edits nothing");
+}
+
 test "decisions are gocyclo's: if, for, case, && and ||" {
     final decisions = go\mgs_getLanguage().syntax!.decisions!;
     std\assert(decisions.keywords.join(" ") == "if for case", message: "keywords");

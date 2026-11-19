@@ -29,5 +29,6 @@ export object Command {
     quiet: bool = false,
     secrets: {str: str} = {},
     envKeys: [str] = [],
+    edits: [str] = [],
     hints: [Hint] = [],
 }

@@ -201,12 +201,12 @@ type Step struct {
 	// so no key moves.
 	ForeignOutputs []types.Glob
 
-	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
-	// Outputs, and hashing either would change every existing key. They exist so
-	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
-	// Updates are never snapshotted, so a run records an entry only when every update
-	// file ended it with the bytes the key saw.
-	Updates []types.Glob // ctx.writesFiles(..., editsExistingSource: true) globs
+	// Updates, Ops and OwnedOutputs are unhashed: the key already covers what they name, and
+	// hashing them would change every existing key. They let checkSourceMutation tell a declared
+	// write from an undeclared one (MGS4007). Updates are never snapshotted, so a run records
+	// an entry only when every update file ended it with the bytes the key saw.
+	Updates []types.Glob // ctx.writesFiles(..., editsExistingSource: true) globs, and a bare op's edits
+	Ops     []string     // "spell::op" of each op a bare-op step runs; MGS4007 names its edits
 	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
 	// target does the same across projects.

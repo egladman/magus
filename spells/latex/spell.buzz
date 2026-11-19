@@ -57,7 +57,7 @@ fun chktex(target: Target) > Command {
 // -g keeps indent.log out of the tree. -c moves the backup into build/.
 fun latexindent(target: Target) > Command {
     final args = ["-k", "-s", "-g=/dev/null", "-c=build/latexindent"];
-    return Command{bin = "latexindent", args = args, sources = ["**/*.tex", "**/*.sty", "**/*.cls"], sourcesEach = true, charms = {
+    return Command{bin = "latexindent", args = args, sources = ["**/*.tex", "**/*.sty", "**/*.cls"], sourcesEach = true, edits = ["**/*.tex", "**/*.sty", "**/*.cls"], charms = {
         "rw": set(args, "-k", "-wd"),
     }};
 }

@@ -159,6 +159,18 @@ type Command struct {
 	// reads it from the environment), so nothing else names it, and an author composing
 	// the op has no way to know it needs declaring at all.
 	EnvKeys []string `json:"env_keys,omitempty"`
+	// Edits are the globs, relative to the project directory, of the existing files
+	// this command may rewrite in place: gofmt -w over **/*.go, go mod tidy over go.mod
+	// and go.sum. Declare them unconditionally, even when only a charm makes the tool
+	// write: the declaration says what the op may touch, a charm decides whether it does.
+	// A "!" entry excludes.
+	//
+	// They apply only when the op is the step, as `magus run go-fmt:rw` or
+	// `go::go-fmt:rw`: there they key the step and exempt the files from MGS4007, as
+	// ctx.writesFiles(..., editsExistingSource: true) does for a target. A magusfile
+	// target that composes the op does not inherit them; it declares its own writes.
+	// A glob that matches no file is allowed: go.sum may not exist yet.
+	Edits []string `json:"edits,omitempty"`
 	// Hints classify a FAILURE of this command into a next step. Each entry pairs a
 	// substring of the tool's output with the advice magus prints when the command
 	// exits non-zero and that substring appeared. The first declared match wins; a
@@ -179,7 +191,7 @@ type Command struct {
 // Validate rejects a Command whose fields contradict each other. Quiet without
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
-	for _, check := range []func() error{c.validateSelection, c.validateQuiet, c.validateSourcesEach, c.validateTestScope, c.validatePathScope} {
+	for _, check := range []func() error{c.validateSelection, c.validateQuiet, c.validateSourcesEach, c.validateTestScope, c.validatePathScope, c.validateEdits} {
 		if err := check(); err != nil {
 			return err
 		}
@@ -251,6 +263,24 @@ func (c Command) validatePathScope() error {
 	}
 	if len(c.PathScopeFiles) > 0 && !positive {
 		return errors.New("path_scope_files holds only exclusions, so it maps no file")
+	}
+	return nil
+}
+
+func (c Command) validateEdits() error {
+	positive := false
+	for i, raw := range c.Edits {
+		pattern, excluded := strings.CutPrefix(raw, "!")
+		if pattern == "" {
+			return fmt.Errorf("edits[%d] %q names no pattern", i, raw)
+		}
+		if !doublestar.ValidatePattern(pattern) {
+			return fmt.Errorf("edits[%d] %q is not a valid glob", i, raw)
+		}
+		positive = positive || !excluded
+	}
+	if len(c.Edits) > 0 && !positive {
+		return errors.New("edits holds only exclusions, so it names no file")
 	}
 	return nil
 }
