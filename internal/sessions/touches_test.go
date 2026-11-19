@@ -23,10 +23,16 @@ type TouchesSuite struct{ suite.Suite }
 
 func TestTouches(t *testing.T) { suite.Run(t, new(TouchesSuite)) }
 
+// withSecrets gives ctx the resolver the recorder requires before it writes anything: with
+// none it refuses rather than store text it could not redact.
+func withSecrets(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
+
 // record writes one observation the way the guard hook does.
 func record(t *testing.T, base string, c recorder.AgentCommand) {
 	t.Helper()
-	recorder.AppendAgentCommand(context.Background(), base, c)
+	recorder.AppendAgentCommand(withSecrets(context.Background()), base, c)
 }
 
 // replayed is replayTrail over a store whose every blob decodes.
@@ -40,8 +46,8 @@ func replayed(t *testing.T, root, base string, paths []string, limit int) map[st
 // recordUndecodable writes an agent command whose request blob is not JSON.
 func recordUndecodable(t *testing.T, base string) string {
 	t.Helper()
-	request := recorder.WritePayload(t.Context(), base, "agent", []byte("not json"))
-	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: recorder.ToolShellCommand, Request: request})
+	request := recorder.WritePayload(withSecrets(t.Context()), base, "agent", []byte("not json"))
+	recorder.AppendCall(withSecrets(t.Context()), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: recorder.ToolShellCommand, Request: request})
 	return request.Ref
 }
 
@@ -222,13 +228,13 @@ func (s *TouchesSuite) TestReplayOnAnEmptyTrailIsEmptyNotAnError() {
 func (s *TouchesSuite) TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed() {
 	t := s.T()
 	dir := t.TempDir()
-	_, err := session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+	_, err := session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{}), []session.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
-	}, session.InvocationStart{})
+	})
 	require.NoError(t, err)
 	fold, err := session.ReadAll(t.Context(), dir)
 	require.NoError(t, err)
@@ -256,11 +262,11 @@ func (s *TouchesSuite) TestAttachTouchesMergesTheTrailAndTheLoadedStore() {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+	_, err = session.LoadEvents(t.Context(), StoreConfig(dir, "", session.InvocationStart{}), []session.LoadEvent{
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
 		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
 		{Session: "s2", Event: session.AgentEvent{Host: "codex", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
-	}, session.InvocationStart{})
+	})
 	require.NoError(t, err)
 
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}, {Path: "untouched.go"}}}
@@ -290,7 +296,7 @@ func (s *TouchesSuite) TestForSessionFoldsOneHostSessionsTrail() {
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "git commit -m x", Decision: verdict.Deny, Lease: "fleet/w1"})
 	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "rm -rf", Decision: verdict.Deny})
-	recorder.AppendAgentSpawn(context.Background(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
+	recorder.AppendAgentSpawn(withSecrets(context.Background()), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
 	got, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)
@@ -333,9 +339,9 @@ func (s *TouchesSuite) TestForSessionCountsACallOnceWithItsToolTime() {
 func (s *TouchesSuite) TestForSessionRefusesARetiredDecision() {
 	t := s.T()
 	base := t.TempDir()
-	response := recorder.WritePayload(t.Context(), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
+	response := recorder.WritePayload(withSecrets(t.Context()), base, "agent", []byte(`{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`))
 	ref := response.Ref
-	recorder.AppendCall(t.Context(), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
+	recorder.AppendCall(withSecrets(t.Context()), base, journal.Call{Time: time.UnixMilli(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: recorder.ToolShellCommand, Response: response})
 
 	_, err := readActivity(t.Context(), base, "s1", 100)
 	var retired *recorder.RetiredDecisionError
@@ -358,7 +364,7 @@ func (s *TouchesSuite) TestForSessionReturnsEachCallsCostFacts() {
 	})
 	record(t, base, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "grep -r x .", Decision: verdict.Defer, AgentFacts: passed})
 	record(t, base, recorder.AgentCommand{Session: "other", Tool: recorder.ToolShellCommand, Command: "ls", AgentFacts: types.AgentFacts{ContextTokens: 1}})
-	recorder.AppendAgentSpawn(t.Context(), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
+	recorder.AppendAgentSpawn(withSecrets(t.Context()), base, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "look", AgentFacts: types.AgentFacts{ContextTokens: 77_000}})
 
 	got, err := readActivity(t.Context(), base, "s1", 100)
 	require.NoError(t, err)

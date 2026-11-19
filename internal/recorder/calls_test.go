@@ -27,6 +27,17 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// testCtx carries the resolver every write needs: with none the recorder drops the
+// record rather than persist text it could not redact.
+func testCtx(t testing.TB) context.Context {
+	return secrets.WithResolver(t.Context(), testkit.EnvResolver(t))
+}
+
+// bgCtx is testCtx for callers with no *testing.T in reach (helpers, benchmarks).
+func bgCtx() context.Context {
+	return testkit.WithEnvResolver(context.Background())
+}
+
 type CallsSuite struct{ suite.Suite }
 
 func TestCalls(t *testing.T) { suite.Run(t, new(CallsSuite)) }
@@ -50,7 +61,7 @@ func captureWarnings(t *testing.T, fn func()) string {
 func stamped(t *testing.T, got, want journal.Call) journal.Call {
 	t.Helper()
 	want.Time = got.Time
-	want.Origin = StampOrigin(t.Context(), want.Origin)
+	want.Origin = StampOrigin(testCtx(t), want.Origin)
 	want.Request, want.Response = got.Request, got.Response
 	return want
 }
@@ -87,11 +98,11 @@ func seedEvents(t *testing.T, base string, n int) []journal.Call {
 func (s *CallsSuite) TestRecentCallsIsNewestFirst() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
-	AppendCall(t.Context(), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
-	AppendCall(t.Context(), dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
+	AppendCall(testCtx(t), dir, journal.Call{Time: atMs(1), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+	AppendCall(testCtx(t), dir, journal.Call{Time: atMs(2), Kind: journal.CallKindTokenLifecycle, Name: "connector.create", Outcome: journal.OutcomeOK})
+	AppendCall(testCtx(t), dir, journal.Call{Time: atMs(3), Kind: journal.CallKindJob, Workspace: "/ws", Name: "graph build", Outcome: journal.OutcomeError, Error: "boom"})
 
-	events, err := RecentCalls(t.Context(), dir, 10)
+	events, err := RecentCalls(testCtx(t), dir, 10)
 	if err != nil {
 		t.Fatalf("RecentCalls: %v", err)
 	}
@@ -111,9 +122,9 @@ func (s *CallsSuite) TestTrailIsPrivateToItsOwner() {
 	t := s.T()
 	dir := filepath.Join(t.TempDir(), "state")
 	for i := range 3 {
-		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
+		AppendCall(testCtx(t), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: "query", Outcome: journal.OutcomeOK})
 	}
-	ref := WritePayload(t.Context(), dir, "mcp", []byte("a payload")).Ref
+	ref := WritePayload(testCtx(t), dir, "mcp", []byte("a payload")).Ref
 	require.NotEmpty(t, ref)
 
 	perm := func(p string) os.FileMode {
@@ -129,13 +140,13 @@ func (s *CallsSuite) TestTrailIsPrivateToItsOwner() {
 
 func (s *CallsSuite) TestAppend_EmptyBaseIsNoop() {
 	t := s.T()
-	AppendCall(t.Context(), "", journal.Call{Name: "x"}) // must not panic or create anything
+	AppendCall(testCtx(t), "", journal.Call{Name: "x"}) // must not panic or create anything
 }
 
 func (s *CallsSuite) TestAppendAgentCommand_NormalizesHookObservation() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{
 		Workspace: "/repo/magus",
 		Host:      "codex",
 		Session:   "abc123",
@@ -145,7 +156,7 @@ func (s *CallsSuite) TestAppendAgentCommand_NormalizesHookObservation() {
 		Decision:  verdict.Defer,
 	})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -184,8 +195,8 @@ func (s *CallsSuite) TestAppendAgentCommand_NormalizesHookObservation() {
 func (s *CallsSuite) TestAppendAgentCommand_RequiresCommandOrPath() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
-	events, err := RecentCalls(t.Context(), dir, 1)
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Decision: verdict.Defer})
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events)
 }
@@ -193,9 +204,9 @@ func (s *CallsSuite) TestAppendAgentCommand_RequiresCommandOrPath() {
 func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheGuardJudged() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: verdict.Defer, GuardMs: 278})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	require.NotNil(t, events[0].Guard)
@@ -206,9 +217,9 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheGuardJudged() {
 func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheToolRan() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -222,18 +233,18 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsHowLongTheToolRan() {
 func (s *CallsSuite) TestAppendAgentCommand_RecordsTheJudgingBinaryAndDirectory() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{
 		Tool: "Bash", Command: "ls", Decision: verdict.Defer,
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2", Cwd: "/work/tree/console",
 		Phases: []journal.Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
 	})
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: verdict.Defer})
-	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: verdict.Defer})
+	AppendAgentSpawn(testCtx(t), dir, AgentSpawn{
 		Child: "Explore", Context: "look",
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
 	})
 
-	events, err := RecentCalls(t.Context(), dir, 10)
+	events, err := RecentCalls(testCtx(t), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	var commands, spawns []journal.Call
@@ -281,9 +292,9 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsTheJudgingBinaryAndDirectory(
 func (s *CallsSuite) TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Path: "AGENTS.md", Decision: verdict.Advise, Context: "record the decision"})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -327,9 +338,9 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsTheCostFacts() {
 		ResultChars:    &chars,
 		Shadow:         map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Defer},
 	}
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: verdict.Defer, AgentFacts: want})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Command: "grep x", Decision: verdict.Defer, AgentFacts: want})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	raw, err := readBlob(dir, events[0].Request.Ref)
@@ -345,9 +356,9 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsTheCostFacts() {
 func (s *CallsSuite) TestAppendAgentCommand_OmitsCostFactsItWasNotGiven() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls"})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Command: "ls"})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -361,9 +372,9 @@ func (s *CallsSuite) TestAppendAgentCommand_KeepsAnObservedEmptyResult() {
 	t := s.T()
 	dir := t.TempDir()
 	empty := 0
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Command: "ls", AgentFacts: types.AgentFacts{ResultChars: &empty}})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -380,11 +391,11 @@ func (s *CallsSuite) TestAppendAgentSpawn_RecordsTheCostFacts() {
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
 		ContextTokens: 88_000, ContextModel: "claude-opus-5-5", Billing: types.AgentBillingQuota,
 	}
-	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+	AppendAgentSpawn(testCtx(t), dir, AgentSpawn{
 		Child: "Explore", Context: "look around", DeclaredModel: "claude-haiku-5-5", AgentFacts: want,
 	})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	raw, err := readBlob(dir, events[0].Request.Ref)
 	require.NoError(t, err)
@@ -402,7 +413,7 @@ func (s *CallsSuite) TestAppendAgentSpawn_RecordsHandedContext() {
 	t := s.T()
 	dir := t.TempDir()
 	handed := "lease: notes-store-6b\n\nAudit the notes store write boundary and report back."
-	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+	AppendAgentSpawn(testCtx(t), dir, AgentSpawn{
 		Workspace: "/repo/magus",
 		Host:      "claude-code",
 		Session:   "abc123",
@@ -412,7 +423,7 @@ func (s *CallsSuite) TestAppendAgentSpawn_RecordsHandedContext() {
 		Context:   handed,
 	})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
@@ -423,7 +434,7 @@ func (s *CallsSuite) TestAppendAgentSpawn_RecordsHandedContext() {
 	event.Time, event.Request = time.Time{}, journal.Payload{}
 	require.Equal(t, journal.Call{
 		Kind:      journal.CallKindAgentSpawn,
-		Origin:    StampOrigin(t.Context(), job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    StampOrigin(testCtx(t), job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Name:      "Explore",
 		Lease:     "notes-store-6b",
@@ -449,13 +460,13 @@ func (s *CallsSuite) TestAppendAgentSpawn_RecordsHandedContext() {
 func (s *CallsSuite) TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
-	events, err := RecentCalls(t.Context(), dir, 1)
+	AppendAgentSpawn(testCtx(t), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Empty(t, events, "a spawn with no handed context has nothing to audit")
 
-	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Context: "go and do the thing"})
-	events, err = RecentCalls(t.Context(), dir, 1)
+	AppendAgentSpawn(testCtx(t), dir, AgentSpawn{Context: "go and do the thing"})
+	events, err = RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// An unlabelled callee still says a spawn happened, and names no lease.
@@ -470,8 +481,8 @@ func (s *CallsSuite) TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericA
 // spawnName is the action AppendAgentSpawn records for spawn.
 func (s *CallsSuite) spawnName(spawn AgentSpawn) string {
 	dir := s.T().TempDir()
-	AppendAgentSpawn(s.T().Context(), dir, spawn)
-	events, err := RecentCalls(s.T().Context(), dir, 1)
+	AppendAgentSpawn(testCtx(s.T()), dir, spawn)
+	events, err := RecentCalls(testCtx(s.T()), dir, 1)
 	s.Require().NoError(err)
 	s.Require().Len(events, 1)
 	return events[0].Name
@@ -545,12 +556,12 @@ func (s *CallsSuite) TestAppendAgentCommand_RecordsOnlyTheSuppliedLease() {
 	t := s.T()
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/from-env")
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: job.LeaseSourceMarker})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: job.LeaseSourceMarker})
 	// A supplied lease that fails the charset is not stamped, and nothing stands in for it.
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: verdict.Defer})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: verdict.Defer})
 
-	events, err := RecentCalls(t.Context(), dir, 3)
+	events, err := RecentCalls(testCtx(t), dir, 3)
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
@@ -571,9 +582,9 @@ func (s *CallsSuite) TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated() {
 	t := s.T()
 	t.Setenv(EnvBaggage, "")
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
+	AppendAgentCommand(testCtx(t), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 
-	events, err := RecentCalls(t.Context(), dir, 1)
+	events, err := RecentCalls(testCtx(t), dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Empty(t, events[0].Lease, "a missing join is the designed outcome, never an invented one")
@@ -582,7 +593,7 @@ func (s *CallsSuite) TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated() {
 func (s *CallsSuite) TestWritePayload_RoundTripAndDedup() {
 	t := s.T()
 	dir := t.TempDir()
-	p := WritePayload(t.Context(), dir, "mcp", []byte("payload one"))
+	p := WritePayload(testCtx(t), dir, "mcp", []byte("payload one"))
 	ref, size := p.Ref, p.Bytes
 	if ref == "" || size != int64(len("payload one")) || ref[:3] != "mcp" {
 		t.Fatalf("WritePayload = %q,%d", ref, size)
@@ -591,7 +602,7 @@ func (s *CallsSuite) TestWritePayload_RoundTripAndDedup() {
 	if err != nil || string(body) != "payload one" {
 		t.Fatalf("readBlob = %q, %v", body, err)
 	}
-	if again := WritePayload(t.Context(), dir, "mcp", []byte("payload one")).Ref; again != ref { // content-addressed dedup
+	if again := WritePayload(testCtx(t), dir, "mcp", []byte("payload one")).Ref; again != ref { // content-addressed dedup
 		t.Errorf("dedup failed: %q != %q", again, ref)
 	}
 }
@@ -600,14 +611,14 @@ func (s *CallsSuite) TestWritePayload_RejectsBadPrefixOrEmpty() {
 	t := s.T()
 	dir := t.TempDir()
 	for _, bad := range []string{"", "m", "MCP", "toolong99", "a1"} {
-		if ref := WritePayload(t.Context(), dir, bad, []byte("x")).Ref; ref != "" {
+		if ref := WritePayload(testCtx(t), dir, bad, []byte("x")).Ref; ref != "" {
 			t.Errorf("WritePayload(prefix=%q) = %q, want empty", bad, ref)
 		}
 	}
-	if p := WritePayload(t.Context(), dir, "mcp", nil); p != (journal.Payload{}) {
+	if p := WritePayload(testCtx(t), dir, "mcp", nil); p != (journal.Payload{}) {
 		t.Errorf("empty data = %+v; want the zero payload", p)
 	}
-	if ref := WritePayload(t.Context(), "", "mcp", []byte("x")).Ref; ref != "" {
+	if ref := WritePayload(testCtx(t), "", "mcp", []byte("x")).Ref; ref != "" {
 		t.Errorf("empty base = %q, want empty", ref)
 	}
 }
@@ -625,18 +636,18 @@ func (s *CallsSuite) TestRotate_CapsEventsAndGCsOrphanBlobs() {
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
 	for i := 1; i <= 5; i++ {
-		response := WritePayload(t.Context(), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
+		response := WritePayload(testCtx(t), dir, "mcp", []byte(string(rune('a'+i-1))+"-body"))
 		ref := response.Ref
 		refs = append(refs, ref)
-		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: string(rune('a' + i - 1)), Response: response})
+		AppendCall(testCtx(t), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindMCPTool, Name: string(rune('a' + i - 1)), Response: response})
 		// Past blobGraceWindow, so this test exercises real orphan collection rather
 		// than the grace-window protection covered by TestGCBlobs_ProtectsPendingBlob.
 		backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 	}
 
-	require.NoError(t, rotate(t.Context(), dir, 2)) // keep the last 2 events
+	require.NoError(t, rotate(testCtx(t), dir, 2)) // keep the last 2 events
 
-	events, _ := RecentCalls(t.Context(), dir, 10)
+	events, _ := RecentCalls(testCtx(t), dir, 10)
 	if len(events) != 2 {
 		t.Fatalf("after rotate got %d events, want 2", len(events))
 	}
@@ -663,7 +674,7 @@ func (s *CallsSuite) TestRotate_CapsEventsAndGCsOrphanBlobs() {
 func (s *CallsSuite) TestGCBlobs_ProtectsPendingBlob() {
 	t := s.T()
 	dir := t.TempDir()
-	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("pending payload"))
+	ref := writeBlobRef(testCtx(t), dir, "mcp", []byte("pending payload"))
 
 	require.NoError(t, gcBlobs(dir, nil)) // simulate rotate's events snapshot: taken before Append landed
 
@@ -677,10 +688,10 @@ func (s *CallsSuite) TestGCBlobs_ProtectsPendingBlob() {
 func (s *CallsSuite) TestWritePayload_DedupHitReopensTheGraceWindow() {
 	t := s.T()
 	dir := t.TempDir()
-	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
+	ref := writeBlobRef(testCtx(t), dir, "mcp", []byte("shared payload"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
-	again := writeBlobRef(t.Context(), dir, "mcp", []byte("shared payload"))
+	again := writeBlobRef(testCtx(t), dir, "mcp", []byte("shared payload"))
 	require.Equal(t, ref, again, "identical content must dedup onto the stored blob")
 
 	require.NoError(t, gcBlobs(dir, nil)) // rotate's snapshot, taken before the pending Append lands
@@ -694,7 +705,7 @@ func (s *CallsSuite) TestWritePayload_DedupHitReopensTheGraceWindow() {
 func (s *CallsSuite) TestGCBlobs_CollectsOrphanPastGraceWindow() {
 	t := s.T()
 	dir := t.TempDir()
-	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("truly orphaned"))
+	ref := writeBlobRef(testCtx(t), dir, "mcp", []byte("truly orphaned"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 
 	require.NoError(t, gcBlobs(dir, nil))
@@ -710,7 +721,7 @@ func (s *CallsSuite) TestGCBlobs_CollectsOrphanPastGraceWindow() {
 func (s *CallsSuite) TestGCBlobs_KeepsTheVerdictARepeatDenyCites() {
 	t := s.T()
 	dir := t.TempDir()
-	ref := writeBlobRef(t.Context(), dir, "grd", []byte("the full verdict"))
+	ref := writeBlobRef(testCtx(t), dir, "grd", []byte("the full verdict"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
 	line, err := journal.Call{Kind: journal.CallKindAgentCommand, Name: "shell.command", Guard: &journal.Guard{Verdict: journal.Payload{Ref: ref}}}.MarshalJSON()
 	require.NoError(t, err)
@@ -726,22 +737,22 @@ func (s *CallsSuite) TestGCBlobs_KeepsTheVerdictARepeatDenyCites() {
 func (s *CallsSuite) TestRotate_UnderCapAndEmptyBaseAreNoops() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
-	require.NoError(t, rotate(t.Context(), dir, 10)) // under cap: no rewrite
-	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 1 {
+	AppendCall(testCtx(t), dir, journal.Call{Time: atMs(1), Name: "a"})
+	require.NoError(t, rotate(testCtx(t), dir, 10)) // under cap: no rewrite
+	if evs, _ := RecentCalls(testCtx(t), dir, 10); len(evs) != 1 {
 		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
-	require.NoError(t, rotate(t.Context(), "", 2))
+	require.NoError(t, rotate(testCtx(t), "", 2))
 }
 
 func (s *CallsSuite) TestRotateCalls_UnderCapKeepsAll() {
 	t := s.T()
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
-		AppendCall(t.Context(), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
+		AppendCall(testCtx(t), dir, journal.Call{Time: atMs(int64(i)), Kind: journal.CallKindJob, Name: "x"})
 	}
-	require.NoError(t, RotateCalls(t.Context(), dir)) // maxEvents is 10000, so this is a no-op that must not lose events
-	if evs, _ := RecentCalls(t.Context(), dir, 10); len(evs) != 3 {
+	require.NoError(t, RotateCalls(testCtx(t), dir)) // maxEvents is 10000, so this is a no-op that must not lose events
+	if evs, _ := RecentCalls(testCtx(t), dir, 10); len(evs) != 3 {
 		t.Errorf("RotateCalls under cap changed the log: got %d events, want 3", len(evs))
 	}
 }
@@ -752,8 +763,8 @@ func (s *CallsSuite) TestRotateCalls_TrimsAnOverCapTrail() {
 	dir := t.TempDir()
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
-	require.NoError(t, RotateCalls(t.Context(), dir))
-	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
+	require.NoError(t, RotateCalls(testCtx(t), dir))
+	got, err := RecentCalls(testCtx(t), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges, newest first.
@@ -768,7 +779,7 @@ func (s *CallsSuite) TestWritePayload_IsOwnerOnly() {
 		t.Skip("no POSIX modes")
 	}
 	dir := t.TempDir()
-	ref := writeBlobRef(t.Context(), dir, "mcp", []byte("payload"))
+	ref := writeBlobRef(testCtx(t), dir, "mcp", []byte("payload"))
 	require.NotEmpty(t, ref)
 
 	fi, err := os.Stat(filepath.Join(blobsPath(dir), ref))
@@ -787,8 +798,8 @@ func (s *CallsSuite) TestRotateCalls_WritesTheTrailPrivate() {
 	seedEvents(t, dir, maxEvents+5)
 	require.NoError(t, os.Chmod(eventsPath(dir), 0o644))
 
-	require.NoError(t, RotateCalls(t.Context(), dir))
-	got, err := RecentCalls(t.Context(), dir, maxEvents+100)
+	require.NoError(t, RotateCalls(testCtx(t), dir))
+	got, err := RecentCalls(testCtx(t), dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents, "the rotate ran")
 	fi, err := os.Stat(eventsPath(dir))
@@ -802,14 +813,14 @@ func (s *CallsSuite) TestRotateCalls_WritesTheTrailPrivate() {
 func (s *CallsSuite) TestRotateCalls_SkipsTheReadWhenTheFileIsTooSmall() {
 	t := s.T()
 	dir := t.TempDir()
-	AppendCall(t.Context(), dir, journal.Call{Time: atMs(1), Name: "a"})
+	AppendCall(testCtx(t), dir, journal.Call{Time: atMs(1), Name: "a"})
 
 	info, err := os.Stat(eventsPath(dir))
 	require.NoError(t, err)
 	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
 
-	require.NoError(t, RotateCalls(t.Context(), dir))
-	got, err := RecentCalls(t.Context(), dir, 10)
+	require.NoError(t, RotateCalls(testCtx(t), dir))
+	got, err := RecentCalls(testCtx(t), dir, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
 
@@ -823,7 +834,7 @@ func (s *CallsSuite) TestRotateCalls_SkipsTheReadWhenTheFileIsTooSmall() {
 
 func (s *CallsSuite) TestRotateCalls_EmptyBaseIsNoop() {
 	t := s.T()
-	require.NoError(t, RotateCalls(t.Context(), ""))
+	require.NoError(t, RotateCalls(testCtx(t), ""))
 }
 
 // TestSelectKept_ReservesAFloorForEveryKind is the governance guarantee: a loud kind must not be
@@ -890,9 +901,9 @@ func (s *CallsSuite) TestTrailRedactsThroughContext() {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(t)
 	t.Setenv("TRAIL_TEST_TOKEN", credential)
-	ctx := secrets.WithResolver(t.Context(), res)
+	ctx := secrets.WithResolver(testCtx(t), res)
 	// Reading is what marks the value as a secret: provenance, not shape.
 	got, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
@@ -941,9 +952,9 @@ func (s *CallsSuite) TestTrailRedactsThroughContext() {
 func (s *CallsSuite) TestTrailKeepsStructuralFields() {
 	t := s.T()
 	base := t.TempDir()
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(t)
 	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
-	ctx := secrets.WithResolver(t.Context(), res)
+	ctx := secrets.WithResolver(testCtx(t), res)
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 
@@ -967,11 +978,11 @@ func (s *CallsSuite) TestTrailKeepsStructuralFields() {
 func (s *CallsSuite) TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts() {
 	t := s.T()
 	base := t.TempDir()
-	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Tool: ToolFileRead, Path: "a.go"})
-	request := WritePayload(t.Context(), base, "agent", []byte("not json"))
-	AppendCall(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: ToolShellCommand, Request: request})
+	AppendAgentCommand(testCtx(t), base, AgentCommand{Session: "s1", Tool: ToolFileRead, Path: "a.go"})
+	request := WritePayload(testCtx(t), base, "agent", []byte("not json"))
+	AppendCall(testCtx(t), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Name: ToolShellCommand, Request: request})
 
-	reads, writes, shell, err := ObservedCounts(t.Context(), base, 100)
+	reads, writes, shell, err := ObservedCounts(testCtx(t), base, 100)
 
 	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)
@@ -982,8 +993,8 @@ func (s *CallsSuite) TestObservedCountsReturnsAnUndecodableBlobBesideTheCounts()
 // recordUndecodable writes an agent command whose request blob is not JSON.
 func recordUndecodable(t *testing.T, base string) string {
 	t.Helper()
-	request := WritePayload(t.Context(), base, "agent", []byte("not json"))
-	AppendCall(t.Context(), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: ToolShellCommand, Request: request})
+	request := WritePayload(testCtx(t), base, "agent", []byte("not json"))
+	AppendCall(testCtx(t), base, journal.Call{Time: atMs(1), Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}, Lease: "l1", Name: ToolShellCommand, Request: request})
 	return request.Ref
 }
 
@@ -1008,9 +1019,9 @@ func (s *CallsSuite) TestLastJobReturnsALogThatDoesNotRead() {
 	t := s.T()
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(eventsPath(base), 0o700))
-	_, _, err := LastJob(t.Context(), base, "graph build")
+	_, _, err := LastJob(testCtx(t), base, "graph build")
 	require.Error(t, err)
-	_, _, err = StatCalls(t.Context(), base)
+	_, _, err = StatCalls(testCtx(t), base)
 	require.Error(t, err)
 }
 
@@ -1025,18 +1036,18 @@ func (s *CallsSuite) TestRelativizeCutsTheRootAtASeparator() {
 func (s *CallsSuite) TestLastAgentActivityReadsTheNewestObservation() {
 	t := s.T()
 	base := t.TempDir()
-	_, ok := LastAgentActivity(t.Context(), base)
+	_, ok := LastAgentActivity(testCtx(t), base)
 	assert.False(t, ok, "an empty log has no activity to report")
 
-	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
-	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s2", Host: "opencode", Tool: ToolFileRead, Path: "magus.go"})
+	AppendAgentCommand(testCtx(t), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
+	AppendAgentCommand(testCtx(t), base, AgentCommand{Session: "s2", Host: "opencode", Tool: ToolFileRead, Path: "magus.go"})
 
-	got, ok := LastAgentActivity(t.Context(), base)
+	got, ok := LastAgentActivity(testCtx(t), base)
 	require.True(t, ok)
 	assert.Equal(t, AgentActivity{Session: "s2", Host: "opencode", At: got.At}, got)
 	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
 
-	_, ok = LastAgentActivity(t.Context(), t.TempDir())
+	_, ok = LastAgentActivity(testCtx(t), t.TempDir())
 	assert.False(t, ok, "an absent log is no activity, not an error")
 }
 
@@ -1045,17 +1056,17 @@ func (s *CallsSuite) TestLastAgentActivityReadsTheNewestObservation() {
 func (s *CallsSuite) TestLastAgentActivityIsNotBoundedByAWindow() {
 	t := s.T()
 	base := t.TempDir()
-	AppendAgentCommand(t.Context(), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
+	AppendAgentCommand(testCtx(t), base, AgentCommand{Session: "s1", Host: "opencode", Tool: ToolShellCommand, Command: "ls"})
 	for range 200 {
-		AppendCall(t.Context(), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
+		AppendCall(testCtx(t), base, journal.Call{Kind: journal.CallKindJob, Time: time.Now()})
 	}
 
-	got, ok := LastAgentActivity(t.Context(), base)
+	got, ok := LastAgentActivity(testCtx(t), base)
 	require.True(t, ok, "an observation does not age out because other calls were recorded after it")
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	AppendCall(t.Context(), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
-	_, ok = LastAgentActivity(t.Context(), stamped)
+	AppendCall(testCtx(t), stamped, journal.Call{Kind: journal.CallKindAgentCommand, Origin: job.Origin{Session: "s1"}})
+	_, ok = LastAgentActivity(testCtx(t), stamped)
 	assert.False(t, ok, "an observation with no time has no age to report")
 }

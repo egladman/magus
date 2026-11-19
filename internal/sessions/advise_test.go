@@ -21,7 +21,9 @@ func TestDirectiveSuite(t *testing.T) { suite.Run(t, new(DirectiveSuite)) }
 
 func (s *DirectiveSuite) SetupTest() {
 	s.dir = s.T().TempDir()
-	s.store = newDirectiveStore(s.dir)
+	store, err := newDirectiveStore(s.dir)
+	s.Require().NoError(err)
+	s.store = store
 	s.now = time.UnixMilli(1_800_000_000_000)
 }
 
@@ -45,7 +47,9 @@ func (s *DirectiveSuite) TestAnAbsentStoreHoldsNothing() {
 }
 
 func (s *DirectiveSuite) TestADeliveryWithNothingOpenCreatesNoStore() {
-	s.store = newDirectiveStore(filepath.Join(s.dir, "absent"))
+	store, err := newDirectiveStore(filepath.Join(s.dir, "absent"))
+	s.Require().NoError(err)
+	s.store = store
 	s.Empty(s.deliver("s1"))
 	s.NoDirExists(s.store.Dir())
 }

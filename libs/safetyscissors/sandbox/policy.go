@@ -18,6 +18,7 @@
 package sandbox
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -62,8 +63,8 @@ func (m Mode) String() string {
 }
 
 // Policy is the compiled form of a set of Binds. It is immutable once built and safe
-// for concurrent use. A nil Policy confines nothing: Check passes every access and
-// Command starts a plain child.
+// for concurrent use. A nil Policy is refused, never read as no confinement: Check,
+// Confines and Command return a *[NilPolicyError].
 type Policy struct {
 	rules     filesystem.Ruleset
 	mode      Mode
@@ -77,20 +78,54 @@ type Policy struct {
 	launcher string
 }
 
-// Option configures New.
-type Option func(*Policy)
+// Config is what [New] compiles a Policy from. Binds are the paths a confined child may
+// reach; none confines it to nothing. Everything else is set by an [Option].
+type Config struct {
+	Binds []Bind
+
+	mode       Mode
+	unconfined func(context.Context, error)
+	launcher   string
+	lease      string
+	leaseFrom  job.LeaseSource
+	probe      func() (int, error)
+	errs       []error
+}
+
+// Option adjusts a [Config] before [New] or [Relaunch] reads it. An option given a nil or
+// invalid value records an *[OptionError] on the Config rather than being ignored, so the
+// construction is refused.
+type Option func(*Config)
+
+func (c *Config) fail(option, problem string) {
+	c.errs = append(c.errs, &OptionError{Option: option, Problem: problem})
+}
 
 // WithMode sets what Command does on a host that cannot confine a child. New refuses
-// BestEffort without [WithUnconfined], so a child never runs unconfined unheard.
+// BestEffort without [WithUnconfined], so a child never runs unconfined unheard. A Mode
+// other than Required and BestEffort is an *[OptionError].
 func WithMode(m Mode) Option {
-	return func(p *Policy) { p.mode = m }
+	return func(c *Config) {
+		if m != Required && m != BestEffort {
+			c.fail("WithMode", fmt.Sprintf("%s is not a mode", m))
+			return
+		}
+		c.mode = m
+	}
 }
 
 // WithUnconfined has fn hear each child a BestEffort Command starts unconfined, with
 // the *UnconfinedError saying why the host could not confine it. fn runs on the
-// goroutine calling Command, with Command's ctx, before it returns.
+// goroutine calling Command, with Command's ctx, before it returns. A nil fn is an
+// *[OptionError].
 func WithUnconfined(fn func(context.Context, error)) Option {
-	return func(p *Policy) { p.unconfined = fn }
+	return func(c *Config) {
+		if fn == nil {
+			c.fail("WithUnconfined", "nil function")
+			return
+		}
+		c.unconfined = fn
+	}
 }
 
 // defaultLauncherName is argv[0] of the launcher Command starts on Linux when no
@@ -100,34 +135,80 @@ const defaultLauncherName = "safetyscissors-sandbox-launch"
 // WithLauncherName sets argv[0] of the launcher Command starts on Linux, and the one
 // Relaunch recognizes, so a caller's process listing names its own tool. The default is
 // safetyscissors-sandbox-launch. Pass the same name to both. argv[0] is never parsed as
-// a verb, so the name adds nothing a user can type.
+// a verb, so the name adds nothing a user can type. An empty name is an *[OptionError].
 func WithLauncherName(name string) Option {
-	return func(p *Policy) { p.launcher = name }
+	return func(c *Config) {
+		if name == "" {
+			c.fail("WithLauncherName", "the name is empty")
+			return
+		}
+		c.launcher = name
+	}
 }
 
 // WithLease names the job lease whose boundary the binds are, and the source that
-// answered it, so a DeniedError can name them.
+// answered it, so a DeniedError can name them. An empty id is an *[OptionError]: a
+// policy no lease narrowed takes no WithLease.
 func WithLease(id string, from job.LeaseSource) Option {
-	return func(p *Policy) { p.lease, p.leaseFrom = id, from }
+	return func(c *Config) {
+		if id == "" {
+			c.fail("WithLease", "empty lease id")
+			return
+		}
+		c.lease, c.leaseFrom = id, from
+	}
 }
 
 // WithKernelProbe replaces the host probe Confines and Command ask: probe reports the
 // host's confinement level (the landlock ABI on Linux, 1 where sandbox-exec exists on
-// macOS) or why there is none. A test answers it without the host.
+// macOS) or why there is none. A test answers it without the host. A nil probe is an
+// *[OptionError].
 func WithKernelProbe(probe func() (int, error)) Option {
-	return func(p *Policy) { p.probe = probe }
+	return func(c *Config) {
+		if probe == nil {
+			c.fail("WithKernelProbe", "nil function")
+			return
+		}
+		c.probe = probe
+	}
 }
 
-// New compiles binds into a Policy. A Bind with an unknown Mode or an empty Path is
+// launcherName is the launcher c names, or the default when no option named one.
+func (c *Config) launcherName() string { return cmp.Or(c.launcher, defaultLauncherName) }
+
+// New compiles cfg's Binds into a Policy. A Bind with an unknown Mode or an empty Path is
 // an error naming it, so a typo cannot quietly grant less, or more, than was meant.
 //
-// It refuses with an [*OptionError] a BestEffort mode without [WithUnconfined] and an
-// empty [WithLauncherName].
-func New(binds []Bind, opts ...Option) (*Policy, error) {
-	p, err := applyOptions(opts)
+// It fails with every problem found, joined: an [*OptionError] for each refused option
+// and for a BestEffort mode without [WithUnconfined], and the bind errors.
+func New(cfg Config, opts ...Option) (*Policy, error) {
+	for _, o := range opts {
+		o(&cfg)
+	}
+	errs := cfg.errs
+	if cfg.mode == BestEffort && cfg.unconfined == nil {
+		errs = append(errs, &OptionError{Option: "WithMode(BestEffort)", Problem: "it needs WithUnconfined to hear each child that runs unconfined"})
+	}
+	rules, err := compile(cfg.Binds)
 	if err != nil {
+		errs = append(errs, err)
+	}
+	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
+	return &Policy{
+		rules:      filesystem.Ruleset{Rules: rules},
+		mode:       cfg.mode,
+		lease:      cfg.lease,
+		leaseFrom:  cfg.leaseFrom,
+		probe:      cfg.probe,
+		unconfined: cfg.unconfined,
+		launcher:   cfg.launcherName(),
+	}, nil
+}
+
+// compile resolves binds into rules, refusing each bind it cannot read.
+func compile(binds []Bind) ([]filesystem.Rule, error) {
 	var errs []error
 	rules := make([]filesystem.Rule, 0, len(binds))
 	for _, b := range binds {
@@ -147,23 +228,7 @@ func New(binds []Bind, opts ...Option) (*Policy, error) {
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("sandbox: %w", errors.Join(errs...))
 	}
-	p.rules = filesystem.Ruleset{Rules: rules}
-	return p, nil
-}
-
-// applyOptions builds a policy holding opts, refusing the combinations New refuses.
-func applyOptions(opts []Option) (*Policy, error) {
-	p := &Policy{launcher: defaultLauncherName}
-	for _, o := range opts {
-		o(p)
-	}
-	switch {
-	case p.mode == BestEffort && p.unconfined == nil:
-		return nil, &OptionError{Option: "WithMode(BestEffort)", Problem: "it needs WithUnconfined to hear each child that runs unconfined"}
-	case p.launcher == "":
-		return nil, &OptionError{Option: "WithLauncherName", Problem: "the name is empty"}
-	}
-	return p, nil
+	return rules, nil
 }
 
 // Rules returns the compiled rules, paths resolved, in the order the binds gave them.
@@ -185,10 +250,10 @@ func (p *Policy) Lease() (string, job.LeaseSource) {
 
 // Check reports whether p permits access to path, resolved through its symlinks
 // first. A refusal is a *DeniedError, which wraps filesystem.ErrDenied. Check records
-// nothing; a nil p permits everything.
+// nothing; a nil p is a *[NilPolicyError].
 func (p *Policy) Check(access filesystem.Access, path string) error {
 	if p == nil {
-		return nil
+		return &NilPolicyError{Op: "Check"}
 	}
 	if err := p.rules.Check(path, access); err != nil {
 		return &DeniedError{Access: access, Path: path, Lease: p.lease, LeaseFrom: p.leaseFrom, Err: err}

@@ -155,6 +155,24 @@ func (s *CallsSuite) TestABadLineIsALineError() {
 	s.Equal(2, lineErr.Line)
 }
 
+// One line past the cap costs that line, not every call around it.
+func (s *CallsSuite) TestALongLineIsALineErrorAndTheRestRead() {
+	s.writeLines(
+		s.line(Call{Time: time.UnixMilli(1), Kind: CallKindJob, Name: "before"}),
+		strings.Repeat("x", maxCallLineBytes+1),
+		s.line(Call{Time: time.UnixMilli(2), Kind: CallKindJob, Name: "after"}),
+	)
+	got, errs := s.read(10)
+	s.Require().Len(got, 2)
+	s.Equal("after", got[0].Name)
+	s.Equal("before", got[1].Name)
+	s.Require().Len(errs, 1)
+	var lineErr *codec.LineError
+	s.Require().ErrorAs(errs[0], &lineErr)
+	s.Equal(2, lineErr.Line)
+	s.ErrorIs(errs[0], errLineTooLong)
+}
+
 func (s *CallsSuite) TestTheOriginReadsInline() {
 	s.writeLines(`{"ts":1,"kind":"job","user":"eli","host":"claude","action":"a","outcome":"ok"}`)
 	got, _ := s.read(1)

@@ -88,7 +88,9 @@ func ReadToken(ctx context.Context) (secrets.Secret, error) {
 	if tok.IsZero() {
 		return secrets.Secret{}, fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
 	}
-	secrets.ResolverFromContext(ctx).Register(tok)
+	if err := secrets.ResolverFromContext(ctx).Register(tok); err != nil {
+		return secrets.Secret{}, fmt.Errorf("read token from stdin: %w", err)
+	}
 	return tok, nil
 }
 

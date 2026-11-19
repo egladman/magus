@@ -64,7 +64,7 @@ func openTiered(t *testing.T, backend types.CacheBackend, sign bool, opts ...Opt
 	if sign {
 		all = append(all, WithSigningKey(seed))
 	}
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), append(all, opts...)...)
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), append(all, opts...)...)
 	require.NoError(t, err)
 	return c
 }
@@ -82,11 +82,11 @@ func TestTierL1HitNeverReadsL2(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	c := openTiered(t, backend, false)
 	root := t.TempDir()
-	_, ran := buildIn(t, ContextWithRemoteStats(t.Context()), root, c)
+	_, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, c)
 	require.True(t, ran)
 	gets := backend.gets.Load()
 
-	r, ran := buildIn(t, ContextWithRemoteStats(t.Context()), root, c)
+	r, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, c)
 	assert.True(t, r.Hit)
 	assert.False(t, ran)
 	assert.Equal(t, gets, backend.gets.Load(), "an L1 hit fetched from L2")
@@ -98,24 +98,24 @@ func TestTierL1HitNeverReadsL2(t *testing.T) {
 func TestTierL2HitIsPromotedIntoL1(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	producer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	producer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
-	_, ran := buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), producer)
+	_, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), producer)
 	require.True(t, ran)
 
-	consumer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	consumer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}))
 	require.NoError(t, err)
 	root := t.TempDir()
-	r, ran := buildIn(t, ContextWithRemoteStats(t.Context()), root, consumer)
+	r, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, consumer)
 	require.True(t, r.Hit)
 	require.False(t, ran)
 	_, err = consumer.readManifest("test/pkg", r.Hash)
 	require.NoError(t, err, "the L2 hit was not promoted into L1")
 
 	gets := backend.gets.Load()
-	r, _ = buildIn(t, ContextWithRemoteStats(t.Context()), root, consumer)
+	r, _ = buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, consumer)
 	assert.True(t, r.Hit)
 	assert.Equal(t, gets, backend.gets.Load(), "the second run went to L2 again")
 }
@@ -125,18 +125,18 @@ func TestTierL2HitIsPromotedIntoL1(t *testing.T) {
 func TestTierL2HitWithLocalWriteOffIsNotPersisted(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	producer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	producer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
-	_, ran := buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), producer)
+	_, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), producer)
 	require.True(t, ran)
 
 	dir := filepath.Join(t.TempDir(), ".magus")
-	consumer, err := Open(t.Context(), dir,
+	consumer, err := Open(withResolver(t.Context()), dir,
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithLocalWrite(false))
 	require.NoError(t, err)
 	root := t.TempDir()
-	r, ran := buildIn(t, ContextWithRemoteStats(t.Context()), root, consumer)
+	r, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, consumer)
 	require.True(t, r.Hit, "the L2 hit replays from staging")
 	require.False(t, ran)
 	got, err := os.ReadFile(filepath.Join(root, "test", "pkg", "out.txt"))
@@ -167,7 +167,7 @@ func TestTierWriteThrough(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			backend, dir := newCountingBackend(t)
 			c := openTiered(t, backend, name != "no signer", tc.opts...)
-			r, ran := buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), c)
+			r, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), c)
 			require.True(t, ran)
 			_, err := c.readManifest("test/pkg", r.Hash)
 			assert.Equal(t, tc.wantL1, err == nil, "L1")
@@ -181,12 +181,12 @@ func TestTierWriteThrough(t *testing.T) {
 func TestTierOpenRefusesAnUnhonorableRemoteWrite(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, _ := genKeypair(t)
-	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	_, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}),
 		WithLocalWrite(false), WithRemoteWrite(true))
 	assert.ErrorContains(t, err, "local writes are off")
 
-	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithRemoteWrite(true))
 	assert.ErrorContains(t, err, "no signing key")
 }
@@ -197,15 +197,15 @@ func TestTierBackfillsL2FromAnL1Hit(t *testing.T) {
 	backend, dir := newCountingBackend(t)
 	root := t.TempDir()
 	c := openTiered(t, backend, true, WithRemoteWrite(false))
-	r, ran := buildIn(t, ContextWithRemoteStats(t.Context()), root, c)
+	r, ran := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, c)
 	require.True(t, ran)
 	require.False(t, storedIn(t, dir, r.Hash))
 
 	// Same cache directory, now allowed to write L2.
-	writer, err := Open(t.Context(), c.dir, WithRemoteBackend(backend),
+	writer, err := Open(withResolver(t.Context()), c.dir, WithRemoteBackend(backend),
 		WithTrustedKeys(c.trustedKeys), WithSigningKey(c.signingSeed))
 	require.NoError(t, err)
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	r, ran = buildIn(t, ctx, root, writer)
 	require.True(t, r.Hit)
 	require.False(t, ran)
@@ -215,7 +215,7 @@ func TestTierBackfillsL2FromAnL1Hit(t *testing.T) {
 	assert.True(t, storedIn(t, dir, r.Hash))
 
 	puts := backend.puts.Load()
-	ctx = ContextWithRemoteStats(t.Context())
+	ctx = ContextWithRemoteStats(withResolver(t.Context()))
 	buildIn(t, ctx, root, writer)
 	writer.RemoteSummary(ctx)
 	assert.Equal(t, puts, backend.puts.Load(), "an entry L2 holds was uploaded again")
@@ -226,7 +226,7 @@ func TestTierBackfillsL2FromAnL1Hit(t *testing.T) {
 func TestTierUnreachableL2DegradesTheRun(t *testing.T) {
 	gets := &atomic.Int64{}
 	c := openTiered(t, errRemote{gets: gets}, true)
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	_, ran := buildIn(t, ctx, t.TempDir(), c)
 	require.True(t, ran)
 	_, ran = buildIn(t, ctx, t.TempDir(), c)
@@ -248,7 +248,7 @@ func TestTierRequiredRemoteWriteFailsTheStep(t *testing.T) {
 	touchOut(t, root)
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-	_, err := c.Run(ContextWithRemoteStats(t.Context()), step, func(context.Context) error {
+	_, err := c.Run(ContextWithRemoteStats(withResolver(t.Context())), step, func(context.Context) error {
 		return os.WriteFile(filepath.Join(root, "test", "pkg", "out.txt"), []byte("built"), 0o644)
 	})
 	assert.ErrorContains(t, err, "remote writes are required")
@@ -260,13 +260,13 @@ func TestTierL1EvictionLeavesL2(t *testing.T) {
 	backend, dir := newCountingBackend(t)
 	c := openTiered(t, backend, true)
 	root := t.TempDir()
-	r, _ := buildIn(t, ContextWithRemoteStats(t.Context()), root, c)
-	c.evictOldest(t.Context(), 1)
+	r, _ := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, c)
+	c.evictOldest(withResolver(t.Context()), 1)
 	_, err := c.readManifest("test/pkg", r.Hash)
 	require.Error(t, err, "L1 evicted the entry")
 	assert.True(t, storedIn(t, dir, r.Hash), "L1 eviction reached L2")
 
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	r, ran := buildIn(t, ctx, root, c)
 	assert.True(t, r.Hit)
 	assert.False(t, ran)
@@ -278,17 +278,17 @@ func TestTierL1EvictionLeavesL2(t *testing.T) {
 func TestTierRemoteHitIsOneEventAfterReplay(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	producer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	producer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
-	buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), producer)
+	buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), producer)
 
-	consumer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	consumer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}))
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	consumer.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), consumer)
+	buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), consumer)
 
 	assert.Equal(t, 1, strings.Count(buf.String(), `"msg":"cache.hit"`))
 	assert.NotContains(t, buf.String(), `cache.remote.hit`)
@@ -301,10 +301,10 @@ func TestTierRemoteHitIsOneEventAfterReplay(t *testing.T) {
 	root := t.TempDir()
 	writeMain(t, root, "package main")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "test", "pkg", "out.txt", "keep"), 0o755))
-	other, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	other, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}))
 	require.NoError(t, err)
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	_, _ = other.Run(ctx, step, func(context.Context) error { return nil })
@@ -318,7 +318,7 @@ func TestTierLocalReplayFailureTriesL2(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	c := openTiered(t, backend, true)
 	root := t.TempDir()
-	r, _ := buildIn(t, ContextWithRemoteStats(t.Context()), root, c)
+	r, _ := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), root, c)
 	m, err := c.readManifest("test/pkg", r.Hash)
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(c.blobPath(m.Outputs[0].Blob)))
@@ -326,7 +326,7 @@ func TestTierLocalReplayFailureTriesL2(t *testing.T) {
 	// only needed once the output is gone.
 	require.NoError(t, os.Remove(filepath.Join(root, "test", "pkg", "out.txt")))
 
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	r, ran := buildIn(t, ctx, root, c)
 	assert.True(t, r.Hit)
 	assert.False(t, ran, "rebuilt instead of trying L2")
@@ -337,32 +337,32 @@ func TestTierLocalReplayFailureTriesL2(t *testing.T) {
 func TestTierPromotionEvicts(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	producer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	producer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
-	buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), producer)
+	buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), producer)
 
 	// A 2 MiB entry, written by an uncapped cache over the same directory.
 	dir := filepath.Join(t.TempDir(), ".magus")
-	uncapped, err := Open(t.Context(), dir)
+	uncapped, err := Open(withResolver(t.Context()), dir)
 	require.NoError(t, err)
 	big := makeStep(t.TempDir())
 	big.Target = "big"
 	big.Outputs = types.MustParseGlobs("test/pkg/big")
 	writeMain(t, big.WorkspaceRoot, "package big")
 	touchOut(t, big.WorkspaceRoot)
-	rb, err := uncapped.Run(t.Context(), big, func(context.Context) error {
+	rb, err := uncapped.Run(withResolver(t.Context()), big, func(context.Context) error {
 		return os.WriteFile(filepath.Join(big.WorkspaceRoot, "test", "pkg", "big"), bytes.Repeat([]byte("x"), 2<<20), 0o644)
 	})
 	require.NoError(t, err)
 
-	consumer, err := Open(t.Context(), dir,
+	consumer, err := Open(withResolver(t.Context()), dir,
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSizeMB(1))
 	require.NoError(t, err)
 	_, err = consumer.readManifest("test/pkg", rb.Hash)
 	require.NoError(t, err)
 
-	r, _ := buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), consumer)
+	r, _ := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), consumer)
 	require.True(t, r.Hit)
 	_, err = consumer.readManifest("test/pkg", rb.Hash)
 	assert.Error(t, err, "the promotion did not evict down to the cap")
@@ -376,11 +376,11 @@ func TestTierPromotionEvicts(t *testing.T) {
 // has not been used since it was written.
 func TestTierEvictionOrdersByLastUse(t *testing.T) {
 	root, _, c := newMutableCache(t)
-	old, _ := buildIn(t, t.Context(), root, c)
+	old, _ := buildIn(t, withResolver(t.Context()), root, c)
 
 	newer := makeStep(root)
 	newer.Target = "newer"
-	rn, err := c.Run(t.Context(), newer, func(context.Context) error { return nil })
+	rn, err := c.Run(withResolver(t.Context()), newer, func(context.Context) error { return nil })
 	require.NoError(t, err)
 	// Backdate both writes, newer still after old, so the hit below is the latest use
 	// whatever the filesystem's timestamp resolution.
@@ -388,11 +388,11 @@ func TestTierEvictionOrdersByLastUse(t *testing.T) {
 	require.NoError(t, os.Chtimes(c.manifestPath("test/pkg", old.Hash), base, base))
 	require.NoError(t, os.Chtimes(c.manifestPath("test/pkg", rn.Hash), base.Add(time.Minute), base.Add(time.Minute)))
 
-	hit, _ := buildIn(t, t.Context(), root, c)
+	hit, _ := buildIn(t, withResolver(t.Context()), root, c)
 	require.True(t, hit.Hit)
 
 	total, _ := c.scanManifests()
-	c.evictOldest(t.Context(), total-1)
+	c.evictOldest(withResolver(t.Context()), total-1)
 	_, err = c.readManifest("test/pkg", old.Hash)
 	require.NoError(t, err, "the entry that just hit was evicted before one unused since it was written")
 	_, err = c.readManifest("test/pkg", rn.Hash)
@@ -404,7 +404,7 @@ func TestTierAlreadyStoredIsNeitherUploadNorFailure(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	backend.putErr = types.ErrCacheExists
 	c := openTiered(t, backend, true)
-	ctx := ContextWithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(withResolver(t.Context()))
 	buildIn(t, ctx, t.TempDir(), c)
 	stats := remoteStatsFromContext(ctx)
 	assert.Equal(t, int64(1), backend.puts.Load())
@@ -418,37 +418,37 @@ func TestTierAlreadyStoredIsNeitherUploadNorFailure(t *testing.T) {
 func TestRemoteNamespaceIsSignedVerifiedAndGated(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	writer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	writer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
 	ns := writer.RemoteNamespace("@shards")
-	require.NoError(t, ns.Put(t.Context(), "k1", strings.NewReader("shard bytes")))
-	rc, err := ns.Get(t.Context(), "k1")
+	require.NoError(t, ns.Put(withResolver(t.Context()), "k1", strings.NewReader("shard bytes")))
+	rc, err := ns.Get(withResolver(t.Context()), "k1")
 	require.NoError(t, err)
 	got, _ := io.ReadAll(rc)
 	assert.Equal(t, "shard bytes", string(got))
 
-	_, err = ns.Get(t.Context(), "absent")
+	_, err = ns.Get(withResolver(t.Context()), "absent")
 	assert.ErrorIs(t, err, types.ErrCacheMiss)
 
 	// Served under another key, the signature still verifies, and the binding refuses it.
-	raw, err := backend.CacheBackend.GetArtifact(t.Context(), "@shards", "k1")
+	raw, err := backend.CacheBackend.GetArtifact(withResolver(t.Context()), "@shards", "k1")
 	require.NoError(t, err)
 	data, _ := io.ReadAll(raw)
-	require.NoError(t, backend.CacheBackend.PutArtifact(t.Context(), "@shards", "k2", bytes.NewReader(data)))
-	_, err = ns.Get(t.Context(), "k2")
+	require.NoError(t, backend.CacheBackend.PutArtifact(withResolver(t.Context()), "@shards", "k2", bytes.NewReader(data)))
+	_, err = ns.Get(withResolver(t.Context()), "k2")
 	assert.ErrorContains(t, err, "not bound to this key")
 
 	// A different trust set refuses it outright.
 	otherPub, _ := genKeypair(t)
-	reader, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	reader, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{otherPub}))
 	require.NoError(t, err)
-	_, err = reader.RemoteNamespace("@shards").Get(t.Context(), "k1")
+	_, err = reader.RemoteNamespace("@shards").Get(withResolver(t.Context()), "k1")
 	assert.Error(t, err)
 
 	// No signing key, so the remote tier is read-only: the put is refused.
-	err = reader.RemoteNamespace("@shards").Put(t.Context(), "k3", strings.NewReader("x"))
+	err = reader.RemoteNamespace("@shards").Put(withResolver(t.Context()), "k3", strings.NewReader("x"))
 	assert.ErrorIs(t, err, ErrRemoteReadOnly)
 }
 
@@ -456,7 +456,7 @@ func TestRemoteNamespaceIsSignedVerifiedAndGated(t *testing.T) {
 func TestPublishOutputRefusedWithRemoteWriteOff(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	c := openTiered(t, backend, true, WithRemoteWrite(false))
-	_, err := c.PublishOutput(t.Context(), "out0123")
+	_, err := c.PublishOutput(withResolver(t.Context()), "out0123")
 	assert.ErrorContains(t, err, "remote writes are off")
 	assert.Zero(t, backend.puts.Load())
 }
@@ -467,21 +467,21 @@ func TestPublishOutputRefusedWithRemoteWriteOff(t *testing.T) {
 func TestImportedFilesAre0644(t *testing.T) {
 	backend, _ := newCountingBackend(t)
 	pub, seed := genKeypair(t)
-	producer, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	producer, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}), WithSigningKey(seed))
 	require.NoError(t, err)
-	buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), producer)
+	buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), producer)
 
-	promoted, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	promoted, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteBackend(backend), WithTrustedKeys([][]byte{pub}))
 	require.NoError(t, err)
-	r, _ := buildIn(t, ContextWithRemoteStats(t.Context()), t.TempDir(), promoted)
+	r, _ := buildIn(t, ContextWithRemoteStats(withResolver(t.Context())), t.TempDir(), promoted)
 	require.True(t, r.Hit)
 
 	var archive bytes.Buffer
-	require.NoError(t, producer.Export(t.Context(), &archive))
+	require.NoError(t, producer.Export(withResolver(t.Context()), &archive))
 	imported := testCacheDir(t)
-	require.NoError(t, imported.Import(t.Context(), &archive))
+	require.NoError(t, imported.Import(withResolver(t.Context()), &archive))
 
 	for _, c := range []*Cache{promoted, imported} {
 		for _, sub := range []string{"cas", "manifests", "logs"} {

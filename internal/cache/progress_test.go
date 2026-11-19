@@ -55,7 +55,7 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 	s.NoCache = true // a settle re-run is always a skip-cache target
 
 	sink := &eventSink{}
-	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx := recorder.WithSinks(withResolver(t.Context()), sink.Handle)
 	ctx = recorder.WithInvocationID(ctx, "invtest")
 	prog := NewProgress()
 	ctx = ContextWithProgress(ctx, prog)
@@ -105,7 +105,7 @@ func TestRunAsideReportsFailureLikeABatchStep(t *testing.T) {
 	s.NoCache = true
 
 	sink := &eventSink{}
-	ctx := recorder.WithSinks(t.Context(), sink.Handle)
+	ctx := recorder.WithSinks(withResolver(t.Context()), sink.Handle)
 
 	_, err := c.RunAside(ctx, s, func(context.Context) error {
 		return assert.AnError

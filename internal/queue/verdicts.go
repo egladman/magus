@@ -237,14 +237,19 @@ func (w *faultWait) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (d *VerdictDir) faultWaits() file.JSONL[faultWait] {
-	return file.JSONL[faultWait]{JSONL: codec.JSONL[faultWait]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}}
+func (d *VerdictDir) faultWaits() (file.JSONL[faultWait], error) {
+	return file.NewJSONL(codec.JSONLConfig[faultWait]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(d.Path, faultWaitsFile), Perm: 0o644,
+		Key: func(w faultWait) string { return w.Change }})
 }
 
 // FaultWaits is how many runs in a row waited on a machine fault for c at its
 // current head. A new head starts the count again.
 func (d *VerdictDir) FaultWaits(c types.Change) (int, error) {
-	all, err := d.faultWaits().Load()
+	log, err := d.faultWaits()
+	if err != nil {
+		return 0, err
+	}
+	all, err := log.Load()
 	if err != nil {
 		return 0, err
 	}
@@ -267,7 +272,11 @@ func (d *VerdictDir) NoteFaultWait(ctx context.Context, c types.Change, waited b
 	if waited {
 		next = prior + 1
 	}
-	return d.faultWaits().Update(ctx, func([]faultWait) []faultWait {
+	log, err := d.faultWaits()
+	if err != nil {
+		return err
+	}
+	return log.Update(ctx, func([]faultWait) []faultWait {
 		return []faultWait{{Change: c.ID, Head: c.Head, Count: next}}
 	})
 }

@@ -58,7 +58,7 @@ func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	testkit.Isolate(t)
 	root := testkit.NewRepository(t, nil).Root()
 	cacheDir = t.TempDir()
-	return WithLocation(t.Context(), cacheDir, root, root), cacheDir
+	return withSecrets(WithLocation(t.Context(), cacheDir, root, root)), cacheDir
 }
 
 // Envelopes as each host's wiring hands them to `magus shell`, shapes copied from the
@@ -946,7 +946,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	fixtureGit(t, workerRoot, "commit", "-q", "--allow-empty", "-m", "the worker's own")
 	workerHead := fixtureGit(t, workerRoot, "rev-parse", "HEAD")
 	require.NotEqual(t, spawnerHead, workerHead, "the worker's checkout is on a revision of its own")
-	workerCtx := WithLocation(t.Context(), workerCache, workerRoot, workerRoot)
+	workerCtx := withSecrets(WithLocation(t.Context(), workerCache, workerRoot, workerRoot))
 	deps := Dependencies{}
 
 	Judge(spawnerCtx, deps, Request{Input: finishedSpawn(t, "orchestrator/fix guard-facts", "guard-facts", "opus", "worktree", "a1b2c3"), Host: "claude-code"})

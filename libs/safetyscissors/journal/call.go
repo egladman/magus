@@ -2,9 +2,11 @@ package journal
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"iter"
 	"log/slog"
@@ -274,6 +276,12 @@ func Calls(ctx context.Context, dir string, limit int) iter.Seq2[Call, error] {
 		}
 		path := filepath.Join(dir, callsFile)
 		for i := len(lines) - 1; i >= 0; i-- {
+			if lines[i].over {
+				if !yield(Call{}, &codec.LineError{Path: path, Line: lines[i].n, Err: errLineTooLong}) {
+					return
+				}
+				continue
+			}
 			var c Call
 			if err := codec.Unmarshal(lines[i].text, &c); err != nil {
 				if !yield(Call{}, &codec.LineError{Path: path, Line: lines[i].n, Err: err}) {
@@ -291,7 +299,15 @@ func Calls(ctx context.Context, dir string, limit int) iter.Seq2[Call, error] {
 type numbered struct {
 	n    int
 	text []byte
+	// over says the line ran past maxCallLineBytes, and text holds none of it.
+	over bool
 }
+
+// maxCallLineBytes bounds one activity line a reader keeps. Ref lines stay small, so a
+// longer one is damage, and it costs that line rather than the whole read.
+const maxCallLineBytes = 4 << 20
+
+var errLineTooLong = fmt.Errorf("the line is longer than the %d bytes a call line may be", maxCallLineBytes)
 
 // tailLines is the last limit non-blank lines of dir's activity log, oldest
 // first. A missing log has none.
@@ -316,27 +332,53 @@ func tailLines(ctx context.Context, dir string, limit int) ([]numbered, error) {
 	// A circular buffer over the tail; head marks the oldest slot, so no line is shifted.
 	buf := make([]numbered, 0, limit)
 	head := 0
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // ref lines stay small; allow headroom
-	for n := 1; sc.Scan(); n++ {
+	br := bufio.NewReader(f)
+	for n := 1; ; n++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if len(sc.Bytes()) == 0 {
-			continue
+		text, over, err := readCallLine(br)
+		if len(bytes.TrimSpace(text)) > 0 || over {
+			line := numbered{n: n, text: bytes.TrimRight(text, "\r\n"), over: over}
+			if over {
+				line.text = nil
+			}
+			if len(buf) < limit {
+				buf = append(buf, line)
+			} else {
+				buf[head] = line
+				head = (head + 1) % limit
+			}
 		}
-		line := numbered{n: n, text: append([]byte(nil), sc.Bytes()...)}
-		if len(buf) < limit {
-			buf = append(buf, line)
-		} else {
-			buf[head] = line
-			head = (head + 1) % limit
+		if errors.Is(err, io.EOF) {
+			break
 		}
-	}
-	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("journal: read %s: %w", filepath.Join(dir, callsFile), err)
+		if err != nil {
+			return nil, fmt.Errorf("journal: read %s: %w", filepath.Join(dir, callsFile), err)
+		}
 	}
 	return append(buf[head:], buf[:head]...), nil
+}
+
+// readCallLine reads one line, keeping at most maxCallLineBytes of it and discarding the
+// rest, so an oversized line costs memory up to the cap and the reader stays at the next
+// line. A copy of session's readLine, kept here so journal does not import session.
+func readCallLine(br *bufio.Reader) ([]byte, bool, error) {
+	var line []byte
+	var over bool
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if room := maxCallLineBytes - len(line); len(chunk) > room {
+			over = true
+			line = append(line, chunk[:room]...)
+		} else {
+			line = append(line, chunk...)
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return line, over, err
+	}
 }
 
 // ValidPayloadRef reports whether ref names a payload: a 2 to 8 letter

@@ -11,6 +11,7 @@ import (
 	"github.com/opencontainers/go-digest"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -72,10 +73,13 @@ func registryCredential(ctx context.Context, spells config.SpellsConfig, host st
 }
 
 // LockClient authenticates lock's registry calls from spells.registries without
-// loading the workspace, so a reference resolves through the built-in environment
-// provider rather than one a magusfile would select.
-func LockClient(httpClient func() *http.Client, spells config.SpellsConfig) func(context.Context, string) (*oci.Client, error) {
-	r := secrets.NewResolver()
+// loading the workspace, so a reference resolves through the environment rather than a
+// provider a magusfile would select. The error is the resolver refusing to build.
+func LockClient(httpClient func() *http.Client, spells config.SpellsConfig) (func(context.Context, string) (*oci.Client, error), error) {
+	r, err := recorder.NewSecretResolver()
+	if err != nil {
+		return nil, err
+	}
 	return func(ctx context.Context, host string) (*oci.Client, error) {
 		c := &oci.Client{HTTP: httpClient()}
 		if _, ok := spells.Registry(host); !ok {
@@ -87,7 +91,7 @@ func LockClient(httpClient func() *http.Client, spells config.SpellsConfig) func
 		}
 		c.Credentials = oci.Credentials{Username: user, Password: pass}
 		return c, nil
-	}
+	}, nil
 }
 
 // VerifyLock is lock without --update: every declared remote spell is pinned for its

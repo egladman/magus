@@ -26,12 +26,12 @@ func TestOrigin(t *testing.T) { suite.Run(t, new(OriginSuite)) }
 func (s *OriginSuite) TestAppendStampsTheOSAccountAndTheEntryPoint() {
 	t := s.T()
 	dir := t.TempDir()
-	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
+	ctx := ContextWithEntryPoint(testCtx(t), job.EntryPointCLI)
 
 	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
 	AppendCall(ctx, dir, journal.Call{Kind: journal.CallKindJob, Name: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
-	events, err := RecentCalls(t.Context(), dir, 2)
+	events, err := RecentCalls(testCtx(t), dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	local := LocalOrigin(ctx)
@@ -54,7 +54,7 @@ func (s *OriginSuite) TestAppendStampsTheOSAccountAndTheEntryPoint() {
 func (s *OriginSuite) TestStampOriginReadsTheCredentialFromTheContext() {
 	t := s.T()
 	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: auth.AccessConsole()}
-	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), job.EntryPointRPC), cred)
+	ctx := ContextWithCredential(ContextWithEntryPoint(testCtx(t), job.EntryPointRPC), cred)
 
 	got := StampOrigin(ctx, job.Origin{Host: "console"})
 	local := LocalOrigin(ctx)
@@ -63,7 +63,7 @@ func (s *OriginSuite) TestStampOriginReadsTheCredentialFromTheContext() {
 	}, got, "the origin records the credential without its grant")
 	share := job.Credential{Kind: auth.KindShare, ID: "9b2e04aa"}
 	assert.Equal(t, share, StampOrigin(ctx, job.Origin{Credential: share}).Credential, "a named credential is kept")
-	assert.Zero(t, StampOrigin(t.Context(), job.Origin{}).Credential, "no guard, no credential")
+	assert.Zero(t, StampOrigin(testCtx(t), job.Origin{}).Credential, "no guard, no credential")
 }
 
 // A failed passwd lookup records the uid alone. user.Current's pure-Go fallback reads

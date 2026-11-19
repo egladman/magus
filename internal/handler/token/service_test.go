@@ -420,7 +420,8 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 		connect.WithInterceptors(activityrpc.Interceptor(dir, journal.CallKindTokenLifecycle, activityrpc.WithSubject(AuditSubject))))
 	op := auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
+		ctx := testkit.WithEnvResolver(r.Context())
+		h.ServeHTTP(w, r.WithContext(recorder.ContextWithEntryPoint(recorder.ContextWithCredential(ctx, op), job.EntryPointRPC)))
 	}))
 	defer srv.Close()
 	c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)

@@ -125,7 +125,7 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
-	recorder.AppendCall(context.Background(), dir, journal.Call{
+	recorder.AppendCall(testkit.WithEnvResolver(context.Background()), dir, journal.Call{
 		Time:     time.UnixMilli(1000),
 		Kind:     journal.CallKindJob,
 		Name:     "run test libs/authkit",

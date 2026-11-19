@@ -38,7 +38,7 @@ func (s *LoadLockSuite) TestWaitEndsWithCaller() {
 	ctx, cancel := context.WithTimeout(s.T().Context(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	_, err := LoadEvents(ctx, dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
+	_, err := LoadEvents(ctx, testConfig(s.T(), dir, "", InvocationStart{}), []LoadEvent{loadable("s1", "h1", "r1", 10)})
 	s.Require().ErrorIs(err, context.DeadlineExceeded)
 	s.Less(time.Since(start), 10*time.Second)
 }

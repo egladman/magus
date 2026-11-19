@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/codec"
@@ -301,238 +299,305 @@ func (s *jobSuite) TestOnlyACheckPostconditionCarriesAccept() {
 	s.Equal([]string{`accept: postcondition "docs" is a paths postcondition and carries accept, which only a check postcondition reads`}, s.faultsAccepted(g))
 }
 
-// TestValidJobID pins the rule every lease channel shares. The marker scanner is not the
+// ValidID is the rule every lease channel shares. The marker scanner is not the
 // only producer: whatever stamps a Job has to agree with this, or internal/trail's
 // redaction exemption starts covering strings nobody checked.
-func TestValidJobID(t *testing.T) {
-	t.Parallel()
+func (s *jobSuite) TestValidIDAcceptsTheShapesEveryLeaseChannelShares() {
+	s.True(ValidID("mgs1021"), "plain")
+	s.True(ValidID("a.b-1/2"), "every separator")
+	s.True(ValidID("feat/spawn-capture"), "branch shaped")
+	s.True(ValidID(strings.Repeat("u", MaxIDLen)), "at the length cap")
+}
 
-	for name, tc := range map[string]struct {
-		id   string
-		want bool
-	}{
-		"plain":               {"mgs1021", true},
-		"every separator":     {"a.b-1/2", true},
-		"branch shaped":       {"feat/spawn-capture", true},
-		"uppercase":           {"MGS1021", false},
-		"colon":               {"a:b", false},
-		"underscore":          {"a_b", false},
-		"double dot":          {"a..b", false},
-		"leading slash":       {"/a", false},
-		"trailing slash":      {"a/", false},
-		"doubled slash":       {"a//b", false},
-		"segment dot start":   {"a/.b", false},
-		"segment dash start":  {"a/-b", false},
-		"leading dash":        {"-a", false},
-		"at the length cap":   {strings.Repeat("u", MaxIDLen), true},
-		"past the length cap": {strings.Repeat("u", MaxIDLen+1), false},
-		"empty":               {"", false},
-		"space":               {"two words", false},
-		"punctuation":         {"MGS1021!", false},
-		"newline":             {"lease\n", false},
-		"non-ascii":           {"lease-é", false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, ValidID(tc.id))
-		})
-	}
+func (s *jobSuite) TestValidIDRefusesWhatBreaksARule() {
+	s.False(ValidID("MGS1021"), "uppercase")
+	s.False(ValidID("a:b"), "colon")
+	s.False(ValidID("a_b"), "underscore")
+	s.False(ValidID("a..b"), "double dot")
+	s.False(ValidID("/a"), "leading slash")
+	s.False(ValidID("a/"), "trailing slash")
+	s.False(ValidID("a//b"), "doubled slash")
+	s.False(ValidID("a/.b"), "segment dot start")
+	s.False(ValidID("a/-b"), "segment dash start")
+	s.False(ValidID("-a"), "leading dash")
+	s.False(ValidID(strings.Repeat("u", MaxIDLen+1)), "past the length cap")
+	s.False(ValidID(""), "empty")
+	s.False(ValidID("two words"), "space")
+	s.False(ValidID("MGS1021!"), "punctuation")
+	s.False(ValidID("lease\n"), "newline")
+	s.False(ValidID("lease-é"), "non-ascii")
 }
 
 func owner(id string, state State, paths ...string) Job {
 	return Job{ID: id, State: state, Paths: Paths{Write: paths}}
 }
 
-func TestJobOverlaps(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		leases []Job
-		want   []Overlap
-	}{
-		{
-			name:   "the same path claimed twice",
-			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateDeclared, "internal/ledger")},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger"}},
-			},
-		},
-		{
-			// The common case a reader most needs told: one lease owns the directory, the
-			// other owns a file inside it, and nothing about either row says so.
-			name:   "a file inside a claimed directory, and both declarations are named",
-			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger/store.go")},
-			want: []Overlap{
-				{
-					JobA: "a", JobB: "b",
-					PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger/store.go"},
-				},
-			},
-		},
-		{
-			name:   "a glob is judged by the directories it names",
-			leases: []Job{owner("a", StateRunning, "console/src/**/*.ts"), owner("b", StateRunning, "console/src/console/plan/main.ts")},
-			want: []Overlap{
-				{
-					JobA: "a", JobB: "b",
-					PathsA: []string{"console/src/**/*.ts"},
-					PathsB: []string{"console/src/console/plan/main.ts"},
-				},
-			},
-		},
-		{
-			name:   "sibling directories are not an overlap",
-			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledgerx", "console/")},
-		},
-		{
-			// A prefix that stops mid-segment is a different directory, not a parent.
-			name:   "a shared name prefix inside a segment is not containment",
-			leases: []Job{owner("a", StateRunning, "internal/led"), owner("b", StateRunning, "internal/ledger/store.go")},
-		},
-		{
-			// A blank entry names nothing. It cleans to ".", and reading THAT as a claim on
-			// the whole tree paired the row holding it with every other lease in the plan.
-			name:   "a blank declaration claims nothing, not everything",
-			leases: []Job{owner("a", StateRunning, "  ", ""), owner("b", StateRunning, "internal/ledger")},
-		},
-		{
-			name:   "a read-only lease declares no paths, so it collides with nothing",
-			leases: []Job{owner("a", StateRunning, "internal/ledger"), {ID: "scout", State: StateRunning, ReadOnly: true}},
-		},
-		{
-			// The pair is reported once, and the ids read in ledger order so a reader can
-			// find both rows in the table they are looking at.
-			name: "three leases claiming one tree are three pairs, each named once",
-			leases: []Job{
-				owner("a", StateRunning, "internal"),
-				owner("b", StateRunning, "internal/ledger"),
-				owner("c", StateDeclared, "internal/handler"),
-			},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"internal"}, PathsB: []string{"internal/ledger"}},
-				{JobA: "a", JobB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
-			},
-		},
-		{
-			// Listed rather than dropped: the file is shared, and "disjoint" is what tells the
-			// reader the pair is an integration order and not a wait.
-			name:   "different declarations of one file are a disjoint pair",
-			leases: []Job{owner("a", StateRunning, "run.go#executeStages"), owner("b", StateRunning, "run.go#RunCI", "docs/x.md")},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"run.go#executeStages"}, PathsB: []string{"run.go#RunCI"}, Claims: ClaimsDisjoint},
-			},
-		},
-		{
-			name:   "one declaration claimed twice is shared",
-			leases: []Job{owner("a", StateRunning, "run.go#RunCI"), owner("b", StateRunning, "run.go# RunCI ")},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"run.go#RunCI"}, PathsB: []string{"run.go# RunCI "}, Claims: ClaimsShared},
-			},
-		},
-		{
-			name:   "a declaration inside a directory claimed whole is shared",
-			leases: []Job{owner("a", StateRunning, "internal/job"), owner("b", StateRunning, "internal/job/store.go#digest")},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job/store.go#digest"}, Claims: ClaimsShared},
-			},
-		},
-		{
-			name:   "a disjoint file beside a shared one makes the pair shared",
-			leases: []Job{owner("a", StateRunning, "run.go#A", "b.go"), owner("b", StateRunning, "run.go#B", "b.go")},
-			want: []Overlap{
-				{JobA: "a", JobB: "b", PathsA: []string{"run.go#A", "b.go"}, PathsB: []string{"run.go#B", "b.go"}, Claims: ClaimsShared},
-			},
-		},
-		{
-			name:   "declarations of different files do not meet at all",
-			leases: []Job{owner("a", StateRunning, "run.go#A"), owner("b", StateRunning, "order.go#A")},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.want, NewList(tt.leases).Overlaps)
-		})
-	}
+func (s *jobSuite) TestSpecChangedSinceReadsAZeroStampAsUnknown() {
+	s.False(Job{Generation: 2}.SpecChangedSince(2), "same generation")
+	s.True(Job{Generation: 2}.SpecChangedSince(1), "an earlier spec")
+	s.False(Job{Generation: 2}.SpecChangedSince(0), "an unstamped record")
+	s.False(Job{}.SpecChangedSince(1), "a row with no generation")
 }
 
-func TestPathsIntersectReadsTheClaimGrammar(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		a, b string
-		want bool
-	}{
-		{"run.go#A", "run.go#B", false},
-		{"run.go#A", "run.go#A", true},
-		{"run.go#A", "run.go", true},
-		{"run.go#A", ".", true},
-		{"run.go#A", "*.go", true},
-		{"run.go#A", "order.go#A", false},
-		{"pkg/run.go#A", "pkg", true},
-		{"run.go#A", "", false},
-	} {
-		assert.Equal(t, tc.want, PathsIntersect(tc.a, tc.b), "%q and %q", tc.a, tc.b)
-		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
-	}
-	assert.Equal(t, "pkg/run.go", LiteralPrefix("pkg/run.go#A"), "a declaration is not a path segment")
+func (s *jobSuite) TestUnmetNamesWhatThisBuildLacks() {
+	s.Nil(Job{}.Unmet())
+	s.Nil(Job{Requires: []string{"claim-declarations"}}.Unmet())
+	s.Equal([]string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-postconditions", "x"}}.Unmet())
 }
 
-func TestPathsIntersectMatchesALiteralAgainstAGlobPrecisely(t *testing.T) {
-	t.Parallel()
+func (s *jobSuite) TestServerRunNeedsNoAgentAndTheServerAsRegistrar() {
+	server := Origin{EntryPoint: EntryPointServer}
+	s.True(Job{RegisteredBy: server}.ServerRun())
+	s.False(Job{RegisteredBy: server, Agent: &Agent{}}.ServerRun(), "an agent section is a session's work")
+	s.False(Job{RegisteredBy: Origin{EntryPoint: EntryPointCLI}}.ServerRun())
+}
 
-	for _, tc := range []struct {
-		a, b string
-		want bool
-	}{
-		{"internal/guard/guard.go", "internal/guard/*_test.go", false},
-		{"internal/guard/guard_test.go", "internal/guard/*_test.go", true},
-		{"internal/guard/guard.go#A", "internal/guard/*.go", true},
-		{"internal/guard", "internal/guard/*_test.go", true},
-		{"internal", "internal/guard/*_test.go", true},
-		{"internal/guard/sub/x.go", "internal/guard/*.go", false},
-		{"internal/guard/sub/x.go", "internal/guard/**/*.go", true},
-		{"a/b/c", "a/b/*/d.go", true},
-		{"docs/x.md", "internal/**/*.go", false},
-		{"docs/x.md", "**/*.go", true},
-		{"pkg/run.go", "*.go", false},
-		{"internal/a/x.go", "internal/{a,b}/x.go", true},
-		{"internal/c/x.go", "internal/{a,b}/x.go", false},
-		{"internal/c/x.go", "internal/{a/b,c}/x.go", true},
-		{"internal/guard/guard.go", "internal/guard/*.go", true},
-		{"internal/guard/*.go", "internal/*/*_test.go", true},
-	} {
-		assert.Equal(t, tc.want, PathsIntersect(tc.a, tc.b), "%q and %q", tc.a, tc.b)
-		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
+func (s *jobSuite) TestHoldsNoBuildSeatNeedsNoCheckNoWritePathsAndAReadOnlyRow() {
+	check := Postcondition{Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}
+	s.True(Job{ReadOnly: true}.HoldsNoBuildSeat())
+	s.False(Job{ReadOnly: true, Postconditions: []Postcondition{check}}.HoldsNoBuildSeat(), "a check runs a target")
+	s.False(Job{ReadOnly: true, Paths: Paths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())
+	s.False(Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
+}
+
+// The generation and the rejection are the store's, so a declaration
+// never writes them: Apply leaves them where they were.
+func (s *jobSuite) TestDeclarationApplyLeavesStoreComputedFieldsAlone() {
+	row := Job{
+		ID:         "worker",
+		Generation: 2,
+		Rejection:  &Rejection{At: 1, ObservedGeneration: 2},
 	}
+	want := row
+	want.Agent = Instructed("again")
+	Declaration{ID: "worker", Agent: Instructed("again")}.Apply(&row)
+	s.Equal(want, row)
+}
+
+// The record is the whole spec, so applying one that omits breaks clears them: a job
+// keeps the right to break something only while its declaration says so.
+func (s *jobSuite) TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne() {
+	var row Job
+	Declaration{ID: "worker", Breaks: []string{" --old-flag ", "", "api.Open"}}.Apply(&row)
+	s.Equal([]string{"--old-flag", "api.Open"}, row.Breaks)
+
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	s.Empty(row.Breaks)
+}
+
+// A pause holds until its bound and not a second past it; a pause naming no bound holds
+// until it is lifted.
+func (s *jobSuite) TestPausedAtLapsesAtItsBound() {
+	s.False(Job{PausedUntil: 200}.PausedAt(100), "not paused")
+	s.True(Job{Paused: 10, PauseReason: "busy"}.PausedAt(100), "paused, no bound")
+	s.True(Job{Paused: 10, PauseReason: "busy", PausedUntil: 101}.PausedAt(100), "inside its bound")
+	s.False(Job{Paused: 10, PauseReason: "busy", PausedUntil: 100}.PausedAt(100), "at its bound")
+}
+
+// Ancestors walks nearest first, stops at a parent the rows do not carry and at a
+// cycle, and allocates only the chain it returns: every list asks it of every live row,
+// and a per-call index of the whole store made one list quadratic in allocations.
+func (s *jobSuite) TestAncestors() {
+	rows := []Job{
+		{ID: "root"},
+		{ID: "mid", Parent: "root"},
+		{ID: "leaf", Parent: "mid"},
+		{ID: "orphan", Parent: "missing"},
+		{ID: "a", Parent: "b"},
+		{ID: "b", Parent: "a"},
+		{ID: "into", Parent: "a"},
+	}
+	ids := func(id string) []string {
+		var out []string
+		for _, a := range Ancestors(rows, id) {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	s.Equal([]string{"mid", "root"}, ids("leaf"))
+	s.Empty(ids("root"))
+	s.Empty(ids("orphan"), "a parent the rows do not carry ends the walk")
+	s.Equal([]string{"b"}, ids("a"), "a cycle back to the start ends the walk")
+	s.Equal([]string{"a", "b"}, ids("into"), "a cycle above the start ends the walk")
+
+	for i := range 1000 {
+		rows = append(rows, Job{ID: fmt.Sprintf("filler-%d", i)})
+	}
+	allocs := testing.AllocsPerRun(10, func() { Ancestors(rows, "leaf") })
+	s.LessOrEqual(allocs, 4.0, "only the returned chain allocates, whatever the store's size")
+}
+
+// A footprint that is not known still says so on the wire: footprint_known is never
+// omitted, so a reader cannot take a missing footprint for an empty one.
+func (s *jobSuite) TestFootprintsCrossJSON() {
+	status, err := codec.Marshal(Status{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
+	s.Require().NoError(err)
+	s.JSONEq(`{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)","lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
+
+	status, err = codec.Marshal(Status{Job: "a", FootprintKnown: true, Footprint: []RegionChange{
+		{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
+	}})
+	s.Require().NoError(err)
+	s.JSONEq(`{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
+		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}],"lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
+
+	status, err = codec.Marshal(Status{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
+	s.Require().NoError(err)
+	s.JSONEq(`{"job":"a","verified":false,"footprint_known":false,"lines_added":0,"lines_deleted":0,"symbol_delta_known":false,`+
+		`"observed_generation":2,"prior_generation":1}`, string(status))
+
+	overlap, err := codec.Marshal(Overlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
+		Footprint: &OverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
+	s.Require().NoError(err)
+	s.JSONEq(`{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+
+		`"footprint":{"verdict":"shared","shared":["x/a.go#func X() {"]}}`, string(overlap))
+}
+
+type ListSuite struct{ suite.Suite }
+
+func TestListSuite(t *testing.T) { suite.Run(t, new(ListSuite)) }
+
+func (s *ListSuite) TestTheSamePathClaimedTwice() {
+	leases := []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateDeclared, "internal/ledger")}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger"}},
+	}, NewList(leases).Overlaps)
+}
+
+// The common case a reader most needs told: one lease owns the directory, the
+// other owns a file inside it, and nothing about either row says so.
+func (s *ListSuite) TestAFileInsideAClaimedDirectoryNamesBothDeclarations() {
+	leases := []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger/store.go")}
+
+	s.Equal([]Overlap{
+		{
+			JobA: "a", JobB: "b",
+			PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger/store.go"},
+		},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestAGlobIsJudgedByTheDirectoriesItNames() {
+	leases := []Job{owner("a", StateRunning, "console/src/**/*.ts"), owner("b", StateRunning, "console/src/console/plan/main.ts")}
+
+	s.Equal([]Overlap{
+		{
+			JobA: "a", JobB: "b",
+			PathsA: []string{"console/src/**/*.ts"},
+			PathsB: []string{"console/src/console/plan/main.ts"},
+		},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestSiblingDirectoriesAreNotAnOverlap() {
+	leases := []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledgerx", "console/")}
+
+	s.Nil(NewList(leases).Overlaps)
+}
+
+// A prefix that stops mid-segment is a different directory, not a parent.
+func (s *ListSuite) TestASharedNamePrefixInsideASegmentIsNotContainment() {
+	leases := []Job{owner("a", StateRunning, "internal/led"), owner("b", StateRunning, "internal/ledger/store.go")}
+
+	s.Nil(NewList(leases).Overlaps)
+}
+
+// A blank entry names nothing. It cleans to ".", and reading THAT as a claim on
+// the whole tree paired the row holding it with every other lease in the plan.
+func (s *ListSuite) TestABlankDeclarationClaimsNothingNotEverything() {
+	leases := []Job{owner("a", StateRunning, "  ", ""), owner("b", StateRunning, "internal/ledger")}
+
+	s.Nil(NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestAReadOnlyLeaseDeclaresNoPathsSoItCollidesWithNothing() {
+	leases := []Job{owner("a", StateRunning, "internal/ledger"), {ID: "scout", State: StateRunning, ReadOnly: true}}
+
+	s.Nil(NewList(leases).Overlaps)
+}
+
+// The pair is reported once, and the ids read in ledger order so a reader can
+// find both rows in the table they are looking at.
+func (s *ListSuite) TestThreeLeasesClaimingOneTreeAreThreePairsEachNamedOnce() {
+	leases := []Job{
+		owner("a", StateRunning, "internal"),
+		owner("b", StateRunning, "internal/ledger"),
+		owner("c", StateDeclared, "internal/handler"),
+	}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"internal"}, PathsB: []string{"internal/ledger"}},
+		{JobA: "a", JobB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
+	}, NewList(leases).Overlaps)
+}
+
+// Listed rather than dropped: the file is shared, and "disjoint" is what tells the
+// reader the pair is an integration order and not a wait.
+func (s *ListSuite) TestDifferentDeclarationsOfOneFileAreADisjointPair() {
+	leases := []Job{owner("a", StateRunning, "run.go#executeStages"), owner("b", StateRunning, "run.go#RunCI", "docs/x.md")}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"run.go#executeStages"}, PathsB: []string{"run.go#RunCI"}, Claims: ClaimsDisjoint},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestOneDeclarationClaimedTwiceIsShared() {
+	leases := []Job{owner("a", StateRunning, "run.go#RunCI"), owner("b", StateRunning, "run.go# RunCI ")}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"run.go#RunCI"}, PathsB: []string{"run.go# RunCI "}, Claims: ClaimsShared},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestADeclarationInsideADirectoryClaimedWholeIsShared() {
+	leases := []Job{owner("a", StateRunning, "internal/job"), owner("b", StateRunning, "internal/job/store.go#digest")}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job/store.go#digest"}, Claims: ClaimsShared},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestADisjointFileBesideASharedOneMakesThePairShared() {
+	leases := []Job{owner("a", StateRunning, "run.go#A", "b.go"), owner("b", StateRunning, "run.go#B", "b.go")}
+
+	s.Equal([]Overlap{
+		{JobA: "a", JobB: "b", PathsA: []string{"run.go#A", "b.go"}, PathsB: []string{"run.go#B", "b.go"}, Claims: ClaimsShared},
+	}, NewList(leases).Overlaps)
+}
+
+func (s *ListSuite) TestDeclarationsOfDifferentFilesDoNotMeetAtAll() {
+	leases := []Job{owner("a", StateRunning, "run.go#A"), owner("b", StateRunning, "order.go#A")}
+
+	s.Nil(NewList(leases).Overlaps)
 }
 
 // A finished lease is not competing for anything. The skill has a worker RELEASE its
 // paths when it stops editing, so reporting a pass, a fail, or a no-return as a
 // collision would make the report loudest exactly as the plan winds down.
-func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
-	t.Parallel()
-
+func (s *ListSuite) finishedLeaseCollidesWithNothing(state State) {
+	s.T().Helper()
 	live := owner("live", StateRunning, "internal/ledger")
-	for _, state := range []State{StatePass, StateFail, StateNoReturn} {
-		t.Run(string(state), func(t *testing.T) {
-			t.Parallel()
-
-			done := owner("done", state, "internal/ledger")
-			assert.Empty(t, NewList([]Job{live, done}).Overlaps)
-			assert.Empty(t, NewList([]Job{done, live}).Overlaps, "whichever order the rows sit in")
-		})
-	}
+	done := owner("done", state, "internal/ledger")
+	s.Empty(NewList([]Job{live, done}).Overlaps, string(state))
+	s.Empty(NewList([]Job{done, live}).Overlaps, "%s, whichever order the rows sit in", state)
 }
 
-// TestPathHoldersKeepsEditingRows: a path is held by a declared or running row only. An
-// exited row filed its result, so its outputs are anyone's to regenerate.
-func TestPathHoldersKeepsEditingRows(t *testing.T) {
-	t.Parallel()
+func (s *ListSuite) TestAPassedLeaseIsNotACollision() {
+	s.finishedLeaseCollidesWithNothing(StatePass)
+}
 
+func (s *ListSuite) TestAFailedLeaseIsNotACollision() {
+	s.finishedLeaseCollidesWithNothing(StateFail)
+}
+
+func (s *ListSuite) TestANoReturnLeaseIsNotACollision() {
+	s.finishedLeaseCollidesWithNothing(StateNoReturn)
+}
+
+// PathHolders: a path is held by a declared or running row only. An
+// exited row filed its result, so its outputs are anyone's to regenerate.
+func (s *ListSuite) TestPathHoldersKeepsEditingRows() {
 	rows := []Job{
 		owner("declared", StateDeclared, "a"),
 		owner("running", StateRunning, "b"),
@@ -544,48 +609,157 @@ func TestPathHoldersKeepsEditingRows(t *testing.T) {
 	for _, r := range PathHolders(rows) {
 		ids = append(ids, r.ID)
 	}
-	assert.Equal(t, []string{"declared", "running"}, ids)
-	assert.Len(t, rows, 5, "the rows passed in are left whole")
+	s.Equal([]string{"declared", "running"}, ids)
+	s.Len(rows, 5, "the rows passed in are left whole")
 }
 
 // An exited holder returned, so its write paths collide with nobody's while it waits to be
 // graded.
-func TestJobOverlapsSkipsAnExitedJob(t *testing.T) {
-	t.Parallel()
-
+func (s *ListSuite) TestAnExitedJobIsNotACollision() {
 	live := owner("live", StateRunning, "internal/ledger")
 	exited := owner("exited", StateExited, "internal/ledger")
-	assert.Empty(t, NewList([]Job{live, exited}).Overlaps)
-	assert.Empty(t, NewList([]Job{exited, live}).Overlaps, "whichever order the rows sit in")
-	assert.True(t, StateExited.Live(), "an exited job stays live until it is graded")
-	assert.False(t, StateExited.Editing())
+	s.Empty(NewList([]Job{live, exited}).Overlaps)
+	s.Empty(NewList([]Job{exited, live}).Overlaps, "whichever order the rows sit in")
+	s.True(StateExited.Live(), "an exited job stays live until it is graded")
+	s.False(StateExited.Editing())
 }
 
-func TestNewJobListDerivesOverlapsFromTheRows(t *testing.T) {
-	t.Parallel()
-
+func (s *ListSuite) TestNewListDerivesOverlapsFromTheRows() {
 	leases := []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger")}
 	report := NewList(leases)
-	assert.Equal(t, leases, report.Jobs, "the rows are served exactly as they were recorded")
-	assert.Len(t, report.Overlaps, 1)
+	s.Equal(leases, report.Jobs, "the rows are served exactly as they were recorded")
+	s.Len(report.Overlaps, 1)
 
 	// Derived on read: the same rows with one of them finished report nothing, and no
 	// row had to be rewritten for that to happen.
 	leases[1].State = StatePass
-	assert.Empty(t, NewList(leases).Overlaps)
+	s.Empty(NewList(leases).Overlaps)
 }
 
 // The empty case is settled in the constructor rather than at each read door, so the MCP
 // tool and the console's route cannot disagree about it: an unwritten ledger serves an
 // empty list, never null, whichever door served it.
-func TestNewJobListNormalizesTheEmptyLedger(t *testing.T) {
-	t.Parallel()
-
+func (s *ListSuite) TestNewListNormalizesTheEmptyLedger() {
 	report := NewList(nil)
-	assert.NotNil(t, report.Jobs, "a workspace where nobody has declared a lease yet is empty, not broken")
-	assert.Empty(t, report.Jobs)
-	assert.Empty(t, report.Overlaps)
+	s.NotNil(report.Jobs, "a workspace where nobody has declared a lease yet is empty, not broken")
+	s.Empty(report.Jobs)
+	s.Empty(report.Overlaps)
 }
+
+// An exited dependency is done editing, so nobody collecting it leaves its dependent
+// queued forever: the clock starts at the exit, and only a declared or running one holds it.
+func (s *ListSuite) TestIdleSinceStartsAtAnExitedDependency() {
+	row := Job{ID: "next", State: StateDeclared, Updated: 100, DependsOn: []string{"first"}}
+	exited := Job{ID: "first", State: StateExited, Updated: 300}
+	since, waiting := IdleSince([]Job{exited, row}, row)
+	s.False(waiting)
+	s.Equal(int64(300), since)
+	s.True(StaleAt([]Job{exited, row}, row, 300+3600, time.Hour))
+
+	for _, state := range []State{StateRunning, StateDeclared} {
+		dep := Job{ID: "first", State: state, Updated: 300}
+		_, waiting = IdleSince([]Job{dep, row}, row)
+		s.True(waiting, "a %s dependency still holds the clock", state)
+	}
+}
+
+func dependent(id string, state State, dependsOn string, paths ...string) Job {
+	return Job{ID: id, State: state, Paths: Paths{Write: paths}, DependsOn: []string{dependsOn}}
+}
+
+func (s *ListSuite) waiterBlockedOn(state State) {
+	s.T().Helper()
+	rows := []Job{owner("dep", state, "internal/job"), dependent("waiter", StateDeclared, "dep", "internal/job")}
+	report := NewList(rows)
+	s.Empty(report.Overlaps, "a job waiting on dep claims nothing dep could collide with")
+	s.Equal([]Block{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
+}
+
+func (s *ListSuite) TestOverlapsOmitsAWaiterOnADeclaredDependency() {
+	s.waiterBlockedOn(StateDeclared)
+}
+
+func (s *ListSuite) TestOverlapsOmitsAWaiterOnARunningDependency() {
+	s.waiterBlockedOn(StateRunning)
+}
+
+func (s *ListSuite) TestOverlapsOmitsAWaiterOnAnExitedDependency() {
+	s.waiterBlockedOn(StateExited)
+}
+
+func (s *ListSuite) TestAThirdLiveJobIsNotShieldedByTheWaiter() {
+	rows := []Job{
+		owner("dep", StateRunning, "types"),
+		dependent("waiter", StateDeclared, "dep", "internal/job"),
+		owner("other", StateRunning, "internal/job"),
+	}
+	s.Empty(NewList(rows).Overlaps)
+}
+
+func (s *ListSuite) TestOverlapsReportsADependentOnceEveryDependencyPasses() {
+	rows := []Job{
+		owner("dep", StateRunning, "types"),
+		{ID: "waiter", State: StateDeclared, Paths: Paths{Write: []string{"internal/job"}}, DependsOn: []string{"dep", "dep2"}},
+		owner("dep2", StatePass),
+		owner("other", StateRunning, "internal/job"),
+	}
+	s.Empty(NewList(rows).Overlaps, "one dependency still running keeps the waiter out")
+
+	rows[0].State = StatePass
+	report := NewList(rows)
+	s.Equal([]Overlap{{JobA: "waiter", JobB: "other", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job"}}}, report.Overlaps)
+	s.Empty(report.Blocked)
+}
+
+func (s *ListSuite) ownsNothingBehindEndedDependency(state State) {
+	s.T().Helper()
+	rows := []Job{owner("dep", state), dependent("waiter", StateDeclared, "dep", "internal/job"), owner("other", StateRunning, "internal/job")}
+	report := NewList(rows)
+	s.Empty(report.Overlaps)
+	s.Equal([]Block{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
+}
+
+func (s *ListSuite) TestAJobBehindAFailedDependencyOwnsNothing() {
+	s.ownsNothingBehindEndedDependency(StateFail)
+}
+
+func (s *ListSuite) TestAJobBehindANoReturnDependencyOwnsNothing() {
+	s.ownsNothingBehindEndedDependency(StateNoReturn)
+}
+
+func (s *ListSuite) TestAnUndeclaredDependencyIsNamedAsTheBlock() {
+	report := NewList([]Job{dependent("waiter", StateDeclared, "gone", "internal/job"), owner("other", StateRunning, "internal/job")})
+	s.Empty(report.Overlaps)
+	s.Equal([]Block{{Job: "waiter", On: "gone"}}, report.Blocked)
+}
+
+func (s *ListSuite) TestATerminalDependentIsNotReportedBlocked() {
+	s.Empty(NewList([]Job{owner("dep", StateFail), dependent("waiter", StateNoReturn, "dep")}).Blocked)
+}
+
+func (s *ListSuite) TestBlockedJSONNamesTheReason() {
+	got, err := codec.Marshal(NewList([]Job{owner("dep", StateFail), dependent("waiter", StateDeclared, "dep")}))
+	s.Require().NoError(err)
+	s.Contains(string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
+}
+
+func (s *ListSuite) TestFlagsAQueuedJobStaleOnlyOnceItsDependenciesEnd() {
+	const now, hour = int64(100_000), int64(3600)
+	rows := []Job{
+		{ID: "dep", State: StateRunning, Registered: now, Updated: now},
+		{ID: "queued", State: StateDeclared, DependsOn: []string{"dep"}, Updated: now - 3*hour},
+		{ID: "lone", State: StateDeclared, Updated: now - 3*hour},
+	}
+	s.Equal([]string{"lone"}, NewList(rows).Flag(now, 2*time.Hour).Stale, "a live dependency keeps its waiter queued")
+
+	rows[0].State, rows[0].Updated = StatePass, now-hour
+	s.Equal([]string{"lone"}, NewList(rows).Flag(now, 2*time.Hour).Stale, "the waiter's clock starts at its dependency's end")
+	s.Equal([]string{"queued", "lone"}, NewList(rows).Flag(now+2*hour, 2*time.Hour).Stale)
+}
+
+type CloneSuite struct{ suite.Suite }
+
+func TestCloneSuite(t *testing.T) { suite.Run(t, new(CloneSuite)) }
 
 // Clone is what makes a row handed out of a store safe to keep, so a slice field it
 // forgets aliases the store's own array. Every field here carries SPARE CAPACITY, which is
@@ -594,9 +768,7 @@ func TestNewJobListNormalizesTheEmptyLedger(t *testing.T) {
 // appender: it shows up as the NEXT reader's append overwriting the first one's row. So
 // this asserts across two clones rather than back at the original, which is the only form
 // of the check that can fail.
-func TestJobCloneCopiesEverySliceField(t *testing.T) {
-	t.Parallel()
-
+func (s *CloneSuite) TestCopiesEverySliceField() {
 	orig := Job{
 		ID: "a",
 		Paths: Paths{
@@ -631,7 +803,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.Unattributed = append(second.Unattributed, UnattributedWrite{Path: "second/z.go"})
 
 	// Clone resolves each gate's kind and expectation, so the clone's gate carries both.
-	assert.Equal(t, Job{
+	s.Equal(Job{
 		ID: "a",
 		Paths: Paths{
 			Write: []string{"types/", "first/"},
@@ -647,7 +819,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
-	assert.Equal(t, Job{
+	s.Equal(Job{
 		ID: "a",
 		Paths: Paths{
 			Write: []string{"types/"},
@@ -664,10 +836,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 
 // A run's args sit one level down, in the attempt and in each postcondition's attempt, so they
 // alias the store's array unless Clone copies them too. Asserted across two clones for the
-// reason TestJobCloneCopiesEverySliceField gives.
-func TestJobCloneCopiesAttemptArgs(t *testing.T) {
-	t.Parallel()
-
+// reason TestCopiesEverySliceField gives.
+func (s *CloneSuite) TestCopiesAttemptArgs() {
 	args := func() []string { return append(make([]string, 0, 4), "-run", "TestOne") }
 	orig := Job{
 		ID:                    "a",
@@ -682,18 +852,16 @@ func TestJobCloneCopiesAttemptArgs(t *testing.T) {
 	second.PostconditionAttempts[0].Attempt.ExtraArgs = append(second.PostconditionAttempts[0].Attempt.ExtraArgs, "second")
 	first.Attempt.ExtraArgs[0] = "-bench"
 
-	assert.Equal(t, []string{"-bench", "TestOne", "first"}, first.Attempt.ExtraArgs)
-	assert.Equal(t, []string{"-run", "TestOne", "first"}, first.PostconditionAttempts[0].Attempt.ExtraArgs)
-	assert.Equal(t, []string{"-run", "TestOne"}, orig.Attempt.ExtraArgs)
-	assert.Equal(t, []string{"-run", "TestOne"}, orig.PostconditionAttempts[0].Attempt.ExtraArgs)
+	s.Equal([]string{"-bench", "TestOne", "first"}, first.Attempt.ExtraArgs)
+	s.Equal([]string{"-run", "TestOne", "first"}, first.PostconditionAttempts[0].Attempt.ExtraArgs)
+	s.Equal([]string{"-run", "TestOne"}, orig.Attempt.ExtraArgs)
+	s.Equal([]string{"-run", "TestOne"}, orig.PostconditionAttempts[0].Attempt.ExtraArgs)
 }
 
 // The rejection is the next holder's evidence, so a clone handed out of
 // the store must not alias the slices one level down. Asserted across
-// two clones for the reason TestJobCloneCopiesEverySliceField gives.
-func TestJobCloneCopiesTheRejection(t *testing.T) {
-	t.Parallel()
-
+// two clones for the reason TestCopiesEverySliceField gives.
+func (s *CloneSuite) TestCopiesTheRejection() {
 	refs := func() []string { return append(make([]string, 0, 4), "out1") }
 	unmet := func() []VerificationStatus {
 		return append(make([]VerificationStatus, 0, 4), VerificationStatus{ID: "unit", Violations: refs()})
@@ -708,366 +876,158 @@ func TestJobCloneCopiesTheRejection(t *testing.T) {
 	}
 	first.Rejection.At = 9
 
-	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
-	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Violations)
-	assert.Equal(t, Job{ID: "a", Rejection: &Rejection{Unmet: unmet(), Violations: refs()}}, orig)
-}
-
-// The generation and the rejection are the store's, so a declaration
-// never writes them: Apply leaves them where they were.
-func TestDeclarationApplyLeavesStoreComputedFieldsAlone(t *testing.T) {
-	t.Parallel()
-
-	row := Job{
-		ID:         "worker",
-		Generation: 2,
-		Rejection:  &Rejection{At: 1, ObservedGeneration: 2},
-	}
-	want := row
-	want.Agent = Instructed("again")
-	Declaration{ID: "worker", Agent: Instructed("again")}.Apply(&row)
-	assert.Equal(t, want, row)
-}
-
-func TestJobSpecChangedSinceReadsAZeroStampAsUnknown(t *testing.T) {
-	t.Parallel()
-
-	assert.False(t, Job{Generation: 2}.SpecChangedSince(2), "same generation")
-	assert.True(t, Job{Generation: 2}.SpecChangedSince(1), "an earlier spec")
-	assert.False(t, Job{Generation: 2}.SpecChangedSince(0), "an unstamped record")
-	assert.False(t, Job{}.SpecChangedSince(1), "a row with no generation")
+	s.Equal([]string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
+	s.Equal([]string{"out1", "1"}, second.Rejection.Violations)
+	s.Equal(Job{ID: "a", Rejection: &Rejection{Unmet: unmet(), Violations: refs()}}, orig)
 }
 
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
 // as [] through the JSON door.
-func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
-	t.Parallel()
-
+func (s *CloneSuite) TestKeepsNilSlicesNil() {
 	c := Job{ID: "a"}.Clone()
-	assert.Nil(t, c.Unattributed)
-	assert.Nil(t, c.Releases)
-	assert.Nil(t, c.Postconditions)
-	assert.Nil(t, c.PostconditionAttempts)
+	s.Nil(c.Unattributed)
+	s.Nil(c.Releases)
+	s.Nil(c.Postconditions)
+	s.Nil(c.PostconditionAttempts)
 }
 
-func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {
-	t.Parallel()
+type PathsSuite struct{ suite.Suite }
 
-	assert.Nil(t, Job{}.Unmet())
-	assert.Nil(t, Job{Requires: []string{"claim-declarations"}}.Unmet())
-	assert.Equal(t, []string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-postconditions", "x"}}.Unmet())
+func TestPathsSuite(t *testing.T) { suite.Run(t, new(PathsSuite)) }
+
+// intersects asserts the answer both ways round: intersection is symmetric.
+func (s *PathsSuite) intersects(a, b string, want bool) {
+	s.T().Helper()
+	s.Equal(want, PathsIntersect(a, b), "%q and %q", a, b)
+	s.Equal(want, PathsIntersect(b, a), "%q and %q, reversed", b, a)
 }
 
-func TestServerRunNeedsNoAgentAndTheServerAsRegistrar(t *testing.T) {
-	t.Parallel()
-
-	server := Origin{EntryPoint: EntryPointServer}
-	assert.True(t, Job{RegisteredBy: server}.ServerRun())
-	assert.False(t, Job{RegisteredBy: server, Agent: &Agent{}}.ServerRun(), "an agent section is a session's work")
-	assert.False(t, Job{RegisteredBy: Origin{EntryPoint: EntryPointCLI}}.ServerRun())
+func (s *PathsSuite) within(inner, outer string, want bool) {
+	s.T().Helper()
+	s.Equal(want, PathWithin(inner, outer), "PathWithin(%q, %q)", inner, outer)
 }
 
-// The record is the whole spec, so applying one that omits breaks clears them: a job
-// keeps the right to break something only while its declaration says so.
-func TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne(t *testing.T) {
-	t.Parallel()
-
-	var row Job
-	Declaration{ID: "worker", Breaks: []string{" --old-flag ", "", "api.Open"}}.Apply(&row)
-	assert.Equal(t, []string{"--old-flag", "api.Open"}, row.Breaks)
-
-	Declaration{ID: "worker"}.ApplySpec(&row)
-	assert.Empty(t, row.Breaks)
+func (s *PathsSuite) TestIntersectReadsTheClaimGrammar() {
+	s.intersects("run.go#A", "run.go#B", false)
+	s.intersects("run.go#A", "run.go#A", true)
+	s.intersects("run.go#A", "run.go", true)
+	s.intersects("run.go#A", ".", true)
+	s.intersects("run.go#A", "*.go", true)
+	s.intersects("run.go#A", "order.go#A", false)
+	s.intersects("pkg/run.go#A", "pkg", true)
+	s.intersects("run.go#A", "", false)
+	s.Equal("pkg/run.go", LiteralPrefix("pkg/run.go#A"), "a declaration is not a path segment")
 }
 
-// An exited dependency is done editing, so nobody collecting it leaves its dependent
-// queued forever: the clock starts at the exit, and only a declared or running one holds it.
-func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
-	t.Parallel()
-
-	row := Job{ID: "next", State: StateDeclared, Updated: 100, DependsOn: []string{"first"}}
-	exited := Job{ID: "first", State: StateExited, Updated: 300}
-	since, waiting := IdleSince([]Job{exited, row}, row)
-	assert.False(t, waiting)
-	assert.Equal(t, int64(300), since)
-	assert.True(t, StaleAt([]Job{exited, row}, row, 300+3600, time.Hour))
-
-	for _, state := range []State{StateRunning, StateDeclared} {
-		dep := Job{ID: "first", State: state, Updated: 300}
-		_, waiting = IdleSince([]Job{dep, row}, row)
-		assert.True(t, waiting, "a %s dependency still holds the clock", state)
-	}
+func (s *PathsSuite) TestIntersectMatchesALiteralAgainstAStarGlobPrecisely() {
+	s.intersects("internal/guard/guard.go", "internal/guard/*_test.go", false)
+	s.intersects("internal/guard/guard_test.go", "internal/guard/*_test.go", true)
+	s.intersects("internal/guard/guard.go#A", "internal/guard/*.go", true)
+	s.intersects("internal/guard", "internal/guard/*_test.go", true)
+	s.intersects("internal", "internal/guard/*_test.go", true)
+	s.intersects("internal/guard/sub/x.go", "internal/guard/*.go", false)
+	s.intersects("internal/guard/sub/x.go", "internal/guard/**/*.go", true)
+	s.intersects("a/b/c", "a/b/*/d.go", true)
+	s.intersects("docs/x.md", "internal/**/*.go", false)
+	s.intersects("docs/x.md", "**/*.go", true)
+	s.intersects("pkg/run.go", "*.go", false)
+	s.intersects("internal/guard/guard.go", "internal/guard/*.go", true)
+	s.intersects("internal/guard/*.go", "internal/*/*_test.go", true)
 }
 
-func dependent(id string, state State, dependsOn string, paths ...string) Job {
-	return Job{ID: id, State: state, Paths: Paths{Write: paths}, DependsOn: []string{dependsOn}}
+func (s *PathsSuite) TestIntersectMatchesALiteralAgainstABraceGlobPrecisely() {
+	s.intersects("internal/a/x.go", "internal/{a,b}/x.go", true)
+	s.intersects("internal/c/x.go", "internal/{a,b}/x.go", false)
+	s.intersects("internal/c/x.go", "internal/{a/b,c}/x.go", true)
 }
 
-func TestJobOverlapsOmitsADependentThatIsNotReady(t *testing.T) {
-	t.Parallel()
-
-	for _, state := range []State{StateDeclared, StateRunning, StateExited} {
-		t.Run(string(state), func(t *testing.T) {
-			t.Parallel()
-
-			rows := []Job{owner("dep", state, "internal/job"), dependent("waiter", StateDeclared, "dep", "internal/job")}
-			report := NewList(rows)
-			assert.Empty(t, report.Overlaps, "a job waiting on dep claims nothing dep could collide with")
-			assert.Equal(t, []Block{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
-		})
-	}
-
-	t.Run("a third live job is not shielded by the waiter", func(t *testing.T) {
-		t.Parallel()
-
-		rows := []Job{
-			owner("dep", StateRunning, "types"),
-			dependent("waiter", StateDeclared, "dep", "internal/job"),
-			owner("other", StateRunning, "internal/job"),
-		}
-		assert.Empty(t, NewList(rows).Overlaps)
-	})
+func (s *PathsSuite) TestWithinReadsLiteralsAndDirectories() {
+	s.within("internal/job/a.go", "internal/job/a.go", true)
+	s.within("internal/job/a.go", "internal/job", true)
+	s.within("internal/job/a.go", "internal/jo", false)
+	s.within("internal/job/a.go", "internal/job/*.go", true)
+	s.within("internal/job/a.go", "internal/**", true)
+	s.within("internal/job/a.txt", "internal/job/*.go", false)
 }
 
-func TestJobOverlapsReportsADependentOnceEveryDependencyPasses(t *testing.T) {
-	t.Parallel()
-
-	rows := []Job{
-		owner("dep", StateRunning, "types"),
-		{ID: "waiter", State: StateDeclared, Paths: Paths{Write: []string{"internal/job"}}, DependsOn: []string{"dep", "dep2"}},
-		owner("dep2", StatePass),
-		owner("other", StateRunning, "internal/job"),
-	}
-	assert.Empty(t, NewList(rows).Overlaps, "one dependency still running keeps the waiter out")
-
-	rows[0].State = StatePass
-	report := NewList(rows)
-	assert.Equal(t, []Overlap{{JobA: "waiter", JobB: "other", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job"}}}, report.Overlaps)
-	assert.Empty(t, report.Blocked)
+func (s *PathsSuite) TestWithinReadsDeclarations() {
+	s.within("internal/job/a.go#Run", "internal/job/a.go", true)
+	s.within("internal/job/a.go#Run", "internal/job/*.go", true)
+	s.within("internal/job/a.go#Run", "internal/job/a.go#Run", true)
+	s.within("internal/job/a.go#Run", "internal/job/a.go#Stop", false)
+	s.within("internal/job/a.go", "internal/job/a.go#Run", false)
+	s.within("internal/job/*.go", "internal/job/a.go#Run", false)
 }
 
-func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
-	t.Parallel()
-
-	for _, state := range []State{StateFail, StateNoReturn} {
-		t.Run(string(state), func(t *testing.T) {
-			t.Parallel()
-
-			rows := []Job{owner("dep", state), dependent("waiter", StateDeclared, "dep", "internal/job"), owner("other", StateRunning, "internal/job")}
-			report := NewList(rows)
-			assert.Empty(t, report.Overlaps)
-			assert.Equal(t, []Block{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
-		})
-	}
-
-	t.Run("an undeclared dependency", func(t *testing.T) {
-		t.Parallel()
-
-		report := NewList([]Job{dependent("waiter", StateDeclared, "gone", "internal/job"), owner("other", StateRunning, "internal/job")})
-		assert.Empty(t, report.Overlaps)
-		assert.Equal(t, []Block{{Job: "waiter", On: "gone"}}, report.Blocked)
-	})
-
-	t.Run("a terminal dependent is not reported", func(t *testing.T) {
-		t.Parallel()
-
-		assert.Empty(t, NewList([]Job{owner("dep", StateFail), dependent("waiter", StateNoReturn, "dep")}).Blocked)
-	})
-
-	t.Run("json names the reason", func(t *testing.T) {
-		t.Parallel()
-
-		got, err := codec.Marshal(NewList([]Job{owner("dep", StateFail), dependent("waiter", StateDeclared, "dep")}))
-		require.NoError(t, err)
-		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
-	})
+func (s *PathsSuite) TestWithinNarrowsGlobsOnly() {
+	s.within("internal/job/*.go", "internal/job", true)
+	s.within("internal/job/*.go", "internal/job/a.go", false)
+	s.within("internal/job/*.go", "internal/**", true)
+	s.within("internal/job/*.go", "internal/**/*.go", true)
+	s.within("internal/*/x/*.go", "internal/**/*.go", true)
+	s.within("internal/job/a.go", "internal/**/*.go", true)
+	s.within("internal/*.go", "internal/**/*.go", true)
+	s.within("internal/job/**", "internal/**/*.go", false)
+	s.within("internal/job/*.txt", "internal/**/*.go", false)
+	s.within("internal/job/*_test.go", "internal/**/*.go", true)
+	s.within("internal/job/*.go", "internal/**/*_test.go", false)
+	s.within("internal/job/*", "internal/**/*.go", false)
+	s.within("internal/job/*.{go,txt}", "internal/**/*.go", false)
+	s.within("internal/job/*.[a-z]", "internal/**/*.go", false)
+	s.within("internal/job/*.go", "internal/**/*", true)
+	s.within("internal/**", "internal/job/**", false)
+	s.within("**/*.go", "internal/**", false)
+	s.within("**/*.go", "**", true)
+	s.within("internal/job/*.go", "internal/job/*.go", true)
 }
 
-func TestJobListFlagsAQueuedJobStaleOnlyOnceItsDependenciesEnd(t *testing.T) {
-	t.Parallel()
-
-	const now, hour = int64(100_000), int64(3600)
-	rows := []Job{
-		{ID: "dep", State: StateRunning, Registered: now, Updated: now},
-		{ID: "queued", State: StateDeclared, DependsOn: []string{"dep"}, Updated: now - 3*hour},
-		{ID: "lone", State: StateDeclared, Updated: now - 3*hour},
-	}
-	assert.Equal(t, []string{"lone"}, NewList(rows).Flag(now, 2*time.Hour).Stale, "a live dependency keeps its waiter queued")
-
-	rows[0].State, rows[0].Updated = StatePass, now-hour
-	assert.Equal(t, []string{"lone"}, NewList(rows).Flag(now, 2*time.Hour).Stale, "the waiter's clock starts at its dependency's end")
-	assert.Equal(t, []string{"queued", "lone"}, NewList(rows).Flag(now+2*hour, 2*time.Hour).Stale)
+func (s *PathsSuite) TestWithinNeverHoldsTheWholeTreeOrNothingInsideAnything() {
+	s.within(".", "internal/**", false)
+	s.within(".", "internal/**/*.go", false)
+	s.within(".", "internal/job/*.go", false)
+	s.within("", "internal/job", false)
+	s.within("internal/job/a.go", "", false)
 }
 
-// JobAncestors walks nearest first, stops at a parent the rows do not carry and at a
-// cycle, and allocates only the chain it returns: every list asks it of every live row,
-// and a per-call index of the whole store made one list quadratic in allocations.
-func TestJobAncestors(t *testing.T) {
-	rows := []Job{
-		{ID: "root"},
-		{ID: "mid", Parent: "root"},
-		{ID: "leaf", Parent: "mid"},
-		{ID: "orphan", Parent: "missing"},
-		{ID: "a", Parent: "b"},
-		{ID: "b", Parent: "a"},
-		{ID: "into", Parent: "a"},
-	}
-	ids := func(id string) []string {
-		var out []string
-		for _, a := range Ancestors(rows, id) {
-			out = append(out, a.ID)
-		}
-		return out
-	}
-	assert.Equal(t, []string{"mid", "root"}, ids("leaf"))
-	assert.Empty(t, ids("root"))
-	assert.Empty(t, ids("orphan"), "a parent the rows do not carry ends the walk")
-	assert.Equal(t, []string{"b"}, ids("a"), "a cycle back to the start ends the walk")
-	assert.Equal(t, []string{"a", "b"}, ids("into"), "a cycle above the start ends the walk")
+type ClaimEvidenceSuite struct{ suite.Suite }
 
-	for i := range 1000 {
-		rows = append(rows, Job{ID: fmt.Sprintf("filler-%d", i)})
-	}
-	allocs := testing.AllocsPerRun(10, func() { Ancestors(rows, "leaf") })
-	assert.LessOrEqual(t, allocs, 4.0, "only the returned chain allocates, whatever the store's size")
+func TestClaimEvidenceSuite(t *testing.T) { suite.Run(t, new(ClaimEvidenceSuite)) }
+
+func (s *ClaimEvidenceSuite) parsesAs(because string, want ClaimEvidence) {
+	s.T().Helper()
+	got, err := ParseClaimEvidence(because)
+	s.Require().NoError(err, because)
+	s.Equal(want, got)
+	s.Equal(because, got.String(), "the evidence spells back as its because")
 }
 
-// A footprint that is not known still says so on the wire: footprint_known is never
-// omitted, so a reader cannot take a missing footprint for an empty one.
-func TestFootprintsCrossJSON(t *testing.T) {
-	t.Parallel()
-
-	status, err := codec.Marshal(Status{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)","lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
-
-	status, err = codec.Marshal(Status{Job: "a", FootprintKnown: true, Footprint: []RegionChange{
-		{File: FileChange{Path: "a.go"}, Side: RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
-	}})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
-		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}],"lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
-
-	status, err = codec.Marshal(Status{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"lines_added":0,"lines_deleted":0,"symbol_delta_known":false,`+
-		`"observed_generation":2,"prior_generation":1}`, string(status))
-
-	overlap, err := codec.Marshal(Overlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
-		Footprint: &OverlapFootprint{Verdict: FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+
-		`"footprint":{"verdict":"shared","shared":["x/a.go#func X() {"]}}`, string(overlap))
+func (s *ClaimEvidenceSuite) refuses(because, why string) {
+	s.T().Helper()
+	_, err := ParseClaimEvidence(because)
+	s.Require().Error(err, because)
+	s.Contains(err.Error(), why)
 }
 
-func TestPathWithin(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		inner, outer string
-		want         bool
-	}{
-		{"internal/job/a.go", "internal/job/a.go", true},
-		{"internal/job/a.go", "internal/job", true},
-		{"internal/job/a.go", "internal/jo", false},
-		{"internal/job/a.go", "internal/job/*.go", true},
-		{"internal/job/a.go", "internal/**", true},
-		{"internal/job/a.txt", "internal/job/*.go", false},
-		{"internal/job/a.go#Run", "internal/job/a.go", true},
-		{"internal/job/a.go#Run", "internal/job/*.go", true},
-		{"internal/job/a.go#Run", "internal/job/a.go#Run", true},
-		{"internal/job/a.go#Run", "internal/job/a.go#Stop", false},
-		{"internal/job/a.go", "internal/job/a.go#Run", false},
-		{"internal/job/*.go", "internal/job/a.go#Run", false},
-		{"internal/job/*.go", "internal/job", true},
-		{"internal/job/*.go", "internal/job/a.go", false},
-		{"internal/job/*.go", "internal/**", true},
-		{"internal/job/*.go", "internal/**/*.go", true},
-		{"internal/*/x/*.go", "internal/**/*.go", true},
-		{"internal/job/a.go", "internal/**/*.go", true},
-		{"internal/*.go", "internal/**/*.go", true},
-		{"internal/job/**", "internal/**/*.go", false},
-		{"internal/job/*.txt", "internal/**/*.go", false},
-		{"internal/job/*_test.go", "internal/**/*.go", true},
-		{"internal/job/*.go", "internal/**/*_test.go", false},
-		{"internal/job/*", "internal/**/*.go", false},
-		{"internal/job/*.{go,txt}", "internal/**/*.go", false},
-		{"internal/job/*.[a-z]", "internal/**/*.go", false},
-		{"internal/job/*.go", "internal/**/*", true},
-		{".", "internal/**", false},
-		{".", "internal/**/*.go", false},
-		{".", "internal/job/*.go", false},
-		{"internal/**", "internal/job/**", false},
-		{"**/*.go", "internal/**", false},
-		{"**/*.go", "**", true},
-		{"internal/job/*.go", "internal/job/*.go", true},
-		{"", "internal/job", false},
-		{"internal/job/a.go", "", false},
-	} {
-		assert.Equalf(t, tc.want, PathWithin(tc.inner, tc.outer), "PathWithin(%q, %q)", tc.inner, tc.outer)
-	}
+func (s *ClaimEvidenceSuite) TestParseReadsEachKind() {
+	s.parsesAs("refs:hint.VCSAdd", ClaimEvidence{Kind: ClaimRefs, Subject: "hint.VCSAdd"})
+	s.parsesAs("test:cmd/magus/vcs.go", ClaimEvidence{Kind: ClaimTest, Subject: "cmd/magus/vcs.go"})
+	s.parsesAs("output:.:config-generate", ClaimEvidence{Kind: ClaimOutput, Subject: ".:config-generate"})
+	s.parsesAs("released", ClaimEvidence{Kind: ClaimReleased})
 }
 
-func TestParseClaimEvidence(t *testing.T) {
-	t.Parallel()
-
-	for because, want := range map[string]ClaimEvidence{
-		"refs:hint.VCSAdd":         {Kind: ClaimRefs, Subject: "hint.VCSAdd"},
-		"test:cmd/magus/vcs.go":    {Kind: ClaimTest, Subject: "cmd/magus/vcs.go"},
-		"output:.:config-generate": {Kind: ClaimOutput, Subject: ".:config-generate"},
-		"released":                 {Kind: ClaimReleased},
-	} {
-		got, err := ParseClaimEvidence(because)
-		require.NoError(t, err, because)
-		assert.Equal(t, want, got)
-		assert.Equal(t, because, got.String(), "the evidence spells back as its because")
-	}
-	for because, refused := range map[string]string{
-		"hunch:x":         "names no proof",
-		"refs:":           "names no refs subject",
-		"released:a.go":   "released names nothing after it",
-		"output:generate": "names no target",
-	} {
-		_, err := ParseClaimEvidence(because)
-		require.Error(t, err, because)
-		assert.Contains(t, err.Error(), refused)
-	}
+func (s *ClaimEvidenceSuite) TestParseRefusesWhatNamesNoProof() {
+	s.refuses("hunch:x", "names no proof")
+	s.refuses("refs:", "names no refs subject")
+	s.refuses("released:a.go", "released names nothing after it")
+	s.refuses("output:generate", "names no target")
 }
 
-// A pause holds until its bound and not a second past it; a pause naming no bound holds
-// until it is lifted.
-func TestJobPausedAtLapsesAtItsBound(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]struct {
-		row  Job
-		want bool
-	}{
-		"not paused":       {row: Job{PausedUntil: 200}, want: false},
-		"paused, no bound": {row: Job{Paused: 10, PauseReason: "busy"}, want: true},
-		"inside its bound": {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 101}, want: true},
-		"at its bound":     {row: Job{Paused: 10, PauseReason: "busy", PausedUntil: 100}, want: false},
-	}
-	for name, c := range cases {
-		assert.Equal(t, c.want, c.row.PausedAt(100), name)
-	}
-}
-
-func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
-	t.Parallel()
-
+func (s *ClaimEvidenceSuite) TestParseReadsADeadHolder() {
 	e, err := ParseClaimEvidence("dead:api/migrate")
-	require.NoError(t, err)
-	assert.Equal(t, ClaimEvidence{Kind: ClaimDeadHolder, Subject: "api/migrate"}, e)
-	assert.Equal(t, "dead:api/migrate", e.String())
+	s.Require().NoError(err)
+	s.Equal(ClaimEvidence{Kind: ClaimDeadHolder, Subject: "api/migrate"}, e)
+	s.Equal("dead:api/migrate", e.String())
 
 	_, err = ParseClaimEvidence("dead")
-	assert.EqualError(t, err, `"dead" names no dead subject`)
-}
-
-func TestHoldsNoBuildSeat(t *testing.T) {
-	check := Postcondition{Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}
-	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
-	assert.False(t, Job{ReadOnly: true, Postconditions: []Postcondition{check}}.HoldsNoBuildSeat(), "a check runs a target")
-	assert.False(t, Job{ReadOnly: true, Paths: Paths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())
-	assert.False(t, Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
+	s.EqualError(err, `"dead" names no dead subject`)
 }

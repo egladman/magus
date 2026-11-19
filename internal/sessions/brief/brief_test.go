@@ -468,7 +468,7 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 func briefClock(t *testing.T) sessions.PromptCacheClock {
 	t.Helper()
 	cacheDir := t.TempDir()
-	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
+	recorder.AppendAgentCommand(testkit.WithEnvResolver(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: recorder.ToolShellCommand, Command: "ls", Decision: verdict.Defer})
 	return sessions.PromptCacheForCheckout(t.Context(), cacheDir, time.Now().Add(7*time.Minute))
 }
 
@@ -723,7 +723,7 @@ func fileResult(t *testing.T, root string, start session.InvocationStart, inv st
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	w, err := session.Open(t.Context(), dir, inv, start, session.WithTie(sessions.AttentionTie()))
+	w, err := session.Open(t.Context(), sessions.StoreConfig(dir, inv, start), session.WithTie(sessions.AttentionTie()))
 	require.NoError(t, err)
 	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, r))
 }

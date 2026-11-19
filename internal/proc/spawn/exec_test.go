@@ -24,6 +24,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// withTestResolver gives ctx the resolver Exec requires before it hands back captured
+// output: with none it refuses rather than return text it could not redact.
+func withTestResolver(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
+
 // TestExecRedactsSecretsFromEveryCapturedPath is the regression for two leaks found in
 // review AFTER the feature was reported working off a terminal-only check:
 //
@@ -34,7 +40,7 @@ import (
 //
 // Both variants run here because Quiet is the one that leaves zero other coverage.
 func TestExecRedactsSecretsFromEveryCapturedPath(t *testing.T) {
-	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(t.Context())
 	t.Setenv("MAGUS_TEST_LEAK_TOKEN", "ghp_never_capture_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LEAK_TOKEN")
 	require.NoError(t, err)
@@ -54,13 +60,21 @@ func TestExecRedactsSecretsFromEveryCapturedPath(t *testing.T) {
 	}
 }
 
-// TestExecWithoutAResolverIsUnchanged pins that the redaction plumbing is inert on the
-// overwhelmingly common path: a run that reads no secret at all.
-func TestExecWithoutAResolverIsUnchanged(t *testing.T) {
+// TestExecCaptureWithoutAResolverRefuses pins that captured output is never returned
+// unredacted: a context with no resolver is an error, not a pass-through.
+func TestExecCaptureWithoutAResolverRefuses(t *testing.T) {
 	res, err := Exec(t.Context(), "sh", []string{"-c", "echo plain output"},
 		ExecOptions{Dir: ".", Capture: true, Quiet: true})
+	var noResolver *secrets.NoResolverError
+	require.ErrorAs(t, err, &noResolver)
+	assert.Empty(t, res.Stdout)
+}
+
+// TestExecWithoutCaptureNeedsNoResolver pins that only a captured run needs the resolver.
+func TestExecWithoutCaptureNeedsNoResolver(t *testing.T) {
+	_, err := Exec(t.Context(), "sh", []string{"-c", "echo plain output"},
+		ExecOptions{Dir: ".", Quiet: true})
 	require.NoError(t, err)
-	assert.Equal(t, "plain output", strings.TrimSpace(res.Stdout))
 }
 
 // TestExecCapturesOutputWithNoTrailingNewline is the regression for a corruption a
@@ -68,16 +82,10 @@ func TestExecWithoutAResolverIsUnchanged(t *testing.T) {
 // the capture buffers were read, so anything past the last newline vanished. It hit every
 // run, not only ones touching a secret: `printf` came back empty.
 func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
-	for _, withResolver := range []bool{false, true} {
-		ctx := t.Context()
-		if withResolver {
-			ctx = secrets.WithResolver(ctx, secrets.NewResolver())
-		}
-		res, err := Exec(ctx, "printf", []string{"v1.2.3"},
-			ExecOptions{Dir: ".", Capture: true, Quiet: true})
-		require.NoError(t, err)
-		assert.Equal(t, "v1.2.3", res.Stdout, "resolver=%v: unterminated output must survive", withResolver)
-	}
+	res, err := Exec(withTestResolver(t.Context()), "printf", []string{"v1.2.3"},
+		ExecOptions{Dir: ".", Capture: true, Quiet: true})
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", res.Stdout, "unterminated output must survive")
 }
 
 // TestExecClassifiesAMissingBinary covers Exec specifically, because Exec is the path
@@ -127,7 +135,7 @@ func TestExecConsultsTheStepGate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			seen := false
-			ctx := WithStepGate(t.Context(), func(_ context.Context, _ string, _ []string, _ string) StepAction {
+			ctx := WithStepGate(withTestResolver(t.Context()), func(_ context.Context, _ string, _ []string, _ string) StepAction {
 				seen = true
 				return tc.action
 			})
@@ -232,7 +240,7 @@ func TestExecConfinesTheChildWhereTheKernelCan(t *testing.T) {
 	require.NoError(t, os.WriteFile(secretFile, []byte("s3cret"), 0o600))
 	policy := func(mode types.SandboxMode) context.Context {
 		p := sandbox.BuildPolicy(sandbox.PolicyOptions{Mode: mode, Workspace: ws, Environ: os.Environ(), GOOS: runtime.GOOS})
-		return sandbox.WithPolicy(t.Context(), p)
+		return sandbox.WithPolicy(withTestResolver(t.Context()), p)
 	}
 	opts := ExecOptions{Dir: ws, Capture: true, Quiet: true}
 	abi, abiErr := scissors.ABI()
@@ -265,7 +273,7 @@ func TestExecChecksARelativeCommandWhereItRuns(t *testing.T) {
 	ws := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "tool.sh"), []byte("#!/bin/sh\necho ran\n"), 0o755))
 	p := sandbox.BuildPolicy(sandbox.PolicyOptions{Mode: types.SandboxModeBestEffort, Workspace: ws, Environ: os.Environ(), GOOS: runtime.GOOS})
-	res, err := Exec(sandbox.WithPolicy(t.Context(), p), "./tool.sh", nil, ExecOptions{Dir: ws, Capture: true, Quiet: true})
+	res, err := Exec(sandbox.WithPolicy(withTestResolver(t.Context()), p), "./tool.sh", nil, ExecOptions{Dir: ws, Capture: true, Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, "ran\n", res.Stdout)
 }
@@ -387,7 +395,7 @@ func TestExecResolvesAgainstTheRunsPATH(t *testing.T) {
 	const tool = "magus-environ-probe"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, tool), []byte("#!/bin/sh\necho found $MAGUS_ENVIRON_VAR\n"), 0o755))
 
-	ctx := environ.With(t.Context())
+	ctx := environ.With(withTestResolver(t.Context()))
 	environ.From(ctx).Set("PATH", fmt.Sprintf("%s%c%s", dir, os.PathListSeparator, os.Getenv("PATH")))
 	environ.From(ctx).Set("MAGUS_ENVIRON_VAR", "x")
 
@@ -455,7 +463,7 @@ func (s *QuietActivitySuite) TestAQuietChildsStderrIsActivity() {
 		s.T().Skip("needs sh")
 	}
 	var beats atomic.Int64
-	ctx := WithActivity(s.T().Context(), func() { beats.Add(1) })
+	ctx := WithActivity(withTestResolver(s.T().Context()), func() { beats.Add(1) })
 	res, err := Exec(ctx, "sh", []string{"-c", "echo 'waiting for a seat' >&2"}, ExecOptions{Quiet: true, Capture: true})
 
 	s.Require().NoError(err)

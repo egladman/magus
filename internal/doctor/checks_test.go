@@ -877,12 +877,12 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{{
+	_, err = session.LoadEvents(t.Context(), sessions.StoreConfig(dir, "", session.InvocationStart{}), []session.LoadEvent{{
 		Session: "s1",
 		Event: session.AgentEvent{
 			Host: "h1", Kind: session.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
 		},
-	}}, session.InvocationStart{})
+	}})
 	require.NoError(t, err)
 }
 
@@ -1650,7 +1650,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		t.Helper()
 		base := (&runner{root: root}).cacheDir()
 		for i := range n {
-			recorder.AppendAgentCommand(context.Background(), base, recorder.AgentCommand{
+			recorder.AppendAgentCommand(withSecrets(context.Background()), base, recorder.AgentCommand{
 				Host: "test",
 				Tool: tool,
 				Path: fmt.Sprintf("file-%d.go", i),

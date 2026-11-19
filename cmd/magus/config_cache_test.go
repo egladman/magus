@@ -190,7 +190,7 @@ func (s *cacheShard) run(t *testing.T, args ...string) (string, error) {
 	global.output = s.output
 	var err error
 	stderr := notices(t, func() {
-		err = configCacheCommand(context.Background(), s.root, args)
+		err = configCacheCommand(withSecrets(context.Background()), s.root, args)
 	})
 	if magusValue != nil {
 		_ = magusValue.Close()

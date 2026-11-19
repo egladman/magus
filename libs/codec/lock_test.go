@@ -45,6 +45,9 @@ func (s *LockSuite) TestExcludes() {
 		return nil
 	})
 	require.ErrorContains(s.T(), err, "another process has held the lock")
+	held, ok := errors.AsType[*LockHeldError](err)
+	require.True(s.T(), ok, "a held lock is a *LockHeldError")
+	require.Equal(s.T(), path, held.Path)
 
 	release()
 	ran := false

@@ -23,12 +23,12 @@ func (s *PolicySuite) SetupTest() {
 }
 
 func (s *PolicySuite) TestEachModeCompilesToItsRights() {
-	p, err := New([]Bind{
+	p, err := New(Config{Binds: []Bind{
 		{Path: filepath.Join(s.dir, "ro")},
 		{Path: filepath.Join(s.dir, "rw"), Mode: "rw", Create: true},
 		{Path: filepath.Join(s.dir, "rx"), Mode: "rx", Create: true},
 		{Path: filepath.Join(s.dir, "rwx"), Mode: "rwx"},
-	})
+	}})
 	s.Require().NoError(err)
 	s.Equal([]filesystem.Rule{
 		{Path: filepath.Join(s.dir, "ro"), Read: true},
@@ -44,20 +44,20 @@ func (s *PolicySuite) TestABindIsResolvedThroughItsLinks() {
 	link := filepath.Join(s.dir, "link")
 	s.Require().NoError(os.Symlink(target, link))
 
-	p, err := New([]Bind{{Path: link, Mode: "rw"}})
+	p, err := New(Config{Binds: []Bind{{Path: link, Mode: "rw"}}})
 	s.Require().NoError(err)
 	s.Equal([]filesystem.Rule{{Path: target, Read: true, Write: true}}, p.Rules())
 }
 
 func (s *PolicySuite) TestAnUnknownModeAndAnEmptyPathAreRefused() {
-	p, err := New([]Bind{{Path: s.dir, Mode: "RW"}, {Mode: "ro"}})
+	p, err := New(Config{Binds: []Bind{{Path: s.dir, Mode: "RW"}, {Mode: "ro"}}})
 	s.Nil(p)
 	s.Require().ErrorContains(err, `unknown mode "RW"`)
 	s.ErrorContains(err, "empty path")
 }
 
 func (s *PolicySuite) TestCheckRefusesOutsideTheBinds() {
-	p, err := New([]Bind{{Path: s.dir}}, WithLease("fleet/w1", job.LeaseSourceMarker))
+	p, err := New(Config{Binds: []Bind{{Path: s.dir}}}, WithLease("fleet/w1", job.LeaseSourceMarker))
 	s.Require().NoError(err)
 	s.Require().NoError(p.Check(filesystem.Read, filepath.Join(s.dir, "f")))
 
@@ -71,9 +71,11 @@ func (s *PolicySuite) TestCheckRefusesOutsideTheBinds() {
 	}, *denied)
 }
 
-func (s *PolicySuite) TestANilPolicyPermitsEverything() {
+func (s *PolicySuite) TestANilPolicyPermitsNothing() {
 	var p *Policy
-	s.Require().NoError(p.Check(filesystem.Write, "/anywhere"))
+	var refused *NilPolicyError
+	s.Require().ErrorAs(p.Check(filesystem.Write, "/anywhere"), &refused)
+	s.Equal("Check", refused.Op)
 	s.Nil(p.Rules())
 	id, from := p.Lease()
 	s.Empty(id)

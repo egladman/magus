@@ -115,7 +115,7 @@ func (s *WaitBoardSuite) TestUpstreamsLeaveOutStepsOutsideTheBatch() {
 // waitContext is the context waitForUpstream logs console build's wait with.
 func waitContext() context.Context {
 	edge := WaitEdge{Waiter: ref("console", "build"), Upstream: ref("docs", "build")}
-	return context.WithValue(context.Background(), waitEdgeKey{}, edge)
+	return context.WithValue(withResolver(context.Background()), waitEdgeKey{}, edge)
 }
 
 type WaitBandSuite struct {
@@ -137,7 +137,7 @@ func (s *WaitBandSuite) SetupTest() {
 }
 
 func (s *WaitBandSuite) handle(msg string, attrs ...slog.Attr) {
-	s.Require().NoError(s.h.Handle(context.Background(), buildRecord(msg, attrs...)))
+	s.Require().NoError(s.h.Handle(withResolver(context.Background()), buildRecord(msg, attrs...)))
 }
 
 func (s *WaitBandSuite) step(project, target string, state StepState) {
@@ -188,7 +188,7 @@ func (s *WaitBandSuite) TestWaitLineIsDroppedWhileTheBoardShowsIt() {
 
 func (s *WaitBandSuite) TestBoardClearsAtTheEndOfTheRun() {
 	s.plan(1)
-	s.Require().NoError(s.h.EndRun(context.Background(), ""))
+	s.Require().NoError(s.h.EndRun(withResolver(context.Background()), ""))
 	s.Zero(s.screen.FindRow("bottleneck"))
 }
 
@@ -200,7 +200,7 @@ func (s *WaitBandSuite) TestRunAllFeedsTheBoard() {
 // before RunAll starts.
 func (s *WaitBandSuite) TestRunAllFeedsTheBoardAfterAnEarlierRunEnded() {
 	s.handle("cache.pool", slog.Int("capacity", 4), slog.Int("running", 1))
-	s.Require().NoError(s.h.EndRun(context.Background(), ""))
+	s.Require().NoError(s.h.EndRun(withResolver(context.Background()), ""))
 	s.Require().False(s.h.RendersBand())
 	s.Contains(s.boardDuringRunAll(), "holds 1")
 }

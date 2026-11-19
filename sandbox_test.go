@@ -81,7 +81,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 		return p.Lease
 	}
 
-	assert.Equal(t, "fleet/client", leaseOf(jobtypes.WithLease(t.Context(), "fleet/client")))
+	assert.Equal(t, "fleet/client", leaseOf(leased(t, t.Context(), "fleet/client")))
 	assert.Equal(t, "fleet/daemon", leaseOf(t.Context()), "with no lease on ctx the environment's claim stands")
 }
 
@@ -163,4 +163,12 @@ func (s *ScriptSandboxSuite) TestAScriptsOwnExecLeavesTargetsToTheirSteps() {
 	ctx, err := s.m.ApplySandbox(s.T().Context())
 	s.Require().NoError(err)
 	s.Error(sandbox.PolicyFromContext(ctx).CheckRead(ctx, filepath.Join(s.granted, "f")))
+}
+
+// leased is ctx carrying lease.
+func leased(t testing.TB, ctx context.Context, lease string) context.Context {
+	t.Helper()
+	ctx, err := jobtypes.WithLease(ctx, lease)
+	require.NoError(t, err)
+	return ctx
 }

@@ -512,7 +512,7 @@ func (s *ChangeRiskWorkspaceSuite) TestTheSourceIsTheTargetDeclaringTheProfile()
 }
 
 func (s *ChangeRiskWorkspaceSuite) touchedLabels(base string) []string {
-	set, err := s.m.touchedSince(s.T().Context(), base)
+	set, err := s.m.touchedSince(withSecrets(s.T().Context()), base)
 	s.Require().NoError(err)
 	var labels []string
 	for _, fn := range set.fns {
@@ -533,7 +533,7 @@ func (s *ChangeRiskWorkspaceSuite) TestABaseScoresOnlyWhatChangedSinceIt() {
 	})
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "a.go"), []byte(riskBody+"\nfunc G() int {\n\treturn 3\n}\n"), 0o644))
 
-	set, err := s.m.touchedSince(s.T().Context(), "HEAD")
+	set, err := s.m.touchedSince(withSecrets(s.T().Context()), "HEAD")
 	s.Require().NoError(err)
 
 	s.Equal([]string{"G"}, s.labelsTouched(set.fns))
@@ -558,7 +558,7 @@ func (s *ChangeRiskWorkspaceSuite) TestAMovedFunctionIsNotTouched() {
 	moved := fmt.Sprintf("package a\n\n%s\n%s", g, strings.TrimPrefix(riskBody, "package a\n\n"))
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "a.go"), []byte(moved), 0o644))
 
-	set, err := s.m.touchedSince(s.T().Context(), "HEAD")
+	set, err := s.m.touchedSince(withSecrets(s.T().Context()), "HEAD")
 	s.Require().NoError(err)
 
 	s.Empty(set.fns)
@@ -567,7 +567,7 @@ func (s *ChangeRiskWorkspaceSuite) TestAMovedFunctionIsNotTouched() {
 const riskPatch = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -7,1 +7,1 @@\n-\treturn 1\n+\treturn 0\n"
 
 func (s *ChangeRiskWorkspaceSuite) TestAttachChangeRiskChecksTheFunctionADiffChanged() {
-	got, err := s.m.diff(s.T().Context(), []string{"a.go"}, diffConfig{patch: riskPatch, patchGiven: true})
+	got, err := s.m.diff(withSecrets(s.T().Context()), []string{"a.go"}, diffConfig{patch: riskPatch, patchGiven: true})
 	s.Require().NoError(err)
 
 	var checks []string
@@ -992,7 +992,7 @@ func (s *ChangeRiskRunSuite) open() {
 }
 
 func (s *ChangeRiskRunSuite) TestNoBaseScoresEachFunctionFromTheTestProfile() {
-	got, err := s.m.ChangeRisk(s.T().Context(), "")
+	got, err := s.m.ChangeRisk(withSecrets(s.T().Context()), "")
 
 	s.Require().NoError(err)
 	s.Require().Len(got.Functions, 1, "gaps: %v", got.Gaps)
@@ -1003,7 +1003,7 @@ func (s *ChangeRiskRunSuite) TestNoBaseScoresEachFunctionFromTheTestProfile() {
 func (s *ChangeRiskRunSuite) TestABaseNoCacheHoldsIsAnErrorNamingTheBaseAndTheCommand() {
 	s.repo.Write("a.go", riskBody+"\nfunc G() int {\n\treturn 2\n}\n")
 
-	_, err := s.m.ChangeRisk(s.T().Context(), "HEAD")
+	_, err := s.m.ChangeRisk(withSecrets(s.T().Context()), "HEAD")
 
 	s.ErrorIs(err, errBaseNotCached)
 	s.ErrorContains(err, "no cache holds the coverage profile of base ")
@@ -1011,7 +1011,7 @@ func (s *ChangeRiskRunSuite) TestABaseNoCacheHoldsIsAnErrorNamingTheBaseAndTheCo
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterWithNoBaseJudgesNoBase() {
-	r, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "")
+	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "")
 
 	s.Require().NoError(err)
 	s.Equal("", r.commit)
@@ -1019,7 +1019,7 @@ func (s *ChangeRiskRunSuite) TestNewRiskMeterWithNoBaseJudgesNoBase() {
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterResolvesTheMergeBase() {
-	r, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "HEAD")
+	r, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "HEAD")
 
 	s.Require().NoError(err)
 	s.Len(r.commit, 40)
@@ -1028,7 +1028,7 @@ func (s *ChangeRiskRunSuite) TestNewRiskMeterResolvesTheMergeBase() {
 }
 
 func (s *ChangeRiskRunSuite) TestNewRiskMeterRefusesABaseThatNamesNoRevision() {
-	_, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "no-such-ref")
+	_, err := s.m.newRiskMeter(withSecrets(s.T().Context()), touchedSet{}, "no-such-ref")
 
 	s.ErrorContains(err, "change risk: ")
 }

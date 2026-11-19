@@ -77,8 +77,9 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.NoError(t, err, "NewSink")
 
 	obs := stageObserver{out: sink, label: "fixture", policies: targetPolicies(p)}
-	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
-	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
+	ctx := withSecrets(t.Context())
+	obs.TargetEnd(ctx, "security", time.Second, errors.New("govulncheck: exit 1"))
+	obs.TargetEnd(ctx, "test", time.Second, errors.New("go test: exit 1"))
 
 	assert.Contains(t, out.String(), "[advisory] fixture security")
 	assert.Contains(t, out.String(), "[fail] fixture test",
@@ -1523,7 +1524,7 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 // interpolated credential would print it verbatim as the final thing a user sees. This
 // is the one seam where a run error stops being magus's and becomes the caller's text.
 func TestRedactError(t *testing.T) {
-	m := &Magus{resolver: secrets.NewResolver()}
+	m := &Magus{resolver: testkit.EnvResolver(t)}
 	ctx := secrets.WithResolver(t.Context(), m.resolver)
 	t.Setenv("MAGUS_TEST_RUNERR_TOKEN", "ghp_thrown_from_a_magusfile")
 	_, err := m.resolver.Read(ctx, "MAGUS_TEST_RUNERR_TOKEN")

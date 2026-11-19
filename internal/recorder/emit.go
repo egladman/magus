@@ -79,7 +79,12 @@ func Emit[B journal.Body](ctx context.Context, body B) {
 	if len(sinks) == 0 {
 		return
 	}
-	r := journal.NewRecord(time.Now(), InvocationIDFromContext(ctx), redact(ctx, body))
+	body, err := redact(ctx, body)
+	if err != nil {
+		slog.WarnContext(ctx, "journal.dropped", slog.String("kind", fmt.Sprintf("%T", body)), slog.String("why", err.Error()))
+		return
+	}
+	r := journal.NewRecord(time.Now(), InvocationIDFromContext(ctx), body)
 	for _, s := range sinks {
 		s(ctx, r)
 	}
@@ -88,31 +93,36 @@ func Emit[B journal.Body](ctx context.Context, body B) {
 // redact masks the free-text fields of body here rather than at each emit
 // site, a rule someone eventually forgets. TestEveryFreeTextFieldIsRedacted
 // holds every string field to this switch or to its enumerations.
-func redact[B journal.Body](ctx context.Context, body B) B {
+func redact[B journal.Body](ctx context.Context, body B) (B, error) {
+	var err error
 	switch b := any(&body).(type) {
 	case *journal.Started:
-		b.Command.Arguments = redactAll(ctx, b.Command.Arguments)
+		b.Command.Arguments, err = redactAll(ctx, b.Command.Arguments)
 	case *journal.Exec:
-		b.Command = secrets.RedactString(ctx, b.Command)
+		b.Command, err = secrets.RedactString(ctx, b.Command)
 	case *journal.Output:
-		b.Text = secrets.RedactString(ctx, b.Text)
+		b.Text, err = secrets.RedactString(ctx, b.Text)
 	case *journal.Run:
-		b.Error = secrets.RedactString(ctx, b.Error)
+		b.Error, err = secrets.RedactString(ctx, b.Error)
 	case *journal.Secret:
-		b.Text = secrets.RedactString(ctx, b.Text)
+		b.Text, err = secrets.RedactString(ctx, b.Text)
 	}
-	return body
+	return body, err
 }
 
-func redactAll(ctx context.Context, in []string) []string {
+func redactAll(ctx context.Context, in []string) ([]string, error) {
 	if len(in) == 0 {
-		return in
+		return in, nil
 	}
 	out := make([]string, len(in))
 	for i, s := range in {
-		out[i] = secrets.RedactString(ctx, s)
+		red, err := secrets.RedactString(ctx, s)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = red
 	}
-	return out
+	return out, nil
 }
 
 // FileSink appends each record as one line to a writer. It flushes every kind
@@ -187,14 +197,16 @@ func (s *FileSink) Flush() {
 // NewSecretResolver builds a secrets.Resolver the way every magus scope needs one: a value
 // too short to mask is reported as MGS2011, and the endpoint forwarder logs through
 // slog's default logger, which magus wraps in [secrets.NewRedactingHandler]. opts apply
-// after those, so a caller's own options win.
+// after those, so a caller's own options win. A read with no provider selected goes
+// through the environment, which is how a magusfile names a bare variable.
 //
 // It lives here, the lowest package every caller imports, so no caller builds a bare
-// resolver that would keep the MGS2011 notice to itself.
-func NewSecretResolver(opts ...secrets.Option) *secrets.Resolver {
+// resolver that would keep the MGS2011 notice to itself. The error is an option a caller
+// passed that the resolver refused.
+func NewSecretResolver(opts ...secrets.Option) (*secrets.Resolver, error) {
 	base := make([]secrets.Option, 0, 2+len(opts))
 	base = append(base, secrets.WithShortSecret(warnUnmasked), secrets.WithLogger(slog.New(defaultHandler{})))
-	return secrets.NewResolver(append(base, opts...)...)
+	return secrets.NewResolver(secrets.Config{Fallback: secrets.EnvProvider{}}, append(base, opts...)...)
 }
 
 // warnUnmasked says out loud that a resolved value will not be masked: the caller has no

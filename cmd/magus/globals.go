@@ -88,7 +88,9 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	if flagWasSet(fs, "tee") {
 		global.tee.Reset()
 	}
-	applyDisplay()
+	if err := applyDisplay(); err != nil {
+		return nil, err
+	}
 	if err := checkOutputSupported(name, fs); err != nil {
 		return nil, err
 	}

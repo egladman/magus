@@ -28,8 +28,8 @@ func (s *gradingSuite) SetupTest() {
 	s.store = s.open()
 }
 
-func (s *gradingSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.dir, append(writable(
+func (s *gradingSuite) open(opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, append(writable(
 		WithTree(func(context.Context) (string, error) { return s.tree, nil }),
 		WithCheckCommand(func(Job, Postcondition) ([]string, string, error) { return s.argv, s.work, nil }),
 	), opts...)...)
@@ -166,7 +166,7 @@ func (s *GradeSuite) TestAnUnknownJobIsRefused() {
 }
 
 func (s *GradeSuite) TestGradingWithNoTreeIsRefused() {
-	st, err := Open(s.dir, writable()...)
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, writable()...)
 	s.Require().NoError(err)
 
 	_, err = st.Grade(s.T().Context(), "j1", nil)
@@ -238,6 +238,23 @@ func (s *GradeSuite) TestAGradeLineSpellingGoalsIsRefused() {
 	err := codec.Unmarshal([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,"goals":[]}`), &e)
 
 	s.ErrorContains(err, "spells goal")
+}
+
+func (s *GradeSuite) TestAMemberANewerWriterStoredInAGradeOrARunIsRefused() {
+	for _, line := range []string{
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,"postconditions":[],"later":1}`,
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Grade","job":"j1","graded":1,"verified":false,` +
+			`"postconditions":[{"postcondition":"tests","passed":true,"verified":false,"later":1}]}`,
+		`{"api_version":"safetyscissors.job/v1alpha1","kind":"Run","ref":"run-1","job":"j1","postcondition":"tests","basis":"reported",` +
+			`"check":{"target":"test","project":"."},"tree":"t","exit":0,"started":1,"ended":2,"later":1}`,
+	} {
+		var e gradesEntry
+		err := codec.Unmarshal([]byte(line), &e)
+
+		refused, ok := errors.AsType[*UnknownMemberError](err)
+		s.Require().True(ok, "%s: %v", line, err)
+		s.Equal([]string{"later"}, refused.Members, line)
+	}
 }
 
 func (s *GradeSuite) TestARunsAndAGradesLinesArePinned() {

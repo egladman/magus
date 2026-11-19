@@ -161,7 +161,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	// No session_id: the checkout's record answers only a caller its host names no session for.
 	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
 	var out bytes.Buffer
-	err = shellStdin(context.Background(), strings.NewReader(envelope), &out, []string{"-o", "name"})
+	err = shellStdin(withSecrets(context.Background()), strings.NewReader(envelope), &out, []string{"-o", "name"})
 	var silent reportedExit
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
@@ -455,7 +455,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
 	judge := func() verdict.Judgment {
-		ctx := t.Context()
+		ctx := withSecrets(t.Context())
 		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
 	first := judge()

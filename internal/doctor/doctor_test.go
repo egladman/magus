@@ -22,6 +22,12 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// withSecrets gives a context the resolver main installs in production; the
+// activity trail refuses to record without one.
+func withSecrets(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
+
 func TestCheckLanguageCoverage(t *testing.T) {
 	r := &runner{}
 

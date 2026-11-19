@@ -51,6 +51,12 @@ var toolTokenRe = func() *regexp.Regexp {
 	return regexp.MustCompile(fmt.Sprintf("\\b(?:%s)\\b", strings.Join(names, "|")))
 }()
 
+// bgCtx carries the resolver that recording and captured spawns require; production
+// installs one in cmd/magus, and without it they refuse.
+func bgCtx() context.Context {
+	return testkit.WithEnvResolver(context.Background())
+}
+
 // fixtureMagus opens a real single-project workspace so a tool that needs a
 // live *magus.Magus can be exercised.
 func fixtureMagus(t *testing.T) *magus.Magus {
@@ -114,7 +120,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 			return mcplib.NewToolResultText(out), nil
 		})
 
-		result, err := h(context.Background(), req)
+		result, err := h(bgCtx(), req)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -134,7 +140,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 			return nil, errors.New("boom")
 		})
 
-		result, err := h(context.Background(), req)
+		result, err := h(bgCtx(), req)
 		require.Error(t, err)
 		assert.Nil(t, result)
 
@@ -151,7 +157,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 		h := wrap(quietLogger(), originFn, "", noSecrets, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText("ok"), nil
 		})
-		result, err := h(context.Background(), req)
+		result, err := h(bgCtx(), req)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
@@ -172,7 +178,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
-	_, err := h(context.Background(), req)
+	_, err := h(bgCtx(), req)
 	require.NoError(t, err)
 
 	events, err := loggedCalls(t.Context(), dir, 10)
@@ -219,7 +225,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
-	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
+	_, err := h(bgCtx(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
 	events, err := loggedCalls(t.Context(), dir, 10)
@@ -244,7 +250,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(recorder.ContextWithCredential(context.Background(), auth.CredentialStdio()), callRequest(d.Name, nil))
+		res, err := st.Handler(recorder.ContextWithCredential(bgCtx(), auth.CredentialStdio()), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -330,7 +336,7 @@ func TestAdapt(t *testing.T) {
 
 	t.Run("error becomes a soft IsError result, not a transport error", func(t *testing.T) {
 		h := adapt(cannedDriver{err: errors.New("boom")})
-		res, err := h(context.Background(), mcplib.CallToolRequest{})
+		res, err := h(bgCtx(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.True(t, res.IsError)
 		assert.Contains(t, allText(res), "boom")
@@ -338,7 +344,7 @@ func TestAdapt(t *testing.T) {
 
 	t.Run("structured Data is marshaled to JSON text", func(t *testing.T) {
 		h := adapt(cannedDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
-		res, err := h(context.Background(), mcplib.CallToolRequest{})
+		res, err := h(bgCtx(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.False(t, res.IsError)
 		assert.JSONEq(t, `{"ok":true}`, allText(res))
@@ -346,7 +352,7 @@ func TestAdapt(t *testing.T) {
 
 	t.Run("plain Text is returned verbatim when Data is nil", func(t *testing.T) {
 		h := adapt(cannedDriver{resp: spells.InvokeResponse{Text: "just text"}})
-		res, err := h(context.Background(), mcplib.CallToolRequest{})
+		res, err := h(bgCtx(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "just text", allText(res))
 	})
@@ -453,12 +459,12 @@ func TestDeclaredParamsRefusesAnUndeclaredParam(t *testing.T) {
 	t.Parallel()
 
 	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(cannedDriver{resp: spells.InvokeResponse{Text: "ran"}}))
-	res, err := h(context.Background(), callRequest("demo", map[string]any{"script": "x", "input": 1}))
+	res, err := h(bgCtx(), callRequest("demo", map[string]any{"script": "x", "input": 1}))
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Equal(t, `demo: unknown parameter "input"`, allText(res))
 
-	res, err = h(context.Background(), callRequest("demo", map[string]any{"script": "x"}))
+	res, err = h(bgCtx(), callRequest("demo", map[string]any{"script": "x"}))
 	require.NoError(t, err)
 	assert.Equal(t, "ran", allText(res))
 }
@@ -473,7 +479,7 @@ func TestWrapMeasuresEveryByteSent(t *testing.T) {
 	h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return jsonResult(map[string]any{"ok": true})
 	})
-	result, err := h(context.Background(), callRequest(hint.ToolStatus.String(), nil))
+	result, err := h(bgCtx(), callRequest(hint.ToolStatus.String(), nil))
 	require.NoError(t, err)
 	require.Len(t, *calls, 1)
 	assert.Equal(t, int64(2*len(allText(result))), (*calls)[0].OutputBytes)
@@ -492,7 +498,7 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	const credential = "sk-live-must-not-be-persisted"
 	base := t.TempDir()
 
-	res := secrets.NewResolver()
+	res := testkit.EnvResolver(t)
 	t.Setenv("MCP_TEST_TOKEN", credential)
 	// Provenance is what marks a value as a credential, so resolve it once.
 	got, err := res.Read(secrets.WithResolver(t.Context(), res), "MCP_TEST_TOKEN")
@@ -504,7 +510,7 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	h := wrapWithResolver(t, base, res, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText("upstream said: " + credential), nil
 	})
-	_, err = h(context.Background(), callRequest("client", map[string]any{"q": credential}))
+	_, err = h(bgCtx(), callRequest("client", map[string]any{"q": credential}))
 	require.NoError(t, err)
 
 	var found []string

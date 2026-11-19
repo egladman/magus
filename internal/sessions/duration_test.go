@@ -16,7 +16,7 @@ import (
 func recordResults(t *testing.T, dir string, results ...session.TargetResult) {
 	t.Helper()
 	for i, r := range results {
-		w, err := session.Open(t.Context(), dir, fmt.Sprintf("invmv%04d1", i), session.InvocationStart{Command: "run"})
+		w, err := session.Open(t.Context(), StoreConfig(dir, fmt.Sprintf("invmv%04d1", i), session.InvocationStart{Command: "run"}))
 		require.NoError(t, err)
 		require.NoError(t, w.Append(t.Context(), session.KindTargetResult, r))
 	}
@@ -39,7 +39,7 @@ func (s *RunDurationWithSuite) SetupTest() {
 		{"run go-test . -- -run TestA", 20_000},
 		{"run go-test . --", 300_000},
 	} {
-		w, err := session.Open(s.T().Context(), s.dir, fmt.Sprintf("invwith%04d1", i), session.InvocationStart{Command: run.command})
+		w, err := session.Open(s.T().Context(), StoreConfig(s.dir, fmt.Sprintf("invwith%04d1", i), session.InvocationStart{Command: run.command}))
 		s.Require().NoError(err)
 		s.Require().NoError(w.Append(s.T().Context(), session.KindTargetResult, session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: run.took}))
 	}

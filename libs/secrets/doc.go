@@ -7,7 +7,7 @@
 // makes redaction exact over the bytes the caller produced.
 //
 // WHERE a secret comes from is the caller's business: a [Provider] fetches by an opaque
-// reference, and the environment is the built-in one. What only this package can do is
+// reference, and [EnvProvider] reads the environment. What only this package can do is
 // know that a value IS a secret.
 //
 // State lives on a Resolver the caller creates and carries on the context, never in the
@@ -15,6 +15,7 @@
 // long; a second workspace gets a second Resolver.
 //
 // The package keeps no process-wide state and writes nowhere on its own: a logger, a
-// provider opener and the notice for a value too short to mask all come from options. It
+// provider opener and the notice for a value too short to mask all come from the [Config]
+// and its options. It
 // imports the standard library and golang.org/x/sync.
 package secrets

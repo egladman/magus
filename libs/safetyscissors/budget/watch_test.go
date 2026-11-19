@@ -283,14 +283,13 @@ func (s *WatchSuite) TestSeatReleaseGivesTheSlotsBack() {
 	assert.Equal(t, LimiterSnapshot{Capacity: 3}, lim.Snapshot())
 }
 
-// A seat of fewer than one slot takes one, as AcquireN floors it, so its release gives
-// that slot back rather than leaking it.
-func (s *WatchSuite) TestSeatFloorsACountBelowOne() {
+// A seat of fewer than one slot is refused, as AcquireN refuses it, and takes nothing.
+func (s *WatchSuite) TestSeatRefusesACountBelowOne() {
 	lim := newTestLimiter(s.T(), 1)
 	_, release, err := lim.Seat(s.T().Context(), 0, ". build")
-	s.Require().NoError(err)
-	s.Equal(1, lim.Snapshot().Running)
-	release()
+	var refused *SlotCountError
+	s.Require().ErrorAs(err, &refused)
+	s.Nil(release)
 	s.Equal(LimiterSnapshot{Capacity: 1}, lim.Snapshot())
 }
 

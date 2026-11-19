@@ -93,7 +93,10 @@ func (t *lineTap) Write(p []byte) (int, error) {
 	// The write is reported as len(p) rather than the redacted length: the caller is
 	// os/exec copying a pipe, and a short write makes it stop. Redaction changes how
 	// many bytes we emit, never how many we accepted.
-	scrubbed := secrets.Redact(t.c.ctx, p)
+	scrubbed, err := secrets.Redact(t.c.ctx, p)
+	if err != nil {
+		return 0, err
+	}
 	if _, err := t.dest.Write(scrubbed); err != nil {
 		return 0, err
 	}

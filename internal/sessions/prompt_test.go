@@ -23,7 +23,7 @@ func (s *PromptSuite) TestPromptCacheForCheckoutReadsThisCheckoutsLog() {
 	assert.Empty(t, PromptCacheForCheckout(t.Context(), cacheDir, time.Now()).Providers,
 		"a checkout no agent has run against has no activity to clock")
 
-	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	recorder.AppendAgentCommand(withSecrets(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 
 	clock := PromptCacheForCheckout(t.Context(), cacheDir, time.Now())
 	assert.Equal(t, "s1", clock.Session)

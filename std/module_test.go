@@ -20,6 +20,12 @@ func TestMain(m *testing.M) {
 	testkit.Main(m, "UPDATE_STD_API_LOCK")
 }
 
+// withSecrets gives a context the resolver main installs in production; output
+// capture refuses to run without one.
+func withSecrets(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
+
 // The covImpl* functions below are Method Impls and Field Resolvers of every shape
 // validateMethod and validateField accept or reject. They are package-level rather
 // than closures because implementationName and implementationPackage read the runtime function name,

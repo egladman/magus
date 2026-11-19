@@ -104,9 +104,9 @@ type policyMarker struct {
 
 // policyMarkerLog is the marker's file: a line for each change of the rule set, the last one
 // being the marker. The file is the guard's own state, private to its owner.
-func policyMarkerLog(path string) file.JSONL[policyMarker] {
-	return file.JSONL[policyMarker]{JSONL: codec.JSONL[policyMarker]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
-		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}}
+func policyMarkerLog(path string) (file.JSONL[policyMarker], error) {
+	return file.NewJSONL(codec.JSONLConfig[policyMarker]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o600, Key: func(policyMarker) string { return "" },
+		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)})
 }
 
 // policyAPIVersion is the guard_policy blob's format.
@@ -223,7 +223,12 @@ func recordedRule(cacheDir string, seam functionSeam) bool {
 // readPolicyMarker is the last marker at path, false when there is none. A marker that cannot
 // be read is logged and read as none.
 func readPolicyMarker(path string) (policyMarker, bool) {
-	held, err := policyMarkerLog(path).Load()
+	log, err := policyMarkerLog(path)
+	if err != nil {
+		reportGuardRecord(err)
+		return policyMarker{}, false
+	}
+	held, err := log.Load()
 	if err != nil {
 		reportGuardRecord(err)
 	}
@@ -247,7 +252,12 @@ func reportGuardRecord(err error) {
 // reads the old record or the new one and never half of each. Losing the race costs a
 // duplicate event, not a missed one.
 func writePolicyMarker(path string, m policyMarker) {
-	_ = policyMarkerLog(path).Update(context.Background(), func(held []policyMarker) []policyMarker {
+	log, err := policyMarkerLog(path)
+	if err != nil {
+		reportGuardRecord(err)
+		return
+	}
+	_ = log.Update(context.Background(), func(held []policyMarker) []policyMarker {
 		// By encoding: a marker read back has nil where the one written had an empty list.
 		if old, err := codec.Marshal(held); len(held) == 1 && err == nil {
 			if next, err := codec.Marshal([]policyMarker{m}); err == nil && bytes.Equal(old, next) {
@@ -396,10 +406,10 @@ type snapshotSite struct {
 	authority headPolicy
 }
 
-func (s snapshotSite) log() file.JSONL[policySnapshot] {
+func (s snapshotSite) log() (file.JSONL[policySnapshot], error) {
 	// One entry per store: a store is one workspace, and only its current
 	// state is worth keeping.
-	return file.JSONL[policySnapshot]{JSONL: codec.JSONL[policySnapshot]{Log: slog.With(attr.Component("magus")), Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }}}
+	return file.NewJSONL(codec.JSONLConfig[policySnapshot]{Log: slog.With(attr.Component("magus")), Path: s.store.Path, Perm: 0o600, Key: func(policySnapshot) string { return "" }})
 }
 
 // openSnapshot resolves the snapshot site for w.Root. The error says why the
@@ -448,7 +458,11 @@ func (s snapshotSite) key(sources []string) (string, bool) {
 // lookup is the stored snapshot when it verifies and its key names the state
 // on disk now. A read error is the store's; a miss is false with none.
 func (s snapshotSite) lookup() (policySnapshot, bool, error) {
-	entries, err := s.log().Load()
+	log, err := s.log()
+	if err != nil {
+		return policySnapshot{}, false, err
+	}
+	entries, err := log.Load()
 	if err != nil || len(entries) == 0 {
 		return policySnapshot{}, false, err
 	}
@@ -496,7 +510,11 @@ func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
 	if err := s.store.Prepare(); err != nil {
 		return err
 	}
-	return s.log().Update(ctx, func([]policySnapshot) []policySnapshot { return []policySnapshot{snap} })
+	log, err := s.log()
+	if err != nil {
+		return err
+	}
+	return log.Update(ctx, func([]policySnapshot) []policySnapshot { return []policySnapshot{snap} })
 }
 
 // newSnapshotBody is what one load of rules decided, as a snapshot keeps it.

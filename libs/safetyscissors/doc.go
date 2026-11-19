@@ -4,10 +4,11 @@
 // control.
 //
 // [New] opens the job store and this invocation's session writer under one directory
-// and returns a [*SafetyScissors]. It requires [WithInvocation], [WithActor],
-// [WithNotices] and [WithCheckSpec]. The slot limiter, the machine budget, the tier set
-// and the sandbox are absent until their options are passed, and each accessor names
-// the option that supplies its part. The subpackages stay importable on their own; a
+// and returns a [*SafetyScissors]. Its [Config] names, and New requires, the invocation,
+// the job store's actor, notices and check spec, and the session store's retention and
+// prune error handler. The slot limiter, the machine budget, the tier set and the sandbox
+// are absent until their options are passed, and each accessor names the option that
+// supplies its part. The subpackages stay importable on their own; a
 // program that needs only verdict imports only verdict. Each has one job:
 //
 //   - budget: the slot limiter, machine-wide memory and slot claims, and the price types

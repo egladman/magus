@@ -553,19 +553,19 @@ type (
 	}
 )
 
-func (s *Store) viewedLog() file.JSONL[viewedLine] {
-	return file.JSONL[viewedLine]{JSONL: codec.JSONL[viewedLine]{Log: slog.With(attr.Component("magus")), Path: s.viewedPath, Old: oldFile(s.viewedPath, "viewed.json"),
-		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }}}
+func (s *Store) viewedLog() (file.JSONL[viewedLine], error) {
+	return file.NewJSONL(codec.JSONLConfig[viewedLine]{Log: slog.With(attr.Component("magus")), Path: s.viewedPath, Perm: 0o644, Old: oldFile(s.viewedPath, "viewed.json"),
+		Key: func(l viewedLine) string { return l.Digest }, Live: func(l viewedLine) bool { return l.Viewed }})
 }
 
-func (s *Store) seenLog() file.JSONL[seenLine] {
-	return file.JSONL[seenLine]{JSONL: codec.JSONL[seenLine]{Log: slog.With(attr.Component("magus")), Path: s.seenPath, Old: oldFile(s.seenPath, "seen-threads.json"),
-		Key: func(l seenLine) string { return l.ID }}}
+func (s *Store) seenLog() (file.JSONL[seenLine], error) {
+	return file.NewJSONL(codec.JSONLConfig[seenLine]{Log: slog.With(attr.Component("magus")), Path: s.seenPath, Perm: 0o644, Old: oldFile(s.seenPath, "seen-threads.json"),
+		Key: func(l seenLine) string { return l.ID }})
 }
 
-func (s *Store) draftsLog() file.JSONL[draftLine] {
-	return file.JSONL[draftLine]{JSONL: codec.JSONL[draftLine]{Log: slog.With(attr.Component("magus")), Path: s.draftsPath, Old: oldFile(s.draftsPath, "drafts.json"),
-		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }}}
+func (s *Store) draftsLog() (file.JSONL[draftLine], error) {
+	return file.NewJSONL(codec.JSONLConfig[draftLine]{Log: slog.With(attr.Component("magus")), Path: s.draftsPath, Perm: 0o644, Old: oldFile(s.draftsPath, "drafts.json"),
+		Key: func(l draftLine) string { return l.ID }, Live: func(l draftLine) bool { return !l.Removed && l.Comment != nil }})
 }
 
 // oldFile is name, the JSON document an older magus kept beside path, or "" when the store
@@ -584,7 +584,12 @@ func (s *Store) saveDrafts(drafts []diff.Comment) {
 	if s.draftsPath == "" {
 		return
 	}
-	err := s.draftsLog().Update(context.Background(), func(stored []draftLine) []draftLine {
+	dl, err := s.draftsLog()
+	if err != nil {
+		reportStateFailure(context.Background(), "could not persist the drafts", err)
+		return
+	}
+	err = dl.Update(context.Background(), func(stored []draftLine) []draftLine {
 		held := make(map[string]*diff.Comment, len(stored))
 		for _, l := range stored {
 			held[l.ID] = l.Comment
@@ -643,7 +648,12 @@ func (s *Store) saveViewed(digests []string) {
 	if s.viewedPath == "" {
 		return
 	}
-	err := s.viewedLog().Update(context.Background(), func(stored []viewedLine) []viewedLine {
+	vl, err := s.viewedLog()
+	if err != nil {
+		reportStateFailure(context.Background(), "could not persist the read marks", err)
+		return
+	}
+	err = vl.Update(context.Background(), func(stored []viewedLine) []viewedLine {
 		held := make(map[string]bool, len(stored))
 		for _, l := range stored {
 			held[l.Digest] = true
@@ -676,7 +686,11 @@ func (s *Store) LoadDrafts() ([]diff.Comment, error) {
 	if s.draftsPath == "" {
 		return nil, nil
 	}
-	held, err := s.draftsLog().Load()
+	dl, err := s.draftsLog()
+	if err != nil {
+		return nil, fmt.Errorf("drafts: %w", err)
+	}
+	held, err := dl.Load()
 	if err != nil {
 		return nil, fmt.Errorf("drafts: %w", err)
 	}
@@ -697,7 +711,11 @@ func (s *Store) LoadViewed() ([]string, error) {
 	if s.viewedPath == "" {
 		return nil, fmt.Errorf("read marks: %w", ErrNoStateDir)
 	}
-	held, err := s.viewedLog().Load()
+	vl, err := s.viewedLog()
+	if err != nil {
+		return nil, fmt.Errorf("read marks: %w", err)
+	}
+	held, err := vl.Load()
 	if err != nil {
 		return nil, fmt.Errorf("read marks: %w", err)
 	}
@@ -722,7 +740,11 @@ func (s *Store) LoadSeenComments() ([]string, error) {
 	if s.seenPath == "" {
 		return nil, nil
 	}
-	held, err := s.seenLog().Load()
+	sl, err := s.seenLog()
+	if err != nil {
+		return nil, fmt.Errorf("seen comments: %w", err)
+	}
+	held, err := sl.Load()
 	if err != nil {
 		return nil, fmt.Errorf("seen comments: %w", err)
 	}
@@ -756,7 +778,12 @@ func (s *Store) saveSeen(ids []string) {
 		return
 	}
 	ctx := context.Background()
-	err := s.seenLog().Update(ctx, func(stored []seenLine) []seenLine {
+	sl, err := s.seenLog()
+	if err != nil {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "could not persist the review's seen threads", attr.Error(err))
+		return
+	}
+	err = sl.Update(ctx, func(stored []seenLine) []seenLine {
 		held := make(map[string]bool, len(stored))
 		for _, l := range stored {
 			held[l.ID] = true

@@ -336,6 +336,7 @@ github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context)
 github.com/egladman/magus/libs/testkit.CaptureLog func(tb TB, level log/slog.Leveler, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
+github.com/egladman/magus/libs/testkit.EnvResolver func(t TB, opts ...github.com/egladman/magus/libs/secrets.Option) *github.com/egladman/magus/libs/secrets.Resolver
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
 github.com/egladman/magus/libs/testkit.Isolate func(tb TB) string
 github.com/egladman/magus/libs/testkit.Isolated func(m *testing.M, keep ...string) IsolatedM
@@ -373,6 +374,7 @@ github.com/egladman/magus/libs/testkit.TB.Helper imethod func()
 github.com/egladman/magus/libs/testkit.TB.Setenv imethod func(key string, value string)
 github.com/egladman/magus/libs/testkit.TB.Skip imethod func(args ...any)
 github.com/egladman/magus/libs/testkit.TB.TempDir imethod func() string
+github.com/egladman/magus/libs/testkit.WithEnvResolver func(ctx context.Context) context.Context
 github.com/egladman/magus/libs/testkit.Workspace type struct
 github.com/egladman/magus/libs/testkit.Workspace.Magusfile method(ptr) func(body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Path method(ptr) func(rel ...string) string

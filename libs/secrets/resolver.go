@@ -36,14 +36,15 @@ type Provider interface {
 // a credential. See [WithShortSecret].
 const MinMaskLen = 4
 
-// envProvider is the built-in provider: a reference is an environment variable name. It
-// applies when no provider is selected.
-type envProvider struct{}
+// EnvProvider is a provider whose reference is an environment variable name. A caller
+// that wants reads with no provider selected to work off its environment sets it as
+// [Config.Fallback]; the Resolver never reaches for it unasked.
+type EnvProvider struct{}
 
 // Fetch returns the environment variable named by ref. Unset and set-to-empty are both
 // errors: returning "" would hand the caller a credential-shaped blank that fails later
 // at whatever consumes it, with an error far from the cause.
-func (envProvider) Fetch(_ context.Context, ref string) (Secret, error) {
+func (EnvProvider) Fetch(_ context.Context, ref string) (Secret, error) {
 	v, ok := os.LookupEnv(ref)
 	if !ok {
 		return Secret{}, fmt.Errorf("$%s is not set", ref)
@@ -55,9 +56,9 @@ func (envProvider) Fetch(_ context.Context, ref string) (Secret, error) {
 }
 
 // resolvedKey pairs a reference with the provider that resolved it. Keying on the reference
-// alone would let a caller that reads before selecting a provider settle on the built-in
-// env fallback and keep returning it under the declared provider: a silently wrong
-// credential rather than an error.
+// alone would let a caller that reads before selecting a provider settle on the fallback
+// and keep returning it under the declared provider: a silently wrong credential rather
+// than an error.
 type resolvedKey struct {
 	provider string
 	ref      string
@@ -67,10 +68,10 @@ type resolvedKey struct {
 // reference resolved to, and the endpoints opened for grants. A Resolver reads through
 // one provider, fixed for the value; [Resolver.WithProvider] derives a Resolver that
 // reads through another and shares this one's state. It is safe for concurrent use. A
-// nil *Resolver is usable: every method degrades to "nothing resolved, nothing to
-// redact", or errors where a value was asked for.
+// nil *Resolver reads, registers and redacts nothing: each of those is a
+// *[NoResolverError].
 type Resolver struct {
-	// provider is the provider this Resolver reads through; empty means the built-in.
+	// provider is the provider this Resolver reads through; empty means the fallback.
 	provider string
 	*state
 }
@@ -92,6 +93,7 @@ type state struct {
 
 	// Set once at construction and never written again, so deliberately outside mu.
 	timeouts Timeouts
+	fallback Provider
 	open     Opener
 	short    func(ctx context.Context, ref string)
 	log      *slog.Logger
@@ -114,14 +116,62 @@ type state struct {
 	endpoints map[endpointKey]*forwarder
 }
 
-// NewResolver returns an empty Resolver that reads through the built-in environment
-// provider.
-func NewResolver(opts ...Option) *Resolver {
-	r := &Resolver{state: &state{timeouts: DefaultTimeouts(), log: slog.New(slog.DiscardHandler)}}
+// Config is what a [Resolver] is built from. The zero value builds a Resolver with no
+// fallback, which refuses every read until [Resolver.WithProvider] selects a provider.
+type Config struct {
+	// Fallback is the provider a read goes through when none is selected by
+	// [Resolver.WithProvider]. Nil means none: such a read is a *[ReadError] wrapping
+	// [ErrNoFallback], never a silent read of the environment.
+	Fallback Provider
+	// Timeouts bounds a provider read. A zero field keeps [DefaultTimeouts].
+	Timeouts Timeouts
+	// Open builds the provider a name selects. See [WithOpener].
+	Open Opener
+	// ShortSecret hears each resolved value shorter than [MinMaskLen]. See [WithShortSecret].
+	ShortSecret func(ctx context.Context, ref string)
+	// Log receives what the endpoint forwarder cannot put on the socket. Nil discards.
+	Log *slog.Logger
+
+	// errs are the problems [Option] values recorded, reported by [NewResolver].
+	errs []error
+}
+
+// fail records a problem with an option for [NewResolver] to report.
+func (c *Config) fail(option, problem string) {
+	c.errs = append(c.errs, &OptionError{Option: option, Problem: problem})
+}
+
+// NewResolver returns an empty Resolver built from cfg with opts applied. It returns
+// every problem the options recorded joined, including a negative [Config.Timeouts]
+// field, each an *[OptionError].
+func NewResolver(cfg Config, opts ...Option) (*Resolver, error) {
 	for _, o := range opts {
-		o(r)
+		o(&cfg)
 	}
-	return r
+	if cfg.Timeouts.Interactive < 0 || cfg.Timeouts.Unattended < 0 {
+		cfg.fail("Config.Timeouts", "a negative timeout")
+	}
+	if len(cfg.errs) > 0 {
+		return nil, errors.Join(cfg.errs...)
+	}
+	timeouts := DefaultTimeouts()
+	if cfg.Timeouts.Interactive > 0 {
+		timeouts.Interactive = cfg.Timeouts.Interactive
+	}
+	if cfg.Timeouts.Unattended > 0 {
+		timeouts.Unattended = cfg.Timeouts.Unattended
+	}
+	log := cfg.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	return &Resolver{state: &state{
+		timeouts: timeouts,
+		fallback: cfg.Fallback,
+		open:     cfg.Open,
+		short:    cfg.ShortSecret,
+		log:      log,
+	}}, nil
 }
 
 // Timeouts returns the budgets for a provider read. A nil Resolver reports
@@ -153,7 +203,7 @@ func ResolverFromContext(ctx context.Context) *Resolver {
 }
 
 // WithProvider returns a Resolver that reads through the provider named name, built by
-// the [Opener]; an empty name selects the built-in environment provider. It shares r's
+// the [Opener]; an empty name selects the [Config.Fallback]. It shares r's
 // kept answers, redaction set and endpoints, so a value either reads is masked by both. r is
 // unchanged. A nil Resolver returns nil.
 func (r *Resolver) WithProvider(name string) *Resolver {
@@ -166,7 +216,7 @@ func (r *Resolver) WithProvider(name string) *Resolver {
 }
 
 // ProviderName returns the name of the provider r reads through, empty when the
-// built-in applies.
+// fallback applies.
 func (r *Resolver) ProviderName() string {
 	if r == nil {
 		return ""
@@ -181,7 +231,7 @@ type NoResolverError struct{}
 func (*NoResolverError) Error() string { return "secrets: no resolver on this context" }
 
 // ReadError is why [Resolver.Read] returned no value. Provider is empty under the
-// built-in environment provider; Err is the cause, a canceled or expired context
+// [Config.Fallback]; Err is the cause, a canceled or expired context
 // included.
 type ReadError struct {
 	Ref      string
@@ -193,7 +243,7 @@ func (e *ReadError) Error() string {
 	if e.Ref == "" {
 		return "secrets: read: " + e.Err.Error()
 	}
-	via := "the built-in environment provider"
+	via := "the fallback provider"
 	if e.Provider != "" {
 		via = fmt.Sprintf("provider %q", e.Provider)
 	}
@@ -201,6 +251,10 @@ func (e *ReadError) Error() string {
 }
 
 func (e *ReadError) Unwrap() error { return e.Err }
+
+// ErrNoFallback is why a read with no provider selected failed on a Resolver built
+// without a [Config.Fallback]. It is the cause inside a *[ReadError].
+var ErrNoFallback = errors.New("no provider is selected and this resolver has no fallback")
 
 var (
 	errEmptyRef   = errors.New("empty reference")
@@ -213,8 +267,10 @@ var (
 // through [Resolver.Redact] masks the value. Every failure is a *[ReadError], or a
 // *[NoResolverError] for a nil Resolver.
 //
-// A value shorter than [MinMaskLen] is returned but NOT registered; the [WithShortSecret]
-// notice is told about it.
+// A value shorter than [MinMaskLen] is returned but NOT registered, and the
+// [WithShortSecret] notice is told about it; with no notice it is a *[ReadError] wrapping
+// a *[ShortSecretError], because the caller would have no other way to learn that the
+// value is unprotected.
 //
 // Concurrent reads of one reference share a single provider invocation, and a reference
 // is fetched once per provider for the Resolver's life. The shared fetch runs under the
@@ -283,18 +339,24 @@ func (r *Resolver) fetch(callerCtx context.Context, key resolvedKey) (Secret, er
 	if val.IsZero() {
 		return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: errEmptyValue}
 	}
-	if val.Len() < MinMaskLen && r.short != nil {
+	if val.Len() < MinMaskLen {
+		if r.short == nil {
+			return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: &ShortSecretError{Len: val.Len()}}
+		}
 		r.short(ctx, key.ref)
 	}
 	r.record(key, val)
 	return val, nil
 }
 
-// askProvider asks key's provider for its reference, falling back to the built-in when
-// none is selected, which keeps an unconfigured caller working off its environment.
+// askProvider asks key's provider for its reference. With none selected it reads through
+// the fallback, and refuses when there is none rather than guessing at the environment.
 func (r *Resolver) askProvider(ctx context.Context, key resolvedKey) (Secret, error) {
 	if key.provider == "" {
-		return envProvider{}.Fetch(ctx, key.ref)
+		if r.fallback == nil {
+			return Secret{}, ErrNoFallback
+		}
+		return r.fallback.Fetch(ctx, key.ref)
 	}
 	if r.open == nil {
 		return Secret{}, errNoOpener
@@ -340,17 +402,33 @@ func (r *Resolver) record(key resolvedKey, v Secret) {
 
 // Register adds v and its encoded forms to the redaction set without keeping it as a
 // resolved reference: for a credential the caller mints or receives outside a provider (a
-// token read from stdin). A value shorter than [MinMaskLen] and a nil Resolver are
-// ignored.
-func (r *Resolver) Register(v Secret) {
-	if r == nil || v.Len() < MinMaskLen {
-		return
+// token read from stdin). A value shorter than [MinMaskLen] cannot be masked and is a
+// *[ShortSecretError], whatever [WithShortSecret] says, since the caller is handed nothing
+// to warn about; a nil Resolver is a *[NoResolverError].
+func (r *Resolver) Register(v Secret) error {
+	if r == nil {
+		return &NoResolverError{}
+	}
+	if v.Len() < MinMaskLen {
+		return &ShortSecretError{Len: v.Len()}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, form := range encodedForms(v) {
 		r.addRedactable(form)
 	}
+	return nil
+}
+
+// ShortSecretError is a value shorter than [MinMaskLen], which no redaction masks: from
+// [Resolver.Register] always, and from [Resolver.Read] when no [WithShortSecret] notice
+// hears it.
+type ShortSecretError struct {
+	Len int
+}
+
+func (e *ShortSecretError) Error() string {
+	return fmt.Sprintf("the value is %d characters, below the %d redaction masks, so it would print in the clear", e.Len, MinMaskLen)
 }
 
 // unregisterRedactable removes v and its encoded forms from the redaction set.
@@ -418,7 +496,9 @@ func (r *Resolver) addRedactable(v Secret) {
 // Redact replaces every value this resolver has registered with the mask. It returns p
 // unchanged, without copying, when there is nothing to do: the overwhelmingly common
 // case on an output-capture hot path. Callers must not retain p after a no-op return: it
-// is the caller's own buffer, handed straight back.
+// is the caller's own buffer, handed straight back. A nil Resolver is a
+// *[NoResolverError] and returns nothing, because nothing it could return is known
+// to be masked.
 //
 // LIMITS, which callers must not overstate:
 //   - Only values read or registered through this resolver are known.
@@ -426,8 +506,15 @@ func (r *Resolver) addRedactable(v Secret) {
 //     registered alongside the raw value; ANY other transform (a different alphabet,
 //     compression, splitting the value across a delimiter) defeats it.
 //   - A secret straddling two calls is masked only if both halves land in one call.
-func (r *Resolver) Redact(p []byte) []byte {
-	if r == nil || len(p) == 0 {
+func (r *Resolver) Redact(p []byte) ([]byte, error) {
+	if r == nil {
+		return nil, &NoResolverError{}
+	}
+	return r.redact(p), nil
+}
+
+func (r *Resolver) redact(p []byte) []byte {
+	if len(p) == 0 {
 		return p
 	}
 	r.mu.RLock()
@@ -459,8 +546,15 @@ func (r *Resolver) hasSecrets() bool {
 }
 
 // RedactString is [Resolver.Redact] for text already in string form.
-func (r *Resolver) RedactString(s string) string {
-	if r == nil || s == "" {
+func (r *Resolver) RedactString(s string) (string, error) {
+	if r == nil {
+		return "", &NoResolverError{}
+	}
+	return r.redactString(s), nil
+}
+
+func (r *Resolver) redactString(s string) string {
+	if s == "" {
 		return s
 	}
 	r.mu.RLock()
@@ -472,10 +566,14 @@ func (r *Resolver) RedactString(s string) string {
 }
 
 // Redact redacts p using ctx's resolver, returning p unchanged (and UNCOPIED, still the
-// caller's own buffer) when there is no resolver or nothing matched.
-func Redact(ctx context.Context, p []byte) []byte { return ResolverFromContext(ctx).Redact(p) }
+// caller's own buffer) when nothing matched. A ctx with no resolver is a
+// *[NoResolverError].
+func Redact(ctx context.Context, p []byte) ([]byte, error) {
+	return ResolverFromContext(ctx).Redact(p)
+}
 
-// RedactString redacts s using ctx's resolver.
-func RedactString(ctx context.Context, s string) string {
+// RedactString redacts s using ctx's resolver. A ctx with no resolver is a
+// *[NoResolverError].
+func RedactString(ctx context.Context, s string) (string, error) {
 	return ResolverFromContext(ctx).RedactString(s)
 }

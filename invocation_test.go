@@ -28,7 +28,7 @@ func TestBeginInvocationWritesLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	ctx, finish := workspace.BeginInvocation(context.Background(), Command{
+	ctx, finish := workspace.BeginInvocation(withSecrets(context.Background()), Command{
 		Arguments: []string{"test"},
 		Cwd:       root,
 		Trigger:   string(journal.TriggerRun),
@@ -150,7 +150,7 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	m := covInspect(t)
 	cmd := Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: string(journal.TriggerRun)}
 
-	ctx, finish := m.BeginInvocation(context.Background(), cmd, "v0.cov")
+	ctx, finish := m.BeginInvocation(withSecrets(context.Background()), cmd, "v0.cov")
 	id := recorder.InvocationIDFromContext(ctx)
 	require.NotEmpty(t, id)
 	finish(nil)

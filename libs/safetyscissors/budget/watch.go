@@ -95,8 +95,8 @@ func newSlotWatch(n int, o limiterOptions) *slotWatch {
 }
 
 // Seat takes n slots for the work named label and records the hold, so a later waiter
-// can tell a slot that is working from one that is stuck. n < 1 is floored to 1, as
-// [Limiter.AcquireN] floors it, so release gives back what was taken. It returns ctx
+// can tell a slot that is working from one that is stuck. An n below 1 is a
+// [*SlotCountError], as [Limiter.AcquireN] refuses it. It returns ctx
 // carrying the hold, which a blocking wait inside the work marks itself on
 // ([MarkWaiting]), and release,
 // which retires the hold and gives the slots back. Seat does not mark ctx as holding
@@ -105,7 +105,9 @@ func newSlotWatch(n int, o limiterOptions) *slotWatch {
 // When every slot is held by a step that is itself waiting, the wait is refused with the
 // limiter's refusal error once the wedge has held for its grace.
 func (l *Limiter) Seat(ctx context.Context, n int, label string) (context.Context, func(), error) {
-	n = max(n, 1)
+	if n < 1 {
+		return ctx, nil, &SlotCountError{Slots: n}
+	}
 	hold, err := l.acquireWatched(ctx, n, label)
 	if err != nil {
 		return ctx, nil, err

@@ -43,22 +43,31 @@ type checkoutRecord struct {
 	Removed  bool   `json:"removed,omitempty"`
 }
 
-func madeCheckouts(meta string) file.JSONL[checkoutRecord] {
-	return file.JSONL[checkoutRecord]{JSONL: codec.JSONL[checkoutRecord]{
+func madeCheckouts(meta string) (file.JSONL[checkoutRecord], error) {
+	return file.NewJSONL(codec.JSONLConfig[checkoutRecord]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(meta, madeCheckoutsFile),
+		Perm: 0o644,
 		Key:  func(r checkoutRecord) string { return r.Resolved },
 		Live: func(r checkoutRecord) bool { return !r.Removed },
-	}}
+	})
 }
 
 func recordMadeCheckout(ctx context.Context, meta string, r checkoutRecord) error {
-	return madeCheckouts(meta).Update(ctx, func([]checkoutRecord) []checkoutRecord { return []checkoutRecord{r} })
+	log, err := madeCheckouts(meta)
+	if err != nil {
+		return err
+	}
+	return log.Update(ctx, func([]checkoutRecord) []checkoutRecord { return []checkoutRecord{r} })
 }
 
 // madeCheckoutAt is the record for dir, false when CreateCheckout did not make it.
 func madeCheckoutAt(meta, dir string) (checkoutRecord, bool, error) {
-	all, err := madeCheckouts(meta).Load()
+	log, err := madeCheckouts(meta)
+	if err != nil {
+		return checkoutRecord{}, false, err
+	}
+	all, err := log.Load()
 	if err != nil {
 		return checkoutRecord{}, false, err
 	}
@@ -72,12 +81,20 @@ func madeCheckoutAt(meta, dir string) (checkoutRecord, bool, error) {
 
 func forgetMadeCheckout(ctx context.Context, meta string, r checkoutRecord) error {
 	r.Removed = true
-	return madeCheckouts(meta).Update(ctx, func([]checkoutRecord) []checkoutRecord { return []checkoutRecord{r} })
+	log, err := madeCheckouts(meta)
+	if err != nil {
+		return err
+	}
+	return log.Update(ctx, func([]checkoutRecord) []checkoutRecord { return []checkoutRecord{r} })
 }
 
 // madeCheckoutDirs lists the checkouts the record holds, resolved and sorted.
 func madeCheckoutDirs(meta string) ([]string, error) {
-	all, err := madeCheckouts(meta).Load()
+	log, err := madeCheckouts(meta)
+	if err != nil {
+		return nil, err
+	}
+	all, err := log.Load()
 	if err != nil {
 		return nil, err
 	}

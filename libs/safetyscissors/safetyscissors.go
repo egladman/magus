@@ -32,95 +32,100 @@ type SafetyScissors struct {
 	policy  *sandbox.Policy
 }
 
-// New opens the harness on dir. It requires [WithInvocation], [WithActor],
-// [WithNotices] and [WithCheckSpec]; every other part is absent until its option is passed, and its
-// accessor then returns an [*UnconfiguredError] naming the option.
+// New opens the harness from cfg. Every part but the job store and the session writer is
+// absent until its option is passed, and its accessor then returns an
+// [*UnconfiguredError] naming the option.
 //
-// It refuses an empty dir and each option problem with an [*OptionError], joined, and
-// returns the error of the part that would not open: [session.Open]'s, [tier.NewSet]'s,
-// [sandbox.New]'s, and under [WithSandbox] the [*sandbox.UnconfinedError] of a host that
-// cannot confine a child in the Required mode. It writes no record; [session.Open]
-// creates the sessions directory and may prune it.
-func New(ctx context.Context, dir string, opts ...Option) (*SafetyScissors, error) {
-	var c config
-	var errs []error
-	if strings.TrimSpace(dir) == "" {
-		errs = append(errs, errors.New("safetyscissors: New needs the directory the stores live in, and none was named"))
-	}
+// It fails with every configuration problem found, joined: a [*ConfigError] for each
+// required [Config] field that is empty or nil and for a Retention that is not positive, a
+// [*session.InvalidIDError] for an Invocation the session store cannot file, and an
+// [*OptionError] for each refused option. Then it returns the error of the part that
+// would not open: [session.Open]'s, [job.Open]'s, [tier.NewSet]'s, [sandbox.New]'s, and
+// under [WithSandbox] the [*sandbox.UnconfinedError] of a host that cannot confine a
+// child in the Required mode. It writes no record; [session.Open] creates the sessions
+// directory and may prune it.
+func New(ctx context.Context, cfg Config, opts ...Option) (*SafetyScissors, error) {
 	for _, opt := range opts {
-		if err := opt(&c); err != nil {
-			errs = append(errs, err)
-		}
+		opt(&cfg)
 	}
-	errs = append(errs, c.missing()...)
-	dirs := layout(dir, c.dirs)
-	if dirs.Jobs == dirs.Sessions {
-		errs = append(errs, &OptionError{Option: "WithDirs", Problem: "Jobs and Sessions name one directory, " + dirs.Jobs})
-	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+	dirs := layout(cfg.Dir, cfg.dirs)
+	if err := errors.Join(slices.Concat(cfg.errs, cfg.missing(), dirs.shared())...); err != nil {
+		return nil, err
 	}
 
-	s := &SafetyScissors{dirs: dirs, root: c.root}
+	s := &SafetyScissors{dirs: dirs, root: cfg.root}
 	var err error
-	if s.session, err = session.Open(ctx, dirs.Sessions, c.invocation, c.start, c.sessionOptions()...); err != nil {
+	if s.session, err = session.Open(ctx, cfg.sessionConfig(dirs.Sessions), cfg.sessionOptions()...); err != nil {
 		return nil, err
 	}
-	if s.jobs, err = job.Open(dirs.Jobs, c.jobOptions()...); err != nil {
+	if s.jobs, err = job.Open(ctx, job.Config{Dir: dirs.Jobs}, cfg.jobOptions()...); err != nil {
 		return nil, err
 	}
-	if c.withSlots {
-		s.slots = budget.NewLimiter(c.slots, c.slotOpts...)
+	if cfg.withSlots {
+		s.slots = budget.NewLimiter(cfg.slots, cfg.slotOpts...)
 	}
-	if c.withMachine {
-		s.machine = budget.NewMachine(c.machineMB, c.machineSlots, c.machineOptions()...)
+	if cfg.withMachine {
+		s.machine = budget.NewMachine(cfg.machineMB, cfg.machineSlots, cfg.machineOptions()...)
 	}
-	if c.withTiers {
-		if s.tiers, err = tier.NewSet(c.tiers); err != nil {
+	if cfg.withTiers {
+		if s.tiers, err = tier.NewSet(cfg.tiers); err != nil {
 			return nil, err
 		}
 	}
-	if c.withSandbox {
-		if s.policy, err = confining(c.binds, c.sandboxOpts); err != nil {
+	if cfg.withSandbox {
+		if s.policy, err = confining(cfg.binds, cfg.sandboxOpts); err != nil {
 			return nil, err
 		}
 	}
 	return s, nil
 }
 
-func (c *config) missing() []error {
+func (c *Config) missing() []error {
 	var errs []error
-	if !c.invoked {
-		errs = append(errs, &OptionError{Option: "WithInvocation", Problem: "New requires it: the module mints no invocation id"})
+	if strings.TrimSpace(c.Dir) == "" {
+		errs = append(errs, &ConfigError{Field: "Dir", Problem: "New needs the directory the stores live in"})
 	}
-	if c.actor == nil {
-		errs = append(errs, &OptionError{Option: "WithActor", Problem: "New requires it: every job write says who writes"})
+	if !session.ValidFileID(c.Invocation) {
+		errs = append(errs, &session.InvalidIDError{Field: "invocation id", ID: c.Invocation})
 	}
-	if c.notices == nil {
-		errs = append(errs, &OptionError{Option: "WithNotices", Problem: "New requires it: the job store reports what it did there, and never prints"})
+	if c.Actor == nil {
+		errs = append(errs, &ConfigError{Field: "Actor", Problem: "nil: every job write says who writes"})
 	}
-	if c.checks == nil {
-		errs = append(errs, &OptionError{Option: "WithCheckSpec", Problem: "New requires it: the job store keeps a check opaque and reads it only through the caller's spec"})
+	if c.Notices == nil {
+		errs = append(errs, &ConfigError{Field: "Notices", Problem: "nil: the job store reports what it did there, and never prints"})
+	}
+	if c.CheckSpec == nil {
+		errs = append(errs, &ConfigError{Field: "CheckSpec", Problem: "nil: the job store keeps a check opaque and reads it only through the caller's spec"})
+	}
+	if c.Retention <= 0 {
+		errs = append(errs, &ConfigError{Field: "Retention", Problem: fmt.Sprintf("%s is not a positive duration", c.Retention)})
+	}
+	if c.PruneErrors == nil {
+		errs = append(errs, &ConfigError{Field: "PruneErrors", Problem: "nil: opening the session writer prunes, and a prune that fails says so"})
 	}
 	return errs
 }
 
-func (c *config) sessionOptions() []session.Option {
+func (c *Config) sessionConfig(dir string) session.Config {
+	return session.Config{Dir: dir, Invocation: c.Invocation, Start: c.Start, Retention: c.Retention, PruneErrors: c.PruneErrors}
+}
+
+func (c *Config) sessionOptions() []session.Option {
 	if c.clock == nil {
 		return nil
 	}
 	return []session.Option{session.WithClock(c.clock)}
 }
 
-func (c *config) jobOptions() []job.StoreOption {
-	opts := slices.Concat(c.jobOpts, []job.StoreOption{job.WithActor(c.actor), job.WithNotices(c.notices)}, c.checks)
+func (c *Config) jobOptions() []job.Option {
+	opts := slices.Concat(c.jobOpts, []job.Option{job.WithActor(c.Actor), job.WithNotices(c.Notices), job.WithCheckSpec(c.CheckSpec)})
 	if c.clock != nil {
 		opts = append(opts, job.WithClock(c.clock))
 	}
 	return opts
 }
 
-func (c *config) machineOptions() []budget.MachineOption {
+func (c *Config) machineOptions() []budget.MachineOption {
 	if c.clock == nil {
 		return c.machineOpts
 	}
@@ -131,7 +136,7 @@ func (c *config) machineOptions() []budget.MachineOption {
 // fails here rather than at the first child. A BestEffort policy's refusal is its
 // WithUnconfined's to hear, per child.
 func confining(binds []sandbox.Bind, opts []sandbox.Option) (*sandbox.Policy, error) {
-	p, err := sandbox.New(binds, opts...)
+	p, err := sandbox.New(sandbox.Config{Binds: binds}, opts...)
 	if err != nil {
 		return nil, err
 	}

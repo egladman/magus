@@ -1,7 +1,6 @@
 package recorder
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -15,7 +14,7 @@ func TestBroadcaster(t *testing.T) { suite.Run(t, new(BroadcasterSuite)) }
 
 // emit sends one record to bc through Emit, the real capture path.
 func emit(bc *Broadcaster, text string) {
-	Emit(WithSinks(context.Background(), bc.Handle), journal.Output{Text: text})
+	Emit(WithSinks(bgCtx(), bc.Handle), journal.Output{Text: text})
 }
 
 func text(r journal.Record) string {

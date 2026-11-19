@@ -299,7 +299,10 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	if err != nil {
 		return fmt.Errorf("exportArtifact: read manifest: %w", err)
 	}
-	manifestBytes = secrets.Redact(ctx, manifestBytes)
+	manifestBytes, err = secrets.Redact(ctx, manifestBytes)
+	if err != nil {
+		return fmt.Errorf("exportArtifact: manifest: %w", err)
+	}
 	manifestRel, err := filepath.Rel(c.store, c.manifestPath(projectPath, hash))
 	if err != nil {
 		return fmt.Errorf("exportArtifact: manifest path: %w", err)
@@ -330,7 +333,11 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if relErr != nil {
 			return fmt.Errorf("exportArtifact: log path: %w", relErr)
 		}
-		if err := addSigned(rel, secrets.Redact(ctx, logBytes)); err != nil {
+		logBytes, err := secrets.Redact(ctx, logBytes)
+		if err != nil {
+			return fmt.Errorf("exportArtifact: log: %w", err)
+		}
+		if err := addSigned(rel, logBytes); err != nil {
 			return fmt.Errorf("exportArtifact: log: %w", err)
 		}
 	}
@@ -343,7 +350,11 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if desc, err := c.outputs.newestDescriptor(hash); err == nil {
 			if data, mErr := codec.Marshal(desc); mErr == nil {
 				rel := path.Join("outputs", hash, desc.Attempt+descExt)
-				if err := addSigned(rel, secrets.Redact(ctx, data)); err != nil {
+				data, err := secrets.Redact(ctx, data)
+				if err != nil {
+					return fmt.Errorf("exportArtifact: descriptor: %w", err)
+				}
+				if err := addSigned(rel, data); err != nil {
 					return fmt.Errorf("exportArtifact: descriptor: %w", err)
 				}
 			}

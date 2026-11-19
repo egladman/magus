@@ -70,6 +70,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
 
@@ -155,7 +156,22 @@ func runCLI() int {
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
-	rootCtx = jobtypes.WithLease(rootCtx, recorder.LeaseFromEnv())
+	rootCtx, err := jobtypes.WithLease(rootCtx, recorder.LeaseFromEnv())
+	if err != nil {
+		stopSignals()
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return 1
+	}
+	// Redaction refuses a context with no resolver, so every path starts with one. It
+	// holds nothing until a workspace's own resolver replaces it or a read registers a
+	// value.
+	resolver, err := recorder.NewSecretResolver()
+	if err != nil {
+		stopSignals()
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return 1
+	}
+	rootCtx = secrets.WithResolver(rootCtx, resolver)
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = recorder.ContextWithEntryPoint(rootCtx, jobtypes.EntryPointCLI)
 	rootCtx = interactive.WithHints(rootCtx)
@@ -500,7 +516,9 @@ func resolveProfile(sub string, subArgs []string) commands.DispatchProfile {
 // yaml and env, so without this pass `--log-level bogus` ran with a value the yaml
 // loader refuses.
 func finalizeConfig() error {
-	applyDisplay()
+	if err := applyDisplay(); err != nil {
+		return err
+	}
 	if err := config.Validate(globalCfg); err != nil {
 		return err
 	}
@@ -673,7 +691,10 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	if v := commands.ExtractVerbosityCount(args); v > 0 {
 		global.verbose = quiet.Verbosity(v)
 	}
-	applyDisplay()
+	if err := applyDisplay(); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return rootCtx, startupResult{cleanup: cleanup}, 1
+	}
 
 	// Retrofit-enable the tracer if the config file set trace level (pre-config phases are missed).
 	if !trace.Enabled() && cfg.Log.SlogLevel() <= config.LevelTrace {
@@ -761,7 +782,11 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		}
 		helpRequested = true
 	}
-	applyDisplay()
+	if err := applyDisplay(); err != nil {
+		stopFlags()
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return rootCtx, startupResult{cleanup: cleanup}, 1
+	}
 	rest := fs.Args()
 	// The parse above stops at the subcommand, so a global config flag written AFTER it
 	// - which the usage text promises works, and which is where people naturally put it

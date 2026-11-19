@@ -39,6 +39,12 @@ func (s *DecisionSuite) TestUnmarshalTextRefusesTheRetiredNames() {
 	}
 }
 
+func (s *DecisionSuite) TestUnsetIsNotAValidDecision() {
+	s.False(Decision("").Valid())
+	s.False(Decision("block").Valid())
+	s.True(Defer.Valid())
+}
+
 func (s *DecisionSuite) TestStringRendersUnsetByName() {
 	s.Equal("unset", Decision("").String())
 	s.Equal("deny", Deny.String())

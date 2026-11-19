@@ -147,11 +147,12 @@ func capturesLedger() (file.JSONL[Capture], error) {
 	if err != nil {
 		return file.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
 	}
-	return file.JSONL[Capture]{JSONL: codec.JSONL[Capture]{
+	return file.NewJSONL(codec.JSONLConfig[Capture]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(state, "magus", "captures.jsonl"),
+		Perm: 0o644,
 		Key:  func(c Capture) string { return c.Dir },
-	}}, nil
+	})
 }
 
 // PreserveChanged captures the uncommitted work in dir unless the last

@@ -420,7 +420,7 @@ func (h *Host) Start(ctx context.Context) {
 	cfg := h.Config
 	// The BAGGAGE of whoever started the daemon names nobody it serves. Every run it
 	// adopts restamps its client's lease, and work no client stamped acts under none.
-	ctx = jobtypes.WithLease(ctx, "")
+	ctx = jobtypes.WithoutLease(ctx)
 	h.started = time.Now()
 	knowledge.SetReadCacheLimit(readCacheBytes)
 	n := cfg.Concurrency

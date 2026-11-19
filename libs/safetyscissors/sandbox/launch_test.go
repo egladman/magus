@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Confines and Command follow the mode against what the host probe answers.
@@ -18,16 +20,22 @@ func TestConfinesSuite(t *testing.T) { suite.Run(t, new(ConfinesSuite)) }
 func unheard(context.Context, error) {}
 
 func (s *ConfinesSuite) policy(level int, err error, opts ...Option) *Policy {
-	p, newErr := New(nil, append(opts, WithKernelProbe(func() (int, error) { return level, err }))...)
+	p, newErr := New(Config{}, append(opts, WithKernelProbe(func() (int, error) { return level, err }))...)
 	s.Require().NoError(newErr)
 	return p
 }
 
-func (s *ConfinesSuite) TestANilPolicyConfinesNothing() {
+func (s *ConfinesSuite) TestANilPolicyIsRefused() {
 	var p *Policy
+	var refused *NilPolicyError
+
 	ok, err := p.Confines()
-	s.Require().NoError(err)
+	s.Require().ErrorAs(err, &refused)
 	s.False(ok)
+	cmd, err := Command(s.T().Context(), p, "true")
+	s.Require().ErrorAs(err, &refused, "a nil policy never starts an unconfined child")
+	s.Nil(cmd)
+	s.ErrorAs(p.Check(0, "/"), &refused)
 }
 
 func (s *ConfinesSuite) TestRequiredIsTheDefault() {
@@ -71,17 +79,28 @@ func (s *ConfinesSuite) TestBestEffortReturnsTheProbeError() {
 }
 
 func (s *ConfinesSuite) TestNewRefusesBestEffortWithoutWithUnconfined() {
-	_, err := New(nil, WithMode(BestEffort))
+	_, err := New(Config{}, WithMode(BestEffort))
 	var refused *OptionError
 	s.Require().ErrorAs(err, &refused)
 	s.Equal("WithMode(BestEffort)", refused.Option)
 }
 
 func (s *ConfinesSuite) TestNewRefusesAnEmptyLauncherName() {
-	_, err := New(nil, WithLauncherName(""))
+	_, err := New(Config{}, WithLauncherName(""))
 	var refused *OptionError
 	s.Require().ErrorAs(err, &refused)
 	s.Equal("WithLauncherName", refused.Option)
+}
+
+func (s *ConfinesSuite) TestNewRefusesEveryInvalidOptionAtOnce() {
+	_, err := New(Config{}, WithMode(Mode(7)), WithUnconfined(nil), WithLease("", job.LeaseSourceMarker), WithKernelProbe(nil))
+	var refused []string
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		opt, ok := errors.AsType[*OptionError](e)
+		s.Require().True(ok, "%v is an OptionError", e)
+		refused = append(refused, opt.Option)
+	}
+	s.Equal([]string{"WithMode", "WithUnconfined", "WithLease", "WithKernelProbe"}, refused)
 }
 
 func (s *ConfinesSuite) TestCommandRefusesARequiredPolicyItCannotConfine() {
@@ -101,13 +120,6 @@ func (s *ConfinesSuite) TestCommandStartsABestEffortChildPlainWithoutASandbox() 
 	s.Require().Len(heard, 1, "the caller hears that the child runs unconfined")
 	var unconfined *UnconfinedError
 	s.ErrorAs(heard[0], &unconfined)
-}
-
-func (s *ConfinesSuite) TestCommandStartsANilPolicyPlain() {
-	cmd, err := Command(s.T().Context(), nil, "true")
-	s.Require().NoError(err)
-	s.Equal([]string{"true"}, cmd.Args)
-	s.Empty(cmd.ExtraFiles)
 }
 
 // Relaunch handles only a process Command started as its launcher.

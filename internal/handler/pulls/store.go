@@ -64,17 +64,18 @@ type Store struct {
 
 // OpenStore returns the store at path. The file is created by the first
 // Set, and its absence is what makes the filter the default.
-func OpenStore(path string) Store {
-	return Store{
-		path: path,
-		now:  time.Now,
-		lines: file.JSONL[authorEntry]{JSONL: codec.JSONL[authorEntry]{
-			Log:  slog.With(attr.Component("magus")),
-			Path: path,
-			Key:  func(e authorEntry) string { return e.Login },
-			Live: func(e authorEntry) bool { return e.Tracked },
-		}},
+func OpenStore(path string) (Store, error) {
+	lines, err := file.NewJSONL(codec.JSONLConfig[authorEntry]{
+		Path: path,
+		Perm: 0o644,
+		Key:  func(e authorEntry) string { return e.Login },
+		Live: func(e authorEntry) bool { return e.Tracked },
+		Log:  slog.With(attr.Component("magus")),
+	})
+	if err != nil {
+		return Store{}, fmt.Errorf("pulls: open authors: %w", err)
 	}
+	return Store{path: path, now: time.Now, lines: lines}, nil
 }
 
 // Filter reads the saved filter.

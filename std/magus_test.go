@@ -94,8 +94,16 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 	}
 }
 
+// leased is ctx carrying lease.
+func leased(t testing.TB, ctx context.Context, lease string) context.Context {
+	t.Helper()
+	ctx, err := jobtypes.WithLease(ctx, lease)
+	require.NoError(t, err)
+	return ctx
+}
+
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	ctx := jobtypes.WithLease(t.Context(), "fleet/captured")
+	ctx := leased(t, t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
 
@@ -613,7 +621,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
-	ctx := jobtypes.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := leased(t, types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -628,7 +636,7 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
 	require.NoError(t, job.NewStore(job.Location{StateBase: stateBase, CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
-	ctx := jobtypes.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+	ctx := leased(t, types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
@@ -694,7 +702,7 @@ func graphContext(t *testing.T) context.Context {
 			Provenance: "scip count=1 lines=3",
 		})
 	}
-	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	return types.WithWorkspace(withSecrets(t.Context()), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 }
 
 func TestGraphMembersAreServedInProcess(t *testing.T) {
@@ -848,7 +856,7 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 	t.Parallel()
 	cacheDir := t.TempDir()
-	ctx := types.WithOutputCacheDir(t.Context(), cacheDir)
+	ctx := types.WithOutputCacheDir(withSecrets(t.Context()), cacheDir)
 
 	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("cd", 32),
 		[]byte("FAIL\n"), cache.OutputDescriptor{Project: "pkg/a", Target: "test", Failed: true})
@@ -879,7 +887,7 @@ func (s *stdSuite) TestForkFactsRefusesAWorkspaceWithNoCacheDirectory() {
 
 func (s *stdSuite) TestForkFactsReadsThePinnedStore() {
 	cacheDir := s.T().TempDir()
-	ctx := job.WithSnapshot(types.WithOutputCacheDir(s.T().Context(), cacheDir), job.Snapshot{})
+	ctx := job.WithSnapshot(types.WithOutputCacheDir(withSecrets(s.T().Context()), cacheDir), job.Snapshot{})
 	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("ef", 32),
 		[]byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", Revision: "abc"})
 	s.Require().NoError(err)
@@ -1118,6 +1126,6 @@ func (s *MagusCommandAllSuite) TestACommandCannotReenterThePoolItsStepHolds() {
 }
 
 func (s *MagusCommandAllSuite) TestACommandKeepsItsCallersLease() {
-	ctx := jobtypes.WithLease(s.T().Context(), "fleet/captured")
+	ctx := leased(s.T(), s.T().Context(), "fleet/captured")
 	s.Equal([]string{"BAGGAGE=magus.lease=fleet/captured"}, batchCommandEnv(ctx))
 }

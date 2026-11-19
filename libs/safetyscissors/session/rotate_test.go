@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,10 +228,54 @@ func (s *PruneSuite) TestExemptionPropagatesThroughASharedFile() {
 func (s *PruneSuite) TestOpenPrunesTheStore() {
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
 
-	_, err := Open(s.T().Context(), s.dir, "current", InvocationStart{Workspace: "/repo"})
+	_, err := openAt(s.T(), s.dir, "current", InvocationStart{Workspace: "/repo"})
 	s.Require().NoError(err)
 
 	s.Empty(s.stored())
+}
+
+// Open prunes at the retention its Config names, not a window of its own.
+func (s *PruneSuite) TestOpenPrunesAtItsRetention() {
+	s.writeAged("recent", 2*time.Hour, []Record{s.result("recent", 1, 2*time.Hour)})
+
+	cfg := testConfig(s.T(), s.dir, "current", InvocationStart{})
+	cfg.Retention = time.Hour
+	_, err := Open(s.T().Context(), cfg)
+	s.Require().NoError(err)
+
+	s.Empty(s.stored())
+}
+
+// A store whose housekeeping fails still opens, and the caller hears why.
+func (s *PruneSuite) TestOpenHandsAFailedPruneToPruneErrors() {
+	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
+	s.Require().NoError(os.Chmod(s.dir, 0o500))
+	s.T().Cleanup(func() { s.Require().NoError(os.Chmod(s.dir, 0o700)) })
+
+	var heard []error
+	cfg := testConfig(s.T(), s.dir, "current", InvocationStart{})
+	cfg.PruneErrors = func(_ context.Context, err error) { heard = append(heard, err) }
+	_, err := Open(s.T().Context(), cfg)
+
+	s.Require().NoError(err, "housekeeping never fails the open")
+	s.NotEmpty(heard)
+}
+
+// Open names every field it cannot open from, and every option it refused, at once.
+func (s *PruneSuite) TestOpenRefusesAnIncompleteConfig() {
+	_, err := Open(s.T().Context(), Config{Invocation: "inv"}, WithClock(nil), WithTie(Tie{}))
+
+	var fields, options []string
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		if c, ok := errors.AsType[*ConfigError](e); ok {
+			fields = append(fields, c.Field)
+		}
+		if o, ok := errors.AsType[*OptionError](e); ok {
+			options = append(options, o.Option)
+		}
+	}
+	s.Equal([]string{"Dir", "Retention", "PruneErrors"}, fields)
+	s.Equal([]string{"WithClock", "WithTie"}, options)
 }
 
 // Open prunes with the tie it was given.
@@ -238,7 +283,7 @@ func (s *PruneSuite) TestOpenPrunesWithItsTie() {
 	age := 400 * 24 * time.Hour
 	s.writeAged("blocked", age, []Record{s.record("blocked", 1, msAgo(age), kindHeld, grouped{Group: "g1"})})
 
-	_, err := Open(s.T().Context(), s.dir, "current", InvocationStart{}, WithTie(testTie()))
+	_, err := openAt(s.T(), s.dir, "current", InvocationStart{}, WithTie(testTie()))
 	s.Require().NoError(err)
 
 	s.Equal([]string{"blocked"}, s.stored())
@@ -247,17 +292,17 @@ func (s *PruneSuite) TestOpenPrunesWithItsTie() {
 // Pruning reads every invocation file's metadata, so Open does it at most once per
 // interval; a store pruned a moment ago is left alone.
 func (s *PruneSuite) TestOpenPrunesAtMostOncePerInterval() {
-	_, err := Open(s.T().Context(), s.dir, "first", InvocationStart{})
+	_, err := openAt(s.T(), s.dir, "first", InvocationStart{})
 	s.Require().NoError(err)
 
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
-	_, err = Open(s.T().Context(), s.dir, "second", InvocationStart{})
+	_, err = openAt(s.T(), s.dir, "second", InvocationStart{})
 	s.Require().NoError(err)
 	s.Equal([]string{"ancient"}, s.stored())
 
 	stale := time.Now().Add(-2 * pruneInterval)
 	s.Require().NoError(os.Chtimes(filepath.Join(s.dir, pruneStamp), stale, stale))
-	_, err = Open(s.T().Context(), s.dir, "third", InvocationStart{})
+	_, err = openAt(s.T(), s.dir, "third", InvocationStart{})
 	s.Require().NoError(err)
 	s.Empty(s.stored())
 }
@@ -267,7 +312,7 @@ func (s *PruneSuite) TestOpenPrunesAtMostOncePerInterval() {
 func (s *PruneSuite) TestOpenNeverPrunesItsOwnFile() {
 	s.writeAged("resumed", 400*24*time.Hour, []Record{s.result("resumed", 1, 400*24*time.Hour)})
 
-	w, err := Open(s.T().Context(), s.dir, "resumed", InvocationStart{})
+	w, err := openAt(s.T(), s.dir, "resumed", InvocationStart{})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
@@ -342,7 +387,7 @@ func (s *PruneSuite) TestCapsTheStoreAtItsNewestFiles() {
 	}
 	s.writeLegacy("legacy", time.Now().Add(-30*time.Minute))
 
-	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 3, "inv4"+FileExt, newOptions(nil)))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 3, "inv4"+FileExt, Config{}))
 
 	s.Equal([]string{"inv0", "inv1", "inv4", "legacy"}, s.stored(),
 		"the newest three by newest fact survive, schema-1 included, and the writer's own file is never past the cap")
@@ -359,7 +404,7 @@ func (s *PruneSuite) TestCapSparesTheNewestLoadedSessions() {
 		})
 	}
 
-	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", newOptions(nil)))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", Config{}))
 
 	s.Equal([]string{"inv0", "inv1", "loaded"}, s.stored(), "a loaded host session is the rare kind the cap must not push out")
 }
@@ -373,7 +418,7 @@ func (s *PruneSuite) TestCapStillHonorsTheTie() {
 		})
 	}
 
-	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", newOptions([]Option{WithTie(testTie())})))
+	s.Require().NoError(prune(s.T().Context(), s.dir, retention, 2, "", Config{tie: testTie()}))
 
 	s.Equal([]string{"asker", "inv0", "inv1"}, s.stored(), "a held file is exempt from the cap as from retention")
 }
@@ -397,7 +442,7 @@ func (s *PruneSuite) TestClaimStalePruneStampPrunesOnceUnderConcurrency() {
 		wg.Go(func() {
 			ready.Done()
 			ready.Wait() // line every goroutine up before any of them races the claim
-			claimStalePruneStamp(s.T().Context(), s.dir, stamp, "", newOptions(nil))
+			claimStalePruneStamp(s.T().Context(), stamp, "", testConfig(s.T(), s.dir, "", InvocationStart{}))
 		})
 	}
 	wg.Wait()
@@ -426,7 +471,7 @@ func (s *PruneSuite) TestClaimStalePruneStampSkipsWhenAlreadyContended() {
 	}()
 	<-held
 
-	claimStalePruneStamp(s.T().Context(), s.dir, stamp, "", newOptions(nil))
+	claimStalePruneStamp(s.T().Context(), stamp, "", testConfig(s.T(), s.dir, "", InvocationStart{}))
 	close(release)
 	s.Require().NoError(<-done)
 

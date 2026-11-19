@@ -93,29 +93,20 @@ type CheckSpec interface {
 type checkSpec struct{ CheckSpec }
 
 // WithCheckSpec is how the store reads the checks a row and its postconditions carry: the store
-// keeps a check as an opaque [Check] and never interprets one. Open refuses a nil spec
-// with a [*CheckSpecError].
+// keeps a check as an opaque [Check] and never interprets one. A nil spec is an
+// *[OptionError].
 //
 // Without it every row write refuses with an [*UnconfiguredError], and [Store.Grade],
 // [Store.Witness], [Store.Attest] and [Store.ReportRun] with a
 // [*GradingUnconfiguredError], each naming WithCheckSpec.
-func WithCheckSpec(spec CheckSpec) StoreOption {
-	return func(c *storeConfig) { c.checks = &checkSpec{CheckSpec: spec} }
-}
-
-// CheckSpecError is a [WithCheckSpec] given a nil [CheckSpec].
-type CheckSpecError struct{}
-
-func (e *CheckSpecError) Error() string {
-	return "job: WithCheckSpec needs a CheckSpec, and it was given nil"
-}
-
-// refusal is why spec cannot be used, nil when it can or when none was given.
-func (spec *checkSpec) refusal() error {
-	if spec != nil && spec.CheckSpec == nil {
-		return &CheckSpecError{}
+func WithCheckSpec(spec CheckSpec) Option {
+	return func(c *Config) {
+		if spec == nil {
+			c.fail("WithCheckSpec", "nil spec")
+			return
+		}
+		c.checks = &checkSpec{CheckSpec: spec}
 	}
-	return nil
 }
 
 // ErrNoCheck is the zero [Check] where a check is needed: a run of nothing grades nothing,

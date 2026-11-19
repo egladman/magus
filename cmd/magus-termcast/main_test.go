@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"os"
@@ -354,7 +353,11 @@ func TestMaterializeLeavesAResolvableBaseRef(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err != nil {
 		t.Errorf("the demo workspace has no root magusfile: %v", err)
 	}
-	res, err := spawn.Exec(context.Background(), "git",
+	ctx, err := background()
+	if err != nil {
+		t.Fatalf("background: %v", err)
+	}
+	res, err := spawn.Exec(ctx, "git",
 		[]string{"merge-base", "origin/main", "HEAD"},
 		spawn.ExecOptions{Dir: dir, Quiet: true, Capture: true})
 	if err != nil {

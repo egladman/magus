@@ -17,7 +17,7 @@ import (
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
 	cdir := t.TempDir()
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err)
 	_, _, err = c.LastEntry("nonexistent/project")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
@@ -47,9 +47,9 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		return os.WriteFile(abs, []byte("binary"), 0o755)
 	}
 
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
-	_, err = c.Run(context.Background(), step, fn)
+	_, err = c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
 
 	m, logPath, err := c.LastEntry("myservice")
@@ -73,7 +73,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 // TestLastRecordedRun_NothingRecorded: with no entry there is no comparison to make,
 // and the error has to say so and name the step that would create one.
 func TestLastRecordedRun_NothingRecorded(t *testing.T) {
-	c, err := Open(t.Context(), t.TempDir())
+	c, err := Open(withResolver(t.Context()), t.TempDir())
 	require.NoError(t, err)
 
 	_, err = c.LastRecordedRun("svc", "build")
@@ -91,10 +91,10 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	_, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+	_, err := c.Run(withResolver(t.Context()), step, func(context.Context) error { return nil })
 	require.NoError(t, err)
 
-	liveKey, liveLines, err := c.StepKey(t.Context(), &step)
+	liveKey, liveLines, err := c.StepKey(withResolver(t.Context()), &step)
 	require.NoError(t, err)
 	rec, err := c.LastRecordedRun("test/pkg", "build")
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 
 	writeMain(t, root, "package main // edited")
 
-	liveKey, liveLines, err = c.StepKey(t.Context(), &step)
+	liveKey, liveLines, err = c.StepKey(withResolver(t.Context()), &step)
 	require.NoError(t, err)
 	assert.NotEqual(t, rec.Key, liveKey, "the edit moved the key, so a run now misses")
 
@@ -120,7 +120,7 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 // replays: every tier's manifests pass one validator, which requires the identity.
 func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
 	const key = "abc123abc123abc123abc123"
@@ -147,7 +147,7 @@ func TestLastRecordedRun_WouldReplayAnOlderKey(t *testing.T) {
 	run := func(body string) {
 		t.Helper()
 		writeMain(t, root, body)
-		_, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+		_, err := c.Run(withResolver(t.Context()), step, func(context.Context) error { return nil })
 		require.NoError(t, err)
 	}
 
@@ -155,7 +155,7 @@ func TestLastRecordedRun_WouldReplayAnOlderKey(t *testing.T) {
 	run("package main // edited")
 	writeMain(t, root, "package main")
 
-	liveKey, _, err := c.StepKey(t.Context(), &step)
+	liveKey, _, err := c.StepKey(withResolver(t.Context()), &step)
 	require.NoError(t, err)
 	rec, err := c.LastRecordedRun("test/pkg", "build")
 	require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithLogger(discardLogger))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
 	buildStep := Step{
@@ -203,9 +203,9 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 		Target:        "test",
 	}
 
-	_, err = c.Run(context.Background(), buildStep, writeOutput("build.out"))
+	_, err = c.Run(withResolver(context.Background()), buildStep, writeOutput("build.out"))
 	require.NoError(t, err)
-	_, err = c.Run(context.Background(), testStep, writeOutput("test.out"))
+	_, err = c.Run(withResolver(context.Background()), testStep, writeOutput("test.out"))
 	require.NoError(t, err)
 
 	// Filtering by "test" should return only the test entry.

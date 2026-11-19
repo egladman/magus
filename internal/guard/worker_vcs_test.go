@@ -858,7 +858,7 @@ func ledgerAt(t *testing.T, ctx context.Context) location {
 
 // contextWithLedger lets a suite keep the ledger location instead of a context field.
 func contextWithLedger(t *testing.T, at location) context.Context {
-	return context.WithValue(t.Context(), locationKey{}, at)
+	return withSecrets(context.WithValue(t.Context(), locationKey{}, at))
 }
 
 // workerRevert pins row 602: a worker reverts its own commit on its own

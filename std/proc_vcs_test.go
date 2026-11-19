@@ -61,7 +61,7 @@ func TestOsExecRefusesAVCSBinary(t *testing.T) {
 }
 
 func TestOsExecRunsAShellLineThatOnlyMentionsGit(t *testing.T) {
-	res, err := ProcExec(t.Context(), "/bin/sh", []string{"-c", "echo git"}, "", types.ExecOptions{Quiet: true})
+	res, err := ProcExec(withSecrets(t.Context()), "/bin/sh", []string{"-c", "echo git"}, "", types.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, "git", res.Stdout)
 }
@@ -103,7 +103,7 @@ func TestArgvCommands(t *testing.T) {
 }
 
 func TestVcsCmdStillRunsWhereProcExecIsRefused(t *testing.T) {
-	ctx := WithCurrentWorkingDirectory(t.Context(), testkit.NewRepository(t, nil).Root())
+	ctx := WithCurrentWorkingDirectory(withSecrets(t.Context()), testkit.NewRepository(t, nil).Root())
 
 	res, err := VCSCommand(ctx, []string{"rev-parse", "--is-inside-work-tree"}, types.VCSCommandOptions{Quiet: true})
 	require.NoError(t, err)
@@ -121,6 +121,6 @@ func TestVcsCmdIsStillLeaseGraded(t *testing.T) {
 	refusal := errors.New("lease-vcs: refused")
 	withVCSLeaseGate(t, func(context.Context, job.Job, string, []string, string, []string) error { return refusal })
 
-	_, err = VCSCommand(job.WithLease(WithCurrentWorkingDirectory(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, types.VCSCommandOptions{})
+	_, err = VCSCommand(leased(t, WithCurrentWorkingDirectory(ws, repo.Root()), "worker"), []string{"commit", "--allow-empty", "-m", "x"}, types.VCSCommandOptions{})
 	assert.ErrorIs(t, err, refusal)
 }

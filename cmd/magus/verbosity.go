@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/quiet"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
@@ -119,8 +120,9 @@ func restoreTerminal() {
 
 // applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
 // the process-global slog logger at the level globalCfg.Log names, filtered when the
-// display is quiet (see quietDisplay).
-func applyDisplay() {
+// display is quiet (see quietDisplay). The error is the logger's empty secret resolver
+// refusing to build.
+func applyDisplay() error {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
 	//
@@ -163,7 +165,36 @@ func applyDisplay() {
 	if global.output != string(outputJSONL) && quietDisplay() {
 		h = quiet.Wrap(h, global.verbose >= 1)
 	}
-	slog.SetDefault(slog.New(dirHandler{h}))
+	empty, err := recorder.NewSecretResolver()
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(slog.New(dirHandler{resolvingHandler{Handler: h, empty: empty}}))
+	return nil
+}
+
+// resolvingHandler handles a record whose context carries no secret resolver under
+// empty, one that holds nothing. A bare slog call has no context to carry one, and
+// the display's redaction refuses a context without, which would drop the line. A
+// record with a resolver on its context is redacted against that one.
+type resolvingHandler struct {
+	slog.Handler
+	empty *secrets.Resolver
+}
+
+func (h resolvingHandler) Handle(ctx context.Context, r slog.Record) error {
+	if secrets.ResolverFromContext(ctx) == nil {
+		ctx = secrets.WithResolver(ctx, h.empty)
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h resolvingHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return resolvingHandler{Handler: h.Handler.WithAttrs(as), empty: h.empty}
+}
+
+func (h resolvingHandler) WithGroup(name string) slog.Handler {
+	return resolvingHandler{Handler: h.Handler.WithGroup(name), empty: h.empty}
 }
 
 // displayLogHandler builds the stderr handler for the -o and log.format in

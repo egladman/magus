@@ -65,14 +65,14 @@ const receiptFile = "review/receipts.jsonl"
 // neither read nor skipped: a skipped one would report every file it covered as unread.
 const oldReceiptFile = "review/receipts.json"
 
-func receiptLog(cacheDir string) file.JSONL[Receipt] {
-	return file.JSONL[Receipt]{JSONL: codec.JSONL[Receipt]{
+func receiptLog(cacheDir string) (file.JSONL[Receipt], error) {
+	return file.NewJSONL(codec.JSONLConfig[Receipt]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
 		Perm: 0o600,
 		Key:  func(r Receipt) string { return r.Path },
 		Old:  filepath.Join(cacheDir, filepath.FromSlash(oldReceiptFile)),
-	}}
+	})
 }
 
 // Receipt marks a file as read at one specific content. It names no reader; see the package
@@ -111,7 +111,11 @@ type Store map[string]Receipt
 // Load reads the store. A missing file is an empty store, not an error: nobody having
 // acknowledged anything yet is the starting state.
 func Load(cacheDir string) (Store, error) {
-	list, err := receiptLog(cacheDir).Load()
+	rl, err := receiptLog(cacheDir)
+	if err != nil {
+		return nil, err
+	}
+	list, err := rl.Load()
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +147,11 @@ func (s Store) Covers(path, digest string) bool {
 // serializes the read of an earlier reason with its replacement and the compaction; a dropped
 // receipt would read as a file nobody read.
 func Record(cacheDir string, add []Receipt) error {
-	return receiptLog(cacheDir).Update(context.Background(), func(stored []Receipt) []Receipt {
+	rl, err := receiptLog(cacheDir)
+	if err != nil {
+		return err
+	}
+	return rl.Update(context.Background(), func(stored []Receipt) []Receipt {
 		cur := make(Store, len(stored))
 		for _, r := range stored {
 			cur[r.Path] = r

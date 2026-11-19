@@ -33,8 +33,9 @@ func decisions() enum.Set[Decision] { return enum.Set[Decision]{Defer, Advise, A
 // Values lists the declared decisions, excluding the zero value.
 func (d Decision) Values() []string { return decisions().Strings() }
 
-// Valid reports whether d is a declared decision or unset.
-func (d Decision) Valid() bool { return decisions().Valid(d) }
+// Valid reports whether d is a declared decision. Unset is not one: a caller that
+// reads the zero value as a defer checks for it by name.
+func (d Decision) Valid() bool { return d != "" && decisions().Valid(d) }
 
 // String renders d for an error message: the value, or "unset" when empty.
 func (d Decision) String() string { return enum.String(d) }
@@ -43,10 +44,10 @@ func (d Decision) String() string { return enum.String(d) }
 func (d Decision) MarshalText() ([]byte, error) { return []byte(d), nil }
 
 // UnmarshalText sets d from a name, refusing one outside Values with an
-// [*UnknownDecisionError].
+// [*UnknownDecisionError]. An empty name leaves d unset.
 func (d *Decision) UnmarshalText(text []byte) error {
 	v := Decision(text)
-	if !v.Valid() {
+	if v != "" && !v.Valid() {
 		return &UnknownDecisionError{Decision: string(text)}
 	}
 	*d = v

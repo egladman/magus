@@ -65,7 +65,7 @@ func (s *ReadSuite) record(target, revision string, edit func(*cache.OutputDescr
 		edit(&d)
 	}
 	key := fmt.Sprintf("%064x", s.runs)
-	_, err := cache.NewOutputStore(s.cacheDir).Persist(s.T().Context(), key, []byte("ok\n"), d)
+	_, err := cache.NewOutputStore(s.cacheDir).Persist(testkit.WithEnvResolver(s.T().Context()), key, []byte("ok\n"), d)
 	s.Require().NoError(err)
 }
 

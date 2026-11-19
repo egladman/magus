@@ -910,7 +910,10 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cache := digestCache(filepath.Join(filepath.Dir(s.path), digestCacheName))
+	cache, err := digestCache(filepath.Join(filepath.Dir(s.path), digestCacheName))
+	if err != nil {
+		return "", err
+	}
 	entries, _ := cache.Load() // an unreadable cache is rehashed
 	key := resolved(bin)
 	for _, e := range entries {
@@ -929,8 +932,8 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 }
 
 // digestCache is the JSON Lines store at path, keyed by binary path.
-func digestCache(path string) file.JSONL[binaryDigest] {
-	return file.JSONL[binaryDigest]{JSONL: codec.JSONL[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Key: func(d binaryDigest) string { return d.Path }}}
+func digestCache(path string) (file.JSONL[binaryDigest], error) {
+	return file.NewJSONL(codec.JSONLConfig[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o644, Key: func(d binaryDigest) string { return d.Path }})
 }
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it

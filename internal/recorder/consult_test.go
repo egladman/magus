@@ -16,7 +16,7 @@ func TestConsult(t *testing.T) { suite.Run(t, new(ConsultSuite)) }
 // record writes one observation the way the guard hook does.
 func record(t *testing.T, base string, c AgentCommand) {
 	t.Helper()
-	AppendAgentCommand(t.Context(), base, c)
+	AppendAgentCommand(testCtx(t), base, c)
 }
 
 func (s *ConsultSuite) TestConsultedJoinsQuestionsToTheWriteThroughTheLease() {
@@ -30,7 +30,7 @@ func (s *ConsultSuite) TestConsultedJoinsQuestionsToTheWriteThroughTheLease() {
 	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolShellCommand, Command: "grep -rn explain internal/trail"})
 	record(t, base, AgentCommand{Session: "s1", Lease: "wave2/trail", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
 
-	got, gap, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
+	got, gap, _ := Consulted(testCtx(t), "", base, []string{"internal/trail/consult.go"}, 100)
 
 	// Most asked first, and the subject is kept where Touch.Ran drops every argument.
 	assert.Equal(t, []Consultation{
@@ -51,7 +51,7 @@ func (s *ConsultSuite) TestConsultedMergesEveryLeaseThatWroteTheChangeset() {
 	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: ToolShellCommand, Command: "magus refs Consulted"})
 	record(t, base, AgentCommand{Session: "w1", Lease: "wave/worker-1", Tool: ToolFileWrite, Path: "b.go"})
 
-	got, gap, _ := Consulted(t.Context(), "", base, []string{"a.go", "b.go"}, 100)
+	got, gap, _ := Consulted(testCtx(t), "", base, []string{"a.go", "b.go"}, 100)
 
 	// The subject both workers asked about counts twice; the list is keyed by subject and not
 	// by who asked.
@@ -66,7 +66,7 @@ func (s *ConsultSuite) TestConsultedMergesEveryLeaseThatWroteTheChangeset() {
 // one is a fact about the change, and rendering them alike reports a fresh clone as unresearched
 // work.
 func (s *ConsultSuite) TestConsultedNamesNothingObservedInThisCheckout() {
-	_, gap, _ := Consulted(s.T().Context(), "", s.T().TempDir(), []string{"a.go"}, 100)
+	_, gap, _ := Consulted(testCtx(s.T()), "", s.T().TempDir(), []string{"a.go"}, 100)
 	s.Equal(ConsultGapUnobserved, gap)
 }
 
@@ -77,7 +77,7 @@ func (s *ConsultSuite) TestConsultedNamesObservedButUnleased() {
 	record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
 	record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "a.go"})
 
-	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	_, gap, _ := Consulted(testCtx(t), "", base, []string{"a.go"}, 100)
 	s.Equal(ConsultGapUnleased, gap)
 }
 
@@ -87,7 +87,7 @@ func (s *ConsultSuite) TestConsultedNamesLeasedWorkThatWroteOtherFiles() {
 	record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
 	record(t, base, AgentCommand{Session: "s1", Lease: "other", Tool: ToolFileWrite, Path: "elsewhere.go"})
 
-	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	_, gap, _ := Consulted(testCtx(t), "", base, []string{"a.go"}, 100)
 	s.Equal(ConsultGapUnmatched, gap)
 }
 
@@ -97,7 +97,7 @@ func (s *ConsultSuite) TestConsultedNamesAuthorsWhoAskedNothing() {
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolShellCommand, Command: "go doc net/http"})
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: ToolFileWrite, Path: "a.go"})
 
-	_, gap, _ := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	_, gap, _ := Consulted(testCtx(t), "", base, []string{"a.go"}, 100)
 	s.Equal(ConsultGapNoQuestions, gap)
 }
 
@@ -112,7 +112,7 @@ func (s *ConsultSuite) TestConsultedReportsNothingWithoutALease() {
 	record(t, base, AgentCommand{Session: "s1", Tool: ToolShellCommand, Command: "magus explain internal/trail"})
 	record(t, base, AgentCommand{Session: "s1", Tool: ToolFileWrite, Path: "internal/trail/consult.go"})
 
-	got, gap, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
+	got, gap, _ := Consulted(testCtx(t), "", base, []string{"internal/trail/consult.go"}, 100)
 	assert.Empty(t, got)
 	assert.Equal(t, ConsultGapUnleased, gap)
 }
@@ -127,7 +127,7 @@ func (s *ConsultSuite) TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(
 	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: ToolShellCommand, Command: "magus explain a"})
 	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: ToolFileWrite, Path: "console/src/app.ts"})
 
-	got, _, _ := Consulted(t.Context(), "", base, []string{"internal/trail/consult.go"}, 100)
+	got, _, _ := Consulted(testCtx(t), "", base, []string{"internal/trail/consult.go"}, 100)
 	require.Len(t, got, 1)
 	assert.Equal(t, Consultation{Verb: "refs", Subject: "AppendAgentCommand", Count: 1}, got[0])
 }
@@ -140,7 +140,7 @@ func (s *ConsultSuite) TestConsultedRelativizesTheWrittenPath() {
 	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolShellCommand, Command: "magus describe target ci ."})
 	record(t, base, AgentCommand{Session: "s1", Lease: "l", Tool: ToolFileWrite, Path: "/repo/magusfile.buzz"})
 
-	got, _, _ := Consulted(t.Context(), "/repo", base, []string{"magusfile.buzz"}, 100)
+	got, _, _ := Consulted(testCtx(t), "/repo", base, []string{"magusfile.buzz"}, 100)
 	require.Len(t, got, 1)
 	assert.Equal(t, Consultation{Verb: "describe", Subject: "target ci .", Count: 1}, got[0])
 }
@@ -203,7 +203,7 @@ func (s *ConsultSuite) TestConsultedReturnsAnUndecodableBlob() {
 	base := t.TempDir()
 	ref := recordUndecodable(t, base)
 
-	_, _, err := Consulted(t.Context(), "", base, []string{"a.go"}, 100)
+	_, _, err := Consulted(testCtx(t), "", base, []string{"a.go"}, 100)
 
 	var undecodable *blobUndecodableError
 	require.ErrorAs(t, err, &undecodable)

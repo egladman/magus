@@ -23,7 +23,9 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
@@ -48,7 +50,22 @@ func Dir(root string) (string, error) {
 	return dir, nil
 }
 
+// StoreConfig is the [session.Config] every magus writer of the store at dir opens with:
+// [session.DefaultRetention], and a prune error logged as a warning, since housekeeping
+// never fails a command.
+func StoreConfig(dir, invocation string, start session.InvocationStart) session.Config {
+	return session.Config{
+		Dir: dir, Invocation: invocation, Start: start,
+		Retention:   session.DefaultRetention,
+		PruneErrors: warnPrune,
+	}
+}
+
+func warnPrune(ctx context.Context, err error) {
+	slog.With(attr.Component("magus")).WarnContext(ctx, "the session store could not prune itself; it keeps growing until a later prune succeeds", attr.Error(err))
+}
+
 // openWriter is [session.Open] with the attention tie every magus writer prunes with.
 func openWriter(ctx context.Context, dir, invocation string, start session.InvocationStart) (*session.Writer, error) {
-	return session.Open(ctx, dir, invocation, start, session.WithTie(AttentionTie()))
+	return session.Open(ctx, StoreConfig(dir, invocation, start), session.WithTie(AttentionTie()))
 }

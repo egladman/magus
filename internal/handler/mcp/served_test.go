@@ -94,7 +94,7 @@ func TestServedNamesTheServedRootAndBuildOnEveryResult(t *testing.T) {
 		roots: []mcplib.Root{{URI: "file://" + filepath.Join(root, "internal")}},
 	}
 
-	res := callStamped(t, s, context.Background(), session)
+	res := callStamped(t, s, bgCtx(), session)
 	assert.Equal(t, servedInfo{Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "http"}, servedMeta(t, res))
 	assert.Equal(t, []string{`{"ok":true}`}, textParts(res), "no skew adds no line")
 	assert.NotNil(t, res.StructuredContent, "no skew keeps the structured payload")
@@ -110,8 +110,8 @@ func TestServedReportsRootSkewFromTheCallersRoots(t *testing.T) {
 		roots: []mcplib.Root{{URI: "file://" + other}},
 	}
 
-	res := callStamped(t, s, context.Background(), session)
-	callStamped(t, s, context.Background(), session)
+	res := callStamped(t, s, bgCtx(), session)
+	callStamped(t, s, bgCtx(), session)
 	assert.Equal(t, int32(1), session.asked.Load(), "roots are asked once per session")
 	assert.Equal(t, servedInfo{
 		Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "http",
@@ -129,7 +129,7 @@ func TestServedReportsNoRootSkewWithoutTheRootsCapability(t *testing.T) {
 	s := &served{root: root, build: testBuild, roots: newSessionRoots().lookup}
 	session := &rootsSession{roots: []mcplib.Root{{URI: "file://" + other}}}
 
-	res := callStamped(t, s, context.Background(), session)
+	res := callStamped(t, s, bgCtx(), session)
 	assert.Zero(t, session.asked.Load(), "a client that declared no roots is never asked")
 	assert.Empty(t, servedMeta(t, res).Skew)
 	assert.Equal(t, []string{`{"ok":true}`}, textParts(res))
@@ -145,7 +145,7 @@ func TestServedHasNoRootSkewOverStdio(t *testing.T) {
 		roots: []mcplib.Root{{URI: "file://" + other}},
 	}
 
-	res := callStamped(t, s, recorder.ContextWithCredential(context.Background(), auth.CredentialStdio()), session)
+	res := callStamped(t, s, recorder.ContextWithCredential(bgCtx(), auth.CredentialStdio()), session)
 	assert.Zero(t, session.asked.Load())
 	assert.Equal(t, servedInfo{Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "stdio"}, servedMeta(t, res))
 }
@@ -158,12 +158,12 @@ func TestServedReportsAReplacedExecutable(t *testing.T) {
 	s.watchExecutable(exe)
 	session := &rootsSession{}
 
-	res := callStamped(t, s, context.Background(), session)
+	res := callStamped(t, s, bgCtx(), session)
 	assert.Empty(t, servedMeta(t, res).Skew, "an untouched executable is no skew")
 
 	require.NoError(t, os.WriteFile(exe+".new", []byte("a newer build"), 0o755))
 	require.NoError(t, os.Rename(exe+".new", exe))
-	res = callStamped(t, s, context.Background(), session)
+	res = callStamped(t, s, bgCtx(), session)
 	assert.Equal(t, []servedSkew{{Kind: "build", Executable: exe}}, servedMeta(t, res).Skew)
 	assert.Equal(t, []string{
 		`{"ok":true}`,

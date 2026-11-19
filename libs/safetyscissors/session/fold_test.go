@@ -79,7 +79,7 @@ func (s *FoldCacheSuite) TestReadsOnlyFilesThatChanged() {
 	s.Require().NoError(f.Close())
 	s.Require().NoError(os.Chtimes(pathA, fi.ModTime(), fi.ModTime()))
 
-	w, err := Open(s.T().Context(), s.dir, "b", InvocationStart{})
+	w, err := openAt(s.T(), s.dir, "b", InvocationStart{})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindAgentEvent, AgentEvent{Host: "h", Kind: EventFileWrite, Ref: "w", Text: "z.go"}))
 
@@ -127,7 +127,7 @@ func (s *FoldCacheSuite) TestForgetsAPrunedFile() {
 // record appended later is seen by the next read.
 func (s *FoldCacheSuite) TestEachKindKeepsItsOwnCache() {
 	writeRaw(&s.Suite, s.dir, "a", []Record{agentRecord("a", 1, "x.go")})
-	w, err := Open(s.T().Context(), s.dir, "b", InvocationStart{})
+	w, err := openAt(s.T(), s.dir, "b", InvocationStart{})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "ci", Outcome: OutcomePass}))
 
@@ -173,7 +173,7 @@ func (s *FoldCacheSuite) TestUnderConcurrentReadersAndWriters() {
 	errs := make([]error, writers)
 	for i := range writers {
 		wg.Go(func() {
-			w, err := Open(s.T().Context(), s.dir, fmt.Sprintf("w%d", i), InvocationStart{})
+			w, err := openAt(s.T(), s.dir, fmt.Sprintf("w%d", i), InvocationStart{})
 			if err != nil {
 				errs[i] = err
 				return

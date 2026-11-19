@@ -14,6 +14,8 @@ import (
 	"net/netip"
 	"slices"
 	"time"
+
+	"github.com/egladman/magus/libs/secrets"
 )
 
 // Server is the HTTP core: a listener, a mux, and an *http.Server with a
@@ -76,6 +78,12 @@ func (s *Server) Patterns() []string {
 // ctx.Done() it performs a graceful Shutdown with a 5s timeout. A clean
 // shutdown (http.ErrServerClosed) is swallowed and reported as nil.
 func (s *Server) Serve(ctx context.Context) error {
+	// A request records to the activity trail, and redaction refuses a context with no
+	// resolver: each request carries ctx's, and none of ctx's other values.
+	res := secrets.ResolverFromContext(ctx)
+	s.srv.BaseContext = func(net.Listener) context.Context {
+		return secrets.WithResolver(context.Background(), res)
+	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.srv.Serve(s.ln) }()
 

@@ -276,7 +276,7 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	dir := t.TempDir()
-	ctx := recorder.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
+	ctx := recorder.ContextWithEntryPoint(withSecrets(WithLocation(t.Context(), dir, "/repo", "")), jobtypes.EntryPointCLI)
 
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
 
@@ -341,7 +341,7 @@ func bash(command string) map[string]any {
 func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	root, err := workspace.FindRoot("")
 	require.NoError(t, err)
-	m, err := LoadWorkspaceRules(t.Context(), root, types.VCSOptions{})
+	m, err := LoadWorkspaceRules(withSecrets(t.Context()), root, types.VCSOptions{})
 	require.NoError(t, err, "the policy loads the way the hook loads it")
 	require.NotNil(t, m.CommandRule(), "the root magusfile registers a command rule")
 	require.NotNil(t, m.SpawnRule(), "and a spawn rule")
@@ -439,10 +439,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 					row.CheckoutRoot = hookLocation(ctx, Dependencies{}).workspace
 				}
 				row.Validated = 1
-				_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
+				_, err := store.Update(withSecrets(t.Context()), row.ID, func(cur *jobtypes.Job) { *cur = row })
 				require.NoError(t, err)
 				if row.Worktree != nil {
-					_, err = store.RecordWorktree(t.Context(), row.ID, *row.Worktree)
+					_, err = store.RecordWorktree(withSecrets(t.Context()), row.ID, *row.Worktree)
 					require.NoError(t, err)
 				}
 			}
@@ -656,10 +656,10 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 
 		// A cited ref is looked up in the store of the checkout being judged.
 		store := cache.NewOutputStore(cacheDir)
-		passed, err := store.Persist(t.Context(), strings.Repeat("a1", 32), []byte("ok\n"),
+		passed, err := store.Persist(withSecrets(t.Context()), strings.Repeat("a1", 32), []byte("ok\n"),
 			cache.OutputDescriptor{Project: ".", Target: "go-test"})
 		require.NoError(t, err)
-		failed, err := store.Persist(t.Context(), strings.Repeat("b2", 32), []byte("FAIL\n"),
+		failed, err := store.Persist(withSecrets(t.Context()), strings.Repeat("b2", 32), []byte("FAIL\n"),
 			cache.OutputDescriptor{Project: "libs/conventions", Target: "go-test", Failed: true})
 		require.NoError(t, err)
 		citing := func(ref string) string {
@@ -768,7 +768,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 	judgeIn := func(t *testing.T, ws, command string) verdict.Judgment {
 		t.Helper()
 		testkit.Isolate(t)
-		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
+		ctx := WithLocation(withSecrets(t.Context()), t.TempDir(), ws, ws)
 		deps := Dependencies{CommandRule: m.CommandRule(), SpawnRule: m.SpawnRule(), WriteRule: m.WriteRule()}
 		return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Bash",
@@ -845,7 +845,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		repo.Git("switch", "-q", "-c", "bump-skills")
 		repo.Commit("bump the skill stamp format", map[string]string{catalog: "package agent\n\nconst skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha2\"\n"})
 		ws := repo.Root()
-		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
+		ctx := WithLocation(withSecrets(t.Context()), t.TempDir(), ws, ws)
 		edit := func(newText string) verdict.Judgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
@@ -873,7 +873,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 	testkit.Isolate(t)
 	root, elsewhere := t.TempDir(), t.TempDir()
-	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
+	ctx := WithLocation(withSecrets(t.Context()), t.TempDir(), root, root)
 	write := func(path string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: path, IsPath: true, Session: "s1", Host: "test-host"})
 	}
@@ -1019,7 +1019,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 					},
 					Policy: func() PolicyState { return PolicyState{Digest: "d1", ShellRules: 1} },
 				}
-				return WithLocation(t.Context(), cacheDir, "/ws", "/ws"), deps, Request{Input: "/ws/app/main.go", IsPath: true, Session: who.Session}
+				return WithLocation(withSecrets(t.Context()), cacheDir, "/ws", "/ws"), deps, Request{Input: "/ws/app/main.go", IsPath: true, Session: who.Session}
 			},
 			want: verdict.Judgment{Decision: verdict.Advise, Rule: string(advisoryScopeDrift)},
 		},
@@ -1035,7 +1035,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			name: "a denied command",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
 				testkit.Isolate(t)
-				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
+				return WithLocation(withSecrets(t.Context()), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
 			},
 			want: verdict.Judgment{Decision: verdict.Deny},
 		},
@@ -1134,7 +1134,7 @@ func TestSessionCopyRemovesTheCopyOfAnExitedProcess(t *testing.T) {
 func TestDryRunRefusesASpawn(t *testing.T) {
 	testkit.Isolate(t)
 	cacheDir := t.TempDir()
-	ctx := WithLocation(t.Context(), cacheDir, "/ws", "/ws")
+	ctx := WithLocation(withSecrets(t.Context()), cacheDir, "/ws", "/ws")
 	v := Judge(ctx, Dependencies{}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", DryRun: true})
 	assert.Equal(t, verdict.Deny, v.Decision)
 	entries, err := os.ReadDir(cacheDir)
@@ -1318,7 +1318,7 @@ func TestShellAdvisoriesNameACataloguedRule(t *testing.T) {
 		"npm update":                      advisoryDependencyUpdate,
 		"pnpm install":                    advisoryDependencyInstall,
 	} {
-		v := Evaluate(t.Context(), advising(testDependencies()), command)
+		v := Evaluate(withSecrets(t.Context()), advising(testDependencies()), command)
 		require.NotEmpty(t, v.Context, command)
 		assert.Equal(t, string(want), v.advisoryName(), command)
 		_, ok := Rule(v.advisoryName())
@@ -1360,12 +1360,12 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	put := func(row jobtypes.Job) {
 		t.Helper()
-		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
+		_, err := store.Update(withSecrets(t.Context()), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	rowsOf := func() []string {
 		t.Helper()
-		snap, ok := job.SnapshotFromContext(withJobStoreRows(t.Context(), at))
+		snap, ok := job.SnapshotFromContext(withJobStoreRows(withSecrets(t.Context()), at))
 		require.True(t, ok)
 		require.NoError(t, snap.Err)
 		var ids []string
@@ -1437,8 +1437,8 @@ func TestRecoverableRulesDenyUnlessSetToAdvise(t *testing.T) {
 	}
 	assert.Len(t, strict(Dependencies{}).Builtins, len(defaults))
 
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(t.Context(), Dependencies{}, sedInPlace).Rule.Name, "the default denies")
-	assert.Empty(t, Evaluate(t.Context(), advising(Dependencies{}), sedInPlace).Deny, "advise is the opt-out")
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(withSecrets(t.Context()), Dependencies{}, sedInPlace).Rule.Name, "the default denies")
+	assert.Empty(t, Evaluate(withSecrets(t.Context()), advising(Dependencies{}), sedInPlace).Deny, "advise is the opt-out")
 }
 
 // sedInPlace is a recoverable deny on its own line, and nothing else.
@@ -1503,13 +1503,13 @@ func TestGradeDefaultsAndUnknownRules(t *testing.T) {
 func TestEvaluateGradesEachSite(t *testing.T) {
 	t.Parallel()
 
-	advised := Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Advise), sedInPlace)
+	advised := Evaluate(withSecrets(t.Context()), withSetting(string(denyRuleSedInPlace), builtin.Advise), sedInPlace)
 	assert.Empty(t, advised.Deny)
 	assert.True(t, advised.demoted)
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), advised.Kind)
 
-	assert.Equal(t, denyRuleSedInPlace, Evaluate(t.Context(), Dependencies{}, sedInPlace).Rule.Name)
-	assert.Equal(t, ShellVerdict{}, Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(withSecrets(t.Context()), Dependencies{}, sedInPlace).Rule.Name)
+	assert.Equal(t, ShellVerdict{}, Evaluate(withSecrets(t.Context()), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
 }
 
 func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
@@ -1520,7 +1520,7 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 		"git add -A && git reset --hard",
 		"git add -A && git stash",
 	} {
-		v := Evaluate(t.Context(), advising(Dependencies{}), command)
+		v := Evaluate(withSecrets(t.Context()), advising(Dependencies{}), command)
 		assert.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}
@@ -1529,18 +1529,18 @@ func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
 func TestDemotedDenyOutranksAdvisories(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(t.Context(), advising(Dependencies{}), sedInPlace+" && git commit -m x")
+	v := Evaluate(withSecrets(t.Context()), advising(Dependencies{}), sedInPlace+" && git commit -m x")
 	assert.True(t, v.demoted, "the held advice outranks the commit advisory")
 	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), v.Kind)
 
-	off := Evaluate(t.Context(), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace+" && git commit -m x")
+	off := Evaluate(withSecrets(t.Context()), withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace+" && git commit -m x")
 	assert.Equal(t, advisoryStageClassify, off.Kind, "an off rule leaves the line to the advisory")
 }
 
 func TestDemotedDenyKeepsThePushGate(t *testing.T) {
 	t.Parallel()
 
-	v := Evaluate(t.Context(), advising(Dependencies{}), sedInPlace+" && git push")
+	v := Evaluate(withSecrets(t.Context()), advising(Dependencies{}), sedInPlace+" && git push")
 	assert.Equal(t, advisoryPushGate, v.Rule.Name, "Judge upgrades the push gate, so no advice may hide it")
 }
 
@@ -1624,7 +1624,7 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	git := func(args ...string) { repo.Git(args...) }
 	file := repo.Path("policy.buzz")
 
-	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
+	res, err := vcs.Resolve(withSecrets(t.Context()), root, "", types.VCSOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, res.VCS)
 	h := headPolicy{
@@ -1638,7 +1638,7 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	}
 	scope := []string{file}
 
-	got, err := h.Pending(t.Context(), scope)
+	got, err := h.Pending(withSecrets(t.Context()), scope)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 
@@ -1653,19 +1653,19 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 %s
 `, fp, sentinel)), 0o644))
 
-	got, err = h.Pending(t.Context(), scope)
+	got, err = h.Pending(withSecrets(t.Context()), scope)
 	require.NoError(t, err)
 	assert.Equal(t, []string{sentinel}, got, "an unchanged tree must reuse the recorded pending list")
 
 	require.NoError(t, os.WriteFile(file, []byte("fun judge() > void { changed; }\n"), 0o644))
-	got, err = h.Pending(t.Context(), scope)
+	got, err = h.Pending(withSecrets(t.Context()), scope)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, canonicalPath(file), canonicalPath(got[0]), "an edit must ask git again")
 
 	git("add", "policy.buzz")
 	git("commit", "-q", "-m", "edit")
-	got, err = h.Pending(t.Context(), scope)
+	got, err = h.Pending(withSecrets(t.Context()), scope)
 	require.NoError(t, err)
 	assert.Empty(t, got, "a commit of that edit is clean, which HEAD has to say because the file bytes did not change again")
 }
@@ -1677,7 +1677,7 @@ func gitPolicy(t *testing.T, files map[string]string) (root string, h headPolicy
 	repo := testkit.NewRepository(t, files)
 	root = repo.Root()
 	git = func(args ...string) { repo.Git(args...) }
-	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
+	res, err := vcs.Resolve(withSecrets(t.Context()), root, "", types.VCSOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, res.VCS)
 	return root, headPolicy{
@@ -1755,13 +1755,13 @@ func TestPendingRecordsOnlyTheStateStatusSaw(t *testing.T) {
 				before:    func() { tc.before(t, file, git) },
 				after:     func() { tc.after(t, file, git) },
 			}
-			_, err := racing.Pending(t.Context(), scope)
+			_, err := racing.Pending(withSecrets(t.Context()), scope)
 			require.NoError(t, err)
 			if tc.restore {
 				loosen(t, file)
 			}
 
-			got, err := h.Pending(t.Context(), scope)
+			got, err := h.Pending(withSecrets(t.Context()), scope)
 			require.NoError(t, err)
 			require.Len(t, got, 1, "the loosened file differs from HEAD")
 			assert.Equal(t, canonicalPath(file), canonicalPath(got[0]))
@@ -1782,7 +1782,7 @@ func TestPendingRecordsEachScopeInTheConfiguredCacheDir(t *testing.T) {
 	scopeA := []string{filepath.Join(root, "a.buzz")}
 	scopeB := []string{filepath.Join(root, "b.buzz")}
 	for _, scope := range [][]string{scopeA, scopeB} {
-		_, err := h.Pending(t.Context(), scope)
+		_, err := h.Pending(withSecrets(t.Context()), scope)
 		require.NoError(t, err)
 	}
 	a, ok := h.pendingCacheFile(scopeA)
@@ -1845,9 +1845,9 @@ func TestApprovedReaderReadsCleanFilesFromDiskWithoutABatch(t *testing.T) {
 	var reads []string
 	unbatched := h
 	unbatched.driver = unbatchedDriver{VCSDriver: h.driver, reads: &reads}
-	pending, err := unbatched.Pending(t.Context(), nil)
+	pending, err := unbatched.Pending(withSecrets(t.Context()), nil)
 	require.NoError(t, err)
-	read := approvedReader(t.Context(), unbatched, pending)
+	read := approvedReader(withSecrets(t.Context()), unbatched, pending)
 	got, err := read(clean)
 	require.NoError(t, err)
 	assert.Equal(t, "clean\n", string(got))
@@ -1858,7 +1858,7 @@ func TestApprovedReaderReadsCleanFilesFromDiskWithoutABatch(t *testing.T) {
 
 	assert.True(t, h.batched())
 	defer func() { _ = h.Close() }()
-	got, err = approvedReader(t.Context(), h, nil)(edited)
+	got, err = approvedReader(withSecrets(t.Context()), h, nil)(edited)
 	require.NoError(t, err)
 	assert.Equal(t, "committed\n", string(got), "a batched authority does not trust disk")
 }
@@ -1960,14 +1960,14 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 	disabled := false
 	rules := &WorkspaceRules{root: t.TempDir(), opts: types.VCSOptions{Enabled: &disabled}, registry: workspace.NewWorkspaceRegistry()}
 
-	got, err := rules.effectiveBuiltins(t.Context())
+	got, err := rules.effectiveBuiltins(withSecrets(t.Context()))
 	require.NoError(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileLight}, got["stall"],
 		"nothing declared is the light level")
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["root-repeat"], "a rule light leaves alone keeps its default")
 
 	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
-	got, err = rules.effectiveBuiltins(t.Context())
+	got, err = rules.effectiveBuiltins(withSecrets(t.Context()))
 	require.NoError(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
 	assert.Equal(t, builtin.Setting{Decision: builtin.Deny}, got["capture-filter"])
@@ -2042,70 +2042,70 @@ func userAgents(t *testing.T, dir, body string) {
 
 func TestGuardProfileUnsetIsLight(t *testing.T) {
 	rules, _ := profileRules(t, "")
-	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), rules, ""))
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(withSecrets(t.Context()), rules, ""))
 
-	approved, err := LoadApprovedProfile(t.Context(), rules.root)
+	approved, err := LoadApprovedProfile(withSecrets(t.Context()), rules.root)
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardProfileLight, approved, "no approval authority is light")
-	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), nil, rules.root))
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(withSecrets(t.Context()), nil, rules.root))
 }
 
 // A person's agents.profile raises the workspace's level and never lowers it, including
 // below the light a workspace that declares nothing gets.
 func TestGuardProfileUserTierOnlyTightens(t *testing.T) {
 	rules, user := profileRules(t, types.GuardProfileStandard)
-	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), rules, ""))
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(withSecrets(t.Context()), rules, ""))
 
 	userAgents(t, user, "agents:\n  profile: strict\n")
-	assert.Equal(t, types.GuardProfileStrict, EffectiveProfile(t.Context(), rules, ""))
+	assert.Equal(t, types.GuardProfileStrict, EffectiveProfile(withSecrets(t.Context()), rules, ""))
 	userAgents(t, user, "agents:\n  profile: off\n")
-	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), rules, ""))
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(withSecrets(t.Context()), rules, ""))
 
 	unset, user := profileRules(t, "")
 	userAgents(t, user, "agents:\n  profile: off\n")
-	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(t.Context(), unset, ""))
+	assert.Equal(t, types.GuardProfileLight, EffectiveProfile(withSecrets(t.Context()), unset, ""))
 
 	off, user := profileRules(t, types.GuardProfileOff)
-	assert.Equal(t, types.GuardProfileOff, EffectiveProfile(t.Context(), off, ""), "a workspace may declare off")
+	assert.Equal(t, types.GuardProfileOff, EffectiveProfile(withSecrets(t.Context()), off, ""), "a workspace may declare off")
 	userAgents(t, user, "agents:\n  profile: standard\n")
-	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(t.Context(), off, ""))
+	assert.Equal(t, types.GuardProfileStandard, EffectiveProfile(withSecrets(t.Context()), off, ""))
 }
 
 // With no level that sets anything, a declaration still applies, and a magus.yaml that
 // does not load is reported beside the answer, never in place of it.
 func TestEffectiveBuiltinsReadsTheUserTier(t *testing.T) {
 	rules, user := profileRules(t, types.GuardProfileOff)
-	got, err := rules.effectiveBuiltins(t.Context())
+	got, err := rules.effectiveBuiltins(withSecrets(t.Context()))
 	require.NoError(t, err)
 	assert.Nil(t, got, "no level sets a rule yet, so nothing is declared")
 
 	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
-	got, err = rules.effectiveBuiltins(t.Context())
+	got, err = rules.effectiveBuiltins(withSecrets(t.Context()))
 	require.NoError(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
 
 	userAgents(t, user, "agents:\n  billing: oauth\n")
-	got, err = rules.effectiveBuiltins(t.Context())
+	got, err = rules.effectiveBuiltins(withSecrets(t.Context()))
 	require.Error(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"], "the declaration still applies")
-	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, BuiltinSettings(t.Context(), rules, "")["whole-tree"])
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, BuiltinSettings(withSecrets(t.Context()), rules, "")["whole-tree"])
 }
 
 func TestBuiltinSettingsAtTheOffLevelAreTheBareDefaults(t *testing.T) {
 	rules, _ := profileRules(t, types.GuardProfileOff)
-	assert.Nil(t, BuiltinSettings(t.Context(), rules, ""))
+	assert.Nil(t, BuiltinSettings(withSecrets(t.Context()), rules, ""))
 }
 
 // The approved side alone resolves the declaration over the defaults when no working tree
 // loaded; with no approval authority that is the defaults.
 func TestLoadApprovedBuiltinsWithoutAnAuthority(t *testing.T) {
 	rules, user := profileRules(t, "")
-	got, err := LoadApprovedBuiltins(t.Context(), rules.root)
+	got, err := LoadApprovedBuiltins(withSecrets(t.Context()), rules.root)
 	require.NoError(t, err)
 	assert.Equal(t, builtin.Setting{Decision: builtin.Deny}, got["whole-tree"])
 
 	userAgents(t, user, "agents:\n  profile: max\n")
-	_, err = LoadApprovedBuiltins(t.Context(), rules.root)
+	_, err = LoadApprovedBuiltins(withSecrets(t.Context()), rules.root)
 	require.Error(t, err, "a magus.yaml that does not load is an error")
 }
 
@@ -2117,17 +2117,17 @@ func TestCheckoutStateAt(t *testing.T) {
 	root := repo.Root()
 	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 
-	got := checkoutStateAt(t.Context(), root)
+	got := checkoutStateAt(withSecrets(t.Context()), root)
 	require.NotNil(t, got)
 	assert.NotEmpty(t, got.Branch)
 	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
 
 	repo.Git("checkout", "-q", "--detach")
-	got = checkoutStateAt(t.Context(), root)
+	got = checkoutStateAt(withSecrets(t.Context()), root)
 	require.NotNil(t, got)
 	assert.Empty(t, got.Branch)
 
-	assert.Nil(t, checkoutStateAt(t.Context(), t.TempDir()), "outside any version control")
+	assert.Nil(t, checkoutStateAt(withSecrets(t.Context()), t.TempDir()), "outside any version control")
 }
 
 // The 10-13 lapses stalled in the job store's read, which sweeps it and can run the VCS
@@ -2362,7 +2362,7 @@ func (s *resolveAuthoritySuite) SetupTest() {
 }
 
 func (s *resolveAuthoritySuite) resolve(req Request, rows ...jobtypes.Job) CallAuthority {
-	ctx := WithLocation(s.T().Context(), filepath.Join(s.ws, ".magus"), s.ws, s.ws)
+	ctx := withSecrets(WithLocation(s.T().Context(), filepath.Join(s.ws, ".magus"), s.ws, s.ws))
 	return ResolveAuthority(ctx, Dependencies{JobReader: rowsReader(rows)}, req)
 }
 

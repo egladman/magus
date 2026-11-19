@@ -27,7 +27,7 @@ func TestExecEmitsExecEventWithinStep(t *testing.T) {
 	// A Broadcaster is the public way to observe the captured stream; its retained
 	// backlog holds every event emitted before we subscribe.
 	rec := recorder.NewBroadcaster()
-	ctx := recorder.WithStep(recorder.WithSinks(context.Background(), rec.Handle), "web", "build")
+	ctx := recorder.WithStep(recorder.WithSinks(withTestResolver(context.Background()), rec.Handle), "web", "build")
 	_, err := Exec(ctx, "echo", []string{"hello world"}, ExecOptions{Quiet: true})
 	require.NoError(t, err)
 
@@ -44,7 +44,7 @@ func TestExecEmitsExecEventWithinStep(t *testing.T) {
 
 	// No step on ctx: no exec event (internal probes stay silent).
 	noStep := recorder.NewBroadcaster()
-	noCtx := recorder.WithSinks(context.Background(), noStep.Handle)
+	noCtx := recorder.WithSinks(withTestResolver(context.Background()), noStep.Handle)
 	_, err = Exec(noCtx, "echo", []string{"hi"}, ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	got2, _, cancel2 := noStep.Subscribe()
@@ -61,7 +61,7 @@ func TestExecInjectsMAGUS(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecOptions{Capture: true})
+	res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", `printf %s "$MAGUS"`}, ExecOptions{Capture: true})
 	require.NoError(t, err)
 	want, err := os.Executable()
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestExecInjectsMagusLevel(t *testing.T) {
 	}
 	level := func(t *testing.T) string {
 		t.Helper()
-		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecOptions{Capture: true})
+		res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", `printf %s "$MAGUS_LEVEL"`}, ExecOptions{Capture: true})
 		require.NoError(t, err)
 		return res.Stdout
 	}
@@ -119,7 +119,7 @@ func TestExecWithholdsProcSocket(t *testing.T) {
 	read := func(t *testing.T, opts ExecOptions) string {
 		t.Helper()
 		opts.Capture = true
-		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_PROC_SOCKET"`}, opts)
+		res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", `printf %s "$MAGUS_PROC_SOCKET"`}, opts)
 		require.NoError(t, err)
 		return res.Stdout
 	}

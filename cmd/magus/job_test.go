@@ -495,7 +495,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			w, err := session.Open(t.Context(), dir, "invmv00001", session.InvocationStart{Command: "run"})
+			w, err := session.Open(t.Context(), sessions.StoreConfig(dir, "invmv00001", session.InvocationStart{Command: "run"}))
 			require.NoError(t, err)
 			require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{
 				Target: "test", Project: ".", Outcome: session.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
@@ -594,7 +594,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	worker := t.TempDir()
 	recorded, err := cache.NewOutputStore(filepath.Join(worker, ".magus")).
-		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", DurationMs: 1500, Revision: "abc123", Dirty: true})
+		Persist(withSecrets(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", DurationMs: 1500, Revision: "abc123", Dirty: true})
 	require.NoError(t, err)
 	require.NotEmpty(t, recorded.Attempt)
 
@@ -626,7 +626,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	holderCache, err := magus.ResolveCacheDir(holder.Root())
 	require.NoError(t, err)
 	passed, err := cache.NewOutputStore(holderCache).
-		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "go-test", TimestampMs: time.Now().UnixMilli()})
+		Persist(withSecrets(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "go-test", TimestampMs: time.Now().UnixMilli()})
 	require.NoError(t, err)
 
 	found, err := storedAttempts(holder.Root())(t.Context(), passed.Ref)

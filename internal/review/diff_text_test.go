@@ -219,7 +219,7 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
 		got := notices(t, func() {
-			HintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
+			HintSinceLastReview(withSecrets(t.Context()), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
 		})
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
 		assert.Contains(t, got, "0123456789ab", "the prose abbreviates")

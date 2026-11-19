@@ -18,7 +18,9 @@ func TestAuthorsSuite(t *testing.T) { suite.Run(t, new(AuthorsSuite)) }
 
 func (s *AuthorsSuite) SetupTest() {
 	s.path = filepath.Join(s.T().TempDir(), "pulls", "authors.jsonl")
-	s.store = OpenStore(s.path)
+	store, err := OpenStore(s.path)
+	s.Require().NoError(err)
+	s.store = store
 }
 
 func (s *AuthorsSuite) TestAbsentFileIsTheViewerByDefault() {

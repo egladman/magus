@@ -69,7 +69,9 @@ func TestPolicyMarkerPreservesLegacyState(t *testing.T) {
 	old := filepath.Join(filepath.Dir(path), "guard-policy.json")
 	const held = "{\"digest\":\"older\"}\n"
 	require.NoError(t, os.WriteFile(old, []byte(held), 0o600))
-	_, err := policyMarkerLog(path).Load()
+	log, err := policyMarkerLog(path)
+	require.NoError(t, err)
+	_, err = log.Load()
 	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	_, ok := readPolicyMarker(path)
 	assert.False(t, ok)
@@ -105,14 +107,14 @@ func TestRecordPolicyWritesOneEventPerChange(t *testing.T) {
 	calls := 0
 	clean := sourcesAt(&calls, PolicySource{Path: "/w/magusfile.buzz", Worktree: "a", Approved: "a"})
 
-	assert.Empty(t, RecordPolicy(t.Context(), base, "/w", PolicyState{}, false), "no rules, nothing to record")
+	assert.Empty(t, RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{}, false), "no rules, nothing to record")
 	assert.Empty(t, policyActions(t, base))
 
 	state := PolicyState{Digest: "d1", SpawnRule: true, Sources: clean}
-	assert.Equal(t, "d1", RecordPolicy(t.Context(), base, "/w", state, false))
+	assert.Equal(t, "d1", RecordPolicy(withSecrets(t.Context()), base, "/w", state, false))
 	for range 5 {
-		RecordPolicy(t.Context(), base, "/w", state, false)
-		RecordPolicy(t.Context(), base, "/w", state, true)
+		RecordPolicy(withSecrets(t.Context()), base, "/w", state, false)
+		RecordPolicy(withSecrets(t.Context()), base, "/w", state, true)
 	}
 	assert.Equal(t, []string{PolicyLoaded}, policyActions(t, base))
 	assert.Equal(t, 1, calls, "a steady state with nothing pending reads no approved ids")
@@ -125,7 +127,7 @@ func TestRecordPolicyClassifiesTheChange(t *testing.T) {
 	calls := 0
 	clean := sourcesAt(&calls, PolicySource{Path: "/w/magusfile.buzz", Worktree: "a", Approved: "a"})
 	dirty := sourcesAt(&calls, PolicySource{Path: "/w/magusfile.buzz", Worktree: "b", Approved: "a"})
-	ctx := t.Context()
+	ctx := withSecrets(t.Context())
 
 	RecordPolicy(ctx, base, "/w", PolicyState{Digest: "d1", ShellRules: 1, Sources: clean}, false)
 	RecordPolicy(ctx, base, "/w", PolicyState{Digest: "d2", ShellRules: 1, SpawnRule: true, Sources: dirty}, false)
@@ -147,8 +149,8 @@ func TestRecordPolicyShellRuleDropIsCommitted(t *testing.T) {
 	base := t.TempDir()
 	calls := 0
 	dirty := sourcesAt(&calls, PolicySource{Path: "/w/magusfile.buzz", Worktree: "b", Approved: "a"})
-	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", ShellRules: 2, SpawnRule: true, Sources: dirty}, false)
-	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", ShellRules: 1, SpawnRule: true, Sources: dirty}, false)
+	RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{Digest: "d1", ShellRules: 2, SpawnRule: true, Sources: dirty}, false)
+	RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{Digest: "d2", ShellRules: 1, SpawnRule: true, Sources: dirty}, false)
 	assert.Equal(t, []string{PolicyLoaded, PolicyCommitted}, policyActions(t, base))
 }
 
@@ -157,8 +159,8 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	base := t.TempDir()
 	calls := 0
 	src := PolicySource{Path: "/w/magusfile.buzz", Worktree: "b", Approved: "a"}
-	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", SpawnRule: true, Sources: sourcesAt(&calls)}, false)
-	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", SpawnRule: true, Sources: sourcesAt(&calls, src)}, false)
+	RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{Digest: "d1", SpawnRule: true, Sources: sourcesAt(&calls)}, false)
+	RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{Digest: "d2", SpawnRule: true, Sources: sourcesAt(&calls, src)}, false)
 
 	events := callsOfKind(t, base, journal.CallKindGuardPolicy)
 	require.Len(t, events, 2)
@@ -221,7 +223,7 @@ func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
-	tr, _, err := sessions.ActivityHere(t.Context(), cacheDir, "s1")
+	tr, _, err := sessions.ActivityHere(withSecrets(t.Context()), cacheDir, "s1")
 	require.NoError(t, err)
 	calls := tr.Calls
 	require.Len(t, calls, 2)
@@ -276,12 +278,12 @@ func TestPolicyRecordedRule(t *testing.T) {
 	}
 	assert.False(t, recordedRule("", seamCommand), "no cache dir")
 
-	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", CommandRule: true, WriteRule: true}, false)
+	RecordPolicy(withSecrets(t.Context()), base, "/w", PolicyState{Digest: "d1", CommandRule: true, WriteRule: true}, false)
 	assert.Equal(t, []bool{false, true, true},
 		[]bool{recordedRule(base, seamSpawn), recordedRule(base, seamCommand), recordedRule(base, seamWrite)})
 
 	// A load failure hands RecordPolicy no state, so the record stands.
-	recordPolicy(t.Context(), Dependencies{}, location{cacheDir: base}, true)
+	recordPolicy(withSecrets(t.Context()), Dependencies{}, location{cacheDir: base}, true)
 	assert.True(t, recordedRule(base, seamCommand))
 }
 

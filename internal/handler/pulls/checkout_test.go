@@ -30,7 +30,8 @@ func TestCheckoutSuite(t *testing.T) { suite.Run(t, new(CheckoutSuite)) }
 
 func (s *CheckoutSuite) SetupTest() {
 	s.args, s.out, s.err = nil, checkoutRecordJSON, nil
-	store := OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	store, err := OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
+	s.Require().NoError(err)
 	pull := newPull(7, "ada")
 	pull.HeadSHA = "abc1234def"
 	pull.FetchRef = "refs/pull/7/head"

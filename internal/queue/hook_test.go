@@ -601,7 +601,7 @@ func TestEveryHookTakesItsHookEnv(t *testing.T) {
 	t.Setenv("FIXED", "queue")
 	env := HookEnv{Sandbox: config.SandboxConfig{Env: config.SandboxEnv{Passthrough: []string{"PASSED", "FIXED"}}}, Fixed: []string{"FIXED=f"}}
 	record := script(`echo "$PASSED $FIXED" > seen; echo '{"units": ["//..."]}'`)
-	ctx := context.Background()
+	ctx := withSecrets(context.Background())
 
 	gated := t.TempDir()
 	_, err := CommandGate(record, env, nil).Validate(ctx, boxed(t, types.Candidate{Commit: "s", Dir: gated}), hookUnits)
@@ -841,16 +841,22 @@ var facts = script(`case "$1" in
 	*) exit 9;;
 	esac`)
 
+// withSecrets gives ctx the resolver spawn requires before it hands back captured output:
+// with none it refuses rather than return text it could not redact.
+func withSecrets(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
+
 func TestCommandFactsGetTheFactAskedForAsTheirArgument(t *testing.T) {
 	// magus affected --plan prints a shard plan with affected and unbounded_by beside it.
-	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), HookEnv{}, nil).Affected(context.Background(), hookChange, []string{"app/main.go"})
+	got, unboundedBy, err := CommandFacts(facts, t.TempDir(), HookEnv{}, nil).Affected(withSecrets(context.Background()), hookChange, []string{"app/main.go"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"app"}, got)
 	assert.Empty(t, unboundedBy)
 }
 
 func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
-	ctx := context.Background()
+	ctx := withSecrets(context.Background())
 	_, unboundedBy, err := CommandFacts(script(`echo '{}'`), t.TempDir(), HookEnv{}, nil).Affected(ctx, hookChange, []string{"x"})
 	require.NoError(t, err)
 	assert.Equal(t, "the affected hook printed no affected set", unboundedBy)
@@ -866,7 +872,7 @@ func TestCommandFactsWithoutASetAreUnboundedAndAFailureIsAnError(t *testing.T) {
 
 // A facts command that answers only "outputs" declares no update and maintains nothing.
 func TestCommandFactsReadAnOutputsOnlyAnswer(t *testing.T) {
-	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), HookEnv{}, nil).Classify(context.Background(), []string{"gen/a", ".gitattributes"})
+	writes, err := CommandFacts(script(`echo '{"outputs": ["gen/a"]}'`), t.TempDir(), HookEnv{}, nil).Classify(withSecrets(context.Background()), []string{"gen/a", ".gitattributes"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]types.Writes{"gen/a": {Output: true}}, writes)
 }
@@ -879,7 +885,7 @@ func TestCommandFactsAnswerAutoResolve(t *testing.T) {
 	auto_resolve) cat > asked; echo '{"auto_resolve": true, "verdict": "CHANGELOG.md: prose (a glob)"}';;
 	*) exit 9;;
 	esac`)
-	verdict, ok, err := CommandFacts(facts, dir, HookEnv{}, nil).AutoResolvable(context.Background(), "CHANGELOG.md", []byte("a\n"), []byte("a\nb\n"))
+	verdict, ok, err := CommandFacts(facts, dir, HookEnv{}, nil).AutoResolvable(withSecrets(context.Background()), "CHANGELOG.md", []byte("a\n"), []byte("a\nb\n"))
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, "CHANGELOG.md: prose (a glob)", verdict)
@@ -887,7 +893,7 @@ func TestCommandFactsAnswerAutoResolve(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"path": "CHANGELOG.md", "base": "a\n", "merged": "a\nb\n"}`, string(asked))
 
-	verdict, ok, err = CommandFacts(script(`exit 9`), dir, HookEnv{}, nil).AutoResolvable(context.Background(), "x.go", nil, nil)
+	verdict, ok, err = CommandFacts(script(`exit 9`), dir, HookEnv{}, nil).AutoResolvable(withSecrets(context.Background()), "x.go", nil, nil)
 	require.NoError(t, err)
 	assert.False(t, ok)
 	assert.Equal(t, "x.go: the facts command answered no auto_resolve (auto_resolve hook: exited 9)", verdict)
@@ -897,7 +903,7 @@ func TestCommandFactsAnswerAutoResolve(t *testing.T) {
 // a command that cannot answer it, or answers a tier no path has, classifies the path as
 // code.
 func TestCommandFactsAnswerClassifyEdit(t *testing.T) {
-	ctx := context.Background()
+	ctx := withSecrets(context.Background())
 	dir := t.TempDir()
 	facts := script(`case "$1" in
 	classify_edit) cat > asked; echo '{"tier": "prose", "why": "a glob"}';;
@@ -920,7 +926,7 @@ func TestCommandFactsAnswerClassifyEdit(t *testing.T) {
 }
 
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {
-	ctx := context.Background()
+	ctx := withSecrets(context.Background())
 	dir := t.TempDir()
 	f := CommandFacts(facts, dir, HookEnv{}, nil)
 	writes, err := f.Classify(ctx, []string{"gen/a", "src/b", "docs/b.md", ".gitattributes"})
@@ -958,7 +964,7 @@ func TestAUnitAHookCouldReadAsAnOptionIsNeverAppended(t *testing.T) {
 // Paths reach a hook's stdin one per line, and git allows a line break in a path, which
 // would read as two paths: such a path is never written.
 func TestAPathWithALineBreakNeverReachesAHooksStdin(t *testing.T) {
-	ctx := context.Background()
+	ctx := withSecrets(context.Background())
 	for _, broken := range []string{"gen/a\napp/main.go", "gen/a\r"} {
 		dir := t.TempDir()
 		err := CommandRegenerate(script(`cat > got`), HookEnv{}, nil)(ctx, boxedRegen(t, types.Regeneration{Dir: dir, Change: hookChange, Paths: []string{"gen/ok", broken}, Units: hookUnits}))

@@ -64,7 +64,7 @@ func TestJobserverHoldsGNUMakeToTheGrant(t *testing.T) {
 
 			j, err := OpenJobserver(slots)
 			require.NoError(t, err)
-			ctx := WithJobserver(t.Context(), j)
+			ctx := WithJobserver(withTestResolver(t.Context()), j)
 
 			// No -j: a -jN on make's command line starts a pool of its own.
 			res, err := Exec(ctx, mk, []string{"-s"}, ExecOptions{Dir: dir, Capture: true, Quiet: true})

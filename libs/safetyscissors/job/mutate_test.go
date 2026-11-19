@@ -3,9 +3,13 @@ package job
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
 )
 
 type MutateSuite struct {
@@ -14,8 +18,8 @@ type MutateSuite struct {
 
 func TestMutateSuite(t *testing.T) { suite.Run(t, new(MutateSuite)) }
 
-func (s *MutateSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.T().TempDir(), append(writable(), opts...)...)
+func (s *MutateSuite) open(opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, append(writable(), opts...)...)
 	s.Require().NoError(err)
 	return st
 }
@@ -84,11 +88,51 @@ func (s *MutateSuite) TestAReforkStoresTheFoldTheHookMakes() {
 	s.Equal(StateFail, tries[0].Status.State, "the ended attempt was folded")
 }
 
+// The fold is appended while the row's lock is still held, so no other writer reads the
+// attempts between the row and its fold.
+func (s *MutateSuite) TestAReforksFoldIsAppendedUnderTheRowsLock() {
+	st := s.open(WithWriteHook(func(_ context.Context, e *WriteEvent) error {
+		if e.Stage == StageRefork {
+			fold := e.Attempts.Live(e.ID)
+			fold.Status.State = e.Prev.State
+			e.Fold = &fold
+		}
+		return nil
+	}))
+	ctx := s.T().Context()
+	_, err := st.Update(ctx, "a", func(r *Job) { r.State = StateFail })
+	s.Require().NoError(err)
+	path, err := st.Path()
+	s.Require().NoError(err)
+
+	attemptsHeld, releaseAttempts := make(chan struct{}), make(chan struct{})
+	go func() {
+		_ = codec.WithLock(ctx, filepath.Join(filepath.Dir(path), attemptsFileName)+".lock", time.Second, func() error {
+			close(attemptsHeld)
+			<-releaseAttempts
+			return nil
+		})
+	}()
+	<-attemptsHeld
+	done := make(chan error, 1)
+	go func() {
+		_, err := st.Update(ctx, "a", func(r *Job) { r.State = StateDeclared })
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	probe := codec.WithLock(ctx, path+".lock", 0, func() error { return nil })
+	close(releaseAttempts)
+
+	s.Require().NoError(<-done)
+	s.Error(probe, "the row's lock is held while the fold waits on the attempts")
+}
+
 func (s *MutateSuite) TestAForkPastItsCapIsRefusedWithNoHook() {
 	st := s.open()
 	_, err := st.Update(s.T().Context(), "a", func(r *Job) { r.State, r.MaxAttempts = StateFail, 1 })
 	s.Require().NoError(err)
-	s.Require().NoError(st.AppendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
+	s.Require().NoError(st.appendAttempts(s.T().Context(), Attempt{Job: "a", N: 1}))
 
 	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateDeclared })
 

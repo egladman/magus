@@ -24,7 +24,18 @@ func TestResolver(t *testing.T) { suite.Run(t, new(ResolverSuite)) }
 // SetupTest gives every test a fresh resolver on its context: nothing leaks between
 // tests, as nothing leaks between scopes of a long-lived caller.
 func (s *ResolverSuite) SetupTest() {
-	s.r = NewResolver()
+	s.r = newTestResolver(s.T())
+}
+
+// newTestResolver builds a Resolver that falls back to the environment, as most tests
+// read through it, with opts applied.
+func newTestResolver(t testing.TB, opts ...Option) *Resolver {
+	t.Helper()
+	r, err := NewResolver(Config{Fallback: EnvProvider{}}, opts...)
+	if err != nil {
+		t.Fatalf("NewResolver: %v", err)
+	}
+	return r
 }
 
 // ctx is the test's context carrying the suite's resolver.
@@ -48,51 +59,71 @@ func (f providerFunc) Fetch(ctx context.Context, ref string) (Secret, error) { r
 // name, reading through name.
 func (s *ResolverSuite) withProvider(name string, p Provider, opts ...Option) {
 	opener := func(context.Context, string) (Provider, error) { return p, nil }
-	s.r = NewResolver(append([]Option{WithOpener(opener)}, opts...)...).WithProvider(name)
+	s.r = newTestResolver(s.T(), append([]Option{WithOpener(opener)}, opts...)...).WithProvider(name)
+}
+
+func (s *ResolverSuite) TestReadWithNoProviderAndNoFallbackIsRefused() {
+	r, err := NewResolver(Config{})
+	s.Require().NoError(err)
+	s.T().Setenv("SECRETS_TEST_TOKEN", "s3cret-value")
+	_, err = r.Read(s.T().Context(), "SECRETS_TEST_TOKEN")
+	var re *ReadError
+	s.Require().ErrorAs(err, &re)
+	s.ErrorIs(err, ErrNoFallback)
 }
 
 func (s *ResolverSuite) TestEnvProviderReadsTheNamedVariable() {
 	s.T().Setenv("SECRETS_TEST_TOKEN", "s3cret-value")
-	v, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_TOKEN")
+	v, err := EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_TOKEN")
 	s.Require().NoError(err)
 	s.Equal("s3cret-value", v.Reveal())
 }
 
 func (s *ResolverSuite) TestEnvProviderTellsUnsetFromEmpty() {
-	_, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_ABSENT")
+	_, err := EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_ABSENT")
 	s.Require().ErrorContains(err, "$SECRETS_TEST_ABSENT is not set")
 
 	s.T().Setenv("SECRETS_TEST_BLANK", "")
-	_, err = envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_BLANK")
+	_, err = EnvProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_BLANK")
 	s.Require().ErrorContains(err, "is set but empty")
 }
 
 func (s *ResolverSuite) TestReadRegistersForRedaction() {
 	s.T().Setenv("SECRETS_TEST_TOKEN", "hunter2-token")
 	s.Equal("hunter2-token", s.read("SECRETS_TEST_TOKEN").Reveal())
-	s.Equal("pushing with *** to ghcr.io\n", string(s.r.Redact([]byte("pushing with hunter2-token to ghcr.io\n"))))
+	s.Equal("pushing with *** to ghcr.io\n", string(s.r.redact([]byte("pushing with hunter2-token to ghcr.io\n"))))
 }
 
 func (s *ResolverSuite) TestRedactIsInertWithoutReadSecrets() {
 	in := []byte("nothing sensitive here")
-	got := s.r.Redact(in)
+	got := s.r.redact(in)
 	s.Equal("nothing sensitive here", string(got))
 	// Returned without copying when there is nothing to do: the hot path for every
 	// caller that reads no secret at all.
 	s.Same(&in[0], &got[0])
 }
 
+func (s *ResolverSuite) TestANilResolverRefusesToRedact() {
+	var r *Resolver
+	var nr *NoResolverError
+
+	out, err := r.Redact([]byte("plaintext"))
+	s.Require().ErrorAs(err, &nr)
+	s.Nil(out, "nothing a nil resolver returns is known to be masked")
+	str, err := r.RedactString("plaintext")
+	s.Require().ErrorAs(err, &nr)
+	s.Empty(str)
+}
+
 func (s *ResolverSuite) TestNilResolverDegradesSafely() {
 	var r *Resolver
-	s.Equal("untouched", string(r.Redact([]byte("untouched"))))
-	s.Equal("untouched", r.RedactString("untouched"))
 	s.Empty(r.ProviderName())
 	s.Nil(r.WithProvider("x"))
-	s.NotPanics(func() { r.Register(New("ignored-by-nil")) })
+	var nr *NoResolverError
+	s.ErrorAs(r.Register(New("refused-by-nil")), &nr)
 	s.Equal(DefaultTimeouts(), r.Timeouts())
 
 	_, err := ResolverFromContext(context.Background()).Read(context.Background(), "ANY")
-	var nr *NoResolverError
 	s.Require().ErrorAs(err, &nr)
 	s.Equal("secrets: no resolver on this context", err.Error())
 }
@@ -104,18 +135,19 @@ func (s *ResolverSuite) TestRedactMasksLongestValueFirst() {
 	s.T().Setenv("SECRETS_TEST_LONG", "abcdefgh")
 	s.read("SECRETS_TEST_SHORT")
 	s.read("SECRETS_TEST_LONG")
-	s.Equal("value=***", string(s.r.Redact([]byte("value=abcdefgh"))))
+	s.Equal("value=***", string(s.r.redact([]byte("value=abcdefgh"))))
 }
 
 func (s *ResolverSuite) TestReadDoesNotRegisterValuesTooShortToMask() {
 	s.T().Setenv("SECRETS_TEST_TINY", "ab")
+	s.r = newTestResolver(s.T(), WithShortSecret(func(context.Context, string) {}))
 	s.Equal("ab", s.read("SECRETS_TEST_TINY").Reveal(), "the value is returned; only its protection is declined")
-	s.Equal("grab a table", string(s.r.Redact([]byte("grab a table"))))
+	s.Equal("grab a table", string(s.r.redact([]byte("grab a table"))))
 
 	// No encoded derivative either: encoding inflates, so base64("ab") is "YWI=" and
 	// hex("ab") is "6162", both long enough to mask on their own.
 	for _, form := range []string{"YWI=", "YWJh", "6162"} {
-		s.Equal(fmt.Sprintf("x%sy", form), string(s.r.Redact(fmt.Appendf(nil, "x%sy", form))),
+		s.Equal(fmt.Sprintf("x%sy", form), string(s.r.redact(fmt.Appendf(nil, "x%sy", form))),
 			"no encoded form of a too-short secret may be registered")
 	}
 }
@@ -142,7 +174,7 @@ func (s *ResolverSuite) TestReadReReadsWhenTheProviderChanges() {
 	opener := func(context.Context, string) (Provider, error) {
 		return providerFunc(func(context.Context, string) (Secret, error) { return New("from-vault"), nil }), nil
 	}
-	s.r = NewResolver(WithOpener(opener))
+	s.r = newTestResolver(s.T(), WithOpener(opener))
 	s.T().Setenv("SOME_REF", "from-env")
 	s.Equal("from-env", s.read("SOME_REF").Reveal())
 
@@ -232,12 +264,12 @@ func (s *ResolverSuite) TestReadRejectsEmptyReference() {
 
 func (s *ResolverSuite) TestWithProviderDerivesWithoutChangingTheOriginal() {
 	vault := s.r.WithProvider("onepassword")
-	s.Empty(s.r.ProviderName(), "no selection means the built-in env provider applies")
+	s.Empty(s.r.ProviderName(), "no selection means the fallback applies")
 	s.Equal("onepassword", vault.ProviderName())
 
 	// The derived resolver shares the redaction set: a value one registers, both mask.
-	vault.Register(New("shared-redaction-token"))
-	s.Equal(mask, s.r.RedactString("shared-redaction-token"))
+	s.Require().NoError(vault.Register(New("shared-redaction-token")))
+	s.Equal(mask, s.r.redactString("shared-redaction-token"))
 }
 
 func (s *ResolverSuite) TestReadUnderANamedProviderNeedsAnOpener() {
@@ -247,7 +279,7 @@ func (s *ResolverSuite) TestReadUnderANamedProviderNeedsAnOpener() {
 }
 
 func (s *ResolverSuite) TestReadSurfacesProviderOpenFailures() {
-	s.r = NewResolver(WithOpener(func(context.Context, string) (Provider, error) {
+	s.r = newTestResolver(s.T(), WithOpener(func(context.Context, string) (Provider, error) {
 		return nil, errors.New("spell not registered")
 	})).WithProvider("missing-spell")
 	_, err := s.r.Read(s.resolverContext(), "ANY")
@@ -265,8 +297,8 @@ func (s *ResolverSuite) TestRedactStringMatchesRedact() {
 	s.read("SECRETS_TEST_BOTH")
 
 	const in = "x=both-forms-token y"
-	s.Equal(s.r.RedactString(in), string(s.r.Redact([]byte(in))))
-	s.True(strings.Contains(s.r.RedactString(in), mask))
+	s.Equal(s.r.redactString(in), string(s.r.redact([]byte(in))))
+	s.True(strings.Contains(s.r.redactString(in), mask))
 }
 
 // A token in an `Authorization: Basic` header is base64 and a token in a URL is
@@ -277,27 +309,34 @@ func (s *ResolverSuite) TestRedactCoversCommonEncodings() {
 	s.T().Setenv("SECRETS_TEST_TOKEN", tok)
 	s.read("SECRETS_TEST_TOKEN")
 
-	s.Equal(mask, s.r.RedactString(tok))
-	s.Equal(mask, s.r.RedactString(base64.StdEncoding.EncodeToString([]byte(tok))))
-	s.Equal(mask, s.r.RedactString(base64.RawStdEncoding.EncodeToString([]byte(tok))))
-	s.Equal(mask, s.r.RedactString(base64.URLEncoding.EncodeToString([]byte(tok))))
-	s.Equal(mask, s.r.RedactString(hex.EncodeToString([]byte(tok))))
+	s.Equal(mask, s.r.redactString(tok))
+	s.Equal(mask, s.r.redactString(base64.StdEncoding.EncodeToString([]byte(tok))))
+	s.Equal(mask, s.r.redactString(base64.RawStdEncoding.EncodeToString([]byte(tok))))
+	s.Equal(mask, s.r.redactString(base64.URLEncoding.EncodeToString([]byte(tok))))
+	s.Equal(mask, s.r.redactString(hex.EncodeToString([]byte(tok))))
 
 	// A percent-escaped value only differs when it contains reserved characters.
 	const urly = "p@ss/word+with spaces"
 	s.T().Setenv("SECRETS_TEST_URL_TOKEN", urly)
 	s.read("SECRETS_TEST_URL_TOKEN")
-	s.Equal(mask, s.r.RedactString(url.QueryEscape(urly)))
-	s.Equal(mask, s.r.RedactString(url.PathEscape(urly)))
+	s.Equal(mask, s.r.redactString(url.QueryEscape(urly)))
+	s.Equal(mask, s.r.redactString(url.PathEscape(urly)))
 }
 
 func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 	s.T().Setenv("SECRETS_TEST_PKG", "pkg-level-token")
 	s.read("SECRETS_TEST_PKG")
 
-	s.Equal("a=***", string(Redact(s.resolverContext(), []byte("a=pkg-level-token"))))
-	s.Equal("a=***", RedactString(s.resolverContext(), "a=pkg-level-token"))
-	s.Equal("a=pkg-level-token", RedactString(context.Background(), "a=pkg-level-token"))
+	b, err := Redact(s.resolverContext(), []byte("a=pkg-level-token"))
+	s.Require().NoError(err)
+	s.Equal("a=***", string(b))
+	str, err := RedactString(s.resolverContext(), "a=pkg-level-token")
+	s.Require().NoError(err)
+	s.Equal("a=***", str)
+
+	var nr *NoResolverError
+	_, err = RedactString(context.Background(), "a=pkg-level-token")
+	s.Require().ErrorAs(err, &nr, "a context with no resolver is refused, not handed back in plaintext")
 
 	// A nil context reaches these from log handlers that have none to hand them, and
 	// ctx.Value on a nil interface panics, so the nil guard is the contract. Held in a
@@ -305,26 +344,38 @@ func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 	var nilCtx context.Context
 	s.NotPanics(func() {
 		s.Nil(ResolverFromContext(nilCtx))
-		s.Equal("x", RedactString(nilCtx, "x"))
-		s.Equal("x", string(Redact(nilCtx, []byte("x"))))
+		_, err := RedactString(nilCtx, "x")
+		s.ErrorAs(err, &nr)
+		_, err = Redact(nilCtx, []byte("x"))
+		s.ErrorAs(err, &nr)
 	})
 }
 
 // A credential held without a provider read is masked like a resolved one.
 func (s *ResolverSuite) TestRegisterMasksAHeldCredential() {
-	s.r.Register(New("stdin-registry-token"))
-	s.Equal("push with "+mask, s.r.RedactString("push with stdin-registry-token"))
+	s.Require().NoError(s.r.Register(New("stdin-registry-token")))
+	s.Equal("push with "+mask, s.r.redactString("push with stdin-registry-token"))
 	s.Empty(s.r.resolved, "a registered value is not a resolved reference")
 }
 
-func (s *ResolverSuite) TestRegisterIgnoresAValueTooShortToMask() {
-	s.r.Register(New("ab"))
-	s.Equal("grab", s.r.RedactString("grab"))
+func (s *ResolverSuite) TestRegisterRefusesAValueTooShortToMask() {
+	var short *ShortSecretError
+	s.Require().ErrorAs(s.r.Register(New("ab")), &short)
+	s.Equal(2, short.Len)
+	s.Equal("grab", s.r.redactString("grab"))
+}
+
+func (s *ResolverSuite) TestReadRefusesAShortValueNoNoticeHears() {
+	s.T().Setenv("SECRETS_TEST_TINY", "ab")
+	_, err := newTestResolver(s.T()).Read(s.T().Context(), "SECRETS_TEST_TINY")
+
+	var short *ShortSecretError
+	s.Require().ErrorAs(err, &short)
 }
 
 func (s *ResolverSuite) TestUnregisterKeepsOtherValues() {
-	s.r.Register(New("keep-this-token"))
-	s.r.Register(New("drop-this-token"))
+	s.Require().NoError(s.r.Register(New("keep-this-token")))
+	s.Require().NoError(s.r.Register(New("drop-this-token")))
 	s.r.unregisterRedactable(New("drop-this-token"))
-	s.Equal("drop-this-token "+mask, s.r.RedactString("drop-this-token keep-this-token"))
+	s.Equal("drop-this-token "+mask, s.r.redactString("drop-this-token keep-this-token"))
 }

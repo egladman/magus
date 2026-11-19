@@ -100,19 +100,26 @@ func (s *Store) MutateSeeing(ctx context.Context, id string, kind WriteKind, app
 		}
 		return s.head(ctx)
 	})
+	var foldErr error
 	err := s.rewrite(ctx, func(f *Rows) error {
 		w.f = f
 		return w.run(ctx, apply)
+	}, func() error {
+		// After the row, so a refused write folds nothing, and under its lock, so no other
+		// writer's fork reads the attempts between the row and its fold.
+		if w.folded != nil {
+			if err := s.appendAttempts(ctx, *w.folded); err != nil {
+				foldErr = fmt.Errorf("%s was forked again, and its last attempt was not folded: %w", id, err)
+			}
+		}
+		return nil
 	})
 	s.mu.Unlock()
 	if err != nil {
 		return Job{}, err
 	}
-	// After the row, so a refused write folds nothing.
-	if w.folded != nil {
-		if err := s.AppendAttempts(ctx, *w.folded); err != nil {
-			return w.stored, fmt.Errorf("%s was forked again, and its last attempt was not folded: %w", id, err)
-		}
+	if foldErr != nil {
+		return w.stored, foldErr
 	}
 	for _, after := range w.after {
 		if err := after(ctx); err != nil {

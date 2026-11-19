@@ -81,7 +81,11 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	}
 	// Masked as plain text, not as the marshaled JSON: a secret containing a character
 	// json escapes would not match its escaped form, and would land on disk raw.
-	data, err := codec.Marshal(MaskKeyInputs(ctx, inputs))
+	masked, err := MaskKeyInputs(ctx, inputs)
+	if err != nil {
+		return err
+	}
+	data, err := codec.Marshal(masked)
 	if err != nil {
 		return err
 	}
@@ -99,7 +103,7 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 // shown or compared: env values digested ([DigestEnvValues]), then every registered
 // secret redacted ([RedactKeyInputs]), in that order. Every site uses this rather than
 // the pair, so a stored line and its live twin can never be masked differently.
-func MaskKeyInputs(ctx context.Context, lines []string) []string {
+func MaskKeyInputs(ctx context.Context, lines []string) ([]string, error) {
 	return RedactKeyInputs(ctx, DigestEnvValues(lines))
 }
 
@@ -113,14 +117,19 @@ func MaskKeyInputs(ctx context.Context, lines []string) []string {
 // diff no edit can settle.
 //
 // Per line rather than over a joined blob, because a key input may itself contain a
-// newline; splitting a redacted join back apart would resegment the set. Always returns a
-// fresh slice of the same length, holding the lines verbatim when nothing is registered.
-func RedactKeyInputs(ctx context.Context, lines []string) []string {
+// newline; splitting a redacted join back apart would resegment the set. It returns a
+// fresh slice of the same length, holding the lines verbatim when nothing is registered,
+// and fails when ctx carries no resolver.
+func RedactKeyInputs(ctx context.Context, lines []string) ([]string, error) {
 	out := make([]string, len(lines))
 	for i, line := range lines {
-		out[i] = secrets.RedactString(ctx, line)
+		red, err := secrets.RedactString(ctx, line)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = red
 	}
-	return out
+	return out, nil
 }
 
 // KeyInputsByRef returns the stored pre-hash key inputs behind ref (step ref, unique

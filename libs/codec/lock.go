@@ -19,6 +19,18 @@ const lockRetryDelay = 20 * time.Millisecond
 // errLockHeld is what tryLock answers when another holder has the lock.
 var errLockHeld = errors.New("lock held")
 
+// LockHeldError is [WithLock] giving up because another holder kept the lock at Path
+// for the whole Wait. A zero Wait means the one try found it held.
+type LockHeldError struct {
+	Path string
+	Wait time.Duration
+}
+
+func (e *LockHeldError) Error() string {
+	return fmt.Sprintf("codec: another process has held the lock at %s for more than %s,"+
+		" the lock is an OS file lock and is released the moment its holder exits", e.Path, e.Wait)
+}
+
 // WithLock runs fn while holding an exclusive OS file lock on path, creating path's
 // directory and the lock file as needed.
 //
@@ -33,7 +45,8 @@ var errLockHeld = errors.New("lock held")
 //
 // The wait is bounded by wait and by ctx, whichever ends first; ctx shortens the wait
 // and never lengthens it. The error says which ended it, because a caller cancelled by
-// its own deadline and a caller blocked by a stuck holder have different problems.
+// its own deadline and a caller blocked by a stuck holder have different problems: a
+// wait that ran out is a *[LockHeldError].
 // A zero wait tries once, for a caller that skips its work rather than repeat what the
 // holder is doing. fn does not run when the lock is not acquired.
 func WithLock(ctx context.Context, path string, wait time.Duration, fn func() error) (err error) {
@@ -74,8 +87,7 @@ func acquire(ctx context.Context, f *os.File, path string, wait time.Duration) e
 			return fmt.Errorf("lock %s: %w", path, err)
 		}
 		if !time.Now().Before(deadline) {
-			return fmt.Errorf("codec: another process has held the lock at %s for more than %s,"+
-				" the lock is an OS file lock and is released the moment its holder exits", path, wait)
+			return &LockHeldError{Path: path, Wait: wait}
 		}
 		select {
 		case <-ctx.Done():

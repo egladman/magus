@@ -22,9 +22,9 @@ func TestActivity(t *testing.T) { suite.Run(t, new(ActivitySuite)) }
 func (s *ActivitySuite) TestActivityHereJoinsThisCheckoutsLog() {
 	t := s.T()
 	cacheDir := t.TempDir()
-	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
-	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
-	recorder.AppendAgentSpawn(t.Context(), cacheDir, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
+	recorder.AppendAgentCommand(withSecrets(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer, Lease: "fleet/w1"})
+	recorder.AppendAgentCommand(withSecrets(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
+	recorder.AppendAgentSpawn(withSecrets(t.Context()), cacheDir, recorder.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
 
 	tr, ok, err := ActivityHere(t.Context(), cacheDir, "s1")
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func (s *ActivitySuite) TestActivityHereJoinsThisCheckoutsLog() {
 func (s *ActivitySuite) TestActivityHereIsAbsentForASessionThatRanElsewhere() {
 	t := s.T()
 	cacheDir := t.TempDir()
-	recorder.AppendAgentCommand(t.Context(), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
+	recorder.AppendAgentCommand(withSecrets(t.Context()), cacheDir, recorder.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: verdict.Defer})
 
 	_, ok, err := ActivityHere(t.Context(), cacheDir, "s2")
 	require.NoError(t, err)

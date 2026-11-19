@@ -124,8 +124,8 @@ func ABI() (int, error) {
 func buildRuleset(rules []filesystem.Rule, abi int, scopes uint64) (int, error) {
 	handledFS := handledAccessFS(abi)
 	attr := unix.LandlockRulesetAttr{
-		Access_fs: handledFS,
-		Scoped:    scopes,
+		Handled_access_fs: handledFS,
+		Scoped:            scopes,
 	}
 	fd, _, errno := syscall.Syscall(
 		unix.SYS_LANDLOCK_CREATE_RULESET,

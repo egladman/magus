@@ -37,7 +37,7 @@ func (s *sandboxExecSuite) run(p *Policy, name string, args ...string) error {
 }
 
 func (s *sandboxExecSuite) policy(binds ...Bind) *Policy {
-	p, err := New(append([]Bind{{Path: "/bin", Mode: "rx"}}, binds...))
+	p, err := New(Config{Binds: append([]Bind{{Path: "/bin", Mode: "rx"}}, binds...)})
 	s.Require().NoError(err)
 	return p
 }

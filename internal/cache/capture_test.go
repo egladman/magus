@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,7 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 	lp := filepath.Join(blockedDir, "deadbeef.log")
 
 	fnCalled := false
-	_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(context.Context) error {
+	_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(context.Context) error {
 		fnCalled = true
 		return nil
 	})
@@ -61,7 +62,7 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 func TestLineTapIsSafeForConcurrentWriters(t *testing.T) {
 	t.Parallel()
 
-	tap := newLineEmitter(context.Background(), "proj", "ci").
+	tap := newLineEmitter(withResolver(context.Background()), "proj", "ci").
 		newLineTap(io.Discard, "stdout")
 
 	// Two writers, mirroring two fanned-out children sharing one tap. The payload is
@@ -92,7 +93,7 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 	t.Parallel()
 
 	var sink strings.Builder
-	tap := newLineEmitter(context.Background(), "proj", "build").
+	tap := newLineEmitter(withResolver(context.Background()), "proj", "build").
 		newLineTap(&sink, "stdout")
 
 	_, err := tap.Write([]byte("half"))
@@ -112,7 +113,7 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 //
 // The resolver rides on the emitter ctx, so this needs no global cleanup.
 func TestLineTapRedactsSecrets(t *testing.T) {
-	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(t.Context())
 	t.Setenv("MAGUS_TEST_CAPTURE_TOKEN", "ghp_do_not_log_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CAPTURE_TOKEN")
 	require.NoError(t, err)

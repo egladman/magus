@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -74,13 +75,16 @@ func heartbeatStore(root string) (file.JSONL[heartbeat], error) {
 		return file.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
 	}
 	sum := sha256.Sum256([]byte(root))
-	return file.JSONL[heartbeat]{JSONL: codec.JSONL[heartbeat]{
+	return file.NewJSONL(codec.JSONLConfig[heartbeat]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(stateBase, "magus", "heartbeat", fmt.Sprintf("%s.jsonl", hex.EncodeToString(sum[:8]))),
-		Perm: 0o600,
+		Perm: heartbeatPerm,
 		Key:  heartbeat.key,
-	}}, nil
+	})
 }
+
+// heartbeatPerm is the stamp file's mode: a session id is private to its owner.
+const heartbeatPerm os.FileMode = 0o600
 
 // stampHeartbeat records that session was judged on a call under lease at now, at most
 // once per [heartbeatInterval] for the pair. It never fails a judgment: a store error is
@@ -139,7 +143,7 @@ const heartbeatRetain = 7 * 24 * time.Hour
 // stamp older than [heartbeatRetain] before now and then the oldest past
 // [heartbeatMaxEntries].
 func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now time.Time) error {
-	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path), file.LockWait, func() error {
+	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path()), file.LockWait, func() error {
 		entries, err := store.Load()
 		if err != nil {
 			return err
@@ -155,7 +159,7 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now tim
 			}
 			lines = append(lines, line)
 		}
-		return codec.RewriteLines(store.Path, lines, store.Perm)
+		return codec.RewriteLines(store.Path(), lines, heartbeatPerm)
 	})
 }
 

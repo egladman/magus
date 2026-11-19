@@ -14,23 +14,31 @@ is the design. The module is pre-1.0 and breaks its API on purpose.
 ## Use
 
 `safetyscissors.New` opens the job store and this invocation's session writer under
-one directory. It refuses to open without four options:
+one directory. It refuses to open unless its `Config` sets every field:
 
-- `WithInvocation` names the invocation this process records sessions as. The module
-  mints no id.
-- `WithActor` says who the job store writes as.
-- `WithNotices` hears what the store did that no call asked about. The module never
+- `Dir` holds the stores.
+- `Invocation` names the invocation this process records sessions as, and `Start` is
+  its start record. The module mints no id.
+- `Actor` says who the job store writes as.
+- `Notices` hears what the store did that no call asked about. The module never
   prints.
-- `WithCheckSpec` validates, compares and renders your checks. The store keeps a check
+- `CheckSpec` validates, compares and renders your checks. The store keeps a check
   as opaque JSON and never reads it.
+- `Retention` is how long a session file outlives its newest fact, and `PruneErrors`
+  hears what the prune that opening runs could not do. A failed prune never fails the
+  open.
 
 ```go
-ss, err := safetyscissors.New(ctx, dir,
-    safetyscissors.WithInvocation("inv1", session.InvocationStart{Command: "example"}),
-    safetyscissors.WithActor(func() job.Actor { return job.Actor{} }),
-    safetyscissors.WithNotices(func(job.Notice) {}),
-    safetyscissors.WithCheckSpec(keptChecks{}),
-)
+ss, err := safetyscissors.New(ctx, safetyscissors.Config{
+    Dir:         dir,
+    Invocation:  "inv1",
+    Start:       session.InvocationStart{Command: "example"},
+    Actor:       func() job.Actor { return job.Actor{} },
+    Notices:     func(job.Notice) {},
+    CheckSpec:   keptChecks{},
+    Retention:   session.DefaultRetention,
+    PruneErrors: func(ctx context.Context, err error) { slog.WarnContext(ctx, "prune", "err", err) },
+})
 if err != nil {
     return err
 }
@@ -49,7 +57,7 @@ row, err := ss.Jobs().Update(ctx, "fix-login", func(j *job.Job) {
 as written. `ExampleNew` in [safetyscissors_test.go](safetyscissors_test.go) runs this
 code with its output checked.
 
-`dir` holds `jobs/`, `sessions/` and `activity/`; `WithDirs` moves any of them.
+`Dir` holds `jobs/`, `sessions/` and `activity/`; `WithDirs` moves any of them.
 
 Every other part stays absent until you pass its option. Its accessor then returns an
 `*UnconfiguredError` naming the option.

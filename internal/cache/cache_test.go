@@ -37,7 +37,7 @@ func newMutableCache(t *testing.T) (root, cdir string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir = filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(true))
 	require.NoError(t, err, "cache.Open")
 	return root, cdir, c
 }
@@ -88,16 +88,16 @@ func TestMissThenHit(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.False(t, r1.Hit, "first Run must miss")
 	require.Equal(t, 1, calls, "fn called once")
 	require.NotEmpty(t, r1.Hash, "Hash must not be empty after a successful run")
 
 	// Re-open in read-only mode so the second call can hit.
-	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
+	c2, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(read)")
-	r2, err := c2.Run(context.Background(), step, fn)
+	r2, err := c2.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	assert.True(t, r2.Hit, "second Run must hit")
 	assert.Equal(t, 1, calls, "fn must not run again after hit")
@@ -112,7 +112,7 @@ func TestCacheStateIsPrivateToItsOwner(t *testing.T) {
 	touchOut(t, root)
 	step := makeStep(root)
 
-	r, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+	r, err := c.Run(withResolver(t.Context()), step, func(context.Context) error { return nil })
 	require.NoError(t, err)
 
 	perm := func(p string) os.FileMode {
@@ -147,18 +147,18 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.False(t, r1.Hit, "first Run must miss")
 
 	// Re-open read-only so the second call can hit.
-	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
+	c2, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(read)")
 
 	var stdoutOut, stderrOut string
 	stdoutOut = testkit.CaptureStdout(t, func() {
 		stderrOut = testkit.CaptureStderr(t, func() {
-			r2, err := c2.Run(context.Background(), step, fn)
+			r2, err := c2.Run(withResolver(context.Background()), step, fn)
 			require.NoError(t, err, "Run(hit)")
 			require.True(t, r2.Hit, "second Run must hit")
 		})
@@ -203,18 +203,18 @@ func logs(err error) func(context.Context) error {
 // hit runs the step once to store it, then again at level, and returns
 // what the hit printed on stderr.
 func (s *logReplaySuite) hit(level slog.Level) string {
-	c, err := Open(s.T().Context(), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo))
+	c, err := Open(withResolver(s.T().Context()), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo))
 	s.Require().NoError(err)
 	_ = testkit.CaptureStderr(s.T(), func() {
-		_, err = c.Run(s.T().Context(), s.step, logs(nil))
+		_, err = c.Run(withResolver(s.T().Context()), s.step, logs(nil))
 	})
 	s.Require().NoError(err)
 
-	c, err = Open(s.T().Context(), s.cdir, WithLocalWrite(false), WithLog("text", level))
+	c, err = Open(withResolver(s.T().Context()), s.cdir, WithLocalWrite(false), WithLog("text", level))
 	s.Require().NoError(err)
 	var r Result
 	out := testkit.CaptureStderr(s.T(), func() {
-		r, err = c.Run(s.T().Context(), s.step, logs(nil))
+		r, err = c.Run(withResolver(s.T().Context()), s.step, logs(nil))
 	})
 	s.Require().NoError(err)
 	s.Require().True(r.Hit)
@@ -236,11 +236,11 @@ func (s *logReplaySuite) TestAHitAtDebugShowsEveryRecord() {
 }
 
 func (s *logReplaySuite) TestAFailureDumpHidesARecordBelowTheConsolesLevel() {
-	c, err := Open(s.T().Context(), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo), WithCollapse(true))
+	c, err := Open(withResolver(s.T().Context()), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo), WithCollapse(true))
 	s.Require().NoError(err)
 
 	out := testkit.CaptureStderr(s.T(), func() {
-		_, err = c.Run(s.T().Context(), s.step, logs(errors.New("boom")))
+		_, err = c.Run(withResolver(s.T().Context()), s.step, logs(errors.New("boom")))
 	})
 
 	s.Require().Error(err)
@@ -296,7 +296,7 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 		}),
 	}
 
-	r, err := c.Run(context.Background(), step, fn, opts...)
+	r, err := c.Run(withResolver(context.Background()), step, fn, opts...)
 	require.Error(t, err, "snapshot failure must surface as Run's error")
 
 	assert.True(t, onResultCalled, "OnResult must fire on a snapshot failure")
@@ -312,7 +312,7 @@ func TestRunCancelledAfterSuccessReportsEnd(t *testing.T) {
 	writeMain(t, root, "package main")
 	step := makeStep(root)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(withResolver(context.Background()))
 	defer cancel()
 	fn := func(_ context.Context) error {
 		cancel()
@@ -350,10 +350,10 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r1.Hit, "first Run want miss")
-	r2, err := c.Run(context.Background(), step, fn)
+	r2, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "second Run")
 	require.False(t, r2.Hit, "second Run want miss (NoCache must never replay)")
 	assert.Equal(t, 2, calls, "NoCache must run every time")
@@ -379,19 +379,19 @@ func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	}
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r1.Hit, "first Run want miss")
 	require.NotEmpty(t, r1.Hash, "SkipReplay must still snapshot: expected a hash")
 
-	r2, err := c.Run(context.Background(), step, fn)
+	r2, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "second Run (still --no-cache)")
 	require.False(t, r2.Hit, "second Run want miss (SkipReplay must never replay)")
 	assert.Equal(t, 2, calls, "SkipReplay must run every time")
 
 	// Drop SkipReplay: an ordinary run must now hit the entry SkipReplay refreshed.
 	step.SkipReplay = false
-	r3, err := c.Run(context.Background(), step, fn)
+	r3, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "third Run (ordinary)")
 	assert.True(t, r3.Hit, "ordinary run must hit the entry a --no-cache run refreshed")
 	assert.Equal(t, 2, calls, "hit must not call fn again")
@@ -402,7 +402,7 @@ func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
 func TestModeAutoWritesOnMiss(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir)
+	c, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
@@ -411,14 +411,14 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	calls := 0
 	fn := func(_ context.Context) error { calls++; return os.WriteFile(out, []byte("built"), 0o644) }
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.False(t, r1.Hit, "first Run must miss")
 
 	// Re-open (same dir, same default mode) — must hit.
-	c2, err := Open(t.Context(), cdir)
+	c2, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "cache.Open(auto, second)")
-	r2, err := c2.Run(context.Background(), step, fn)
+	r2, err := c2.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	assert.True(t, r2.Hit, "ModeAuto must hit on second run")
 	assert.Equal(t, 1, calls, "fn called once")
@@ -434,14 +434,14 @@ func TestModeAutoReplaysOnHit(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	_, err := c.Run(context.Background(), step, fn)
+	_, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "prime")
 
 	// Re-open (default mutable) — must hit without calling fn.
-	c2, err := Open(t.Context(), cdir)
+	c2, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "cache.Open")
 	calls := 0
-	r, err := c2.Run(context.Background(), step, func(_ context.Context) error { calls++; return fn(context.Background()) })
+	r, err := c2.Run(withResolver(context.Background()), step, func(_ context.Context) error { calls++; return fn(withResolver(context.Background())) })
 	require.NoError(t, err, "Run")
 	assert.True(t, r.Hit, "must replay on hit")
 	assert.Equal(t, 0, calls, "fn must not run on hit")
@@ -458,16 +458,16 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	c, err := Open(t.Context(), cdir, WithLocalWrite(false))
+	c, err := Open(withResolver(t.Context()), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(immutable)")
-	r, err := c.Run(context.Background(), step, fn)
+	r, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r.Hit, "first Run want miss")
 
 	// Re-open mutable — must still miss (nothing was written).
-	c2, err := Open(t.Context(), cdir)
+	c2, err := Open(withResolver(t.Context()), cdir)
 	require.NoError(t, err, "cache.Open")
-	r, err = c2.Run(context.Background(), step, fn)
+	r, err = c2.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err, "second Run after immutable miss")
 	assert.False(t, r.Hit, "second Run after immutable miss want miss")
 }
@@ -482,10 +482,10 @@ func TestHashChangesOnSourceEdit(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
 	writeMain(t, root, "package main // v2")
-	r2, err := c.Run(context.Background(), step, fn)
+	r2, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
 	assert.NotEqual(t, r1.Hash, r2.Hash, "hash must change after source edit")
 }
@@ -503,11 +503,11 @@ func TestActionDiscriminant(t *testing.T) {
 
 	build := base
 	build.Target = "build"
-	rBuild, err := c.Run(context.Background(), build, fn)
+	rBuild, err := c.Run(withResolver(context.Background()), build, fn)
 	require.NoError(t, err)
 	test := base
 	test.Target = "test"
-	rTest, err := c.Run(context.Background(), test, fn)
+	rTest, err := c.Run(withResolver(context.Background()), test, fn)
 	require.NoError(t, err)
 	assert.NotEqual(t, rBuild.Hash, rTest.Hash, "different Target must yield different hash")
 }
@@ -522,13 +522,13 @@ func TestClean(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("out"), 0o644) }
 
-	_, err := c.Run(context.Background(), step, fn)
+	_, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
-	require.NoError(t, c.Delete(context.Background(), "test/pkg"), "Clean")
+	require.NoError(t, c.Delete(withResolver(context.Background()), "test/pkg"), "Clean")
 
 	calls := 0
-	wrapped := func(_ context.Context) error { calls++; return fn(context.Background()) }
-	r, err := c.Run(context.Background(), step, wrapped)
+	wrapped := func(_ context.Context) error { calls++; return fn(withResolver(context.Background())) }
+	r, err := c.Run(withResolver(context.Background()), step, wrapped)
 	require.NoError(t, err)
 	assert.False(t, r.Hit, "Run after Clean must miss")
 	assert.Equal(t, 1, calls, "fn called once after Clean")
@@ -543,7 +543,7 @@ func TestStats(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("out"), 0o644)
 	})
 	require.NoError(t, err)
@@ -568,7 +568,7 @@ func (s *RunCountsSuite) SetupTest() {
 }
 
 func (s *RunCountsSuite) run() Result {
-	r, err := s.c.Run(context.Background(), s.step, func(_ context.Context) error {
+	r, err := s.c.Run(withResolver(context.Background()), s.step, func(_ context.Context) error {
 		return os.WriteFile(s.out, []byte("out"), 0o644)
 	})
 	s.Require().NoError(err)
@@ -601,7 +601,7 @@ func TestCacheSizeCapAccepted(t *testing.T) {
 	for _, env := range []string{"", "0", "1000", "500KB", "2MB", "1GB", "bad"} {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv("MAGUS_CACHE_SIZE", env)
-			_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".cap"))
+			_, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".cap"))
 			require.NoErrorf(t, err, "Open with MAGUS_CACHE_SIZE=%q", env)
 		})
 	}
@@ -619,7 +619,7 @@ func TestPanicInFnDoesNotDeadlock(t *testing.T) {
 
 	// The panic from fn must propagate out of Run rather than deadlock.
 	assert.Panics(t, func() {
-		_, _ = c.Run(context.Background(), step, func(_ context.Context) error {
+		_, _ = c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 			panic(errors.New("boom"))
 		})
 	}, "expected panic to propagate from fn")
@@ -636,24 +636,24 @@ func TestExportImportRoundTrip(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	// Populate the source cache.
-	_, err := src.Run(context.Background(), step, func(_ context.Context) error {
+	_, err := src.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "populate")
 
 	// Export the source cache to an in-memory buffer.
 	var rawBuf bytes.Buffer
-	require.NoError(t, src.Export(context.Background(), &rawBuf), "Export")
+	require.NoError(t, src.Export(withResolver(context.Background()), &rawBuf), "Export")
 
 	// Import into a new cache directory (immutable so we test read-after-import).
 	dstDir := filepath.Join(t.TempDir(), ".magus-dst")
-	dst, err := Open(t.Context(), dstDir, WithLocalWrite(false))
+	dst, err := Open(withResolver(t.Context()), dstDir, WithLocalWrite(false))
 	require.NoError(t, err, "Open dst")
-	require.NoError(t, dst.Import(context.Background(), &rawBuf), "Import")
+	require.NoError(t, dst.Import(withResolver(context.Background()), &rawBuf), "Import")
 
 	// Verify that the step hits in the destination cache.
 	calls := 0
-	r, err := dst.Run(context.Background(), step, func(_ context.Context) error { calls++; return nil })
+	r, err := dst.Run(withResolver(context.Background()), step, func(_ context.Context) error { calls++; return nil })
 	require.NoError(t, err, "Run after import")
 	assert.True(t, r.Hit, "Run after Import must hit")
 	assert.Equal(t, 0, calls, "fn must not run after Import hit")
@@ -681,7 +681,7 @@ func TestOnResult(t *testing.T) {
 	})
 
 	// Miss: fn runs and writes out.txt.
-	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	_, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("ok"), 0o644)
 	}, onResult)
 	require.NoError(t, err, "Run(miss)")
@@ -689,7 +689,7 @@ func TestOnResult(t *testing.T) {
 	assert.Equal(t, call{"test/pkg", false, nil}, calls[0], "after miss")
 
 	// Hit: same step, fn must not run.
-	_, err = c.Run(context.Background(), step, func(_ context.Context) error {
+	_, err = c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		t.Error("fn must not run on hit")
 		return nil
 	}, onResult)
@@ -704,7 +704,7 @@ func TestOnResult(t *testing.T) {
 		WorkspaceRoot: root,
 	}
 	wantErr := errors.New("build failed")
-	_, err = c.Run(context.Background(), errStep, func(_ context.Context) error {
+	_, err = c.Run(withResolver(context.Background()), errStep, func(_ context.Context) error {
 		return wantErr
 	}, onResult)
 	require.Error(t, err, "Run(error): expected error")
@@ -726,7 +726,7 @@ func TestOnResultMultiple(t *testing.T) {
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
 	var first, second int
-	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	_, err := c.Run(withResolver(context.Background()), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("ok"), 0o644)
 	},
 		OnResult(func(*Step, *Result, error) { first++ }),
@@ -771,15 +771,15 @@ func TestImportRejectsPoisonedBlob(t *testing.T) {
 	// Positive control: the same archive shape with matching content imports
 	// cleanly, so the rejection below is due to the content/name mismatch alone,
 	// not a malformed archive or misplaced entry.
-	cGood, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
+	cGood, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
-	require.NoError(t, cGood.Import(context.Background(), casArchive(t, name, good, time.Time{})), "control: well-formed blob must import")
+	require.NoError(t, cGood.Import(withResolver(context.Background()), casArchive(t, name, good, time.Time{})), "control: well-formed blob must import")
 	require.FileExists(t, cGood.blobPath(name), "control: blob must be present after a valid import")
 
 	// Poison: the same (matching) name, tampered content.
-	cBad, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
+	cBad, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
-	err = cBad.Import(context.Background(), casArchive(t, name, []byte("tampered bytes"), time.Time{}))
+	err = cBad.Import(withResolver(context.Background()), casArchive(t, name, []byte("tampered bytes"), time.Time{}))
 	require.Error(t, err, "Import must reject a blob whose content does not match its name")
 	assert.NoFileExists(t, cBad.blobPath(name), "a mismatched blob must not remain in the store")
 }
@@ -795,11 +795,11 @@ func TestImportRejectedBlobKeepsTheStoredOne(t *testing.T) {
 	sum := sha256.Sum256(good)
 	name := hex.EncodeToString(sum[:])
 
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
-	require.NoError(t, c.Import(context.Background(), casArchive(t, name, good, time.Time{})), "seed: a valid blob must import")
+	require.NoError(t, c.Import(withResolver(context.Background()), casArchive(t, name, good, time.Time{})), "seed: a valid blob must import")
 
-	err = c.Import(context.Background(), casArchive(t, name, []byte("tampered bytes"), time.Now().Add(time.Hour)))
+	err = c.Import(withResolver(context.Background()), casArchive(t, name, []byte("tampered bytes"), time.Now().Add(time.Hour)))
 	require.Error(t, err, "Import must reject the mismatched blob")
 
 	after, err := os.ReadFile(c.blobPath(name))
@@ -837,7 +837,7 @@ func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
 		return &buf
 	}
 
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
+	c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 	dest := filepath.Join(c.dir, "manifests", "test", "entry")
 	require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o755))
@@ -845,12 +845,12 @@ func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
 	now := time.Now()
 	require.NoError(t, os.Chtimes(dest, now, now))
 
-	require.NoError(t, c.Import(context.Background(), entryArchive(now.Add(-time.Hour), []byte("older"))))
+	require.NoError(t, c.Import(withResolver(context.Background()), entryArchive(now.Add(-time.Hour), []byte("older"))))
 	got, err := os.ReadFile(dest)
 	require.NoError(t, err)
 	assert.Equal(t, "on disk", string(got), "an entry older than the file on disk must be skipped")
 
-	require.NoError(t, c.Import(context.Background(), entryArchive(now.Add(time.Hour), []byte("newer"))))
+	require.NoError(t, c.Import(withResolver(context.Background()), entryArchive(now.Add(time.Hour), []byte("newer"))))
 	got, err = os.ReadFile(dest)
 	require.NoError(t, err)
 	assert.Equal(t, "newer", string(got), "an entry newer than the file on disk must overwrite it")
@@ -860,7 +860,7 @@ func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
 // that would escape the cache directory via path traversal.
 func TestExportImportUnsafePath(t *testing.T) {
 	dir := t.TempDir()
-	c, err := Open(t.Context(), filepath.Join(dir, ".magus"), WithLocalWrite(false))
+	c, err := Open(withResolver(t.Context()), filepath.Join(dir, ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 
 	// Craft a malicious tar with a path traversal entry.
@@ -876,7 +876,7 @@ func TestExportImportUnsafePath(t *testing.T) {
 	_ = tw.Close()
 	_ = gz.Close()
 
-	assert.Error(t, c.Import(context.Background(), &buf), "Import with path traversal must return error")
+	assert.Error(t, c.Import(withResolver(context.Background()), &buf), "Import with path traversal must return error")
 }
 
 // collapseCache builds a Cache in collapse-on-success mode at default verbosity.
@@ -892,7 +892,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
 			return nil
@@ -911,7 +911,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	want := errors.New("boom")
 
 	stderrOut := testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
 			return want
@@ -956,7 +956,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
 			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
@@ -978,7 +978,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	want := errors.New("boom")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
 				fmt.Fprintf(stdout, "line %d\n", i)
@@ -1008,7 +1008,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 	want := errors.New("boom")
 
 	_ = testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
 			return want
@@ -1026,7 +1026,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 	lp := c.logPath("svc/api", "feedface")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(withResolver(context.Background()), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
 			return nil
@@ -1074,7 +1074,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	}
 
 	first := captureLog(t, func() {
-		_, err := c.Run(context.Background(), step, fn)
+		_, err := c.Run(withResolver(context.Background()), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, first, "inputs unchanged", "nothing was recorded yet to point at")
@@ -1082,7 +1082,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	var second Result
 	out := captureLog(t, func() {
 		var err error
-		second, err = c.Run(context.Background(), step, fn)
+		second, err = c.Run(withResolver(context.Background()), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.Contains(t, out, "hint: inputs unchanged since out")
@@ -1096,7 +1096,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	var thirdRes Result
 	third := captureLog(t, func() {
 		var err error
-		thirdRes, err = c.Run(context.Background(), step, fn)
+		thirdRes, err = c.Run(withResolver(context.Background()), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, third, "inputs unchanged", "once per key, not once per run")
@@ -1122,12 +1122,12 @@ func TestRunHintsUnchangedFailureOnlyForItsOwnFailure(t *testing.T) {
 			step, c := hintCache(t, "package main // "+name)
 			boom := errors.New(tc.err)
 			fn := func(context.Context) error { return boom }
-			_, err := c.Run(context.Background(), step, fn)
+			_, err := c.Run(withResolver(context.Background()), step, fn)
 			require.ErrorIs(t, err, boom)
 
 			var res Result
 			out := captureLog(t, func() {
-				res, err = c.Run(context.Background(), step, fn)
+				res, err = c.Run(withResolver(context.Background()), step, fn)
 				require.ErrorIs(t, err, boom)
 			})
 			if tc.hint {
@@ -1158,13 +1158,13 @@ func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
 		return nil
 	}
 
-	failed, err := c.Run(context.Background(), step, fn)
+	failed, err := c.Run(withResolver(context.Background()), step, fn)
 	require.ErrorIs(t, err, lockHeld)
 	require.NotEmpty(t, failed.Ref)
 
 	var passed Result
 	out := captureLog(t, func() {
-		passed, err = c.Run(context.Background(), step, fn)
+		passed, err = c.Run(withResolver(context.Background()), step, fn)
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 2, calls, "a recorded failure is never replayed")
@@ -1193,7 +1193,7 @@ func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, newest.Failed, "the step ref moved to the pass")
 
-	replayed, err := c.Run(context.Background(), step, fn)
+	replayed, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
 	assert.True(t, replayed.Hit, "the pass is the entry")
 	assert.Equal(t, 2, calls)
@@ -1211,7 +1211,7 @@ func TestRunDeterministicFailureNeverReplays(t *testing.T) {
 	}
 
 	for i := range 3 {
-		res, err := c.Run(context.Background(), step, fn)
+		res, err := c.Run(withResolver(context.Background()), step, fn)
 		require.ErrorIs(t, err, exit7, "run %d", i+1)
 		assert.False(t, res.Hit, "run %d", i+1)
 	}
@@ -1246,13 +1246,13 @@ func TestHitLeavesAForeignOutputAlone(t *testing.T) {
 	}
 
 	// The entry an older binary wrote: it recorded the stale generated file as its own.
-	_, err := c.Run(t.Context(), step, fn)
+	_, err := c.Run(withResolver(t.Context()), step, fn)
 	require.NoError(t, err, "Run(miss)")
 	require.NoError(t, os.WriteFile(generated, []byte("regenerated"), 0o644))
 	require.NoError(t, os.Remove(own))
 
 	step.ForeignOutputs = types.MustParseGlobs("test/pkg/gen/**")
-	res, err := c.Run(t.Context(), step, fn)
+	res, err := c.Run(withResolver(t.Context()), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	require.True(t, res.Hit, "ForeignOutputs is unhashed, so the key and its entry stay")
 	assert.Equal(t, 1, calls)
@@ -1261,11 +1261,11 @@ func TestHitLeavesAForeignOutputAlone(t *testing.T) {
 	assert.NotContains(t, res.Outputs, generated)
 
 	// A fresh entry never records the foreign file at all.
-	require.NoError(t, c.Delete(t.Context(), step.ProjectPath))
-	_, err = c.Run(t.Context(), step, fn)
+	require.NoError(t, c.Delete(withResolver(t.Context()), step.ProjectPath))
+	_, err = c.Run(withResolver(t.Context()), step, fn)
 	require.NoError(t, err, "Run(miss after delete)")
 	require.NoError(t, os.WriteFile(generated, []byte("edited"), 0o644))
-	_, err = c.Run(t.Context(), step, fn)
+	_, err = c.Run(withResolver(t.Context()), step, fn)
 	require.NoError(t, err, "Run(hit)")
 	assert.Equal(t, "edited", read(generated))
 }
@@ -1277,13 +1277,13 @@ func TestRunNoHintWhenInputsChanged(t *testing.T) {
 	boom := errors.New("compile error")
 	fn := func(_ context.Context) error { return boom }
 
-	_, err := c.Run(context.Background(), step, fn)
+	_, err := c.Run(withResolver(context.Background()), step, fn)
 	require.ErrorIs(t, err, boom)
 
 	writeMain(t, step.WorkspaceRoot, "package main // hint moved inputs, edited")
 	var res Result
 	out := captureLog(t, func() {
-		res, err = c.Run(context.Background(), step, fn)
+		res, err = c.Run(withResolver(context.Background()), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, out, "inputs unchanged")
@@ -1297,13 +1297,13 @@ func TestRunNoHintAfterSuccess(t *testing.T) {
 	step, c := hintCache(t, "package main // hint after success")
 	fn := func(_ context.Context) error { return nil }
 
-	_, err := c.Run(context.Background(), step, fn)
+	_, err := c.Run(withResolver(context.Background()), step, fn)
 	require.NoError(t, err)
 
 	step.SkipReplay = true
 	var res Result
 	out := captureLog(t, func() {
-		res, err = c.Run(context.Background(), step, fn)
+		res, err = c.Run(withResolver(context.Background()), step, fn)
 		require.NoError(t, err)
 	})
 	assert.False(t, res.Hit, "SkipReplay must take the miss path for this to test anything")
@@ -1331,7 +1331,7 @@ func TestSharedStepSurvivesTheDeadlineOfTheParentThatAskedFirst(t *testing.T) {
 	s.Target = "generate"
 	s.NoCache = true
 
-	scheduled := WithSharedStepBase(t.Context())
+	scheduled := WithSharedStepBase(withResolver(t.Context()))
 	timed, cancel := context.WithTimeout(scheduled, 20*time.Millisecond)
 	defer cancel()
 	timed = context.WithValue(timed, ceilingKey{}, "security")
@@ -1360,7 +1360,7 @@ func TestSharedStepSurvivesTheDeadlineOfTheParentThatAskedFirst(t *testing.T) {
 // stall watchdog and the ceiling of the unit the user actually scheduled all sit above the
 // base, so all three still reach it.
 func TestSharedStepStillDiesWithTheScheduledUnit(t *testing.T) {
-	scheduled, abort := context.WithCancel(context.Background())
+	scheduled, abort := context.WithCancel(withResolver(context.Background()))
 	defer abort()
 	parent, cancel := context.WithTimeout(WithSharedStepBase(scheduled), time.Hour)
 	defer cancel()
@@ -1382,7 +1382,7 @@ func TestSharedStepStillDiesWithTheScheduledUnit(t *testing.T) {
 // with nothing above the caller to borrow a cancellation from, inventing one would make
 // such a step unkillable.
 func TestSharedStepContextIsAPassThroughOutsideAScheduledTarget(t *testing.T) {
-	parent, cancel := context.WithCancel(context.Background())
+	parent, cancel := context.WithCancel(withResolver(context.Background()))
 	defer cancel()
 
 	shared := SharedStepContext(parent)
@@ -1393,12 +1393,12 @@ func TestSharedStepContextIsAPassThroughOutsideAScheduledTarget(t *testing.T) {
 // A declared remote write with no backend to write is refused at Open, whether none was
 // wired or the wired one did not start.
 func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {
-	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
+	_, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
 	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired, "+
 		"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 
 	startErr := errors.New("ACTIONS_RUNTIME_TOKEN is unset")
-	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteUnavailable("github", startErr), WithRemoteWrite(true))
 	require.ErrorIs(t, err, startErr)
 	assert.EqualError(t, err, "magus/cache: remote writes are required but the backend is down, "+
@@ -1415,7 +1415,7 @@ func TestBuildTiersUnstartedBackendRunsLocalOnly(t *testing.T) {
 			if write != nil {
 				opts = append(opts, WithRemoteWrite(*write))
 			}
-			c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opts...)
+			c, err := Open(withResolver(t.Context()), filepath.Join(t.TempDir(), ".magus"), opts...)
 			require.NoError(t, err)
 			assert.Nil(t, c.remote)
 			assert.Equal(t, []tier{c.local}, c.tiers)
@@ -1452,7 +1452,7 @@ func TestRunAllBeforeKeyRunsAfterUpstreamsAndFailsOnlyItsStep(t *testing.T) {
 		}
 		return nil
 	}
-	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+	_, err := c.RunAll(withResolver(t.Context()), steps, func(_ context.Context, s Step) error {
 		note("run:" + s.ProjectPath)
 		return nil
 	}, WithTargetRunner(runTarget))
@@ -1527,7 +1527,7 @@ func BenchmarkCacheMiss(b *testing.B) {
 	outRel := writeBenchProject(b, root, "pkg")
 	step := benchStep(root, "pkg", outRel)
 	fn := buildFunction(root, outRel)
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1549,7 +1549,7 @@ func BenchmarkCacheHit(b *testing.B) {
 	outRel := writeBenchProject(b, root, "pkg")
 	step := benchStep(root, "pkg", outRel)
 	fn := buildFunction(root, outRel)
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	warm := openBenchCache(b, cdir, true)
 	if _, err := warm.Run(ctx, step, fn); err != nil {
@@ -1592,7 +1592,7 @@ func BenchmarkRunAll(b *testing.B) {
 				fns[i] = buildFunction(root, outRel)
 			}
 
-			ctx := context.Background()
+			ctx := withResolver(context.Background())
 
 			// Pre-populate the cache so RunAll replays on every b.N iteration.
 			warm := openBenchCache(b, cdir, true)
@@ -1659,7 +1659,7 @@ func BenchmarkRunAllColdMtime(b *testing.B) {
 		steps[i] = benchStep(root, p, outRel)
 		fns[i] = buildFunction(root, outRel)
 	}
-	ctx := context.Background()
+	ctx := withResolver(context.Background())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -1701,7 +1701,7 @@ func ExampleCache_Run() {
 	}
 	defer os.RemoveAll(dir)
 
-	c, err := Open(context.Background(), dir, WithLog("text", slog.LevelError))
+	c, err := Open(withResolver(context.Background()), dir, WithLog("text", slog.LevelError))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -1720,7 +1720,7 @@ func ExampleCache_Run() {
 	}
 
 	// First run: cold miss → fn is called.
-	r1, err := c.Run(context.Background(), step, fn)
+	r1, err := c.Run(withResolver(context.Background()), step, fn)
 	if err != nil {
 		fmt.Println("run1:", err)
 		return
@@ -1728,7 +1728,7 @@ func ExampleCache_Run() {
 	fmt.Println("run1 hit:", r1.Hit)
 
 	// Second run on the same store: hit → fn is skipped.
-	r2, err := c.Run(context.Background(), step, fn)
+	r2, err := c.Run(withResolver(context.Background()), step, fn)
 	if err != nil {
 		fmt.Println("run2:", err)
 		return
@@ -1754,7 +1754,7 @@ func ExampleCache_RunAll() {
 	}
 	defer os.RemoveAll(dir)
 
-	c, err := Open(context.Background(), dir, WithLog("text", slog.LevelError))
+	c, err := Open(withResolver(context.Background()), dir, WithLog("text", slog.LevelError))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -1768,7 +1768,7 @@ func ExampleCache_RunAll() {
 	var mu sync.Mutex
 	var missed []string
 	results, err := c.RunAll(
-		context.Background(), steps,
+		withResolver(context.Background()), steps,
 		func(_ context.Context, _ Step) error { return nil },
 		WithLimiter(NewLimiter(4)),
 		OnResult(func(_ *Step, r *Result, err error) {
@@ -1803,7 +1803,7 @@ func TestExportDoesNotBlockANestedRun(t *testing.T) {
 
 	c.exportMu.RLock() // the outer run
 	exported := make(chan error, 1)
-	go func() { exported <- c.Export(t.Context(), io.Discard) }()
+	go func() { exported <- c.Export(withResolver(t.Context()), io.Discard) }()
 	time.Sleep(3 * exportLockPoll) // the Export is now waiting
 
 	nested := make(chan struct{})
@@ -1835,7 +1835,7 @@ func TestRunRecordsTheFailedNeedOnTheDescriptor(t *testing.T) {
 	step, c := hintCache(t, "package main // failed need")
 	boom := WrapNeedFailure(errors.New("lint findings"), NeedMember{Target: "lint-go", Ref: "outdddddddddddd"})
 
-	res, err := c.Run(context.Background(), step, func(context.Context) error {
+	res, err := c.Run(withResolver(context.Background()), step, func(context.Context) error {
 		return fmt.Errorf("ctx.needs: %w", boom)
 	})
 	require.Error(t, err)
@@ -1855,7 +1855,7 @@ func TestRunRecordsTheFailedNeedOnTheDescriptor(t *testing.T) {
 func TestRunRecordsNoFailedNeedForAnOrdinaryFailure(t *testing.T) {
 	step, c := hintCache(t, "package main // ordinary failure")
 
-	res, err := c.Run(context.Background(), step, func(context.Context) error { return errors.New("boom") })
+	res, err := c.Run(withResolver(context.Background()), step, func(context.Context) error { return errors.New("boom") })
 	require.Error(t, err)
 
 	_, d, err := c.outputs.ByRef(res.Ref)
@@ -1871,11 +1871,11 @@ func TestUnchangedFailureHintNamesTheFailedNeedRef(t *testing.T) {
 	member := WrapNeedFailure(errors.New("lint findings\nmore"), NeedMember{Target: "lint-go", Ref: "outeeeeeeeeeeee"})
 	fn := func(context.Context) error { return member }
 
-	_, err := c.Run(context.Background(), step, fn)
+	_, err := c.Run(withResolver(context.Background()), step, fn)
 	require.Error(t, err)
 
 	out := captureLog(t, func() {
-		_, err = c.Run(context.Background(), step, fn)
+		_, err = c.Run(withResolver(context.Background()), step, fn)
 		require.Error(t, err)
 	})
 	assert.Contains(t, out, "inputs unchanged since out")

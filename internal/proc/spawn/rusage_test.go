@@ -23,7 +23,7 @@ import (
 // they were kilobytes lands near 2GB (caught only by a ceiling well under 100GB). One
 // gigabyte is the ceiling: absurd for `sh -c echo hi`, and below any mis-scaled value.
 func TestMaxRSSBytesIsPlausibleForRealProcess(t *testing.T) {
-	res, err := Exec(context.Background(), "sh", []string{"-c", "echo hi"}, ExecOptions{Capture: true})
+	res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", "echo hi"}, ExecOptions{Capture: true})
 	require.NoError(t, err)
 	require.True(t, res.Started)
 

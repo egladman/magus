@@ -35,7 +35,7 @@ import (
 // it into the returned object.
 func TestOsExecTeesToOutputWriters(t *testing.T) {
 	var tee bytes.Buffer
-	ctx := spawn.WithOutputWriters(context.Background(), &tee, &tee)
+	ctx := spawn.WithOutputWriters(withSecrets(context.Background()), &tee, &tee)
 	res, err := ProcExec(ctx, "printf", []string{"hello"}, "", types.ExecOptions{})
 	require.NoError(t, err)
 	got := res.Stdout
@@ -46,7 +46,7 @@ func TestOsExecTeesToOutputWriters(t *testing.T) {
 // TestOsExecStdin verifies opts.stdin is fed to the process: the plumbing under
 // pipe-style chaining (a prior call's stdout becomes the next call's stdin).
 func TestOsExecStdin(t *testing.T) {
-	res, err := ProcExec(context.Background(), "cat", nil, "", types.ExecOptions{Stdin: "piped-input"})
+	res, err := ProcExec(withSecrets(context.Background()), "cat", nil, "", types.ExecOptions{Stdin: "piped-input"})
 	require.NoError(t, err)
 	got := res.Stdout
 	assert.Equal(t, "piped-input", got, "stdin not delivered")
@@ -112,7 +112,7 @@ func TestOsExecResolvesCwd(t *testing.T) {
 	subReal := filepath.Join(baseReal, "nested")
 
 	runPwd := func(ctxCwd, dirArg, wantDir string) {
-		ctx := WithCurrentWorkingDirectory(context.Background(), ctxCwd)
+		ctx := WithCurrentWorkingDirectory(withSecrets(context.Background()), ctxCwd)
 		res, err := ProcExec(ctx, "pwd", nil, dirArg, types.ExecOptions{})
 		require.NoError(t, err)
 		require.Equal(t, 0, res.Code, "pwd exit code")
@@ -179,7 +179,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 	}
 	lim := cache.NewLimiter(4)
 	require.NoError(t, lim.AcquireN(context.Background(), 4))
-	stepCtx, closeStep, err := spawn.SeatJobserver(cache.ContextWithLimiter(context.Background(), lim), 4)
+	stepCtx, closeStep, err := spawn.SeatJobserver(cache.ContextWithLimiter(withSecrets(context.Background()), lim), 4)
 	require.NoError(t, err)
 	defer closeStep()
 	stepCtx = budget.WithSlotsHeld(stepCtx, 4)
@@ -490,7 +490,7 @@ func TestExecCancelledReportsCancellation(t *testing.T) {
 	// Cancel AFTER the child is running, which is the shape that produced the confusing
 	// output: an already-cancelled context never starts the process and takes a different
 	// branch, so it would not exercise this at all.
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(withSecrets(context.Background()))
 	go func() {
 		time.Sleep(150 * time.Millisecond)
 		cancel()
@@ -527,7 +527,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	}()
 
 	// The rename publishes the pid whole, and the exec keeps it for sleep.
-	_, err := ProcExec(context.Background(), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", types.ExecOptions{})
+	_, err := ProcExec(withSecrets(context.Background()), "sh", []string{"-c", `echo $$ > "$0.new" && mv "$0.new" "$0" && exec sleep 31`, pidFile}, ".", types.ExecOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signal: killed", "the signal is the whole diagnosis")
 	assert.Contains(t, err.Error(), "OOM killer", "say what usually does this on CI")
@@ -537,7 +537,7 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 // allow_failure hands back the result instead of raising, and a signal leaves no status
 // and no stderr, so the signal goes in Stderr or the caller reads a bare -1.
 func TestExecAllowFailureNamesTheSignal(t *testing.T) {
-	res, err := ProcExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", types.ExecOptions{AllowFailure: true})
+	res, err := ProcExec(withSecrets(context.Background()), "sh", []string{"-c", "kill -9 $$"}, ".", types.ExecOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, -1, res.Code)
 	assert.Contains(t, res.Stderr, "signal: killed")
@@ -547,7 +547,7 @@ func TestExecAllowFailureNamesTheSignal(t *testing.T) {
 // the three cannot drift into offering different option sets. Capture stays on
 // regardless: a quiet call is still consuming the value, just not echoing it.
 func TestOsExecQuietStillCaptures(t *testing.T) {
-	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
+	res, err := ProcExec(withSecrets(context.Background()), "sh", []string{"-c", "echo captured"}, "",
 		types.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "captured", Code: 0, OK: true}, res, "proc.exec trims captured output")
@@ -556,7 +556,7 @@ func TestOsExecQuietStillCaptures(t *testing.T) {
 func TestProcShellQuietStillCaptures(t *testing.T) {
 	c, err := ProcShell(context.Background(), "echo captured", "")
 	require.NoError(t, err)
-	res, err := ProcExec(context.Background(), c.Bin, c.Args, "", types.ExecOptions{Quiet: true})
+	res, err := ProcExec(withSecrets(context.Background()), c.Bin, c.Args, "", types.ExecOptions{Quiet: true})
 	require.NoError(t, err)
 	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
 }
@@ -565,7 +565,7 @@ func TestProcShellQuietStillCaptures(t *testing.T) {
 // log that silently stopped showing command output would be a worse regression than
 // any noise it removed.
 func TestOsExecDefaultsToNotQuiet(t *testing.T) {
-	res, err := ProcExec(context.Background(), "sh", []string{"-c", "echo shown"}, "", types.ExecOptions{})
+	res, err := ProcExec(withSecrets(context.Background()), "sh", []string{"-c", "echo shown"}, "", types.ExecOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "shown", res.Stdout)
 }
@@ -925,7 +925,7 @@ func TestProcExecTimeoutKillsASlowCommandAndRaises(t *testing.T) {
 }
 
 func TestProcExecTimeoutLeavesAFastCommandAlone(t *testing.T) {
-	res, err := ProcExec(t.Context(), "printf", []string{"ok"}, "", types.ExecOptions{TimeoutMs: 10000})
+	res, err := ProcExec(withSecrets(t.Context()), "printf", []string{"ok"}, "", types.ExecOptions{TimeoutMs: 10000})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.Stdout)
 }

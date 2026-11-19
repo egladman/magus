@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -77,40 +77,6 @@ type Store struct {
 	dryEnded map[string]Job
 }
 
-// storeConfig is everything a Store carries but its mutex and its dry run, so a view
-// copies it whole and sets only what differs.
-type storeConfig struct {
-	path string
-	// err is why the store could not be opened, which every operation reports: a Store
-	// that cannot name its file must not read as an empty ledger, since absent rows are
-	// how a guard decides nothing is leased.
-	err      error
-	root     string
-	pinned   *Actor
-	actor    func() Actor
-	origin   func(context.Context) Origin
-	denials  Denials
-	hook     WriteHook
-	retain   func(context.Context, *Rows, time.Time) error
-	sweep    func(context.Context, Rows) (Rows, error)
-	notices  func(Notice)
-	clock    func() time.Time
-	declared func(ctx context.Context, path, decl string, body []byte) string
-	head     func(context.Context) string
-	version  apiversion.APIVersion
-	migrate  Migrate
-	creds    wireEnum[CredentialKind]
-	wrapErr  func(error) error
-	tree     func(context.Context) (string, error)
-	verifier Verifier
-	command  CheckCommand
-	checks   *checkSpec
-}
-
-// StoreOption sets one of a Store's seams. Each option a caller leaves out has the
-// default its documentation names.
-type StoreOption func(*storeConfig)
-
 // Denials reads the denials recorded against the holder of job id since the unix second
 // since, from the checkout holderCheckout names ("" for the store's own), and whether the
 // record reaches back that far. A fork of an ended job folds them into its last attempt.
@@ -126,126 +92,6 @@ type Notice struct {
 }
 
 func (n Notice) String() string { return fmt.Sprintf("%s: %s", n.Path, n.Text) }
-
-// WithRoot names the checkout a row's paths are relative to, for the digest a release
-// records. Without one every release records [DigestAbsent] and a [Notice] says so.
-func WithRoot(root string) StoreOption { return func(c *storeConfig) { c.root = root } }
-
-// WithActor resolves who each write is made by, at every write; an unbound writer returns
-// the zero Actor. [Store.As] pins one instead. A store with neither refuses every row
-// write and grant with an [*UnconfiguredError] rather than guess who wrote it.
-func WithActor(actor func() Actor) StoreOption { return func(c *storeConfig) { c.actor = actor } }
-
-// WithOrigin stamps where a write came from onto what the store records of it: a row's
-// registered_by, an entry's and a grant's by. Without it those are the zero Origin.
-func WithOrigin(origin func(context.Context) Origin) StoreOption {
-	return func(c *storeConfig) { c.origin = origin }
-}
-
-// WithDenials reads the denials a fork of an ended job folds into its last attempt.
-// Without it they are unknown.
-func WithDenials(d Denials) StoreOption { return func(c *storeConfig) { c.denials = d } }
-
-// WithWriteHook runs hook at each [WriteStage] of a row write, inside the write, while
-// the store's locks are held: it must not touch the store.
-func WithWriteHook(hook WriteHook) StoreOption { return func(c *storeConfig) { c.hook = hook } }
-
-// WithRetention runs retain over the rows of every rewrite, inside the lock and before
-// the write, with the store's clock: it may drop rows that are over and stamp
-// [Rows.Retained]. Without it every row is kept.
-func WithRetention(retain func(ctx context.Context, rows *Rows, now time.Time) error) StoreOption {
-	return func(c *storeConfig) { c.retain = retain }
-}
-
-// WithSweep runs sweep over the rows [Store.List] reads before it returns them, for a
-// caller that ends rows it can prove dead. The sweep may write through the store. Without
-// it List returns the rows as stored.
-func WithSweep(sweep func(ctx context.Context, rows Rows) (Rows, error)) StoreOption {
-	return func(c *storeConfig) { c.sweep = sweep }
-}
-
-// WithNotices sends each [Notice] to notice. A store without it refuses every row write
-// and grant with an [*UnconfiguredError], since a write is where a store notices.
-func WithNotices(notice func(Notice)) StoreOption { return func(c *storeConfig) { c.notices = notice } }
-
-// WithClock is the store's clock for what [Store.Now] reads. Without it, time.Now.
-func WithClock(clock func() time.Time) StoreOption { return func(c *storeConfig) { c.clock = clock } }
-
-// WithDeclarationDigest digests one declaration of the file at path, whose content is
-// body, for the release of a claim. It answers a sha256 digest of the lines the
-// declaration spans, or one of the Digest markers. Without it a released declaration
-// records [DigestUnreadable] and a [Notice] says so.
-func WithDeclarationDigest(digest func(ctx context.Context, path, decl string, body []byte) string) StoreOption {
-	return func(c *storeConfig) { c.declared = digest }
-}
-
-// WithHead resolves the committed revision an unbound fork records as a row's
-// Authority. Without it such a fork records none.
-func WithHead(head func(context.Context) string) StoreOption {
-	return func(c *storeConfig) { c.head = head }
-}
-
-// WithMigrations is the store version this build writes, as its header's api_version, and
-// how a file at another is converted to it, the way a Kubernetes conversion takes an
-// object between versions of its group. Without it the store writes [APIVersion] and
-// refuses a file at any other. Open refuses a version that does not parse.
-func WithMigrations(version apiversion.APIVersion, migrate Migrate) StoreOption {
-	return func(c *storeConfig) { c.version, c.migrate = version, migrate }
-}
-
-// WithCredentialKinds are the credential kinds an origin the store records may carry,
-// stored as the caller spells them. A stored kind none of them names is refused rather
-// than read. Without it an origin carrying any kind is refused.
-func WithCredentialKinds(kinds ...CredentialKind) StoreOption {
-	return func(c *storeConfig) { c.creds = newWireEnum(kinds...) }
-}
-
-// WithErrorWrap passes each refusal the store raises of its own, a typed error, through
-// wrap, for a caller that adds its own codes or remedy.
-func WithErrorWrap(wrap func(error) error) StoreOption {
-	return func(c *storeConfig) { c.wrapErr = wrap }
-}
-
-// WithTree digests the tree a check reads, the way the caller defines it: a revision plus
-// a digest of the uncommitted changes, a hash of a module, anything stable. The store
-// compares digests and never interprets one. Without it [Store.Witness], [Store.Attest],
-// [Store.ReportRun] and [Store.Grade] refuse with a [*GradingUnconfiguredError], since no
-// grade could tell a run of this tree from a run of an older one.
-func WithTree(tree func(context.Context) (string, error)) StoreOption {
-	return func(c *storeConfig) { c.tree = tree }
-}
-
-// WithVerifier lets [Store.Attest] accept the statements v vouches for. Without it Attest
-// refuses every statement rather than record one unchecked.
-func WithVerifier(v Verifier) StoreOption { return func(c *storeConfig) { c.verifier = v } }
-
-// WithCheckCommand names the command a check postcondition is run by. The store never reads what
-// a check names (see [WithCheckSpec]), so it derives no argv itself. Without it
-// [Store.Witness] refuses.
-func WithCheckCommand(command CheckCommand) StoreOption {
-	return func(c *storeConfig) { c.command = command }
-}
-
-// Open returns the ledger kept in dir, which holds jobs.jsonl, attempts.jsonl,
-// grants.jsonl, grades.jsonl and the lock. The files are created by the first write. dir is the
-// caller's: Open resolves nothing about a repository. A [WithCheckSpec] given a nil function
-// is a [*CheckSpecError].
-func Open(dir string, opts ...StoreOption) (*Store, error) {
-	if strings.TrimSpace(dir) == "" {
-		return nil, errors.New("job: open a store on the directory that holds it, and none was named")
-	}
-	s := &Store{storeConfig: storeConfig{path: filepath.Join(dir, jobsFileName), creds: newWireEnum[CredentialKind](), version: APIVersion}}
-	for _, opt := range opts {
-		opt(&s.storeConfig)
-	}
-	if _, err := apiversion.Parse(string(s.version)); err != nil {
-		return nil, fmt.Errorf("job: WithMigrations: %w", err)
-	}
-	if err := s.checks.refusal(); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
 
 // Unopened is a store every operation of which fails with err, for a caller that holds
 // the reason it could not place a store rather than return it.
@@ -685,13 +531,6 @@ func (s *Store) endedAttemptDenials(ctx context.Context, id string) ([]Denial, b
 	return denials, known
 }
 
-// Reader is s as a [Reader].
-func (s *Store) Reader() Reader { return storeReader{s} }
-
-type storeReader struct{ s *Store }
-
-func (r storeReader) List(ctx context.Context) ([]Job, error) { return r.s.List(ctx) }
-
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
 //
@@ -780,18 +619,41 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 
 // archive writes the rows a clear or a delete is about to drop beside the ledger, in the
 // ledger's own shape and named for the moment they were dropped, with their attempts. A
-// second drop within the same second overwrites the first archive.
+// second drop within the same second takes the next free "-<n>" suffix, because an
+// archive is a forced delete's only record. The caller holds the store's lock.
 func (s *Store) archive(ctx context.Context, f Rows) error {
 	lines, err := s.encodeJobs(f)
 	if err != nil {
 		return err
 	}
-	stamp := s.Now().UTC().Format("20060102T150405Z")
 	dir := filepath.Dir(s.path)
-	if err := s.archiveAttempts(ctx, filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
+	stem, err := reserveArchive(dir, s.Now().UTC().Format("20060102T150405Z"))
+	if err != nil {
 		return err
 	}
-	return codec.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
+	if err := s.archiveAttempts(ctx, filepath.Join(dir, stem+".attempts.jsonl"), f.Jobs); err != nil {
+		return err
+	}
+	return codec.RewriteLines(filepath.Join(dir, stem+".jsonl"), lines, 0o600)
+}
+
+// reserveArchive creates an empty jobs-<stamp>.jsonl, or jobs-<stamp>-<n>.jsonl for the
+// first n free, exclusively, and returns its name without the extension.
+func reserveArchive(dir, stamp string) (string, error) {
+	for n := 1; ; n++ {
+		stem := "jobs-" + stamp
+		if n > 1 {
+			stem = fmt.Sprintf("jobs-%s-%d", stamp, n)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, stem+".jsonl"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("job: archive: %w", err)
+		}
+		return stem, f.Close()
+	}
 }
 
 // Rewrite runs fn over the ledger as it stands, holding both of the Store's locks, so a
@@ -805,11 +667,13 @@ func (s *Store) archive(ctx context.Context, f Rows) error {
 func (s *Store) Rewrite(ctx context.Context, fn func(*Rows) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.rewrite(ctx, fn)
+	return s.rewrite(ctx, fn, nil)
 }
 
-// rewrite is Rewrite for a caller holding s.mu.
-func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
+// rewrite is Rewrite for a caller holding s.mu. then, when not nil, runs after the rows
+// are written and still under both locks, so what it appends cannot interleave with
+// another writer's.
+func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error, then func() error) error {
 	if err := s.needWriter("Rewrite"); err != nil {
 		return err
 	}
@@ -841,13 +705,21 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error) error {
 				return err
 			}
 		}
-		if err := s.write(f, log); err != nil {
-			return err
+		if err := refuseDuplicateRows(f.Jobs); err != nil {
+			return s.wrap(err)
 		}
 		for _, row := range f.Jobs {
 			delete(gone, row.ID)
 		}
-		return s.dropAttempts(ctx, gone)
+		// Before the rows: a dropped row whose tries outlived it would hand them to the
+		// next job forked under its id.
+		if err := s.dropAttempts(ctx, gone); err != nil {
+			return err
+		}
+		if err := s.write(f, log); err != nil || then == nil {
+			return err
+		}
+		return then()
 	})
 }
 
@@ -939,11 +811,18 @@ func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) 
 	if s.migrate == nil {
 		return Rows{}, jobsLog{}, s.refuseVersion(f)
 	}
-	migrate := func() error { return s.migrate(ctx, s.path, f.APIVersion, lines) }
 	if wait {
-		err = s.locked(ctx, migrate)
+		// The lines were read before the lock: re-read them under it, so a writer that
+		// migrated or appended in between is migrated from what it left.
+		err = s.locked(ctx, func() error {
+			f, log, lines, err := s.parse(ctx, false)
+			if err != nil || s.current(f, log) {
+				return err
+			}
+			return s.migrate(ctx, s.path, f.APIVersion, lines)
+		})
 	} else {
-		err = migrate()
+		err = s.migrate(ctx, s.path, f.APIVersion, lines)
 	}
 	if err != nil {
 		return Rows{}, jobsLog{}, err
@@ -1121,20 +1000,6 @@ func MarshalHeader(features []apiversion.Feature) ([]byte, error) {
 	return codec.Marshal(Rows{TypeMeta: jobListType(), Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
 }
 
-// ReadRecord is the row a line of jobs.jsonl stores, kinds being the credential kinds
-// its origins may carry, and false for a line that is not a row, such as the header.
-func ReadRecord(text []byte, kinds ...CredentialKind) (Job, bool, error) {
-	var r jobRecord
-	if err := codec.Unmarshal(text, &r); err != nil {
-		return Job{}, false, err
-	}
-	if r.Kind != jobType().Kind {
-		return Job{}, false, nil
-	}
-	row, err := r.job(newWireEnum(kinds...))
-	return row, err == nil, err
-}
-
 // Delete removes ONE row and returns it, or reports that no such row exists.
 //
 // A row that is over is still a row: ending a job moves it to a terminal state, which is
@@ -1243,43 +1108,32 @@ func (s *Store) Digest(ctx context.Context, declared string) string {
 
 // fileDigest is Digest for a path SplitClaim already cut.
 func (s *Store) fileDigest(ctx context.Context, declared string) string {
+	body, marker := s.readReleased(ctx, declared)
+	if marker != "" {
+		return marker
+	}
+	sum := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// readReleased reads the released file at declared, or names the marker Digest answers
+// for it instead.
+func (s *Store) readReleased(ctx context.Context, declared string) ([]byte, string) {
 	if s.root == "" {
 		s.notice(Notice{Path: declared, Text: "the store names no root (WithRoot), so its release records " + DigestAbsent})
-		return DigestAbsent
+		return nil, DigestAbsent
 	}
 	if ctx.Err() != nil {
-		return DigestUnreadable
+		return nil, DigestUnreadable
 	}
 	// Symlinks are resolved on BOTH sides before the containment check, so a link inside
 	// the root pointing outside it is never hashed, and a root reached through a symlinked
 	// parent does not read as an escape from itself.
 	full, ok := s.resolve(declared)
 	if !ok {
-		return DigestAbsent
+		return nil, DigestAbsent
 	}
-	info, err := os.Stat(full)
-	switch {
-	case err != nil:
-		return DigestUnreadable
-	case info.IsDir():
-		return DigestDir
-	case !info.Mode().IsRegular():
-		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
-		// somebody writes to it, and it would block holding the store's mutex.
-		return DigestUnreadable
-	case info.Size() > maxDigestBytes:
-		return DigestUnreadable
-	}
-	fh, err := os.Open(full)
-	if err != nil {
-		return DigestUnreadable
-	}
-	defer fh.Close()
-	sum := sha256.New()
-	if _, err := io.Copy(sum, fh); err != nil {
-		return DigestUnreadable
-	}
-	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
+	return readRegular(full)
 }
 
 // resolve is declared inside the root with symlinks resolved, and false when nothing
@@ -1304,28 +1158,16 @@ func (s *Store) resolve(declared string) (string, bool) {
 // declarationDigest is Digest for one declaration of the file at p. The file passes every
 // check Digest makes of a whole file before a line of it is placed.
 func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
-	if whole := s.fileDigest(ctx, p); !strings.HasPrefix(whole, "sha256:") {
-		return whole
+	body, marker := s.readReleased(ctx, p)
+	if marker != "" {
+		return marker
 	}
 	if s.declared == nil {
 		s.notice(Notice{Path: p, Text: "the store digests no declaration (WithDeclarationDigest), so the release of " + decl + " records " + DigestUnreadable})
 		return DigestUnreadable
 	}
-	full, ok := s.resolve(p)
-	if !ok {
-		return DigestAbsent
-	}
-	body, err := os.ReadFile(full)
-	if err != nil {
-		return DigestUnreadable
-	}
 	return s.declared(ctx, p, decl, body)
 }
-
-// maxDigestBytes bounds one release digest, because the hash is computed while the store
-// holds its mutex; a path over the cap records unreadable, which is what it is from the
-// reader's side.
-const maxDigestBytes = 32 << 20
 
 // attemptsLog is attempts.jsonl beside the rows: an attempt lives and dies with the row
 // it is a try of.
@@ -1333,13 +1175,13 @@ func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
 	if s.err != nil {
 		return codec.JSONL[attemptRecord]{}, s.err
 	}
-	return codec.JSONL[attemptRecord]{
+	return codec.NewJSONL(codec.JSONLConfig[attemptRecord]{
 		Path:   filepath.Join(filepath.Dir(s.path), attemptsFileName),
 		Perm:   0o600,
 		Key:    attemptRecord.key,
 		Live:   func(r attemptRecord) bool { return !r.Status.Dropped },
 		OnDrop: s.dropped,
-	}, nil
+	})
 }
 
 // refuseAttemptVersion refuses a line another writer's version stored, which this one
@@ -1415,8 +1257,8 @@ func (s *Store) ChangeLiveAttempt(ctx context.Context, id string, change func(*A
 	return live, nil
 }
 
-// AppendAttempts appends attempts as their records.
-func (s *Store) AppendAttempts(ctx context.Context, attempts ...Attempt) error {
+// appendAttempts appends attempts as their records.
+func (s *Store) appendAttempts(ctx context.Context, attempts ...Attempt) error {
 	if len(attempts) == 0 {
 		return nil
 	}
@@ -1444,7 +1286,7 @@ func MarshalAttempt(a Attempt, dropped bool) ([]byte, error) {
 // AttemptsPath is the attempts file beside the store's rows.
 func (s *Store) AttemptsPath() (string, error) {
 	log, err := s.attemptsLog()
-	return log.Path, err
+	return log.Path(), err
 }
 
 // dropAttempts ends every try of the jobs gone names, whose rows a write dropped, so an
@@ -1495,4 +1337,133 @@ func (s *Store) archiveAttempts(ctx context.Context, path string, rows []Job) er
 		return nil
 	}
 	return codec.RewriteLines(path, lines, 0o600)
+}
+
+func (s *Store) grantsLog() (codec.JSONL[grantRecord], error) {
+	path, err := s.Path()
+	if err != nil {
+		return codec.JSONL[grantRecord]{}, err
+	}
+	return codec.NewJSONL(codec.JSONLConfig[grantRecord]{
+		Path:   filepath.Join(filepath.Dir(path), grantsFileName),
+		Perm:   0o600,
+		Key:    func(r grantRecord) string { return Grant{Job: r.Job, Rule: r.Rule}.Key() },
+		OnDrop: s.dropped,
+	})
+}
+
+// grantRecord is a [Grant] as grants.jsonl stores it. It refuses a member this build does
+// not declare, because the compaction after an older build's read would drop it, and a
+// dropped member of a grant can widen what the grant lowers.
+type grantRecord struct {
+	Job     string       `json:"job"`
+	Rule    string       `json:"rule"`
+	By      originRecord `json:"by"`
+	At      int64        `json:"at"`
+	Until   int64        `json:"until,omitzero"`
+	Attempt int          `json:"attempt,omitzero"`
+	Revoked bool         `json:"revoked,omitzero"`
+}
+
+func (r *grantRecord) UnmarshalJSON(data []byte) error {
+	type plain grantRecord
+	return readNested(data, (*plain)(r), "grantRecord")
+}
+
+func recordGrant(g Grant) grantRecord {
+	return grantRecord{Job: g.Job, Rule: g.Rule, By: recordOrigin(g.By), At: g.At, Until: g.Until, Attempt: g.Attempt, Revoked: g.Revoked}
+}
+
+func (r grantRecord) grant(creds wireEnum[CredentialKind]) (Grant, error) {
+	var bad wireReads
+	g := Grant{Job: r.Job, Rule: r.Rule, By: r.By.origin(&bad, creds), At: r.At, Until: r.Until, Attempt: r.Attempt, Revoked: r.Revoked}
+	if err := bad.refusal(); err != nil {
+		return Grant{}, fmt.Errorf("job: grant of %s for %s: %w", r.Rule, r.Job, err)
+	}
+	return g, nil
+}
+
+// Grant records a person's approval lowering rule to advice for job id's calls until the
+// unix second until, or for the job's live attempt when until is zero. A later grant for the
+// same job and rule replaces it. The caller has checked rule is grantable; the store
+// refuses a lease holder, an unknown job and one that already ended.
+func (s *Store) Grant(ctx context.Context, id, rule string, until int64) (Grant, error) {
+	return s.appendGrant(ctx, id, rule, func(row Job, g *Grant) error {
+		if row.State.Terminal() {
+			return fmt.Errorf("job: %s already ended %s, so there is nothing left to grant", id, row.State)
+		}
+		tries, err := s.Attempts(ctx)
+		if err != nil {
+			return err
+		}
+		g.Until, g.Attempt = until, NewAttempts(tries).LiveN(id)
+		return nil
+	})
+}
+
+// Revoke ends job id's grant of rule, recording who ended it. Revoking a grant that is not
+// there still writes the line.
+func (s *Store) Revoke(ctx context.Context, id, rule string) (Grant, error) {
+	return s.appendGrant(ctx, id, rule, func(_ Job, g *Grant) error {
+		g.Revoked = true
+		return nil
+	})
+}
+
+// GrantRefusedError is a grant or revocation made under a lease: a grant is a person's
+// keystroke, and a process acting under a lease is a worker.
+type GrantRefusedError struct {
+	Lease string
+}
+
+func (e *GrantRefusedError) Error() string {
+	return fmt.Sprintf("job: a grant is a person's keystroke, and this process acts under lease %q: a person grants it at their own terminal", e.Lease)
+}
+
+func (s *Store) appendGrant(ctx context.Context, id, rule string, fill func(Job, *Grant) error) (Grant, error) {
+	if err := s.needWriter("Grant"); err != nil {
+		return Grant{}, err
+	}
+	if actor := s.Actor(); actor.Bound() {
+		return Grant{}, s.wrap(&GrantRefusedError{Lease: actor.Lease})
+	}
+	rows, err := s.List(ctx)
+	if err != nil {
+		return Grant{}, err
+	}
+	i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == id })
+	if i < 0 {
+		return Grant{}, s.wrap(fmt.Errorf("%w: %q", ErrUnknownJob, id))
+	}
+	g := Grant{Job: id, Rule: rule, By: s.callerOrigin(ctx), At: s.Now().Unix()}
+	if err := fill(rows[i], &g); err != nil {
+		return Grant{}, err
+	}
+	log, err := s.grantsLog()
+	if err != nil {
+		return Grant{}, err
+	}
+	return g, s.wrap(log.Update(ctx, func([]grantRecord) []grantRecord { return []grantRecord{recordGrant(g)} }))
+}
+
+// Grants is every job and rule's last line, revocations included, in the order they were
+// last written.
+func (s *Store) Grants(ctx context.Context) ([]Grant, error) {
+	log, err := s.grantsLog()
+	if err != nil {
+		return nil, err
+	}
+	records, err := log.Load()
+	if err != nil {
+		return nil, s.wrap(err)
+	}
+	grants := make([]Grant, 0, len(records))
+	for _, r := range records {
+		g, err := r.grant(s.creds)
+		if err != nil {
+			return nil, s.wrap(err)
+		}
+		grants = append(grants, g)
+	}
+	return grants, nil
 }

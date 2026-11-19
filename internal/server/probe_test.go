@@ -630,7 +630,7 @@ func TestRenderProbeResults(t *testing.T) {
 	render := func(results []probeResult) (string, string, bool) {
 		var out strings.Builder
 		var ok bool
-		errb := notices(t, func() { ok = renderProbeResults(t.Context(), &out, results) })
+		errb := notices(t, func() { ok = renderProbeResults(withSecrets(t.Context()), &out, results) })
 		return out.String(), errb, ok
 	}
 

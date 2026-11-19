@@ -31,7 +31,7 @@ func (s *LeaseBoundarySuite) SetupTest() {
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		s.Require().NoError(os.MkdirAll(filepath.Join(s.root, filepath.FromSlash(dir)), 0o755))
 	}
-	base, err := New([]Bind{{Path: s.root, Mode: "rwx"}, {Path: s.outside}, {Path: "/dev/null", Mode: "rw"}})
+	base, err := New(Config{Binds: []Bind{{Path: s.root, Mode: "rwx"}, {Path: s.outside}, {Path: "/dev/null", Mode: "rw"}}})
 	s.Require().NoError(err)
 	s.base = base
 }
@@ -87,6 +87,16 @@ func (s *LeaseBoundarySuite) TestALiteralPathToCreateGrantsItsDirectory() {
 	s.Require().NoError(s.writes(p, "pkg/a/sibling.go"), "the grant is the directory the file lands in")
 	s.Error(s.writes(p, "pkg/b/x.txt"))
 	s.Error(s.writes(p, "pkg/nowhere/x.txt"))
+}
+
+func (s *LeaseBoundarySuite) TestALiteralPathUnderAMissingDirectoryGrantsNoAncestor() {
+	b, ok := LeaseBoundary(s.worker([]string{"pkg/a/missing/deeper/new.go"}, nil), job.LeaseSourceMarker, s.root)
+	s.Require().True(ok)
+	p := b.Apply(s.base)
+
+	s.Zero(b.Granted())
+	s.Error(s.writes(p, "pkg/a/missing/deeper/new.go"))
+	s.Error(s.writes(p, "pkg/a/x.txt"), "pkg/a is two missing levels up, not the file's directory")
 }
 
 func (s *LeaseBoundarySuite) TestNothingOutsideTheCheckoutIsGranted() {

@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/libs/codec"
 )
 
-// DefaultRetention is how long an invocation file outlives its newest fact. [Open]
-// prunes with it; a caller that wants a different window calls [Prune] directly.
+// DefaultRetention is a [Config.Retention] a caller may choose: thirty days past an
+// invocation file's newest fact.
 const DefaultRetention = 30 * 24 * time.Hour
 
 // defaultMaxFiles caps how many invocation files a store keeps, newest fact first.
@@ -61,20 +61,29 @@ type Tie struct {
 // that does contend skips pruning this round rather than waiting to prune again a
 // moment later, which "at most once per interval" already tolerates.
 //
-// Every error is dropped, a failed prune included: Open cannot fail over housekeeping,
-// and the next interval prunes again.
-func claimStalePruneStamp(ctx context.Context, dir, stamp, keep string, o options) {
-	_ = codec.WithLock(ctx, stamp+".lock", 0, func() error {
-		if fi, err := os.Stat(stamp); err == nil && o.now().Sub(fi.ModTime()) < pruneInterval {
+// Every error goes to c.PruneErrors and none fails the open: Open cannot fail over
+// housekeeping, and the next interval prunes again. A lost race for the lock is no
+// error, since another caller is pruning.
+func claimStalePruneStamp(ctx context.Context, stamp, keep string, c Config) {
+	err := codec.WithLock(ctx, stamp+".lock", 0, func() error {
+		if fi, err := os.Stat(stamp); err == nil && c.now().Sub(fi.ModTime()) < pruneInterval {
 			return nil // another caller already pruned and refreshed the stamp while this one waited
 		}
-		_ = prune(ctx, dir, DefaultRetention, defaultMaxFiles, keep, o)
-		now := o.now()
-		if os.Chtimes(stamp, now, now) != nil {
-			_ = os.WriteFile(stamp, nil, 0o644)
+		if err := prune(ctx, c.Dir, c.Retention, defaultMaxFiles, keep, c); err != nil {
+			c.PruneErrors(ctx, err)
+		}
+		now := c.now()
+		if os.Chtimes(stamp, now, now) == nil {
+			return nil
+		}
+		if err := os.WriteFile(stamp, nil, 0o644); err != nil {
+			return &StoreError{Op: "write prune stamp", Path: stamp, Err: err}
 		}
 		return nil
 	})
+	if _, lost := errors.AsType[*codec.LockHeldError](err); err != nil && !lost {
+		c.PruneErrors(ctx, err)
+	}
 }
 
 // Prune deletes whole invocation files whose newest fact is older than retain, and then
@@ -94,7 +103,9 @@ func claimStalePruneStamp(ctx context.Context, dir, stamp, keep string, o option
 // but could not delete, joined; a store that does not exist has nothing to prune. A
 // failure deletes nothing it did not mean to: every file it cannot read or that changed
 // since it was read is kept. Callers on the write path must not be able to lose a fact
-// because housekeeping went wrong, which is why [Open] drops the error.
+// because housekeeping went wrong, which is why [Open] hands the error to
+// [Config.PruneErrors] rather than return it. An option refused is an *[OptionError],
+// joined, and prunes nothing.
 //
 // # Ties
 //
@@ -118,18 +129,22 @@ func claimStalePruneStamp(ctx context.Context, dir, stamp, keep string, o option
 //
 // It stops early and returns ctx.Err() as is once ctx is done.
 func Prune(ctx context.Context, dir string, retain time.Duration, opts ...Option) error {
-	return prune(ctx, dir, retain, defaultMaxFiles, "", newOptions(opts))
+	c, err := Config{}.applied(opts)
+	if err != nil {
+		return err
+	}
+	return prune(ctx, dir, retain, defaultMaxFiles, "", c)
 }
 
 // prune is [Prune] with the caller's own invocation file held back. Open passes its
 // invocation file so a writer can never delete the file it is about to append to,
 // whatever the clock or a reused invocation id says. maxFiles of zero or less leaves the
 // count uncapped.
-func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, keep string, o options) error {
+func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, keep string, c Config) error {
 	if retain <= 0 {
 		return nil
 	}
-	cutoff := o.now().Add(-retain)
+	cutoff := c.now().Add(-retain)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -195,7 +210,7 @@ func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, 
 			if rec.Kind == KindAgentEvent {
 				holdsAgentEvents[name] = true
 			}
-			if id := o.tie.key(rec); id != "" {
+			if id := c.tie.key(rec); id != "" {
 				if groupFiles[id] == nil {
 					groupFiles[id] = make(map[string]bool)
 				}
@@ -225,7 +240,7 @@ func prune(ctx context.Context, dir string, retain time.Duration, maxFiles int, 
 
 	sortRecords(all)
 	held := make(map[string]bool)
-	for _, id := range o.tie.held(Fold{Records: all}) {
+	for _, id := range c.tie.held(Fold{Records: all}) {
 		held[id] = true
 	}
 

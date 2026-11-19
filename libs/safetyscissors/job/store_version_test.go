@@ -45,7 +45,7 @@ func (s *StoreVersionSuite) TestARetiredNameNamesTheRowAndTheRespelling() {
 // A row spelling its postconditions goals would keep them as an unknown member, and every
 // reader would see a row with none.
 func (s *StoreVersionSuite) TestARowSpellingGoalsIsRefused() {
-	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
+	_, _, err := readRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"goals":[{"id":"tests","kind":"check","expect":"passed","check":{"target":"test","project":"."}}]},"status":{"created":1,"updated":1}}`))
 
 	retired, ok := errors.AsType[*RetiredNameError](err)
@@ -54,7 +54,7 @@ func (s *StoreVersionSuite) TestARowSpellingGoalsIsRefused() {
 }
 
 func (s *StoreVersionSuite) TestARowRequiringSignatureGoalsIsRefused() {
-	_, _, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job",` +
+	_, _, err := readRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job",` +
 		`"metadata":{"name":"a","annotations":{"safetyscissors.job/requires":"signature-goals"}},"spec":{},"status":{"created":1,"updated":1}}`))
 
 	retired, ok := errors.AsType[*RetiredNameError](err)
@@ -87,7 +87,7 @@ func (s *StoreSuite) TestAStoredRowSpellingGoalsIsRefused() {
 }
 
 func (s *StoreVersionSuite) TestARowSpellingPostconditionsReads() {
-	row, ok, err := ReadRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{},"status":{"created":1,"updated":1}}`))
+	row, ok, err := readRecord([]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{},"status":{"created":1,"updated":1}}`))
 
 	s.Require().NoError(err)
 	s.True(ok)
@@ -141,7 +141,7 @@ func (s *StoreVersionSuite) TestAMigratedRowKeepsTheOlderLayout() {
 	s.Require().NoError(err)
 	text, err := codec.Marshal(got)
 	s.Require().NoError(err)
-	_, _, err = ReadRecord(text)
+	_, _, err = readRecord(text)
 
 	s.Contains(s.spec(got), `"accept":["Witnessed"]`)
 	refused, ok := errors.AsType[*apiversion.RefusedError](err)

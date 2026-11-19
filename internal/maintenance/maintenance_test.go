@@ -1,6 +1,7 @@
 package maintenance
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,11 @@ import (
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// Production installs a resolver in main; the journal refuses to write without one.
+func withSecrets(ctx context.Context) context.Context {
+	return testkit.WithEnvResolver(ctx)
+}
 
 func TestBuildSchedule_SkipsDisabledAndResolvesArgv(t *testing.T) {
 	m := config.Maintenance{
@@ -50,12 +56,13 @@ func TestIsDue(t *testing.T) {
 
 	// Ran 25h ago (start + duration = finish): interval elapsed, due.
 	old := now.Add(-25 * time.Hour)
-	recorder.AppendCall(t.Context(), dir, journal.Call{Time: old.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
+	ctx := withSecrets(t.Context())
+	recorder.AppendCall(ctx, dir, journal.Call{Time: old.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
 	require.True(t, due(j))
 
 	// A more recent run (1h ago) is newest, so LastRun returns it: not due.
 	recent := now.Add(-time.Hour)
-	recorder.AppendCall(t.Context(), dir, journal.Call{Time: recent.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
+	recorder.AppendCall(ctx, dir, journal.Call{Time: recent.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
 	require.False(t, due(j))
 
 	// A run of a DIFFERENT job does not satisfy this one.

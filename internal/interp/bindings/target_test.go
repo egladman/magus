@@ -72,7 +72,7 @@ func requireDirect(t *testing.T, obj vm.Value, name string) vm.Value {
 // session's, and a test calls the same DirectValue with the same handle twice.
 func callVoidDirect(t *testing.T, fn vm.Value, args ...vm.Value) error {
 	t.Helper()
-	_, err := callSession(t).CallValue(context.Background(), fn, args)
+	_, err := callSession(t).CallValue(testCtx(), fn, args)
 	return err
 }
 
@@ -562,7 +562,7 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
-	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
+	r := testkit.EnvResolver(t, secrets.WithOpener(p.Opener()))
 
 	// The same evaluation's read goes through the selected provider.
 	parsed, err := parseChoices(t, secrets.WithResolver(context.Background(), r),
@@ -578,7 +578,9 @@ try {
 	assert.Equal(t, "onepassword", parsed.Choices.SecretProvider, "the selection is returned for the workspace's later runs")
 	assert.Empty(t, r.ProviderName(), "the run's resolver is derived from, never changed")
 	assert.Equal(t, 1, p.Fetches("op://vault/token"))
-	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=op-token-value"))))
+	red, err := r.RedactString("tok=op-token-value")
+	require.NoError(t, err)
+	assert.Equal(t, "tok=***", red)
 }
 
 // parseChoices evaluates a magusfile whose top level is body through [interp.Parse], the
@@ -593,7 +595,7 @@ func parseChoices(t *testing.T, ctx context.Context, body string) (interp.Parsed
 }
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
-	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(context.Background())
 
 	// Typed as any, so the value reaches the binding rather than the type checker.
 	_, err := parseChoices(t, ctx, `final handle: any = "onepassword";
@@ -616,7 +618,7 @@ try {
 }
 
 func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StringValue("onepassword"))
 	err := callSecret(t, secretObj, "provider", handle)
@@ -625,7 +627,7 @@ func TestSecretProviderOutsideAnEvaluationIsRefused(t *testing.T) {
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
-	r := secrets.NewResolver()
+	r := testkit.EnvResolver(t)
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
 	secretObj := buildSecret(secrets.WithResolver(context.Background(), r), nil)
 
@@ -633,18 +635,20 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 
 	// Reading through the namespace is what registers the value, so redaction is live
 	// from this point on. That the read happened at all is what this masking proves.
-	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=ns-token-value"))))
+	red, err := r.RedactString("tok=ns-token-value")
+	require.NoError(t, err)
+	assert.Equal(t, "tok=***", red)
 }
 
 func TestSecretReadRejectsEmptyReference(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
 	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
@@ -673,7 +677,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
-	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
+	ctx := testkit.WithEnvResolver(context.Background())
 	ctx = recorder.WithSinks(ctx, rec.Handle)
 	ctx = recorder.WithStep(ctx, "demo", "publish")
 
@@ -745,7 +749,7 @@ func (s *SecretGrantSuite) TestAnEndpointOutsideARunIsRefusedByName() {
 	grant.MapSet("ref", vm.StringValue("TOKEN"))
 	grant.MapSet("host", vm.StringValue("api.example.com"))
 	grant.MapSet("header", vm.StringValue("Authorization"))
-	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(testkit.WithEnvResolver(context.Background()), nil)
 
 	err := callVoidDirect(s.T(), requireDirect(s.T(), secretObj, "endpoint"), grant)
 	s.Require().ErrorContains(err, "belongs to a run")
@@ -910,7 +914,7 @@ func runUsesTarget(t *testing.T, target string) (trace string, err error) {
 	t.Chdir(dir)
 	w.Magusfile(usesMagusfile)
 
-	_, err = interp.RunDir(context.Background(), dir, target, nil)
+	_, err = interp.RunDir(testCtx(), dir, target, nil)
 	raw, readError := os.ReadFile(filepath.Join(dir, "trace.txt"))
 	if readError != nil {
 		return "", err
@@ -948,7 +952,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 `
 	w.Magusfile(src)
-	_, err := interp.RunDir(context.Background(), dir, "build", nil)
+	_, err := interp.RunDir(testCtx(), dir, "build", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be a fiber")
 }
@@ -997,7 +1001,7 @@ func TestConditionalNeedsDispatchesOnlyTheTakenBranch(t *testing.T) {
 	t.Chdir(dir)
 	w.Magusfile(conditionalNeedsMagusfile)
 
-	_, err := interp.RunDir(context.Background(), dir, "build", nil)
+	_, err := interp.RunDir(testCtx(), dir, "build", nil)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(dir, "ran.txt"))
@@ -1034,7 +1038,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 			dir := w.Root()
 			t.Chdir(dir)
 			w.Magusfile(mf)
-			ctx := t.Context()
+			ctx := testCtx()
 			if tc.narrowing != nil {
 				ctx = project.WithOpNarrowing(ctx, *tc.narrowing)
 			}

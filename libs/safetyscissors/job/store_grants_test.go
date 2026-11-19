@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ type StoreGrantsSuite struct {
 func TestStoreGrantsSuite(t *testing.T) { suite.Run(t, new(StoreGrantsSuite)) }
 
 func (s *StoreGrantsSuite) SetupTest() {
-	st, err := Open(s.T().TempDir(), writable(WithOrigin(func(context.Context) Origin { return Origin{User: "eli"} }))...)
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, writable(WithOrigin(func(context.Context) Origin { return Origin{User: "eli"} }))...)
 	s.Require().NoError(err)
 	s.store = st
 	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateRunning })
@@ -88,7 +89,7 @@ func (s *StoreGrantsSuite) TestAGrantEndsWithTheJobAndItsAttempt() {
 	ended := row
 	ended.State = StatePass
 	s.False(s.lowersAt(ended, "hooks-off", now), "a grant ends at the job's terminal state")
-	s.Require().NoError(s.store.AppendAttempts(ctx, Attempt{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}))
+	s.Require().NoError(s.store.appendAttempts(ctx, Attempt{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}))
 	s.False(s.lowersAt(row, "hooks-off", now), "the next attempt is not the one the person approved")
 }
 
@@ -115,6 +116,23 @@ func (s *StoreGrantsSuite) TestAGrantsLogIsReadableByItsOwnerAlone() {
 
 	s.Require().NoError(err)
 	s.Equal(os.FileMode(0o600), info.Mode().Perm())
+}
+
+func (s *StoreGrantsSuite) TestAMemberANewerWriterStoredInAGrantIsRefused() {
+	ctx := s.T().Context()
+	path, err := s.store.Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(filepath.Join(filepath.Dir(path), grantsFileName),
+		[]byte(`{"job":"a","rule":"hooks-off","by":{"user":"eli"},"at":1,"paths":["pkg/**"]}`+"\n"), 0o600))
+
+	_, err = s.store.Grants(ctx)
+
+	refused, ok := errors.AsType[*UnknownMemberError](err)
+	s.Require().True(ok, err)
+	s.Equal("grantRecord", refused.Record)
+	s.Equal([]string{"paths"}, refused.Members)
+	_, err = s.store.Grant(ctx, "a", "hooks-off", 0)
+	s.Error(err, "a grant whose write could compact the line away is refused too")
 }
 
 func (s *StoreGrantsSuite) TestAGrantLowersItsRuleWhileTheJobRuns() {

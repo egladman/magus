@@ -199,28 +199,6 @@ func (r *TargetResult) UnmarshalJSON(b []byte) error {
 // listing the store for invocations skips any other file.
 const FileExt = ".jsonl"
 
-// Option configures [Open], [Prune] and [LoadEvents].
-type Option func(*options)
-
-type options struct {
-	now func() time.Time
-	tie Tie
-}
-
-func newOptions(opts []Option) options {
-	o := options{now: time.Now}
-	for _, opt := range opts {
-		opt(&o)
-	}
-	return o
-}
-
-// WithClock stamps records and ages files by now instead of the real clock.
-func WithClock(now func() time.Time) Option { return func(o *options) { o.now = now } }
-
-// WithTie has pruning keep the records t binds together; see [Prune].
-func WithTie(t Tie) Option { return func(o *options) { o.tie = t } }
-
 // Bounder is a payload that clamps itself before [Writer.Append] stores it. The bound
 // is applied at write time because it protects the store, not the caller: a payload
 // carrying text a producer piped in unbounded is a line every later reader pays for,
@@ -241,39 +219,50 @@ type Writer struct {
 	begun bool
 }
 
-// Open prepares a writer for invocation id under dir, which is created if absent.
+// Open prepares a writer for cfg.Invocation under cfg.Dir, which is created if absent.
 //
-// It writes NOTHING: the invocation's file appears with the first fact, and start is
+// It writes NOTHING: the invocation's file appears with the first fact, and cfg.Start is
 // emitted as the KindInvocationStart record just ahead of it. A command that produces no
 // facts therefore leaves no entry at all, rather than an invocation that only ever says
 // it began.
 //
-// Opening also prunes the store at [DefaultRetention] with the options' [Tie], which is
-// what keeps a grow-only store bounded without a server or a cron: every producer opens,
-// so every producer pays a little of the housekeeping. It is best-effort and cannot fail
-// the open; see [Prune]. It runs at most once per [pruneInterval], since reading a store
-// of ten thousand invocations cost every run 17ms to delete nothing.
+// Opening also prunes the store at cfg.Retention with the options' [Tie], which is what
+// keeps a grow-only store bounded without a server or a cron: every producer opens, so
+// every producer pays a little of the housekeeping. It cannot fail the open: each error
+// it meets goes to cfg.PruneErrors; see [Prune]. It runs at most once per
+// [pruneInterval], since reading a store of ten thousand invocations cost every run 17ms
+// to delete nothing.
 //
 // An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
-// An id [ValidFileID] refuses is an [*InvalidIDError].
 //
-// It stops early and returns ctx.Err() as is once ctx is done.
-func Open(ctx context.Context, dir, invocation string, start InvocationStart, opts ...Option) (*Writer, error) {
+// It fails with every configuration problem found, joined: an *[OptionError] for each
+// refused option, a *[ConfigError] for an empty Dir, a Retention that is not positive and
+// a nil PruneErrors, and an [*InvalidIDError] for an Invocation [ValidFileID] refuses. It
+// stops early and returns ctx.Err() as is once ctx is done.
+func Open(ctx context.Context, cfg Config, opts ...Option) (*Writer, error) {
+	c, errs := cfg.checked(opts)
+	if !ValidFileID(c.Invocation) {
+		errs = append(errs, &InvalidIDError{Field: "invocation id", ID: c.Invocation})
+	}
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return open(ctx, c)
+}
+
+// open is [Open] over a Config [Config.checked] accepted and a valid invocation id.
+func open(ctx context.Context, c Config) (*Writer, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !ValidFileID(invocation) {
-		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
+	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
+		return nil, &StoreError{Op: "create store", Path: c.Dir, Err: err}
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, &StoreError{Op: "create store", Path: dir, Err: err}
+	stamp := filepath.Join(c.Dir, pruneStamp)
+	if fi, err := os.Stat(stamp); err != nil || c.now().Sub(fi.ModTime()) >= pruneInterval {
+		claimStalePruneStamp(ctx, stamp, c.Invocation+FileExt, c)
 	}
-	o := newOptions(opts)
-	stamp := filepath.Join(dir, pruneStamp)
-	if fi, err := os.Stat(stamp); err != nil || o.now().Sub(fi.ModTime()) >= pruneInterval {
-		claimStalePruneStamp(ctx, dir, stamp, invocation+FileExt, o)
-	}
-	w := &Writer{path: filepath.Join(dir, invocation+FileExt), invocation: invocation, now: o.now, start: start}
+	w := &Writer{path: filepath.Join(c.Dir, c.Invocation+FileExt), invocation: c.Invocation, now: c.now, start: c.Start}
 	w.resume()
 	return w, nil
 }
@@ -347,11 +336,35 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on a CLI path is
 	// positioned to run.
-	if err := codec.AppendLines(w.path, [][]byte{line}, 0o600, codec.WithoutSync()); err != nil {
+	lines := [][]byte{line}
+	if unfinishedTail(w.path) {
+		// A writer died mid-line: end that line, so this record is not glued onto it.
+		lines = [][]byte{nil, line}
+	}
+	if err := codec.AppendLines(w.path, lines, 0o600, codec.WithoutSync()); err != nil {
 		return &StoreError{Op: "append " + kind + " record", Path: w.path, Err: err}
 	}
 	w.seq++
 	return nil
+}
+
+// unfinishedTail reports whether the file at path ends in bytes no newline closes. An
+// absent or unreadable file reports false: the append itself then says what is wrong.
+func unfinishedTail(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || info.Size() == 0 {
+		return false
+	}
+	last := make([]byte, 1)
+	if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+		return false
+	}
+	return last[0] != '\n'
 }
 
 // Fold is the union of every invocation file in one store, ordered.
@@ -385,8 +398,10 @@ type Fold struct {
 // line is skipped and counted in Skipped rather than failing the read, so one killed
 // process cannot make the whole history unreadable. A file listed by the directory but
 // gone by the time it is opened was pruned by another process mid-fold; it counts as
-// neither an invocation nor damage. Only an unreadable DIRECTORY is an error, a line
-// stamped with the group these records had before the module took them, which is a
+// neither an invocation nor damage. An unreadable directory, and a file that cannot be
+// opened or read to its end, are a [*StoreError]: a fold missing a file's records is not
+// the history. So is a line stamped with the group these records had before the module
+// took them, which is a
 // [*RetiredGroupError], and a loaded event holding a retired guard decision, which is a
 // [*RetiredDecisionError].
 //
@@ -411,6 +426,9 @@ func ReadAll(ctx context.Context, dir string) (Fold, error) {
 		read := decodeFile(path)
 		if read.vanished {
 			continue
+		}
+		if read.err != nil {
+			return Fold{}, &StoreError{Op: "read invocation", Path: path, Err: read.err}
 		}
 		if err := read.refusal(path); err != nil {
 			return Fold{}, err
@@ -573,8 +591,8 @@ func (r fileRead) refusal(path string) error {
 	return refuseRetiredDecision(path, r.records)
 }
 
-// readFile is [decodeFile]'s result as the fold and rotation read it, without the
-// failure that ended the file, which they count as a skipped line.
+// readFile is [decodeFile]'s result as pruning reads it, without the failure that ended
+// the file: a file it cannot read dates nothing, so pruning keeps it.
 func readFile(path string) (records []Record, skipped, legacy int, retired apiversion.APIVersion, vanished bool) {
 	r := decodeFile(path)
 	return r.records, r.skipped, r.legacy, r.retired, r.vanished
@@ -586,9 +604,8 @@ func readFile(path string) (records []Record, skipped, legacy int, retired apive
 // The vanished case is separated from the unreadable one because pruning can delete a
 // file between a caller's directory listing and this open. Nothing was lost that the
 // caller could have read, so counting it as damage would report corruption every time
-// housekeeping ran. Any OTHER open failure (a permission, a device error) is real: it is
-// err, and it counts as a skipped line, on the same reasoning as a corrupt tail: a fold
-// of the whole store keeps a partial history rather than refusing it.
+// housekeeping ran. Any OTHER open or read failure (a permission, a device error) is
+// real: it is err, which every reader of records returns.
 func decodeFile(path string) fileRead {
 	f, err := os.Open(path)
 	if err != nil {
@@ -863,30 +880,47 @@ type LoadResult struct {
 // built on: a loader re-reads whole transcript files rather than tracking where it
 // stopped, and the store is what makes that cheap instead of duplicative.
 //
-// start supplies the fields a start record carries beyond the events themselves; Host
-// and Session are overwritten per session from the events, since that is the join this
-// store exists to record. Events are written in the order given, so a caller that wants
-// them ordered orders them first. ctx bounds the wait for another loader's lock and
-// nothing else. opts reach every [Open] the load makes.
-func LoadEvents(ctx context.Context, dir string, events []LoadEvent, start InvocationStart, opts ...Option) (LoadResult, error) {
+// The store is cfg.Dir, and every writer the load opens is configured as [Open] would be
+// from cfg. Each session's events are filed under that session's id, so cfg.Invocation
+// is ignored. cfg.Start supplies the fields a start record carries beyond the events
+// themselves; Host and Session are overwritten per session from the events, since that
+// is the join this store exists to record. Events are written in the order given, so a
+// caller that wants them ordered orders them first. ctx bounds the wait for another
+// loader's lock and nothing else.
+//
+// A configuration [Open] refuses fails the load before it reads anything, with the same
+// errors, and a session id [ValidFileID] refuses fails it at that session with an
+// [*InvalidIDError].
+func LoadEvents(ctx context.Context, cfg Config, events []LoadEvent, opts ...Option) (LoadResult, error) {
+	c, errs := cfg.checked(opts)
+	if err := errors.Join(errs...); err != nil {
+		return LoadResult{}, err
+	}
 	// The one operation in this package that is NOT append-only, and therefore the one
 	// that needs a lock. Everything else appends a line, which POSIX makes atomic on a
 	// local filesystem; this reads the whole store to build a dedup set and then appends
 	// against it, so two loaders that both read before either writes each believe the
 	// other's events are new and store them twice, permanently, because the dedup set is
 	// a snapshot.
+	//
+	// The store is made first, owner-only as Open makes it, because the lock would create
+	// it world-searchable.
+	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
+		return LoadResult{}, &StoreError{Op: "create store", Path: c.Dir, Err: err}
+	}
 	var result LoadResult
-	err := codec.WithLock(ctx, filepath.Join(dir, loadLockName), loadLockTimeout, func() error {
+	err := codec.WithLock(ctx, filepath.Join(c.Dir, loadLockName), loadLockTimeout, func() error {
 		var err error
-		result, err = loadEvents(ctx, dir, events, start, opts)
+		result, err = loadEvents(ctx, c, events)
 		return err
 	})
 	return result, err
 }
 
-// loadEvents is LoadEvents' body, run under the store's load lock.
-func loadEvents(ctx context.Context, dir string, events []LoadEvent, start InvocationStart, opts []Option) (LoadResult, error) {
-	fold, err := ReadAll(ctx, dir)
+// loadEvents is LoadEvents' body, run under the store's load lock with a Config
+// [Config.checked] accepted.
+func loadEvents(ctx context.Context, c Config, events []LoadEvent) (LoadResult, error) {
+	fold, err := ReadAll(ctx, c.Dir)
 	if err != nil {
 		return LoadResult{}, err
 	}
@@ -902,9 +936,13 @@ func loadEvents(ctx context.Context, dir string, events []LoadEvent, start Invoc
 		}
 		w := writers[ev.Session]
 		if w == nil {
-			loadStart := start
-			loadStart.Host, loadStart.Session = ev.Event.Host, ev.Session
-			if w, err = Open(ctx, dir, ev.Session, loadStart, opts...); err != nil {
+			if !ValidFileID(ev.Session) {
+				return result, &InvalidIDError{Field: "invocation id", ID: ev.Session}
+			}
+			sc := c
+			sc.Invocation = ev.Session
+			sc.Start.Host, sc.Start.Session = ev.Event.Host, ev.Session
+			if w, err = open(ctx, sc); err != nil {
 				return result, err
 			}
 			writers[ev.Session] = w

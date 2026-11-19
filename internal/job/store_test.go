@@ -1276,7 +1276,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 
 	holder, holderTrail := t.TempDir(), t.TempDir()
 	deny := func(base, rule string) {
-		recorder.AppendAgentCommand(t.Context(), base, recorder.AgentCommand{
+		recorder.AppendAgentCommand(withSecrets(t.Context()), base, recorder.AgentCommand{
 			Host: "claude-code", Session: "s1", Tool: "file.write", Path: "docs/x.md",
 			Decision: "deny", Reason: "docs/x.md is no lease's", Rule: rule, Lease: "a",
 		})

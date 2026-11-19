@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"time"
@@ -13,7 +12,11 @@ import (
 
 // recordShowcase drives the session and writes the marked capture.
 func recordShowcase(dir string) error {
-	s, err := spawn.StartTTY(context.Background(), "bash", []string{"--noprofile", "--norc"}, dir, showCols, showRows)
+	ctx, err := background()
+	if err != nil {
+		return err
+	}
+	s, err := spawn.StartTTY(ctx, "bash", []string{"--noprofile", "--norc"}, dir, showCols, showRows)
 	if err != nil {
 		return fmt.Errorf("start session: %w", err)
 	}

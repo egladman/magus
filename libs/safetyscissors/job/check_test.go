@@ -126,13 +126,13 @@ func (s *CheckSuite) TestAStoredRowsChecksRewriteToOneLine() {
 	stored := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},` +
 		`"spec":{"check":{ "target" : "test", "project": "." },"postconditions":[{"id":"lint","kind":"check","expect":"passed",` +
 		`"check":{"target":"lint","project":"p"},"accept":["witnessed"]}]},"status":{"created":10,"updated":20}}`)
-	row, ok, err := ReadRecord(stored)
+	row, ok, err := readRecord(stored)
 	s.Require().NoError(err)
 	s.Require().True(ok)
 
 	once, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
-	again, ok, err := ReadRecord(once)
+	again, ok, err := readRecord(once)
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	twice, err := MarshalRecord(again, nil)
@@ -200,7 +200,7 @@ func (specChecks) Render(c Check) (string, error) {
 }
 
 // testCheckSpec is the [WithCheckSpec] every test store is opened with.
-func testCheckSpec() StoreOption { return WithCheckSpec(specChecks{}) }
+func testCheckSpec() Option { return WithCheckSpec(specChecks{}) }
 
 // rawCheck is the Check json spells, as its author spelled it: the tests hand the store
 // spellings no decode would keep.
@@ -228,21 +228,22 @@ func TestCheckSpecSuite(t *testing.T) { suite.Run(t, new(CheckSpecSuite)) }
 
 func (s *CheckSpecSuite) SetupTest() { s.dir = s.T().TempDir() }
 
-func (s *CheckSpecSuite) open(opts ...StoreOption) *Store {
-	st, err := Open(s.dir, writable(opts...)...)
+func (s *CheckSpecSuite) open(opts ...Option) *Store {
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, writable(opts...)...)
 	s.Require().NoError(err)
 	return st
 }
 
 func (s *CheckSpecSuite) TestOpenRefusesANilSpec() {
-	_, err := Open(s.dir, WithCheckSpec(nil))
+	_, err := Open(s.T().Context(), Config{Dir: s.dir}, WithCheckSpec(nil))
 
-	_, ok := errors.AsType[*CheckSpecError](err)
-	s.True(ok, err)
+	refused, ok := errors.AsType[*OptionError](err)
+	s.Require().True(ok, err)
+	s.Equal("WithCheckSpec", refused.Option)
 }
 
 func (s *CheckSpecSuite) TestAStoreWithNoCheckSpecRefusesARowWrite() {
-	st, err := Open(s.dir, WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {}))
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, WithActor(func() Actor { return Actor{} }), WithNotices(func(Notice) {}))
 	s.Require().NoError(err)
 
 	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
@@ -253,7 +254,7 @@ func (s *CheckSpecSuite) TestAStoreWithNoCheckSpecRefusesARowWrite() {
 }
 
 func (s *CheckSpecSuite) TestAStoreWithNoCheckSpecRefusesToGrade() {
-	st, err := Open(s.dir, WithTree(func(_ context.Context) (string, error) { return "tree", nil }))
+	st, err := Open(s.T().Context(), Config{Dir: s.dir}, WithTree(func(_ context.Context) (string, error) { return "tree", nil }))
 	s.Require().NoError(err)
 
 	_, err = st.Grade(s.T().Context(), "a", nil)

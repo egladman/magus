@@ -114,11 +114,12 @@ func gateWaivers(store *job.Store) (file.JSONL[types.GateWaiver], error) {
 	if err != nil {
 		return file.JSONL[types.GateWaiver]{}, err
 	}
-	return file.JSONL[types.GateWaiver]{JSONL: codec.JSONL[types.GateWaiver]{
+	return file.NewJSONL(codec.JSONLConfig[types.GateWaiver]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(jobs), gateWaiversFileName),
+		Perm: 0o644,
 		Key:  types.GateWaiver.Key,
-	}}, nil
+	})
 }
 
 // WaiveGate records a person's waiver of the push gate for commit, a full

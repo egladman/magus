@@ -572,7 +572,8 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	}
 	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
 
-	claimed := jobtypes.WithLease(context.Background(), "fleet/claimed")
+	claimed, err := jobtypes.WithLease(context.Background(), "fleet/claimed")
+	require.NoError(t, err)
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
 
 	t.Setenv(recorder.EnvBaggage, recorder.BaggageLease+"=fleet/env")

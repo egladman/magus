@@ -339,8 +339,12 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		// prompting `Password: ` displayed nothing until it exited. The live stream is
 		// redacted per write by the tap in internal/cache/capture.go instead; a secret
 		// split across two writes to the TERMINAL is a documented limit.
-		res.Stdout = secrets.RedactString(ctx, outBuf.String())
-		res.Stderr = secrets.RedactString(ctx, errBuf.String())
+		stdout, outErr := secrets.RedactString(ctx, outBuf.String())
+		stderr, errErr := secrets.RedactString(ctx, errBuf.String())
+		if err := errors.Join(outErr, errErr); err != nil {
+			return ExecResult{}, errors.Join(err, runErr)
+		}
+		res.Stdout, res.Stderr = stdout, stderr
 	}
 	// Surface ctx.Err() whenever cancelled, even if the process won the race and
 	// exited 0, so callers can distinguish cancel from a clean finish. errors.Join

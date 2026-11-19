@@ -876,9 +876,15 @@ func (s *respellFeaturesSuite) TestARowsSignatureGoalsBecomesSignaturePostcondit
 
 	s.JSONEq(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a",`+
 		`"annotations":{"safetyscissors.job/requires":"claim-declarations,signature-postconditions","x.example/note":"signature-goals"}}}`, got)
-	row, ok, err := job.ReadRecord([]byte(got))
-	s.Require().NoError(err)
-	s.Require().True(ok)
+	var stored struct {
+		Metadata apiversion.Metadata `json:"metadata"`
+	}
+	s.Require().NoError(codec.Unmarshal([]byte(got), &stored))
+	var row job.Job
+	for _, f := range stored.Metadata.Requires("safetyscissors.job") {
+		row.Requires = append(row.Requires, string(f))
+	}
+	s.Equal([]string{"claim-declarations", "signature-postconditions"}, row.Requires)
 	s.Empty(row.Unmet(), "this build implements every feature the row requires")
 }
 

@@ -57,6 +57,16 @@ func (e *UnconfinedError) Error() string {
 
 func (e *UnconfinedError) Unwrap() error { return e.Err }
 
+// NilPolicyError is Op called on a nil *Policy. A nil policy is a caller that lost its
+// policy, so it is refused rather than run as no confinement.
+type NilPolicyError struct {
+	Op string
+}
+
+func (e *NilPolicyError) Error() string {
+	return fmt.Sprintf("sandbox: %s on a nil policy: build one with New", e.Op)
+}
+
 // OptionError is [New]'s or [Relaunch]'s refusal of an option or a combination of them.
 type OptionError struct {
 	Option, Problem string

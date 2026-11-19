@@ -25,6 +25,11 @@ func (s *GrantSuite) TestNormalizeRequiresEveryField() {
 	s.refused(Grant{Ref: "R", Host: "h"}, "header is required")
 }
 
+func (s *GrantSuite) TestNormalizeRefusesAPortWithNoHost() {
+	s.refused(Grant{Ref: "R", Host: ":8080", Header: "A"}, "names a port and no host")
+	s.refused(Grant{Ref: "R", Host: "[]:8443", Header: "A"}, "names a port and no host")
+}
+
 func (s *GrantSuite) TestNormalizeRefusesAWildcardHost() {
 	s.refused(Grant{Ref: "R", Host: "*.example.com", Header: "A"}, "wildcard")
 }

@@ -81,7 +81,7 @@ func (b Boundary) Narrow(rules []filesystem.Rule) []filesystem.Rule {
 }
 
 // Apply returns a copy of p narrowed to b (see Narrow) and naming b's lease. A nil p
-// stays nil: no policy has no writes to narrow.
+// stays nil, which every Policy method refuses.
 func (b Boundary) Apply(p *Policy) *Policy {
 	if p == nil {
 		return nil
@@ -113,7 +113,9 @@ func narrows(row job.Job) bool {
 // a write path is a claim about files that exist, and inventing a rule for a path that
 // does not would grant a subtree on the strength of a typo. A LITERAL path is the
 // exception, because a lease routinely owns a file it is spawned to create: it grants
-// its nearest existing ancestor, which is the directory the new file lands in.
+// its immediate parent, the directory the new file lands in, and nothing when that
+// parent is missing too. Walking further up would grant a whole top-level directory
+// for a path two missing levels deep.
 func grantedPaths(root string, write, deny []string) []string {
 	denyAbs := make([]string, 0, len(deny))
 	for _, f := range deny {
@@ -137,7 +139,7 @@ func grantedPaths(root string, write, deny []string) []string {
 	for _, g := range write {
 		pattern := strings.TrimPrefix(path.Clean(filepath.ToSlash(g)), "/")
 		if !strings.ContainsAny(pattern, "*?[{") {
-			if abs := nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))); abs != "" {
+			if abs := existingOrParent(root, filepath.Join(root, filepath.FromSlash(pattern))); abs != "" {
 				grant(abs)
 			}
 			continue
@@ -163,19 +165,17 @@ func grantedPaths(root string, write, deny []string) []string {
 	return out
 }
 
-// nearestExisting walks up from abs to the first path that exists below root: the
-// directory a not-yet-created file will land in. It reports "" for a path outside root
-// and for one whose every ancestor below root is missing, because the only thing left to
-// grant then is the checkout itself.
-func nearestExisting(root, abs string) string {
+// existingOrParent reports abs when it exists, else its parent when that exists: the
+// directory a not-yet-created file lands in. It reports "" for a path outside root and
+// for one whose parent is missing as well.
+func existingOrParent(root, abs string) string {
 	if !filesystem.Under(abs, root) {
 		return ""
 	}
-	for abs != root {
-		if _, err := os.Lstat(abs); err == nil {
-			return abs
+	for _, p := range []string{abs, filepath.Dir(abs)} {
+		if _, err := os.Lstat(p); err == nil {
+			return p
 		}
-		abs = filepath.Dir(abs)
 	}
 	return ""
 }

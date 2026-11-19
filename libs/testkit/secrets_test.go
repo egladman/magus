@@ -14,7 +14,7 @@ func TestSecretProvider(t *testing.T) { suite.Run(t, new(SecretProviderSuite)) }
 
 func (s *SecretProviderSuite) TestAResolverReadsThroughItOnce() {
 	p := NewSecretProvider(map[string]string{"vault/token": "fake-vault-token"})
-	r := secrets.NewResolver(secrets.WithOpener(p.Opener())).WithProvider("vault")
+	r := EnvResolver(s.T(), secrets.WithOpener(p.Opener())).WithProvider("vault")
 
 	for range 2 {
 		v, err := r.Read(s.T().Context(), "vault/token")
@@ -22,7 +22,9 @@ func (s *SecretProviderSuite) TestAResolverReadsThroughItOnce() {
 		s.Equal("fake-vault-token", v.Reveal())
 	}
 	s.Equal(1, p.Fetches("vault/token"), "the resolver memoizes, so the provider is fetched once")
-	s.Equal("token="+"***", r.RedactString("token=fake-vault-token"))
+	red, err := r.RedactString("token=fake-vault-token")
+	s.Require().NoError(err)
+	s.Equal("token="+"***", red)
 }
 
 func (s *SecretProviderSuite) TestAnUnknownReferenceIsAnErrorNamingIt() {

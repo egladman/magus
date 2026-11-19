@@ -12,10 +12,17 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
 const testSecret = "hunter2-token"
+
+// testCtx is a context carrying a resolver: capturing a command's output
+// refuses to run without one, so a test that captures needs this.
+func testCtx() context.Context {
+	return testkit.WithEnvResolver(context.Background())
+}
 
 type emitMagusLogSuite struct {
 	suite.Suite
@@ -39,8 +46,8 @@ func (s *emitMagusLogSuite) SetupTest() {
 			return a
 		},
 	}))))
-	s.resolver = secrets.NewResolver()
-	s.resolver.Register(secrets.New(testSecret))
+	s.resolver = testkit.EnvResolver(s.T())
+	s.Require().NoError(s.resolver.Register(secrets.New(testSecret)))
 }
 
 func (s *emitMagusLogSuite) TearDownTest() { slog.SetDefault(s.previous) }
@@ -132,7 +139,7 @@ func (s *emitMagusLogSuite) TestALogAfterItsStepEndedSaysSoOnTheConsole() {
 }
 
 func (s *emitMagusLogSuite) TestALogOutsideATargetGoesToTheProcessLoggerOnly() {
-	emitMagusLog(context.Background(), slog.LevelWarn, "loud", map[string]string{"k": "v"})
+	emitMagusLog(testCtx(), slog.LevelWarn, "loud", map[string]string{"k": "v"})
 
 	s.Equal("level=WARN msg=loud k=v\n", s.process.String())
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
+	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
@@ -218,9 +219,17 @@ func loggedCalls(ctx context.Context, base string, limit int) ([]journal.Call, e
 // verifiedAs stands in for the bearer guard, which puts the verified credential and the rpc
 // entry point on the request context before any service sees it.
 func verifiedAs(credential auth.Credential, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return withSecrets(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), credential), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	}))
+}
+
+// withSecrets stands in for the server's resolver middleware: the interceptor's trail writers
+// refuse to run on a request context without one.
+func withSecrets(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(testkit.WithEnvResolver(r.Context())))
 	})
 }
 
@@ -287,7 +296,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(withSecrets(mux))
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)

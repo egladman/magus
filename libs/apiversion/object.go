@@ -108,58 +108,6 @@ func New[S Versioned](metadata Metadata, spec S) Object[S] {
 	return Object[S]{TypeMeta: SpecHeader[S](), Metadata: metadata, Spec: spec}
 }
 
-// Unmarshal is the decoder signature of encoding/json and the yaml packages.
-type Unmarshal func(data []byte, v any) error
-
-// ReadHeader decodes only the TypeMeta of data. unmarshal must ignore the
-// members TypeMeta lacks, so a strict decoder does not belong here.
-func ReadHeader(data []byte, unmarshal Unmarshal) (TypeMeta, error) {
-	var header TypeMeta
-	if err := unmarshal(data, &header); err != nil {
-		return TypeMeta{}, fmt.Errorf("read header: %w", err)
-	}
-	return header, nil
-}
-
-// ReadOption adjusts Read.
-type ReadOption func(*readOptions)
-
-type readOptions struct {
-	bodyUnmarshal Unmarshal
-}
-
-// WithBodyUnmarshal decodes the body with unmarshal, such as a strict
-// decoder, while the header still goes through Read's own function.
-func WithBodyUnmarshal(unmarshal Unmarshal) ReadOption {
-	return func(o *readOptions) { o.bodyUnmarshal = unmarshal }
-}
-
-// Read decodes data as an Object[S]. It reads the TypeMeta first with
-// unmarshal, returns a *RefusedError for any header but SpecHeader[S](),
-// then decodes the whole record.
-func Read[S Versioned](data []byte, unmarshal Unmarshal, opts ...ReadOption) (Object[S], error) {
-	var options readOptions
-	for _, opt := range opts {
-		opt(&options)
-	}
-	got, err := ReadHeader(data, unmarshal)
-	if err != nil {
-		return Object[S]{}, err
-	}
-	if want := SpecHeader[S](); got != want {
-		return Object[S]{}, &RefusedError{Want: want, Got: got}
-	}
-	body := unmarshal
-	if options.bodyUnmarshal != nil {
-		body = options.bodyUnmarshal
-	}
-	var object Object[S]
-	if err := body(data, &object); err != nil {
-		return Object[S]{}, fmt.Errorf("read %s body: %w", got.Kind, err)
-	}
-	return object, nil
-}
-
 // RefusedError is a reader's refusal of a record whose header is not the
 // one it reads. Callers wrap it with what the record was and what to do.
 type RefusedError struct {

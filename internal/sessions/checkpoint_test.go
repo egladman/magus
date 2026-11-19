@@ -197,7 +197,7 @@ func (s *CheckpointSuite) TestLatestCheckpointsIsEmptyWithoutAny() {
 	t := s.T()
 	dir := t.TempDir()
 
-	w, err := session.Open(t.Context(), dir, "sess1", session.InvocationStart{Command: "run build"})
+	w, err := session.Open(t.Context(), StoreConfig(dir, "sess1", session.InvocationStart{Command: "run build"}))
 	require.NoError(t, err)
 	require.NoError(t, w.Append(t.Context(), session.KindTargetResult, session.TargetResult{Target: "build", Outcome: session.OutcomePass}))
 

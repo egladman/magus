@@ -332,7 +332,7 @@ func testServer(t *testing.T, build func(mcp.Options) *Server) (*Server, netip.A
 
 func serveMounted(t *testing.T, d *Server, addr netip.AddrPort) (string, []string, map[string]auth.Need) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(withSecrets(context.Background()))
 	type mounted struct {
 		patterns []string
 		needs    map[string]auth.Need

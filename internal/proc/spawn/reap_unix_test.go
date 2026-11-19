@@ -55,7 +55,7 @@ func TestAGroupIsKilledBeforeItsLeaderIsReapedAndNeverAfter(t *testing.T) {
 // shell forks the sleep before it prints, so no fork is in flight when the group dies.
 func TestExecKillsWhatOutlivesTheChild(t *testing.T) {
 	start := time.Now()
-	res, err := Exec(context.Background(), "sh", []string{"-c", `sleep 30 & echo $!`},
+	res, err := Exec(withTestResolver(context.Background()), "sh", []string{"-c", `sleep 30 & echo $!`},
 		ExecOptions{Capture: true, Quiet: true})
 	require.NoError(t, err)
 	assert.Less(t, time.Since(start), time.Second, "Exec waited on the orphan's copy of stdout")
@@ -134,7 +134,7 @@ func TestAGroupWatchIsReleasedBeforeTheLeaderIsReaped(t *testing.T) {
 			}
 		}
 	}
-	ctx := WithGroupWatch(WithGroupWatch(t.Context(), watch("outer")), watch("inner"))
+	ctx := WithGroupWatch(WithGroupWatch(withTestResolver(t.Context()), watch("outer")), watch("inner"))
 
 	res, err := Exec(ctx, "sh", []string{"-c", "echo $$"}, ExecOptions{Capture: true, Quiet: true})
 	require.NoError(t, err)

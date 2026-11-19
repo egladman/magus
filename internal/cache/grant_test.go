@@ -69,7 +69,7 @@ func TestRunAllSlotsThrottles(t *testing.T) {
 		return nil
 	}
 
-	_, err := c.RunAll(context.Background(), steps, fn, WithLimiter(NewLimiter(2)))
+	_, err := c.RunAll(withResolver(context.Background()), steps, fn, WithLimiter(NewLimiter(2)))
 	require.NoError(t, err, "RunAll")
 
 	assert.False(t, overlappedHeavy.Load(), "no step may run while a slots==budget step holds every slot")
@@ -110,7 +110,7 @@ func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.RunAll(context.Background(), []Step{heavy}, fn, WithLimiter(NewLimiter(2)))
+		_, err := c.RunAll(withResolver(context.Background()), []Step{heavy}, fn, WithLimiter(NewLimiter(2)))
 		done <- err
 	}()
 
@@ -136,7 +136,7 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 	}
 	var mu sync.Mutex
 	got := map[string][2]string{}
-	_, err := c.RunAll(context.Background(), steps, func(ctx context.Context, s Step) error {
+	_, err := c.RunAll(withResolver(context.Background()), steps, func(ctx context.Context, s Step) error {
 		flags, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$CARGO_MAKEFLAGS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
 		if err != nil {
 			return err
@@ -169,13 +169,13 @@ func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b := testBudget(t, 0, 10)
 	require.True(t, b.Request(budget.Claim{Project: "other", Target: "test", Slots: 7, PID: os.Getpid() + 1}, 0).Granted)
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	var held int
 	var procs string
 	step := Step{ProjectPath: ".", Target: "test", WorkspaceRoot: t.TempDir(), Slots: 8, SlotsFloor: 1, NoCache: true}
-	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
+	_, err = c.RunAll(withResolver(t.Context()), []Step{step}, func(ctx context.Context, _ Step) error {
 		held = budget.SlotsHeld(ctx)
 		out, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$GOMAXPROCS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
 		procs = out.Stdout
@@ -190,12 +190,12 @@ func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
 func TestGrantedSlotsOfAFixedStepAreItsWidth(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b := testBudget(t, 0, 10)
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	c, err := Open(withResolver(t.Context()), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	var held int
 	step := Step{ProjectPath: ".", Target: "scip", WorkspaceRoot: t.TempDir(), Slots: 4, NoCache: true}
-	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
+	_, err = c.RunAll(withResolver(t.Context()), []Step{step}, func(ctx context.Context, _ Step) error {
 		held = budget.SlotsHeld(ctx)
 		return nil
 	}, WithLimiter(NewLimiter(8)))

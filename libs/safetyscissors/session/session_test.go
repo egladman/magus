@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,22 @@ func writeRaw(s *suite.Suite, dir, invocation string, records []Record) {
 		b.WriteByte('\n')
 	}
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, invocation+FileExt), []byte(b.String()), 0o644))
+}
+
+// testConfig opens invocation under dir at DefaultRetention, failing t on a prune error.
+func testConfig(t testing.TB, dir, invocation string, start InvocationStart) Config {
+	return Config{
+		Dir: dir, Invocation: invocation, Start: start, Retention: DefaultRetention,
+		PruneErrors: func(_ context.Context, err error) { t.Errorf("prune: %v", err) },
+	}
+}
+
+func openAt(t testing.TB, dir, invocation string, start InvocationStart, opts ...Option) (*Writer, error) {
+	return Open(t.Context(), testConfig(t, dir, invocation, start), opts...)
+}
+
+func loadAt(t testing.TB, dir string, events []LoadEvent, start InvocationStart) (LoadResult, error) {
+	return LoadEvents(t.Context(), testConfig(t, dir, "", start), events)
 }
 
 func loadable(session, host, ref string, at int64) LoadEvent {
@@ -51,7 +68,7 @@ func TestWriter(t *testing.T) { suite.Run(t, new(WriterSuite)) }
 func (s *WriterSuite) TestAppendReadRoundTrip() {
 	dir := s.T().TempDir()
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}))
 
@@ -69,11 +86,38 @@ func (s *WriterSuite) TestAppendReadRoundTrip() {
 	s.Equal(TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
 }
 
+// A line a dead writer left unfinished costs that line, never the record appended after.
+func (s *WriterSuite) TestAnAppendAfterAnUnfinishedLineStartsItsOwn() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "sess1.jsonl"), []byte(`{"v":"safetyscissors.session/v1alpha1","invo`), 0o600))
+
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{Command: "run build"})
+	s.Require().NoError(err)
+	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+
+	fold, err := ReadAll(s.T().Context(), dir)
+	s.Require().NoError(err)
+	s.Equal(1, fold.Skipped, "the unfinished line alone")
+	s.Len(fold.Records, 2)
+}
+
+// A load creates the store as Open does, owner-only, though its lock comes first.
+func (s *WriterSuite) TestALoadCreatesTheStorePrivate() {
+	dir := filepath.Join(s.T().TempDir(), "sessions")
+
+	_, err := loadAt(s.T(), dir, nil, InvocationStart{})
+	s.Require().NoError(err)
+
+	info, err := os.Stat(dir)
+	s.Require().NoError(err)
+	s.Equal(os.FileMode(0o700), info.Mode().Perm())
+}
+
 // The modes Open and Append create: an invocation records the commands its user ran.
 func (s *WriterSuite) TestStoreIsPrivateToItsOwner() {
 	dir := filepath.Join(s.T().TempDir(), "sessions")
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass}))
 
@@ -90,7 +134,7 @@ func (s *WriterSuite) TestAppendStampsWithTheCallersClock() {
 	dir := s.T().TempDir()
 	at := time.UnixMilli(1_700_000_000_000)
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{}, WithClock(func() time.Time { return at }))
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{}, WithClock(func() time.Time { return at }))
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
@@ -133,7 +177,7 @@ func (s *WriterSuite) TestTargetResultReadsTheOlderDurationSpelling() {
 func (s *WriterSuite) TestOpenWritesNothingUntilTheFirstFact() {
 	dir := s.T().TempDir()
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
 
 	fold, err := ReadAll(s.T().Context(), dir)
@@ -152,7 +196,7 @@ func (s *WriterSuite) TestOpenWritesNothingUntilTheFirstFact() {
 func (s *WriterSuite) TestAppendStoresABounderAsItBoundsItself() {
 	dir := s.T().TempDir()
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), "note", note{Text: "a long line of text"}))
 
@@ -168,12 +212,12 @@ func (s *WriterSuite) TestAppendStoresABounderAsItBoundsItself() {
 func (s *WriterSuite) TestOpenResumesTheSequenceOfAnExistingInvocation() {
 	dir := s.T().TempDir()
 
-	first, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Command: "run build"})
+	first, err := openAt(s.T(), dir, "sess1", InvocationStart{Command: "run build"})
 	s.Require().NoError(err)
 	s.Require().NoError(first.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 	s.Require().NoError(first.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
-	second, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Command: "run lint"})
+	second, err := openAt(s.T(), dir, "sess1", InvocationStart{Command: "run lint"})
 	s.Require().NoError(err)
 	s.Require().NoError(second.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
@@ -192,7 +236,7 @@ func (s *WriterSuite) TestOpenResumesTheSequenceOfAnExistingInvocation() {
 
 func (s *WriterSuite) TestOpenRejectsAnIDThatCouldEscapeTheStore() {
 	for _, id := range []string{"", "../escape", "a/b", "."} {
-		_, err := Open(s.T().Context(), s.T().TempDir(), id, InvocationStart{})
+		_, err := openAt(s.T(), s.T().TempDir(), id, InvocationStart{})
 		var invalid *InvalidIDError
 		s.Require().ErrorAs(err, &invalid, "invocation id %q", id)
 		s.Equal(id, invalid.ID)
@@ -208,7 +252,7 @@ func (s *WriterSuite) TestValidFileIDRefusesAPathSeparator() {
 // A pane name is an id like any other: a caller with no host session still writes.
 func (s *WriterSuite) TestAnInvocationNeedsNoHostSession() {
 	dir := s.T().TempDir()
-	w, err := Open(s.T().Context(), dir, "pane-left", InvocationStart{Command: "edit"})
+	w, err := openAt(s.T(), dir, "pane-left", InvocationStart{Command: "edit"})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "save", Outcome: OutcomePass}))
 
@@ -245,15 +289,30 @@ func (s *ReadSuite) TestReadAllSkipsAnOversizedLineAndKeepsReading() {
 	s.Equal(uint64(3), fold.Records[1].Seq, "the record after the oversized line is the one a scanner loses")
 }
 
+// A file the fold cannot open is missing history, not one damaged line.
+func (s *ReadSuite) TestAnUnreadableFileIsAnError() {
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	s.Require().NoError(os.WriteFile(path, []byte(`{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1}`+"\n"), 0o000))
+
+	_, err := ReadAll(s.T().Context(), dir)
+
+	var store *StoreError
+	s.Require().ErrorAs(err, &store)
+	s.Equal(path, store.Path)
+	_, err = FoldKind(s.T().Context(), dir, "target_result")
+	s.Require().ErrorAs(err, &store)
+}
+
 // Two writers with distinct ids in one store are both visible to one fold. This is the
 // two-worktree done-check in miniature: the writers differ, the store does not, so each
 // sees the other's facts.
 func (s *ReadSuite) TestFoldSeesEveryWriterInTheStore() {
 	dir := s.T().TempDir()
 
-	left, err := Open(s.T().Context(), dir, "wt-left", InvocationStart{Workspace: "/repo/a"})
+	left, err := openAt(s.T(), dir, "wt-left", InvocationStart{Workspace: "/repo/a"})
 	s.Require().NoError(err)
-	right, err := Open(s.T().Context(), dir, "wt-right", InvocationStart{Workspace: "/repo/b"})
+	right, err := openAt(s.T(), dir, "wt-right", InvocationStart{Workspace: "/repo/b"})
 	s.Require().NoError(err)
 
 	s.Require().NoError(left.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
@@ -312,7 +371,7 @@ func (s *ReadSuite) TestFoldOrdersByTimeThenInvocationThenSeq() {
 func (s *ReadSuite) TestReadAllToleratesACorruptTail() {
 	dir := s.T().TempDir()
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
@@ -447,7 +506,7 @@ func (s *ReadSuite) TestSummarizeOrdersMostRecentFirst() {
 func (s *ReadSuite) TestLeaseSurvivesTheStoreOnBothPayloads() {
 	dir := s.T().TempDir()
 
-	w, err := Open(s.T().Context(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
+	w, err := openAt(s.T(), dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Lease: "fleet/f3"}))
 
@@ -484,7 +543,7 @@ func (s *ReadSuite) TestTraceContextSurvivesTheStoreAndSummarizes() {
 		Spawner:      "claude code",
 	}
 	for id, start := range map[string]InvocationStart{"sess1": parent, "sess2": child} {
-		w, err := Open(s.T().Context(), dir, id, start)
+		w, err := openAt(s.T(), dir, id, start)
 		s.Require().NoError(err)
 		s.Require().NoError(w.Append(s.T().Context(), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 	}
@@ -607,12 +666,12 @@ func (s *LoadSuite) TestLoadEventsDedupsOnHostSessionRef() {
 		loadable("s2", "h1", "r1", 30),
 	}
 
-	first, err := LoadEvents(s.T().Context(), dir, events, InvocationStart{})
+	first, err := loadAt(s.T(), dir, events, InvocationStart{})
 	s.Require().NoError(err)
 	s.Equal(LoadResult{Loaded: 3, ByKind: map[string]int{EventFileRead: 3}}, first,
 		"r1 under two sessions is two events")
 
-	second, err := LoadEvents(s.T().Context(), dir, events, InvocationStart{})
+	second, err := loadAt(s.T(), dir, events, InvocationStart{})
 	s.Require().NoError(err)
 	s.Equal(LoadResult{Deduped: 3, ByKind: map[string]int{}}, second,
 		"a dedup run reports no kinds: the breakdown counts what was written")
@@ -631,9 +690,9 @@ func (s *LoadSuite) TestALoadThatAddsHintIDsIsFoldedIntoOneEvent() {
 	joined := early
 	joined.Event.NextServed = []string{"hint-1"}
 
-	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{early}, InvocationStart{})
+	_, err := loadAt(s.T(), dir, []LoadEvent{early}, InvocationStart{})
 	s.Require().NoError(err)
-	got, err := LoadEvents(s.T().Context(), dir, []LoadEvent{joined}, InvocationStart{})
+	got, err := loadAt(s.T(), dir, []LoadEvent{joined}, InvocationStart{})
 	s.Require().NoError(err)
 	s.Equal(1, got.Loaded, "the ids are new, so the event is appended again")
 
@@ -648,7 +707,7 @@ func (s *LoadSuite) TestALoadThatAddsHintIDsIsFoldedIntoOneEvent() {
 // start record and not only the events.
 func (s *LoadSuite) TestLoadEventsRecordsTheHostOnTheInvocationStart() {
 	dir := s.T().TempDir()
-	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
+	_, err := loadAt(s.T(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
 	s.Require().NoError(err)
 
 	fold, err := ReadAll(s.T().Context(), dir)
@@ -676,7 +735,7 @@ func (s *LoadSuite) TestLoadEventsRecordsTheHostOnTheInvocationStart() {
 // the pair today's rules would be checked against, not what it began with.
 func (s *LoadSuite) TestSummarizeReadsTheNewestModelAndHostVersionPair() {
 	dir := s.T().TempDir()
-	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{
+	_, err := loadAt(s.T(), dir, []LoadEvent{
 		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r1", AtMs: 10, Agent: Agent{Model: "claude-opus-5", HostVersion: "2.1.260"}}},
 		{Session: "s1", Event: AgentEvent{Host: "h1", Kind: EventFileRead, Ref: "r2", AtMs: 20, Agent: Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}}},
 	}, InvocationStart{})
@@ -706,7 +765,7 @@ func (s *LoadSuite) TestSummaryKeepsTheSubagentAndThePairApart() {
 // host that says nothing is unobservable, not "no model".
 func (s *LoadSuite) TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne() {
 	dir := s.T().TempDir()
-	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
+	_, err := loadAt(s.T(), dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{})
 	s.Require().NoError(err)
 
 	fold, err := ReadAll(s.T().Context(), dir)
@@ -720,7 +779,7 @@ func (s *LoadSuite) TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne() {
 // transcript is a month-old record.
 func (s *LoadSuite) TestNewestEventMsReadsTheHostTimestamp() {
 	dir := s.T().TempDir()
-	_, err := LoadEvents(s.T().Context(), dir, []LoadEvent{
+	_, err := loadAt(s.T(), dir, []LoadEvent{
 		loadable("s1", "h1", "r1", 10),
 		loadable("s1", "h1", "r2", 900),
 	}, InvocationStart{})
@@ -746,7 +805,7 @@ func (s *LoadSuite) TestValidEventKind() {
 
 // A load refuses a session id that could not name a file, and says which.
 func (s *LoadSuite) TestLoadEventsRefusesAnInvalidSessionID() {
-	_, err := LoadEvents(s.T().Context(), s.T().TempDir(), []LoadEvent{loadable("../x", "h1", "r1", 10)}, InvocationStart{})
+	_, err := loadAt(s.T(), s.T().TempDir(), []LoadEvent{loadable("../x", "h1", "r1", 10)}, InvocationStart{})
 	var invalid *InvalidIDError
 	s.Require().ErrorAs(err, &invalid)
 	s.Equal("../x", invalid.ID)

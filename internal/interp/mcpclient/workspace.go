@@ -60,6 +60,9 @@ func OpenWorkspace(ctx context.Context, errOut io.Writer, open Opener) (context.
 	}
 	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
 	ctx = recorder.ContextWithBase(ctx, m.CacheDir)
-	ctx = job.WithLease(ctx, recorder.LeaseFromEnv())
+	ctx, err = job.WithLease(ctx, recorder.LeaseFromEnv())
+	if err != nil {
+		return ctx, err
+	}
 	return recorder.ContextWithEntryPoint(ctx, job.EntryPointMCP), nil
 }

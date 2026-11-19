@@ -66,7 +66,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 		outR, outW := io.Pipe()
 		served := make(chan error, 1)
 		go func() {
-			served <- ServeMCPStdio(context.Background(), m, inR, outW, StdioIdentity{Version: "test", Build: func() types.MagusBuild { return types.MagusBuild{} }})
+			served <- ServeMCPStdio(withSecrets(context.Background()), m, inR, outW, StdioIdentity{Version: "test", Build: func() types.MagusBuild { return types.MagusBuild{} }})
 			_ = outW.Close()
 		}()
 		wire := bufio.NewScanner(outR)
