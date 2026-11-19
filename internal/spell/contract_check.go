@@ -46,7 +46,7 @@ func checkContract(src string) error {
 		}
 		exported[fd.Name] = fd.Line
 		if op, ok := ops[fd.Name]; ok {
-			problems = append(problems, checkSignature(fd, op)...)
+			problems = append(problems, checkOp(fd, op)...)
 			continue
 		}
 		if !strings.HasPrefix(fd.Name, "mgs_") {
@@ -83,6 +83,24 @@ func checkHarnessExports(exported map[string]int) []string {
 	}
 	return problems
 }
+
+// checkOp holds a provider op to op. It returns T, or result\Result::<T>
+// when it can fail. A raising op is refused (ADR 0054).
+func checkOp(fd *ast.FunDecl, op decode.ContractFunc) []string {
+	result := resultOf(op.Returns)
+	var problems []string
+	if fd.ErrAnnot != "" {
+		problems = append(problems, fmt.Sprintf("line %d: %s declares !> %s; an op returns > %s and never raises",
+			fd.Line, fd.Name, fd.ErrAnnot, result))
+	}
+	if squash(fd.RetAnnot) == squash(result) {
+		op.Returns = result
+	}
+	return append(problems, checkSignature(fd, op)...)
+}
+
+// resultOf is the Result annotation an op that can fail declares for returns.
+func resultOf(returns string) string { return `result\Result::<` + returns + ">" }
 
 // checkSignature holds an export to fn's parameter types and return type. Parameter names
 // are the spell's own; a function whose Params is empty takes none.

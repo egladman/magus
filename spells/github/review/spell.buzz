@@ -214,9 +214,9 @@ export fun reviewBody(summary: str, verdict: str, drafts: [ReviewDraft]) > any {
 // find_review reports the pull request open for this branch, or an empty number when there is
 // none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
 // so it is never an error and never a reason a diff fails to open.
-export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any { //nolint:no-throw // magus reads a raise as a failed review call
+export fun find_review(target: Target, req: FindReviewRequest) > result\Result::<ReviewTarget> {
     if (!has_token()) {
-        return ReviewTarget{ reason = "no credential" };
+        return result\ok::<ReviewTarget>(ReviewTarget{ reason = "no credential" });
     }
     // The branch and the remote arrive from the CALLER rather than being discovered here.
     // magus already knows both, through a VCS layer that speaks four backends, and a spell
@@ -226,50 +226,48 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
     final repo = slug(req.remote, host: apiHost(base));
     final branch = req.branch;
     if (repo == "" or branch == "") {
-        return ReviewTarget{ reason = "not a {apiHost(base)} remote" };
+        return result\ok::<ReviewTarget>(ReviewTarget{ reason = "not a {apiHost(base)} remote" });
     }
     final head = repo.split("/")[0] + ":" + branch;
     final url = base + "/repos/" + repo + "/pulls?head=" + head;
     final auth = headers();
     if (auth.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<ReviewTarget>{ error = e };
     }
-    final res = http\get(url, headers: auth.value!);
-    if (res["status"] != 200) {
-        return ReviewTarget{ reason = "github: HTTP {res["status"]}" };
+    var list = [<serialize\Boxed>];
+    try {
+        final res = http\get(url, headers: auth.value!);
+        if (res["status"] != 200) {
+            return result\ok::<ReviewTarget>(ReviewTarget{ reason = "github: HTTP {res["status"]}" });
+        }
+        // .listValue(), never the boxed value itself - see decodeThreads. Without it len() is the
+        // accessor count (16) whatever the response, so this branch was taken even for an EMPTY
+        // array and list[0] was null: the op threw on every call, and the contract rendered that
+        // as "no pull request for this branch".
+        list = serialize\jsonDecode(res["body"]).listValue();
+    } catch (err: any) {
+        return result\caught::<ReviewTarget>(err);
     }
-    // .listValue(), never the boxed value itself - see decodeThreads. Without it len() is the
-    // accessor count (16) whatever the response, so this branch was taken even for an EMPTY
-    // array and list[0] was null: the op threw on every call, and the contract rendered that
-    // as "no pull request for this branch".
-    final list = serialize\jsonDecode(res["body"]).listValue();
     if (list.len() > 0) {
         // Rendered as a string: magus treats a review id as opaque so a provider whose changes are
         // named by a hash stays writable. GitHub's is a number and reads as one either way.
         final opener = viewerLogin(req.wantViewer);
         if (opener.error -> e) {
-            //nolint:no-throw // magus reads a raise as a failed review call
-            throw e.message;
+            return result\Result::<ReviewTarget>{ error = e };
         }
-        return ReviewTarget{
+        return result\ok::<ReviewTarget>(ReviewTarget{
             id = "{list[0].q("number").integerValue()}",
             repo = repo,
             state = "open",
             author = list[0].q("user").q("login").stringValue(),
             viewer = opener.value!,
-        };
+        });
     }
     // Nothing OPEN for this branch, which is what the query above asks for and all magus needed
     // until a merge became worth noticing. Ask again without that filter before reporting none:
     // a branch whose pull request just landed is the ordinary end of a review, not the absence
     // of one, and the reader is owed the difference.
-    final closed = closedReview(url, auth: auth.value!, repo: repo, wantViewer: req.wantViewer);
-    if (closed.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
-    }
-    return closed.value!;
+    return closedReview(url, auth: auth.value!, repo: repo, wantViewer: req.wantViewer);
 }
 
 fun closedReview(url: str, auth: any, repo: str, wantViewer: bool) > result\Result::<ReviewTarget> {
@@ -348,29 +346,30 @@ fun viewerLogin(want: bool) > result\Result::<str> {
 // you accumulate remarks, and only then decide the set is worth sending. Publishing each as it
 // is written would send the first thought before the fifth changed your mind about it.
 //
-// A failed post throws rather than answering false, so the reason reaches the reader.
-export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed review call
+// A failed post fails the Result rather than answering false.
+// The reason then reaches the reader.
+export fun publish_review(target: Target, req: PublishReviewRequest) > result\Result::<Ack> {
     if (!has_token()) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw "github-review: no credential; publishing needs {TOKEN_REF}";
+        return result\fail::<Ack>("github-review: no credential; publishing needs {TOKEN_REF}");
     }
     if (req.repo == "" or req.id == "") {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw "github-review: publish needs a repo and a pull-request id";
+        return result\fail::<Ack>("github-review: publish needs a repo and a pull-request id");
     }
     final payload = reviewBody(req.summary, verdict: req.verdict, drafts: req.drafts);
     final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/reviews";
     final auth = headers();
     if (auth.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<Ack>{ error = e };
     }
-    final res = http\post(url, body: serialize\jsonEncode(payload), headers: auth.value!);
-    if (res["status"] != 200 and res["status"] != 201) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
+    try {
+        final res = http\post(url, body: serialize\jsonEncode(payload), headers: auth.value!);
+        if (res["status"] != 200 and res["status"] != 201) {
+            return result\fail::<Ack>("github-review: publish failed: HTTP {res["status"]}: {res["body"]}");
+        }
+        return result\ok::<Ack>(Ack{ ok = true });
+    } catch (err: any) {
+        return result\caught::<Ack>(err);
     }
-    return Ack{ ok = true };
 }
 
 // decodeThreads turns one page of GitHub's review-comment JSON into thread records.
@@ -405,60 +404,67 @@ fun decodeThreads(body: str) > result\Result::<[ReviewComment]> {
 // review_threads lists the inline comment threads already on the review, so a reader never
 // leaves for the browser to find out what a colleague said.
 //
-// This is the one function that makes magus depend on a host being reachable. Every failure
-// returns an EMPTY list rather than throwing: a diff that will not open because GitHub is slow
-// is a worse tool than one that shows the change and says nothing about the conversation.
+// This is the one function that makes magus depend on a host being reachable.
+// A page GitHub refuses returns an EMPTY list rather than a failure. A diff
+// that will not open because GitHub is slow is the worse tool.
 //
 // Paged, because the default page holds 30 and a truncation here reads as "nobody commented
 // after the thirtieth". A page that fails discards the pages before it for the same reason:
 // the return has no way to say "incomplete", so a short list would read as a finished
 // conversation. The 10-page cap bounds an unbounded loop against a paging bug.
-export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any { //nolint:no-throw // magus reads a raise as a failed review call
+export fun review_threads(target: Target, req: ReviewRef) > result\Result::<[ReviewComment]> {
     if (!has_token() or req.repo == "" or req.id == "") {
-        return [<ReviewComment>];
+        return result\ok::<[ReviewComment]>([<ReviewComment>]);
     }
     final base = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/comments?per_page=100&page=";
     final auth = headers();
     if (auth.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<[ReviewComment]>{ error = e };
     }
     final threads = mut [<ReviewComment>];
     var page = 1;
     while (page <= 10) {
-        final res = http\get(base + "{page}", headers: auth.value!);
-        if (res["status"] != 200) {
-            return [<ReviewComment>];
+        var body = "";
+        try {
+            final res = http\get(base + "{page}", headers: auth.value!);
+            if (res["status"] != 200) {
+                return result\ok::<[ReviewComment]>([<ReviewComment>]);
+            }
+            body = res["body"];
+        } catch (err: any) {
+            return result\caught::<[ReviewComment]>(err);
         }
-        final got = decodeThreads(res["body"]);
+        final got = decodeThreads(body);
         if (got.error -> e) {
-            //nolint:no-throw // magus reads a raise as a failed review call
-            throw e.message;
+            return result\Result::<[ReviewComment]>{ error = e };
         }
         foreach (t in got.value!) {
             threads.append(t);
         }
         if (got.value!.len() < 100) {
-            return threads;
+            return result\ok::<[ReviewComment]>(threads);
         }
         page = page + 1;
     }
-    return threads;
+    return result\ok::<[ReviewComment]>(threads);
 }
 
 // reply_review answers one existing thread, so a conversation can be finished without leaving.
-export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed review call
+export fun reply_review(target: Target, req: ReplyReviewRequest) > result\Result::<Ack> {
     if (!has_token() or req.repo == "" or req.id == "" or req.thread == "") {
-        return Ack{ ok = false };
+        return result\ok::<Ack>(Ack{ ok = false });
     }
     final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/comments/" + req.thread + "/replies";
     final auth = headers();
     if (auth.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<Ack>{ error = e };
     }
-    final res = http\post(url, body: serialize\jsonEncode({"body": req.body}), headers: auth.value!);
-    return Ack{ ok = res["status"] == 200 or res["status"] == 201 };
+    try {
+        final res = http\post(url, body: serialize\jsonEncode({"body": req.body}), headers: auth.value!);
+        return result\ok::<Ack>(Ack{ ok = res["status"] == 200 or res["status"] == 201 });
+    } catch (err: any) {
+        return result\caught::<Ack>(err);
+    }
 }
 
 // Tally counts the requests one list_pulls call sends and keeps the budget
@@ -856,30 +862,28 @@ fun readPulls(req: ListPullsRequest, repo: str, viewer: str, auth: any) > result
 
 // list_pulls reads the open pull requests on a base branch with their checks,
 // for a live dashboard. A failed read comes back as the list's reason.
-//nolint:no-throw // magus reads a raise as a failed review call
-export fun list_pulls(target: Target, req: ListPullsRequest) > PullList !> any {
+export fun list_pulls(target: Target, req: ListPullsRequest) > result\Result::<PullList> {
     if (!has_token()) {
-        return PullList{ reason = "no credential" };
+        return result\ok::<PullList>(PullList{ reason = "no credential" });
     }
     final base = apiBase();
     final repo = slug(req.remote, host: apiHost(base));
     if (repo == "") {
-        return PullList{ reason = "not a {apiHost(base)} remote" };
+        return result\ok::<PullList>(PullList{ reason = "not a {apiHost(base)} remote" });
     }
     final auth = headers();
     if (auth.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<PullList>{ error = e };
     }
     final who = viewerLogin(true);
     if (who.error -> e) {
-        return PullList{ repo = repo, reason = e.message };
+        return result\ok::<PullList>(PullList{ repo = repo, reason = e.message });
     }
     final got = readPulls(req, repo: repo, viewer: who.value!, auth: auth.value!);
     if (got.error -> e) {
-        return PullList{ repo = repo, viewer = who.value!, reason = e.message };
+        return result\ok::<PullList>(PullList{ repo = repo, viewer = who.value!, reason = e.message });
     }
-    return got.value!;
+    return got;
 }
 
 test "a check run maps onto the contract's states" {

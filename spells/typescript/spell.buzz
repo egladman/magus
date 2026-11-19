@@ -898,11 +898,6 @@ fun nodeClaims(req: DiscoveryQuery) > result\Result::<[DiscoveredProject]> {
 // pnpm-workspace.yaml or package.json workspaces decide which packages link by
 // name. Every package.json script is reported, never wired: its meaning is the
 // project's.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
-    final claims = nodeClaims(req);
-    if (claims.error -> err) {
-        //nolint:no-throw // magus reads a raise as a failed discovery
-        throw err.message;
-    }
-    return claims.value!;
+export fun discover_projects(target: Target, req: DiscoveryQuery) > result\Result::<[DiscoveredProject]> {
+    return nodeClaims(req);
 }

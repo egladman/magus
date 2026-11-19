@@ -48,7 +48,8 @@ func runLifecycleProvider(ctx context.Context, spellName, root string, keys []st
 		if !exported || errors.Is(err, errMalformedAnswer) {
 			return nil, err
 		}
-		// A throw is the provider failing to reach its source, the review_threads posture:
+		// A failed Result is the provider failing to reach its source.
+		// The review_threads posture:
 		// what it adds is optional, so an unreachable host is a state and not an error.
 		return nil, fmt.Errorf("%w: %w", workspace.ErrLifecycleUnreached, err)
 	}

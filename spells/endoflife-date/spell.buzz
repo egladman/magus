@@ -29,29 +29,45 @@ export fun mgs_getName() > str { return "endoflife-date"; }
 final API = "https://endoflife.date/api/v1/products/";
 
 // list_lifecycles is the lifecycle contract. A product endoflife.date does not know (404) is
-// left out of the answer, which magus reads as unknown; any other failure throws, which magus
-// reads as unreached, never as a build failure.
-export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] !> any { //nolint:no-throw // magus reads this raise as unreached
+// left out of the answer, which magus reads as unknown. Any other failure
+// fails the Result. magus reads that as unreached, never as a build failure.
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > result\Result::<[Lifecycle]> {
     final answers = mut [<Lifecycle>];
     foreach (product in req.keys) {
         if (product == "") {
             continue;
         }
         final url = API + product;
+        final fetched = fetch(url);
+        if (fetched.error -> e) {
+            return result\Result::<[Lifecycle]>{ error = e };
+        }
+        if (fetched.value -> body) {
+            final parsed = parseLifecycle(product, url: url, body: body);
+            if (parsed.error -> e) {
+                return result\Result::<[Lifecycle]>{ error = e };
+            }
+            answers.append(parsed.value!);
+        }
+    }
+    return result\ok::<[Lifecycle]>(answers);
+}
+
+// fetch is one product page's body.
+// It is null for a product endoflife.date does not know (404).
+fun fetch(url: str) > result\Result::<str?> {
+    try {
         final res = http\get(url, headers: {"Accept": "application/json"});
         if (res["status"] == 404) {
-            continue;
+            return result\ok::<str?>(null);
         }
         if (res["status"] != 200) {
-            throw "endoflife-date: GET {url}: HTTP {res["status"]}"; //nolint:no-throw // magus reads this raise as unreached
+            return result\fail::<str?>("endoflife-date: GET {url}: HTTP {res["status"]}");
         }
-        final parsed = parseLifecycle(product, url: url, body: "{res["body"]}");
-        if (parsed.error -> e) {
-            throw e.message; //nolint:no-throw // magus reads this raise as unreached
-        }
-        answers.append(parsed.value!);
+        return result\ok::<str?>("{res["body"]}");
+    } catch (err: any) {
+        return result\caught::<str?>(err);
     }
-    return answers;
 }
 
 // parseLifecycle reads one v1 product response. Upstream's last_modified is the as-of time,
@@ -107,4 +123,10 @@ test "an lts cycle says so" {
     final l = parseLifecycle("nodejs", url: "https://endoflife.date/api/v1/products/nodejs", body: body).value!;
     assert\equal(l.cycles[0].lts, want: true, message: "isLts reads through");
     assert\equal(l.cycles[0].cycle, want: "22", message: "the cycle is the release name");
+}
+
+test "no product asked is an empty answer, not a failure" {
+    final got = list_lifecycles(Target{}, req: LifecycleQuery{ keys = ["", ""] });
+    assert\equal(got.error == null, want: true, message: "nothing was fetched, so nothing failed");
+    assert\equal(got.value?.len() ?? -1, want: 0, message: "no lifecycles");
 }

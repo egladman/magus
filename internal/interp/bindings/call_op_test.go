@@ -58,6 +58,40 @@ export fun last_green_run(target: Target, req: Empty) > any {
 	assert.ErrorContains(t, err, `has no member "branch"`)
 }
 
+// A failed Result is the error a raise of its Diagnostic became.
+func TestCallOpReadsAFailedResultAsTheError(t *testing.T) {
+	drv := buzzProvider(t, `import "result";
+export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {
+    return result\Result::<Secret>{ error = result\Diagnostic{ code = "MGS1051", message = "vault sealed", url = "https://example.test/MGS1051" } };
+}`)
+	_, exported, err := CallOp(context.Background(), drv, providerops.ResolveSecret, types.Target{}, types.SecretRef{Ref: "x"})
+	require.Error(t, err)
+	assert.True(t, exported)
+	assert.Equal(t, "spell \"test-provider\": resolve_secret: [MGS1051] vault sealed\n  see: https://example.test/MGS1051", err.Error())
+	assert.ErrorIs(t, err, types.SpellContractViolated)
+	assert.NotErrorIs(t, err, errMalformedAnswer)
+}
+
+func TestCallOpDecodesAnOkResult(t *testing.T) {
+	drv := buzzProvider(t, `import "result";
+export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {
+    return result\ok::<Secret>(Secret{ value = req.ref });
+}`)
+	got, _, err := CallOp(context.Background(), drv, providerops.ResolveSecret, types.Target{}, types.SecretRef{Ref: "token"})
+	require.NoError(t, err)
+	assert.Equal(t, spells.Secret{Value: "token"}, got)
+}
+
+func TestCallOpRefusesAResultWithNeitherSide(t *testing.T) {
+	drv := buzzProvider(t, `import "result";
+export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {
+    return result\Result::<Secret>{};
+}`)
+	_, _, err := CallOp(context.Background(), drv, providerops.ResolveSecret, types.Target{}, types.SecretRef{Ref: "x"})
+	require.ErrorIs(t, err, errMalformedAnswer)
+	assert.ErrorContains(t, err, "neither a value nor an error")
+}
+
 func TestCallOpRefusesADriverWithNoBuzzSource(t *testing.T) {
 	drv := spellstest.NewMockDriver(t)
 	drv.EXPECT().Name().Return("go-driver")
