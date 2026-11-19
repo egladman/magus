@@ -50,11 +50,11 @@ func evidenceGapLines(gap recorder.ConsultGap) []string {
 			"EVIDENCE: no lease recorded here wrote these files, so their questions sit elsewhere",
 			"      The work was done in another checkout, or it has aged out of the trail.",
 		}
-	default:
-		return []string{
-			"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
-			fmt.Sprintf("      This record is per checkout, and wiring it is `%s`.", hint.AgentInstall.String()),
-		}
+	case recorder.ConsultGapNone, recorder.ConsultGapUnobserved:
+	}
+	return []string{
+		"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
+		fmt.Sprintf("      This record is per checkout, and wiring it is `%s`.", hint.AgentInstall.String()),
 	}
 }
 

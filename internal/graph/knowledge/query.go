@@ -638,6 +638,7 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 			}
 			out.Refs = append(out.Refs, types.KnowledgeRefSite{File: file, Count: count, Lines: lines})
 			out.RefCount += count
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCalls, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
 		}
 	}
 	slices.SortFunc(out.Defs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
@@ -1104,6 +1105,7 @@ func (g *Graph) dirRecord(n types.KnowledgeNode, tree dirTree, layers map[string
 				d.Imports = append(d.Imports, other)
 			case types.RelationCalls:
 				d.Calls = append(d.Calls, g.declaredCalls(e, other)...)
+			case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationReferences, types.RelationSplits, types.RelationUses:
 			}
 		}
 	}
@@ -1114,6 +1116,7 @@ func (g *Graph) dirRecord(n types.KnowledgeNode, tree dirTree, layers map[string
 				d.ImportedBy = append(d.ImportedBy, other)
 			case types.RelationCalls:
 				d.CalledBy = append(d.CalledBy, g.declaredCalls(e, other)...)
+			case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationReferences, types.RelationSplits, types.RelationUses:
 			}
 		}
 	}

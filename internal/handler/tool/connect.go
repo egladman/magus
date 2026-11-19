@@ -183,9 +183,9 @@ func placeCycle(key, version string, a lifecycleAnswer, now time.Time) (cycle, e
 		return c.Cycle, c.EOL, toolv1.Support_SUPPORT_EOL
 	case spells.SupportUnannounced:
 		return c.Cycle, c.EOL, toolv1.Support_SUPPORT_UNANNOUNCED
-	default:
-		return c.Cycle, c.EOL, toolv1.Support_SUPPORT_UNKNOWN
+	case spells.SupportUnknown:
 	}
+	return c.Cycle, c.EOL, toolv1.Support_SUPPORT_UNKNOWN
 }
 
 func lifecycleToProto(s types.LifecycleStatus) *toolv1.Lifecycle {
@@ -306,11 +306,11 @@ func verdict(b spells.VersionBounds, version string) toolv1.Verdict {
 		return toolv1.Verdict_VERDICT_TOO_NEW
 	case spells.VerdictInside:
 		return toolv1.Verdict_VERDICT_INSIDE
-	default:
-		// Inside is explicit above so this arm can be UNKNOWN: a verdict added upstream
-		// must read as "could not check", never "checked, fine".
-		return toolv1.Verdict_VERDICT_UNKNOWN
+	case spells.VerdictUnknown:
 	}
+	// Inside is explicit above so this arm can be UNKNOWN: a verdict added upstream
+	// must read as "could not check", never "checked, fine".
+	return toolv1.Verdict_VERDICT_UNKNOWN
 }
 
 // diagnosticCode is the code the CLI raises for a verdict. Derived, not returned beside
@@ -321,9 +321,9 @@ func diagnosticCode(v toolv1.Verdict) string {
 		return string(types.ToolTooOld)
 	case toolv1.Verdict_VERDICT_TOO_NEW:
 		return string(types.ToolTooNew)
-	default:
-		return ""
+	case toolv1.Verdict_VERDICT_INSIDE, toolv1.Verdict_VERDICT_UNKNOWN, toolv1.Verdict_VERDICT_UNSPECIFIED:
 	}
+	return ""
 }
 
 // boundsToProto converts a window to the wire type, returning nil for an unconstrained one

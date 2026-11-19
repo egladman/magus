@@ -650,10 +650,11 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) diff.Why {
 		case orderEdgeContinues:
 			w.Relation = diff.WhyContinuedBy
 			w.Text = fmt.Sprintf("begins %s, which continues %s", symbol, stepAt(step, here, "below", "in step"))
-		default:
+		case orderEdgeUses:
 			w.Relation = diff.WhyUsedBy
 			w.Text = fmt.Sprintf("defines %s, used %s", symbol, stepAt(step, here, "below", "in step"))
 		}
+	case orderStarts:
 	}
 	if len(p.nodes) > 1 {
 		w.Cycle = p.cycle

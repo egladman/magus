@@ -60,6 +60,7 @@ func (p CarryPolicy) Allows(t CarryTier) bool {
 		return true
 	case CarryCode:
 		return false
+	case CarryCommentOnly, CarryGenerated, CarryProse:
 	}
 	return slices.Contains(p, t)
 }

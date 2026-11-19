@@ -195,6 +195,7 @@ func EmitOccurrences(ctx context.Context, env RefsEnv, opts output.Options, refs
 		// exit non-zero on every successful run and teach a caller to ignore the status. The
 		// exit code carries one meaning: sites were found and withheld.
 		return nil
+	case output.Text:
 	}
 
 	fmt.Fprintf(env.Stdout, "symbol: %s", out.Symbol)
@@ -267,6 +268,7 @@ func EmitDefinitions(ctx context.Context, env RefsEnv, opts output.Options, out 
 			stale++
 		case types.DefinitionVerified:
 			verified++
+		case types.DefinitionUnverified:
 		}
 	}
 	staleErr := func() error {
@@ -314,6 +316,7 @@ func EmitDefinitions(ctx context.Context, env RefsEnv, opts output.Options, out 
 			slog.ErrorContext(ctx, fmt.Sprintf("%d definition(s) changed since indexing and were not listed; refresh with `%s`", stale, hint.GraphBuild), attr.Notice("magus refs"))
 		}
 		return staleErr()
+	case output.Text:
 	}
 
 	fmt.Fprintf(env.Stdout, "symbol: %s", out.Symbol)

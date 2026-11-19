@@ -267,9 +267,9 @@ func degradeHint(a Anchor) string {
 		return "The note it points at is gone. Re-point the anchor or remove it."
 	case AnchorDiagnostic:
 		return "The diagnostic code was retired or renumbered. Re-anchor the note to the code that replaced it; `magus query kind=diagnostic` lists them."
-	default:
-		return "The project or target no longer exists. Re-anchor the note to something that does."
+	case AnchorProject, AnchorTarget:
 	}
+	return "The project or target no longer exists. Re-anchor the note to something that does."
 }
 
 // RecordDigests stamps each symbol anchor with its CURRENT signature and every other anchor

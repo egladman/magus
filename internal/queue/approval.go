@@ -174,7 +174,7 @@ func classifyChanged(ctx context.Context, v types.ReadVCS, f types.BuildFacts, r
 	c.Path = path
 	switch c.Tier {
 	case types.CarryGenerated, types.CarryProse, types.CarryCommentOnly, types.CarryCode:
-	default:
+	case types.CarryRebase:
 		c.Why = fmt.Sprintf("the build tool answered tier %q for a path", c.Tier)
 		c.Tier = types.CarryCode
 	}

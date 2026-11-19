@@ -63,6 +63,7 @@ func annotateProseStaleness(shards []Shard, vcsByPath map[string]types.Knowledge
 			switch e.Relation {
 			case types.RelationDocuments, types.RelationAnnotates:
 				subjects[e.Source] = append(subjects[e.Source], e.Target)
+			case types.RelationAuthored, types.RelationCalls, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationReferences, types.RelationSplits, types.RelationUses:
 			}
 		}
 	}

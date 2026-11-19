@@ -958,7 +958,7 @@ func splitEdges(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge) []type
 			into = defined
 		case types.RelationReferences:
 			into = referenced
-		default:
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCalls, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
 			continue
 		}
 		if p, ok := parseDescriptors(e.Target); !ok || len(afterNamespace(p)) == 0 {

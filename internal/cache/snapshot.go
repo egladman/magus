@@ -243,6 +243,7 @@ func ownedOutputs(m *Manifest, s Step) (*Manifest, error) {
 			kept = append(kept, rec)
 		case unclaimedRecord:
 			return nil, fmt.Errorf("manifest records %q, which no output glob of the step claims", rec.Path)
+		case droppedRecord:
 		}
 	}
 	if len(kept) == len(m.Outputs) {

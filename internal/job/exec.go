@@ -129,7 +129,7 @@ func execRefusal(row *job.Job, here string, facts execFacts) error {
 		switch compareBase(withFullRevision(row.Checkpoint, facts.full), withFullRevision(facts.base, facts.full)) {
 		case job.BaseMatch, job.BaseRevisionMatch, job.BaseUnknown:
 			row.Worktree = facts.moved
-		default:
+		case job.BaseDiverged:
 			return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
 				row.ID, row.Worktree.Root, here, checkpointRevision(row.Checkpoint), checkpointRevision(facts.base))}
 		}
@@ -303,10 +303,10 @@ func BaseAdvice(row job.Job) string {
 			" so a later reader can tell whether a worker was on the base it was given.",
 			row.ID, row.ReportedBase)
 
-	default:
-		return fmt.Sprintf("recorded job %s's base as %s, and this magus does not recognize the verdict %q it computed."+
-			" Read the row itself rather than this sentence.", row.ID, row.ReportedBase, row.BaseVerdict)
 	}
+	return fmt.Sprintf("recorded job %s's base as %s, and this magus does not recognize the verdict %q it computed."+
+		" Read the row itself rather than this sentence.", row.ID, row.ReportedBase, row.BaseVerdict)
+
 }
 
 // describePatchDigest is the dirty-patch half of a checkpoint token, or "none (clean tree)" when

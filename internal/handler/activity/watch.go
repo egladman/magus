@@ -258,9 +258,9 @@ func decodeKind(k activityv1.Kind) journal.CallKind {
 		return journal.CallKind(kindFileChange)
 	case activityv1.Kind_KIND_RUN:
 		return journal.CallKind(kindRun)
-	default:
-		return ""
+	case activityv1.Kind_KIND_AGENT_COMMAND, activityv1.Kind_KIND_AGENT_SPAWN, activityv1.Kind_KIND_CONFIG_CHANGE, activityv1.Kind_KIND_CREDENTIAL_GRANT, activityv1.Kind_KIND_GUARD_POLICY, activityv1.Kind_KIND_JOB, activityv1.Kind_KIND_MCP_TOOL_CALL, activityv1.Kind_KIND_NOTES, activityv1.Kind_KIND_SANDBOX_DENIAL, activityv1.Kind_KIND_TOKEN_LIFECYCLE, activityv1.Kind_KIND_UNSPECIFIED:
 	}
+	return ""
 }
 
 // The two synthesized kinds' store spellings. They are not CallKind

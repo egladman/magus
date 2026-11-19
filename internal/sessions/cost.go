@@ -178,6 +178,7 @@ func SummarizeCost(tr *Activity, table model.Table) *Cost {
 			main = append(main, call)
 		case types.AgentThreadUnknown:
 			unknown++
+		case types.AgentThreadSub:
 		}
 	}
 	noMain := noCallFacts

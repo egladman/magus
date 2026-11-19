@@ -248,6 +248,7 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 			held[head.change.ID] = stackHold{code: types.CodeWaitBelowKicked, reason: kickedBelow(head.change.ID)}
 		case types.DecisionWait:
 			held[head.change.ID] = waitingBelow(head.change.ID)
+		case types.DecisionMerge, types.DecisionMerged:
 		}
 		if !green && head.cand.Commit == "" {
 			continue // nothing above was built onto a refused candidate

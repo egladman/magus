@@ -41,10 +41,10 @@ func (in Source) ReadPatch(ctx context.Context, m PatchReader, paths []string) (
 			return "", "", fmt.Errorf("magus diff: %w", err)
 		}
 		return p, in.Base, nil
-	default:
-		p, err := m.WorkingDiff(ctx, paths)
-		return p, "working", err
+	case SourceWorkingTree:
 	}
+	p, err := m.WorkingDiff(ctx, paths)
+	return p, "working", err
 }
 
 // KeepFilteredHunks drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered

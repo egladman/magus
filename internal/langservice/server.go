@@ -276,9 +276,10 @@ func completionItemKind(k CompletionKind) int {
 		return 7 // Class
 	case KindKeyword:
 		return 14 // Keyword
-	default:
-		return 1 // Text
+		// Text
 	}
+	return 1
+
 }
 
 // --- position <-> byte offset (LSP positions count UTF-16 code units) ---

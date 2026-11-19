@@ -405,6 +405,7 @@ func planFlow(e planEdge, actors map[string]diagram.Actor) diagram.Flow {
 		fl.Label = "merges"
 	case planAfter:
 		fl.Label, fl.Stroke = "after", &dashed
+	case planForked:
 	}
 	return fl
 }

@@ -42,6 +42,7 @@ func (a Align) delimiterCell(width int) string {
 		return strings.Repeat("-", width-1) + ":"
 	case Center:
 		return fmt.Sprintf(":%s:", strings.Repeat("-", width-2))
+	case Left:
 	}
 	return strings.Repeat("-", width)
 }
@@ -56,6 +57,7 @@ func (a Align) pad(cell string, width int) string {
 		return strings.Repeat(" ", spare) + cell
 	case Center:
 		return fmt.Sprintf("%s%s%s", strings.Repeat(" ", spare/2), cell, strings.Repeat(" ", spare-spare/2))
+	case Left:
 	}
 	return cell + strings.Repeat(" ", spare)
 }
@@ -68,6 +70,7 @@ func (a Align) minWidth() int {
 		return 2
 	case Center:
 		return 3
+	case Left:
 	}
 	return 1
 }

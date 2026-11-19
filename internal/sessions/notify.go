@@ -122,9 +122,9 @@ func severityForOutcome(outcome types.EventOutcome) types.EventSeverity {
 		return types.SeverityWarning
 	case types.OutcomeFinished:
 		return types.SeverityInfo
-	default:
-		return types.SeverityNotice
+	case types.OutcomeOther, types.OutcomeUpdate:
 	}
+	return types.SeverityNotice
 }
 
 // RenderNotification is the title and body an event raises.
@@ -138,7 +138,7 @@ func RenderNotification(ev types.Event) (title, body string) {
 		title = "magus: action failed"
 	case types.OutcomeFinished:
 		title = "magus: finished"
-	default:
+	case types.OutcomeDiagnostic, types.OutcomeOther, types.OutcomeUpdate:
 		title = "magus: needs attention"
 	}
 	body = ev.Message

@@ -292,7 +292,7 @@ func writeGuardRefs(dst string, g *Graph, symbols map[string]types.KnowledgeNode
 					at = []int{n}
 				}
 			}
-		default:
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCalls, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
 			continue
 		}
 		var b strings.Builder

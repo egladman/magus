@@ -256,11 +256,12 @@ func completionKind(k symbolKind) CompletionKind {
 		return KindType
 	case symConstant:
 		return KindConstant
-	default:
-		// Unreachable: scanSymbols only produces the three kinds above. A new
-		// symbolKind should be classified explicitly, not silently labeled here.
-		return KindConstant
+
 	}
+	// Unreachable: scanSymbols only produces the three kinds above. A new
+	// symbolKind should be classified explicitly, not silently labeled here.
+	return KindConstant
+
 }
 
 // lineStart returns the index just past the last newline in s (0 if none), i.e.

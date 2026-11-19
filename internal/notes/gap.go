@@ -163,7 +163,7 @@ func FindLines(anchors []Anchor, ids interface{ NodeID(a Anchor) string }) []str
 			line = "magus query " + shellQuote("kind=diagnostic id="+a.Target)
 		case AnchorNote:
 			line = "magus notes get " + shellQuote(a.Target)
-		default:
+		case AnchorFile, AnchorProject, AnchorTarget:
 			line = "magus explain " + shellQuote(ids.NodeID(a))
 		}
 		if !slices.Contains(out, line) {

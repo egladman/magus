@@ -223,6 +223,7 @@ func Prompt(ctx context.Context, h *cache.PrettyHandler, act Actions) error {
 			if err := act.Output(ctx, item); err != nil {
 				slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			}
+		case actionNone:
 		}
 	}
 }
@@ -395,6 +396,7 @@ func dispatchFailureKeys(next func() (termkit.Event, error), h failureBand, hint
 			case 'o':
 				return actionOutput, items[*selected]
 			}
+		case termkit.KeyBackspace, termkit.KeyCtrlN, termkit.KeyCtrlP, termkit.KeyCtrlU, termkit.KeyLeft, termkit.KeyPageDown, termkit.KeyPageUp, termkit.KeyRight, termkit.KeyUnknown:
 		}
 	}
 }

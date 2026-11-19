@@ -161,7 +161,7 @@ func (a *assessment) classify(ctx context.Context, c Classified) verdict {
 			return v
 		}
 		v.tier, v.why = check.RiskMechanical, c.Why+"; lint and generators read comments"
-	default:
+	case ClassCode:
 		if p, ok := a.in.Provers[strings.ToLower(path.Ext(c.Path))]; ok && a.in.Read != nil {
 			if old, cur, err := a.in.Read(ctx, c.Path); err == nil {
 				if eq, why := p.Equivalent(c.Path, old, cur); eq {
@@ -355,7 +355,7 @@ func (a *assessment) gate(rep *types.TierReport, verdicts []verdict) {
 		}
 	case check.RiskScoped:
 		steps = a.scopedGate(rep, verdicts)
-	default:
+	case check.RiskFull:
 		for _, p := range a.in.Affected {
 			if a.hasTarget(p, a.in.Target) {
 				steps = append(steps, step{target: a.in.Target, project: p})

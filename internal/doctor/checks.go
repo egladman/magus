@@ -537,7 +537,7 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ch
 	switch res.Source {
 	case types.VCSSourceDisabled:
 		return check.Check{Name: "vcs-base-ref", Status: check.OK, Evidence: check.EvidenceUnknown, Message: "vcs disabled; skipped"}
-	default:
+	case types.VCSSourceAuto, types.VCSSourceDefault, types.VCSSourceExplicit:
 		// explicit/auto/default sources: proceed to the live probe below
 	}
 
@@ -960,9 +960,9 @@ func externalOpFinding(p *types.Project, sp *spells.Spell, op spells.Op, spellNa
 			return ""
 		}
 		return fmt.Sprintf("%s: the op's verdict comes from data outside this tree that no probe identifies; declare skip_cache with a reason, or declare an observe probe on tool %s in the spell so the data's identity keys the cache", where, op.Bin)
-	default:
-		return ""
+	case spells.ExternalNone:
 	}
+	return ""
 }
 
 // checkRedundantFootprintGlobs is MGS1005: a per-target output glob already
@@ -2447,7 +2447,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 		switch verification.Plugin.Status {
 		case agent.HarnessPluginUninstalled, agent.HarnessPluginDisabled, agent.HarnessPluginBehind:
 			problems = append(problems, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
-		default:
+		case agent.HarnessInvalid, agent.HarnessSkillsOnly, agent.HarnessUncovered, agent.HarnessUnprobed, agent.HarnessVerified:
 			if verification.Plugin.Failing() {
 				advice = append(advice, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
 			}

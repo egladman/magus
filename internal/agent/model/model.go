@@ -35,7 +35,7 @@ func PriceContext(t Table, calls []types.AgentFacts) (contextFloor, string) {
 		case types.AgentBillingMetered:
 		case "":
 			return contextFloor{}, "billing is unknown: set agents.billing in magus.yaml"
-		default:
+		case types.AgentBillingQuota:
 			return contextFloor{}, fmt.Sprintf("billing is %s, which has no per-token price", call.Billing)
 		}
 	}

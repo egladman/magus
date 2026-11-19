@@ -583,6 +583,7 @@ func briefNextStep(rows []jobtypes.Job, row jobtypes.Job, unpushed *briefUnpushe
 		}
 	case jobtypes.StateFail, jobtypes.StateNoReturn:
 		return "read why: " + hint.DescribeJob.With(row.ID)
+	case jobtypes.StateRunning:
 	}
 	return ""
 }

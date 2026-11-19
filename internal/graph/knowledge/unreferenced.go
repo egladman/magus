@@ -100,6 +100,7 @@ func (g *Graph) referencedElsewhere(id string, defFiles map[string]bool) bool {
 			if !defFiles[e.Source] {
 				return true
 			}
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
 		}
 	}
 	return false

@@ -183,9 +183,10 @@ func targetStateToProto(s daemon.TargetRunState) statusv1.TargetRun_State {
 		return statusv1.TargetRun_STATE_CACHED
 	case daemon.TargetRunPermitted:
 		return statusv1.TargetRun_STATE_PERMITTED
-	default:
-		return statusv1.TargetRun_STATE_UNSPECIFIED
+
 	}
+	return statusv1.TargetRun_STATE_UNSPECIFIED
+
 }
 
 // EncodeStatusEvent marshals a status message to base64(protobuf) for a StreamStatus
@@ -230,9 +231,10 @@ func workspaceStateToProto(s daemon.WorkspaceState) statusv1.Workspace_State {
 		return statusv1.Workspace_STATE_ACTIVE
 	case daemon.WorkspaceFailed:
 		return statusv1.Workspace_STATE_FAILED
-	default:
-		return statusv1.Workspace_STATE_UNSPECIFIED
+
 	}
+	return statusv1.Workspace_STATE_UNSPECIFIED
+
 }
 
 func poolToProto(p *daemon.Output) (*statusv1.Pool, error) {
