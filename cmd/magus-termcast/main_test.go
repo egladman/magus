@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -10,8 +12,16 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/termkit/screen"
 )
+
+// termcast runs the command line args name, returning its error.
+func termcast(args []string) error {
+	_, err := command.Invoke(context.Background(), root(), args,
+		command.Streams{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
+	return err
+}
 
 // repositoryFile reads a path relative to the repo root. The tests run in the command's
 // own directory, and every artifact this command owns lives two levels up.

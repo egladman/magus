@@ -1,7 +1,7 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/libs/termkit/pick"
@@ -37,31 +39,38 @@ import (
 // The output is deterministic (no timestamps, no randomness), which is what
 // lets it be committed and checked for drift like every other generated file.
 
-// runShots is the `shots` subcommand: it writes every shot into -out.
-func runShots(args []string) error {
-	fs := flag.NewFlagSet("magus-termcast shots", flag.ExitOnError)
-	outDir := fs.String("out", filepath.Join("assets", "gen"), "directory to write the SVGs into")
-	if err := fs.Parse(args); err != nil {
-		return err
+func shotsCommand() command.Command {
+	var outDir string
+	return command.Command{
+		Name:  "shots",
+		Short: "Write every shot into -out",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Default: filepath.Join("assets", "gen"), Doc: "directory to write the SVGs into", Target: &outDir},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			if len(inv.Args) > 0 {
+				return exit.Usagef("unexpected argument %q", inv.Args[0])
+			}
+			return shots(outDir)
+		},
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
-	}
+}
 
+func shots(outDir string) error {
 	svgs, err := renderShots()
 	if err != nil {
 		return err
 	}
 	// Sorted so the log lists the files in the same order every run.
 	for _, name := range slices.Sorted(maps.Keys(svgs)) {
-		if err := write(filepath.Join(*outDir, name), svgs[name]); err != nil {
+		if err := write(filepath.Join(outDir, name), svgs[name]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// renderShots produces every shot, keyed by filename. Split from runShots so the
+// renderShots produces every shot, keyed by filename. Split from shots so the
 // drift test can compare without writing.
 func renderShots() (map[string]string, error) {
 	out := map[string]string{}
