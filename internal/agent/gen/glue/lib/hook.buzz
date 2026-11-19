@@ -21,6 +21,7 @@ import "io";
 import "os";
 import "path";
 import "proc";
+import "result";
 import "std";
 
 // The namespace a host gives a tool served over MCP. wholeEvent matches it so an
@@ -537,15 +538,20 @@ export fun noticeOnce(session: str, family: str, file: str) > bool {
 }
 
 // plantBinary leaves an executable ./magus in dir.
-fun plantBinary(dir: str) > void !> any {
-    fs\writeFile("{dir}/magus", content: "#!/bin/sh\n");
-    fs\chmod("{dir}/magus", mode: 493);
+fun plantBinary(dir: str) > result\Result::<bool> {
+    try {
+        fs\writeFile("{dir}/magus", content: "#!/bin/sh\n");
+        fs\chmod("{dir}/magus", mode: 493);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 test "a call from a nested project resolves the workspace root's binary" {
     final root = fs\tempDir("hook-root-");
     fs\writeFile("{root}/magus.yaml", content: "");
-    plantBinary(root);
+    std\assert(plantBinary(root).error == null, message: "plant the binary");
     fs\mkdirAll("{root}/console/src");
     fs\writeFile("{root}/console/magusfile.buzz", content: "");
     std\assert(workspaceRootAt("{root}/console/src") == root, message: "the magus.yaml directory is the root, not the project");
@@ -559,8 +565,8 @@ test "a planted ./magus where the call runs never chooses the binary" {
     final planted = fs\tempDir("hook-planted-");
     fs\writeFile("{session}/magus.yaml", content: "");
     fs\writeFile("{planted}/magus.yaml", content: "");
-    plantBinary(session);
-    plantBinary(planted);
+    std\assert(plantBinary(session).error == null, message: "plant the binary");
+    std\assert(plantBinary(planted).error == null, message: "plant the binary");
     std\assert(resolveBin(cwd: planted, session: session) == "{session}/magus", message: "the session's binary");
     std\assert(fallbackNote(planted, session: session) == "", message: "the session's own ./magus judges");
     fs\removeAll(session);
@@ -575,7 +581,7 @@ test "a fallback from the session's ./magus is named, and only then" {
     fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
     std\assert(fallbackNote(bare, session: root).indexOf("chmod +x {root}/magus") != null, message: fallbackNote(bare, session: root));
     std\assert(fallbackNote(root, session: bare) == "", message: "a workspace that builds no ./magus expects PATH's");
-    plantBinary(root);
+    std\assert(plantBinary(root).error == null, message: "plant the binary");
     std\assert(fallbackNote(bare, session: root) == "", message: "a runnable ./magus is no fallback");
     fs\removeAll(root);
     fs\removeAll(bare);
@@ -608,14 +614,14 @@ test "a notice joins the reply the person reads" {
 test "a worktree under another checkout never climbs into it" {
     final parent = fs\tempDir("hook-parent-");
     fs\writeFile("{parent}/magus.yaml", content: "");
-    plantBinary(parent);
+    std\assert(plantBinary(parent).error == null, message: "plant the binary");
     final worktree = "{parent}/.claude/worktrees/job";
     fs\mkdirAll("{worktree}/console");
     fs\writeFile("{worktree}/magus.yaml", content: "");
     fs\writeFile("{worktree}/console/magusfile.buzz", content: "");
     std\assert(workspaceRootAt("{worktree}/console") == worktree, message: "its own magus.yaml is the nearest");
     std\assert(resolveBin(session: "{worktree}/console") != "{parent}/magus", message: "the parent's binary is never the answer");
-    plantBinary(worktree);
+    std\assert(plantBinary(worktree).error == null, message: "plant the binary");
     std\assert(resolveBin(session: "{worktree}/console") == "{worktree}/magus", message: "its own binary once it has one");
     fs\removeAll(parent);
 }
@@ -653,11 +659,15 @@ test "only a line magus supplied as the repair runs, alone on its line" {
     env\set(REPAIR_ROOT_ENV, value: savedRoot) catch void;
 }
 
-fun stub(dir: str, name: str, body: str) > str !> any {
+fun stub(dir: str, name: str, body: str) > result\Result::<str> {
     final bin = "{dir}/{name}";
-    fs\writeFile(bin, content: "#!/bin/sh\ncat > /dev/null\n{body}\n");
-    fs\chmod(bin, mode: 493);
-    return bin;
+    try {
+        fs\writeFile(bin, content: "#!/bin/sh\ncat > /dev/null\n{body}\n");
+        fs\chmod(bin, mode: 493);
+        return result\ok::<str>(bin);
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 fun run(bin: str) > proc\ExecResult? {
@@ -668,11 +678,11 @@ test "a binary that cannot load the tree is passed over for the next" {
     final dir = fs\tempDir("hook-candidates-");
     final config = stub(dir, name: "config", body: "echo 'magus: WARN config' >&2\n"
         + "echo '[MGS1040] magus.yaml has a key this magus does not know:' >&2\n"
-        + "echo '  - ci.remote_gate  (line 3)' >&2\nexit 1");
-    final stale = stub(dir, name: "stale", body: "printf '%s\\n%s' '{UNLOADED_MARK}\"stale predates magus.yaml\\nmore\"' '\{}'\nexit 2");
-    final staleJSON = stub(dir, name: "stale-json", body: "echo '\{\"decision\":\"deny\",\"rule\":\"stale-binary\",\"reason\":\"json predates\"}'\nexit 2");
-    final killed = stub(dir, name: "killed", body: "echo 'signal: killed' >&2\nexit 137");
-    final loads = stub(dir, name: "loads", body: "echo VERDICT");
+        + "echo '  - ci.remote_gate  (line 3)' >&2\nexit 1").value!;
+    final stale = stub(dir, name: "stale", body: "printf '%s\\n%s' '{UNLOADED_MARK}\"stale predates magus.yaml\\nmore\"' '\{}'\nexit 2").value!;
+    final staleJSON = stub(dir, name: "stale-json", body: "echo '\{\"decision\":\"deny\",\"rule\":\"stale-binary\",\"reason\":\"json predates\"}'\nexit 2").value!;
+    final killed = stub(dir, name: "killed", body: "echo 'signal: killed' >&2\nexit 137").value!;
+    final loads = stub(dir, name: "loads", body: "echo VERDICT").value!;
 
     final judged = judgeFirstLoaded([config, stale, staleJSON, loads], ask: run);
     std\assert(judged.by == loads and judged.result!.stdout.trim() == "VERDICT", message: "{judged.by}");
@@ -695,7 +705,7 @@ test "a binary that cannot load the tree is passed over for the next" {
 test "the next candidates are the checkouts up from the call, then PATH" {
     final parent = fs\tempDir("hook-parent-");
     fs\writeFile("{parent}/magus.yaml", content: "");
-    plantBinary(parent);
+    std\assert(plantBinary(parent).error == null, message: "plant the binary");
     final worktree = "{parent}/.claude/worktrees/agent-x";
     fs\mkdirAll("{worktree}/docs");
     fs\writeFile("{worktree}/magus.yaml", content: "");

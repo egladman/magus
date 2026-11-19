@@ -142,6 +142,7 @@ import "env";
 import "fs";
 import "path";
 import "proc";
+import "result";
 import "lib/hook" as hook;
 
 // ADVISE_DEFAULT and the two ask arms are separate strings because a host may
@@ -356,16 +357,20 @@ object Guard {
 
 // Every flag rides in `extra`, so the unattributed retry drops them all: a binary too old
 // for one fails BOTH attempts otherwise.
-fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
+fun judge(guard: Guard, extra: [str]) > result\Result::<proc\ExecResult> {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
-        quiet = true,
-        allowFailure = true,
-        stdin = guard.payload,
-    });
+    try {
+        return result\ok::<proc\ExecResult>(proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+            quiet = true,
+            allowFailure = true,
+            stdin = guard.payload,
+        }));
+    } catch (err: any) {
+        return result\caught::<proc\ExecResult>(err);
+    }
 }
 
 // UNKNOWN_FLAG is how magus's flag parser refuses a flag it does not define.
@@ -692,13 +697,13 @@ fun ask(guard: Guard, attributed: [str], newest: [str]) > proc\ExecResult? {
         final newer = mut [<str>];
         foreach (word in attributed) { newer.append(word); }
         foreach (word in newest) { newer.append(word); }
-        result = judge(guard, extra: newer) catch null;
+        result = judge(guard, extra: newer).value;
     }
     if (newest.len() == 0 or rejectedFlag(result)) {
-        result = judge(guard, extra: attributed) catch null;
+        result = judge(guard, extra: attributed).value;
     }
     if (rejectedFlag(result)) {
-        result = judge(guard, extra: [<str>]) catch null;
+        result = judge(guard, extra: [<str>]).value;
     }
     return result;
 }

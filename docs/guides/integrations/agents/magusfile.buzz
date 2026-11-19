@@ -9,6 +9,7 @@ import "../../../../hack/magusfile/index" as index;
 
 import "proc";
 import "fs";
+import "result";
 import "semver";
 import "magus/spell/typescript";
 // Imported for dprint only. Listing it in spells would claim *.md, which the root lints.
@@ -87,7 +88,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     foreach (name in embed\embedNames(tmpl)) {
         files[name] = fs\readFile(name);
     }
-    final rendered = embed\render(tmpl, files: files);
+    final rendering = embed\render(tmpl, files: files);
+    if (rendering.error -> failed) { throw failed.message; }
+    final rendered = rendering.value!;
     // A spell imported here is a handle, not its functions, so a script
     // at the root calls each harness spell's lists.
     final row = fun (alias: str, id: str, hooks: str) > str
@@ -101,10 +104,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         + "import \"spells/harness/codex/spell\" as codex; "
         + "import \"spells/harness/cursor/spell\" as cursor; "
         + "import \"spells/harness/opencode/spell\" as opencode; "
-        + "fun main(args: [str]) > void !> any \{ io\\stdout.write(bindings\\page(["
+        + "fun main(args: [str]) > void !> any \{ final page = bindings\\page(["
         + [listed("claudeCode", id: "claude-code"), row("claudeCodeMod", id: "claude-code-mod", hooks: "[<HookCommand>]"),
            listed("codex", id: "codex"), listed("cursor", id: "cursor"), listed("opencode", id: "opencode")].join(", ")
-        + "])); \}";
+        + "]); if (page.error -> failed) \{ throw failed.message; \} io\\stdout.write(page.value!); \}";
     // magus\cmd trims its stdout, and a Markdown file ends on a newline.
     final matrix = magus\cmd("buzz", args: ["-e", script],
         opts: magus\CommandOptions{dir = "../../../..", quiet = true}).stdout + "\n";
@@ -179,23 +182,29 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "claude-code/mod/tsconfig.json"]});
     typescript["biome-check"](ctx);
-    checkBuzz();
+    final checked = checkBuzz();
+    if (checked.error -> failed) { throw failed.message; }
 }
 
 // The templates are upstream-strict and lib/ is engine Buzz, so each set gets its own
 // check. Not quiet: quiet would swallow the diagnostics on failure.
-fun checkBuzz() > void !> any {
-    var strict = mut ["--check", "cursor-hook.buzz"];
-    foreach (script in fs\glob("magus-*.buzz")) {
-        strict.append(script.value);
-    }
-    _ = magus\cmd("buzz", args: strict);
+fun checkBuzz() > result\Result::<bool> {
+    try {
+        var strict = mut ["--check", "cursor-hook.buzz"];
+        foreach (script in fs\glob("magus-*.buzz")) {
+            strict.append(script.value);
+        }
+        _ = magus\cmd("buzz", args: strict);
 
-    var embedded = mut ["--check", "--embedded"];
-    foreach (script in fs\glob("lib/*.buzz")) {
-        embedded.append(script.value);
+        var embedded = mut ["--check", "--embedded"];
+        foreach (script in fs\glob("lib/*.buzz")) {
+            embedded.append(script.value);
+        }
+        _ = magus\cmd("buzz", args: embedded);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    _ = magus\cmd("buzz", args: embedded);
 }
 
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.

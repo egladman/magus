@@ -15,21 +15,21 @@ fun host() > bindings\HookMatrix {
 }
 
 test "a bound cell names each script that binds the point, once" {
-    assert\equal(bindings\cell(host(), point: HookPoint.shell), "`magus-command`", "one hook");
-    assert\equal(bindings\cell(host(), point: HookPoint.stop), "`magus-command, magus-checkpoint`", "two scripts");
-    assert\equal(bindings\cell(host(), point: HookPoint.attach), "unsupported", "the row's point");
+    assert\equal(bindings\cell(host(), point: HookPoint.shell).value ?? "", "`magus-command`", "one hook");
+    assert\equal(bindings\cell(host(), point: HookPoint.stop).value ?? "", "`magus-command, magus-checkpoint`", "two scripts");
+    assert\equal(bindings\cell(host(), point: HookPoint.attach).value ?? "", "unsupported", "the row's point");
 }
 
-test "a point with neither a hook nor a row raises" {
-    final said = bindings\cell(host(), point: HookPoint.mcp) catch "raised";
-    assert\equal(said, "raised", "doctor fails the same gap");
+test "a point with neither a hook nor a row is an error" {
+    final said = bindings\cell(host(), point: HookPoint.mcp);
+    assert\equal(said.error?.message ?? "", "host binds no hook to mcp and gives no reason; fix its spell", "doctor fails the same gap");
 }
 
 test "the table pads every column to its widest cell" {
     final other = bindings\HookMatrix{id = "other", hooks = [
         HookCommand{event = "Pre", script = "x", points = bindings\POINTS},
     ], unsupported = [<HookBinding>]};
-    final lines = (bindings\table([other]) catch "").split("\n");
+    final lines = (bindings\table([other]).value ?? "").split("\n");
     assert\equal(lines.len(), 11, "the header, the rule and a row per point");
     assert\equal(lines[0], "| hook point      | other |", "the header");
     assert\equal(lines[1], "| --------------- | ----- |", "the rule");

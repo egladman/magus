@@ -10,6 +10,7 @@
 // Pure on purpose. The caller owns the filesystem, so every case below runs without one.
 
 import "assert";
+import "result";
 
 // A marker line names one file and is replaced by its contents in a fenced block.
 final EMBED_PREFIX = "<!-- embed: ";
@@ -53,7 +54,7 @@ fun trimTrailingNewlines(s: str) > str {
 // render replaces every marker with its file's contents. A marker naming a file the caller
 // did not hand in RAISES rather than rendering an empty block: a page that silently lost a
 // template is the failure this generator exists to remove.
-export fun render(tmpl: str, files: {str: str}) > str !> str {
+export fun render(tmpl: str, files: {str: str}) > result\Result::<str> {
     final rendered = mut [<str>];
     foreach (line in tmpl.split("\n")) {
         final name = markerName(line);
@@ -63,18 +64,18 @@ export fun render(tmpl: str, files: {str: str}) > str !> str {
         }
         final body = files[name];
         if (body == null) {
-            throw "guard-templates.md.tmpl embeds {name}, which was not read";
+            return result\fail::<str>("guard-templates.md.tmpl embeds {name}, which was not read");
         }
         rendered.append("```{fenceInfo(name)}");
         rendered.append(trimTrailingNewlines(body!));
         rendered.append("```");
     }
-    return rendered.join("\n");
+    return result\ok::<str>(rendered.join("\n"));
 }
 
 test "a marker becomes a fenced block carrying the whole file" {
     final page = render("intro\n<!-- embed: magus-command.buzz -->\noutro",
-        files: {"magus-command.buzz": "import \"std\";\nstd\\print(\"hi\");\n"}) catch "raised";
+        files: {"magus-command.buzz": "import \"std\";\nstd\\print(\"hi\");\n"}).value ?? "raised";
     assert\equal(page, "intro\n```buzz\nimport \"std\";\nstd\\print(\"hi\");\n```\noutro", "block replaces the marker");
 }
 
@@ -84,7 +85,7 @@ test "the fence follows the extension" {
 }
 
 test "a file's trailing newline does not open a blank line" {
-    final page = render("<!-- embed: x.buzz -->", files: {"x.buzz": "one\n\n\n"}) catch "raised";
+    final page = render("<!-- embed: x.buzz -->", files: {"x.buzz": "one\n\n\n"}).value ?? "raised";
     assert\equal(page, "```buzz\none\n```", "trailing newlines are trimmed");
 }
 
@@ -95,7 +96,7 @@ test "prose that merely mentions a marker is left alone" {
 }
 
 test "a marker naming a file nobody read raises instead of emptying the page" {
-    final page = render("<!-- embed: missing.buzz -->", files: {"other.buzz": "x"}) catch "raised";
+    final page = render("<!-- embed: missing.buzz -->", files: {"other.buzz": "x"}).value ?? "raised";
     assert\equal(page, "raised", "the generator refuses rather than shipping a hole");
 }
 

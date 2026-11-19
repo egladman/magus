@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { JsonView } from '../types'
 import { childPath, headerOf, leafOf, structuredOf, summaryOf, textsOf } from './json'
 import type { Leaf, Structured } from './json'
-import { fromPromise, isRecord } from './result'
+import { fromPromise, isRecord, ok, type Result } from './result'
 import type { On } from './ui'
 
 const MAX_ROWS = 1500
@@ -104,18 +104,20 @@ export type Found = { id: string; s: Structured; text: string; stderr: string; i
 
 // explorer draws structured output as a tree, every node closed until
 // pressed, with the record's envelope named on its closed row.
-export async function explorer($: EngineInterface, e: RenderInput, f: Found) {
+export async function explorer($: EngineInterface, e: RenderInput, f: Found): Promise<Result<RenderElement>> {
   const els = $.ui.resolve(e)
   const { Box, Button, Code, Text } = els
   const { id, s, text, stderr } = f
-  const { value: view = { open: [], isRaw: false } } = await $.state.get({ plugin: 'magus', key: 'json', id })
+  const read = await fromPromise($.state.get({ plugin: 'magus', key: 'json', id }))
+  if (read.error) return read
+  const { value: view = { open: [], isRaw: false } } = read.value
   const rows = new Rows(els, new Set(view.open), path => {
     void edit($, id, v => ({ ...v, open: flip(v.open, path) }))
   })
   if (s.kind === 'json') rows.node(null, s.value, '', 0, false)
   else s.records.forEach((r, i) => rows.node(null, r, `#${i}`, 0, false))
   const count = s.kind === 'jsonl' ? `${s.records.length} records` : ''
-  return (
+  return ok(
     <Box flexDirection="column">
       {s.kind === 'json' && s.lead !== '' ? <Text color={f.isErrored ? 'red' : undefined}>{s.lead}</Text> : null}
       <Box gap={1}>
@@ -132,8 +134,14 @@ export async function explorer($: EngineInterface, e: RenderInput, f: Found) {
       {!view.isRaw && rows.cut > 0 ? <Text dimColor>{rows.cut} more rows; Raw shows all</Text> : null}
       {s.kind === 'json' && s.trail !== '' ? <Text dimColor>{s.trail}</Text> : null}
       {stderr.trim() !== '' ? <Text dimColor>{stderr.trim()}</Text> : null}
-    </Box>
+    </Box>,
   )
+}
+
+// explorerOrError is explorer's drawing, or the line saying why it could not draw.
+export function explorerOrError($: EngineInterface, e: RenderInput, f: Found): Promise<RenderElement> {
+  const { Text } = $.ui.resolve(e)
+  return explorer($, e, f).then(drawn => (drawn.error ? <Text color="red">✖ {drawn.error.message}</Text> : drawn.value))
 }
 
 function found(id: string, output: unknown, isErrored: boolean): Found | null {
@@ -160,7 +168,7 @@ export function registerJsonExplorer(on: On): void {
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
     const f = found(e.props.tool_use_id, e.props.output, e.props.isErrored)
-    return f === null ? next(e) : explorer($, e, f)
+    return f === null ? next(e) : explorerOrError($, e, f)
   })
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
@@ -172,7 +180,7 @@ export function registerJsonExplorer(on: On): void {
     return (
       <Box flexDirection="column">
         {own}
-        {await explorer($, e, f)}
+        {await explorerOrError($, e, f)}
       </Box>
     )
   })
