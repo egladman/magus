@@ -14,14 +14,13 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
     final journal = magus\graph().dir("internal/recorder");
     final spawn = magus\graph().dir("internal/proc/spawn");
     return figure\of("cache-internals",
-            title: "What a cache lookup reads, and what it writes back",
+            title: "A hit restores outputs; only a miss runs the target and signs it",
             eyebrow: "cache",
-            desc: "A lookup hashes a target's declared inputs, found by the change set, and asks "
-                + "the local store, then the remote tier over HTTP. A hit restores the outputs by "
-                + "copy-on-write clone where the filesystem has it. A miss runs the target through "
-                + "the spawner, records the run in the journal and, on a trusted branch, signs the "
-                + "entry with the secret and puts it. The job row decides which writes count as "
-                + "the run's own.")
+            desc: "A lookup hashes a target's declared inputs and asks the local store, then the "
+                + "remote tier over HTTP. A hit restores the outputs by copy-on-write clone. A miss "
+                + "runs the target through the spawner, records it in the journal and, on a trusted "
+                + "branch, signs and puts the entry. The job row decides which writes are the run's "
+                + "own.")
         .box(cache, label: "Cache", sub: "key, restore, store", focal: true)
         .box(changeset, label: "Change set", sub: "declared inputs, diffed")
         .box(reflink, label: "Reflink restore", sub: "copy-on-write clones")

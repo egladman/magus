@@ -5,35 +5,33 @@ import "magus/figure";
 import "site/diagrams/packages" as packages;
 
 export fun serverSocketFigure() > figure\Figure !> any {
+    final cli = magus\graph().dir("cmd/magus");
     final sock = magus\graph().dir("internal/proc");
+    final server = magus\graph().dir("internal/server");
     final share = magus\graph().dir("internal/share");
-    final cli = figure\external("magus CLI", sub: "run, status, query", tag: "shell");
-    final pool = figure\external("Concurrency pool", look: figure\Look.plain);
-    final ws = figure\external("Workspace registry", sub: "graph, SCIP, cache", look: figure\Look.store);
-    final runs = figure\external("Run registry", sub: "live runs", look: figure\Look.store);
-    final svc = figure\external("Broker", sub: "shared services");
-    // The HTTP entry is server-http's; the two share only the registries drawn here as actors.
+    final person = figure\person("You", sub: "run, status, query", tag: "shell");
+    // The HTTP entry is server-http's; the two share only the registries internal/server holds.
     return figure\of("server-socket",
-            title: "How a local command reaches the server",
+            title: "A local command reaches the server over one private socket",
             eyebrow: "magus server",
-            desc: "The magus CLI dispatches over a private unix domain socket into the "
-                + "concurrency pool, the workspace registry and the run registry; shared services "
-                + "go to the broker. Sharing a graph spawns a separate short-lived loopback server.")
-        .actor(cli)
+            desc: "The magus CLI dispatches over a private unix domain socket to the server, "
+                + "which holds the concurrency pool, the workspace and run registries and the "
+                + "broker for shared services. Sharing a graph spawns a separate short-lived "
+                + "loopback server.",
+            level: figure\Level.package)
+        .actor(person)
+        .box(cli, label: "magus CLI", sub: "dispatches every command")
         .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
+        .box(server, label: "Server", sub: "pool, registries, broker", look: figure\Look.store)
         // Not --serve: it only picks the transport, so naming it alone would omit the command.
         .box(share, label: "Loopback server", sub: "graph export --open", look: figure\Look.optional)
         .edgesFromGraph()
-        .flowIn(cli, dst: sock, label: "dispatch")
-        .flowOut(sock, dst: pool)
-        .flowOut(sock, dst: ws)
-        .flowOut(sock, dst: runs)
-        .flowOut(sock, dst: svc)
-        .flowIn(cli, dst: share, label: "spawns", stroke: figure\Stroke.optional)
+        .flowIn(person, dst: cli)
         .legend(figure\Look.store, label: "shared server state")
         .legend(figure\Look.optional, label: "spawned on demand")
         .scope(packages\goPackages("internal/proc/**"))
         .scope(packages\goPackages("internal/share/**"))
+        .scope([server])
         .except([magus\graph().dir("internal/proc/endpoint")],
             why: "parses the transport address a client dials, a value type the CLI and config share")
         .except([magus\graph().dir("internal/proc/environ")],

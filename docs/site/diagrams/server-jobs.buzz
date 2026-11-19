@@ -11,7 +11,7 @@ export fun serverJobsFigure() > figure\Figure !> any {
     final fs = figure\external("Source files", sub: "magusfiles, code", tag: "input");
     final cli = figure\external("magus run", sub: "any invocation", tag: "input");
     return figure\of("server-jobs",
-            title: "What keeps the warm workspace current",
+            title: "Watchers and coalesced graph builds keep one warm workspace current",
             eyebrow: "magus server",
             desc: "File changes reach the watchers, which tell the workspace registry what to "
                 + "invalidate. A magus run queues a coalesced graph-build job on the server, "

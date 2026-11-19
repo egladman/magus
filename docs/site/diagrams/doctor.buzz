@@ -19,10 +19,10 @@ export fun doctorFigure() > figure\Figure !> any {
             title: "One check per question, each reading the subsystem it asks about",
             eyebrow: "doctor",
             desc: "magus doctor runs a list of checks and prints one verdict per check. Each check "
-                + "reads the subsystem it is about: the loaded config, the cache and its remote "
-                + "tier, the spell registry and its overrides, the service audit, the installed "
-                + "agent skills and hooks, and the job, session and activity records. A check "
-                + "reports what is wrong and the command that fixes it; it changes nothing.")
+                + "reads the subsystem it is about: the config, the cache, the spell registry, the "
+                + "service audit, the agent skills and hooks, and the job, session and activity "
+                + "records. A check reports what is wrong and the command that fixes it; it changes "
+                + "nothing.")
         .box(doctor, label: "Checks", sub: "one verdict each", focal: true)
         .box(config, label: "Config", sub: "keys, drift")
         .box(cache, label: "Cache", sub: "local and remote tier")

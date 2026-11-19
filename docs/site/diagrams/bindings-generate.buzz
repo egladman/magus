@@ -16,10 +16,10 @@ export fun bindingsGenerateFigure() > figure\Figure !> any {
             title: "Go types become Buzz mirrors at build time, never at run time",
             eyebrow: "generate",
             desc: "magus-utils reads Go declarations with godecl and the config keys with the "
-                + "config generator. Both hand the emitter a description, and the emitter writes "
-                + "Buzz declarations through buzzgen. The bindings package imports the generated "
-                + "mirrors from its gen directory, so a host module and a Buzz script see the "
-                + "same type. A mirror is generated and committed, never reflected at run time.")
+                + "config generator, and the emitter writes Buzz declarations through buzzgen. The "
+                + "bindings package imports the generated mirrors, so a host module and a Buzz "
+                + "script see the same type. A mirror is generated and committed, never reflected "
+                + "at run time.")
         .box(utils, label: "magus-utils", sub: "the generate targets")
         .box(godecl, label: "Go declarations", sub: "types, enums, callbacks")
         .box(config, label: "Config", sub: "keys, defaults")

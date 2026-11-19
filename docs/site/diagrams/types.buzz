@@ -16,11 +16,10 @@ export fun typesFigure() > figure\Figure !> any {
             title: "The shared records sit at the bottom, and the groups lean on them",
             eyebrow: "types",
             desc: "types holds the records every other package passes around: targets, runs, "
-                + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come "
-                + "from libs/diagnostics. The daemon, diff, feedback and image groups split "
-                + "off the records that only some callers need, and each imports the base and "
-                + "the enums, never the other way. Encoding lives on the type through the shared "
-                + "JSON package, so no reader splits lines itself.")
+                + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come from "
+                + "libs/diagnostics. The daemon, diff, feedback and image groups split off records "
+                + "only some callers need, and each imports the base and the enums, never the other "
+                + "way.")
         .box(types, label: "Records", sub: "targets, runs, findings, jobs", focal: true)
         .box(enums, label: "Enums", sub: "method sets by hand")
         .box(diagnostics, label: "Diagnostic codes", sub: "MGSxxxx")

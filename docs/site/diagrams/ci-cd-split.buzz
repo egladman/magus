@@ -16,13 +16,11 @@ export fun ciCdSplitFigure() > figure\Figure !> any {
     return figure\of("ci-cd-split",
             title: "CI validates a change; CD ships what a merge produces",
             eyebrow: "ci",
-            desc: "ci.yaml runs on a pull request: the gate sizer in internal/ci picks the shards "
-                + "from the forecast and the volatility score, runs them, and annotates the "
-                + "result. It restores the signed remote cache and writes only a tier scoped to "
-                + "the pull request. cd.yaml runs after a merge to main, renders the site from "
-                + "the profiles CI uploaded and builds the image, and it alone holds the key "
-                + "that writes the shared tier. release.yaml cuts binaries on a tag. Nothing "
-                + "that runs pull-request code holds a secret or a write token.",
+            desc: "ci.yaml runs on a pull request: it sizes the shards, runs them, annotates the "
+                + "result, and writes only a cache tier scoped to the pull request. cd.yaml runs "
+                + "after a merge to main, renders the site and builds the image, and alone holds "
+                + "the key to the shared tier. Nothing running pull-request code holds a secret or "
+                + "write token.",
             direction: figure\Direction.down)
         .actor(change)
         .actor(validate)

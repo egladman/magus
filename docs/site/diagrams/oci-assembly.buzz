@@ -12,8 +12,9 @@ export fun ociAssemblyFigure() > figure\Figure !> any {
     final registry = figure\external("Registry", look: figure\Look.store);
 
     return figure\of("oci-assembly",
-            title: "OCI assembly: files in, a layout out, a registry after",
+            title: "Assembly stays on disk; only the registry client talks to a registry",
             eyebrow: "images",
+            direction: figure\Direction.down,
             desc: "Built files and an optional digest-pinned base reach libs/image through the "
                 + "image host module. libs/image assembles each layer, stages one layout per "
                 + "platform, combines the layouts into an index and attaches referrers, cloning "

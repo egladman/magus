@@ -56,6 +56,8 @@ final Grid = 4;
 // can refuse a declaration in its own terms before any placement runs.
 final MaxNodes = 9;
 final MaxEdges = 12;
+// A figure's desc is its alt text, spoken whole by a screen reader.
+final MaxDescWords = 60;
 final MaxAccent = 2;
 // An edge label is a word or two on a connector; past this it is a note.
 final MaxEdgeLabel = 14;
@@ -259,6 +261,9 @@ object Style {
 
     // A URL template with `{path}`; when set, every anchored node links to its path.
     anchorHref: str = "",
+    // A URL template with `{id}`; when set, a node with a drill links to that figure, ahead
+    // of its anchor.
+    drillHref: str = "",
 
     // The arrowhead is drawn in marker units. refX and the polygon derive from these, so
     // widening the head keeps its tip on the attach point rather than past it.
@@ -304,6 +309,9 @@ object Node {
     // A URL the box links to when what it depicts lives outside the repo: another service,
     // a vendor's docs. Painted as an <a>; unlike anchor, nothing checks it.
     link: str = "",
+    // The id of the figure one level down that draws what this box stands for; set by an
+    // Atlas, painted as a link when the draw passes drillHref.
+    drill: str = "",
     x: int = 0,
     y: int = 0,
     w: int = 160,
@@ -371,6 +379,8 @@ export object Diagram {
     desc: str = "",
     width: int = 960,
     height: int = 600,
+    // The one level every box draws at, declared or derived.
+    level: Level = Level.process,
     zones: [ZoneRect] = [<ZoneRect>],
     nodes: [Node] = [<Node>],
     edges: [Edge] = [<Edge>],
@@ -1284,9 +1294,14 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
     if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
+    if (n.drill != "") { attrs = attrs + " data-drill=\"" + escapeSvg(n.drill) + "\""; }
     final body = renderNodeBody(n, p, s);
     if (n.link != "") {
         return "<a href=\"" + escapeSvg(n.link) + "\"" + attrs + "><g>" + body + "</g></a>";
+    }
+    if (s.drillHref != "" and n.drill != "") {
+        final href = s.drillHref.replace("\{id\}", with: escapeSvg(n.drill));
+        return "<a href=\"" + href + "\"" + attrs + "><g>" + body + "</g></a>";
     }
     if (s.anchorHref != "" and n.anchor != "") {
         final href = s.anchorHref.replace("\{path\}", with: escapeSvg(n.anchor));
@@ -2276,6 +2291,7 @@ object Sketch {
     topDown: bool = false,
     isUnscoped: bool = false,
     unscopedWhy: str = "",
+    level: Level = Level.process,
     nodes: mut [Node],
     edges: mut [Edge],
     zones: mut [FlowZone],
@@ -2586,6 +2602,7 @@ fun rebuilt(f: Sketch, nodes: mut [Node], edges: mut [Edge], observedNodes: mut 
         topDown = f.topDown,
         isUnscoped = f.isUnscoped,
         unscopedWhy = f.unscopedWhy,
+        level = f.level,
         nodes = nodes,
         edges = edges,
         zones = f.zones,
@@ -2658,7 +2675,7 @@ fun compose(declared: Sketch) > Sketch {
             label = shownLabel(d.label, id: shownLabel(o!.label, id: o!.id));
             if (anchor == "") { anchor = o!.anchor; }
         }
-        nodes.append(Node{ id = d.id, label = label, sub = d.sub, tag = d.tag, role = d.role, anchor = anchor, symbol = d.symbol, signature = d.signature, link = d.link });
+        nodes.append(Node{ id = d.id, label = label, sub = d.sub, tag = d.tag, role = d.role, anchor = anchor, symbol = d.symbol, signature = d.signature, link = d.link, drill = d.drill });
         i = i + 1;
     }
     foreach (o in observedOnly) {
@@ -4896,7 +4913,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         }
         nodes.append(Node{
             id = n.id, label = n.label, sub = n.sub, tag = n.tag, role = n.role, anchor = n.anchor, symbol = n.symbol, signature = n.signature, link = n.link,
-            x = x, y = y, w = boxW, h = boxH,
+            drill = n.drill, x = x, y = y, w = boxW, h = boxH,
         });
         ni = ni + 1;
     }
@@ -5034,6 +5051,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         omits = f.omitted,
         stamp = f.stamp,
         unscoped = f.unscopedWhy,
+        level = f.level,
         pitch = Pitch,
     };
 }
@@ -6568,25 +6586,63 @@ fun notDirs(dirs: [magus\Dir], call: str) > str? {
     return null;
 }
 
-// Actor is a box that names no directory: a person, a vendor service, a step in a
-// process. Build one with external().
+// Level is the one abstraction level a figure draws at, and every box in it is a unit of
+// that level: a process's steps, the workspace's projects, a scope's packages, or the
+// symbols inside one package. file has no unit constructor yet, so a figure declaring it is
+// refused. A level is not a layer: magus\layer() names a tier of packages, drawn at
+// Level.package.
+export enum<str> Level { process, project, package, file, symbol }
+
+// ActorKind is what an actor stands for, set by the constructor that built it: person()
+// and external() sit outside the code and join a figure at any level; step() is a unit of a
+// Level.process figure; stage() is a symbol inside one package, a unit of Level.symbol.
+export enum<str> ActorKind { person, external, step, stage }
+
+// Actor is a box that names no directory. Build one with person(), external(), step() or
+// stage(): an actor with no kind is refused, since nothing then says which level it is.
 export object Actor {
     name: str = "",
     sub: str = "",
     tag: str = "",
     // A URL for what the actor is; painted as a link, never checked.
     link: str = "",
-    // Null is Look.external.
+    // Null is Look.external for a person or an external, Look.plain for a step or a stage.
     look: Look? = null,
+    kind: ActorKind? = null,
+    // A stage's package and its symbol, from magus\graph().dir and magus\graph().refs.
+    dir: magus\Dir? = null,
+    refs: magus\RefsResult? = null,
 }
 
-// external is an actor the figure draws but no directory holds. look defaults to
+// person is someone outside the code: a user, a reviewer, an operator. look defaults to
 // Look.external.
 //
 // The enum parameter defaults to null rather than a case: gopherbuzz resolves a default in
 // the caller's scope.
+export fun person(name: str, sub: str = "", tag: str = "", link: str = "", look: Look? = null) > Actor {
+    return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.person };
+}
+
+// external is something outside the code the figure draws: a vendor service, a host, a
+// forge, a file a person writes. look defaults to Look.external.
 export fun external(name: str, sub: str = "", tag: str = "", link: str = "", look: Look? = null) > Actor {
-    return Actor{ name = name, sub = sub, tag = tag, link = link, look = look };
+    return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.external };
+}
+
+// step is one step of a process no directory holds: a CI job, a decision, a role. It is
+// the unit of a Level.process figure, and refused in any other.
+export fun step(name: str, sub: str = "", tag: str = "", link: str = "", look: Look? = null) > Actor {
+    return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.step };
+}
+
+// stage is a step that lives inside one package, named by the symbol that carries it out:
+// refs is magus\graph().refs(symbol), and its definition must sit directly in dir. It is the
+// unit of a Level.symbol figure scoped to dir, anchored at that definition. name defaults
+// to the symbol.
+export fun stage(dir: magus\Dir, refs: magus\RefsResult, name: str = "", sub: str = "", tag: str = "", look: Look? = null) > Actor {
+    var named = name;
+    if (named == "") { named = refs.symbol; }
+    return Actor{ name = named, sub = sub, tag = tag, look = look, kind = ActorKind.stage, dir = dir, refs = refs };
 }
 
 // Direction is the way ranks run: across, left to right, or down, top to bottom.
@@ -6683,6 +6739,8 @@ export object Figure {
     eyebrow: str = "",
     desc: str = "",
     direction: Direction = Direction.across,
+    // Null derives the level from the boxes; set, every box must be a unit of it.
+    level: Level? = null,
     // Why the figure draws no directory; empty for a figure that draws some.
     unscopedWhy: str = "",
     // Draws the imports and declared calls the drawn records hold.
@@ -6834,14 +6892,16 @@ export object Figure {
     }
 }
 
-// of starts an empty figure. direction defaults to Direction.across.
+// of starts an empty figure. direction defaults to Direction.across. level is the one level
+// the figure draws at; left null, the boxes decide it, and boxes of two levels are refused
+// either way.
 //
-// The enum parameter defaults to null rather than a case: gopherbuzz resolves a default in
+// The enum parameters default to null rather than a case: gopherbuzz resolves a default in
 // the caller's scope.
-export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null) > mut Figure {
+export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null, level: Level? = null) > mut Figure {
     return mut Figure{
         id = id, title = title, eyebrow = eyebrow, desc = desc,
-        direction = direction ?? Direction.across,
+        direction = direction ?? Direction.across, level = level,
     };
 }
 
@@ -6860,6 +6920,11 @@ object Part {
     symbol: str = "",
     signature: str? = null,
     link: str = "",
+    // What the part is a unit of, from its constructor; null for a person or an external,
+    // which sit outside the code and join any level. A box's level waits for the figure's.
+    actorKind: ActorKind? = null,
+    // The package a stage sits in.
+    stageDir: str = "",
 }
 
 // The Drawn records are the public ones resolved to paths, actor names and paint, each with
@@ -6927,8 +6992,9 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str { //
 }
 
 // drawDiagram paints d, a Figure's diagram(), with theme, as draw
-// does. Painting one figure in several themes lays it out once.
-export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
+// does. Painting one figure in several themes lays it out once. drillHref is a URL
+// template: {id} takes the figure a box drills down to, from an Atlas.
+export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "", drillHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
     final named: str? = theme.value;
     if (named == null) {
         throw "diagram {quote(d.id)}: drawDiagram takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
@@ -6936,7 +7002,7 @@ export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "") > str !> 
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
-    final painted = renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
+    final painted = renderSvg(d, p: p, s: Style{ anchorHref = anchorHref, drillHref = drillHref });
     if (painted.error -> e) {
         throw e.message; //nolint:no-throw // the exported call raises
     }
@@ -6948,16 +7014,27 @@ export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "") > str !> 
 // symbol and its signature in place of the file it is defined in, so moving the definition,
 // in its file or to another, leaves the stamp alone and a signature change moves it, the
 // change `magus diff` classifies as a signature change. A signature the index rendered none
-// for is unknown.
+// for is unknown. A box that drills down records the figure it links to.
 export fun nodeFact(n: Node) > str {
+    var drill = "";
+    if (n.drill != "") { drill = " drill {n.drill}"; }
     if (n.symbol == "") {
-        return "node {n.id} {n.role.value} {n.anchor} {n.label} / {n.sub}";
+        return "node {n.id} {n.role.value} {n.anchor} {n.label} / {n.sub}{drill}";
     }
-    return "node {n.id} {n.role.value} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}";
+    return "node {n.id} {n.role.value} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}{drill}";
 }
 
-fun laidOut(fig: Figure) > result\Result::<Diagram> {
-    final lowest = lowered(fig);
+// drillLinks maps the id of each box in d that drills down to the figure it links to.
+export fun drillLinks(d: Diagram) > {str: str} {
+    final links: mut {str: str} = mut {<str: str>};
+    foreach (n in d.nodes) {
+        if (n.drill != "") { links[n.id] = n.drill; }
+    }
+    return links;
+}
+
+fun laidOut(fig: Figure, drills: {str: str} = {<str: str>}) > result\Result::<Diagram> {
+    final lowest = lowered(fig, drills: drills);
     if (lowest.error -> e) {
         return result\Result::<Diagram>{ error = e };
     }
@@ -6966,6 +7043,171 @@ fun laidOut(fig: Figure) > result\Result::<Diagram> {
         return result\fail::<Diagram>(revoiced(e.message));
     }
     return laid;
+}
+
+// claims counts d's connectors by what each asserts: "imports" and "calls" the graph holds,
+// "flow" an author drew. Every key is present.
+export fun claims(d: Diagram) > {str: int} {
+    final counts: mut {str: int} = mut {"imports": 0, "calls": 0, "flow": 0};
+    foreach (e in d.edges) {
+        counts[e.claim.value] = (counts[e.claim.value] ?? 0) + 1;
+    }
+    return counts;
+}
+
+// Atlas is a registry's figures read together, so a box links to the figure one level down
+// that draws what it stands for, and a figure wider than the column the registry shows it
+// in is refused. Build one with atlas().
+export object Atlas {
+    figures: [Figure] = [<Figure>],
+    // The widest a figure may lay out, in SVG units; 0 sets no budget.
+    column: int = 0,
+
+    // diagram lays f out as Figure.diagram() does, with each box's drill set, and raises
+    // every finding at once, a figure past the column among them.
+    fun diagram(f: Figure) > Diagram !> str { //nolint:no-throw // the exported call raises
+        final laid = laidOut(f, drills: this.drills(f));
+        if (laid.error -> e) {
+            throw e.message; //nolint:no-throw // the exported call raises
+        }
+        final d = laid.value!;
+        if (this.column > 0 and d.width > this.column) {
+            throw "figure {quote(f.id)}: lays out {d.width} wide, past the column of {this.column}; set direction: Direction.down in of(), or split it"; //nolint:no-throw // the exported call raises
+        }
+        return d;
+    }
+
+    // drills maps the id of each box in f to the figure one level down that draws it: a
+    // package's Level.symbol figure, the Level.package figure that boxes each of a group's
+    // directories on its own, a project's Level.package figure inside it. The narrowest
+    // wins, then the first registered.
+    fun drills(f: Figure) > {str: str} {
+        final level = quickLevel(f);
+        final found: mut {str: str} = mut {<str: str>};
+        foreach (b in f.boxes) {
+            var id = "";
+            var dirs: [str] = [<str>];
+            if (b.dir != null and recordPath(b.dir!) != "") {
+                id = b.dir!.path;
+                dirs = [b.dir!.path];
+            } else if (b.group != null) {
+                id = "group:" + b.label;
+                final paths: mut [str] = mut [<str>];
+                foreach (d in b.group!) { if (recordPath(d) != "") { paths.append(d.path); } }
+                dirs = paths;
+            } else {
+                continue;
+            }
+            final target = this.below(f, level: level, isGroup: b.group != null, dirs: dirs);
+            if (target != "") { found[id] = target; }
+        }
+        return found;
+    }
+
+    // undrilled is the label of each group in f that no figure one level down draws.
+    fun undrilled(f: Figure) > [str] {
+        final drawn = this.drills(f);
+        final left: mut [str] = mut [<str>];
+        foreach (b in f.boxes) {
+            if (b.group != null and drawn["group:" + b.label] == null) { left.append(b.label); }
+        }
+        return left;
+    }
+
+    fun below(f: Figure, level: Level, isGroup: bool, dirs: [str]) > str {
+        var best = "";
+        var bestSize = 0;
+        foreach (g in this.figures) {
+            if (g.id == f.id) { continue; }
+            final gl = quickLevel(g);
+            final scope = scopePaths(g);
+            var fits = false;
+            if (level == Level.package and isGroup == false and gl == Level.symbol) {
+                final staged = stageDirsOf(g);
+                fits = staged.len() == 1 and dirs.len() == 1 and staged[0] == dirs[0];
+            } else if (level == Level.package and isGroup and gl == Level.package) {
+                final boxed = boxedPaths(g);
+                fits = dirs.len() > 0;
+                foreach (d in dirs) {
+                    if (listHolds(boxed, item: d) == false) { fits = false; }
+                }
+            } else if (level == Level.project and gl == Level.package and dirs.len() == 1) {
+                fits = scope.len() > 0;
+                foreach (s in scope) {
+                    if (s != dirs[0] and inside(s + "/x", dir: dirs[0]) == false) { fits = false; }
+                }
+            }
+            if (fits and (best == "" or scope.len() < bestSize)) {
+                best = g.id;
+                bestSize = scope.len();
+            }
+        }
+        return best;
+    }
+}
+
+// atlas reads figures together. column is the widest a figure may lay out, in SVG units:
+// the prose column the registry inlines them in.
+export fun atlas(figures: [Figure], column: int = 0) > Atlas {
+    return Atlas{ figures = figures, column = column };
+}
+
+// quickLevel is the level a figure declares, or the one its boxes name first: a stage is
+// Level.symbol, a box or group Level.package, the root box Level.project, a step
+// Level.process. A figure of two levels is refused when it lays out, so the first serves.
+fun quickLevel(f: Figure) > Level {
+    if (f.level != null) {
+        final named: str? = f.level!.value;
+        if (named != null) { return f.level!; }
+    }
+    var sawPackage = false;
+    var sawProject = false;
+    foreach (b in f.boxes) {
+        if (b.actor != null and b.actor!.kind == ActorKind.stage) { return Level.symbol; }
+        if (b.dir != null and recordPath(b.dir!) == ".") { sawProject = true; }
+        if ((b.dir != null and recordPath(b.dir!) != ".") or b.group != null) { sawPackage = true; }
+    }
+    if (sawPackage) { return Level.package; }
+    if (sawProject) { return Level.project; }
+    return Level.process;
+}
+
+fun scopePaths(f: Figure) > [str] {
+    final seen: mut {str: bool} = mut {<str: bool>};
+    final paths: mut [str] = mut [<str>];
+    foreach (dirs in f.scopes) {
+        foreach (d in dirs) {
+            final path = recordPath(d);
+            if (path != "" and seen[path] == null) {
+                seen[path] = true;
+                paths.append(path);
+            }
+        }
+    }
+    return paths;
+}
+
+// boxedPaths is the directory of each dir box in f, groups left out.
+fun boxedPaths(f: Figure) > [str] {
+    final paths: mut [str] = mut [<str>];
+    foreach (b in f.boxes) {
+        if (b.dir != null and recordPath(b.dir!) != "") { paths.append(b.dir!.path); }
+    }
+    return paths;
+}
+
+fun stageDirsOf(f: Figure) > [str] {
+    final seen: mut {str: bool} = mut {<str: bool>};
+    final dirs: mut [str] = mut [<str>];
+    foreach (b in f.boxes) {
+        if (b.actor -> a) {
+            if (a.kind == ActorKind.stage and a.dir != null and recordPath(a.dir!) != "" and seen[a.dir!.path] == null) {
+                seen[a.dir!.path] = true;
+                dirs.append(a.dir!.path);
+            }
+        }
+    }
+    return dirs;
 }
 
 // lookName is look's value: null when none was passed, empty when look is not a Look.
@@ -6983,7 +7225,7 @@ fun strokeName(stroke: Stroke?) > str? {
 }
 
 fun sameActor(a: Actor, b: Actor) > bool {
-    return a.name == b.name and a.sub == b.sub and a.tag == b.tag and a.link == b.link and a.look == b.look;
+    return a.name == b.name and a.sub == b.sub and a.tag == b.tag and a.link == b.link and a.look == b.look and a.kind == b.kind;
 }
 
 // dirPaths is the paths of dirs, sorted, each once. An item that is not a Dir record is a
@@ -7115,9 +7357,18 @@ fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor},
     }
     if (b.actor != null) {
         final a = b.actor!;
-        final call = "external({quote(a.name)})";
+        final kind = actorKindName(a.kind);
+        if (kind == null) {
+            found.append("Actor\{ name = {quote(a.name)} } names no kind, so nothing says what it stands for or which level it is; build it with person(), external(), step() or stage()");
+            return null;
+        }
+        if (kind! == "") {
+            found.append("Actor {quote(a.name)} takes kind: ActorKind.<case>, not a string");
+            return null;
+        }
+        final call = "{kind!}({quote(a.name)})";
         if (a.name == "") {
-            found.append("an external has no name; name what it stands for in external(name)");
+            found.append("an actor has no name; name what it stands for in {kind!}(name)");
             return null;
         }
         final prior = actors[a.name];
@@ -7128,12 +7379,38 @@ fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor},
             return null;
         }
         actors[a.name] = a;
-        final look = lookName(a.look) ?? "external";
+        var fallback = "external";
+        if (kind! == "step" or kind! == "stage") { fallback = "plain"; }
+        final look = lookName(a.look) ?? fallback;
         if (look == "") { found.append("{call} takes look: Look.<case>, not a string"); }
-        return Part{
+        final part = Part{
             id = actorId(a.name), kind = "actor", call = call, label = a.name, sub = a.sub, tag = a.tag,
-            role = roleName(look), link = a.link,
+            role = roleName(look), link = a.link, actorKind = a.kind,
         };
+        if (kind! != "stage") { return part; }
+        if (a.dir == null or recordPath(a.dir!) == "" or a.refs == null) {
+            found.append("{call} takes the Dir its symbol sits in and the magus\\graph().refs result naming it; build it with stage(dir, refs:)");
+            return null;
+        }
+        final dir = a.dir!.path;
+        final refs = a.refs!;
+        foreach (site in refs.defs) {
+            if (directlyIn(site.file, dir: dir)) {
+                return Part{
+                    id = part.id, kind = part.kind, call = call, label = part.label, sub = part.sub, tag = part.tag,
+                    role = part.role, anchor = site.file, symbol = refs.symbol, signature = refs.signature,
+                    actorKind = a.kind, stageDir = dir,
+                };
+            }
+        }
+        if (refs.defs.len() == 0) {
+            found.append("{call} names symbol {quote(refs.symbol)}, which has no definition in the index; rebuild it with `magus graph build`, or name the symbol that carries the step out");
+        } else {
+            final files: mut [str] = mut [<str>];
+            foreach (site in refs.defs) { files.append(site.file); }
+            found.append("{call} names symbol {quote(refs.symbol)}, defined in {files.join(", ")} and not directly in {quote(dir)}; build the stage on the package that defines it");
+        }
+        return null;
     }
     found.append("a box sets none of dir, group and actor; set one");
     return null;
@@ -7184,6 +7461,25 @@ fun actorId(name: str) > str {
     return "external:" + name;
 }
 
+// directlyIn reports whether a workspace-relative file sits in dir itself, not in a
+// directory below it: the files of one package.
+fun directlyIn(file: str, dir: str) > bool {
+    var rest = file;
+    if (dir != ".") {
+        if (file.startsWith(dir + "/") == false) { return false; }
+        rest = file.sub(dir.len() + 1);
+    }
+    return rest.indexOf("/") == null;
+}
+
+// actorKindName is kind's value: null when none was set, empty when kind is not an
+// ActorKind.
+fun actorKindName(kind: ActorKind?) > str? {
+    if (kind == null) { return null; }
+    final named: str? = kind!.value;
+    return named ?? "";
+}
+
 // inside reports whether a workspace-relative file sits in dir, "." holding everything.
 fun inside(file: str, dir: str) > bool {
     if (dir == ".") { return true; }
@@ -7208,6 +7504,121 @@ fun revoiced(msg: str) > str {
     return msg.replace("flow \"", with: "figure \"").replace("one flow() each", with: "one figure\\of() each");
 }
 
+// stagedIn reports whether a stage among parts sits in dir, which then counts as drawn.
+fun stagedIn(parts: [Part], dir: str) > bool {
+    foreach (part in parts) {
+        if (part.stageDir == dir) { return true; }
+    }
+    return false;
+}
+
+// descWords counts desc's words, the alt text a screen reader speaks.
+fun descWords(desc: str) > int {
+    var n = 0;
+    foreach (w in desc.replace("\n", with: " ").split(" ")) {
+        if (w != "") { n = n + 1; }
+    }
+    return n;
+}
+
+// unitLevel is the level part is a unit of, or null for a person or an external, which
+// join any level. A box is a package unless the figure says its boxes are projects; the
+// root "." holds every directory, so it is always the root project.
+fun unitLevel(part: Part, declared: Level?) > Level? {
+    if (part.kind == "box" or part.kind == "group") {
+        if (part.dirs.len() == 1 and part.dirs[0] == ".") { return Level.project; }
+        if (declared == Level.project) { return Level.project; }
+        return Level.package;
+    }
+    if (part.actorKind == ActorKind.stage) { return Level.symbol; }
+    if (part.actorKind == ActorKind.step) { return Level.process; }
+    return null;
+}
+
+// levelFindings is the one level fig draws at: the declared one, or the level most of its
+// boxes are units of. Every box of another level is a finding naming where it belongs.
+fun levelFindings(fig: Figure, parts: [Part], found: mut [str]) > Level {
+    var declared: Level? = null;
+    if (fig.level != null) {
+        final named: str? = fig.level!.value;
+        if (named == null) {
+            found.append("of() takes level: Level.<case>, not a string");
+        } else {
+            declared = fig.level;
+        }
+    }
+    if (declared == Level.file) {
+        found.append("is Level.file, and no constructor draws a file yet; draw the symbols of the one package at Level.symbol with stage()");
+    }
+    final counts: mut {str: int} = mut {<str: int>};
+    final firstAt: mut {str: int} = mut {<str: int>};
+    var i = 0;
+    while (i < parts.len()) {
+        final lv = unitLevel(parts[i], declared: declared);
+        if (lv != null) {
+            counts[lv!.value] = (counts[lv!.value] ?? 0) + 1;
+            if (firstAt[lv!.value] == null) { firstAt[lv!.value] = i; }
+        }
+        i = i + 1;
+    }
+    var level = declared ?? Level.process;
+    if (declared == null) {
+        var best = -1;
+        foreach (lv in Level) {
+            final n = counts[lv.value] ?? 0;
+            if (n > best or (n == best and n > 0 and (firstAt[lv.value] ?? 0) < (firstAt[level.value] ?? 0))) {
+                best = n;
+                level = lv;
+            }
+        }
+        if (best == 0) { level = Level.process; }
+    }
+    final tail = if (declared == null) ", or declare the level in of(level:)" else "";
+    foreach (part in parts) {
+        final lv = unitLevel(part, declared: declared);
+        if (lv != null and lv! != level) {
+            found.append(mixedFinding(part, unit: lv!, level: level) + tail);
+        }
+    }
+    return level;
+}
+
+// mixedFinding names a part drawn at the wrong level and the figure it belongs in.
+fun mixedFinding(part: Part, unit: Level, level: Level) > str {
+    final at = "and this figure is Level.{level.value}";
+    if (unit == Level.symbol) {
+        return "{part.call} is a symbol inside {quote(part.stageDir)}, {at}; draw the stages in a Level.symbol figure scoped to {quote(part.stageDir)}, and box that package here";
+    }
+    if (unit == Level.project) {
+        return "{part.call} is the root project, {at}; draw it in a Level.project figure, or box the packages the claim needs";
+    }
+    if (unit == Level.process) {
+        return "{part.call} is a process step, {at}; draw the process in a Level.process figure, or build it with person() or external() when it sits outside the code";
+    }
+    if (level == Level.symbol) {
+        return "{part.call} is a package, {at}, which draws inside one package; draw the packages in a Level.package figure whose box links here";
+    }
+    return "{part.call} is a Level.{unit.value} unit, {at}; draw it in a Level.{unit.value} figure of its own";
+}
+
+// narrower is the remedy a figure past a budget takes: the narrower scope to draw apart.
+fun narrower(level: Level, parts: [Part]) > str {
+    if (level == Level.package or level == Level.project) {
+        var widest: Part? = null;
+        foreach (part in parts) {
+            if (part.kind == "group" and (widest == null or part.dirs.len() > widest!.dirs.len())) { widest = part; }
+        }
+        if (widest -> w) {
+            return "scope a detail figure to {setName(w.dirs)}, the widest group, and keep {w.call} here as its box";
+        }
+        return "group the packages the title does not single out, and scope a detail figure to that group";
+    }
+    if (level == Level.symbol) {
+        return "keep the stages the title names, and draw the rest in a second Level.symbol figure";
+    }
+    return "draw one branch of the process as its own Level.process figure, and keep one step here for it";
+}
+
 // Derived is one part-to-part edge the graph holds.
 object Derived {
     src: str = "",
@@ -7217,7 +7628,7 @@ object Derived {
 
 // lowered checks the figure against its records and turns it into the flow the layout
 // places, or raises every finding at once.
-fun lowered(fig: Figure) > result\Result::<Sketch> {
+fun lowered(fig: Figure, drills: {str: str}) > result\Result::<Sketch> {
     final found: mut [str] = mut [<str>];
     final records: mut {str: magus\Dir} = mut {<str: magus\Dir>};
     final actorRecords: mut {str: Actor} = mut {<str: Actor>};
@@ -7329,7 +7740,7 @@ fun lowered(fig: Figure) > result\Result::<Sketch> {
         foreach (path in paths) {
             if (scoped[path] != null) { continue; }
             scoped[path] = true;
-            if (drawnBy[path] == null and excluded[path] == null) {
+            if (drawnBy[path] == null and excluded[path] == null and stagedIn(parts, dir: path) == false) {
                 found.append("{quote(path)} is in scope({setName(paths)}) but nothing draws it; add it to a box or a group, or except([...], why:)");
             }
         }
@@ -7342,12 +7753,33 @@ fun lowered(fig: Figure) > result\Result::<Sketch> {
         }
     }
 
+    final level = levelFindings(fig, parts: parts, found: found);
+    final stageDirs: mut {str: bool} = mut {<str: bool>};
+    foreach (part in parts) {
+        if (part.stageDir != "") { stageDirs[part.stageDir] = true; }
+    }
+    if (stageDirs.size() > 1) {
+        final named: mut [str] = mut [<str>];
+        foreach (d, _ in stageDirs) { named.append(quote(d)); }
+        found.append("draws stages in {named.sort(fun (a: str, b: str) > bool => a < b).join(" and ")}, and a Level.symbol figure draws inside one package; split it, one figure per package");
+    }
+    foreach (d, _ in stageDirs) {
+        if (level == Level.symbol and scoped[d] == null) {
+            found.append("draws stages inside {quote(d)}, which no scope(...) holds; add scope([magus\\graph().dir({quote(d)})])");
+        }
+    }
+
     final unscoped = fig.unscopedWhy != "";
-    if (codeParts == 0 and unscoped == false) {
+    final drawsCode = codeParts > 0 or stageDirs.size() > 0;
+    if (drawsCode == false and unscoped == false) {
         found.append("draws no directory; draw a box() or group(), or say why in unscoped(why:)");
     }
-    if (codeParts > 0 and unscoped) {
+    if (drawsCode and unscoped) {
         found.append("draws directories and declares unscoped(why:); drop the unscoped");
+    }
+    final words = descWords(fig.desc);
+    if (words > MaxDescWords) {
+        found.append("desc runs {words} words, past the budget of {MaxDescWords}; it is the alt text, so keep what the picture shows and move the rest to the page");
     }
     if (codeParts > 1 and fig.graphEdges == false) {
         found.append("draws {codeParts} boxes of code and no edge between them; call edgesFromGraph()");
@@ -7447,10 +7879,12 @@ fun lowered(fig: Figure) > result\Result::<Sketch> {
     f.topDown = direction == "down";
     f.isUnscoped = unscoped;
     f.unscopedWhy = fig.unscopedWhy;
+    f.level = level;
     foreach (part in parts) {
         f.nodes.append(Node{
             id = part.id, label = part.label, sub = part.sub, tag = part.tag, role = part.role,
             anchor = part.anchor, symbol = part.symbol, signature = part.signature, link = part.link,
+            drill = drills[part.id] ?? "",
         });
     }
     foreach (e in sortedEdges) { f.edges.append(e); }
@@ -7464,11 +7898,23 @@ fun lowered(fig: Figure) > result\Result::<Sketch> {
 
     final covered: mut [str] = mut [<str>];
     foreach (path, _ in drawnBy) { covered.append(path); }
+    foreach (path, _ in stageDirs) {
+        if (drawnBy[path] == null) { covered.append(path); }
+    }
     foreach (path, why in excluded) {
         if (drawnBy[path] == null) { covered.append(path); }
         f.omitted[path] = why;
     }
     foreach (path in covered.sort(fun (a: str, b: str) > bool { return a < b; })) { f.scopeGlobs.append(path); }
+
+    // internal/handler/diagram's 422 test pins "N nodes exceeds the budget of 9" and
+    // "split into overview plus detail".
+    if (parts.len() > MaxNodes) {
+        found.append("{parts.len()} nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one figure\\of() each: {narrower(level, parts: parts)}");
+    }
+    if (sortedEdges.len() > MaxEdges) {
+        found.append("{sortedEdges.len()} edges exceeds the budget of {MaxEdges}; split into overview plus detail, one figure\\of() each: {narrower(level, parts: parts)}");
+    }
 
     if (found.len() > 0) {
         final lines: mut [str] = mut [<str>];
@@ -7811,17 +8257,6 @@ test "a string where a Look or Stroke belongs is a finding" {
     assert\equal(failure(f), want: want.join("\n"), message: "stringly");
 }
 
-test "a layout finding speaks for the figure" {
-    var f = of("t").unscoped(why: "budget");
-    var n = 0;
-    while (n < 10) {
-        f = f.actor(external("actor {n}"));
-        n = n + 1;
-    }
-    final msg = failure(f);
-    assert\equal(msg, want: "figure \"t\": 10 nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one figure\\of() each", message: "budget");
-}
-
 test "draw paints each theme" {
     final f = serverHttp(handlers()) catch of("x");
     final page = draw(f, theme: Theme.page) catch "threw";
@@ -7920,4 +8355,147 @@ test "a value that is not a record is refused where it enters" {
         msg = e;
     }
     assert\equal(msg, want: "without takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one", message: "without");
+}
+
+test "a figure past the box budget names the narrower scope" {
+    var f = of("t").unscoped(why: "budget");
+    var n = 0;
+    while (n < 10) {
+        f = f.actor(step("step {n}"));
+        n = n + 1;
+    }
+    assert\equal(failure(f), want: "figure \"t\": 10 nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one figure\\of() each: draw one branch of the process as its own Level.process figure, and keep one step here for it", message: "a process");
+    var g = (serverHttp(handlers()) catch of("x"));
+    n = 0;
+    while (n < 7) {
+        g = g.actor(person("reader {n}"));
+        n = n + 1;
+    }
+    std\assert(failure(g).indexOf("scope a detail figure to \"internal/handler/**\", the widest group, and keep group(\"Connect RPC\") here as its box") != null, message: "a package figure names its widest group: {failure(g)}");
+}
+
+// parserRefs is a symbol defined directly in libs/lang, the package parserStages draws inside.
+fun langDir() > magus\Dir { return dirAt("libs/lang", imports: ["libs/lang/ast"]); }
+fun astDir() > magus\Dir { return dirAt("libs/lang/ast"); }
+fun parseRefs() > magus\RefsResult { return refsAt("Parse", files: ["libs/lang/parse.go"], line: 12, signature: "func Parse(src string) (*ast.File, error)"); }
+fun checkRefs() > magus\RefsResult { return refsAt("Check", files: ["libs/lang/check.go"], line: 3); }
+
+// langStages is a Level.symbol figure of two stages inside libs/lang.
+fun langStages() > mut Figure {
+    final parse = stage(langDir(), refs: parseRefs(), name: "Parser");
+    final check = stage(langDir(), refs: checkRefs());
+    return of("lang-stages", title: "A file is parsed, then checked", level: Level.symbol)
+        .flowAcross(parse, dst: check)
+        .scope([langDir()]);
+}
+
+test "a stage is a symbol inside its package, anchored at its definition" {
+    final d = langStages().diagram() catch Diagram{};
+    assert\equal(d.level.value, want: "symbol", message: "declared");
+    final parser = lookupNode(d, id: "external:Parser");
+    assert\equal(parser.anchor, want: "libs/lang/parse.go", message: "anchored at the definition");
+    assert\equal(parser.symbol, want: "Parse", message: "and the symbol");
+    assert\equal(lookupNode(d, id: "external:Check").label, want: "Check", message: "the name defaults to the symbol");
+    assert\equal(d.scope.join(","), want: "libs/lang", message: "the stages draw the scope's one package");
+    final derived = of("t").flowAcross(stage(langDir(), refs: parseRefs()), dst: stage(langDir(), refs: checkRefs())).scope([langDir()]).diagram() catch Diagram{};
+    assert\equal(derived.level.value, want: "symbol", message: "derived from the stages");
+}
+
+test "a stage not defined directly in its package is refused" {
+    final nested = refsAt("Node", files: ["libs/lang/ast/node.go"], line: 1);
+    final f = of("t").actor(stage(langDir(), refs: nested)).scope([langDir()]);
+    std\assert(failure(f).startsWith("figure \"t\": stage(\"Node\") names symbol \"Node\", defined in libs/lang/ast/node.go and not directly in \"libs/lang\"; build the stage on the package that defines it\n"),
+        message: "a symbol of a sub-package: {failure(f)}");
+}
+
+test "stages in two packages, or outside every scope, are refused" {
+    final f = of("t").flowAcross(stage(langDir(), refs: parseRefs()), dst: stage(astDir(), refs: refsAt("Node", files: ["libs/lang/ast/node.go"], line: 1)))
+        .scope([langDir(), astDir()]);
+    std\assert(failure(f).indexOf("draws stages in \"libs/lang\" and \"libs/lang/ast\", and a Level.symbol figure draws inside one package; split it, one figure per package") != null, message: failure(f));
+    final g = of("t").actor(stage(langDir(), refs: parseRefs())).unscoped(why: "x");
+    std\assert(failure(g).indexOf("draws stages inside \"libs/lang\", which no scope(...) holds") != null, message: failure(g));
+}
+
+test "a package figure refuses a stage, naming the figure it belongs in" {
+    final f = of("t", level: Level.package).box(langDir()).box(astDir()).edgesFromGraph()
+        .actor(stage(langDir(), refs: parseRefs(), name: "Parser"));
+    assert\equal(failure(f), want: "figure \"t\": stage(\"Parser\") is a symbol inside \"libs/lang\", and this figure is Level.package; draw the stages in a Level.symbol figure scoped to \"libs/lang\", and box that package here",
+        message: "the audit's mixed case");
+}
+
+test "a derived figure names its odd box out and the level to declare" {
+    final f = of("t").box(dirAt(".")).box(guardDir()).box(mcpDir()).edgesFromGraph();
+    assert\equal(failure(f), want: "figure \"t\": box(\".\") is the root project, and this figure is Level.package; draw it in a Level.project figure, or box the packages the claim needs, or declare the level in of(level:)",
+        message: "the root beside packages");
+}
+
+test "a step joins only a process figure, and a box never does" {
+    final f = (serverHttp(handlers()) catch of("x")).actor(step("Review"));
+    assert\equal(failure(f), want: "figure \"server-http\": step(\"Review\") is a process step, and this figure is Level.package; draw the process in a Level.process figure, or build it with person() or external() when it sits outside the code, or declare the level in of(level:)",
+        message: "a step among packages");
+    final g = of("t", level: Level.process).box(guardDir()).actor(step("Review"));
+    std\assert(failure(g).indexOf("box(\"internal/httpx\") is a Level.package unit, and this figure is Level.process") != null, message: failure(g));
+    final d = of("t").flowAcross(person("Author"), dst: step("Review")).unscoped(why: "a process").diagram() catch Diagram{};
+    assert\equal(d.level.value, want: "process", message: "steps and people derive a process");
+    final outside = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).flowOut(mcpDir(), dst: external("Forge")).diagram() catch Diagram{};
+    assert\equal(outside.level.value, want: "package", message: "people and externals join a package figure");
+}
+
+test "an actor with no kind and Level.file are refused" {
+    final f = of("t").actor(Actor{ name = "Parser" }).unscoped(why: "x");
+    assert\equal(failure(f), want: "figure \"t\": Actor\{ name = \"Parser\" } names no kind, so nothing says what it stands for or which level it is; build it with person(), external(), step() or stage()",
+        message: "a plain actor");
+    final g = of("t", level: Level.file).actor(person("A")).unscoped(why: "x");
+    std\assert(failure(g).indexOf("is Level.file, and no constructor draws a file yet") != null, message: failure(g));
+}
+
+test "a desc past the budget is refused" {
+    var words = "";
+    var n = 0;
+    while (n <= MaxDescWords) {
+        words = words + "word ";
+        n = n + 1;
+    }
+    final f = of("t", desc: words).actor(person("A")).unscoped(why: "x");
+    assert\equal(failure(f), want: "figure \"t\": desc runs {MaxDescWords + 1} words, past the budget of {MaxDescWords}; it is the alt text, so keep what the picture shows and move the rest to the page",
+        message: "alt text stays short");
+}
+
+test "an atlas links a box to the figure one level down" {
+    final overview = of("lang", title: "The checker reads the parser's tree").box(langDir()).box(astDir()).edgesFromGraph()
+        .scope([langDir(), astDir()]);
+    final routes = (serverHttp(handlers()) catch of("x")).scope(handlers().dirs + [guardDir()]);
+    final handlerFigure = of("handlers", title: "Each handler mounts on the guard").box(mcpDir()).box(graphDir()).box(jobDir()).box(guardDir())
+        .edgesFromGraph().scope(handlers().dirs + [guardDir()]);
+    final a = atlas([overview, langStages(), routes, handlerFigure]);
+    final d = a.diagram(overview) catch Diagram{};
+    assert\equal(lookupNode(d, id: "libs/lang").drill, want: "lang-stages", message: "the package box drills into its stages");
+    assert\equal(lookupNode(d, id: "libs/lang/ast").drill, want: "", message: "nothing draws inside ast");
+    final svg = drawDiagram(d, theme: Theme.light, drillHref: "#diagram-\{id}") catch "threw";
+    std\assert(svg.indexOf("<a href=\"#diagram-lang-stages\" data-node=\"libs/lang\" data-anchor=\"libs/lang\" data-drill=\"lang-stages\">") != null, message: "painted as a link");
+    final plain = drawDiagram(d, theme: Theme.light) catch "threw";
+    std\assert(plain.indexOf("href=\"#diagram") == null and plain.indexOf("data-drill=\"lang-stages\"") != null, message: "no template, no link");
+    final r = a.diagram(routes) catch Diagram{};
+    assert\equal(lookupNode(r, id: "group:Connect RPC").drill, want: "handlers", message: "a group drills into the package figure that boxes each of its directories");
+    final lonely = of("lonely").group([guardDir(), langDir()], label: "odd").box(mcpDir()).edgesFromGraph();
+    assert\equal(atlas([overview, lonely]).undrilled(lonely).join(","), want: "odd", message: "a group no figure draws is listed");
+}
+
+test "an atlas refuses a figure wider than its column" {
+    final a = atlas([serverHttp(handlers()) catch of("x")], column: 200);
+    var msg = "";
+    try {
+        _ = a.diagram(a.figures[0]);
+    } catch (e: str) {
+        msg = e;
+    }
+    std\assert(msg.startsWith("figure \"server-http\": lays out ") and msg.endsWith(" wide, past the column of 200; set direction: Direction.down in of(), or split it"), message: msg);
+}
+
+test "claims counts each connector by what it asserts" {
+    final d = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).diagram() catch Diagram{};
+    final c = claims(d);
+    assert\equal(c["imports"] ?? -1, want: 2, message: "the two imports");
+    assert\equal(c["calls"] ?? -1, want: 0, message: "no calls");
+    assert\equal(c["flow"] ?? -1, want: 1, message: "the hand edge");
 }

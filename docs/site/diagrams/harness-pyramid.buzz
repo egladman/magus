@@ -4,9 +4,9 @@ import "magus";
 import "magus/figure";
 
 export fun harnessPyramidFigure() > figure\Figure !> any {
-    final person = figure\external("Person", sub: "decides, pays");
-    final outer = figure\external("Outer harness", sub: "magus: guard, leases, jobs", look: figure\Look.focal);
-    final inner = figure\external("Inner harness", sub: "agent loop: Claude Code, Codex");
+    final person = figure\person("Person", sub: "decides, pays");
+    final outer = figure\step("Outer harness", sub: "magus: guard, leases, jobs", look: figure\Look.focal);
+    final inner = figure\step("Inner harness", sub: "agent loop: Claude Code, Codex");
     final model = figure\external("Model", sub: "proposes the next action", look: figure\Look.plain);
     return figure\of("harness-pyramid",
             title: "The model proposes, the harness executes",
@@ -30,18 +30,16 @@ export fun harnessStackFigure() > figure\Figure !> any {
     final store = magus\graph().dir("internal/job");
     final guard = magus\graph().dir("internal/guard");
     final graph = magus\graph().dir("internal/graph/workspacegraph");
-    final person = figure\external("Person", sub: "forks, reviews");
+    final person = figure\person("Person", sub: "forks, reviews");
     final claude = figure\external("Claude Code", sub: "inner harness");
     final codex = figure\external("Codex", sub: "inner harness");
     return figure\of("harness-stack",
-            title: "Two inner harnesses, one outer harness, shared records",
+            title: "Two inner harnesses never talk; the outer harness's records join them",
             eyebrow: "design",
-            desc: "Top to bottom: the person, the outer harness, the inner harnesses. The person "
-                + "writes the guard rules and forks job rows into the job store. Claude Code and "
-                + "Codex each take a row with magus job exec and return it with magus job exit, "
-                + "and send every call through the guard, which reads the row and the workspace "
-                + "graph and answers with a verdict. The two loops never talk to each other; the "
-                + "records are what they share.",
+            desc: "The person writes the guard rules and forks job rows into the job store. Claude "
+                + "Code and Codex each take a row with magus job exec, return it with magus job "
+                + "exit, and send every call through the guard, which reads the row and the "
+                + "workspace graph. The two loops never talk; the records are what they share.",
             direction: figure\Direction.down)
         .actor(person)
         .actor(claude)

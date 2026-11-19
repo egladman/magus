@@ -7,24 +7,23 @@ import "magus/figure";
 // work. The workers' hand-back that wakes the root is left out to stay in the connector
 // budget; the ADR's text says it.
 export fun mandateRolesFigure() > figure\Figure !> any {
-    final person = figure\external("Person", sub: "decides", look: figure\Look.focal);
-    final plan = figure\external("Plan", sub: "job rows", look: figure\Look.store);
-    final mandate = figure\external("Mandate", sub: "raises the bar", look: figure\Look.store);
-    final grant = figure\external("Grant", sub: "lowers one rule", look: figure\Look.store);
-    final guard = figure\external("Guard", sub: "allow, deny, advise", look: figure\Look.focal);
-    final root = figure\external("Root", sub: "the session");
-    final workers = figure\external("Workers", sub: "one per job");
-    final disposition = figure\external("Disposition", sub: "integrated or held for review");
-    final report = figure\external("Report", sub: "hack/dev/issue-mandate.buzz");
+    final person = figure\person("Person", sub: "decides", look: figure\Look.focal);
+    final plan = figure\step("Plan", sub: "job rows", look: figure\Look.store);
+    final mandate = figure\step("Mandate", sub: "raises the bar", look: figure\Look.store);
+    final grant = figure\step("Grant", sub: "lowers one rule", look: figure\Look.store);
+    final guard = figure\step("Guard", sub: "allow, deny, advise", look: figure\Look.focal);
+    final root = figure\step("Root", sub: "the session");
+    final workers = figure\step("Workers", sub: "one per job");
+    final disposition = figure\step("Disposition", sub: "integrated or held for review");
+    final report = figure\step("Report", sub: "hack/dev/issue-mandate.buzz");
     return figure\of("mandate-roles",
             title: "The person decides; the guard enforces what they wrote down",
             eyebrow: "decision",
-            desc: "Four rows: the person decides, the plan, the mandate and each grant write the "
-                + "decision down, the guard judges every call against them, and the root and its "
-                + "workers do the work. Every call either one makes goes to the guard, whose verdict "
-                + "is allow, deny or advise. The root forks jobs and spawns workers; a worker's "
-                + "hand-back wakes the root. What a job did ends integrated or held for review, and "
-                + "the report hands that back to the person.",
+            desc: "The person decides; the plan, the mandate and each grant write the decision "
+                + "down; the guard judges every call against them; the root and its workers do the "
+                + "work. The root forks jobs and spawns workers, and a worker's hand-back wakes it. "
+                + "A job ends integrated or held for review, and the report hands that back to the "
+                + "person.",
             direction: figure\Direction.down)
         .flowAcross(person, dst: plan, label: "plans")
         .flowAcross(person, dst: mandate, label: "mandates")
@@ -48,10 +47,10 @@ export fun mandateRolesFigure() > figure\Figure !> any {
 // mandateBarFigure is the tier bar a mandate's tolerance sets: an unsettled job at or below
 // it is integrated with no one present, one above it is held for review.
 export fun mandateBarFigure() > figure\Figure !> any {
-    final trivial = figure\external("trivial", sub: "no gate");
-    final mechanical = figure\external("mechanical", sub: "no code semantics");
-    final scoped = figure\external("scoped", sub: "tests narrow");
-    final full = figure\external("full", sub: "anything unproven");
+    final trivial = figure\step("trivial", sub: "no gate");
+    final mechanical = figure\step("mechanical", sub: "no code semantics");
+    final scoped = figure\step("scoped", sub: "tests narrow");
+    final full = figure\step("full", sub: "anything unproven");
     return figure\of("mandate-raises-the-bar",
             title: "A mandate raises the bar at its tolerance",
             eyebrow: "decision",

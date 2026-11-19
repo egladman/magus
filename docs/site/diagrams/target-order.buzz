@@ -3,15 +3,15 @@ namespace targetOrder;
 import "magus/figure";
 
 export fun targetOrderFigure() > figure\Figure !> any {
-    final install = figure\external("install", sub: "fetch dependencies", look: figure\Look.plain);
-    final generate = figure\external("generate", sub: "committed output", look: figure\Look.plain);
-    final format = figure\external("format", sub: "rewrites source", look: figure\Look.plain);
-    final lint = figure\external("lint", sub: "reports, never writes", look: figure\Look.plain);
-    final build = figure\external("build", sub: "uncommitted artifacts", look: figure\Look.plain);
-    final test = figure\external("test", look: figure\Look.plain);
-    final security = figure\external("security", sub: "advisory data, uncached", look: figure\Look.plain);
-    final ci = figure\external("ci", sub: "MGS1001 when absent", look: figure\Look.focal);
-    final cd = figure\external("cd charm", sub: "ci:cd delivers", look: figure\Look.optional);
+    final install = figure\step("install", sub: "fetch dependencies", look: figure\Look.plain);
+    final generate = figure\step("generate", sub: "committed output", look: figure\Look.plain);
+    final format = figure\step("format", sub: "rewrites source", look: figure\Look.plain);
+    final lint = figure\step("lint", sub: "reports, never writes", look: figure\Look.plain);
+    final build = figure\step("build", sub: "uncommitted artifacts", look: figure\Look.plain);
+    final test = figure\step("test", look: figure\Look.plain);
+    final security = figure\step("security", sub: "advisory data, uncached", look: figure\Look.plain);
+    final ci = figure\step("ci", sub: "MGS1001 when absent", look: figure\Look.focal);
+    final cd = figure\step("cd charm", sub: "ci:cd delivers", look: figure\Look.optional);
     return figure\of("target-order",
             title: "Only ci is required; the rest is an order",
             eyebrow: "targets",

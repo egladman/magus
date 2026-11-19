@@ -3,14 +3,14 @@ namespace projectReference;
 import "magus/figure";
 
 export fun projectReferenceFigure() > figure\Figure !> any {
-    final url = figure\external("workspace://pkg/api", look: figure\Look.plain);
-    final rel = figure\external("pkg/api", look: figure\Look.plain);
-    final dot = figure\external("./pkg/api", look: figure\Look.plain);
-    final root = figure\external("workspace://", sub: "the root alias", look: figure\Look.plain);
-    final parse = figure\external("parse", tag: "step", look: figure\Look.plain);
-    final ref = figure\external("One reference", sub: "path: pkg/api", look: figure\Look.focal);
-    final human = figure\external("Human output", sub: "pkg/api", look: figure\Look.plain);
-    final machine = figure\external("Machine output", sub: "workspace://pkg/api", look: figure\Look.plain);
+    final url = figure\step("workspace://pkg/api", look: figure\Look.plain);
+    final rel = figure\step("pkg/api", look: figure\Look.plain);
+    final dot = figure\step("./pkg/api", look: figure\Look.plain);
+    final root = figure\step("workspace://", sub: "the root alias", look: figure\Look.plain);
+    final parse = figure\step("parse", tag: "step", look: figure\Look.plain);
+    final ref = figure\step("One reference", sub: "path: pkg/api", look: figure\Look.focal);
+    final human = figure\step("Human output", sub: "pkg/api", look: figure\Look.plain);
+    final machine = figure\step("Machine output", sub: "workspace://pkg/api", look: figure\Look.plain);
     return figure\of("project-reference",
             title: "Four spellings in, one reference out",
             eyebrow: "agents",

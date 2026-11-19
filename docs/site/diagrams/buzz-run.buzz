@@ -4,9 +4,13 @@ import "magus";
 import "magus/figure";
 import "site/diagrams/buzz-stages" as buzzStages;
 
+// buzzRunFigure draws the steps inside package vm. Session.runChunk, in the root package,
+// hands the chunk in; buzz-compile draws where it comes from.
 export fun buzzRunFigure() > figure\Figure !> any {
-    final session = magus\graph().dir("libs/gopherbuzz");
     final vm = magus\graph().dir("libs/gopherbuzz/vm");
+    final chunk = figure\external("Compiled chunk", sub: "from Session.runChunk", look: figure\Look.input);
+    final run = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Run().", name: "VM.Run",
+        sub: "register window, inline caches");
     final compile = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#jitRun().", name: "Baseline JIT",
         sub: "depths, then golang-asm");
     final native = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/jitEntry().", name: "Native code",
@@ -18,41 +22,26 @@ export fun buzzRunFigure() > figure\Figure !> any {
     return figure\of("buzz-run",
             title: "Interpreter first, native code when the chunk allows it",
             eyebrow: "gopherbuzz",
-            desc: "Session.runChunk makes a VM and calls VM.Run with the chunk and the session's "
-                + "environment. Run reserves the top-level register window and asks jitRun first. "
-                + "With the JIT on, the baseline JIT judges the chunk once and caches the verdict: "
-                + "depths() admits only the numeric subset, locals, constants, arithmetic, "
-                + "comparisons and jumps, and validates every operand, and compileJIT emits amd64 "
-                + "or arm64 code through golang-asm into executable pages. Only the chunk Run was "
-                + "handed can go native; a function it calls runs on the interpreter. There is one "
-                + "native tier and no hotness counter. A value the native code cannot handle "
-                + "deopts to the interpreter at the instruction it stopped on, with the stack depth "
-                + "checked; a chunk the JIT declines, or one with no slot locals, runs on the "
-                + "interpreter from the start. The interpreter's values are NaN-boxed 64-bit "
-                + "words, and heap objects are handles into one table the session releases when "
-                + "it closes.",
-            direction: figure\Direction.down)
-        .box(session, label: "Session", sub: "runChunk", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#runChunk()."))
-        .box(vm, label: "VM.Run", sub: "register window, inline caches", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Run()."))
+            desc: "VM.Run offers the chunk to the baseline JIT, which judges it once: a numeric "
+                + "chunk becomes native code, anything else runs on the interpreter. Native code "
+                + "deopts to the interpreter at the instruction it stopped on. The interpreter "
+                + "allocates heap objects as handles into one table the session frees when it closes.",
+            direction: figure\Direction.down, level: figure\Level.symbol)
+        .actor(chunk)
+        .actor(run)
         .actor(compile)
         .actor(native)
         .actor(interpreter)
         .actor(heap)
-        .edgesFromGraph()
-        .markEdge(session, dst: vm, label: "*Chunk, *Env")
-        .flowOut(vm, dst: compile, label: "JIT on")
-        .flowOut(vm, dst: interpreter, label: "JIT off")
+        .flowAcross(chunk, dst: run, label: "*Chunk, *Env")
+        .flowAcross(run, dst: compile, label: "JIT on")
+        .flowAcross(run, dst: interpreter, label: "JIT off")
         .flowAcross(compile, dst: native, label: "compiled")
         .flowAcross(compile, dst: interpreter, label: "declined")
         .flowAcross(native, dst: interpreter, label: "deopt at ip", stroke: figure\Stroke.focal)
         .flowAcross(interpreter, dst: heap, label: "allocates")
         .rank(actors: [native, interpreter])
-        .zone("package vm", dirs: [vm], actors: [compile, native, interpreter, heap])
         .legend(figure\Look.focal, label: "the native tier")
-        .scope(buzzStages\gopherbuzzPackages())
-        .except([magus\graph().dir("libs/gopherbuzz/token"), magus\graph().dir("libs/gopherbuzz/ast"), magus\graph().dir("libs/gopherbuzz/types")],
-            why: "the compile side, drawn in buzz-compile; a run starts from the chunk")
-        .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
-            why: "the Buzz stdlib and its JSON codec: modules a program calls, run by this same VM")
-        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY);
+        .legend(figure\Look.input, label: "what the session hands in")
+        .scope([vm]);
 }

@@ -16,13 +16,12 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
     return figure\of("diagram-pipeline",
             title: "One library draws every figure, here and in the console",
             eyebrow: "figures",
-            desc: "A figure in docs/site/diagrams builds its boxes from the knowledge graph's own "
-                + "records, magus\\graph().dir, magus\\graph().dirs and magus\\graph().layer, and draws the imports and "
-                + "declared calls between them. magus/figure lays it out and paints it; "
-                + "diagrams-generate writes the committed light, dark and page copies with a "
-                + "receipt beside each, and the site render inlines the page copy. The server "
-                + "embeds the same module to draw live figures at /api/v1/diagrams, which the "
-                + "console fetches. The job store draws its plan figure through the same module, and each figure's receipt carries a stamp of its boxes and edges, so a stale committed copy is a diff.")
+            direction: figure\Direction.down,
+            desc: "A figure in docs/site/diagrams builds its boxes from the knowledge graph's "
+                + "records and draws the imports and declared calls between them. magus/figure lays "
+                + "it out and paints it; diagrams-generate writes the committed copies with a "
+                + "receipt beside each. The server embeds the same module to draw the console's "
+                + "live figures, and the job store draws its plan through it.")
         .actor(source)
         .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: figure\Look.input)
         .box(module, label: "magus/figure", sub: "sets, layout, paint", focal: true)

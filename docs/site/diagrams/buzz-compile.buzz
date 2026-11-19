@@ -4,14 +4,14 @@ import "magus";
 import "magus/figure";
 import "site/diagrams/buzz-stages" as buzzStages;
 
+// buzzCompileFigure draws the steps inside the gopherbuzz root package. The lexer and the
+// chunk passes live in token and vm, so they are named in the subs, not drawn beside the
+// steps: a Level.symbol figure draws inside one package.
 export fun buzzCompileFigure() > figure\Figure !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
-    final lexer = magus\graph().dir("libs/gopherbuzz/token");
-    final tree = magus\graph().dir("libs/gopherbuzz/ast");
-    final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
-    final vm = magus\graph().dir("libs/gopherbuzz/vm");
+    final source = figure\external("Buzz source", sub: "a file or a snippet", look: figure\Look.input);
     final parseCache = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/ParseCache#tokenize().", name: "Parse cache",
-        sub: "tokens keyed by source", look: figure\Look.store);
+        sub: "token.Tokenize on a miss", look: figure\Look.store);
     final parser = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/parseModedTracked().", name: "Parser",
         sub: "recursive descent, *ast.Program");
     final imports = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadFileImports().", name: "Import resolution",
@@ -23,49 +23,30 @@ export fun buzzCompileFigure() > figure\Figure !> any {
     final store = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadCachedChunk().", name: "Bytecode store",
         sub: ".bo plus its import closure", look: figure\Look.store);
     return figure\of("buzz-compile",
-            title: "From Buzz source to a chunk",
+            title: "Imports run before the checker sees a name",
             eyebrow: "gopherbuzz",
-            desc: "Session.Exec compiles source in six steps, all in the gopherbuzz root package "
-                + "except the first and the last. The lexer, token.Tokenize, turns the source into "
-                + "tokens; a session given a parse cache keeps them by source text, so a module "
-                + "many sessions import is lexed once. The parser builds an ast.Program. Before "
-                + "the checker sees it, import resolution runs every imported file through this "
-                + "same pipeline and the VM, so their exports are bound when the checker looks "
-                + "names up. The checker reports types.Type mismatches as BZZ diagnostics, and the "
-                + "compiler emits a vm.Chunk, one per function. In the vm package, FoldConsts folds "
-                + "constants and FusePeephole fuses the common local, constant and branch "
-                + "sequences into superinstructions. A session with a bytecode store saves the "
-                + "chunk with every file it was compiled against and, on a later run where all of "
-                + "them still hold the same bytes, hands the saved chunk to the VM without parsing "
-                + "anything.",
-            direction: figure\Direction.down)
-        .box(lexer, label: "Lexer", sub: "token.Tokenize", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/token`/Tokenize()."))
+            desc: "Inside the gopherbuzz root package, source passes the parse cache, the parser, "
+                + "import resolution, the checker and the compiler, which emits a chunk. Import "
+                + "resolution runs every imported module through the same steps first, so its "
+                + "exports are bound before the checker looks names up. A fresh bytecode store "
+                + "skips every step.",
+            direction: figure\Direction.down, level: figure\Level.symbol)
+        .actor(source)
         .actor(parseCache)
         .actor(parser)
         .actor(imports)
         .actor(checker)
         .actor(compiler)
         .actor(store)
-        .box(vm, label: "Chunk", sub: "FoldConsts, FusePeephole", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/FusePeephole()."))
-        .edgesFromGraph()
-        .flowOut(lexer, dst: parseCache, label: "on a miss")
+        .flowAcross(source, dst: parseCache)
         .flowAcross(parseCache, dst: parser, label: "[]Token")
         .flowAcross(parser, dst: imports, label: "*ast.Program")
         .flowAcross(imports, dst: checker, label: "exports bound")
         .flowAcross(checker, dst: compiler, label: "no errors")
-        .flowIn(compiler, dst: vm, label: "emits")
-        .flowIn(store, dst: vm, label: "fresh hit")
-        .rank(dirs: [lexer], actors: [parseCache, parser, imports])
-        .rank(actors: [checker, compiler])
-        .rank(dirs: [vm], actors: [store])
+        .flowAcross(compiler, dst: store, label: "saves")
+        .flowAcross(source, dst: store, label: "fresh hit", stroke: figure\Stroke.optional)
         .legend(figure\Look.focal, label: "where an import runs")
         .legend(figure\Look.store, label: "optional, set by the host")
-        .scope(buzzStages\gopherbuzzPackages())
-        .except([session],
-            why: "its steps are drawn one by one, each checked against the symbol that implements it")
-        .except([tree, typeSystem],
-            why: "data packages: their types label the connectors")
-        .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
-            why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled by these same steps")
-        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY);
+        .legend(figure\Look.input, label: "what a host hands in")
+        .scope([session]);
 }

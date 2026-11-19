@@ -15,11 +15,9 @@ export fun serviceFigure() > figure\Figure !> any {
             title: "A service op is one long-running process with one identity",
             eyebrow: "services",
             desc: "A service op names a long-running process. internal/service starts it through "
-                + "the spawner and keeps the record of the run, keyed by an identity that "
-                + "survives a restart. The ward checks the op's argv against its declared kind "
-                + "before it runs, the audit finds a recorded service whose op is gone, and "
-                + "the host bindings and doctor read the same identity. The identity package "
-                + "holds the key and nothing else, so every reader agrees on what one service is.")
+                + "the spawner and records the run under an identity that survives a restart. The "
+                + "ward checks the op's argv before it runs, the audit finds a recorded service "
+                + "whose op is gone, and the host bindings and doctor read the same identity.")
         .box(service, label: "Service", sub: "start, record, stop", focal: true)
         .box(identity, label: "Identity", sub: "one key per service")
         .box(spawn, label: "Spawner", sub: "the process")

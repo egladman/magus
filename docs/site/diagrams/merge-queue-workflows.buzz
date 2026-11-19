@@ -15,12 +15,11 @@ export fun mergeQueueWorkflowsFigure() > figure\Figure !> any {
     return figure\of("merge-queue-workflows",
             title: "Three workflows drive the queue, and one script gates it",
             eyebrow: "merge queue",
-            desc: "queue-intent runs when a pull request asks to merge and records the intent. "
-                + "queue plans the batch with the engine, asks the forge provider for the changes "
-                + "and runs the repository's gate script on the candidate. queue-apply merges the "
-                + "candidate the gate passed and reports the rest. The workflows are YAML; the "
-                + "decisions are the engine's, so the same queue runs from any forge that has a "
-                + "provider.",
+            desc: "queue-intent records a pull request's request to merge. queue plans the batch "
+                + "with the engine, asks the forge provider for the changes and runs the "
+                + "repository's gate script on the candidate. queue-apply merges what the gate "
+                + "passed. The workflows are YAML and the decisions are the engine's, so any forge "
+                + "with a provider runs the same queue.",
             direction: figure\Direction.down)
         .actor(intent)
         .actor(queue)

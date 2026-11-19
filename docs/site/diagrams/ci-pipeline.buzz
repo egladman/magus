@@ -3,7 +3,7 @@ namespace ciPipeline;
 import "magus/figure";
 
 export fun ciPipelineFigure() > figure\Figure !> any {
-    final cmd = figure\external("magus affected ci", look: figure\Look.focal);
+    final cmd = figure\step("magus affected ci", look: figure\Look.focal);
     // A fan-out, not a chain: drawn as a sequence, it read as magus owning a fixed pipeline,
     // which the page around it says magus does not.
     final f = figure\of("ci-pipeline",
@@ -15,11 +15,11 @@ export fun ciPipelineFigure() > figure\Figure !> any {
         .actor(cmd)
         .unscoped(why: "a magusfile convention, not a package: nothing in the tree to hold it to");
     foreach (step in ["generate", "format", "lint", "build", "test", "security"]) {
-        _ = f.actor(figure\external(step, look: figure\Look.plain));
+        _ = f.actor(figure\step(step, look: figure\Look.plain));
     }
     // An actor is keyed by its name, so these join the boxes declared above.
     foreach (step in ["generate", "build", "format", "test", "lint", "security"]) {
-        _ = f.flowAcross(cmd, dst: figure\external(step, look: figure\Look.plain));
+        _ = f.flowAcross(cmd, dst: figure\step(step, look: figure\Look.plain));
     }
     return f;
 }

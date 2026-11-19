@@ -16,14 +16,11 @@ export fun leaseLoopFigure() > figure\Figure !> any {
     return figure\of("lease-loop",
             title: "A declared plan, released early, verified by diff",
             eyebrow: "lease",
-            desc: "An orchestrator checkpoints the revision through vcs, partitions the work by "
-                + "write set and forks one job row per unit into the job store: goal, "
-                + "checkpoint, write paths. describe prints the row a worker reads. The guard "
-                + "reads the row on every call. Holders release paths as soon as they are done, "
-                + "so the plan shrinks while it runs, and the Jobs view renders the rows for "
-                + "whoever is watching. The change set verifies each job by diffing since that "
-                + "job's checkpoint against what it claimed. magus records and answers; it "
-                + "enforces none of it beyond the guard.",
+            desc: "An orchestrator checkpoints the revision, partitions the work by write set and "
+                + "forks one job row per unit: goal, checkpoint, write paths. The guard reads the "
+                + "row on every call. Holders release paths when done, so the plan shrinks while it "
+                + "runs, and the change set verifies each job by diffing since its checkpoint "
+                + "against what it claimed.",
             direction: figure\Direction.down)
         .actor(root)
         .box(vcs, label: "Checkpoint", sub: "revision + dirty digest")

@@ -48,6 +48,7 @@ func TestSourceSHA256IsTheFileOnDisk(t *testing.T) {
 // out; Draw hands Buzz null for each.
 var hostless = map[string]string{
 	"Box.symbol": "a magus\\refs result, which no host holds",
+	"Actor.refs": "a magus\\refs result, which no host holds",
 }
 
 // TestMirrorMatchesTheModule walks every record Figure reaches in the module's own
