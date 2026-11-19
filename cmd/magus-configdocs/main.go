@@ -136,23 +136,31 @@ func flagCell(s configuration.Setting) string {
 
 // kindLabel maps a setting's command.Kind to a reader-facing type name.
 func kindLabel(k command.Kind) (string, error) {
-	switch k {
-	case command.String, command.Text:
-		return "string", nil
-	case command.Int:
-		return "int", nil
-	case command.Bool:
-		return "bool", nil
-	case command.Float:
-		return "float", nil
-	case command.OptionalBool:
-		return "bool _(env only)_", nil
-	case command.Duration:
-		return "duration", nil
-	case command.StringList:
-		return "list _(comma-separated, env only)_", nil
-	case command.StringMap:
-		return "map", nil
+	if label := kindName(k); label != "" {
+		return label, nil
 	}
 	return "", fmt.Errorf("setting kind %q has no label", k)
+}
+
+func kindName(k command.Kind) string {
+	switch k {
+	case command.String, command.Text:
+		return "string"
+	case command.Int:
+		return "int"
+	case command.Bool:
+		return "bool"
+	case command.Float:
+		return "float"
+	case command.OptionalBool:
+		return "bool _(env only)_"
+	case command.Duration:
+		return "duration"
+	case command.StringList:
+		return "list _(comma-separated, env only)_"
+	case command.StringMap:
+		return "map"
+	case command.Custom:
+	}
+	return ""
 }

@@ -12,6 +12,28 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func cleanUsage(fs *flag.FlagSet) {
+	fmt.Fprint(os.Stderr, cleanHelp)
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+const cleanHelp = `Usage: magus clean [flags] [project...]
+
+Remove declared Outputs for selected projects.
+With no project args, the cwd project (or all) is selected.
+
+This removes the files matched by each project's declared Outputs globs
+- the same files the cache snapshots and replays on cache hits. Whether
+each one is regenerable is the declaration's claim, not something clean
+verifies: a file magus only modifies belongs in ctx.writesFiles(..., editsExistingSource: true), which clean
+never removes. Nor does it remove an output the VCS tracks: that file is
+committed, and deleting it would dirty the tree.
+Pass --dry-run (global flag) to preview before trusting one.
+Use --cache to also drop the magus cache entries, forcing a full rebuild.
+
+`
+
 // cleanCommand implements `magus clean [flags] [project...]`.
 // It removes files matching each selected project's declared Outputs globs
 // (the regenerable build artifacts), keeping any the VCS tracks. With --cache
@@ -22,24 +44,7 @@ func cleanCommand(ctx context.Context, root string, args []string) error {
 	var cf *flaggen.CleanFlags
 	projectArgs, err := commandParse("clean", args, func(fs *flag.FlagSet) {
 		cf = flaggen.BindClean(fs)
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus clean [flags] [project...]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Remove declared Outputs for selected projects.")
-			fmt.Fprintln(os.Stderr, "With no project args, the cwd project (or all) is selected.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "This removes the files matched by each project's declared Outputs globs")
-			fmt.Fprintln(os.Stderr, "- the same files the cache snapshots and replays on cache hits. Whether")
-			fmt.Fprintln(os.Stderr, "each one is regenerable is the declaration's claim, not something clean")
-			fmt.Fprintln(os.Stderr, "verifies: a file magus only modifies belongs in ctx.writesFiles(..., editsExistingSource: true), which clean")
-			fmt.Fprintln(os.Stderr, "never removes. Nor does it remove an output the VCS tracks: that file is")
-			fmt.Fprintln(os.Stderr, "committed, and deleting it would dirty the tree.")
-			fmt.Fprintln(os.Stderr, "Pass --dry-run (global flag) to preview before trusting one.")
-			fmt.Fprintln(os.Stderr, "Use --cache to also drop the magus cache entries, forcing a full rebuild.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { cleanUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -84,6 +89,7 @@ func cleanCommand(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, report)
 	case outputName:
 		return emitNames(os.Stdout, report.Removed)
+	case outputText:
 	}
 
 	for _, path := range report.Removed {

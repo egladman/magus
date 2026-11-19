@@ -42,7 +42,17 @@ type failedResults struct{ internalci.FailedResults }
 
 func (c *failedResults) list() []journal.Run { return c.List() }
 
-// affected dispatches `magus affected <target>`; project set is determined by VCS diff.
+func affectedTargetUsage(fs *flag.FlagSet, target string) {
+	fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintf(os.Stderr, "Run target %s for every project affected by VCS changes.\n", target)
+	fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// affected dispatches `magus affected <target>` over the VCS diff's projects.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
@@ -100,15 +110,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	var af *flaggen.AffectedFlags
 	operands, err := commandParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		af = flaggen.BindAffected(fs)
-		fs.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "Run target %s for every project affected by VCS changes.\n", target)
-			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { affectedTargetUsage(fs, target) }
 	})
 	if err != nil {
 		return err
@@ -409,6 +411,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			slices.Sorted(maps.Keys(undeclaredOnly)))
 	case outputName:
 		return emitProjectNames(m, targets)
+	case outputJSONL, outputText:
 	}
 	return nil
 }

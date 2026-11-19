@@ -107,9 +107,7 @@ func parseKeyring(data []byte) (Keyring, error) {
 		if len(raw) != ed25519.PublicKeySize {
 			return nil, fmt.Errorf("key %d: %d bytes, want %d", i, len(raw), ed25519.PublicKeySize)
 		}
-		switch e.State {
-		case KeyActive, KeyStandby, KeyRetired, KeyRevoked:
-		default:
+		if !knownKeyState(e.State) {
 			return nil, fmt.Errorf("key %d: unknown state %q", i, e.State)
 		}
 		pub := ed25519.PublicKey(raw)
@@ -121,6 +119,14 @@ func parseKeyring(data []byte) (Keyring, error) {
 		ring = append(ring, Key{ID: id, State: e.State, Pub: pub})
 	}
 	return ring, nil
+}
+
+func knownKeyState(s KeyState) bool {
+	switch s {
+	case KeyActive, KeyStandby, KeyRetired, KeyRevoked:
+		return true
+	}
+	return false
 }
 
 // Active returns the single signing key. Two active keys, or none, is a
