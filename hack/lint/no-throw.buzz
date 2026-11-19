@@ -1,9 +1,23 @@
-// no-throw: a function returns one value carrying its result and its error.
-// Only the top-level entry throws. In TS and JS that is module scope,
-// unreachable(x: never), and each scope ENTRIES names. no-throw.mjs parses;
-// this judges against the counts in no-throw.jsonl, which may only fall.
+// no-throw: errors are values below the entry. A function returns one value
+// carrying its result and its error; only an entry throws. Three constructs
+// count per file against no-throw.jsonl, whose counts may only fall:
 //
-// Tier 2, measured shape: no file holds more throws than its recorded count.
+//	throw                  a TS or JS throw below an entry
+//	async-no-result        an exported TS async function that returns no Promise of a Result
+//	buzz-error-signature   a Buzz function that declares `!>` and is no entry
+//
+// The entry kinds, where a throw or a `!>` is allowed:
+//
+//	TS and JS  module scope; unreachable(x: never); each scope ENTRIES names (a host hook)
+//	Buzz       a script main; an exported magusfile target or spell op shaped
+//	           (ctx: magus\Context, args: [str]); an exported lint check(files: [Path])
+//
+// no-throw.mjs parses TS and JS. Buzz is scanned here by line, and a signature
+// split over lines is joined up to its opening brace. gen/ and testdata/ are
+// not read. No marker comment waives a site: the only exit is a count a person
+// types into no-throw.jsonl, and a count above the real one fails.
+//
+// Tier 2, measured shape: no file holds more of a construct than its recorded count.
 namespace nothrow;
 
 import "assert";
@@ -20,9 +34,35 @@ final PARSER = "hack/lint/no-throw.mjs";
 final FIX = "Return an error value; throw only in the top-level entry. "
     + "A count in " + CEILING + " may only fall.";
 
-// Site is one throw as a parser reports it. scope is the dotted chain of
-// classes and functions around it, outermost first. Buzz sites join here once
-// buzz\parse lands, with an error signature as a second construct.
+final FIX_ASYNC = "Return Promise<Result<T>> (types.Result from gen/magus/types) and let the caller read the failure. "
+    + "A count in " + CEILING + " may only fall.";
+
+final FIX_BUZZ = "Return result\\Result::<T> (import \"result\") and drop `!>`. Only a script main, an exported "
+    + "(ctx: magus\\Context, args: [str]) target or an exported lint check(files: [Path]) declares it. "
+    + "A count in " + CEILING + " may only fall.";
+
+fun remedy(construct: str) > str {
+    if (construct == "async-no-result") {
+        return FIX_ASYNC;
+    }
+    if (construct == "buzz-error-signature") {
+        return FIX_BUZZ;
+    }
+    return FIX;
+}
+
+fun subject(s: Site) > str {
+    if (s.construct == "async-no-result") {
+        return "exported async {s.scope} returns no Result";
+    }
+    if (s.construct == "buzz-error-signature") {
+        return "`!>` on {s.scope}";
+    }
+    return "{s.construct} in {s.scope}";
+}
+
+// Site is one construct as a scanner reports it. scope is the dotted chain of
+// classes and functions around it, outermost first; a Buzz site names its function.
 export object Site {
     path: str,
     line: int = 0,
@@ -55,7 +95,7 @@ export object Ceiling {
 }
 
 export fun reads() > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", CEILING, PARSER];
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.buzz", CEILING, PARSER];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -64,12 +104,131 @@ export fun check(files: [Path]) > [Finding] !> any {
         return [support\missing(CEILING)];
     }
     final sources = mut [<Path>];
+    final found = mut [<Site>];
     foreach (f in files) {
         if (scanned(f.value)) {
             sources.append(f);
+        } else if (scannedBuzz(f.value)) {
+            foreach (s in buzzSites(f.value, src: support\read(f))) {
+                found.append(s);
+            }
         }
     }
-    return judge(sites(sources), ceilings: ceilings(support\read(ceilingFile!)), entries: ENTRIES);
+    foreach (s in sites(sources)) {
+        found.append(s);
+    }
+    return judge(found, ceilings: ceilings(support\read(ceilingFile!)), entries: ENTRIES);
+}
+
+// scannedBuzz reports whether the Buzz scan reads p. Generated declarations and
+// planted fixtures hold no hand-written entry or helper.
+export fun scannedBuzz(p: str) > bool {
+    final rooted = "/" + p;
+    if (rooted.indexOf("/testdata/") != null or rooted.indexOf("/gen/") != null) {
+        return false;
+    }
+    return p.endsWith(".buzz");
+}
+
+// Signature is a named Buzz function's parameter text and whether the function itself,
+// not a parameter's function type, declares `!>`.
+object Signature {
+    name: str,
+    params: str,
+    errs: bool,
+}
+
+// declaration is the text of the named function line `at` opens, from its name to its
+// opening brace or `=>`, or null when the line opens none.
+fun declaration(lines: [str], at: int) > str? {
+    final head = lines[at].trim();
+    var start = -1;
+    if (head.startsWith("export fun ")) {
+        start = 11;
+    } else if (head.startsWith("fun ")) {
+        start = 4;
+    }
+    if (start < 0) {
+        return null;
+    }
+    var text = head.sub(start, len: head.len() - start);
+    var next = at + 1;
+    while (text.indexOf("\{") == null and text.indexOf("=>") == null and next < lines.len() and next < at + 6) {
+        text = text + " " + lines[next].trim();
+        next = next + 1;
+    }
+    return text;
+}
+
+fun signature(text: str) > Signature? {
+    final open = text.indexOf("(");
+    if (open == null) {
+        return null;
+    }
+    final paren = open!;
+    var depth = 0;
+    var close = -1;
+    var i = paren;
+    while (i < text.len() and close < 0) {
+        final ch = text.sub(i, len: 1);
+        if (ch == "(") {
+            depth = depth + 1;
+        } else if (ch == ")") {
+            depth = depth - 1;
+            if (depth == 0) {
+                close = i;
+            }
+        }
+        i = i + 1;
+    }
+    final name = text.sub(0, len: paren).trim();
+    if (close < 0 or name == "" or name.indexOf(" ") != null) {
+        return null;
+    }
+    final rest = text.sub(close + 1, len: text.len() - close - 1);
+    var tail = rest;
+    if (rest.indexOf("\{") -> b) {
+        tail = rest.sub(0, len: b);
+    }
+    return Signature{ name = name, params = text.sub(paren + 1, len: close - paren - 1).trim(),
+        errs = tail.indexOf("!>") != null };
+}
+
+// buzzEntry reports whether a Buzz function is an entry: a script main, an exported
+// target or op the host calls with a context and the argument vector, or an exported
+// lint rule check. Only an entry declares `!>`.
+export fun buzzEntry(exported: bool, sig: Signature) > bool {
+    if (sig.name == "main") {
+        return true;
+    }
+    if (!exported) {
+        return false;
+    }
+    if (sig.params.startsWith("ctx: magus\\Context, args: [str]")) {
+        return true;
+    }
+    return sig.name == "check" and sig.params.startsWith("files: [Path]");
+}
+
+// buzzSites answers each named function in a Buzz file that declares `!>` and is no entry.
+export fun buzzSites(path: str, src: str) > [Site] {
+    final found = mut [<Site>];
+    final lines = src.split("\n");
+    var n = 0;
+    while (n < lines.len()) {
+        final text = declaration(lines, at: n);
+        if (text -> t) {
+            final sig = signature(t);
+            if (sig -> s) {
+                if (s.errs and !buzzEntry(lines[n].trim().startsWith("export "), sig: s)) {
+                    found.append(Site{ path = path, line = n + 1, col = 1,
+                        construct = "buzz-error-signature", scope = s.name });
+                }
+            }
+        }
+        n = n + 1;
+    }
+    return found;
 }
 
 // scanned reports whether the parser reads p. testdata plants throws.
@@ -177,9 +336,9 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry]) > [F
         }
         foreach (s in held) {
             found.append(Finding{ path = s.path, line = s.line, col = s.col,
-                message = "{s.construct} in {s.scope}, below the top-level entry: {s.path} holds {held.len()}, "
+                message = "{subject(s)}, below the top-level entry: {s.path} holds {held.len()}, "
                     + "over the {allowed} {CEILING} records",
-                fix = FIX });
+                fix = remedy(s.construct) });
         }
     }
     foreach (k in support\sorted(ceilings.keys())) {
@@ -246,6 +405,8 @@ test "a throw in a function, an arrow, a method or a mistyped unreachable fails"
     final files = support\fixture({"helper.ts": HELPER_TS});
     final over = ", below the top-level entry: helper.ts holds 4, over the 0 hack/lint/no-throw.jsonl records";
     assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>])), want: [
+        "helper.ts:5 exported async load returns no Result, below the top-level entry: helper.ts holds 1, "
+            + "over the 0 hack/lint/no-throw.jsonl records",
         "helper.ts:2 throw in parse" + over,
         "helper.ts:6 throw in load" + over,
         "helper.ts:10 throw in Store.get" + over,
@@ -276,4 +437,46 @@ test "a named entry passes, and an entry with no throw fails" {
     assert\equal(lines(judge([<Site>], ceilings: {<str: Ceiling>}, entries: [entry])),
         want: ["hack/lint/no-throw.buzz:0 names Plugin.apply in plugin.ts as an entry, and it holds no throw"],
         message: "unused");
+}
+
+final BUZZ_SRC = `fun helper(path: str) > str !> any \{
+    return path;
+}
+export fun target(ctx: magus\Context, args: [str]) > void !> any \{}
+fun inner(ctx: magus\Context, args: [str]) > void !> any \{}
+export fun check(files: [Path]) > [Finding] !> any \{
+    return [<Finding>];
+}
+fun main(args: [str]) > void !> any \{}
+export fun pure(n: int) > int \{
+    return n;
+}
+fun takes(run: fun (n: int) > void !> any) > void \{}
+fun split(
+    a: int,
+    b: int
+) > int !> str \{
+    return a;
+}
+`;
+
+test "a Buzz function declaring !> fails unless it is an entry" {
+    final names = mut [<str>];
+    foreach (s in buzzSites("a.buzz", src: BUZZ_SRC)) {
+        names.append("{s.scope}:{s.line}");
+    }
+    assert\equal(names, want: ["helper:1", "inner:5", "split:14"], message: "non-entries with !>");
+}
+
+test "generated and planted Buzz is not read" {
+    assert\equal(scannedBuzz("internal/spell/gen/decls/fs.buzz"), want: false, message: "gen");
+    assert\equal(scannedBuzz("x/testdata/a.buzz"), want: false, message: "testdata");
+    assert\equal(scannedBuzz("hack/lint/a.buzz"), want: true, message: "hand-written");
+}
+
+test "an exported async function with no Result return is counted" {
+    final src = "type Read = Result<number>;\nexport async function a(): Promise<Result<number>> \{ return x; }\nexport async function b(): Promise<Read> \{ return x; }\nexport async function c(): Promise<void> \{}\nexport const d = async () => 1;\nasync function e() \{}\n";
+    final got = lines(judge(sites(support\fixture({"a.ts": src})), ceilings: {<str: Ceiling>}, entries: [<Entry>]));
+    final over = " returns no Result, below the top-level entry: a.ts holds 2, over the 0 hack/lint/no-throw.jsonl records";
+    assert\equal(got, want: ["a.ts:4 exported async c" + over, "a.ts:5 exported async d" + over], message: "async sites");
 }
