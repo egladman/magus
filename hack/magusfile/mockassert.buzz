@@ -1,5 +1,6 @@
 namespace mockassert;
 
+import "result";
 import "fs";
 import "sort";
 import "std";
@@ -23,41 +24,47 @@ fun isInternal(rel: str) > bool {
 }
 
 // relDir is pkgPath's directory relative to the module root, "" for the root itself.
-fun relDir(pkgPath: str) > str !> any {
+fun relDir(pkgPath: str) > result\Result::<str> {
     if (pkgPath == MODULE) {
-        return "";
+        return result\ok::<str>("");
     }
     if (pkgPath.startsWith(MODULE + "/")) {
-        return pkgPath.sub(MODULE.len() + 1);
+        return result\ok::<str>(pkgPath.sub(MODULE.len() + 1));
     }
-    throw "package \"{pkgPath}\" is outside {MODULE}; this generator only knows this module";
+    return result\fail::<str>("package \"{pkgPath}\" is outside {MODULE}; this generator only knows this module");
 }
 
 // clause is the package clause mockery's SrcPackageName renders for a package of this
 // module: its last path element, and magus for the module root.
-fun clause(pkgPath: str) > str !> any {
-    final rel = relDir(pkgPath);
+fun clause(pkgPath: str) > result\Result::<str> {
+    final named = relDir(pkgPath);
+    if (named.error -> err) { return result\Result::<str>{ error = err }; }
+    final rel = named.value!;
     if (rel == "") {
-        return "magus";
+        return result\ok::<str>("magus");
     }
     final parts = rel.split("/");
-    return parts[parts.len() - 1];
+    return result\ok::<str>(parts[parts.len() - 1]);
 }
 
 // expand renders one of .mockery.yaml's dir or pkgname templates for pkgPath. It knows the
 // two variables the config uses, InterfaceDir and SrcPackageName, and raises on any other:
 // the config then changed in a way this generator was not written for.
-export fun expand(template: str, pkgPath: str) > str !> any {
-    final rel = relDir(pkgPath);
+export fun expand(template: str, pkgPath: str) > result\Result::<str> {
+    final named = relDir(pkgPath);
+    if (named.error -> err) { return result\Result::<str>{ error = err }; }
+    final rel = named.value!;
     var rendered = template.replace("\{\{.InterfaceDir}}", with: rel);
     if (rel == "" and rendered.startsWith("/")) {
         rendered = rendered.sub(1, len: rendered.len() - 1);
     }
-    rendered = rendered.replace("\{\{.SrcPackageName}}", with: clause(pkgPath));
+    final packageClause = clause(pkgPath);
+    if (packageClause.error -> err) { return result\Result::<str>{ error = err }; }
+    rendered = rendered.replace("\{\{.SrcPackageName}}", with: packageClause.value!);
     if (rendered.indexOf("\{\{") != null) {
-        throw "the mockery template \"{template}\" uses a variable this generator does not render";
+        return result\fail::<str>("the mockery template \"{template}\" uses a variable this generator does not render");
     }
-    return rendered;
+    return result\ok::<str>(rendered);
 }
 
 // render is one package's assertion file, already in gofmt's layout: the var block's
@@ -109,14 +116,23 @@ export fun files(config: str) > [AssertFile] !> any {
         final names = sort\strings(pkg.q(["interfaces"]).mapValue().keys());
         if (names.len() == 0) { continue; }
         final dir = expand(pkg.q(["config", "dir"]).string() ?? dirTemplate, pkgPath: pkgPath);
-        if (isInternal(relDir(pkgPath)) or isInternal(dir)) { continue; }
+        if (dir.error != null) {
+            throw dir.error!.message;
+        }
+        final rel = relDir(pkgPath);
+        if (rel.error != null) {
+            throw rel.error!.message;
+        }
+        if (isInternal(rel.value!) or isInternal(dir.value!)) { continue; }
+        final pkgName = expand(pkg.q(["config", "pkgname"]).string() ?? pkgTemplate, pkgPath: pkgPath);
+        if (pkgName.error != null) {
+            throw pkgName.error!.message;
+        }
         assertions.append(AssertFile{
             // A test file, so importing the doubles never imports the mocked package: the
             // package's own tests can use them, and the check still compiles in go vet.
-            path = dir + "/assert_test.go",
-            body = render(pkgPath,
-                pkg: expand(pkg.q(["config", "pkgname"]).string() ?? pkgTemplate, pkgPath: pkgPath),
-                interfaces: names),
+            path = dir.value! + "/assert_test.go",
+            body = render(pkgPath, pkg: pkgName.value!, interfaces: names),
         });
     }
     return assertions;

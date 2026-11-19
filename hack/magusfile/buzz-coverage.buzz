@@ -1,4 +1,5 @@
 import "fs";
+import "result";
 import "lcov";
 import "assert";
 
@@ -33,9 +34,14 @@ fun covered(mod: str, embedded: bool) > Run {
 
 // globbed adds to planned a run of each module a glob matches, less the
 // modules under skip when skip is set.
-fun globbed(planned: mut [Run], pattern: str, embedded: bool, skip: str = "") > void !> any {
-    foreach (mod in fs\glob(pattern)) {
-        if (skip == "" or !mod.value.startsWith(skip)) { planned.append(covered(mod.value, embedded: embedded)); }
+fun globbed(planned: mut [Run], pattern: str, embedded: bool, skip: str = "") > result\Result::<bool> {
+    try {
+        foreach (mod in fs\glob(pattern)) {
+            if (skip == "" or !mod.value.startsWith(skip)) { planned.append(covered(mod.value, embedded: embedded)); }
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -69,14 +75,31 @@ final SSG_LIBS = ["csp.buzz", "date.buzz", "dom.buzz", "feed.buzz", "paths.buzz"
 // spells/examples/**.
 export fun runs() > [Run] !> any {
     final planned = mut [<Run>];
-    globbed(planned, pattern: "std/lib/*.buzz", embedded: true);
+    final patterns = mut [<str>];
+    final modes = mut [<bool>];
+    final skips = mut [<str>];
+    patterns.append("std/lib/*.buzz");
+    modes.append(true);
+    skips.append("");
     foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci", "hack/retro", "hack/lint"]) {
-        globbed(planned, pattern: dir + "/*.buzz", embedded: false);
+        patterns.append(dir + "/*.buzz");
+        modes.append(false);
+        skips.append("");
     }
     foreach (dir in ["hack/magusfile", "hack/policy"]) {
-        globbed(planned, pattern: dir + "/*.buzz", embedded: true);
+        patterns.append(dir + "/*.buzz");
+        modes.append(true);
+        skips.append("");
     }
-    globbed(planned, pattern: "spells/**/*.buzz", embedded: true, skip: "spells/examples/");
+    patterns.append("spells/**/*.buzz");
+    modes.append(true);
+    skips.append("spells/examples/");
+    foreach (i, pattern in patterns) {
+        final glob = globbed(planned, pattern: pattern, embedded: modes[i], skip: skips[i]);
+        if (glob.error != null) {
+            throw glob.error!.message;
+        }
+    }
     foreach (lib in DOCS_LIBS) {
         planned.append(docsLib(lib));
     }

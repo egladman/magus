@@ -6,6 +6,7 @@
 // first as a red streak over the run that last passed.
 namespace regressions;
 
+import "result";
 import "serialize";
 import "std";
 import "time";
@@ -112,14 +113,18 @@ export fun parseJobs(body: str, keyOf: fun (name: str) > str) > {str: str} !> an
 
 // parseMainRuns reads `gh run list --json databaseId,headSha,status`,
 // newest first. A run still going judged nothing yet and is left out.
-export fun parseMainRuns(body: str) > [CiRun] !> any {
-    final acc = mut [<CiRun>];
-    foreach (run in serialize\jsonDecode(body).listValue()) {
-        if (run.q("status").stringValue() == "completed") {
-            acc.append(CiRun{ id = "{run.q("databaseId").integerValue()}", sha = run.q("headSha").stringValue() });
+export fun parseMainRuns(body: str) > result\Result::<[CiRun]> {
+    try {
+        final acc = mut [<CiRun>];
+        foreach (run in serialize\jsonDecode(body).listValue()) {
+            if (run.q("status").stringValue() == "completed") {
+                acc.append(CiRun{ id = "{run.q("databaseId").integerValue()}", sha = run.q("headSha").stringValue() });
+            }
         }
+        return result\ok::<[CiRun]>(acc);
+    } catch (err: any) {
+        return result\caught::<[CiRun]>(err);
     }
-    return acc;
 }
 
 fun stateOf(run: CiRun, key: str) > str {
@@ -173,77 +178,89 @@ export fun firstRed(runs: [CiRun], key: str) > Attribution {
 }
 
 // parseMerged reads `gh pr list --state merged --json number,mergeCommit`.
-export fun parseMerged(body: str) > [Merged] !> any {
-    final acc = mut [<Merged>];
-    foreach (pr in serialize\jsonDecode(body).listValue()) {
-        final sha = pr.q("mergeCommit").q("oid").stringValue();
-        if (sha != "") {
-            acc.append(Merged{ number = std\toInt(pr.q("number").integerValue()), sha = sha, mergedAt = pr.q("mergedAt").stringValue() });
+export fun parseMerged(body: str) > result\Result::<[Merged]> {
+    try {
+        final acc = mut [<Merged>];
+        foreach (pr in serialize\jsonDecode(body).listValue()) {
+            final sha = pr.q("mergeCommit").q("oid").stringValue();
+            if (sha != "") {
+                acc.append(Merged{ number = std\toInt(pr.q("number").integerValue()), sha = sha, mergedAt = pr.q("mergedAt").stringValue() });
+            }
         }
+        return result\ok::<[Merged]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Merged]>(err);
     }
-    return acc;
 }
 
 // attribute adds the pull requests behind a's commits and when the newest
 // merged. A commit with no merged pull request, a direct push, leaves
 // mergedAt empty.
-export fun attribute(a: Attribution, merged: [Merged]) > Attribution !> any {
-    if (a.shas.len() == 0 or a.state == "unknown") {
-        return a;
-    }
-    final prs = mut [<int>];
-    var newest = "";
-    var all = true;
-    foreach (sha in a.shas) {
-        var found = false;
-        foreach (m in merged) {
-            if (m.sha != sha) {
-                continue;
+export fun attribute(a: Attribution, merged: [Merged]) > result\Result::<Attribution> {
+    try {
+        if (a.shas.len() == 0 or a.state == "unknown") {
+            return result\ok::<Attribution>(a);
+        }
+        final prs = mut [<int>];
+        var newest = "";
+        var all = true;
+        foreach (sha in a.shas) {
+            var found = false;
+            foreach (m in merged) {
+                if (m.sha != sha) {
+                    continue;
+                }
+                found = true;
+                prs.append(m.number);
+                if (newest == "" or time\parse(STAMP, value: m.mergedAt) > time\parse(STAMP, value: newest)) {
+                    newest = m.mergedAt;
+                }
             }
-            found = true;
-            prs.append(m.number);
-            if (newest == "" or time\parse(STAMP, value: m.mergedAt) > time\parse(STAMP, value: newest)) {
-                newest = m.mergedAt;
+            if (!found) {
+                all = false;
             }
         }
-        if (!found) {
-            all = false;
+        var at = "";
+        if (all) {
+            at = newest;
         }
+        return result\ok::<Attribution>(Attribution{ key = a.key, state = a.state, shas = a.shas, prs = prs, mergedAt = at });
+    } catch (err: any) {
+        return result\caught::<Attribution>(err);
     }
-    var at = "";
-    if (all) {
-        at = newest;
-    }
-    return Attribution{ key = a.key, state = a.state, shas = a.shas, prs = prs, mergedAt = at };
 }
 
 // fixers are the open pull requests whose check passed in a run that
 // started after the introducer merged. Their runs test the merge ref, so an
 // earlier run never saw the regression. With no merge time it returns none;
 // the caller reads mergedAt.
-export fun fixers(open: [Probe], attribution: Attribution) > [int] !> any {
-    final acc = mut [<int>];
-    if (attribution.mergedAt == "") {
-        return acc;
-    }
-    final merged = time\parse(STAMP, value: attribution.mergedAt);
-    foreach (p in open) {
-        var seen = 0;
-        var proven = true;
-        foreach (c in p.checks) {
-            if (c.key != attribution.key) {
-                continue;
+export fun fixers(open: [Probe], attribution: Attribution) > result\Result::<[int]> {
+    try {
+        final acc = mut [<int>];
+        if (attribution.mergedAt == "") {
+            return result\ok::<[int]>(acc);
+        }
+        final merged = time\parse(STAMP, value: attribution.mergedAt);
+        foreach (p in open) {
+            var seen = 0;
+            var proven = true;
+            foreach (c in p.checks) {
+                if (c.key != attribution.key) {
+                    continue;
+                }
+                seen = seen + 1;
+                if (!c.passed or c.startedAt == "" or time\parse(STAMP, value: c.startedAt) <= merged) {
+                    proven = false;
+                }
             }
-            seen = seen + 1;
-            if (!c.passed or c.startedAt == "" or time\parse(STAMP, value: c.startedAt) <= merged) {
-                proven = false;
+            if (seen > 0 and proven) {
+                acc.append(p.pr);
             }
         }
-        if (seen > 0 and proven) {
-            acc.append(p.pr);
-        }
+        return result\ok::<[int]>(acc);
+    } catch (err: any) {
+        return result\caught::<[int]>(err);
     }
-    return acc;
 }
 
 fun short(sha: str) > str {
@@ -335,13 +352,21 @@ export fun unsettled(runs: [CiRun], upto: int, red: [str]) > bool {
 }
 
 // attributeAll attributes each check in red and finds its fixers.
-export fun attributeAll(runs: [CiRun], red: [str], merged: [Merged], probes: [Probe]) > [Regression] !> any {
-    final acc = mut [<Regression>];
-    foreach (k in red) {
-        final a = attribute(firstRed(runs, key: k), merged: merged);
-        acc.append(Regression{ attribution = a, fixers = fixers(probes, attribution: a) });
+export fun attributeAll(runs: [CiRun], red: [str], merged: [Merged], probes: [Probe]) > result\Result::<[Regression]> {
+    try {
+        final acc = mut [<Regression>];
+        foreach (k in red) {
+            final attributed = attribute(firstRed(runs, key: k), merged: merged);
+            if (attributed.error -> err) { return result\Result::<[Regression]>{ error = err }; }
+            final a = attributed.value!;
+            final fixing = fixers(probes, attribution: a);
+            if (fixing.error -> err) { return result\Result::<[Regression]>{ error = err }; }
+            acc.append(Regression{ attribution = a, fixers = fixing.value! });
+        }
+        return result\ok::<[Regression]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Regression]>(err);
     }
-    return acc;
 }
 
 fun run(sha: str, state: str) > CiRun {
@@ -378,14 +403,14 @@ test "a streak that reaches the window's end is unknown, red since before its ol
 test "a merged pull request is found by its commit, and the newest merge time is kept" {
     final merged = parseMerged(`[{"number": 7, "mergedAt": "2026-11-06T10:00:00Z", "mergeCommit": {"oid": "c2"}},
         {"number": 8, "mergedAt": "2026-11-06T11:00:00Z", "mergeCommit": {"oid": "c3"}},
-        {"number": 9, "mergedAt": "2026-11-06T12:00:00Z", "mergeCommit": null}]`);
-    final one = attribute(Attribution{ key = "t", state = "introduced", shas = ["c2"] }, merged: merged);
+        {"number": 9, "mergedAt": "2026-11-06T12:00:00Z", "mergeCommit": null}]`).value!;
+    final one = attribute(Attribution{ key = "t", state = "introduced", shas = ["c2"] }, merged: merged).value!;
     assert\equal(one.prs, want: [7], message: "pr");
     assert\equal(since(one), want: "#7", message: "worded");
-    final two = attribute(Attribution{ key = "t", state = "ambiguous", shas = ["c3", "c2"] }, merged: merged);
+    final two = attribute(Attribution{ key = "t", state = "ambiguous", shas = ["c3", "c2"] }, merged: merged).value!;
     assert\equal(two.mergedAt, want: "2026-11-06T11:00:00Z", message: "newest candidate");
     assert\equal(since(two), want: "one of #8, #7", message: "worded");
-    final direct = attribute(Attribution{ key = "t", state = "introduced", shas = ["cx"] }, merged: merged);
+    final direct = attribute(Attribution{ key = "t", state = "introduced", shas = ["cx"] }, merged: merged).value!;
     assert\equal(direct.mergedAt, want: "", message: "a direct push has no merge time");
     assert\equal(since(direct), want: "cx", message: "the sha");
 }
@@ -397,8 +422,8 @@ test "a fixer passed after the introducer merged; a run that started before the 
     final red = Probe{ pr = 22, checks = [CheckRun{ key = "t", passed = false, startedAt = "2026-11-06T10:30:00Z" }] };
     final other = Probe{ pr = 23, checks = [CheckRun{ key = "u", passed = true, startedAt = "2026-11-06T10:30:00Z" }] };
     final unstamped = Probe{ pr = 24, checks = [CheckRun{ key = "t", passed = true }] };
-    assert\equal(fixers([late, early, red, other, unstamped], attribution: a), want: [20], message: "only the run after the merge");
-    assert\equal(fixers([late], attribution: Attribution{ key = "t", state = "unknown" }).len(), want: 0, message: "no merge time, no answer");
+    assert\equal(fixers([late, early, red, other, unstamped], attribution: a).value!, want: [20], message: "only the run after the merge");
+    assert\equal(fixers([late], attribution: Attribution{ key = "t", state = "unknown" }).value!.len(), want: 0, message: "no merge time, no answer");
 }
 
 test "the board's sentence says unknown, none or the pull request to merge first" {
@@ -415,9 +440,9 @@ test "the reader stops once every red check has a passing run, and attributes ea
     assert\equal(red, want: ["t"], message: "red keys");
     assert\equal(unsettled(runs, upto: 1, red: red), want: true, message: "no pass read yet");
     assert\equal(unsettled(runs, upto: 2, red: red), want: false, message: "the pass settles it");
-    final merged = parseMerged(`[{"number": 7, "mergedAt": "2026-11-06T10:00:00Z", "mergeCommit": {"oid": "c2"}}]`);
+    final merged = parseMerged(`[{"number": 7, "mergedAt": "2026-11-06T10:00:00Z", "mergeCommit": {"oid": "c2"}}]`).value!;
     final late = Probe{ pr = 20, checks = [CheckRun{ key = "t", passed = true, startedAt = "2026-11-06T10:30:00Z" }] };
-    final all = attributeAll(runs, red: red, merged: merged, probes: [late]);
+    final all = attributeAll(runs, red: red, merged: merged, probes: [late]).value!;
     assert\equal(line(all[0]), want: "red since #7 (t); merge #20 first", message: "line");
 }
 

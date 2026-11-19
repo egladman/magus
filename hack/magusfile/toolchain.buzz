@@ -35,6 +35,7 @@
 // provider (magus\lifecycle.provider, spells/endoflife-date here), read through
 // magus\describe.tool(), the same answer `magus describe tools` prints.
 
+import "result";
 import "magus";
 import "std";
 import "os";
@@ -65,38 +66,42 @@ final remotes = {
 // Prerelease and historical tags are dropped. Go's repo still carries `weekly.2012-03-04`
 // and `release.r60`, and both projects tag `beta`/`rc`. A tag that is not a plain release
 // is not something to report as "you are behind".
-fun fetchReleaseTags(bin: str) > [str] !> any {
-    final remote = remotes[bin];
-    if (remote == null) {
-        return [<str>];
+fun fetchReleaseTags(bin: str) > result\Result::<[str]> {
+    try {
+        final remote = remotes[bin];
+        if (remote == null) {
+            return result\ok::<[str]>([<str>]);
+        }
+        var versions = mut [<str>];
+        os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void !> any {
+            // quiet: this is a 954-line listing being consumed, not a build step being
+            // watched. Capture is unaffected.
+            final res = vcs\cmd(["ls-remote", "--tags", "--refs", remote["url"]],
+                opts: vcs\CommandOptions{allowFailure = true, quiet = true});
+            if (res.code != 0) {
+                return; // unreachable remote: reported as unknown, never as up to date
+            }
+            foreach (line in res.stdout.split("\n")) {
+                final marker = line.indexOf("refs/tags/");
+                if (marker == null) {
+                    continue;
+                }
+                final tag = line.sub(marker + 10).trim();
+                if (!tag.startsWith(remote["prefix"])) {
+                    continue;
+                }
+                final v = tag.sub(remote["prefix"].len());
+                // isValid rejects the prerelease and historical shapes without a bespoke
+                // pattern per project: `1.9beta1` and `2012-03-04` both fail to parse.
+                if (semver\isValid(v) and v.indexOf("-") == null) {
+                    versions.append(v);
+                }
+            }
+        });
+        return result\ok::<[str]>(versions);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    var versions = mut [<str>];
-    os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void !> any {
-        // quiet: this is a 954-line listing being consumed, not a build step being
-        // watched. Capture is unaffected.
-        final res = vcs\cmd(["ls-remote", "--tags", "--refs", remote["url"]],
-            opts: vcs\CommandOptions{allowFailure = true, quiet = true});
-        if (res.code != 0) {
-            return; // unreachable remote: reported as unknown, never as up to date
-        }
-        foreach (line in res.stdout.split("\n")) {
-            final marker = line.indexOf("refs/tags/");
-            if (marker == null) {
-                continue;
-            }
-            final tag = line.sub(marker + 10).trim();
-            if (!tag.startsWith(remote["prefix"])) {
-                continue;
-            }
-            final v = tag.sub(remote["prefix"].len());
-            // isValid rejects the prerelease and historical shapes without a bespoke
-            // pattern per project: `1.9beta1` and `2012-03-04` both fail to parse.
-            if (semver\isValid(v) and v.indexOf("-") == null) {
-                versions.append(v);
-            }
-        }
-    });
-    return versions;
 }
 
 // extract pulls a version out of a probe line.
@@ -142,7 +147,7 @@ fun observe(name: str, bin: str, args: [str]) > void {
         std\print("toolchain " + name + ": not installed, or its version is unreadable");
         return;
     }
-    final tags = fetchReleaseTags(bin) catch [<str>];
+    final tags = fetchReleaseTags(bin).value ?? [<str>];
     if (tags.len() == 0) {
         std\print("toolchain " + name + " " + current + ": upstream unreachable, currency unknown");
         return;

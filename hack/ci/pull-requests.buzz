@@ -649,7 +649,11 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
     try {
         final listed = capture("gh", args: ["run", "list", "--branch", base, "--event", "push", "--workflow", CI_WORKFLOW,
             "--status", "completed", "--limit", "20", "--json", "databaseId,headSha,status"]);
-        final runs = regressions\parseMainRuns(listed);
+        final parsedRuns = regressions\parseMainRuns(listed);
+        if (parsedRuns.error -> err) {
+            return result\fail::<[regressions\Regression]>("pull-requests: attribute main's red checks: {err.message}");
+        }
+        final runs = parsedRuns.value!;
         var red = [<str>];
         var i = 0;
         while (i < runs.len()) {
@@ -663,9 +667,16 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
             }
             i = i + 1;
         }
-        final merged = regressions\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", base,
+        final parsedMerged = regressions\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", base,
             "--limit", "100", "--json", "number,mergeCommit,mergedAt"]));
-        return result\ok::<[regressions\Regression]>(regressions\attributeAll(runs, red: red, merged: merged, probes: probes(open)));
+        if (parsedMerged.error -> err) {
+            return result\fail::<[regressions\Regression]>("pull-requests: attribute main's red checks: {err.message}");
+        }
+        final attributedAll = regressions\attributeAll(runs, red: red, merged: parsedMerged.value!, probes: probes(open));
+        if (attributedAll.error -> err) {
+            return result\fail::<[regressions\Regression]>("pull-requests: attribute main's red checks: {attributedAll.error!.message}");
+        }
+        return result\ok::<[regressions\Regression]>(attributedAll.value!);
     } catch (err: any) {
         return result\caught::<[regressions\Regression]>(err, doing: "pull-requests: attribute main's red checks");
     }

@@ -376,22 +376,18 @@ no-throw:
       hack/lint/testpairing-pairing-has-no-exemptions.buzz: 3
       hack/lint/tool-descriptions-follow-proofread-rules.buzz: 2
       hack/lint/trusted-jobs-restore-no-actions-cache.buzz: 2
-      hack/magusfile/advisories.buzz: 6
-      hack/magusfile/badges.buzz: 5
+      hack/magusfile/advisories.buzz: 3
+      hack/magusfile/badges.buzz: 1
       hack/magusfile/bootstrap-timing.buzz: 2
-      hack/magusfile/branch-stack.buzz: 6
-      hack/magusfile/buzz-coverage.buzz: 4
-      hack/magusfile/changelog.buzz: 4
-      hack/magusfile/coverage.buzz: 11
-      hack/magusfile/drift.buzz: 6
-      hack/magusfile/image.buzz: 1
+      hack/magusfile/buzz-coverage.buzz: 3
+      hack/magusfile/changelog.buzz: 3
+      hack/magusfile/coverage.buzz: 4
+      hack/magusfile/drift.buzz: 5
       hack/magusfile/index.buzz: 1
-      hack/magusfile/mockassert.buzz: 5
-      hack/magusfile/regressions.buzz: 5
-      hack/magusfile/releases.buzz: 11
-      hack/magusfile/ruledocs.buzz: 4
-      hack/magusfile/run-golangci.buzz: 9
-      hack/magusfile/toolchain.buzz: 1
+      hack/magusfile/mockassert.buzz: 2
+      hack/magusfile/releases.buzz: 10
+      hack/magusfile/ruledocs.buzz: 2
+      hack/magusfile/run-golangci.buzz: 5
       hack/policy/guard.buzz: 2
       hack/policy/mandate.buzz: 2
       hack/policy/pr_workflow.buzz: 2

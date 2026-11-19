@@ -1,6 +1,7 @@
 namespace branchstack;
 
 import "serialize";
+import "result";
 
 import "assert";
 
@@ -59,17 +60,17 @@ fun cyclePath(start: str, parentOf: {str: str}) > str {
 
 // orderLayers puts every layer after its parent. Layers ready at the same step keep their
 // input order, so a plan already in order comes back unchanged.
-export fun orderLayers(stack: BranchStack) > BranchStack !> any {
+export fun orderLayers(stack: BranchStack) > result\Result::<BranchStack> {
     final parentOf = mut {<str: str>};
     foreach (l in stack.layers) {
-        if (l.branch == "") { throw "branch-stack: a layer names no branch"; }
-        if (l.branch == stack.base) { throw "branch-stack: layer {l.branch} is the stack's base"; }
-        if (parentOf[l.branch] != null) { throw "branch-stack: layer {l.branch} appears twice"; }
+        if (l.branch == "") { return result\fail::<BranchStack>("branch-stack: a layer names no branch"); }
+        if (l.branch == stack.base) { return result\fail::<BranchStack>("branch-stack: layer {l.branch} is the stack's base"); }
+        if (parentOf[l.branch] != null) { return result\fail::<BranchStack>("branch-stack: layer {l.branch} appears twice"); }
         parentOf[l.branch] = l.parent;
     }
     foreach (l in stack.layers) {
         if (l.parent != stack.base and parentOf[l.parent] == null) {
-            throw "branch-stack: layer {l.branch} goes on {l.parent}, which is neither the base {stack.base} nor a layer";
+            return result\fail::<BranchStack>("branch-stack: layer {l.branch} goes on {l.parent}, which is neither the base {stack.base} nor a layer");
         }
     }
     final placed = mut {<str: bool>};
@@ -88,101 +89,144 @@ export fun orderLayers(stack: BranchStack) > BranchStack !> any {
         if (!picked) {
             foreach (l in stack.layers) {
                 if (placed[l.branch] == null) {
-                    throw "branch-stack: the layers form a cycle: {cyclePath(l.branch, parentOf: parentOf)}";
+                    return result\fail::<BranchStack>("branch-stack: the layers form a cycle: {cyclePath(l.branch, parentOf: parentOf)}");
                 }
             }
         }
     }
-    return BranchStack{ schema = stack.schema, base = stack.base, layers = order };
+    return result\ok::<BranchStack>(BranchStack{ schema = stack.schema, base = stack.base, layers = order });
 }
 
-fun checkKeys(m: {str: serialize\Boxed}, allowed: [str], where: str) > void !> any {
+fun checkKeys(m: {str: serialize\Boxed}, allowed: [str], where: str) > result\Result::<bool> {
     foreach (k in m.keys()) {
         if (allowed.indexOf(k) == null) {
-            throw "branch-stack: {where} has unknown member {k}; it takes {allowed.join(", ")}";
+            return result\fail::<bool>("branch-stack: {where} has unknown member {k}; it takes {allowed.join(", ")}");
         }
     }
+    return result\ok::<bool>(true);
 }
 
-fun strField(m: {str: serialize\Boxed}, key: str, where: str, required: bool) > str !> any {
+fun strField(m: {str: serialize\Boxed}, key: str, where: str, required: bool) > result\Result::<str> {
     final v = m[key];
     if (v == null) {
-        if (required) { throw "branch-stack: {where} has no {key}"; }
-        return "";
+        if (required) { return result\fail::<str>("branch-stack: {where} has no {key}"); }
+        return result\ok::<str>("");
     }
     final s = v!.string();
-    if (s == null) { throw "branch-stack: {where}'s {key} is not a string"; }
-    if (required and s! == "") { throw "branch-stack: {where}'s {key} is empty"; }
-    return s!;
+    if (s == null) { return result\fail::<str>("branch-stack: {where}'s {key} is not a string"); }
+    if (required and s! == "") { return result\fail::<str>("branch-stack: {where}'s {key} is empty"); }
+    return result\ok::<str>(s!);
 }
 
-fun listField(m: {str: serialize\Boxed}, key: str, where: str) > [serialize\Boxed] !> any {
+fun listField(m: {str: serialize\Boxed}, key: str, where: str) > result\Result::<[serialize\Boxed]> {
     final v = m[key];
-    if (v == null) { return [<serialize\Boxed>]; }
+    if (v == null) { return result\ok::<[serialize\Boxed]>([<serialize\Boxed>]); }
     final l = v!.list();
-    if (l == null) { throw "branch-stack: {where}'s {key} is not a list"; }
-    return l!;
+    if (l == null) { return result\fail::<[serialize\Boxed]>("branch-stack: {where}'s {key} is not a list"); }
+    return result\ok::<[serialize\Boxed]>(l!);
 }
 
-fun strsField(m: {str: serialize\Boxed}, key: str, where: str) > [str] !> any {
+fun strsField(m: {str: serialize\Boxed}, key: str, where: str) > result\Result::<[str]> {
     final acc = mut [<str>];
-    foreach (i, v in listField(m, key: key, where: where)) {
+    final items = listField(m, key: key, where: where);
+    if (items.error -> err) { return result\Result::<[str]>{ error = err }; }
+    foreach (i, v in items.value!) {
         final s = v.string();
-        if (s == null) { throw "branch-stack: {where}'s {key}[{i}] is not a string"; }
+        if (s == null) { return result\fail::<[str]>("branch-stack: {where}'s {key}[{i}] is not a string"); }
         acc.append(s!);
     }
-    return acc;
+    return result\ok::<[str]>(acc);
 }
 
-fun requireMap(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
+fun requireMap(b: serialize\Boxed, where: str) > result\Result::<{str: serialize\Boxed}> {
     final m = b.map();
-    if (m == null) { throw "branch-stack: {where} is not an object"; }
-    return m!;
+    if (m == null) { return result\fail::<{str: serialize\Boxed}>("branch-stack: {where} is not an object"); }
+    return result\ok::<{str: serialize\Boxed}>(m!);
 }
 
 // readStack decodes a stack and refuses what it cannot act on: another schema, an unknown
 // member, a status outside STATUSES, a postcondition missing its id, target or project, a postcondition id
 // given twice in one layer. Members left out read as empty. It does not order the layers;
 // orderLayers does.
-export fun readStack(json: str) > BranchStack !> any {
-    final doc = requireMap(serialize\jsonDecode(json), where: "the stack");
-    checkKeys(doc, allowed: ["schema", "base", "layers"], where: "the stack");
-    final schema = strField(doc, key: "schema", where: "the stack", required: true);
-    if (schema != SCHEMA) { throw "branch-stack: the stack is {schema}, and this reads {SCHEMA}"; }
+export fun readStack(json: str) > result\Result::<BranchStack> {
+    var decoded: serialize\Boxed? = null;
+    try {
+        decoded = serialize\jsonDecode(json);
+    } catch (err: any) {
+        return result\caught::<BranchStack>(err);
+    }
+    final doc = requireMap(decoded!, where: "the stack");
+    if (doc.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+    final docKeys = checkKeys(doc.value!, allowed: ["schema", "base", "layers"], where: "the stack");
+    if (docKeys.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+    final schema = strField(doc.value!, key: "schema", where: "the stack", required: true);
+    if (schema.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+    if (schema.value! != SCHEMA) { return result\fail::<BranchStack>("branch-stack: the stack is {schema.value!}, and this reads {SCHEMA}"); }
     final layers = mut [<StackLayer>];
-    foreach (i, lb in listField(doc, key: "layers", where: "the stack")) {
+    final layerList = listField(doc.value!, key: "layers", where: "the stack");
+    if (layerList.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+    foreach (i, lb in layerList.value!) {
         final where = "layer {i}";
         final m = requireMap(lb, where: where);
-        checkKeys(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "postconditions", "status", "reason"], where: where);
+        if (m.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final keys = checkKeys(m.value!, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "postconditions", "status", "reason"], where: where);
+        if (keys.error -> err) { return result\Result::<BranchStack>{ error = err }; }
         final postconditions = mut [<CheckPostcondition>];
         final ids = mut [<str>];
-        foreach (j, gb in listField(m, key: "postconditions", where: where)) {
+        final gates = listField(m.value!, key: "postconditions", where: where);
+        if (gates.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        foreach (j, gb in gates.value!) {
             final gw = "{where}'s postconditions[{j}]";
             final gm = requireMap(gb, where: gw);
-            checkKeys(gm, allowed: ["id", "target", "project", "args"], where: gw);
-            final id = strField(gm, key: "id", where: gw, required: true);
-            if (ids.indexOf(id) != null) { throw "branch-stack: {where} names postcondition {id} twice"; }
-            ids.append(id);
-            postconditions.append(CheckPostcondition{ id = id, target = strField(gm, key: "target", where: gw, required: true),
-                project = strField(gm, key: "project", where: gw, required: true), args = strsField(gm, key: "args", where: gw) });
+            if (gm.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            final gateKeys = checkKeys(gm.value!, allowed: ["id", "target", "project", "args"], where: gw);
+            if (gateKeys.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            final id = strField(gm.value!, key: "id", where: gw, required: true);
+            if (id.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            if (ids.indexOf(id.value!) != null) { return result\fail::<BranchStack>("branch-stack: {where} names postcondition {id.value!} twice"); }
+            ids.append(id.value!);
+            final target = strField(gm.value!, key: "target", where: gw, required: true);
+            if (target.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            final project = strField(gm.value!, key: "project", where: gw, required: true);
+            if (project.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            final gateArgs = strsField(gm.value!, key: "args", where: gw);
+            if (gateArgs.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+            postconditions.append(CheckPostcondition{ id = id.value!, target = target.value!, project = project.value!, args = gateArgs.value! });
         }
-        final status = strField(m, key: "status", where: where, required: true);
-        if (STATUSES.indexOf(status) == null) {
-            throw "branch-stack: {where}'s status is {status}; it takes {STATUSES.join(", ")}";
+        final status = strField(m.value!, key: "status", where: where, required: true);
+        if (status.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        if (STATUSES.indexOf(status.value!) == null) {
+            return result\fail::<BranchStack>("branch-stack: {where}'s status is {status.value!}; it takes {STATUSES.join(", ")}");
         }
+        final branch = strField(m.value!, key: "branch", where: where, required: true);
+        if (branch.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final parent = strField(m.value!, key: "parent", where: where, required: true);
+        if (parent.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final job = strField(m.value!, key: "job", where: where, required: false);
+        if (job.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final paths = strsField(m.value!, key: "paths", where: where);
+        if (paths.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final declarations = strsField(m.value!, key: "declarations", where: where);
+        if (declarations.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final check = strField(m.value!, key: "check", where: where, required: false);
+        if (check.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+        final reason = strField(m.value!, key: "reason", where: where, required: false);
+        if (reason.error -> err) { return result\Result::<BranchStack>{ error = err }; }
         layers.append(StackLayer{
-            branch = strField(m, key: "branch", where: where, required: true),
-            parent = strField(m, key: "parent", where: where, required: true),
-            job = strField(m, key: "job", where: where, required: false),
-            paths = strsField(m, key: "paths", where: where),
-            declarations = strsField(m, key: "declarations", where: where),
-            check = strField(m, key: "check", where: where, required: false),
+            branch = branch.value!,
+            parent = parent.value!,
+            job = job.value!,
+            paths = paths.value!,
+            declarations = declarations.value!,
+            check = check.value!,
             postconditions = postconditions,
-            status = status,
-            reason = strField(m, key: "reason", where: where, required: false),
+            status = status.value!,
+            reason = reason.value!,
         });
     }
-    return BranchStack{ schema = schema, base = strField(doc, key: "base", where: "the stack", required: true), layers = layers };
+    final base = strField(doc.value!, key: "base", where: "the stack", required: true);
+    if (base.error -> err) { return result\Result::<BranchStack>{ error = err }; }
+    return result\ok::<BranchStack>(BranchStack{ schema = schema.value!, base = base.value!, layers = layers });
 }
 
 // writeStack encodes every member, empty ones included, so readers never guess a default.
@@ -211,10 +255,9 @@ fun branches(stack: BranchStack) > str {
 }
 
 fun raised(stack: BranchStack) > str {
-    try {
-        _ = orderLayers(stack);
-    } catch (e) {
-        return "{e}";
+    final ordered = orderLayers(stack);
+    if (ordered.error -> err) {
+        return err.message;
     }
     return "";
 }
@@ -222,9 +265,9 @@ fun raised(stack: BranchStack) > str {
 test "orderLayers puts each layer after its parent and keeps input order among ready ones" {
     final stack = BranchStack{ base = "main", layers = [layer("c", parent: "b"), layer("x", parent: "main"),
         layer("b", parent: "a"), layer("a", parent: "main")] };
-    assert\equal(branches(orderLayers(stack)), want: "x a b c", message: "order");
+    assert\equal(branches(orderLayers(stack).value!), want: "x a b c", message: "order");
     final chain = BranchStack{ base = "main", layers = [layer("a", parent: "main"), layer("b", parent: "a")] };
-    assert\equal(branches(orderLayers(chain)), want: "a b", message: "an ordered plan comes back unchanged");
+    assert\equal(branches(orderLayers(chain).value!), want: "a b", message: "an ordered plan comes back unchanged");
 }
 
 test "orderLayers names a cycle, an unknown parent and a duplicate branch" {
@@ -242,18 +285,17 @@ test "writeStack and readStack round-trip every member" {
         status = "conflict", reason = "a.go conflicts" };
     final stack = BranchStack{ base = "main", layers = [l] };
     final text = writeStack(stack);
-    final back = readStack(text);
+    final back = readStack(text).value!;
     assert\equal(writeStack(back), want: text, message: "round trip");
     assert\equal(back.layers[0].postconditions[0].args, want: ["--fix"], message: "postcondition args");
-    final sparse = readStack(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned"}]}`);
+    final sparse = readStack(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned"}]}`).value!;
     assert\equal(sparse.layers[0].paths.len(), want: 0, message: "a left-out list reads empty");
 }
 
 fun refused(text: str) > str {
-    try {
-        _ = readStack(text);
-    } catch (e) {
-        return "{e}";
+    final read = readStack(text);
+    if (read.error -> err) {
+        return err.message;
     }
     return "";
 }

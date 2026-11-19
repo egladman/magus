@@ -15,6 +15,7 @@
 // Everything here COMPUTES; nothing decides. Choosing which of the three candidate
 // versions a change deserves is a judgment about what breaks for a consumer, and
 // that belongs to a human. See the `release` target for the policy that uses these.
+import "result";
 import "vcs";
 import "semver";
 import "crypto";
@@ -884,7 +885,7 @@ test "modules release after what they require, the root last" {
 // rewriteRequire points go.mod's require for module at version, keeping the line's
 // indentation and any trailing comment. The `replace` directive names the same module and
 // is not touched: it is the local-development path, ignored by every downstream consumer.
-export fun rewriteRequire(gomod: str, module: str, version: str) > str !> any {
+export fun rewriteRequire(gomod: str, module: str, version: str) > result\Result::<str> {
     final kept = mut [<str>];
     var found = false;
     foreach (line in gomod.split("\n")) {
@@ -905,16 +906,16 @@ export fun rewriteRequire(gomod: str, module: str, version: str) > str !> any {
         kept.append(line.sub(0, len: at) + module + " " + version + suffix);
         found = true;
     }
-    if (!found) { throw "release: go.mod has no require line for " + module; }
-    return kept.join("\n");
+    if (!found) { return result\fail::<str>("release: go.mod has no require line for " + module); }
+    return result\ok::<str>(kept.join("\n"));
 }
 
 test "a require moves to the new version and keeps its comment" {
     final gomod = "require (\n\t" + MODULE_ROOT + "/libs/diagnostics v0.2.0 // indirect\n\t"
         + MODULE_ROOT + "/libs/text v0.1.0\n\t" + MODULE_ROOT + "/libs/textsearch v0.1.0\n)\n\n"
         + "replace " + MODULE_ROOT + "/libs/text => ./libs/text\n";
-    final got = rewriteRequire(rewriteRequire(gomod, module: MODULE_ROOT + "/libs/diagnostics", version: "v0.3.0"),
-        module: MODULE_ROOT + "/libs/text", version: "v0.2.0");
+    final got = rewriteRequire(rewriteRequire(gomod, module: MODULE_ROOT + "/libs/diagnostics", version: "v0.3.0").value!,
+        module: MODULE_ROOT + "/libs/text", version: "v0.2.0").value!;
     std\assert(got.indexOf("libs/diagnostics v0.3.0 // indirect\n") != null, message: got);
     std\assert(got.indexOf("libs/text v0.2.0\n") != null, message: got);
     std\assert(got.indexOf("libs/textsearch v0.1.0") != null, message: "a longer path is another module");
@@ -999,7 +1000,13 @@ export fun pinGomods(gomods: {str: str}, releasing: {str: str}) > Pinned !> any 
         var pinned = text;
         foreach (req in inRepoRequires(text)) {
             final version = releasing[moduleDir(req["module"]!)];
-            if (version -> v) { pinned = rewriteRequire(pinned, module: req["module"]!, version: v); }
+            if (version -> v) {
+                final rewritten = rewriteRequire(pinned, module: req["module"]!, version: v);
+                if (rewritten.error != null) {
+                    throw rewritten.error!.message;
+                }
+                pinned = rewritten.value!;
+            }
         }
         final dropped = dropInRepoReplaces(pinned);
         if (releasing[gomodDir(path)] != null and dropped != pinned) {
