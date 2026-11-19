@@ -170,6 +170,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate, outputName:
 		return emitQueryRecord(ctx, opts, out, next)
+	case outputText:
 	}
 	return writeQueryText(ctx, os.Stdout, nx, next, res)
 }
@@ -358,6 +359,7 @@ func emitExplainCard(ctx context.Context, root, input string, opts output.Option
 		return emitExplainRecord(opts, record, section)
 	case outputName:
 		return emitNames(os.Stdout, []string{out.Node.ID})
+	case outputText:
 	}
 
 	return writeExplainText(ctx, os.Stdout, root, input, nx, next, res)
@@ -506,6 +508,7 @@ func explainChain(ctx context.Context, root string, xf *flaggen.ExplainFlags, fr
 			names = append(names, step.To)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	fmt.Print(render.PathText(out))
@@ -1155,6 +1158,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 		return emitFormatted(out, rec)
 	case outputName:
 		return emitNames(os.Stdout, []string{header.ID})
+	case outputText:
 	}
 
 	printInvocationText(os.Stdout, header, secrets, events, secretsOnly)
@@ -1254,6 +1258,7 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out out
 		return emitFormatted(out, cache.OutputIdentityRecord[magus.Invocation]{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
 	case outputName:
 		return emitNames(os.Stdout, []string{desc.Ref})
+	case outputText:
 	}
 	var invArgs []string
 	if inv != nil {

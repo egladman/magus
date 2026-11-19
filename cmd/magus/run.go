@@ -570,12 +570,12 @@ func emitSavedPlanDryRun(ctx context.Context, p internalci.PlanOutput, target st
 		return nil
 	case outputName:
 		return emitNames(os.Stdout, internalci.PlanProjects(shards))
-	default:
-		if opts.Format == outputTemplate {
-			p.Summary = internalci.PlanSummaryMarkdown(p)
-		}
-		return emitFormatted(opts, p)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	if opts.Format == outputTemplate {
+		p.Summary = internalci.PlanSummaryMarkdown(p)
+	}
+	return emitFormatted(opts, p)
 }
 
 // skipFlag accumulates repeated --skip values; satisfies flag.Value.

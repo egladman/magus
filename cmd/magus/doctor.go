@@ -114,6 +114,7 @@ func emitDoctorChecks(opts output.Options, checks []doctor.CheckInfo) error {
 		return emitFormatted(opts, checks)
 	case outputName:
 		return emitNames(os.Stdout, doctor.CheckNames(checks))
+	case outputText:
 	}
 	doctor.RenderChecks(os.Stdout, checks)
 	return nil
@@ -125,6 +126,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 		return emitFormatted(opts, out)
 	case outputName:
 		return emitNames(os.Stdout, doctor.UnhealthyNames(out))
+	case outputText:
 	}
 	doctor.RenderReport(os.Stdout, out)
 	return nil

@@ -173,6 +173,7 @@ func emitRefsList(ctx context.Context, opts output.Options, out types.KnowledgeR
 			return err
 		}
 		return knowledge.ReportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
+	case outputText:
 	}
 
 	return knowledge.WriteRefsText(os.Stdout, out)
@@ -426,7 +427,7 @@ func refsRenameCommand(ctx context.Context, root string, opts output.Options, g 
 			names = append(names, f.Path)
 		}
 		return emitNames(os.Stdout, names)
-	default:
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 		return emitFormatted(opts, out)
 	}
 	verb := "would rename"

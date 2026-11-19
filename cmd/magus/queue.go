@@ -436,10 +436,11 @@ func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, nam
 		return err
 	case outputName:
 		return emitNames(e.stdout, names)
-	case output.Template:
+	case outputTemplate:
 		if opts.Template == "" {
 			return writeFormatted(e.stdout, opts, shape)
 		}
+	case outputText, outputYAML:
 	}
 	var record map[string]any
 	if err := codec.Unmarshal(doc, &record); err != nil {

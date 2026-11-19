@@ -420,6 +420,7 @@ func emitCheckpoint(cp typesvcs.Checkpoint) error {
 		return emitFormatted(opts, cp)
 	case outputName:
 		return emitNames(os.Stdout, []string{cp.Token()})
+	case outputText:
 	}
 	fmt.Println(settle.CheckpointLine(cp))
 	return nil
@@ -585,6 +586,7 @@ func emitCheckout(rec job.ReviewCheckoutRecord) error {
 		return emitFormatted(opts, rec)
 	case outputName:
 		return emitNames(os.Stdout, []string{rec.Path})
+	case outputText:
 	}
 	settle.PrintCheckout(os.Stdout, rec)
 	return nil

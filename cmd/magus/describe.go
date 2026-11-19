@@ -292,6 +292,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 			names = append(names, t.Name)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -359,6 +360,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 			names = append(names, c.Name)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -622,6 +624,7 @@ func describeTargets(ctx context.Context, root string) error {
 			names = append(names, t.Name)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -757,6 +760,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			names = append(names, fmt.Sprintf("%s:%s", e.Project, e.Target))
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -798,6 +802,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 			names = append(names, w.Root)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -886,6 +891,7 @@ func describeMCPTools(args []string) error {
 			names = append(names, t.Name)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -947,6 +953,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			names[i] = f.Path
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -1010,6 +1017,7 @@ func describeModules(ctx context.Context, args []string) error {
 			names = append(names, m.Name)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide
@@ -1085,6 +1093,7 @@ func describeTools(ctx context.Context, root string, args []string) error {
 			names = append(names, fmt.Sprintf("%s/%s", t.Project, t.Bin))
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide

@@ -165,6 +165,7 @@ func runAndEmit(ctx context.Context, m *magus.Magus, target string, charms []str
 		return emitRunResult(ctx, m, opts, target, charms, targets, nil, nil, nil)
 	case outputName:
 		return emitProjectNames(m, targets)
+	case outputJSONL, outputText:
 	}
 	return nil
 }

@@ -131,9 +131,9 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	case outputText:
 		plan.Print(os.Stdout, figs, job.HolderCell)
 		return nil
-	default:
-		return emitFormatted(opts, figs)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, figs)
 }
 
 // outputSVG is `magus job graph`'s own -o format.

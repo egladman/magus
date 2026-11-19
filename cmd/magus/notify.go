@@ -78,6 +78,7 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 		return nil
 	case outputName:
 		return emitNames(os.Stdout, []string{string(ev.Outcome)})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
 	return writeFormatted(out, opts, ev)
 }

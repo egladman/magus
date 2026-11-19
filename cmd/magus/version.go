@@ -77,6 +77,7 @@ func runVersion(ctx context.Context, args []string) error {
 		// The scriptable scalar: `magus version -o name` is what a CI step compares
 		// against a pin, so it is the bare version with nothing to strip.
 		return emitNames(os.Stdout, []string{out.Version})
+	case outputText:
 	}
 
 	fmt.Printf("magus %s (%s) built %s\n", out.Version, out.Commit, out.BuildDate)

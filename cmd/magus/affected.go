@@ -716,12 +716,12 @@ func emitPlan(opts output.Options, out internalci.PlanOutput) error {
 		return emitFormatted(output.Options{Format: outputJSON}, out)
 	case outputName:
 		return emitItemNames(os.Stdout, out.Matrix, func(s internalci.PlanShard) string { return s.Shard })
-	default:
-		if opts.Format == outputTemplate {
-			out.Summary = internalci.PlanSummaryMarkdown(out)
-		}
-		return emitFormatted(opts, out)
+	case outputJSONL, outputTemplate, outputYAML:
 	}
+	if opts.Format == outputTemplate {
+		out.Summary = internalci.PlanSummaryMarkdown(out)
+	}
+	return emitFormatted(opts, out)
 }
 
 // noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
@@ -844,6 +844,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			names = append(names, p.Path)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	return internalci.PrintImpactText(os.Stdout, out, func(seed string) (string, string) {
@@ -931,6 +932,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 			return emitNames(os.Stdout, nil)
 		}
 		return emitNames(os.Stdout, []string{out.Project})
+	case outputText:
 	}
 
 	// text and wide
