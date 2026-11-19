@@ -32,7 +32,7 @@ func TestGitHubProviderBuzzTests(t *testing.T) {
 	sess, err := newSession(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sess.Close() })
-	require.NoError(t, sess.Exec(ctx, githubSource+"\n"+githubTests))
+	require.NoError(t, sess.Exec(ctx, strings.Join([]string{githubSource, githubTests}, "\n")))
 	tests := sess.Tests()
 	require.NotEmpty(t, tests)
 	for _, tc := range tests {
