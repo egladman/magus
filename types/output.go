@@ -1,6 +1,9 @@
 package types
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 // OutputRecord is one target run's captured log, the value magus\output returns.
 type OutputRecord struct {
@@ -46,7 +49,7 @@ type StoredOutput struct {
 // Bytes returns the captured output exactly as the record carries it.
 func (r StoredOutput) Bytes() []byte {
 	if r.OutputBase64 != nil {
-		return r.OutputBase64
+		return slices.Clone(r.OutputBase64)
 	}
 	return []byte(r.Output)
 }

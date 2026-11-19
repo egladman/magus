@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
+	"iter"
 	"slices"
 	"strings"
 	"unicode"
@@ -260,14 +261,28 @@ func (m *Model) start(at diff.Cursor) {
 	m.setCursor(file, hunk)
 }
 
-// Rows returns every visible row, cursor included. The renderer windows it.
+// Rows yields every visible row with its index, cursor included. The renderer windows it with
+// RowAt and RowCount instead.
 //
-// The slice ALIASES the model's own, which rebuild refills in place. A cursor move does not
-// rebuild, but a fold or a read mark does, and a row list that grew REALLOCATES, so an earlier
-// return value is left pointing at whichever backing array it was handed, stale rather than
-// live. Read it and drop it rather than holding it. Copying instead would allocate the whole
-// changeset on each of the frames a keypress draws, which is the cost the reuse exists to avoid.
-func (m *Model) Rows() []Row { return m.rows }
+// The iterator reads the model's own rows, which rebuild refills in place, so it is for one
+// pass and does not survive a fold or a read mark. Yielding instead of returning the slice
+// keeps a caller from editing the model's rows, and spares the allocation of a copy of the
+// whole changeset on each of the frames a keypress draws.
+func (m *Model) Rows() iter.Seq2[int, Row] {
+	return func(yield func(int, Row) bool) {
+		for i, r := range m.rows {
+			if !yield(i, r) {
+				return
+			}
+		}
+	}
+}
+
+// RowCount is how many rows Rows yields.
+func (m *Model) RowCount() int { return len(m.rows) }
+
+// RowAt is the row at index i of Rows.
+func (m *Model) RowAt(i int) Row { return m.rows[i] }
 
 // CursorRow is the index into Rows of the row the cursor marks, or -1 when there is none.
 func (m *Model) CursorRow() int { return m.cursorRow }

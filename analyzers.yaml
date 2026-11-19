@@ -15,24 +15,7 @@ accessorclone:
   settings:
     hint: "do not add a baseline entry or a //nolint: only a person types one into analyzers.yaml"
   # file: [Recv.Name or Name]
-  baseline:
-    internal/interactive/difftui/model.go: [Model.Rows]
-    internal/job/evidence/graph.go: [Graph.StaleIndexes]
-    internal/selfupdate/keyring.go: [Keyring.Without]
-    spells/spell.go:
-      - Spell.DeclarationDirGlobs
-      - Spell.DeclarationFiles
-      - Spell.DocRequiredTargets
-      - Spell.IgnoreDirs
-      - Spell.LanguageExtensions
-      - Spell.Manifests
-      - Spell.Outputs
-      - Spell.ScriptRunners
-      - Spell.Sources
-      - Spell.TargetSources
-      - Spell.Targets
-    types/describe.go: [Chain.Needs]
-    types/output.go: [StoredOutput.Bytes]
+  baseline: {}
   # - {path, symbol, reason}
   exits: []
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -112,16 +113,16 @@ func (s *Spell) FuncSource() string { return s.funcSource }
 
 var _ FuncSource = (*Spell)(nil)
 
-func (s *Spell) Sources() []string { return s.sources }
-func (s *Spell) Outputs() []string { return s.outputs }
-func (s *Spell) Targets() []string { return s.targets }
+func (s *Spell) Sources() []string { return slices.Clone(s.sources) }
+func (s *Spell) Outputs() []string { return slices.Clone(s.outputs) }
+func (s *Spell) Targets() []string { return slices.Clone(s.targets) }
 
 // IgnoreDirs returns the non-source directory names this spell's ecosystem
 // generates (vendor, node_modules, target, ...), declared by mgs_listIgnoreDirs.
 // The input-hashing walk prunes them for a project this spell resolves, so the
 // engine holds no language-specific directory names. Dot-directories are skipped
 // structurally and never appear here.
-func (s *Spell) IgnoreDirs() []string { return s.ignoreDirs }
+func (s *Spell) IgnoreDirs() []string { return slices.Clone(s.ignoreDirs) }
 
 // Language returns the canonical source language the spell adapts (e.g. "go",
 // "typescript"), or "" when it adapts no single language. It tags the spell node so a
@@ -130,7 +131,7 @@ func (s *Spell) Language() string { return s.language }
 
 // LanguageExtensions returns the file extensions that are the language, from
 // the Language record's extensions field.
-func (s *Spell) LanguageExtensions() []string { return s.languageExtensions }
+func (s *Spell) LanguageExtensions() []string { return slices.Clone(s.languageExtensions) }
 
 // Syntax returns the declared comment and stub syntax, or nil.
 func (s *Spell) Syntax() *Syntax { return s.syntax }
@@ -159,9 +160,15 @@ func (s *Spell) Opaque() bool                     { return s.opaque }
 
 // Internal reports whether this registration is dispatch plumbing rather than a
 // spell a user binds. See [WithInternal].
-func (s *Spell) Internal() bool                     { return s.internal }
-func (s *Spell) TargetSources() map[string][]string { return s.targetSources }
-func (s *Spell) Charms(target string) []string      { return s.targetCharms[target] }
+func (s *Spell) Internal() bool { return s.internal }
+func (s *Spell) TargetSources() map[string][]string {
+	out := maps.Clone(s.targetSources)
+	for target, sources := range out {
+		out[target] = slices.Clone(sources)
+	}
+	return out
+}
+func (s *Spell) Charms(target string) []string { return s.targetCharms[target] }
 
 // RenderCommand returns the command a fork target would run with the given
 // charms applied — cmd plus the charm-patched argv — for static preview
@@ -213,8 +220,8 @@ func (s *Spell) ServiceView(target string) (view *ServiceView, ok bool) {
 	return s.serviceView(target)
 }
 
-func (s *Spell) DeclarationFiles() []string    { return s.declarationFiles }
-func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
+func (s *Spell) DeclarationFiles() []string    { return slices.Clone(s.declarationFiles) }
+func (s *Spell) DeclarationDirGlobs() []string { return slices.Clone(s.declarationDirGlobs) }
 
 // Manifests returns the ordered candidate manifests this spell's ecosystem declares
 // (go.mod, package.json, Cargo.toml, pyproject.toml), each with the lockfiles that
@@ -238,12 +245,12 @@ func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
 // file IS a project of mine" (discovery), used today only by the magusfile spell.
 // VersionProbe is the TOOLCHAIN's version (`go version`), which feeds cache keys,
 // not the project's own version.
-func (s *Spell) Manifests() []Manifest { return s.manifests }
+func (s *Spell) Manifests() []Manifest { return slices.Clone(s.manifests) }
 
 // ScriptRunners returns the argv prefixes that run a script this spell's manifests
 // define, as declared by mgs_listScriptRunners; nil when the spell declares none.
 // Match an argv against them with MatchScriptRunner.
-func (s *Spell) ScriptRunners() []Command { return s.scriptRunners }
+func (s *Spell) ScriptRunners() []Command { return slices.Clone(s.scriptRunners) }
 
 // TargetDoc returns the documentation comment of the named target's handler, or
 // "" when undocumented or unknown.
@@ -252,7 +259,7 @@ func (s *Spell) TargetDoc(target string) string { return s.targetDocs[target] }
 // DocRequiredTargets returns the function-handler targets `magus doctor` requires
 // a doc comment on. Non-empty only for workspace-local Buzz spells (record-style
 // {cmd,args} ops and Teal spells, whose comments aren't captured, are excluded).
-func (s *Spell) DocRequiredTargets() []string { return s.docRequiredTargets }
+func (s *Spell) DocRequiredTargets() []string { return slices.Clone(s.docRequiredTargets) }
 
 // DependsOn returns in-workspace dependency paths for the project at dir.
 func (s *Spell) DependsOn(dir string) []string {
