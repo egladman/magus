@@ -87,15 +87,6 @@ export fun shim(hook: str, script: str, include: str) > str {
         + "BUZZ_INCLUDE_PATH=\"{root}\" exec magus buzz -s \"$script\" -- \"$@\"\n";
 }
 
-// hooksIn lists the hooks dir declares, one per <hook>.buzz file.
-export fun hooksIn(dir: str) > [str] !> any { //nolint:no-throw // install raises its refusals before writing
-    final found = declaredHooks(dir);
-    if (found.error -> e) {
-        throw e.message; //nolint:no-throw // install raises its refusals before writing
-    }
-    return found.value!;
-}
-
 fun declaredHooks(dir: str) > result\Result::<[str]> {
     try {
         if (!fs\isDir(dir)) { return result\fail::<[str]>("git hooks: {dir} is not a directory"); }

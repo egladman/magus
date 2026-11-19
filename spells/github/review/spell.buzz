@@ -264,17 +264,27 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
     // until a merge became worth noticing. Ask again without that filter before reporting none:
     // a branch whose pull request just landed is the ordinary end of a review, not the absence
     // of one, and the reader is owed the difference.
-    return closedReview(url, auth: auth.value!, repo: repo, wantViewer: req.wantViewer);
+    final closed = closedReview(url, auth: auth.value!, repo: repo, wantViewer: req.wantViewer);
+    if (closed.error -> e) {
+        //nolint:no-throw // magus reads a raise as a failed review call
+        throw e.message;
+    }
+    return closed.value!;
 }
 
-fun closedReview(url: str, auth: any, repo: str, wantViewer: bool) > ReviewTarget !> any { //nolint:no-throw // magus reads a raise as a failed review call
-    final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: auth);
-    if (all["status"] != 200) {
-        return ReviewTarget{ reason = "no pull request for this branch" };
+fun closedReview(url: str, auth: any, repo: str, wantViewer: bool) > result\Result::<ReviewTarget> {
+    var closed = [<serialize\Boxed>];
+    try {
+        final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: auth);
+        if (all["status"] != 200) {
+            return result\ok::<ReviewTarget>(ReviewTarget{ reason = "no pull request for this branch" });
+        }
+        closed = serialize\jsonDecode(all["body"]).listValue();
+    } catch (err: any) {
+        return result\caught::<ReviewTarget>(err);
     }
-    final closed = serialize\jsonDecode(all["body"]).listValue();
     if (closed.len() == 0) {
-        return ReviewTarget{ reason = "no pull request for this branch" };
+        return result\ok::<ReviewTarget>(ReviewTarget{ reason = "no pull request for this branch" });
     }
     // A MERGED one wins over a merely closed one, whatever the sort said. These arrive newest-
     // updated first, so a branch that carried two pull requests - one merged last week, one
@@ -295,16 +305,15 @@ fun closedReview(url: str, auth: any, repo: str, wantViewer: bool) > ReviewTarge
     }
     final viewer = viewerLogin(wantViewer);
     if (viewer.error -> e) {
-        //nolint:no-throw // magus reads a raise as a failed review call
-        throw e.message;
+        return result\Result::<ReviewTarget>{ error = e };
     }
-    return ReviewTarget{
+    return result\ok::<ReviewTarget>(ReviewTarget{
         id = "{pick.q("number").integerValue()}",
         repo = repo,
         state = state,
         author = pick.q("user").q("login").stringValue(),
         viewer = viewer.value!,
-    };
+    });
 }
 
 // viewerLogin names who the credential belongs to, and ONLY when magus asks.
@@ -464,32 +473,36 @@ object Tally {
 
 // getJson reads one resource. Every GET revalidates, so an unchanged
 // resource costs a 304, which GitHub does not count against the limit.
-fun getJson(url: str, auth: any, tally: Tally) > serialize\Boxed !> any {
-    final res = http\get(
-        url,
-        headers: auth,
-        opts: http\Options{ revalidate = true },
-    );
-    tally.requests = tally.requests + 1;
-    final status = res["status"];
-    if (status == 304) {
-        tally.revalidated = tally.revalidated + 1;
-    }
-    final seen = res["headers"];
-    final remaining = seen["X-Ratelimit-Remaining"] ?? "";
-    if (remaining != "") {
-        tally.limit = std\parseInt(seen["X-Ratelimit-Limit"] ?? "0") ?? 0;
-        tally.remaining = std\parseInt(remaining) ?? 0;
-        final epoch = std\parseInt(seen["X-Ratelimit-Reset"] ?? "0") ?? 0;
-        tally.reset = if (epoch == 0) "" else time\format(
-            "2006-01-02T15:04:05Z",
-            unixMillis: std\toDouble(epoch * 1000),
+fun getJson(url: str, auth: any, tally: Tally) > result\Result::<serialize\Boxed> {
+    try {
+        final res = http\get(
+            url,
+            headers: auth,
+            opts: http\Options{ revalidate = true },
         );
+        tally.requests = tally.requests + 1;
+        final status = res["status"];
+        if (status == 304) {
+            tally.revalidated = tally.revalidated + 1;
+        }
+        final seen = res["headers"];
+        final remaining = seen["X-Ratelimit-Remaining"] ?? "";
+        if (remaining != "") {
+            tally.limit = std\parseInt(seen["X-Ratelimit-Limit"] ?? "0") ?? 0;
+            tally.remaining = std\parseInt(remaining) ?? 0;
+            final epoch = std\parseInt(seen["X-Ratelimit-Reset"] ?? "0") ?? 0;
+            tally.reset = if (epoch == 0) "" else time\format(
+                "2006-01-02T15:04:05Z",
+                unixMillis: std\toDouble(epoch * 1000),
+            );
+        }
+        if (status != 200 and status != 304) {
+            return result\fail::<serialize\Boxed>("github: HTTP {status}");
+        }
+        return result\ok::<serialize\Boxed>(serialize\jsonDecode(res["body"]));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed>(err);
     }
-    if (status != 200 and status != 304) {
-        throw "github: HTTP {status}";
-    }
-    return serialize\jsonDecode(res["body"]);
 }
 
 fun isHex(text: str) > bool {
@@ -569,14 +582,15 @@ export fun statusState(state: str) > str {
 
 // checksFor reads the check runs and statuses of one commit. Only a failed
 // check run costs a second request, for its annotations.
-fun failureLines(api: str, id: int, run: serialize\Boxed, auth: any, tally: Tally) > mut [str] !> any {
+fun failureLines(api: str, id: int, run: serialize\Boxed, auth: any, tally: Tally) > result\Result::<mut [str]> {
     final lines = mut [<str>];
     final notes = getJson(
         api + "/check-runs/{id}/annotations",
         auth: auth,
         tally: tally,
     );
-    foreach (note in notes.listValue()) {
+    if (notes.error -> e) { return result\Result::<mut [str]>{ error = e }; }
+    foreach (note in notes.value!.listValue()) {
         final message = note.q("message").stringValue().trim();
         if (lines.len() < 5 and message != "") {
             lines.append(message);
@@ -587,10 +601,10 @@ fun failureLines(api: str, id: int, run: serialize\Boxed, auth: any, tally: Tall
             lines.append(line);
         }
     }
-    return lines;
+    return result\ok::<mut [str]>(lines);
 }
 
-fun checksFor(repo: str, sha: str, auth: any, tally: Tally) > [ForgeCheck] !> any {
+fun checksFor(repo: str, sha: str, auth: any, tally: Tally) > result\Result::<[ForgeCheck]> {
     final api = apiBase() + "/repos/" + repo;
     final rows = mut [<ForgeCheck>];
     final runs = getJson(
@@ -598,13 +612,19 @@ fun checksFor(repo: str, sha: str, auth: any, tally: Tally) > [ForgeCheck] !> an
         auth: auth,
         tally: tally,
     );
-    foreach (run in runs.q("check_runs").listValue()) {
+    if (runs.error -> e) { return result\Result::<[ForgeCheck]>{ error = e }; }
+    foreach (run in runs.value!.q("check_runs").listValue()) {
         final state = checkState(
             run.q("status").stringValue(),
             conclusion: run.q("conclusion").stringValue(),
         );
         final id = run.q("id").integerValue();
-        final lines = if (state == "failed") failureLines(api, id: id, run: run, auth: auth, tally: tally) else mut [<str>];
+        var lines = mut [<str>];
+        if (state == "failed") {
+            final failed = failureLines(api, id: id, run: run, auth: auth, tally: tally);
+            if (failed.error -> e) { return result\Result::<[ForgeCheck]>{ error = e }; }
+            lines = failed.value!;
+        }
         rows.append(ForgeCheck{
             name = run.q("name").stringValue(),
             kind = "check",
@@ -623,10 +643,11 @@ fun checksFor(repo: str, sha: str, auth: any, tally: Tally) > [ForgeCheck] !> an
         auth: auth,
         tally: tally,
     );
-    foreach (st in combined.q("statuses").listValue()) {
+    if (combined.error -> e) { return result\Result::<[ForgeCheck]>{ error = e }; }
+    foreach (st in combined.value!.q("statuses").listValue()) {
         rows.append(statusCheck(st));
     }
-    return rows;
+    return result\ok::<[ForgeCheck]>(rows);
 }
 
 fun statusCheck(st: serialize\Boxed) > ForgeCheck {
@@ -675,61 +696,68 @@ export fun landedPull(subject: str) > int {
 }
 
 fun behindBy(api: str, base: str, sha: str, auth: any, tally: Tally) > int {
-    try {
-        final cmp = getJson(
-            api + "/compare/" + base + "..." + sha,
-            auth: auth,
-            tally: tally,
-        );
-        return cmp.q("behind_by").integerValue();
-    } catch (err: any) {
+    final cmp = getJson(
+        api + "/compare/" + base + "..." + sha,
+        auth: auth,
+        tally: tally,
+    );
+    if (cmp.error != null) {
         return -1;
     }
+    return cmp.value!.q("behind_by").integerValue();
 }
 
-fun changedFiles(api: str, number: int, auth: any, tally: Tally) > [str] !> any {
+fun changedFiles(api: str, number: int, auth: any, tally: Tally) > result\Result::<[str]> {
     final files = mut [<str>];
     final changed = getJson(
         api + "/pulls/{number}/files?per_page=100",
         auth: auth,
         tally: tally,
     );
-    foreach (f in changed.listValue()) {
+    if (changed.error -> e) { return result\Result::<[str]>{ error = e }; }
+    foreach (f in changed.value!.listValue()) {
         files.append(f.q("filename").stringValue());
     }
-    return files;
+    return result\ok::<[str]>(files);
 }
 
-fun latestReviews(api: str, number: int, auth: any, tally: Tally) > {str: str} !> any {
+fun latestReviews(api: str, number: int, auth: any, tally: Tally) > result\Result::<{str: str}> {
     final latest = mut {<str, str>};
     final reviews = getJson(
         api + "/pulls/{number}/reviews?per_page=100",
         auth: auth,
         tally: tally,
     );
-    foreach (r in reviews.listValue()) {
+    if (reviews.error -> e) { return result\Result::<{str: str}>{ error = e }; }
+    foreach (r in reviews.value!.listValue()) {
         final state = r.q("state").stringValue();
         if (state == "APPROVED" or state == "CHANGES_REQUESTED" or state == "DISMISSED") {
             latest[r.q("user").q("login").stringValue()] = state;
         }
     }
-    return latest;
+    return result\ok::<{str: str}>(latest);
 }
 
-fun readPull(item: serialize\Boxed, repo: str, base: str, auth: any, tally: Tally) > ForgePull !> any {
+fun readPull(item: serialize\Boxed, repo: str, base: str, auth: any, tally: Tally) > result\Result::<ForgePull> {
     final api = apiBase() + "/repos/" + repo;
     final number = item.q("number").integerValue();
     final sha = item.q("head").q("sha").stringValue();
     final detail = getJson(api + "/pulls/{number}", auth: auth, tally: tally);
-    final mstate = detail.q("mergeable_state").stringValue();
+    if (detail.error -> e) { return result\Result::<ForgePull>{ error = e }; }
+    final mstate = detail.value!.q("mergeable_state").stringValue();
     final mergeable = if (mstate == "dirty") "conflicting"
         else if (mstate == "" or mstate == "unknown") "unknown"
         else "mergeable";
     final behind = behindBy(api, base: base, sha: sha, auth: auth, tally: tally);
     final files = changedFiles(api, number: number, auth: auth, tally: tally);
+    if (files.error -> e) { return result\Result::<ForgePull>{ error = e }; }
     final latest = latestReviews(api, number: number, auth: auth, tally: tally);
+    if (latest.error -> e) { return result\Result::<ForgePull>{ error = e }; }
     final pushed = getJson(api + "/git/commits/" + sha, auth: auth, tally: tally);
-    return ForgePull{
+    if (pushed.error -> e) { return result\Result::<ForgePull>{ error = e }; }
+    final checks = checksFor(repo, sha: sha, auth: auth, tally: tally);
+    if (checks.error -> e) { return result\Result::<ForgePull>{ error = e }; }
+    return result\ok::<ForgePull>(ForgePull{
         number = number,
         title = item.q("title").stringValue(),
         author = item.q("user").q("login").stringValue(),
@@ -741,16 +769,16 @@ fun readPull(item: serialize\Boxed, repo: str, base: str, auth: any, tally: Tall
         mergeable = mergeable,
         behindBy = behind,
         review = reviewState(
-            latest,
+            latest.value!,
             requested: item.q("requested_reviewers").listValue().len() > 0,
         ),
-        pushedAt = pushed.q("committer").q("date").stringValue(),
-        checks = checksFor(repo, sha: sha, auth: auth, tally: tally),
-        files = files,
-    };
+        pushedAt = pushed.value!.q("committer").q("date").stringValue(),
+        checks = checks.value!,
+        files = files.value!,
+    });
 }
 
-fun readBase(repo: str, name: str, auth: any, tally: Tally) > BaseBranch !> any {
+fun readBase(repo: str, name: str, auth: any, tally: Tally) > result\Result::<BaseBranch> {
     final api = apiBase() + "/repos/" + repo;
     final commits = mut [<BaseCommit>];
     var tipUrl = "";
@@ -759,7 +787,8 @@ fun readBase(repo: str, name: str, auth: any, tally: Tally) > BaseBranch !> any 
         auth: auth,
         tally: tally,
     );
-    foreach (c in log.listValue()) {
+    if (log.error -> e) { return result\Result::<BaseBranch>{ error = e }; }
+    foreach (c in log.value!.listValue()) {
         if (tipUrl == "") {
             tipUrl = c.q("html_url").stringValue();
         }
@@ -772,16 +801,18 @@ fun readBase(repo: str, name: str, auth: any, tally: Tally) > BaseBranch !> any 
         });
     }
     if (commits.len() == 0) {
-        throw "github: no commits on {name}";
+        return result\fail::<BaseBranch>("github: no commits on {name}");
     }
     final tip = commits[0].sha;
-    return BaseBranch{
+    final checks = checksFor(repo, sha: tip, auth: auth, tally: tally);
+    if (checks.error -> e) { return result\Result::<BaseBranch>{ error = e }; }
+    return result\ok::<BaseBranch>(BaseBranch{
         name = name,
         sha = tip,
         url = tipUrl,
-        checks = checksFor(repo, sha: tip, auth: auth, tally: tally),
+        checks = checks.value!,
         commits = commits,
-    };
+    });
 }
 
 fun readPulls(req: ListPullsRequest, repo: str, viewer: str, auth: any) > result\Result::<PullList> {
@@ -791,28 +822,27 @@ fun readPulls(req: ListPullsRequest, repo: str, viewer: str, auth: any) > result
         wanted.append(a.lower());
     }
     final pulls = mut [<ForgePull>];
-    var onBase = BaseBranch{ name = req.base };
-    try {
-        onBase = readBase(repo, name: req.base, auth: auth, tally: tally);
-        final open = getJson(
-            apiBase() + "/repos/" + repo + "/pulls?state=open&base=" + req.base + "&per_page=100",
-            auth: auth,
-            tally: tally,
-        );
-        foreach (item in open.listValue()) {
-            final login = item.q("user").q("login").stringValue().lower();
-            if (wanted.len() > 0 and wanted.indexOf(login) == null) {
-                continue;
-            }
-            pulls.append(readPull(item, repo: repo, base: req.base, auth: auth, tally: tally));
+    final onBase = readBase(repo, name: req.base, auth: auth, tally: tally);
+    if (onBase.error -> e) { return result\Result::<PullList>{ error = e }; }
+    final open = getJson(
+        apiBase() + "/repos/" + repo + "/pulls?state=open&base=" + req.base + "&per_page=100",
+        auth: auth,
+        tally: tally,
+    );
+    if (open.error -> e) { return result\Result::<PullList>{ error = e }; }
+    foreach (item in open.value!.listValue()) {
+        final login = item.q("user").q("login").stringValue().lower();
+        if (wanted.len() > 0 and wanted.indexOf(login) == null) {
+            continue;
         }
-    } catch (err: any) {
-        return result\caught::<PullList>(err);
+        final pull = readPull(item, repo: repo, base: req.base, auth: auth, tally: tally);
+        if (pull.error -> e) { return result\Result::<PullList>{ error = e }; }
+        pulls.append(pull.value!);
     }
     return result\ok::<PullList>(PullList{
         repo = repo,
         viewer = viewer,
-        base = onBase,
+        base = onBase.value!,
         pulls = pulls,
         rate = RateLimit{
             limit = tally.limit,
