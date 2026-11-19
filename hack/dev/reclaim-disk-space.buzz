@@ -15,10 +15,14 @@ import "fs";
 import "os";
 import "result";
 import "std";
+import "strings";
+import "term";
 import "time";
 import "vcs";
 import "serialize";
 import "magus/reclaimdisk" as reclaim;
+import "hack/lib/prompt";
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -68,6 +72,12 @@ fun cachesNote(caches: bool, applied: bool, fence: double, keepWithin: str) > re
     return result\ok::<str>("");
 }
 
+// asks reports whether the plan ends in a question: only a person at a terminal, reading
+// the text plan, with something to remove and --apply left off. -o json is a machine's.
+export fun asks(format: str, applied: bool, removable: int, interactive: bool) > bool {
+    return interactive and format == "text" and !applied and removable > 0;
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--apply", "--caches", "--help"], valued: ["--keep-recent", "--keep-within", "--base", "-o"]);
     if (parsed.values["--help"] != null) {
@@ -99,22 +109,46 @@ export fun main(args: [str]) > void !> any {
 
     final s = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
     final planned = reclaim\rank(s.items);
-    final items = if (applied) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
-    final cached = cachesNote(caches, applied: applied, fence: fence, keepWithin: keepWithin);
+    final t = reclaim\totals(planned);
+    var go = applied;
+    // A person at a terminal who left --apply off sees the plan, then is asked once; a run
+    // with no terminal, or -o json, stays the dry run the missing flag means.
+    var shown = false;
+    if (asks(format, applied: applied, removable: t.removableWorktrees + t.branches, interactive: term\isInteractive())) {
+        final dry = cachesNote(caches, applied: false, fence: fence, keepWithin: keepWithin);
+        if (dry.error != null) {
+            throw dry.error!.message;
+        }
+        std\print(reclaim\headline(planned, applied: false, trimmed: dry.value!));
+        foreach (line in reclaim\render(planned)) { std\print(line); }
+        shown = true;
+        final asked = prompt\confirmed(false, flag: "--apply",
+            question: "remove {strings\pluralCount(t.removableWorktrees, one: "worktree", many: "worktrees")} ({reclaim\size(t.removableKiB)}) and {strings\pluralCount(t.branches, one: "agent branch", many: "agent branches")}?");
+        if (asked.error != null) {
+            throw "reclaim-disk-space: {asked.error!.message}";
+        }
+        go = asked.value!;
+    }
+    if (shown and !go) {
+        std\print("declined: nothing removed");
+        return;
+    }
+    final items = if (go) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
+    final cached = cachesNote(caches, applied: go, fence: fence, keepWithin: keepWithin);
     if (cached.error != null) {
         throw cached.error!.message;
     }
     final trimmed = cached.value!;
     // -o json prints the plan document alone, so a reader can parse the whole of stdout.
     if (format == "json") {
-        final encoded = encode(s, items: items, applied: applied, keepRecent: keepRecent, trimmed: trimmed);
+        final encoded = encode(s, items: items, applied: go, keepRecent: keepRecent, trimmed: trimmed);
         if (encoded.error != null) {
             throw encoded.error!.message;
         }
         std\print(encoded.value!);
         return;
     }
-    std\print(reclaim\headline(items, applied: applied, trimmed: trimmed));
+    std\print(reclaim\headline(items, applied: go, trimmed: trimmed));
     foreach (line in reclaim\render(items)) { std\print(line); }
 }
 
@@ -224,4 +258,12 @@ test "the plan ranks the largest reclaim first, unmeasured rows last, removable 
     assert\equal(reclaim\size(900000), want: "878 MiB", message: "MiB");
     assert\equal(reclaim\size(5452596), want: "5.2 GiB", message: "GiB");
     assert\equal(reclaim\age(3.0 * 86400000.0), want: "3d", message: "days");
+}
+
+test "only a terminal reading a text plan with something removable and no --apply is asked" {
+    assert\equal(asks("text", applied: false, removable: 2, interactive: true), want: true, message: "asked");
+    assert\equal(asks("text", applied: false, removable: 2, interactive: false), want: false, message: "no terminal is the dry run");
+    assert\equal(asks("json", applied: false, removable: 2, interactive: true), want: false, message: "json is a machine's");
+    assert\equal(asks("text", applied: true, removable: 2, interactive: true), want: false, message: "--apply answers");
+    assert\equal(asks("text", applied: false, removable: 0, interactive: true), want: false, message: "nothing to remove");
 }

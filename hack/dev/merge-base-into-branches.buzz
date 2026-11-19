@@ -20,8 +20,11 @@ import "magus";
 import "proc";
 import "result";
 import "std";
+import "strings";
+import "term";
 import "vcs";
 import "hack/dev/bootstrap-checkout" as bootstrap;
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -374,6 +377,23 @@ fun liveShell() > Shell {
     };
 }
 
+// localBranches are the local branches, oldest commit first so a stack reads bottom up,
+// for the --branches prompt.
+export fun localBranches(root: str) > result\Result::<[str]> {
+    try {
+        final listed = vcs\cmd(["for-each-ref", "--sort=committerdate", "--format=%(refname:short)", "refs/heads"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+        return result\ok::<[str]>(listed.split("\n").map(fun (i: int, l: str) > str => l.trim()).filter(fun (i: int, l: str) > bool => l != ""));
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "merge-base-into-branches: list the local branches");
+    }
+}
+
+// asksStack reports whether the run asks if the branches are a stack: only for a list the
+// person just picked, since a typed --branches comes with --stack or without it on purpose.
+export fun asksStack(picked: bool, stacked: bool, branches: int, interactive: bool) > bool {
+    return interactive and picked and !stacked and branches > 1;
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help", "--dry-run", "--stack", "--push"], valued: ["--branches", "--base"]);
     if (parsed.values["--help"] != null) {
@@ -384,15 +404,50 @@ export fun main(args: [str]) > void !> any {
         throw "merge-base-into-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final named = parsed.values["--branches"] ?? "";
-    final branches = if (named == "") [<str>] else named.split(",").map(fun (index: int, b: str) > str => b.trim());
+    var branches = if (named == "") [<str>] else named.split(",").map(fun (index: int, b: str) > str => b.trim());
+    var stacked = parsed.values["--stack"] != null;
+    var push = parsed.values["--push"] != null;
+    final dryRun = parsed.values["--dry-run"] != null;
+    var picked = false;
+    if (named == "") {
+        var offered = [<str>];
+        if (term\isInteractive()) {
+            final found = localBranches(vcs\root());
+            if (found.error -> err) {
+                throw err.message;
+            }
+            offered = found.value!;
+        }
+        final marked = prompt\chooseMany([<str>], flag: "--branches", items: offered, question: "which branches? Tab marks, Enter confirms; a stack reads oldest first");
+        if (marked.error -> err) {
+            throw "merge-base-into-branches: {err.message}\n{USAGE}";
+        }
+        branches = marked.value!;
+        picked = true;
+    }
     final problem = branchesProblem(branches);
     if (problem != "") {
         throw "merge-base-into-branches: {problem}\n{USAGE}";
     }
-    final stack = steps(branches, base: parsed.values["--base"] ?? "origin/main", stacked: parsed.values["--stack"] != null, push: parsed.values["--push"] != null);
+    if (asksStack(picked, stacked: stacked, branches: branches.len(), interactive: term\isInteractive())) {
+        final asked = prompt\confirmed(false, flag: "--stack", question: "is {branches.join(", ")} a stack, each branch merging the one before it?");
+        if (asked.error -> err) {
+            throw "merge-base-into-branches: {err.message}";
+        }
+        stacked = asked.value!;
+    }
+    // The merge is local; the push reaches origin, so it is asked about once, before the first merge.
+    if (!push and !dryRun and term\isInteractive()) {
+        final asked = prompt\confirmed(false, flag: "--push", question: "push {strings\pluralCount(branches.len(), one: "branch", many: "branches")} after merging?");
+        if (asked.error -> err) {
+            throw "merge-base-into-branches: {err.message}";
+        }
+        push = asked.value!;
+    }
+    final stack = steps(branches, base: parsed.values["--base"] ?? "origin/main", stacked: stacked, push: push);
     final sh = liveShell();
     final here = vcs\root();
-    if (parsed.values["--dry-run"] != null) {
+    if (dryRun) {
         std\print("dry run: nothing changes");
         final fetch = fetchArgv(stack);
         if (fetch.len() > 0) {
@@ -613,4 +668,25 @@ test "a merge is not pushed unless the step asks for it" {
     assert\equal(plan(Step{ branch = "b", against = "a" }, dir: "").filter(fun (index: int, c: str) > bool => c.startsWith("git push")).len(), want: 0, message: "plan");
     assert\equal(steps(["a"], base: "origin/main", stacked: false)[0].push, want: false, message: "default");
     assert\equal(steps(["a"], base: "origin/main", stacked: false, push: true)[0].push, want: true, message: "--push");
+}
+
+test "a stack is asked about only for a list just picked on a terminal" {
+    assert\equal(asksStack(true, stacked: false, branches: 2, interactive: true), want: true, message: "picked");
+    assert\equal(asksStack(false, stacked: false, branches: 2, interactive: true), want: false, message: "typed --branches");
+    assert\equal(asksStack(true, stacked: true, branches: 2, interactive: true), want: false, message: "--stack answers");
+    assert\equal(asksStack(true, stacked: false, branches: 1, interactive: true), want: false, message: "one branch");
+    assert\equal(asksStack(true, stacked: false, branches: 2, interactive: false), want: false, message: "no terminal");
+}
+
+test "with no terminal an absent --branches fails naming the flag" {
+    if (term\isInteractive()) {
+        return;
+    }
+    var why = "";
+    try {
+        main(["--base", "origin/main"]);
+    } catch (err: any) {
+        why = "{err}";
+    }
+    assert\equal(why.startsWith("merge-base-into-branches: --branches is required (no terminal to ask on)"), want: true, message: why);
 }

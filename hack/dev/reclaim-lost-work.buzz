@@ -13,8 +13,10 @@ import "flags";
 import "fs";
 import "result";
 import "std";
+import "term";
 import "vcs";
 import "magus/reclaimdisk" as reclaim;
+import "hack/lib/prompt";
 
 final USAGE = "usage: magus buzz hack/dev/reclaim-lost-work.buzz -- [<item>]";
 final HELP = "cost: a few git reads, plus one status read per worktree\n{USAGE}";
@@ -54,6 +56,24 @@ export fun render(items: [AtRisk]) > [str] {
         lines.append("{item.id}  {item.state}  {item.note}");
     }
     return lines;
+}
+
+// keepable are the items a keep would act on, each under the row render prints for it, so a
+// prompt can offer the rows and read the item id back.
+export fun keepable(items: [AtRisk]) > {str: str} {
+    final rows = mut {<str: str>};
+    foreach (item in items) {
+        if (item.state == "restorable") {
+            rows[render([item])[0]] = item.id;
+        }
+    }
+    return rows;
+}
+
+// asksForItem reports whether the run ends by asking which item to keep: no id was passed
+// and a person is there to answer. With no terminal the listing is the whole run.
+export fun asksForItem(given: str, interactive: bool) > bool {
+    return given == "" and interactive;
 }
 
 // revOf is the commit a ref names, "" when the ref does not exist.
@@ -168,15 +188,27 @@ export fun main(args: [str]) > void !> any {
         throw listed.error!.message;
     }
 
-    if (parsed.positionals.len() == 0) {
+    var want = if (parsed.positionals.len() > 0) parsed.positionals[0] else "";
+    if (want == "") {
         std\print("read-only: pass an item id to keep it on a recover/ branch");
         foreach (line in render(listed.value!)) {
             std\print(line);
         }
-        return;
+        // At a terminal the id is picked from the rows just printed, so it is never copied by hand.
+        if (!asksForItem(want, interactive: term\isInteractive())) {
+            return;
+        }
+        final rows = keepable(listed.value!);
+        if (rows.len() == 0) {
+            std\print("nothing is restorable");
+            return;
+        }
+        final picked = prompt\choose(null, flag: "<item>", items: rows.keys(), question: "keep which item on a recover/ branch?");
+        if (picked.error != null) {
+            throw "recover-work: {picked.error!.message}";
+        }
+        want = rows[picked.value!]!;
     }
-
-    final want = parsed.positionals[0];
     foreach (item in listed.value!) {
         if (item.id != want) {
             continue;
@@ -216,4 +248,19 @@ test "rows render id, state and note" {
     assert\equal(render([
         AtRisk{ id = "stash:1234567", kind = "stash", commit = "1234567", target = "recover/stash-1234567", note = "WIP on main", state = "restorable" },
     ]), want: ["stash:1234567  restorable  WIP on main"], message: "row");
+}
+
+test "only a restorable item is offered, under the row render prints" {
+    final rows = keepable([
+        AtRisk{ id = "stash:1234567", kind = "stash", commit = "1234567", target = "recover/stash-1234567", note = "WIP", state = "restorable" },
+        AtRisk{ id = "stash:89abcde", kind = "stash", commit = "89abcde", target = "recover/stash-89abcde", note = "old", state = "kept" },
+        AtRisk{ id = "gone:/w", kind = "gone", commit = "", target = "", note = "/w: gone, detached", state = "nothing" },
+    ]);
+    assert\equal(rows, want: {"stash:1234567  restorable  WIP": "stash:1234567"}, message: "rows");
+}
+
+test "an item is asked for only at a terminal, and only when the list was asked for" {
+    assert\equal(asksForItem("", interactive: true), want: true, message: "terminal");
+    assert\equal(asksForItem("", interactive: false), want: false, message: "no terminal lists and stops");
+    assert\equal(asksForItem("stash:1234567", interactive: true), want: false, message: "the id answers");
 }
