@@ -114,7 +114,7 @@ func readPinned(path, pin string) (*embed.Table, error) {
 	tbl, err := embed.ReadTable(data)
 	if errors.Is(err, embed.ErrLegacyFormat) {
 		// A derived artifact, like a cache entry: unavailable until retrained, never fatal.
-		slog.Warn("the embedding table is in an older format and is unavailable; the embed list is skipped",
+		slog.WarnContext(context.Background(), "the embedding table is in an older format and is unavailable; the embed list is skipped",
 			slog.String("table", path), slog.String("retrain", "magus run table libs/train"), slog.String("publish", "magus graph push -table"))
 		return nil, fmt.Errorf("%w: %s is in an older format: retrain it with `magus run table libs/train` and publish it with `magus graph push -table`", errAbsent, path)
 	}
