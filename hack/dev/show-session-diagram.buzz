@@ -268,11 +268,7 @@ export fun rendered(tr: JobTree, format: str, theme: diagram\Theme, console: str
         if (drawn.error != null) {
             return result\Result::<str>{ error = drawn.error };
         }
-        try {
-            return result\ok::<str>(diagram\draw(drawn.value!, theme: theme));
-        } catch (err: any) {
-            return result\caught::<str>(err, doing: "show-session-diagram: render the diagram");
-        }
+        return diagram\draw(drawn.value!, theme: theme);
     }
     final url = link(tr, base: console);
     if (url.error != null) {
