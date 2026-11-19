@@ -24,10 +24,10 @@ func (s *StoreVersionSuite) TestANewerWriterNamesWhatItLacks() {
 	s.Contains(err.Error(), `/s/jobs.jsonl requires "jobs-v2"`)
 }
 
-func (s *StoreVersionSuite) TestANewerMigrationNamesBoth() {
-	err := &NewerWriterError{Path: "/s/jobs.jsonl", Found: 9, Known: 7}
+func (s *StoreVersionSuite) TestANewerStoreVersionNamesBoth() {
+	err := &NewerWriterError{Path: "/s/jobs.jsonl", Found: "safetyscissors.job/v1alpha9", Known: "safetyscissors.job/v1alpha7"}
 
-	s.Equal("job store /s/jobs.jsonl is at migration 9, past this build's 7", err.Error())
+	s.Equal("job store /s/jobs.jsonl is at safetyscissors.job/v1alpha9, past this build's safetyscissors.job/v1alpha7", err.Error())
 }
 
 func (s *StoreVersionSuite) TestARecordOfAnotherVersionNamesBoth() {

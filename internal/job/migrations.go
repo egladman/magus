@@ -39,23 +39,30 @@ func namePath(err error, path string) error {
 	return pathNamed{err: err, msg: strings.ReplaceAll(msg, storePathToken, path)}
 }
 
-// jobMigrations take a jobs.jsonl from each migration to the next, in order; see
+// jobMigrations take a jobs.jsonl from each store version to the next, in order; see
 // [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
-// name lands here and no reader keeps the old name.
+// name lands here and no reader keeps the old name. The header's api_version is the
+// version the last migration applied converted the store to.
 func jobMigrations() []migrate.Migration {
 	return []migrate.Migration{
-		{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
-		{Name: "worker type resume becomes resumed", Up: workerResumed},
-		{Name: triesMoved, Up: dropTries},
-		{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
-		{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
-		{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
-		{Name: "write, read, deny and soft paths move under spec.paths", Up: pathsNested},
-		{Name: job.AcceptWitnessedMigration, Up: acceptWitnessed},
-		{Name: groupsMoved, Up: regroup, Header: regroup},
-		{Name: keysSnaked, Up: snakeRecord, Header: snakeRecord},
-		{Name: featuresRespelled, Up: respellFeatures, Header: respellFeatures},
+		{Name: "model, criteria and fresh_reason move under agent", To: storeVersion(1), Up: agentSection},
+		{Name: "worker type resume becomes resumed", To: storeVersion(2), Up: workerResumed},
+		{Name: triesMoved, To: storeVersion(3), Up: dropTries},
+		{Name: "model tiers economy, standard and principal become routine, bounded and design", To: storeVersion(4), Up: fourModelTiers},
+		{Name: recordsEnveloped, To: storeVersion(5), Up: envelopeRow, Header: envelopeHeader},
+		{Name: "model tier source Row becomes Job", To: storeVersion(6), Up: modelTierSourceJob},
+		{Name: "write, read, deny and soft paths move under spec.paths", To: storeVersion(7), Up: pathsNested},
+		{Name: job.AcceptWitnessedMigration, To: storeVersion(8), Up: acceptWitnessed},
+		{Name: groupsMoved, To: storeVersion(9), Up: regroup, Header: regroup},
+		{Name: keysSnaked, To: storeVersion(10), Up: snakeRecord, Header: snakeRecord},
+		{Name: featuresRespelled, To: storeVersion(11), Up: respellFeatures, Header: respellFeatures},
 	}
+}
+
+// storeVersion is the n-th alpha version of the job store, in the group of the records it
+// holds.
+func storeVersion(n int) apiversion.APIVersion {
+	return apiversion.APIVersion(fmt.Sprintf("%s/v1alpha%d", job.APIVersion.Group(), n))
 }
 
 // groupsMoved names the migration [Store.migrate] rewrites attempts.jsonl before, with

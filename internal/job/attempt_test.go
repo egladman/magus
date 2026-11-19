@@ -237,9 +237,9 @@ func (s *attemptStoreSuite) storePath() string {
 	return path
 }
 
-// triesMovedFrom is a store at migration 2 holding row a as an older magus
+// triesMovedFrom is a store at the version of migration 2 holding row a as an older magus
 // wrote it, with its tries on the row.
-const triesMovedFrom = `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
+const triesMovedFrom = `{"api_version":"safetyscissors.job/v1alpha2"}
 {"id":"a","state":"running","created":1,"updated":1,"attempts":3,` +
 	`"result":{"job":"a","changed_paths":["a.go"]},` +
 	`"prior":[{"n":1,"state":"no_return","ended":5,"retry":{"retryable":true}},` +
@@ -266,7 +266,7 @@ func (s *attemptStoreSuite) TestMigrationThreeMovesARowsTriesToAttempts() {
 	s.NotContains(row, "result")
 	s.NotContains(row, "prior")
 	s.NotContains(row, "attempts")
-	s.InDelta(len(jobMigrations()), storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(currentStoreVersion()), storedLines(s.T(), path)[0]["api_version"])
 }
 
 // A migration cut short runs again, and the lines it appends twice read once.
@@ -299,11 +299,11 @@ func (s *attemptStoreSuite) TestMovingTriesBesideACamelCaseAttemptsFileReadsBoth
 	s.Len(tries["a"], 3, "the row's tries moved")
 	s.Require().Len(tries["b"], 1, "the camelCase line reads")
 	s.Equal("out1", tries["b"][0].Status.Result.Validation.OutputRef)
-	s.InDelta(len(jobMigrations()), storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(currentStoreVersion()), storedLines(s.T(), path)[0]["api_version"])
 }
 
 func (s *attemptStoreSuite) TestARowWithNoTriesMovesNothing() {
-	plantRaw(s.T(), s.store, `{"api_version":"safetyscissors.job/v1alpha1","migration":2}
+	plantRaw(s.T(), s.store, `{"api_version":"safetyscissors.job/v1alpha2"}
 {"id":"a","state":"running","created":1,"updated":1}`)
 
 	_, err := s.store.List(s.T().Context())

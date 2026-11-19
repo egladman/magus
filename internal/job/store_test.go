@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -686,9 +687,14 @@ func recordLine(id, condition, reason, spec, status string) string {
 		job.APIVersion, id, spec, conditions, status)
 }
 
-// headerLine is the JobList line at this build's migration.
+// headerLine is the JobList line at this build's store version.
 func headerLine(extra string) string {
-	return fmt.Sprintf(`{"api_version":%q,"kind":"JobList","migration":%d%s}`, job.APIVersion, len(jobMigrations()), extra)
+	return fmt.Sprintf(`{"api_version":%q,"kind":"JobList"%s}`, currentStoreVersion(), extra)
+}
+
+// currentStoreVersion is the store version this build writes.
+func currentStoreVersion() apiversion.APIVersion {
+	return migrate.Store{Migrations: jobMigrations()}.Version()
 }
 
 // A row a newer magus wrote is an ordinary row to this one: updating it or any other row
@@ -766,7 +772,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","requires":["jobs-v2"]}`)
+	path := plantRaw(t, s, `{"requires":["jobs-v2"]}`)
 
 	_, err := s.List(t.Context())
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
@@ -783,14 +789,14 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	path := plantRaw(t, s, `{"api_version":"safetyscissors.job/v1alpha99","plan":"p1"}`)
+	path := plantRaw(t, s, `{"plan":"p1"}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 	commit, _ := buildinfo.Commit()
 
 	assert.Equal(t, []map[string]any{{
-		"api_version": string(job.APIVersion), "kind": "JobList", "migration": float64(len(jobMigrations())),
+		"api_version": string(currentStoreVersion()), "kind": "JobList",
 		"plan": "p1", "retained": float64(1_700_000_000), "writer": map[string]any{"version": buildinfo.UnknownVersion, "commit": commit},
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention and writer stamps ride in it")
 }
@@ -1463,9 +1469,10 @@ func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) 
 	return st, plantRaw(s.T(), st, body), notices
 }
 
-// renamed is a migration that renames one spec member of every row carrying it.
-func renamed(from, to string) migrate.Migration {
-	return migrate.Migration{Name: fmt.Sprintf("%s to %s", from, to), Up: func(e migrate.Entry) (migrate.Entry, error) {
+// renamed is a migration to store version v1alpha<version> that renames one spec member
+// of every row carrying it.
+func renamed(version int, from, to string) migrate.Migration {
+	return migrate.Migration{Name: fmt.Sprintf("%s to %s", from, to), To: storeVersion(version), Up: func(e migrate.Entry) (migrate.Entry, error) {
 		var spec map[string]codec.RawMessage
 		if err := codec.Unmarshal(e["spec"], &spec); err != nil {
 			return nil, err
@@ -1480,23 +1487,27 @@ func renamed(from, to string) migrate.Migration {
 	}}
 }
 
-// unmigrated is a header behind every migration, and row a running
-// with spec member name.
+// unmigrated is a header behind every migration, naming no store version, and row a
+// running with spec member name.
 func unmigrated(name string) string {
-	return fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion,
-		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
+	return fmt.Sprintf("{\"kind\":\"JobList\"}\n%s", recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
+}
+
+// headerAt is the JobList line at store version version.
+func headerAt(version apiversion.APIVersion) string {
+	return fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\"}", version)
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
-	st, path, notices := s.migratingStore(unmigrated("postcondition"), renamed("postcondition", "parent"))
+	st, path, notices := s.migratingStore(unmigrated("postcondition"), renamed(1, "postcondition", "parent"))
 	notice := fmt.Sprintf("job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", st.root, path) +
-		fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
+		fmt.Sprintf("job: migrated job store %s from unversioned to %s (1 entries)\n", path, storeVersion(1))
 
 	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
 	s.Equal("ship it", f.Jobs[0].Parent, "the row reads under the name the migration gave it")
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0, "the header records the migration")
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"], "the header records the version")
 	s.Equal(notice, notices.String())
 
 	_, err = st.Read(s.T().Context())
@@ -1505,20 +1516,20 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
-	body := strings.Replace(unmigrated("aim"), `"kind":"JobList"`, `"kind":"JobList","migration":1`, 1)
-	st, path, _ := s.migratingStore(body, renamed("postcondition", "aim"), renamed("aim", "intent"), renamed("intent", "parent"))
+	body := strings.Replace(unmigrated("aim"), `{"kind":"JobList"}`, headerAt(storeVersion(1)), 1)
+	st, path, _ := s.migratingStore(body, renamed(1, "postcondition", "aim"), renamed(2, "aim", "intent"), renamed(3, "intent", "parent"))
 
 	_, err := st.Update(s.T().Context(), "a", func(u *job.Job) { u.Checkpoint = "abc123" })
 	s.Require().NoError(err)
 	spec := storedSpec(s.T(), path, "a")
 	s.Equal("ship it", spec["parent"], "migrations 2 and 3 ran, in order, before the write")
 	s.Equal("abc123", spec["checkpoint"])
-	s.InDelta(3, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(3)), storedLines(s.T(), path)[0]["api_version"])
 }
 
-func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
-	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
+func (s *jobSuite) TestTheJobStoreAtItsVersionIsLeftAlone() {
+	body := fmt.Sprintf("%s\n%s", headerAt(storeVersion(1)), recordLine("a", "Running", "Running", "", ""))
+	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", To: storeVersion(1), Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
 
@@ -1531,12 +1542,12 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", job.APIVersion, recordLine("a", "Running", "Running", "", ""))
-	st, path, _ := s.migratingStore(body, renamed("postcondition", "parent"))
+	body := fmt.Sprintf("%s\n%s", headerAt(storeVersion(3)), recordLine("a", "Running", "Running", "", ""))
+	st, path, _ := s.migratingStore(body, renamed(1, "postcondition", "parent"))
 
 	_, err := st.Read(s.T().Context())
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
-	s.ErrorContains(err, fmt.Sprintf("job store %s is at migration 3, newer than this magus knows (1): update magus", path))
+	s.ErrorContains(err, fmt.Sprintf("job store %s is at %s, newer than this magus knows (%s): update magus", path, storeVersion(3), storeVersion(1)))
 	_, err = st.Update(s.T().Context(), "b", func(cur *job.Job) { *cur = lease("b") })
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder, "a write refuses it too")
 	raw, err := os.ReadFile(path)
@@ -1546,7 +1557,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 
 func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 	body := unmigrated("postcondition")
-	st, path, notices := s.migratingStore(body, renamed("postcondition", "parent"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
+	st, path, notices := s.migratingStore(body, renamed(1, "postcondition", "parent"), migrate.Migration{Name: "fail", To: storeVersion(2), Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("disk on fire")
 	}})
 
@@ -1558,14 +1569,14 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 	s.NotContains(notices.String(), "job: migrated job store")
 }
 
-func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
+func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsVersion() {
 	st := tempStore(s.T(), s.T().TempDir())
-	st = st.withMigrations([]migrate.Migration{renamed("postcondition", "parent"), renamed("aim", "parent")})
+	st = st.withMigrations([]migrate.Migration{renamed(1, "postcondition", "parent"), renamed(2, "aim", "parent")})
 	seed(s.T(), st, lease("a"))
 
 	path, err := st.Path()
 	s.Require().NoError(err)
-	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
+	s.Equal(string(storeVersion(2)), storedLines(s.T(), path)[0]["api_version"], "a new store needs no migration")
 }
 
 // behindStore is a store at root, behind its one migration, holding row a running.
@@ -1580,9 +1591,9 @@ func behindStore(t *testing.T, root string) (*Store, string, *bytes.Buffer) {
 	line, err = codec.Marshal(row)
 	require.NoError(t, err)
 	notices := &bytes.Buffer{}
-	st = st.withMigrations([]migrate.Migration{renamed("postcondition", "parent")})
+	st = st.withMigrations([]migrate.Migration{renamed(1, "postcondition", "parent")})
 	st.notices = notices
-	return st, plantRaw(t, st, fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\"}\n%s", job.APIVersion, line)), notices
+	return st, plantRaw(t, st, fmt.Sprintf("{\"kind\":\"JobList\"}\n%s", line)), notices
 }
 
 // agentSectionSuite pins the migration that moves a row's flat model,
@@ -1600,7 +1611,7 @@ func TestAgentSectionMigration(t *testing.T) {
 func (s *agentSectionSuite) migrated(line string) job.Job {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices = &bytes.Buffer{}
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1"}`, line))
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"kind":"JobList"}`, line))
 	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
@@ -1660,11 +1671,11 @@ func TestWorkerResumedMigration(t *testing.T) {
 }
 
 // migrated is the row after the job store's migrations ran over a file
-// already through migration 1.
+// already at the store version migration 1 converts to.
 func (s *workerResumedSuite) migrated(line string) (job.Job, map[string]any) {
 	st := tempStore(s.T(), s.T().TempDir())
 	st.notices = &bytes.Buffer{}
-	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1","migration":1}`, line))
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"safetyscissors.job/v1alpha1"}`, line))
 	f, err := st.Read(s.T().Context())
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)

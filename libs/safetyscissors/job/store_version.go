@@ -10,19 +10,46 @@ import (
 	"github.com/egladman/magus/libs/codec"
 )
 
-// Migrate brings the store file at path from migration found to the version given with it
-// to [WithMigrations], and refuses a file at a newer one. lines are the file as read, which
-// a migration that refuses reads rows from. It runs holding the store's lock, and the store
+// Migrate converts the store file at path from the store version found, its header's
+// api_version ("" for a file without a header), to the version given with it to
+// [WithMigrations], and refuses a file at a newer one. lines are the file as read, which a
+// migration that refuses reads rows from. It runs holding the store's lock, and the store
 // reads the file again after.
-type Migrate func(ctx context.Context, path string, found int, lines []codec.Line) error
+type Migrate func(ctx context.Context, path string, found apiversion.APIVersion, lines []codec.Line) error
 
-// NewerWriterError is a store file a newer writer stamped: a migration past this build's,
-// or a feature the header requires that this build lacks. Nothing in the file was read.
+// current reports whether the file f and log were read from is at the store version s
+// writes. A file without a header predates every conversion, so only a store with none
+// reads it as it stands.
+func (s *Store) current(f Rows, log jobsLog) bool {
+	if log.header == nil {
+		return s.migrate == nil
+	}
+	return f.APIVersion == s.version
+}
+
+// refuseVersion refuses a file whose header f is at another store version than s writes,
+// for a store with no [WithMigrations] to convert it: a newer one is a
+// [*NewerWriterError], and any other a header this build does not read.
+func (s *Store) refuseVersion(f Rows) error {
+	if f.APIVersion.Group() == s.version.Group() && f.APIVersion.Compare(s.version) > 0 {
+		return s.wrap(&NewerWriterError{Path: s.path, Found: f.APIVersion, Known: s.version})
+	}
+	return s.refuseRecord(s.listType(), f.TypeMeta, 1)
+}
+
+// listType is the type of the header s writes.
+func (s *Store) listType() apiversion.TypeMeta {
+	return apiversion.TypeMeta{APIVersion: s.version, Kind: jobListType().Kind}
+}
+
+// NewerWriterError is a store file a newer writer stamped: a store version past this
+// build's, with no [WithMigrations] to refuse it, or a feature the header requires that
+// this build lacks. Nothing in the file was read.
 type NewerWriterError struct {
 	Path string
-	// Found and Known are the file's migration and this build's, both zero for a
+	// Found and Known are the file's store version and this build's, both empty for a
 	// feature refusal.
-	Found, Known int
+	Found, Known apiversion.APIVersion
 	// Lacks are the features the file requires that this build does not implement.
 	Lacks []string
 }
@@ -31,7 +58,7 @@ func (e *NewerWriterError) Error() string {
 	if len(e.Lacks) > 0 {
 		return fmt.Sprintf("%s requires %s, which this build (%s) lacks", e.Path, quoteAll(e.Lacks), APIVersion)
 	}
-	return fmt.Sprintf("job store %s is at migration %d, past this build's %d", e.Path, e.Found, e.Known)
+	return fmt.Sprintf("job store %s is at %s, past this build's %s", e.Path, e.Found, e.Known)
 }
 
 // RetiredNameError is a store line spelling a member or a required feature by a name this

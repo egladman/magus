@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 )
 
@@ -173,8 +174,8 @@ func (s *StoreSuite) TestALineOfAnotherGroupIsRefused() {
 	s.Equal(1, version.Line)
 }
 
-// A file an older build wrote, keyed in camelCase at this build's migration, names no
-// api_version, so it is refused rather than read as an empty plan.
+// A file an older build wrote, keyed in camelCase, names no api_version, so it is
+// refused rather than read as an empty plan.
 func (s *StoreSuite) TestAnOlderBuildsCamelCaseFileIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
 		[]byte(`{"apiVersion":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"+
@@ -188,31 +189,49 @@ func (s *StoreSuite) TestAnOlderBuildsCamelCaseFileIsRefused() {
 	s.Empty(refused.Got)
 }
 
-func (s *StoreSuite) TestAFileAtANewerMigrationIsRefused() {
+func (s *StoreSuite) TestAFileAtANewerStoreVersionIsRefused() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
-		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":3}`+"\n"), 0o600))
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha3","kind":"JobList"}`+"\n"), 0o600))
 
-	_, err := s.open(WithMigrations(1, nil)).List(s.T().Context())
+	_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", nil)).List(s.T().Context())
 
 	var newer *NewerWriterError
 	s.Require().ErrorAs(err, &newer)
-	s.Equal(3, newer.Found)
-	s.Equal(1, newer.Known)
+	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha3"), newer.Found)
+	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha2"), newer.Known)
+}
+
+func (s *StoreSuite) TestAFileAtAnOlderStoreVersionIsRefusedWithNoMigrations() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
+		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
+
+	_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", nil)).List(s.T().Context())
+
+	var refused *RecordVersionError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha1"), refused.Got)
 }
 
 func (s *StoreSuite) TestAnOlderFileIsMigratedUnderTheLock() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, jobsFileName),
 		[]byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList"}`+"\n"), 0o600))
-	var found []int
-	migrate := func(_ context.Context, path string, from int, _ []codec.Line) error {
+	var found []apiversion.APIVersion
+	migrate := func(_ context.Context, path string, from apiversion.APIVersion, _ []codec.Line) error {
 		found = append(found, from)
-		return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"JobList","migration":1}`+"\n"), 0o600)
+		return os.WriteFile(path, []byte(`{"api_version":"safetyscissors.job/v1alpha2","kind":"JobList"}`+"\n"), 0o600)
 	}
 
-	_, err := s.open(WithMigrations(1, migrate)).List(s.T().Context())
+	f, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", migrate)).Read(s.T().Context())
 
 	s.Require().NoError(err)
-	s.Equal([]int{0}, found)
+	s.Equal([]apiversion.APIVersion{"safetyscissors.job/v1alpha1"}, found)
+	s.Equal(apiversion.APIVersion("safetyscissors.job/v1alpha2"), f.APIVersion, "the header's api_version is the store version")
+}
+
+func (s *StoreSuite) TestAStoreVersionThatDoesNotParseIsRefused() {
+	_, err := Open(s.dir, WithMigrations("v2", nil))
+
+	s.Require().ErrorContains(err, `job: WithMigrations: api version "v2" is not`)
 }
 
 func (s *StoreSuite) TestTheDocumentAnOlderWriterKeptIsRefused() {
