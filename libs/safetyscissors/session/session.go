@@ -510,6 +510,44 @@ func (e *RetiredGroupError) Error() string {
 	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s)", e.Path, e.Version, APIVersion)
 }
 
+// RemoveRetired deletes every invocation file under dir holding a record stamped
+// [retiredGroup] and returns their paths. Such a file is derived state from before the
+// rename that this build cannot read, so no group it names can be held: nothing says it
+// must stay. A file it cannot remove is a [*StoreError] and the rest are still tried.
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func RemoveRetired(ctx context.Context, dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, &StoreError{Op: "read store", Path: dir, Err: err}
+	}
+	var removed []string
+	var errs []error
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if decodeFile(path).retired == "" {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			if !os.IsNotExist(err) {
+				errs = append(errs, &StoreError{Op: "remove retired", Path: path, Err: err})
+			}
+			continue
+		}
+		removed = append(removed, path)
+	}
+	return removed, errors.Join(errs...)
+}
+
 // RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names
 // the guard's defer had before its decisions became defer, advise, ask and deny. The
 // store is refused rather than read around it: a skipped event would drop out of every

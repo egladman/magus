@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -328,6 +330,22 @@ func (s *AppendRequestSuite) TestARepeatAppendsAndCollapsesInTheFold() {
 	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != KindAttentionOpen })
 	s.Len(opens, 2)
 	s.Len(queueIDs(s.T(), s.dir), 1)
+}
+
+// A session file from before the group rename must not stop a reclaim's request: the file
+// is removed and the request opens.
+func (s *AttentionSuite) TestOpenRequestRemovesAFilePredatingTheGroupRename() {
+	t := s.T()
+	dir := t.TempDir()
+	old := filepath.Join(dir, "old.jsonl")
+	body := `{"v":"magus.sessions/v1alpha1","invocation":"old","seq":1,"kind":"target_result","ts":10}` + "\n"
+	require.NoError(t, os.WriteFile(old, []byte(body), 0o644))
+
+	id, opened, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{Workspace: "/repo"})
+	require.NoError(t, err)
+	assert.True(t, opened)
+	assert.Equal(t, []string{id}, queueIDs(t, dir))
+	assert.NoFileExists(t, old)
 }
 
 func (s *AttentionSuite) TestOpenRequestWritesOneRequestAndReportsIt() {

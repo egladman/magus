@@ -464,6 +464,24 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 	}
 }
 
+// RemoveRetired deletes a file holding a magus.sessions record and leaves a current one.
+func (s *ReadSuite) TestRemoveRetiredDeletesOnlyOldGroupFiles() {
+	dir := s.T().TempDir()
+	old := filepath.Join(dir, "old.jsonl")
+	s.Require().NoError(os.WriteFile(old, []byte(`{"v":"magus.sessions/v1alpha1","invocation":"old","seq":1,"kind":"target_result","ts":10}`+"\n"), 0o644))
+	current := filepath.Join(dir, "new.jsonl")
+	s.Require().NoError(os.WriteFile(current, []byte(`{"v":"`+string(APIVersion)+`","invocation":"new","seq":1,"kind":"target_result","ts":10,"payload":{}}`+"\n"), 0o644))
+
+	removed, err := RemoveRetired(s.T().Context(), dir)
+	s.Require().NoError(err)
+	s.Equal([]string{old}, removed)
+	s.NoFileExists(old)
+	s.FileExists(current)
+
+	_, err = ReadAll(s.T().Context(), dir)
+	s.Require().NoError(err, "the store reads once the old file is gone")
+}
+
 // A record from before the module took the store carries magus.sessions, and the store
 // is refused with the file named rather than read with that record missing.
 func (s *ReadSuite) TestARetiredGroupRefusesTheStore() {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -396,7 +397,7 @@ func resolveIDPrefix(ids []string, ref string) (id string, candidates []string) 
 // wrote anything.
 func OpenRequest(ctx context.Context, dir, sourceID string, open AttentionOpen, start session.InvocationStart) (id string, opened bool, err error) {
 	open.Request = RequestID(sourceID, open)
-	fold, err := session.ReadAll(ctx, dir)
+	fold, err := readAllReclaimingRetired(ctx, dir)
 	if err != nil {
 		return open.Request, false, err
 	}
@@ -569,4 +570,23 @@ func AttentionWhere(where *types.EventLocation) string {
 		return fmt.Sprintf("%s [%s]", where.Workspace.Value, where.Project.Path)
 	}
 	return where.Workspace.Value
+}
+
+// readAllReclaimingRetired is [session.ReadAll] for a caller that must not stop on a file
+// from before the session group rename: that file is derived state this build cannot read,
+// so it is removed, each path is warned once, and the read goes on.
+func readAllReclaimingRetired(ctx context.Context, dir string) (session.Fold, error) {
+	fold, err := session.ReadAll(ctx, dir)
+	var retired *session.RetiredGroupError
+	if !errors.As(err, &retired) {
+		return fold, err
+	}
+	removed, rmErr := session.RemoveRetired(ctx, dir)
+	for _, path := range removed {
+		slog.Warn("removed a session file stamped with a group this build no longer reads", "path", path)
+	}
+	if rmErr != nil {
+		return session.Fold{}, rmErr
+	}
+	return session.ReadAll(ctx, dir)
 }
