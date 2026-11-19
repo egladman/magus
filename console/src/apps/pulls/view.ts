@@ -86,51 +86,43 @@ export function overlapText(p: Pull): string[] {
   );
 }
 
+const CI_TEXT: Record<CiState, string> = {
+  [CiState.UNSPECIFIED]: "CI unknown",
+  [CiState.GREEN]: "CI green",
+  [CiState.RED]: "CI red",
+  [CiState.RUNNING]: "CI running",
+  [CiState.QUEUED]: "CI queued",
+  [CiState.NONE]: "no CI",
+  [CiState.CANCELLED]: "CI cancelled",
+  [CiState.UNREADABLE]: "CI unreadable",
+};
+
+const MERGEABLE_TEXT: Record<Mergeable, string> = {
+  [Mergeable.UNSPECIFIED]: "mergeability unknown",
+  [Mergeable.MERGEABLE]: "mergeable",
+  [Mergeable.CONFLICTING]: "conflicting",
+  [Mergeable.UNKNOWN]: "mergeability unknown",
+};
+
+const REVIEW_TEXT: Record<Review, string> = {
+  [Review.UNSPECIFIED]: "review unknown",
+  [Review.APPROVED]: "approved",
+  [Review.CHANGES_REQUESTED]: "changes requested",
+  [Review.REQUIRED]: "review required",
+  [Review.NONE]: "no review",
+};
+
+// A value from a newer server reads as unknown in all three.
 export function ciText(ci: CiState): string {
-  switch (ci) {
-    case CiState.GREEN:
-      return "CI green";
-    case CiState.RED:
-      return "CI red";
-    case CiState.RUNNING:
-      return "CI running";
-    case CiState.QUEUED:
-      return "CI queued";
-    case CiState.NONE:
-      return "no CI";
-    case CiState.CANCELLED:
-      return "CI cancelled";
-    case CiState.UNREADABLE:
-      return "CI unreadable";
-    default:
-      return "CI unknown";
-  }
+  return CI_TEXT[ci] ?? "CI unknown";
 }
 
 export function mergeableText(m: Mergeable): string {
-  switch (m) {
-    case Mergeable.MERGEABLE:
-      return "mergeable";
-    case Mergeable.CONFLICTING:
-      return "conflicting";
-    default:
-      return "mergeability unknown";
-  }
+  return MERGEABLE_TEXT[m] ?? "mergeability unknown";
 }
 
 export function reviewText(r: Review): string {
-  switch (r) {
-    case Review.APPROVED:
-      return "approved";
-    case Review.CHANGES_REQUESTED:
-      return "changes requested";
-    case Review.REQUIRED:
-      return "review required";
-    case Review.NONE:
-      return "no review";
-    default:
-      return "review unknown";
-  }
+  return REVIEW_TEXT[r] ?? "review unknown";
 }
 
 export function firstFailureText(f: FailedJob | undefined): string {

@@ -76,6 +76,7 @@ import {
   type StepRows,
 } from "./readingorder";
 import { reportFailure } from "../../lib/notifications";
+import { unreachable } from "../../lib/unreachable";
 import { detectLanguage, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
@@ -1510,12 +1511,14 @@ export function activate(host: HTMLElement): AppInstance {
     // activeFileTarget (rows.ts) makes the DECISION; this is just wiring it to the two elements
     // that can show it. "generated" is a real file row the index has no entry for - the whole
     // point of the fallback - so hasSidebarEntry is exactly "did the lookup above find one".
-    switch (activeFileTarget(fileRow, candidate !== undefined)) {
+    const target = activeFileTarget(fileRow, candidate !== undefined);
+    activeSidebarRow = fileRow;
+    switch (target) {
       case "file":
         activeSidebarFile = candidate;
         activeGeneratedToggle = undefined;
         activeSidebarFile?.setAttribute("aria-current", "true");
-        break;
+        return;
       case "generated":
         activeSidebarFile = undefined;
         // Re-queried rather than cached: the toggle button is replaced on every renderSidebar.
@@ -1523,13 +1526,13 @@ export function activate(host: HTMLElement): AppInstance {
           sidebarGenerated.querySelector<HTMLButtonElement>(".console-diff-sidebar__group") ??
           undefined;
         activeGeneratedToggle?.setAttribute("aria-current", "true");
-        break;
+        return;
       case "none":
         activeSidebarFile = undefined;
         activeGeneratedToggle = undefined;
-        break;
+        return;
     }
-    activeSidebarRow = fileRow;
+    return unreachable(target);
   };
 
   let ticking = false;
@@ -2285,11 +2288,12 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     const secs = v?.durationMs ? ` ${(v.durationMs / 1000).toFixed(1)}s` : "";
-    switch (v?.state) {
+    const verdictState = v?.state ?? "unknown";
+    switch (verdictState) {
       case "running":
         verdictText.textContent = `Testing ${project}…`;
         verdictButton.title = `magus run ${RUN_TARGET} ${project} is in flight`;
-        break;
+        return renderNotice();
       case "passed":
         verdictText.textContent = stale
           ? `${project} passed, since edited`
@@ -2297,17 +2301,18 @@ export function activate(host: HTMLElement): AppInstance {
         verdictButton.title = stale
           ? "This verdict is about the changeset as it was, not as it is now. Run again."
           : "Run again";
-        break;
+        return renderNotice();
       case "failed":
         verdictText.textContent = stale ? `${project} failed, since edited` : `${project} failed`;
-        verdictButton.title = v.error || "Run again";
-        if (v.error && !stale) verdictReason = `${project} failed: ${v.error}`;
-        break;
-      default:
+        verdictButton.title = v?.error || "Run again";
+        if (v?.error && !stale) verdictReason = `${project} failed: ${v.error}`;
+        return renderNotice();
+      case "unknown":
         verdictText.textContent = `Test ${project}`;
         verdictButton.title = `Run ${RUN_TARGET} for ${project} on this machine`;
+        return renderNotice();
     }
-    renderNotice();
+    return unreachable(verdictState);
   };
 
   // startRun submits the project in view, then polls until it settles.

@@ -5,6 +5,7 @@
 // around 8. Shape has the same five-or-six category ceiling as hue, which is why it pairs with the
 // palette rather than competing: one shape per FAMILY is six shapes.
 
+import { unreachable } from "../../lib/unreachable";
 import type { GLink, GNode, GNodeInput } from "./types.js";
 
 export type NodeShape = "circle" | "square" | "triangle" | "diamond" | "hexagon" | "ring";
@@ -121,10 +122,10 @@ export function traceNodeShape(
       ctx.arc(x, y, r * K_RING, 0, 2 * Math.PI);
       return;
     case "circle":
-    default:
       ctx.arc(x, y, r, 0, 2 * Math.PI);
       return;
   }
+  return unreachable(shape);
 }
 
 // Punches a ring's disc hollow, in the background colour rather than by stroking, so the band's

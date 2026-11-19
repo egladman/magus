@@ -34,19 +34,18 @@ import {
 import { statusGlyph } from "../../ui/status";
 import { confirmDanger } from "./confirm";
 
+const CLASS_LABELS: Record<CredentialClass, string> = {
+  [CredentialClass.UNSPECIFIED]: "Unknown",
+  [CredentialClass.OPERATOR]: "Unknown",
+  [CredentialClass.STORED]: "Token",
+  [CredentialClass.SHARE]: "Read-only share",
+  [CredentialClass.EXCHANGE]: "Link code",
+};
+
 // classLabel names a token's class for the operator. The operator token never reaches a
 // ListTokens response; the grant beside it says what each may do.
 function classLabel(c: CredentialClass): string {
-  switch (c) {
-    case CredentialClass.STORED:
-      return "Token";
-    case CredentialClass.SHARE:
-      return "Read-only share";
-    case CredentialClass.EXCHANGE:
-      return "Link code";
-    default:
-      return "Unknown";
-  }
+  return CLASS_LABELS[c] ?? "Unknown";
 }
 
 // grantLabel renders a grant the way the CLI does ("mcp=write,console=read"), naming only the

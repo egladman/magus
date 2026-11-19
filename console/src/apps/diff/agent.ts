@@ -46,17 +46,17 @@ const ROLE_NAMES: Record<TurnRole, string> = {
   [TurnRole.TOOL]: "tool calls",
 };
 
+// A null label means the turn's own kind names it.
+const TURN_LABELS: Record<TurnRole, string | null> = {
+  [TurnRole.UNSPECIFIED]: null,
+  [TurnRole.USER]: "user",
+  [TurnRole.ASSISTANT]: "assistant",
+  [TurnRole.REASONING]: "reasoning",
+  [TurnRole.TOOL]: null,
+};
+
 function turnLabel(turn: SessionTurn): string {
-  switch (turn.role) {
-    case TurnRole.USER:
-      return "user";
-    case TurnRole.ASSISTANT:
-      return "assistant";
-    case TurnRole.REASONING:
-      return "reasoning";
-    default:
-      return turn.kind || "tool";
-  }
+  return TURN_LABELS[turn.role] ?? (turn.kind || "tool");
 }
 
 function turnText(turn: SessionTurn): string {

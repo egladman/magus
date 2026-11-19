@@ -16,6 +16,7 @@ import {
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
+import { unreachable } from "../lib/unreachable";
 import { ok } from "../gen/magus/types";
 import { appLoadFailure } from "../ui/alert";
 import { emptyStateShell } from "../ui/empty-state";
@@ -96,6 +97,7 @@ export function renderConnectPrompt(
       return;
     }
   }
+  return unreachable(state);
 }
 
 // renderEmptyMessage writes an empty state that is not about the connection (nothing kept yet, a

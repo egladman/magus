@@ -2910,45 +2910,38 @@ function relationIndex() {
 function termMatches(node: GNode, term: QueryTerm) {
   const v = term.value;
   let hit;
-  switch (term.field) {
-    case "kind":
-      hit = node.kind === v;
-      break;
-    case "project":
-      // Knowledge-graph ids: project nodes are "project:<name>", target nodes
-      // are "target:<project>:<name>". Target-graph ids: project nodes are the
-      // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
-      hit =
-        node.id === "project:" + v ||
-        (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
-        (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
-        node.id.toLowerCase() === v ||
-        // Everything the project CONTAINS, transitively - its dirs, docs, files and the
-        // functions inside them. The id comparisons above only ever reach the project node
-        // and its targets.
-        (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
-      break;
-    case "relation": {
-      // relIndex is always built by the callers that run relation queries; treat an
-      // absent index as no match rather than asserting it non-null.
-      const rel = graph.relIndex;
-      hit = !!rel && (rel.get(node.id)?.has(v) ?? false);
-      break;
-    }
-    case "id":
-      hit = node.id.toLowerCase().includes(v);
-      break;
+  if (term.field === "kind") {
+    hit = node.kind === v;
+  } else if (term.field === "project") {
+    // Knowledge-graph ids: project nodes are "project:<name>", target nodes
+    // are "target:<project>:<name>". Target-graph ids: project nodes are the
+    // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
+    hit =
+      node.id === "project:" + v ||
+      (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
+      (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
+      node.id.toLowerCase() === v ||
+      // Everything the project CONTAINS, transitively - its dirs, docs, files and the
+      // functions inside them. The id comparisons above only ever reach the project node
+      // and its targets.
+      (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
+  } else if (term.field === "relation") {
+    // relIndex is always built by the callers that run relation queries; treat an
+    // absent index as no match rather than asserting it non-null.
+    const rel = graph.relIndex;
+    hit = !!rel && (rel.get(node.id)?.has(v) ?? false);
+  } else if (term.field === "id") {
+    hit = node.id.toLowerCase().includes(v);
+  } else if (term.field === "symbol") {
     // symbol: prefix targets SCIP code-symbol nodes by their symbol: id prefix.
     // The CLI treats `symbol:` as free text (no typed field); the box accepts a superset
     // syntactically (restricts to kind=symbol + id substring), but the CLI accepts the query.
-    case "symbol":
-      hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v);
-      break;
-    default:
-      hit =
-        node.id.toLowerCase().includes(v) ||
-        node.label.toLowerCase().includes(v) ||
-        (node.doc && node.doc.toLowerCase().includes(v));
+    hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v);
+  } else {
+    hit =
+      node.id.toLowerCase().includes(v) ||
+      node.label.toLowerCase().includes(v) ||
+      (node.doc && node.doc.toLowerCase().includes(v));
   }
   return term.negated ? !hit : hit;
 }
@@ -4328,154 +4321,139 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   // Render the CLI idiom command for this view.
   renderViewCommand(name, nodeId, nodeTo);
 
-  switch (name) {
-    case "blast": {
-      if (!nodeId) {
-        setStatus(
-          "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
-        );
-        renderList();
-        draw();
-        updateHash();
-        return;
-      }
-      const deps = transitiveDependents(nodeId);
-      matchSet = deps;
-      const n = graph.byId ? graph.byId.get(nodeId) : null;
+  if (name === "blast") {
+    if (!nodeId) {
       setStatus(
-        "What breaks if you change " +
-          (n ? n.label : nodeId) +
-          "? " +
-          (deps.size - 1) +
-          " dependent" +
-          (deps.size - 1 === 1 ? "" : "s") +
+        "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
+      );
+      renderList();
+      draw();
+      updateHash();
+      return;
+    }
+    const deps = transitiveDependents(nodeId);
+    matchSet = deps;
+    const n = graph.byId ? graph.byId.get(nodeId) : null;
+    setStatus(
+      "What breaks if you change " +
+        (n ? n.label : nodeId) +
+        "? " +
+        (deps.size - 1) +
+        " dependent" +
+        (deps.size - 1 === 1 ? "" : "s") +
+        ".",
+    );
+    void refineBlastFromServer(nodeId, ++viewGeneration);
+  } else if (name === "trace") {
+    if (!nodeId || !nodeTo) {
+      setStatus(
+        "Click two nodes to find the path between them (trace view). CLI: magus explain <a> --to <b>",
+      );
+      renderList();
+      draw();
+      updateHash();
+      return;
+    }
+    const na = graph.byId ? graph.byId.get(nodeId) : null;
+    const nb = graph.byId ? graph.byId.get(nodeTo) : null;
+    const path = shortestDependsOnPath(nodeId, nodeTo);
+    if (!path) {
+      setStatus(
+        "No depends_on path from " +
+          (na ? na.label : nodeId) +
+          " to " +
+          (nb ? nb.label : nodeTo) +
           ".",
       );
-      void refineBlastFromServer(nodeId, ++viewGeneration);
-      break;
-    }
-    case "trace": {
-      if (!nodeId || !nodeTo) {
-        setStatus(
-          "Click two nodes to find the path between them (trace view). CLI: magus explain <a> --to <b>",
-        );
-        renderList();
-        draw();
-        updateHash();
-        return;
-      }
-      const na = graph.byId ? graph.byId.get(nodeId) : null;
-      const nb = graph.byId ? graph.byId.get(nodeTo) : null;
-      const path = shortestDependsOnPath(nodeId, nodeTo);
-      if (!path) {
-        setStatus(
-          "No depends_on path from " +
-            (na ? na.label : nodeId) +
-            " to " +
-            (nb ? nb.label : nodeTo) +
-            ".",
-        );
-        matchSet = new Set([nodeId, nodeTo]);
-      } else {
-        matchSet = new Set(path);
-        setStatus(
-          "Path: " +
-            path
-              .map((id) => {
-                const n = graph.byId.get(id);
-                return n ? n.label : id;
-              })
-              .join(" -> "),
-        );
-      }
-      void refineTraceFromServer(nodeId, nodeTo, ++viewGeneration);
-      break;
-    }
-    case "critical": {
-      const path = criticalPath();
-      if (!path) {
-        setStatus(
-          "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
-        );
-        matchSet = null;
-      } else {
-        matchSet = new Set(path);
-        const total = path.reduce((sum, id) => {
-          const n = graph.byId.get(id);
-          return sum + (n ? nodeDurationMs(n) : 0);
-        }, 0);
-        setStatus(
-          "Critical path: " +
-            path.length +
-            " node" +
-            (path.length === 1 ? "" : "s") +
-            ", " +
-            formatDuration(total) +
-            " total (longest duration-weighted chain).",
-        );
-      }
-      break;
-    }
-    case "hubs": {
-      matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
-      const n = matchSet.size;
+      matchSet = new Set([nodeId, nodeTo]);
+    } else {
+      matchSet = new Set(path);
       setStatus(
-        n
-          ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
-          : "Nothing in this graph has a dependent.",
+        "Path: " +
+          path
+            .map((id) => {
+              const n = graph.byId.get(id);
+              return n ? n.label : id;
+            })
+            .join(" -> "),
       );
-      break;
     }
-    case "orphans": {
-      matchSet = new Set(disconnected(graph.nodes, graph.links));
-      const n = matchSet.size;
+    void refineTraceFromServer(nodeId, nodeTo, ++viewGeneration);
+  } else if (name === "critical") {
+    const path = criticalPath();
+    if (!path) {
       setStatus(
-        "What's dead? " +
-          n +
+        "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
+      );
+      matchSet = null;
+    } else {
+      matchSet = new Set(path);
+      const total = path.reduce((sum, id) => {
+        const n = graph.byId.get(id);
+        return sum + (n ? nodeDurationMs(n) : 0);
+      }, 0);
+      setStatus(
+        "Critical path: " +
+          path.length +
           " node" +
-          (n === 1 ? "" : "s") +
-          " of a kind that normally has dependencies, but with none either way.",
+          (path.length === 1 ? "" : "s") +
+          ", " +
+          formatDuration(total) +
+          " total (longest duration-weighted chain).",
       );
-      break;
     }
-    case "cycles": {
-      const ids = new Set<string>();
-      for (const e of graph.links) {
-        if (e.cycle) {
-          ids.add(endpointId(e.source));
-          ids.add(endpointId(e.target));
-        }
+  } else if (name === "hubs") {
+    matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
+    const n = matchSet.size;
+    setStatus(
+      n
+        ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
+        : "Nothing in this graph has a dependent.",
+    );
+  } else if (name === "orphans") {
+    matchSet = new Set(disconnected(graph.nodes, graph.links));
+    const n = matchSet.size;
+    setStatus(
+      "What's dead? " +
+        n +
+        " node" +
+        (n === 1 ? "" : "s") +
+        " of a kind that normally has dependencies, but with none either way.",
+    );
+  } else if (name === "cycles") {
+    const ids = new Set<string>();
+    for (const e of graph.links) {
+      if (e.cycle) {
+        ids.add(endpointId(e.source));
+        ids.add(endpointId(e.target));
       }
-      if (ids.size) {
-        matchSet = ids;
-        setStatus(
-          "Circular dependencies: " +
-            ids.size +
-            " target(s) caught in a loop: a configuration error to fix.",
-        );
-      } else {
-        matchSet = null;
-        setStatus("No circular dependencies: the dependency graph is acyclic.");
-      }
-      break;
     }
-    case "affected": {
-      // Live mode: affected set is provided by caller or stored in window._liveAffectedIds.
-      const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
-      if (!aff || !aff.size) {
-        setStatus("no affected nodes in current diff", "info");
-        matchSet = null;
-      } else {
-        matchSet = aff;
-        setStatus(
-          "What does my diff touch? " +
-            aff.size +
-            " affected node" +
-            (aff.size === 1 ? "" : "s") +
-            " (live workspace).",
-        );
-      }
-      break;
+    if (ids.size) {
+      matchSet = ids;
+      setStatus(
+        "Circular dependencies: " +
+          ids.size +
+          " target(s) caught in a loop: a configuration error to fix.",
+      );
+    } else {
+      matchSet = null;
+      setStatus("No circular dependencies: the dependency graph is acyclic.");
+    }
+  } else if (name === "affected") {
+    // Live mode: affected set is provided by caller or stored in window._liveAffectedIds.
+    const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
+    if (!aff || !aff.size) {
+      setStatus("no affected nodes in current diff", "info");
+      matchSet = null;
+    } else {
+      matchSet = aff;
+      setStatus(
+        "What does my diff touch? " +
+          aff.size +
+          " affected node" +
+          (aff.size === 1 ? "" : "s") +
+          " (live workspace).",
+      );
     }
   }
   setListExpanded(true);
@@ -4524,21 +4502,21 @@ function clearView() {
 // showing" (blast/trace/critical/cycles/affected are fine in any DAG mode or
 // radial; they only need to leave Force, where arrows/direction don't read).
 function preferredModeForView(view: string): LayoutMode | null {
-  switch (view) {
-    case "blast":
-    case "trace":
-    case "critical":
-    case "cycles":
-    case "affected":
-      return layoutMode === "force" ? "layered" : null;
-    case "hubs":
-    case "orphans":
-      return "force"; // connectivity/disconnection reads best as the physics web
-    default:
-      // Unknown view (not one of the question chips above): keep whatever mode is
-      // already showing rather than guessing.
-      return null;
+  if (
+    view === "blast" ||
+    view === "trace" ||
+    view === "critical" ||
+    view === "cycles" ||
+    view === "affected"
+  ) {
+    return layoutMode === "force" ? "layered" : null;
   }
+  if (view === "hubs" || view === "orphans") {
+    return "force"; // connectivity/disconnection reads best as the physics web
+  }
+  // Unknown view (not one of the question chips above): keep whatever mode is
+  // already showing rather than guessing.
+  return null;
 }
 
 // askQuestion is the single entry point every "Ask a question" chip
@@ -4686,19 +4664,18 @@ function buildQueryCmd(queryStr: string) {
 
 // Build the full CLI command string for copy-to-clipboard.
 function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: string | null) {
-  switch (name) {
-    case "blast":
-      if (!nodeId) return "magus explain <node-id>";
-      return "magus explain " + shellQuote(nodeId);
-    case "trace":
-      // Half-picked: name the node already chosen rather than printing a command that throws
-      // away what the app knows.
-      if (!nodeId) return "magus explain <a> --to <b>";
-      if (!nodeTo) return "magus explain " + shellQuote(nodeId) + " --to <b>";
-      return "magus explain " + shellQuote(nodeId) + " --to " + shellQuote(nodeTo);
-    default:
-      return null; // no valid CLI equivalent
+  if (name === "blast") {
+    if (!nodeId) return "magus explain <node-id>";
+    return "magus explain " + shellQuote(nodeId);
   }
+  if (name === "trace") {
+    // Half-picked: name the node already chosen rather than printing a command that throws
+    // away what the app knows.
+    if (!nodeId) return "magus explain <a> --to <b>";
+    if (!nodeTo) return "magus explain " + shellQuote(nodeId) + " --to <b>";
+    return "magus explain " + shellQuote(nodeId) + " --to " + shellQuote(nodeTo);
+  }
+  return null; // no valid CLI equivalent
 }
 
 // Render the view command into the #view-cmd element (the term-prompt variant).
@@ -5138,47 +5115,36 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
 // recompute what they say", rather than each restoring the part of the state it remembered.
 function recomputeMatchSet() {
   if (activeView) {
-    switch (activeView) {
-      case "blast":
-        matchSet = viewNode ? transitiveDependents(viewNode) : null;
-        break;
-      case "trace":
-        if (viewNode && viewNodeTo) {
-          const path = shortestDependsOnPath(viewNode, viewNodeTo);
-          matchSet = path ? new Set(path) : new Set([viewNode, viewNodeTo]);
-        } else {
-          matchSet = null;
-        }
-        break;
-      case "critical": {
-        const path = criticalPath();
-        matchSet = path ? new Set(path) : null;
-        break;
-      }
-      case "hubs":
-        matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
-        break;
-      case "orphans":
-        matchSet = new Set(disconnected(graph.nodes, graph.links));
-        break;
-      case "cycles": {
-        const ids = new Set<string>();
-        for (const e of graph.links) {
-          if (e.cycle) {
-            ids.add(endpointId(e.source));
-            ids.add(endpointId(e.target));
-          }
-        }
-        matchSet = ids.size ? ids : null;
-        break;
-      }
-      case "affected": {
-        const aff = window._liveAffectedIds;
-        matchSet = aff && aff.size ? aff : null;
-        break;
-      }
-      default:
+    if (activeView === "blast") {
+      matchSet = viewNode ? transitiveDependents(viewNode) : null;
+    } else if (activeView === "trace") {
+      if (viewNode && viewNodeTo) {
+        const path = shortestDependsOnPath(viewNode, viewNodeTo);
+        matchSet = path ? new Set(path) : new Set([viewNode, viewNodeTo]);
+      } else {
         matchSet = null;
+      }
+    } else if (activeView === "critical") {
+      const path = criticalPath();
+      matchSet = path ? new Set(path) : null;
+    } else if (activeView === "hubs") {
+      matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
+    } else if (activeView === "orphans") {
+      matchSet = new Set(disconnected(graph.nodes, graph.links));
+    } else if (activeView === "cycles") {
+      const ids = new Set<string>();
+      for (const e of graph.links) {
+        if (e.cycle) {
+          ids.add(endpointId(e.source));
+          ids.add(endpointId(e.target));
+        }
+      }
+      matchSet = ids.size ? ids : null;
+    } else if (activeView === "affected") {
+      const aff = window._liveAffectedIds;
+      matchSet = aff && aff.size ? aff : null;
+    } else {
+      matchSet = null;
     }
     return;
   }

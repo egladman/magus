@@ -16,6 +16,7 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind, Outcome } from "@wire/activity/v1alpha1/activity_pb";
 import type { ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import { createServerTransport, getLiveToken } from "../../../lib/server";
+import { unreachable } from "../../../lib/unreachable";
 import { reportFailure } from "../../../lib/notifications";
 import { h } from "../../../desktop/view";
 import { scrollRegion } from "../scroll";
@@ -41,14 +42,31 @@ export interface FeedRow {
   readonly bad: boolean; // a deny, an ask, or a failed run: the rows somebody is scanning for
 }
 
+const ROW_KINDS: Record<Kind, FeedRow["kind"]> = {
+  [Kind.UNSPECIFIED]: "other",
+  [Kind.MCP_TOOL_CALL]: "other",
+  [Kind.JOB]: "other",
+  [Kind.CONFIG_CHANGE]: "other",
+  [Kind.TOKEN_LIFECYCLE]: "other",
+  [Kind.SANDBOX_DENIAL]: "tool",
+  [Kind.GUARD_POLICY]: "other",
+  [Kind.AGENT_COMMAND]: "tool",
+  [Kind.CREDENTIAL_GRANT]: "other",
+  [Kind.AGENT_SPAWN]: "other",
+  [Kind.NOTES]: "other",
+  [Kind.FILE_CHANGE]: "file",
+  [Kind.RUN]: "run",
+};
+
 // feedRow projects one wire event onto a line. An event whose kind this console does not know
 // still renders, as "other" with its action: a feed that silently dropped what it could not
 // classify would go quiet exactly when the server grew something new to say.
 export function feedRow(e: ActivityEvent): FeedRow {
   const at = e.time ? Number(e.time.seconds) * 1000 + Math.floor(e.time.nanos / 1e6) : 0;
   const failed = e.outcome === Outcome.ERROR;
-  switch (e.kind) {
-    case Kind.FILE_CHANGE:
+  const rowKind = ROW_KINDS[e.kind] ?? "other";
+  switch (rowKind) {
+    case "file":
       return {
         at,
         kind: "file",
@@ -62,7 +80,7 @@ export function feedRow(e: ActivityEvent): FeedRow {
           : e.preview,
         bad: e.contested.length > 0,
       };
-    case Kind.RUN:
+    case "run":
       return {
         at,
         kind: "run",
@@ -71,8 +89,7 @@ export function feedRow(e: ActivityEvent): FeedRow {
         note: [e.preview, e.error].filter(Boolean).join(": "),
         bad: failed,
       };
-    case Kind.AGENT_COMMAND:
-    case Kind.SANDBOX_DENIAL: {
+    case "tool": {
       // The guard writes its verdict into the preview as "guard: <decision>", and "observed"
       // when it judged nothing. Read off the event rather than fetched, so a two-hundred-row
       // feed does not cost two hundred payload reads to say "deny".
@@ -86,9 +103,10 @@ export function feedRow(e: ActivityEvent): FeedRow {
         bad: verdict === "deny" || verdict === "ask" || failed,
       };
     }
-    default:
+    case "other":
       return { at, kind: "other", label: e.action, mark: "", note: e.preview, bad: failed };
   }
+  return unreachable(rowKind);
 }
 
 // JobFeed holds one job's rows and the element showing them. It owns its own element so the

@@ -131,25 +131,18 @@ export function matchesFilter(r: RunSummary, log: RunLog | undefined, f: RunFilt
   if (f.empty) return true;
   const cmd = commandText(log).toLowerCase();
   for (const t of f.keyed) {
-    switch (t.key) {
-      case "project":
-        if (!r.project.toLowerCase().includes(t.value)) return false;
-        break;
-      case "target":
-        if (!r.target.toLowerCase().includes(t.value)) return false;
-        break;
-      case "status":
-        if (runStatus(r) !== t.value) return false;
-        break;
-      case "trigger":
-        if ((log?.trigger || "").toLowerCase() !== t.value) return false;
-        break;
-      case "ref":
-        if (!r.ref.toLowerCase().startsWith(t.value)) return false;
-        break;
-      case "cmd":
-        if (!cmd.includes(t.value)) return false;
-        break;
+    if (t.key === "project") {
+      if (!r.project.toLowerCase().includes(t.value)) return false;
+    } else if (t.key === "target") {
+      if (!r.target.toLowerCase().includes(t.value)) return false;
+    } else if (t.key === "status") {
+      if (runStatus(r) !== t.value) return false;
+    } else if (t.key === "trigger") {
+      if ((log?.trigger || "").toLowerCase() !== t.value) return false;
+    } else if (t.key === "ref") {
+      if (!r.ref.toLowerCase().startsWith(t.value)) return false;
+    } else if (t.key === "cmd") {
+      if (!cmd.includes(t.value)) return false;
     }
   }
   const hay = (
@@ -490,21 +483,16 @@ function facetLabel(key: string, value: string): string {
 // four targets in one project counts once under that project, which is what makes the number
 // predict how many rows clicking it leaves.
 function facetValues(key: string, row: RunRow): string[] {
-  switch (key) {
-    // A partly-failed run reads as "fail" here because that is what clicking gives: `status:fail`
-    // keeps any run holding a failed target, so labelling it anything else would promise a set the
-    // filter does not produce.
-    case "status":
-      return row.status ? [row.status === "mixed" ? "fail" : row.status] : [];
-    case "project":
-      return distinct(row.outputs.map((o) => o.project).filter(Boolean));
-    case "target":
-      return distinct(row.outputs.map((o) => bareTarget(o.target)).filter(Boolean));
-    case "trigger":
-      return row.trigger ? [row.trigger] : [];
-    default:
-      return [];
+  // A partly-failed run reads as "fail" here because that is what clicking gives: `status:fail`
+  // keeps any run holding a failed target, so labelling it anything else would promise a set the
+  // filter does not produce.
+  if (key === "status") return row.status ? [row.status === "mixed" ? "fail" : row.status] : [];
+  if (key === "project") return distinct(row.outputs.map((o) => o.project).filter(Boolean));
+  if (key === "target") {
+    return distinct(row.outputs.map((o) => bareTarget(o.target)).filter(Boolean));
   }
+  if (key === "trigger") return row.trigger ? [row.trigger] : [];
+  return [];
 }
 
 function distinct(values: string[]): string[] {

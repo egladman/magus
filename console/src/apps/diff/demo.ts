@@ -21,6 +21,7 @@
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
 import { MagusError, fail, ok, type Result } from "../../gen/magus/types";
+import { unreachable } from "../../lib/unreachable";
 import type {
   DiffGroup,
   DiffOrder,
@@ -792,4 +793,5 @@ export function applyDemoOp(session: DiffReview, op: SessionOp): DiffReview {
         ),
       };
   }
+  return unreachable(op);
 }
