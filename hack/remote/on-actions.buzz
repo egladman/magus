@@ -20,6 +20,7 @@ import "fs";
 import "io";
 import "os";
 import "proc";
+import "result";
 import "serialize";
 import "std";
 import "vcs";
@@ -49,9 +50,13 @@ export object Reply {
     stderr: str,
 }
 
-export fun call(cmd: str, args: [str]) > Reply !> any {
-    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    return Reply{ ok = res.ok, stdout = res.stdout, stderr = res.stderr };
+export fun call(cmd: str, args: [str]) > result\Result::<Reply> {
+    try {
+        final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        return result\ok::<Reply>(Reply{ ok = res.ok, stdout = res.stdout, stderr = res.stderr });
+    } catch (err: any) {
+        return result\caught::<Reply>(err, doing: "{cmd} {args.join(" ")}");
+    }
 }
 
 // Outcome is what the command step left in the run's artifact; a field is null when the
@@ -64,9 +69,9 @@ export object Outcome {
 // Session is everything a step reaches outside itself, so the tests stand in for gh, git,
 // the artifact download, the clock and both output streams.
 export object Session {
-    exec: fun (cmd: str, args: [str]) > Reply !> any,
-    fetch: fun (id: str) > Outcome !> any,
-    sleep: fun (ms: double) > void !> any,
+    exec: fun (cmd: str, args: [str]) > result\Result::<Reply>,
+    fetch: fun (id: str) > result\Result::<Outcome>,
+    sleep: fun (ms: double) > result\Result::<bool>,
     say: fun (line: str) > void,
     emit: fun (text: str) > void,
 }
@@ -84,12 +89,15 @@ fun short(sha: str) > str {
     return sha.sub(0, len: 12);
 }
 
-fun must(cmd: str, args: [str], exec: fun (cmd: str, args: [str]) > Reply !> any) > str !> any {
+fun must(cmd: str, args: [str], exec: fun (cmd: str, args: [str]) > result\Result::<Reply>) > result\Result::<str> {
     final r = exec(cmd, args: args);
-    if (!r.ok) {
-        throw "on-actions: {cmd} {args.join(" ")}: {r.stderr.trim()}";
+    if (r.error != null) {
+        return result\fail::<str>(r.error!.message);
     }
-    return r.stdout;
+    if (!r.value!.ok) {
+        return result\fail::<str>("on-actions: {cmd} {args.join(" ")}: {r.value!.stderr.trim()}");
+    }
+    return result\ok::<str>(r.value!.stdout);
 }
 
 fun elapsed(began: double, requests: int) > str {
@@ -138,23 +146,24 @@ export fun isScratch(branch: str) > bool {
         and hex(branch.sub(SCRATCH_PREFIX.len()));
 }
 
-// checkArgv raises unless argv can travel as the workflow's argv input. The runner
+// checkArgv fails unless argv can travel as the workflow's argv input. The runner
 // word-splits that input unquoted, so a word carrying whitespace would arrive as two and a
 // glob character would be expanded there.
-export fun checkArgv(argv: [str]) > void !> str {
+export fun checkArgv(argv: [str]) > result\Result::<[str]> {
     if (argv.len() == 0) {
-        throw "no magus argv after `magus`";
+        return result\fail::<[str]>("no magus argv after `magus`");
     }
     foreach (word in argv) {
         if (word == "") {
-            throw "an empty word cannot survive the runner's word split";
+            return result\fail::<[str]>("an empty word cannot survive the runner's word split");
         }
         foreach (c in [" ", "\t", "\n", "*", "?", "["]) {
             if (word.indexOf(c) != null) {
-                throw "\"{word}\" would not reach magus as one word: the runner word-splits and globs the argv";
+                return result\fail::<[str]>("\"{word}\" would not reach magus as one word: the runner word-splits and globs the argv");
             }
         }
     }
+    return result\ok::<[str]>(argv);
 }
 
 // Options is one invocation's parsed options; argv is the command after `magus`.
@@ -183,10 +192,15 @@ final usage = "usage: {SCRIPT} [options] magus <argv>\n"
 
 // parse reads options up to the first word that is not one, sudo-style: that word and
 // everything after it is the command, untouched.
-export fun parse(args: [str]) > Options !> any {
-    final parsed = flags\parse(args, switches: SWITCHES, valued: VALUED);
+export fun parse(args: [str]) > result\Result::<Options> {
+    var parsed = flags\FlagParse{ values = {<str: str>}, lists = {<str: [str]>}, positionals = [<str>], unknown = [<str>] };
+    try {
+        parsed = flags\parse(args, switches: SWITCHES, valued: VALUED);
+    } catch (err: any) {
+        return result\caught::<Options>(err, doing: "on-actions: reading the options");
+    }
     if (parsed.unknown.len() > 0) {
-        throw "on-actions: {parsed.unknown[0]} is not an option of this script, and the command starts with magus\n{usage}";
+        return result\fail::<Options>("on-actions: {parsed.unknown[0]} is not an option of this script, and the command starts with magus\n{usage}");
     }
     final seen = parsed.values;
     final command = parsed.positionals;
@@ -209,43 +223,42 @@ export fun parse(args: [str]) > Options !> any {
         }
     }
     if (modes == 0) {
-        throw "on-actions: no command given\n{usage}";
+        return result\fail::<Options>("on-actions: no command given\n{usage}");
     }
     if (modes > 1) {
-        throw "on-actions: give one of a command, --result, --delete and --ls\n{usage}";
+        return result\fail::<Options>("on-actions: give one of a command, --result, --delete and --ls\n{usage}");
     }
     if (command.len() == 0) {
         foreach (opt in ["--keep", "--detach", "--head", "--ref", "--sandbox"]) {
             if (seen[opt] != null) {
-                throw "on-actions: {opt} applies to a command it starts, not to --result, --delete or --ls";
+                return result\fail::<Options>("on-actions: {opt} applies to a command it starts, not to --result, --delete or --ls");
             }
         }
         if (seen["--result"] != null and !digits(o.result)) {
-            throw "on-actions: --result takes a run id, not \"{o.result}\"";
+            return result\fail::<Options>("on-actions: --result takes a run id, not \"{o.result}\"");
         }
         if (seen["--delete"] != null and !digits(o.delete) and !isScratch(o.delete)) {
-            throw "on-actions: --delete takes a run id or a {SCRATCH_PREFIX}<sha12> branch, not \"{o.delete}\"";
+            return result\fail::<Options>("on-actions: --delete takes a run id or a {SCRATCH_PREFIX}<sha12> branch, not \"{o.delete}\"");
         }
-        return o;
+        return result\ok::<Options>(o);
     }
     if (command[0] != "magus") {
         if (command[0].startsWith("-")) {
-            throw "on-actions: {command[0]} is not an option of this script, and the command starts with magus\n{usage}";
+            return result\fail::<Options>("on-actions: {command[0]} is not an option of this script, and the command starts with magus\n{usage}");
         }
-        throw "on-actions: the command starts with magus, not \"{command[0]}\": run.yaml runs one magus invocation\n{usage}";
+        return result\fail::<Options>("on-actions: the command starts with magus, not \"{command[0]}\": run.yaml runs one magus invocation\n{usage}");
     }
-    try {
-        checkArgv(o.argv);
-    } catch (e: str) {
-        throw "on-actions: {e}\n{usage}";
+    final checked = checkArgv(o.argv);
+    if (checked.error != null) {
+        return result\fail::<Options>("on-actions: {checked.error!.message}\n{usage}");
     }
     if (o.keep and o.detach) {
-        throw "on-actions: --keep does nothing with --detach: a detached run stays until {SCRIPT} --delete <run>";
+        return result\fail::<Options>("on-actions: --keep does nothing with --detach: a detached run stays until {SCRIPT} --delete <run>");
     }
     if (SANDBOXES.indexOf(o.sandbox) == null) {
-        throw "on-actions: --sandbox is one of {SANDBOXES.join(", ")}, not \"{o.sandbox}\"";
+        return result\fail::<Options>("on-actions: --sandbox is one of {SANDBOXES.join(", ")}, not \"{o.sandbox}\"");
     }
-    return o;
+    return result\ok::<Options>(o);
 }
 
 // dispatchArgs is the gh call that starts run.yaml on ref. -f, never -F, so a word
@@ -325,21 +338,25 @@ export object Run {
 }
 
 // readRun refuses a run of any other workflow: this script acts on run.yaml alone.
-export fun readRun(body: str) > Run !> any {
-    final doc = serialize\jsonDecode(body);
-    final r = Run{
-        id = "{doc.q("id").integerValue()}",
-        path = doc.q("path").stringValue(),
-        status = doc.q("status").stringValue(),
-        conclusion = doc.q("conclusion").stringValue(),
-        branch = doc.q("head_branch").stringValue(),
-        sha = doc.q("head_sha").stringValue(),
-        url = doc.q("html_url").stringValue(),
-    };
-    if (r.path != WORKFLOW) {
-        throw "on-actions: run {r.id} is a run of {r.path}, not {WORKFLOW}";
+export fun readRun(body: str) > result\Result::<Run> {
+    try {
+        final doc = serialize\jsonDecode(body);
+        final r = Run{
+            id = "{doc.q("id").integerValue()}",
+            path = doc.q("path").stringValue(),
+            status = doc.q("status").stringValue(),
+            conclusion = doc.q("conclusion").stringValue(),
+            branch = doc.q("head_branch").stringValue(),
+            sha = doc.q("head_sha").stringValue(),
+            url = doc.q("html_url").stringValue(),
+        };
+        if (r.path != WORKFLOW) {
+            return result\fail::<Run>("on-actions: run {r.id} is a run of {r.path}, not {WORKFLOW}");
+        }
+        return result\ok::<Run>(r);
+    } catch (err: any) {
+        return result\caught::<Run>(err, doing: "reading a run");
     }
-    return r;
 }
 
 fun state(r: Run) > str {
@@ -371,11 +388,11 @@ export object Started {
 
 // start pushes HEAD (or checks --ref's tip is HEAD) and dispatches run.yaml. A branch it
 // pushed for a dispatch that then failed is deleted unless --keep, so nothing leaks.
-export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > Reply !> any) > Started !> any {
+export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > result\Result::<Reply>) > result\Result::<Started> {
     final lines = mut [<str>];
     if (!head.clean) {
         if (!o.head) {
-            throw "on-actions: this checkout has uncommitted changes and a run tests a pushed commit; commit them, or pass --head to run HEAD {short(head.sha)} without them";
+            return result\fail::<Started>("on-actions: this checkout has uncommitted changes and a run tests a pushed commit; commit them, or pass --head to run HEAD {short(head.sha)} without them");
         }
         lines.append("on-actions: running HEAD {short(head.sha)}; the uncommitted changes here do not go");
     }
@@ -385,18 +402,29 @@ export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > Rep
     final pushed = ref == "";
     if (pushed) {
         ref = scratchBranch(head.sha);
-        _ = must("git", args: pushArgs(head.sha), exec: exec);
+        final push = must("git", args: pushArgs(head.sha), exec: exec);
+        if (push.error != null) {
+            return result\fail::<Started>(push.error!.message);
+        }
         requests = requests + 1;
         lines.append("on-actions: pushed HEAD to {ref}");
     } else {
-        final tip = must("gh", args: refArgs(ref), exec: exec).trim();
+        final tipped = must("gh", args: refArgs(ref), exec: exec);
+        if (tipped.error != null) {
+            return result\fail::<Started>(tipped.error!.message);
+        }
+        final tip = tipped.value!.trim();
         requests = requests + 1;
         if (tip != head.sha) {
-            throw "on-actions: {ref} on github.com is at {short(tip)} and HEAD is {short(head.sha)}; push HEAD to it, or drop --ref to run HEAD on a branch of its own";
+            return result\fail::<Started>("on-actions: {ref} on github.com is at {short(tip)} and HEAD is {short(head.sha)}; push HEAD to it, or drop --ref to run HEAD on a branch of its own");
         }
     }
     final args = dispatchArgs(ref, argv: o.argv, sandbox: o.sandbox);
-    final r = exec("gh", args: args);
+    final dispatched = exec("gh", args: args);
+    if (dispatched.error != null) {
+        return result\fail::<Started>(dispatched.error!.message);
+    }
+    final r = dispatched.value!;
     requests = requests + 1;
     final url = runURL(r.stdout + "\n" + r.stderr);
     if (!r.ok or url == null) {
@@ -405,7 +433,11 @@ export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > Rep
             why = "gh {args.join(" ")}: {r.stderr.trim()}";
         }
         if (pushed and !o.keep) {
-            final d = exec("gh", args: deleteBranchArgs(ref));
+            final removed = exec("gh", args: deleteBranchArgs(ref));
+            if (removed.error != null) {
+                return result\fail::<Started>(removed.error!.message);
+            }
+            final d = removed.value!;
             if (d.ok) {
                 why = why + "; deleted {ref}";
             } else {
@@ -414,57 +446,82 @@ export fun start(o: Options, head: Head, exec: fun (cmd: str, args: [str]) > Rep
         } else if (pushed) {
             why = why + "; {ref} stays; find its run with gh run list --workflow run.yaml --branch {ref}";
         }
-        throw "on-actions: {why}";
+        return result\fail::<Started>("on-actions: {why}");
     }
     lines.append("on-actions: dispatched {WORKFLOW} on {ref} at {short(head.sha)} (sandbox {o.sandbox}); {elapsed(began, requests: requests)}");
-    return Started{ id = runID(url!), url = url!, branch = ref, lines = lines };
+    return result\ok::<Started>(Started{ id = runID(url!), url = url!, branch = ref, lines = lines });
 }
 
 // wait polls the run until it completes. A few failed polls in a row end the wait, not
 // the run: the error says how to pick it up again.
-export fun wait(id: str, s: Session) > Run !> any {
+export fun wait(id: str, s: Session) > result\Result::<Run> {
     var misses = 0;
     var last: Run? = null;
     while (last == null or last!.status != "completed") {
-        s.sleep(POLL_MS);
-        final r = s.exec("gh", args: runArgs(id));
+        final slept = s.sleep(POLL_MS);
+        if (slept.error != null) {
+            return result\fail::<Run>(slept.error!.message);
+        }
+        final polled = s.exec("gh", args: runArgs(id));
+        if (polled.error != null) {
+            return result\fail::<Run>(polled.error!.message);
+        }
+        final r = polled.value!;
         if (r.ok) {
             misses = 0;
-            last = readRun(r.stdout);
+            final read = readRun(r.stdout);
+            if (read.error != null) {
+                return result\fail::<Run>(read.error!.message);
+            }
+            last = read.value!;
         } else {
             misses = misses + 1;
             if (misses >= POLL_MISSES) {
-                throw "on-actions: gave up waiting after {misses} failed polls ({r.stderr.trim()}); the run goes on: {SCRIPT} --result {id}";
+                return result\fail::<Run>("on-actions: gave up waiting after {misses} failed polls ({r.stderr.trim()}); the run goes on: {SCRIPT} --result {id}");
             }
         }
     }
-    return last!;
+    return result\ok::<Run>(last!);
 }
 
 // finish prints the command's output (or the failed steps' log when the command never
 // wrote any) and returns the exit code to leave with.
-fun finish(r: Run, s: Session) > int !> any {
-    final outcome = s.fetch(r.id);
+fun finish(r: Run, s: Session) > result\Result::<int> {
+    final fetched = s.fetch(r.id);
+    if (fetched.error != null) {
+        return result\fail::<int>(fetched.error!.message);
+    }
+    final outcome = fetched.value!;
     if (outcome.output != null) {
         s.emit(outcome.output!);
     } else if (r.conclusion != "success") {
         s.say("on-actions: the command left no output; the failed steps' log follows");
-        final log = s.exec("gh", args: failedLogArgs(r.id));
-        s.emit(log.stdout);
+        final shown = s.exec("gh", args: failedLogArgs(r.id));
+        if (shown.error != null) {
+            return result\fail::<int>(shown.error!.message);
+        }
+        s.emit(shown.value!.stdout);
     }
-    return exitCode(outcome, r: r);
+    return result\ok::<int>(exitCode(outcome, r: r));
 }
 
 // remove deletes a completed run.yaml run, with its logs and artifacts, and the branch
 // pushed for it. It says what stays visible, since a public run was already public.
-export fun remove(r: Run, exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+export fun remove(r: Run, exec: fun (cmd: str, args: [str]) > result\Result::<Reply>) > result\Result::<[str]> {
     if (r.status != "completed") {
-        throw "on-actions: run {r.id} is {r.status}; GitHub deletes only a completed run, so cancel it first (gh run cancel {r.id})";
+        return result\fail::<[str]>("on-actions: run {r.id} is {r.status}; GitHub deletes only a completed run, so cancel it first (gh run cancel {r.id})");
     }
-    _ = must("gh", args: deleteRunArgs(r.id), exec: exec);
+    final deleted = must("gh", args: deleteRunArgs(r.id), exec: exec);
+    if (deleted.error != null) {
+        return result\fail::<[str]>(deleted.error!.message);
+    }
     final lines = mut ["on-actions: deleted run {r.id} with its logs and artifacts"];
     if (r.branch == scratchBranch(r.sha)) {
-        final d = exec("gh", args: deleteBranchArgs(r.branch));
+        final removed = exec("gh", args: deleteBranchArgs(r.branch));
+        if (removed.error != null) {
+            return result\fail::<[str]>(removed.error!.message);
+        }
+        final d = removed.value!;
         if (d.ok) {
             lines.append("on-actions: deleted branch {r.branch}");
         } else {
@@ -474,13 +531,17 @@ export fun remove(r: Run, exec: fun (cmd: str, args: [str]) > Reply !> any) > [s
         lines.append("on-actions: kept branch {r.branch}: this script did not push it");
     }
     lines.append("on-actions: still visible: commit {short(r.sha)} by its id, and any branch or pull request that holds it; GitHub does not say a deleted run is gone from its side");
-    return lines;
+    return result\ok::<[str]>(lines);
 }
 
 // run is the prefix itself: start, wait, print, clean up, and return the command's code.
-export fun run(o: Options, head: Head, s: Session) > int !> any {
+export fun run(o: Options, head: Head, s: Session) > result\Result::<int> {
     final began = os\time();
-    final st = start(o, head: head, exec: s.exec);
+    final started = start(o, head: head, exec: s.exec);
+    if (started.error != null) {
+        return result\fail::<int>(started.error!.message);
+    }
+    final st = started.value!;
     s.say("on-actions: `magus {o.argv.join(" ")}` runs on a GitHub Actions runner (ubuntu-latest), not here, and spends CI minutes: {st.url}");
     foreach (l in st.lines) {
         s.say(l);
@@ -488,49 +549,88 @@ export fun run(o: Options, head: Head, s: Session) > int !> any {
     if (o.detach) {
         s.emit("{st.id}\n");
         s.say("on-actions: {SCRIPT} --result {st.id} reads it; {SCRIPT} --delete {st.id} removes it");
-        return 0;
+        return result\ok::<int>(0);
     }
     s.say("on-actions: waiting; Ctrl-C ends the wait, not the run: {SCRIPT} --result {st.id} reads it later");
-    final r = wait(st.id, s: s);
-    final code = finish(r, s: s);
+    final waited = wait(st.id, s: s);
+    if (waited.error != null) {
+        return result\fail::<int>(waited.error!.message);
+    }
+    final r = waited.value!;
+    final finished = finish(r, s: s);
+    if (finished.error != null) {
+        return result\fail::<int>(finished.error!.message);
+    }
+    final code = finished.value!;
     s.say("on-actions: run {r.id}: {r.conclusion}, exit {code}, {took(began)}");
     if (o.keep) {
         s.say("on-actions: kept run {r.id} and branch {r.branch}; {SCRIPT} --delete {r.id} removes them");
-        return code;
+        return result\ok::<int>(code);
     }
-    foreach (l in remove(r, exec: s.exec)) {
+    final removed = remove(r, exec: s.exec);
+    if (removed.error != null) {
+        return result\fail::<int>(removed.error!.message);
+    }
+    foreach (l in removed.value!) {
         s.say(l);
     }
-    return code;
+    return result\ok::<int>(code);
 }
 
-// result answers from one request: an unfinished run exits UNFINISHED, a finished one
+// answer is --result: one request. An unfinished run exits UNFINISHED, a finished one
 // prints its output and exits with its code.
-export fun result(id: str, head: Head, s: Session) > int !> any {
-    final r = readRun(must("gh", args: runArgs(id), exec: s.exec));
+export fun answer(id: str, head: Head, s: Session) > result\Result::<int> {
+    final body = must("gh", args: runArgs(id), exec: s.exec);
+    if (body.error != null) {
+        return result\fail::<int>(body.error!.message);
+    }
+    final read = readRun(body.value!);
+    if (read.error != null) {
+        return result\fail::<int>(read.error!.message);
+    }
+    final r = read.value!;
     s.say("on-actions: run {r.id}: {state(r)}, {r.branch} at {short(r.sha)}, {r.url}");
     if (r.sha != head.sha) {
         s.say("on-actions: it ran {short(r.sha)}; this checkout is at {short(head.sha)}");
     }
     if (r.status != "completed") {
         s.say("on-actions: not finished; ask again: {SCRIPT} --result {r.id}");
-        return UNFINISHED;
+        return result\ok::<int>(UNFINISHED);
     }
-    final code = finish(r, s: s);
+    final finished = finish(r, s: s);
+    if (finished.error != null) {
+        return result\fail::<int>(finished.error!.message);
+    }
+    final code = finished.value!;
     s.say("on-actions: exit {code}; magus's own logs: gh run download {r.id} --name magus-logs; {SCRIPT} --delete {r.id} removes the run");
-    return code;
+    return result\ok::<int>(code);
 }
 
 // deleteOne deletes a run by id, or one pushed branch by name.
-export fun deleteOne(target: str, exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+export fun deleteOne(target: str, exec: fun (cmd: str, args: [str]) > result\Result::<Reply>) > result\Result::<[str]> {
     final began = os\time();
     if (isScratch(target)) {
-        _ = must("gh", args: deleteBranchArgs(target), exec: exec);
-        return ["on-actions: deleted branch {target}", "on-actions: {elapsed(began, requests: 1)}"];
+        final dropped = must("gh", args: deleteBranchArgs(target), exec: exec);
+        if (dropped.error != null) {
+            return result\fail::<[str]>(dropped.error!.message);
+        }
+        return result\ok::<[str]>(["on-actions: deleted branch {target}", "on-actions: {elapsed(began, requests: 1)}"]);
     }
-    final r = readRun(must("gh", args: runArgs(target), exec: exec));
+    final body = must("gh", args: runArgs(target), exec: exec);
+    if (body.error != null) {
+        return result\fail::<[str]>(body.error!.message);
+    }
+    final read = readRun(body.value!);
+    if (read.error != null) {
+        return result\fail::<[str]>(read.error!.message);
+    }
+    final r = read.value!;
+    final removed = remove(r, exec: exec);
+    if (removed.error != null) {
+        return result\fail::<[str]>(removed.error!.message);
+    }
     final lines = mut [<str>];
-    foreach (l in remove(r, exec: exec)) {
+    foreach (l in removed.value!) {
         lines.append(l);
     }
     var requests = 2;
@@ -538,15 +638,19 @@ export fun deleteOne(target: str, exec: fun (cmd: str, args: [str]) > Reply !> a
         requests = 3;
     }
     lines.append("on-actions: {elapsed(began, requests: requests)}");
-    return lines;
+    return result\ok::<[str]>(lines);
 }
 
 // ls lists every run.yaml run and every pushed branch no run holds, each with the
 // command that deletes it.
-export fun ls(exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
+export fun ls(exec: fun (cmd: str, args: [str]) > result\Result::<Reply>) > result\Result::<[str]> {
     final lines = mut [<str>];
     final held = mut [<str>];
-    foreach (row in must("gh", args: runsArgs(), exec: exec).split("\n")) {
+    final runs = must("gh", args: runsArgs(), exec: exec);
+    if (runs.error != null) {
+        return result\fail::<[str]>(runs.error!.message);
+    }
+    foreach (row in runs.value!.split("\n")) {
         final f = row.split("\t");
         if (f.len() < 6) {
             continue;
@@ -555,52 +659,84 @@ export fun ls(exec: fun (cmd: str, args: [str]) > Reply !> any) > [str] !> any {
         held.append(r.branch);
         lines.append("run {r.id}: {state(r)}, {r.branch} at {short(r.sha)}, {r.url}; {SCRIPT} --delete {r.id}");
     }
-    foreach (ref in must("gh", args: branchesArgs(), exec: exec).split("\n")) {
+    final branches = must("gh", args: branchesArgs(), exec: exec);
+    if (branches.error != null) {
+        return result\fail::<[str]>(branches.error!.message);
+    }
+    foreach (ref in branches.value!.split("\n")) {
         final branch = ref.trim().replace("refs/heads/", with: "");
         if (isScratch(branch) and held.indexOf(branch) == null) {
             lines.append("branch {branch}: no run; {SCRIPT} --delete {branch}");
         }
     }
-    return lines;
+    return result\ok::<[str]>(lines);
 }
 
-fun checkout() > Head !> any {
-    return Head{ sha = vcs\commit().id, clean = vcs\status().clean };
-}
-
-fun fetch(id: str) > Outcome !> any {
-    final dir = fs\tempDir("on-actions-");
-    final r = call("gh", args: downloadArgs(id, dir: dir));
-    var output: str? = null;
-    var code: int? = null;
-    if (r.ok) {
-        if (fs\exists(dir + "/output")) {
-            output = fs\readFile(dir + "/output");
-        }
-        if (fs\exists(dir + "/exit-code")) {
-            code = std\parseInt(fs\readFile(dir + "/exit-code").trim());
-        }
+fun checkout() > result\Result::<Head> {
+    try {
+        return result\ok::<Head>(Head{ sha = vcs\commit().id, clean = vcs\status().clean });
+    } catch (err: any) {
+        return result\caught::<Head>(err, doing: "reading the checkout");
     }
-    fs\removeAll(dir);
-    return Outcome{ output = output, code = code };
+}
+
+fun fetch(id: str) > result\Result::<Outcome> {
+    try {
+        final dir = fs\tempDir("on-actions-");
+        final downloaded = call("gh", args: downloadArgs(id, dir: dir));
+        if (downloaded.error != null) {
+            return result\fail::<Outcome>(downloaded.error!.message);
+        }
+        var output: str? = null;
+        var code: int? = null;
+        if (downloaded.value!.ok) {
+            if (fs\exists(dir + "/output")) {
+                output = fs\readFile(dir + "/output");
+            }
+            if (fs\exists(dir + "/exit-code")) {
+                code = std\parseInt(fs\readFile(dir + "/exit-code").trim());
+            }
+        }
+        fs\removeAll(dir);
+        return result\ok::<Outcome>(Outcome{ output = output, code = code });
+    } catch (err: any) {
+        return result\caught::<Outcome>(err, doing: "fetching the run's artifact");
+    }
+}
+
+fun napped(ms: double) > result\Result::<bool> {
+    try {
+        os\sleep(ms);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "waiting to poll again");
+    }
 }
 
 fun session() > Session {
     return Session{
         exec = call,
         fetch = fetch,
-        sleep = fun (ms: double) > void !> any { os\sleep(ms); },
+        sleep = napped,
         say = fun (line: str) > void { io\stderr.write(line + "\n") catch void; },
         emit = fun (text: str) > void { io\stdout.write(text) catch void; },
     };
 }
 
 export fun main(args: [str]) > void !> any {
-    final o = parse(args);
+    final parsed = parse(args);
+    if (parsed.error != null) {
+        throw parsed.error!.message;
+    }
+    final o = parsed.value!;
     final s = session();
     var code = 0;
     if (o.ls) {
-        final lines = ls(s.exec);
+        final listed = ls(s.exec);
+        if (listed.error != null) {
+            throw listed.error!.message;
+        }
+        final lines = listed.value!;
         if (lines.len() == 0) {
             s.say("on-actions: nothing left behind");
         }
@@ -608,13 +744,33 @@ export fun main(args: [str]) > void !> any {
             s.emit(l + "\n");
         }
     } else if (o.result != "") {
-        code = result(o.result, head: checkout(), s: s);
+        final head = checkout();
+        if (head.error != null) {
+            throw head.error!.message;
+        }
+        final answered = answer(o.result, head: head.value!, s: s);
+        if (answered.error != null) {
+            throw answered.error!.message;
+        }
+        code = answered.value!;
     } else if (o.delete != "") {
-        foreach (l in deleteOne(o.delete, exec: s.exec)) {
+        final deleted = deleteOne(o.delete, exec: s.exec);
+        if (deleted.error != null) {
+            throw deleted.error!.message;
+        }
+        foreach (l in deleted.value!) {
             s.say(l);
         }
     } else {
-        code = run(o, head: checkout(), s: s);
+        final head = checkout();
+        if (head.error != null) {
+            throw head.error!.message;
+        }
+        final ran = run(o, head: head.value!, s: s);
+        if (ran.error != null) {
+            throw ran.error!.message;
+        }
+        code = ran.value!;
     }
     if (code != 0) {
         os\exit(code);
@@ -645,8 +801,8 @@ fun on(s: Stub, words: [str], reply: Reply) > void {
     s.spent.append(false);
 }
 
-fun exec(s: Stub) > fun (cmd: str, args: [str]) > Reply !> any {
-    return fun (cmd: str, args: [str]) > Reply !> any {
+fun exec(s: Stub) > fun (cmd: str, args: [str]) > result\Result::<Reply> {
+    return fun (cmd: str, args: [str]) > result\Result::<Reply> {
         final line = cmd + " " + args.join(" ");
         s.calls.append(line);
         var i = 0;
@@ -660,22 +816,25 @@ fun exec(s: Stub) > fun (cmd: str, args: [str]) > Reply !> any {
                     }
                     j = j + 1;
                 }
-                return s.replies[i];
+                return result\ok::<Reply>(s.replies[i]);
             }
             i = i + 1;
         }
-        throw "stub: nothing answers {line}";
+        return result\fail::<Reply>("stub: nothing answers {line}");
     };
 }
 
 fun stubSession(s: Stub, outcome: Outcome) > Session {
     return Session{
         exec = exec(s),
-        fetch = fun (id: str) > Outcome !> any {
+        fetch = fun (id: str) > result\Result::<Outcome> {
             s.calls.append("fetch {id}");
-            return outcome;
+            return result\ok::<Outcome>(outcome);
         },
-        sleep = fun (ms: double) > void !> any { s.sleeps.append(ms); },
+        sleep = fun (ms: double) > result\Result::<bool> {
+            s.sleeps.append(ms);
+            return result\ok::<bool>(true);
+        },
         say = fun (line: str) > void { s.said.append(line); },
         emit = fun (text: str) > void { s.emitted.append(text); },
     };
@@ -689,14 +848,7 @@ fun failed(stderr: str) > Reply {
     return Reply{ ok = false, stdout = "", stderr = stderr };
 }
 
-fun refusal(step: fun () > void !> any) > bool {
-    try {
-        step();
-    } catch (e) {
-        return true;
-    }
-    return false;
-}
+
 
 final SHA = "0123456789abcdef0123456789abcdef01234567";
 final RUNS = "https://github.com/o/r/actions/runs/42";
@@ -707,17 +859,17 @@ fun runBody(path: str, status: str, conclusion: str?, branch: str, sha: str) > s
 }
 
 test "options end at the first word that is not one, and the command passes through untouched" {
-    final o = parse(["--keep", "--sandbox", "best-effort", "magus", "run", "test", "--keep", "--detach", "--", "-run", "TestX"]);
+    final o = parse(["--keep", "--sandbox", "best-effort", "magus", "run", "test", "--keep", "--detach", "--", "-run", "TestX"]).value!;
     assert\equal([o.keep, o.detach, o.sandbox, o.argv.join(" ")], want: [true, false, "best-effort", "run test --keep --detach -- -run TestX"], message: "the command's own --keep and --detach stay its own");
-    final d = parse(["--detach", "--ref=wip", "--head", "magus", "affected", "ci"]);
+    final d = parse(["--detach", "--ref=wip", "--head", "magus", "affected", "ci"]).value!;
     assert\equal([d.detach, d.ref, d.head, d.sandbox, d.argv.join(" ")], want: [true, "wip", true, "required", "affected ci"], message: "--ref=value");
-    final m = parse(["magus", "run", "test", "--ls"]);
+    final m = parse(["magus", "run", "test", "--ls"]).value!;
     assert\equal([m.ls, m.argv.join(" ")], want: [false, "run test --ls"], message: "no option after the command");
-    assert\equal(parse(["--result", "42"]).result, want: "42", message: "--result");
-    assert\equal(parse(["--delete", "run-0123456789ab"]).delete, want: "run-0123456789ab", message: "--delete a pushed branch");
-    assert\equal(parse(["--ls"]).ls, want: true, message: "--ls");
-    assert\equal(parse(["--keep", "--", "magus", "run", "test"]).argv, want: ["run", "test"], message: "-- ends the options, as everywhere");
-    assert\equal(parse(["--ref", "a", "--ref", "b", "magus", "run", "test"]).ref, want: "b", message: "the nearer flag is the override, as flags\\parse reads every script");
+    assert\equal(parse(["--result", "42"]).value!.result, want: "42", message: "--result");
+    assert\equal(parse(["--delete", "run-0123456789ab"]).value!.delete, want: "run-0123456789ab", message: "--delete a pushed branch");
+    assert\equal(parse(["--ls"]).value!.ls, want: true, message: "--ls");
+    assert\equal(parse(["--keep", "--", "magus", "run", "test"]).value!.argv, want: ["run", "test"], message: "-- ends the options, as everywhere");
+    assert\equal(parse(["--ref", "a", "--ref", "b", "magus", "run", "test"]).value!.ref, want: "b", message: "the nearer flag is the override, as flags\\parse reads every script");
 }
 
 test "parse refuses what it cannot run" {
@@ -739,18 +891,13 @@ test "parse refuses what it cannot run" {
         ["--delete", "wip"],
         ["--delete", "run-fix"],
     ]) {
-        assert\equal(refusal(fun () > void !> any { _ = parse(argv); }), want: true, message: argv.join(" "));
+        assert\equal(parse(argv).error != null, want: true, message: argv.join(" "));
     }
 }
 
 test "an argv word the runner would split or glob is refused" {
     final raises = fun (argv: [str]) > bool {
-        try {
-            checkArgv(argv);
-        } catch (e: str) {
-            return true;
-        }
-        return false;
+        return checkArgv(argv).error != null;
     };
     assert\equal(raises(["run", "test", "."]), want: false, message: "plain words");
     assert\equal(raises(["run", "test", "./internal/..."]), want: false, message: "a Go package pattern is no glob");
@@ -766,7 +913,7 @@ test "a run pushes HEAD, waits, prints the output, exits with its code, then del
     on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "in_progress", conclusion: null, branch: "run-0123456789ab", sha: SHA)));
     on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "run-0123456789ab", sha: SHA)));
     on(s, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    final code = run(parse(["magus", "run", "lint", "."]), head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = "lint: 2 findings\n", code = 3 }));
+    final code = run(parse(["magus", "run", "lint", "."]).value!, head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = "lint: 2 findings\n", code = 3 })).value!;
     assert\equal(code, want: 3, message: "the remote exit code");
     assert\equal(s.calls, want: [
         "git push origin {SHA}:refs/heads/run-0123456789ab",
@@ -788,7 +935,7 @@ test "--keep leaves the run and the branch, and --ref deletes only the run" {
     on(kept, words: ["git", "push"], reply: ok(""));
     on(kept, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
     on(kept, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "run-0123456789ab", sha: SHA)));
-    final code = run(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(kept, outcome: Outcome{ output = "", code = 0 }));
+    final code = run(parse(["--keep", "magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = true }, s: stubSession(kept, outcome: Outcome{ output = "", code = 0 })).value!;
     assert\equal([code, kept.calls.len()], want: [0, 4], message: "nothing deleted");
     assert\equal(kept.said[kept.said.len() - 1], want: "on-actions: kept run 42 and branch run-0123456789ab; {SCRIPT} --delete 42 removes them", message: "says how to delete them");
 
@@ -797,7 +944,7 @@ test "--keep leaves the run and the branch, and --ref deletes only the run" {
     on(named, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
     on(named, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
     on(named, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    _ = run(parse(["--ref", "wip", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(named, outcome: Outcome{ output = "", code = 0 }));
+    _ = run(parse(["--ref", "wip", "magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = true }, s: stubSession(named, outcome: Outcome{ output = "", code = 0 })).value!;
     assert\equal(named.calls[named.calls.len() - 1], want: "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42", message: "a branch this script did not push is kept");
 }
 
@@ -805,7 +952,7 @@ test "--detach prints the run id and returns without waiting" {
     final s = stub();
     on(s, words: ["git", "push"], reply: ok(""));
     on(s, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
-    final code = run(parse(["--detach", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = null, code = null }));
+    final code = run(parse(["--detach", "magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = null, code = null })).value!;
     assert\equal([code, s.calls.len(), s.sleeps.len()], want: [0, 2, 0], message: "no wait");
     assert\equal(s.emitted, want: ["42\n"], message: "the id on stdout");
 }
@@ -815,28 +962,28 @@ test "a refused dispatch deletes the branch it pushed, unless --keep" {
     on(s, words: ["git", "push"], reply: ok(""));
     on(s, words: ["gh", "workflow", "run"], reply: failed("HTTP 422"));
     on(s, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    assert\equal(refusal(fun () > void !> any { _ = start(parse(["magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, exec: exec(s)); }), want: true, message: "refused");
+    assert\equal(start(parse(["magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = true }, exec: exec(s)).error != null, want: true, message: "refused");
     assert\equal(s.calls[2], want: "gh api --method DELETE repos/\{owner\}/\{repo\}/git/refs/heads/run-0123456789ab", message: "no branch leaks");
     final kept = stub();
     on(kept, words: ["git", "push"], reply: ok(""));
     on(kept, words: ["gh", "workflow", "run"], reply: ok("no url here\n"));
-    assert\equal(refusal(fun () > void !> any { _ = start(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, exec: exec(kept)); }), want: true, message: "no URL is said, not guessed");
+    assert\equal(start(parse(["--keep", "magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = true }, exec: exec(kept)).error != null, want: true, message: "no URL is said, not guessed");
     assert\equal(kept.calls.len(), want: 2, message: "--keep keeps the branch");
 }
 
 test "a run refuses a branch whose tip is not HEAD, and a dirty tree without --head" {
     final s = stub();
     on(s, words: ["gh", "api"], reply: ok("fedcba9876543210fedcba9876543210fedcba98\n"));
-    final o = parse(["--ref", "wip", "magus", "run", "test"]);
-    assert\equal(refusal(fun () > void !> any { _ = start(o, head: Head{ sha = SHA, clean = true }, exec: exec(s)); }), want: true, message: "stale branch");
+    final o = parse(["--ref", "wip", "magus", "run", "test"]).value!;
+    assert\equal(start(o, head: Head{ sha = SHA, clean = true }, exec: exec(s)).error != null, want: true, message: "stale branch");
     assert\equal(s.calls.len(), want: 1, message: "nothing dispatched");
     final quiet = stub();
-    assert\equal(refusal(fun () > void !> any { _ = start(parse(["magus", "run", "test"]), head: Head{ sha = SHA, clean = false }, exec: exec(quiet)); }), want: true, message: "dirty");
+    assert\equal(start(parse(["magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = false }, exec: exec(quiet)).error != null, want: true, message: "dirty");
     assert\equal(quiet.calls.len(), want: 0, message: "no network before the tree is judged");
     final head = stub();
     on(head, words: ["git", "push"], reply: ok(""));
     on(head, words: ["gh", "workflow", "run"], reply: ok(RUNS));
-    final st = start(parse(["--head", "magus", "run", "test"]), head: Head{ sha = SHA, clean = false }, exec: exec(head));
+    final st = start(parse(["--head", "magus", "run", "test"]).value!, head: Head{ sha = SHA, clean = false }, exec: exec(head)).value!;
     assert\equal(st.lines[0], want: "on-actions: running HEAD 0123456789ab; the uncommitted changes here do not go", message: "--head says so");
 }
 
@@ -844,21 +991,21 @@ test "a wait survives a failed poll, and gives up after a few in a row" {
     final s = stub();
     on(s, words: ["gh", "api"], reply: failed("timeout"));
     on(s, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
-    assert\equal(wait("42", s: stubSession(s, outcome: Outcome{ output = null, code = null })).status, want: "completed", message: "one miss");
+    assert\equal(wait("42", s: stubSession(s, outcome: Outcome{ output = null, code = null })).value!.status, want: "completed", message: "one miss");
     final down = stub();
     on(down, words: ["gh", "api"], reply: failed("timeout"));
-    assert\equal(refusal(fun () > void !> any { _ = wait("42", s: stubSession(down, outcome: Outcome{ output = null, code = null })); }), want: true, message: "down");
+    assert\equal(wait("42", s: stubSession(down, outcome: Outcome{ output = null, code = null })).error != null, want: true, message: "down");
     assert\equal(down.calls.len(), want: POLL_MISSES, message: "gives up");
 }
 
 test "a run whose command never ran prints the failed steps' log and exits 1" {
     final s = stub();
     on(s, words: ["gh", "run", "view"], reply: ok("run\tsetup\tbuild failed\n"));
-    final r = readRun(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: SHA));
-    final code = finish(r, s: stubSession(s, outcome: Outcome{ output = null, code = null }));
+    final r = readRun(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: SHA)).value!;
+    final code = finish(r, s: stubSession(s, outcome: Outcome{ output = null, code = null })).value!;
     assert\equal([code, s.calls[1]], want: [1, "gh run view 42 --log-failed"], message: "the log instead");
     assert\equal(s.emitted, want: ["run\tsetup\tbuild failed\n"], message: "printed");
-    assert\equal(exitCode(Outcome{ output = null, code = null }, r: readRun(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA))), want: 0, message: "success with no record");
+    assert\equal(exitCode(Outcome{ output = null, code = null }, r: readRun(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)).value!), want: 0, message: "success with no record");
     assert\equal(exitCode(Outcome{ output = "", code = 0 }, r: r), want: 0, message: "the command's code over the conclusion");
 }
 
@@ -866,21 +1013,21 @@ test "--result answers from one request, and exits with the command's code once 
     final head = Head{ sha = SHA, clean = true };
     final queued = stub();
     on(queued, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "queued", conclusion: null, branch: "wip", sha: SHA)));
-    assert\equal(result("42", head: head, s: stubSession(queued, outcome: Outcome{ output = null, code = null })), want: UNFINISHED, message: "unfinished");
+    assert\equal(answer("42", head: head, s: stubSession(queued, outcome: Outcome{ output = null, code = null })).value!, want: UNFINISHED, message: "unfinished");
     assert\equal(queued.calls, want: ["gh api repos/\{owner\}/\{repo\}/actions/runs/42"], message: "one request");
     final done = stub();
     on(done, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: "fedcba9876543210")));
-    assert\equal(result("42", head: head, s: stubSession(done, outcome: Outcome{ output = "x\n", code = 2 })), want: 2, message: "the command's code");
+    assert\equal(answer("42", head: head, s: stubSession(done, outcome: Outcome{ output = "x\n", code = 2 })).value!, want: 2, message: "the command's code");
     assert\equal([done.said[1], done.emitted[0]], want: ["on-actions: it ran fedcba987654; this checkout is at 0123456789ab", "x\n"], message: "names the commit, prints the output");
 }
 
 test "--delete refuses a run of another workflow or one still going" {
     final other = stub();
     on(other, words: ["gh", "api"], reply: ok(runBody(".github/workflows/release.yaml", status: "completed", conclusion: "success", branch: "main", sha: SHA)));
-    assert\equal(refusal(fun () > void !> any { _ = deleteOne("42", exec: exec(other)); }), want: true, message: "release.yaml");
+    assert\equal(deleteOne("42", exec: exec(other)).error != null, want: true, message: "release.yaml");
     final live = stub();
     on(live, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "in_progress", conclusion: null, branch: "wip", sha: SHA)));
-    assert\equal(refusal(fun () > void !> any { _ = deleteOne("42", exec: exec(live)); }), want: true, message: "unfinished");
+    assert\equal(deleteOne("42", exec: exec(live)).error != null, want: true, message: "unfinished");
     assert\equal(live.calls.len(), want: 1, message: "nothing deleted");
 }
 
@@ -888,7 +1035,7 @@ test "--delete deletes a completed run, and the branch only when it was pushed f
     final scratch = stub();
     on(scratch, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "run-0123456789ab", sha: SHA)));
     on(scratch, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    final lines = deleteOne("42", exec: exec(scratch));
+    final lines = deleteOne("42", exec: exec(scratch)).value!;
     assert\equal(scratch.calls, want: [
         "gh api repos/\{owner\}/\{repo\}/actions/runs/42",
         "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42",
@@ -910,7 +1057,7 @@ test "--ls lists every run and every pushed branch no run holds" {
     final s = stub();
     on(s, words: ["gh", "api", "--paginate", "repos/\{owner\}/\{repo\}/actions"], reply: ok("42\tcompleted\tfailure\trun-0123456789ab\t{SHA}\t{RUNS}\n7\tin_progress\t\twip\t{SHA}\thttps://github.com/o/r/actions/runs/7\n"));
     on(s, words: ["gh", "api", "--paginate", "repos/\{owner\}/\{repo\}/git"], reply: ok("refs/heads/run-0123456789ab\nrefs/heads/run-fedcba987654\nrefs/heads/run-fix\n"));
-    assert\equal(ls(exec(s)), want: [
+    assert\equal(ls(exec(s)).value!, want: [
         "run 42: failure, run-0123456789ab at 0123456789ab, {RUNS}; {SCRIPT} --delete 42",
         "run 7: in_progress, wip at 0123456789ab, https://github.com/o/r/actions/runs/7; {SCRIPT} --delete 7",
         "branch run-fedcba987654: no run; {SCRIPT} --delete run-fedcba987654",
