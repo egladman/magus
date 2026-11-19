@@ -1,68 +1,77 @@
 namespace mandatediagrams;
 
 import "magus/diagram";
+import "result";
 
 // mandateRolesDiagram is ADR 0019's division of acts: the person decides, what they decide
 // is written down, the guard enforces it on every call, and the root and its workers do the
 // work. The workers' hand-back that wakes the root is left out to stay in the connector
 // budget; the ADR's text says it.
-export fun mandateRolesDiagram() > diagram\Diagram !> any {
-    final person = diagram\person("Person", sub: "decides", look: diagram\Look.focal);
-    final plan = diagram\step("Plan", sub: "job rows", look: diagram\Look.store);
-    final mandate = diagram\step("Mandate", sub: "raises the bar", look: diagram\Look.store);
-    final grant = diagram\step("Grant", sub: "lowers one rule", look: diagram\Look.store);
-    final guard = diagram\step("Guard", sub: "allow, deny, advise", look: diagram\Look.focal);
-    final root = diagram\step("Root", sub: "the session");
-    final workers = diagram\step("Workers", sub: "one per job");
-    final disposition = diagram\step("Disposition", sub: "integrated or held for review");
-    final report = diagram\step("Report", sub: "hack/dev/issue-mandate.buzz");
-    return diagram\of("mandate-roles",
-            title: "The person decides; the guard enforces what they wrote down",
-            eyebrow: "decision",
-            desc: "The person decides; the plan, the mandate and each grant write the decision "
-                + "down; the guard judges every call against them; the root and its workers do the "
-                + "work. The root forks jobs and spawns workers, and a worker's hand-back wakes it. "
-                + "A job ends integrated or held for review, and the report hands that back to the "
-                + "person.",
-            direction: diagram\Direction.down)
-        .flowAcross(person, dst: plan, label: "plans")
-        .flowAcross(person, dst: mandate, label: "mandates")
-        .flowAcross(person, dst: grant, label: "grants")
-        .flowAcross(plan, dst: guard)
-        .flowAcross(mandate, dst: guard)
-        .flowAcross(grant, dst: guard)
-        .flowAcross(root, dst: guard, label: "every call")
-        .flowAcross(workers, dst: guard, label: "every call")
-        .flowAcross(root, dst: workers, label: "forks, spawns")
-        .flowAcross(root, dst: disposition)
-        .flowAcross(disposition, dst: report)
-        .flowAcross(report, dst: person)
-        .rank(actors: [plan, mandate, grant])
-        .rank(actors: [root, workers])
-        .legend(diagram\Look.focal, label: "decides or enforces")
-        .legend(diagram\Look.store, label: "written down")
-        .unscoped(why: "a division of acts between a person, the guard and sessions, not a Go package");
+export fun mandateRolesDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final person = diagram\person("Person", sub: "decides", look: diagram\Look.focal);
+        final plan = diagram\step("Plan", sub: "job rows", look: diagram\Look.store);
+        final mandate = diagram\step("Mandate", sub: "raises the bar", look: diagram\Look.store);
+        final grant = diagram\step("Grant", sub: "lowers one rule", look: diagram\Look.store);
+        final guard = diagram\step("Guard", sub: "allow, deny, advise", look: diagram\Look.focal);
+        final root = diagram\step("Root", sub: "the session");
+        final workers = diagram\step("Workers", sub: "one per job");
+        final disposition = diagram\step("Disposition", sub: "integrated or held for review");
+        final report = diagram\step("Report", sub: "hack/dev/issue-mandate.buzz");
+        return result\ok::<diagram\Diagram>(diagram\of("mandate-roles",
+                title: "The person decides; the guard enforces what they wrote down",
+                eyebrow: "decision",
+                desc: "The person decides; the plan, the mandate and each grant write the decision "
+                    + "down; the guard judges every call against them; the root and its workers do the "
+                    + "work. The root forks jobs and spawns workers, and a worker's hand-back wakes it. "
+                    + "A job ends integrated or held for review, and the report hands that back to the "
+                    + "person.",
+                direction: diagram\Direction.down)
+            .flowAcross(person, dst: plan, label: "plans")
+            .flowAcross(person, dst: mandate, label: "mandates")
+            .flowAcross(person, dst: grant, label: "grants")
+            .flowAcross(plan, dst: guard)
+            .flowAcross(mandate, dst: guard)
+            .flowAcross(grant, dst: guard)
+            .flowAcross(root, dst: guard, label: "every call")
+            .flowAcross(workers, dst: guard, label: "every call")
+            .flowAcross(root, dst: workers, label: "forks, spawns")
+            .flowAcross(root, dst: disposition)
+            .flowAcross(disposition, dst: report)
+            .flowAcross(report, dst: person)
+            .rank(actors: [plan, mandate, grant])
+            .rank(actors: [root, workers])
+            .legend(diagram\Look.focal, label: "decides or enforces")
+            .legend(diagram\Look.store, label: "written down")
+            .unscoped(why: "a division of acts between a person, the guard and sessions, not a Go package"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }
 
 // mandateBarDiagram is the tier bar a mandate's tolerance sets: an unsettled job at or below
 // it is integrated with no one present, one above it is held for review.
-export fun mandateBarDiagram() > diagram\Diagram !> any {
-    final trivial = diagram\step("trivial", sub: "no gate");
-    final mechanical = diagram\step("mechanical", sub: "no code semantics");
-    final scoped = diagram\step("scoped", sub: "tests narrow");
-    final full = diagram\step("full", sub: "anything unproven");
-    return diagram\of("mandate-raises-the-bar",
-            title: "A mandate raises the bar at its tolerance",
-            eyebrow: "decision",
-            desc: "The risk tiers magus proves, lowest first. The person types --tolerance when "
-                + "issuing a mandate, at most this repository's ceiling, mechanical. An unsettled "
-                + "job whose change proves at or below it is integrated with no one present; one "
-                + "above it is held for review. A settled job is integrated through its gates at "
-                + "any tier.")
-        .flowAcross(trivial, dst: mechanical)
-        .flowAcross(mechanical, dst: scoped, label: "--tolerance", stroke: diagram\Stroke.focal)
-        .flowAcross(scoped, dst: full)
-        .zone("integrated with no one present", actors: [trivial, mechanical])
-        .zone("held for review", actors: [scoped, full])
-        .unscoped(why: "a policy threshold over risk tiers, not a Go package");
+export fun mandateBarDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final trivial = diagram\step("trivial", sub: "no gate");
+        final mechanical = diagram\step("mechanical", sub: "no code semantics");
+        final scoped = diagram\step("scoped", sub: "tests narrow");
+        final full = diagram\step("full", sub: "anything unproven");
+        return result\ok::<diagram\Diagram>(diagram\of("mandate-raises-the-bar",
+                title: "A mandate raises the bar at its tolerance",
+                eyebrow: "decision",
+                desc: "The risk tiers magus proves, lowest first. The person types --tolerance when "
+                    + "issuing a mandate, at most this repository's ceiling, mechanical. An unsettled "
+                    + "job whose change proves at or below it is integrated with no one present; one "
+                    + "above it is held for review. A settled job is integrated through its gates at "
+                    + "any tier.")
+            .flowAcross(trivial, dst: mechanical)
+            .flowAcross(mechanical, dst: scoped, label: "--tolerance", stroke: diagram\Stroke.focal)
+            .flowAcross(scoped, dst: full)
+            .zone("integrated with no one present", actors: [trivial, mechanical])
+            .zone("held for review", actors: [scoped, full])
+            .unscoped(why: "a policy threshold over risk tiers, not a Go package"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

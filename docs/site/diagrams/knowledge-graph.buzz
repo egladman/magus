@@ -2,44 +2,48 @@ namespace knowledgeGraph;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/packages" as packages;
+import "result";
 
-export fun knowledgeGraphDiagram() > diagram\Diagram !> any {
-    final graph = magus\graph().dir("internal/graph/knowledge");
-    final cli = magus\graph().dir("cmd/magus");
-    final mcp = magus\graph().dir("internal/handler/mcp");
-    // The sources are files a person writes; the adapters that read them live in the graph box.
-    final core = diagram\external("Magusfiles and docs", sub: "registry, Buzz, docs, dirs, owners", look: diagram\Look.plain);
-    final symbols = magus\graph().dirs("internal/symbols/**") + [magus\graph().dir("internal/symbols")];
-    final vcs = diagram\external("History", sub: "@vcs, from git", look: diagram\Look.plain);
-    final notes = diagram\external("Notes", sub: "@notes shared + private", look: diagram\Look.plain);
-    return diagram\of("knowledge-graph",
-            title: "Every source writes a shard; every reader asks one graph",
-            eyebrow: "knowledge graph",
-            desc: "magus graph build assembles a shard per source: the magusfiles, Buzz, docs, "
-                + "directories and owners, a lazy symbol shard per project from a SCIP index, git "
-                + "history and notes. The store rewrites only the shards whose content changed and "
-                + "merges them into one graph, which the CLI and the MCP tools both read.",
-            level: diagram\Level.package)
-        .actor(core)
-        .actor(vcs)
-        .actor(notes)
-        .group(symbols, label: "Symbol index", sub: "SCIP per language, lazy shards", look: diagram\Look.input)
-        .box(graph, label: "One graph", sub: "query, explain, refs, path", focal: true)
-        .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
-        .box(mcp, label: "MCP client", sub: "magus\\graph().query and kin", tag: "reader")
-        .edgesFromGraph()
-        .hideEdges([cli], dst: [mcp],
-            why: "the CLI serves the MCP tools; both read the graph, which is the point")
-        .flowIn(core, dst: graph)
-        .flowIn(vcs, dst: graph)
-        .flowIn(notes, dst: graph)
-        .zone("a shard per source", dirs: symbols, actors: [core, vcs, notes])
-        .legend(diagram\Look.focal, label: "what every reader asks")
-        .legend(diagram\Look.input, label: "built by a SCIP indexer")
-        .scope(packages\goPackages("internal/graph/**") + symbols)
-        .except([magus\graph().dir("internal/graph/dependency")],
-            why: "the project dependency DAG targets run in, a different graph")
-        .except([magus\graph().dir("internal/graph/workspacegraph")],
-            why: "the seam the root package installs its graph builders through; it holds none of the graph itself");
+export fun knowledgeGraphDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final graph = magus\graph().dir("internal/graph/knowledge");
+        final cli = magus\graph().dir("cmd/magus");
+        final mcp = magus\graph().dir("internal/handler/mcp");
+        // The sources are files a person writes; the adapters that read them live in the graph box.
+        final core = diagram\external("Magusfiles and docs", sub: "registry, Buzz, docs, dirs, owners", look: diagram\Look.plain);
+        final symbols = magus\graph().dirs("internal/symbols/**") + [magus\graph().dir("internal/symbols")];
+        final vcs = diagram\external("History", sub: "@vcs, from git", look: diagram\Look.plain);
+        final notes = diagram\external("Notes", sub: "@notes shared + private", look: diagram\Look.plain);
+        return result\ok::<diagram\Diagram>(diagram\of("knowledge-graph",
+                title: "Every source writes a shard; every reader asks one graph",
+                eyebrow: "knowledge graph",
+                desc: "magus graph build assembles a shard per source: the magusfiles, Buzz, docs, "
+                    + "directories and owners, a lazy symbol shard per project from a SCIP index, git "
+                    + "history and notes. The store rewrites only the shards whose content changed and "
+                    + "merges them into one graph, which the CLI and the MCP tools both read.",
+                level: diagram\Level.package)
+            .actor(core)
+            .actor(vcs)
+            .actor(notes)
+            .group(symbols, label: "Symbol index", sub: "SCIP per language, lazy shards", look: diagram\Look.input)
+            .box(graph, label: "One graph", sub: "query, explain, refs, path", focal: true)
+            .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
+            .box(mcp, label: "MCP client", sub: "magus\\graph().query and kin", tag: "reader")
+            .edgesFromGraph()
+            .hideEdges([cli], dst: [mcp],
+                why: "the CLI serves the MCP tools; both read the graph, which is the point")
+            .flowIn(core, dst: graph)
+            .flowIn(vcs, dst: graph)
+            .flowIn(notes, dst: graph)
+            .zone("a shard per source", dirs: symbols, actors: [core, vcs, notes])
+            .legend(diagram\Look.focal, label: "what every reader asks")
+            .legend(diagram\Look.input, label: "built by a SCIP indexer")
+            .scope(magus\graph().dirs("internal/graph/**", opts: magus\DirsOptions{ language = "go" }) + symbols)
+            .except([magus\graph().dir("internal/graph/dependency")],
+                why: "the project dependency DAG targets run in, a different graph")
+            .except([magus\graph().dir("internal/graph/workspacegraph")],
+                why: "the seam the root package installs its graph builders through; it holds none of the graph itself"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

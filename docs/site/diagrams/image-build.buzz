@@ -1,27 +1,32 @@
 namespace imageBuild;
 
 import "magus/diagram";
+import "result";
 
-export fun imageBuildDiagram() > diagram\Diagram !> any {
-    final run = diagram\step("magus run image-build", look: diagram\Look.focal);
-    // Each diamond takes one connector per vertex, all the room a diamond has.
-    final cd = diagram\step("cd?", look: diagram\Look.decision);
-    final local = diagram\step("Load locally", sub: "pushes nothing", look: diagram\Look.plain);
-    final channel = diagram\step("channel", look: diagram\Look.decision);
-    final commit = diagram\step("Commit", sub: "ghcr, tagged by hash", look: diagram\Look.plain);
-    final unstable = diagram\step("Prerelease", sub: "no floating tag", look: diagram\Look.plain);
-    final stable = diagram\step("Release", sub: "version and latest", look: diagram\Look.plain);
-    return diagram\of("image-build",
-            title: "A bare run pushes nothing; only the stable channel moves latest",
-            eyebrow: "recommendations",
-            desc: "Without the cd charm an image-build loads locally and pushes nothing. With "
-                + "it, the channel decides: the default commit channel adds one immutable tag "
-                + "to one registry, and only stable moves the floating latest tag.")
-        .flowAcross(run, dst: cd)
-        .flowAcross(cd, dst: local, label: "no")
-        .flowAcross(cd, dst: channel, label: "yes")
-        .flowAcross(channel, dst: commit, label: "default")
-        .flowAcross(channel, dst: unstable, label: "unstable")
-        .flowAcross(channel, dst: stable, label: "stable")
-        .unscoped(why: "a spell's decision process, not a Go package");
+export fun imageBuildDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final run = diagram\step("magus run image-build", look: diagram\Look.focal);
+        // Each diamond takes one connector per vertex, all the room a diamond has.
+        final cd = diagram\step("cd?", look: diagram\Look.decision);
+        final local = diagram\step("Load locally", sub: "pushes nothing", look: diagram\Look.plain);
+        final channel = diagram\step("channel", look: diagram\Look.decision);
+        final commit = diagram\step("Commit", sub: "ghcr, tagged by hash", look: diagram\Look.plain);
+        final unstable = diagram\step("Prerelease", sub: "no floating tag", look: diagram\Look.plain);
+        final stable = diagram\step("Release", sub: "version and latest", look: diagram\Look.plain);
+        return result\ok::<diagram\Diagram>(diagram\of("image-build",
+                title: "A bare run pushes nothing; only the stable channel moves latest",
+                eyebrow: "recommendations",
+                desc: "Without the cd charm an image-build loads locally and pushes nothing. With "
+                    + "it, the channel decides: the default commit channel adds one immutable tag "
+                    + "to one registry, and only stable moves the floating latest tag.")
+            .flowAcross(run, dst: cd)
+            .flowAcross(cd, dst: local, label: "no")
+            .flowAcross(cd, dst: channel, label: "yes")
+            .flowAcross(channel, dst: commit, label: "default")
+            .flowAcross(channel, dst: unstable, label: "unstable")
+            .flowAcross(channel, dst: stable, label: "stable")
+            .unscoped(why: "a spell's decision process, not a Go package"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

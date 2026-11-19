@@ -1,16 +1,21 @@
 namespace kustomizeArchitecture;
 
 import "magus/diagram";
+import "result";
 import "../libs/kustomize/kustomize" as kustomize;
 
 // The objects come from the dev overlay's own YAML, so an edit to a manifest moves the
 // diagram and nobody redraws it.
-export fun kustomizeArchitectureDiagram() > diagram\Diagram !> any {
-    return kustomize\diagram(kustomize\build("../deploy/kustomize/overlays/dev"),
-        id: "kustomize-architecture",
-        title: "The dev overlay denies the daemon every port but DNS and HTTPS",
-        eyebrow: "kustomize",
-        desc: "Read from deploy/kustomize/overlays/dev without the kustomize binary. One pod, "
-            + "one claim, no token: the default-deny policy shuts every port, and two "
-            + "egress policies open DNS and HTTPS back up.");
+export fun kustomizeArchitectureDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        return result\ok::<diagram\Diagram>(kustomize\diagram(kustomize\build("../deploy/kustomize/overlays/dev"),
+            id: "kustomize-architecture",
+            title: "The dev overlay denies the daemon every port but DNS and HTTPS",
+            eyebrow: "kustomize",
+            desc: "Read from deploy/kustomize/overlays/dev without the kustomize binary. One pod, "
+                + "one claim, no token: the default-deny policy shuts every port, and two "
+                + "egress policies open DNS and HTTPS back up."));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

@@ -1,27 +1,20 @@
 namespace packages;
 
 import "magus";
-import "magus/diagram";
-
-// goPackages is every Go package glob matches.
-export fun goPackages(glob: str) > [magus\Dir] !> any {
-    return magus\graph().dirs(glob, opts: magus\DirsOptions{ language = "go" });
-}
+import "result";
 
 // dataTypes is the types packages a diagram of the project model leaves out:
 // closed string sets and data the diagrams do not trace.
-export fun dataTypes() > [magus\Dir] !> any {
+export fun dataTypes() > result\Result::<[magus\Dir]> {
     final names = ["enum", "daemon", "diff", "feedback", "image",
                    "check", "impact", "release", "vcs"];
-    return names.map(fun (i: int, name: str) > magus\Dir !> any => magus\graph().dir("types/" + name));
-}
-
-// cmdTools is every command under cmd/ except the magus binary itself: docs generators,
-// codegen and the browser playground, each built by its own target.
-export fun cmdTools() > [magus\Dir] !> any {
-    final tools = diagram\without(goPackages("cmd/*"), drop: [magus\graph().dir("cmd/magus")]);
-    if (tools.error != null) {
-        throw tools.error!.message;
+    final dirs: mut [magus\Dir] = mut [<magus\Dir>];
+    foreach (name in names) {
+        try {
+            dirs.append(magus\graph().dir("types/" + name));
+        } catch (err: any) {
+            return result\caught::<[magus\Dir]>(err);
+        }
     }
-    return tools.value!;
+    return result\ok::<[magus\Dir]>(dirs);
 }

@@ -2,39 +2,43 @@ namespace cacheTrust;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/packages" as packages;
+import "result";
 
-export fun cacheTrustDiagram() > diagram\Diagram !> any {
-    final remote = magus\graph().dir("internal/cache");
-    // The runs and the local tier are the CI host's; the rejection of an unsigned entry
-    // happens inside internal/cache, so the box's sub says it rather than a box of its own.
-    final pr = diagram\external("PR run", sub: "no signing key", tag: "pull_request", look: diagram\Look.plain);
-    final local = diagram\external("Local tier", sub: "Actions cache, PR ref", look: diagram\Look.store);
-    final main = diagram\external("Default branch run", sub: "holds the signing key", tag: "push", look: diagram\Look.plain);
-    return diagram\of("cache-trust",
-            title: "A pull request reads the shared cache and never writes it",
-            eyebrow: "remote cache",
-            desc: "A pull request run reads the signed remote tier and reads and writes a "
-                + "local tier scoped to its own ref. Only a run on the default branch holds "
-                + "the signing key, so only the default branch writes the remote tier. "
-                + "Every read checks the signature and rebuilds the target on an unsigned entry.",
-            level: diagram\Level.package)
-        .actor(pr)
-        .actor(local)
-        .box(remote, label: "Remote tier", sub: "unsigned is rebuilt", tag: "ed25519", focal: true)
-        .actor(main)
-        // The argument is the connectors left out: no pull request run writes the remote tier,
-        // and nothing carries a pull request's local tier to the default branch.
-        .flowAcross(pr, dst: local, label: "read + write")
-        .flowOut(remote, dst: pr, label: "read only")
-        .flowIn(main, dst: remote, label: "sign + put", stroke: diagram\Stroke.focal)
-        .zone("pull request, untrusted code", actors: [pr, local])
-        .zone("default branch, trusted", actors: [main])
-        .legend(diagram\Look.focal, label: "the one shared store")
-        .legend(diagram\Look.store, label: "one pull request only")
-        .scope(packages\goPackages("internal/cache/**"))
-        .except([magus\graph().dir("internal/cache/reflink")],
-            why: "copy-on-write file clones for a local restore; no tier, key or signature")
-        .except([magus\graph().dir("internal/cache/remotetest")],
-            why: "a test server for the remote protocols, linked only by tests");
+export fun cacheTrustDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final remote = magus\graph().dir("internal/cache");
+        // The runs and the local tier are the CI host's; the rejection of an unsigned entry
+        // happens inside internal/cache, so the box's sub says it rather than a box of its own.
+        final pr = diagram\external("PR run", sub: "no signing key", tag: "pull_request", look: diagram\Look.plain);
+        final local = diagram\external("Local tier", sub: "Actions cache, PR ref", look: diagram\Look.store);
+        final main = diagram\external("Default branch run", sub: "holds the signing key", tag: "push", look: diagram\Look.plain);
+        return result\ok::<diagram\Diagram>(diagram\of("cache-trust",
+                title: "A pull request reads the shared cache and never writes it",
+                eyebrow: "remote cache",
+                desc: "A pull request run reads the signed remote tier and reads and writes a "
+                    + "local tier scoped to its own ref. Only a run on the default branch holds "
+                    + "the signing key, so only the default branch writes the remote tier. "
+                    + "Every read checks the signature and rebuilds the target on an unsigned entry.",
+                level: diagram\Level.package)
+            .actor(pr)
+            .actor(local)
+            .box(remote, label: "Remote tier", sub: "unsigned is rebuilt", tag: "ed25519", focal: true)
+            .actor(main)
+            // The argument is the connectors left out: no pull request run writes the remote tier,
+            // and nothing carries a pull request's local tier to the default branch.
+            .flowAcross(pr, dst: local, label: "read + write")
+            .flowOut(remote, dst: pr, label: "read only")
+            .flowIn(main, dst: remote, label: "sign + put", stroke: diagram\Stroke.focal)
+            .zone("pull request, untrusted code", actors: [pr, local])
+            .zone("default branch, trusted", actors: [main])
+            .legend(diagram\Look.focal, label: "the one shared store")
+            .legend(diagram\Look.store, label: "one pull request only")
+            .scope(magus\graph().dirs("internal/cache/**", opts: magus\DirsOptions{ language = "go" }))
+            .except([magus\graph().dir("internal/cache/reflink")],
+                why: "copy-on-write file clones for a local restore; no tier, key or signature")
+            .except([magus\graph().dir("internal/cache/remotetest")],
+                why: "a test server for the remote protocols, linked only by tests"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

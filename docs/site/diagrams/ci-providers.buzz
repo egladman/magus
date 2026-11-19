@@ -2,34 +2,38 @@ namespace ciProviders;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/packages" as packages;
+import "result";
 
-export fun ciProvidersDiagram() > diagram\Diagram !> any {
-    final contract = magus\graph().dir("internal/ci/annotate");
-    final quote = magus\graph().dir("internal/ci");
-    // A provider spell is Buzz the binary loads at run time, not a package it links; its
-    // directory carries no symbol index, so it is drawn as what it is to the binary.
-    final spell = diagram\external("Provider spell", sub: "group, annotate, quote_prefixes", tag: "buzz", look: diagram\Look.plain);
-    final vendor = diagram\external("CI system", sub: "job log, pull request");
-    return diagram\of("ci-providers",
-            title: "Vendor syntax lives in the spell, never in the binary",
-            eyebrow: "ci providers",
-            desc: "A failing project reaches the annotator contract, which speaks generic "
-                + "verbs to a provider spell; the spell translates them into the CI system's "
-                + "own syntax. Quote prefixes are declared once in the spell and applied per line in Go.",
-            direction: diagram\Direction.down, level: diagram\Level.package)
-        .box(contract, label: "Annotator contract", sub: "internal/ci/annotate")
-        .box(quote, label: "QuoteWith", sub: "per line, in Go")
-        .actor(spell)
-        .actor(vendor)
-        .edgesFromGraph()
-        .flowOut(contract, dst: spell, label: "generic verbs")
-        .flowAcross(spell, dst: vendor, label: "vendor syntax")
-        .flowIn(spell, dst: quote, label: "read once", stroke: diagram\Stroke.optional)
-        .flowOut(quote, dst: vendor, label: "de-fanged")
-        .zone("magus binary, names no ci system", dirs: [contract, quote])
-        .legend(diagram\Look.external, label: "outside magus")
-        .scope(packages\goPackages("internal/ci/**"))
-        .except([magus\graph().dir("internal/ci/forecast"), magus\graph().dir("internal/ci/volatility")],
-            why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
+export fun ciProvidersDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final contract = magus\graph().dir("internal/ci/annotate");
+        final quote = magus\graph().dir("internal/ci");
+        // A provider spell is Buzz the binary loads at run time, not a package it links; its
+        // directory carries no symbol index, so it is drawn as what it is to the binary.
+        final spell = diagram\external("Provider spell", sub: "group, annotate, quote_prefixes", tag: "buzz", look: diagram\Look.plain);
+        final vendor = diagram\external("CI system", sub: "job log, pull request");
+        return result\ok::<diagram\Diagram>(diagram\of("ci-providers",
+                title: "Vendor syntax lives in the spell, never in the binary",
+                eyebrow: "ci providers",
+                desc: "A failing project reaches the annotator contract, which speaks generic "
+                    + "verbs to a provider spell; the spell translates them into the CI system's "
+                    + "own syntax. Quote prefixes are declared once in the spell and applied per line in Go.",
+                direction: diagram\Direction.down, level: diagram\Level.package)
+            .box(contract, label: "Annotator contract", sub: "internal/ci/annotate")
+            .box(quote, label: "QuoteWith", sub: "per line, in Go")
+            .actor(spell)
+            .actor(vendor)
+            .edgesFromGraph()
+            .flowOut(contract, dst: spell, label: "generic verbs")
+            .flowAcross(spell, dst: vendor, label: "vendor syntax")
+            .flowIn(spell, dst: quote, label: "read once", stroke: diagram\Stroke.optional)
+            .flowOut(quote, dst: vendor, label: "de-fanged")
+            .zone("magus binary, names no ci system", dirs: [contract, quote])
+            .legend(diagram\Look.external, label: "outside magus")
+            .scope(magus\graph().dirs("internal/ci/**", opts: magus\DirsOptions{ language = "go" }))
+            .except([magus\graph().dir("internal/ci/forecast"), magus\graph().dir("internal/ci/volatility")],
+                why: "shard sizing and flaky-test retry: they read run history and speak to no CI system"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

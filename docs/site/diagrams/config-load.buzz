@@ -2,38 +2,43 @@ namespace configLoad;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun configLoadDiagram() > diagram\Diagram !> any {
-    final config = magus\graph().dir("internal/config");
-    final gen = magus\graph().dir("internal/config/gen");
-    final cfgen = magus\graph().dir("libs/clikit/generate");
-    final httpx = magus\graph().dir("internal/httpx");
-    final endpoint = magus\graph().dir("internal/proc/endpoint");
-    final ward = magus\graph().dir("internal/ward");
-    final stamp = magus\graph().dir("internal/stamp");
-    final xdg = magus\graph().dir("libs/xdg");
-    final sources = diagram\external("Config sources", sub: "magus.yaml, env, flags", look: diagram\Look.input);
-    return diagram\of("config-load",
-            title: "Every key has one declaration, and every source feeds the same load",
-            eyebrow: "config",
-            desc: "The load reads magus.yaml, the environment and the flags into one set of keys, "
-                + "resolving paths through the xdg directories, remote sources through the HTTP "
-                + "client and daemon addresses through the endpoint package. The keys come from one "
-                + "declaration, and the generator writes the typed accessors from it, so a flag, a "
-                + "config key and the help cannot disagree.")
-        .actor(sources)
-        .box(config, label: "Config load", sub: "one set of keys", focal: true)
-        .box(gen, label: "Typed keys", sub: "generated accessors", look: diagram\Look.store)
-        .box(cfgen, label: "Key generator", sub: "from the declaration")
-        .box(httpx, label: "HTTP client", sub: "remote sources")
-        .box(endpoint, label: "Endpoints", sub: "daemon addresses")
-        .box(ward, label: "Ward", sub: "kind checks")
-        .box(stamp, label: "Stamp", sub: "build identity")
-        .box(xdg, label: "XDG paths", sub: "config, state, cache")
-        .edgesFromGraph()
-        .flowIn(sources, dst: config)
-        .legend(diagram\Look.focal, label: "the load")
-        .legend(diagram\Look.store, label: "generated output")
-        .legend(diagram\Look.input, label: "where keys come from")
-        .scope([config, gen, cfgen]);
+export fun configLoadDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final config = magus\graph().dir("internal/config");
+        final gen = magus\graph().dir("internal/config/gen");
+        final cfgen = magus\graph().dir("libs/clikit/generate");
+        final httpx = magus\graph().dir("internal/httpx");
+        final endpoint = magus\graph().dir("internal/proc/endpoint");
+        final ward = magus\graph().dir("internal/ward");
+        final stamp = magus\graph().dir("internal/stamp");
+        final xdg = magus\graph().dir("libs/xdg");
+        final sources = diagram\external("Config sources", sub: "magus.yaml, env, flags", look: diagram\Look.input);
+        return result\ok::<diagram\Diagram>(diagram\of("config-load",
+                title: "Every key has one declaration, and every source feeds the same load",
+                eyebrow: "config",
+                desc: "The load reads magus.yaml, the environment and the flags into one set of keys, "
+                    + "resolving paths through the xdg directories, remote sources through the HTTP "
+                    + "client and daemon addresses through the endpoint package. The keys come from one "
+                    + "declaration, and the generator writes the typed accessors from it, so a flag, a "
+                    + "config key and the help cannot disagree.")
+            .actor(sources)
+            .box(config, label: "Config load", sub: "one set of keys", focal: true)
+            .box(gen, label: "Typed keys", sub: "generated accessors", look: diagram\Look.store)
+            .box(cfgen, label: "Key generator", sub: "from the declaration")
+            .box(httpx, label: "HTTP client", sub: "remote sources")
+            .box(endpoint, label: "Endpoints", sub: "daemon addresses")
+            .box(ward, label: "Ward", sub: "kind checks")
+            .box(stamp, label: "Stamp", sub: "build identity")
+            .box(xdg, label: "XDG paths", sub: "config, state, cache")
+            .edgesFromGraph()
+            .flowIn(sources, dst: config)
+            .legend(diagram\Look.focal, label: "the load")
+            .legend(diagram\Look.store, label: "generated output")
+            .legend(diagram\Look.input, label: "where keys come from")
+            .scope([config, gen, cfgen]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

@@ -1,31 +1,36 @@
 namespace dogfood;
 
 import "magus/diagram";
+import "result";
 
-export fun dogfoodDiagram() > diagram\Diagram !> any {
-    final commit = diagram\step("This commit", sub: "magusfile + Go source", look: diagram\Look.plain);
-    final fromSource = diagram\step("Built from source", sub: "setup-magus source-path", look: diagram\Look.plain);
-    final gates = diagram\step("Every gate", sub: "lint, build, test, ci", look: diagram\Look.focal);
-    final pinned = diagram\step("Last release", sub: "setup-magus git-ref");
-    final compat = diagram\step("audit compat", sub: "red is a signal, not a stop", look: diagram\Look.optional);
-    // Two tracks, not a build cycle: a cycle shows the bootstrap but not why one job pins the
-    // last release.
-    return diagram\of("dogfood",
-            title: "magus builds magus, then runs the last release at it too",
-            eyebrow: "development",
-            desc: "Almost every CI job builds magus from the commit under test and runs it "
-                + "against that commit's magusfile, so a change can rely on a feature that has "
-                + "not shipped. One audit job instead runs the pinned previous release against "
-                + "the same magusfile; it is advisory, and a failure reports a breaking change "
-                + "rather than blocking the branch.")
-        .actor(commit)
-        .flowAcross(commit, dst: fromSource)
-        .flowAcross(commit, dst: pinned)
-        .flowAcross(fromSource, dst: gates, label: "must pass")
-        .flowAcross(pinned, dst: compat, label: "may fail", stroke: diagram\Stroke.focal)
-        .zone("blocking: the binary this commit defines", actors: [fromSource, gates])
-        .zone("advisory: the last release, same magusfile", actors: [pinned, compat])
-        .legend(diagram\Look.focal, label: "blocks the branch")
-        .legend(diagram\Look.optional, label: "advisory only")
-        .unscoped(why: "a CI arrangement, not a Go package");
+export fun dogfoodDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final commit = diagram\step("This commit", sub: "magusfile + Go source", look: diagram\Look.plain);
+        final fromSource = diagram\step("Built from source", sub: "setup-magus source-path", look: diagram\Look.plain);
+        final gates = diagram\step("Every gate", sub: "lint, build, test, ci", look: diagram\Look.focal);
+        final pinned = diagram\step("Last release", sub: "setup-magus git-ref");
+        final compat = diagram\step("audit compat", sub: "red is a signal, not a stop", look: diagram\Look.optional);
+        // Two tracks, not a build cycle: a cycle shows the bootstrap but not why one job pins the
+        // last release.
+        return result\ok::<diagram\Diagram>(diagram\of("dogfood",
+                title: "magus builds magus, then runs the last release at it too",
+                eyebrow: "development",
+                desc: "Almost every CI job builds magus from the commit under test and runs it "
+                    + "against that commit's magusfile, so a change can rely on a feature that has "
+                    + "not shipped. One audit job instead runs the pinned previous release against "
+                    + "the same magusfile; it is advisory, and a failure reports a breaking change "
+                    + "rather than blocking the branch.")
+            .actor(commit)
+            .flowAcross(commit, dst: fromSource)
+            .flowAcross(commit, dst: pinned)
+            .flowAcross(fromSource, dst: gates, label: "must pass")
+            .flowAcross(pinned, dst: compat, label: "may fail", stroke: diagram\Stroke.focal)
+            .zone("blocking: the binary this commit defines", actors: [fromSource, gates])
+            .zone("advisory: the last release, same magusfile", actors: [pinned, compat])
+            .legend(diagram\Look.focal, label: "blocks the branch")
+            .legend(diagram\Look.optional, label: "advisory only")
+            .unscoped(why: "a CI arrangement, not a Go package"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

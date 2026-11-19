@@ -1,38 +1,43 @@
 namespace commitGenerated;
 
 import "magus/diagram";
+import "result";
 
-export fun commitGeneratedDiagram() > diagram\Diagram !> any {
-    final start = diagram\step("A target writes a file", look: diagram\Look.plain);
-    final pure = diagram\step("pure function?", look: diagram\Look.decision);
-    final needed = diagram\step("build makes it?", look: diagram\Look.decision);
-    final read = diagram\step("read unbuilt?", look: diagram\Look.decision);
-    final churn = diagram\step("big or churns?", look: diagram\Look.decision);
-    final skip = diagram\step("Do not commit", sub: "CI builds it", look: diagram\Look.plain);
-    final commit = diagram\step("Commit it", sub: "generate is the gate", look: diagram\Look.focal);
-    return diagram\of("commit-generated",
-            title: "Commit a generated file only when a reader never runs the build",
-            eyebrow: "cache",
-            desc: "A generated file is committed only when it is a pure function of committed "
-                + "sources, is not already produced by the build, is read by something that "
-                + "never runs the build, and is neither large nor churning.",
-            direction: diagram\Direction.down)
-        .actor(start)
-        .actor(pure)
-        .actor(needed)
-        .actor(read)
-        .actor(churn)
-        .actor(skip)
-        .actor(commit)
-        .flowAcross(start, dst: pure)
-        .flowAcross(pure, dst: needed, label: "yes")
-        .flowAcross(needed, dst: read, label: "no")
-        .flowAcross(read, dst: churn, label: "no")
-        .flowAcross(pure, dst: skip, label: "no")
-        .flowAcross(needed, dst: skip, label: "yes")
-        .flowAcross(churn, dst: skip, label: "yes")
-        .flowAcross(read, dst: commit, label: "yes")
-        .flowAcross(churn, dst: commit, label: "no")
-        .legend(diagram\Look.focal, label: "needs a drift gate")
-        .unscoped(why: "a decision a person makes, not a Go package");
+export fun commitGeneratedDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final start = diagram\step("A target writes a file", look: diagram\Look.plain);
+        final pure = diagram\step("pure function?", look: diagram\Look.decision);
+        final needed = diagram\step("build makes it?", look: diagram\Look.decision);
+        final read = diagram\step("read unbuilt?", look: diagram\Look.decision);
+        final churn = diagram\step("big or churns?", look: diagram\Look.decision);
+        final skip = diagram\step("Do not commit", sub: "CI builds it", look: diagram\Look.plain);
+        final commit = diagram\step("Commit it", sub: "generate is the gate", look: diagram\Look.focal);
+        return result\ok::<diagram\Diagram>(diagram\of("commit-generated",
+                title: "Commit a generated file only when a reader never runs the build",
+                eyebrow: "cache",
+                desc: "A generated file is committed only when it is a pure function of committed "
+                    + "sources, is not already produced by the build, is read by something that "
+                    + "never runs the build, and is neither large nor churning.",
+                direction: diagram\Direction.down)
+            .actor(start)
+            .actor(pure)
+            .actor(needed)
+            .actor(read)
+            .actor(churn)
+            .actor(skip)
+            .actor(commit)
+            .flowAcross(start, dst: pure)
+            .flowAcross(pure, dst: needed, label: "yes")
+            .flowAcross(needed, dst: read, label: "no")
+            .flowAcross(read, dst: churn, label: "no")
+            .flowAcross(pure, dst: skip, label: "no")
+            .flowAcross(needed, dst: skip, label: "yes")
+            .flowAcross(churn, dst: skip, label: "yes")
+            .flowAcross(read, dst: commit, label: "yes")
+            .flowAcross(churn, dst: commit, label: "no")
+            .legend(diagram\Look.focal, label: "needs a drift gate")
+            .unscoped(why: "a decision a person makes, not a Go package"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

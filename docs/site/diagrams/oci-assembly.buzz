@@ -2,37 +2,42 @@ namespace ociAssembly;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun ociAssemblyDiagram() > diagram\Diagram !> any {
-    final host = magus\graph().dir("std");
-    final image = magus\graph().dir("libs/image");
-    final oci = magus\graph().dir("libs/oci");
-    final files = diagram\external("Built files", look: diagram\Look.input);
-    final base = diagram\external("Pinned base", sub: "optional, by digest", look: diagram\Look.optional);
-    final registry = diagram\external("Registry", look: diagram\Look.store);
+export fun ociAssemblyDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final host = magus\graph().dir("std");
+        final image = magus\graph().dir("libs/image");
+        final oci = magus\graph().dir("libs/oci");
+        final files = diagram\external("Built files", look: diagram\Look.input);
+        final base = diagram\external("Pinned base", sub: "optional, by digest", look: diagram\Look.optional);
+        final registry = diagram\external("Registry", look: diagram\Look.store);
 
-    return diagram\of("oci-assembly",
-            title: "Assembly stays on disk; only the registry client talks to a registry",
-            eyebrow: "images",
-            direction: diagram\Direction.down,
-            desc: "Built files and an optional digest-pinned base reach libs/image through the "
-                + "image host module. libs/image assembles each layer, stages one layout per "
-                + "platform, combines the layouts into an index and attaches referrers, cloning "
-                + "files copy-on-write where the filesystem has it. libs/oci is the registry "
-                + "client: it resolves the base by digest and publishes the result.")
-        .actor(files)
-        .actor(base)
-        .box(host, label: "image module", sub: "write, index, publish")
-        .box(image, label: "Layout assembly", sub: "layers, platforms, index", focal: true)
-        .box(oci, label: "Registry client", sub: "resolve, push, referrers")
-        .actor(registry)
-        .edgesFromGraph()
-        .flowIn(files, dst: host)
-        .flowIn(base, dst: oci, label: "by digest")
-        .flowOut(oci, dst: registry, label: "publish")
-        .legend(diagram\Look.focal, label: "where layers are built")
-        .legend(diagram\Look.input, label: "what magus built")
-        .legend(diagram\Look.optional, label: "optional")
-        .legend(diagram\Look.store, label: "outside magus")
-        .scope([image, oci]);
+        return result\ok::<diagram\Diagram>(diagram\of("oci-assembly",
+                title: "Assembly stays on disk; only the registry client talks to a registry",
+                eyebrow: "images",
+                direction: diagram\Direction.down,
+                desc: "Built files and an optional digest-pinned base reach libs/image through the "
+                    + "image host module. libs/image assembles each layer, stages one layout per "
+                    + "platform, combines the layouts into an index and attaches referrers, cloning "
+                    + "files copy-on-write where the filesystem has it. libs/oci is the registry "
+                    + "client: it resolves the base by digest and publishes the result.")
+            .actor(files)
+            .actor(base)
+            .box(host, label: "image module", sub: "write, index, publish")
+            .box(image, label: "Layout assembly", sub: "layers, platforms, index", focal: true)
+            .box(oci, label: "Registry client", sub: "resolve, push, referrers")
+            .actor(registry)
+            .edgesFromGraph()
+            .flowIn(files, dst: host)
+            .flowIn(base, dst: oci, label: "by digest")
+            .flowOut(oci, dst: registry, label: "publish")
+            .legend(diagram\Look.focal, label: "where layers are built")
+            .legend(diagram\Look.input, label: "what magus built")
+            .legend(diagram\Look.optional, label: "optional")
+            .legend(diagram\Look.store, label: "outside magus")
+            .scope([image, oci]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

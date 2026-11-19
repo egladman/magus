@@ -2,44 +2,48 @@ namespace volatility;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/buzz-stages" as buzzStages;
+import "result";
 
 // volatilityDiagram draws the decision inside internal/ci/volatility. The run that reruns the
 // target and reports the failure is the root package's, so the diagram ends at the verdict.
-export fun volatilityDiagram() > diagram\Diagram !> any {
-    final decide = magus\graph().dir("internal/ci/volatility");
-    final pkg = "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/";
-    final entry = buzzStages\codeStage(decide, symbol: pkg + "Runtime#Decide().", name: "A target failed", sub: "on, and opted in");
-    final thin = buzzStages\codeStage(decide, symbol: pkg + "shouldRetry().", name: "enough history?", look: diagram\Look.decision);
-    final touched = buzzStages\codeStage(decide, symbol: pkg + "shouldRetry().", name: "diff touched it?", look: diagram\Look.decision);
-    final rate = buzzStages\codeStage(decide, symbol: pkg + "score().", name: "over threshold?", look: diagram\Look.decision);
-    final retry = buzzStages\codeStage(decide, symbol: pkg + "Decision#", name: "Retry once", sub: "the same target");
-    final volatile = buzzStages\codeStage(decide, symbol: pkg + "Runtime#Record().", name: "Record volatile", sub: "the run continues");
-    final regress = buzzStages\codeStage(decide, symbol: pkg + "isSuspectedRegression().", name: "Suspected regression", sub: "chase with --bisect", look: diagram\Look.focal);
-    return diagram\of("volatility",
-            title: "A failure is believed only when the diff touched a steady target",
-            eyebrow: "volatility",
-            desc: "A failing target that opted in is retried once while its history is too thin, "
-                + "when the diff did not touch its project, or when its volatility is above the "
-                + "threshold. A retry that passes is recorded as volatile; anything else is a "
-                + "suspected regression.",
-            direction: diagram\Direction.down, level: diagram\Level.symbol)
-        .actor(entry)
-        .actor(thin)
-        .actor(touched)
-        .actor(rate)
-        .actor(retry)
-        .actor(volatile)
-        .actor(regress)
-        .flowAcross(entry, dst: thin)
-        .flowAcross(thin, dst: retry, label: "bootstrap")
-        .flowAcross(thin, dst: touched, label: "yes")
-        .flowAcross(touched, dst: retry, label: "no")
-        .flowAcross(touched, dst: rate, label: "yes")
-        .flowAcross(rate, dst: retry, label: "yes")
-        .flowAcross(rate, dst: regress, label: "no")
-        .flowAcross(retry, dst: volatile, label: "passes")
-        .flowAcross(retry, dst: regress, label: "fails again")
-        .legend(diagram\Look.focal, label: "wants a human")
-        .scope([decide]);
+export fun volatilityDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final decide = magus\graph().dir("internal/ci/volatility");
+        final pkg = "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/";
+        final entry = diagram\stage(decide, refs: magus\graph().refs(pkg + "Runtime#Decide()."), name: "A target failed", sub: "on, and opted in");
+        final thin = diagram\stage(decide, refs: magus\graph().refs(pkg + "shouldRetry()."), name: "enough history?", look: diagram\Look.decision);
+        final touched = diagram\stage(decide, refs: magus\graph().refs(pkg + "shouldRetry()."), name: "diff touched it?", look: diagram\Look.decision);
+        final rate = diagram\stage(decide, refs: magus\graph().refs(pkg + "score()."), name: "over threshold?", look: diagram\Look.decision);
+        final retry = diagram\stage(decide, refs: magus\graph().refs(pkg + "Decision#"), name: "Retry once", sub: "the same target");
+        final volatile = diagram\stage(decide, refs: magus\graph().refs(pkg + "Runtime#Record()."), name: "Record volatile", sub: "the run continues");
+        final regress = diagram\stage(decide, refs: magus\graph().refs(pkg + "isSuspectedRegression()."), name: "Suspected regression", sub: "chase with --bisect", look: diagram\Look.focal);
+        return result\ok::<diagram\Diagram>(diagram\of("volatility",
+                title: "A failure is believed only when the diff touched a steady target",
+                eyebrow: "volatility",
+                desc: "A failing target that opted in is retried once while its history is too thin, "
+                    + "when the diff did not touch its project, or when its volatility is above the "
+                    + "threshold. A retry that passes is recorded as volatile; anything else is a "
+                    + "suspected regression.",
+                direction: diagram\Direction.down, level: diagram\Level.symbol)
+            .actor(entry)
+            .actor(thin)
+            .actor(touched)
+            .actor(rate)
+            .actor(retry)
+            .actor(volatile)
+            .actor(regress)
+            .flowAcross(entry, dst: thin)
+            .flowAcross(thin, dst: retry, label: "bootstrap")
+            .flowAcross(thin, dst: touched, label: "yes")
+            .flowAcross(touched, dst: retry, label: "no")
+            .flowAcross(touched, dst: rate, label: "yes")
+            .flowAcross(rate, dst: retry, label: "yes")
+            .flowAcross(rate, dst: regress, label: "no")
+            .flowAcross(retry, dst: volatile, label: "passes")
+            .flowAcross(retry, dst: regress, label: "fails again")
+            .legend(diagram\Look.focal, label: "wants a human")
+            .scope([decide]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

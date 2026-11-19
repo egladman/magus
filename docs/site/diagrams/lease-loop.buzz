@@ -2,48 +2,53 @@ namespace leaseLoop;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun leaseLoopDiagram() > diagram\Diagram !> any {
-    final vcs = magus\graph().dir("vcs");
-    final jobs = magus\graph().dir("internal/job");
-    final describe = magus\graph().dir("internal/describe");
-    final verify = magus\graph().dir("internal/changeset");
-    final guard = magus\graph().dir("internal/guard");
-    final view = magus\graph().dir("internal/handler/job");
-    final root = diagram\external("Orchestrator", sub: "partitions by write set", look: diagram\Look.plain);
-    final work = diagram\external("Workers", sub: "one write set each");
-    final human = diagram\external("The human", sub: "watches and decides");
-    return diagram\of("lease-loop",
-            title: "A declared plan, released early, verified by diff",
-            eyebrow: "lease",
-            desc: "An orchestrator checkpoints the revision, partitions the work by write set and "
-                + "forks one job row per unit: goal, checkpoint, write paths. The guard reads the "
-                + "row on every call. Holders release paths when done, so the plan shrinks while it "
-                + "runs, and the change set verifies each job by diffing since its checkpoint "
-                + "against what it claimed.",
-            direction: diagram\Direction.down)
-        .actor(root)
-        .box(vcs, label: "Checkpoint", sub: "revision + dirty digest")
-        .box(jobs, label: "Job store", sub: "goal, checkpoint, paths", focal: true)
-        .box(describe, label: "describe job", sub: "the spec a worker reads")
-        .actor(work)
-        .box(guard, label: "Guard", sub: "reads the row per call")
-        .box(verify, label: "Verify each lease", sub: "diff since its checkpoint")
-        .box(view, label: "Jobs view", sub: "rows, overlaps, stale")
-        .actor(human)
-        .edgesFromGraph()
-        .hideEdges([guard], dst: [vcs], why: "the guard reads the row, not the revision")
-        .markEdge(jobs, dst: vcs, label: "checkpoint")
-        .markEdge(jobs, dst: describe, label: "spec")
-        .markEdge(guard, dst: jobs, label: "lease")
-        .markEdge(view, dst: jobs, label: "job rows")
-        .flowIn(root, dst: jobs, label: "fork")
-        .flowIn(work, dst: jobs, label: "release", stroke: diagram\Stroke.focal)
-        .flowIn(work, dst: verify, label: "reports done")
-        .flowIn(human, dst: view, label: "watches")
-        .zone("the loop the orchestrator runs", dirs: [vcs, jobs, describe, verify, guard], actors: [root, work])
-        .zone("what a person watches", dirs: [view], actors: [human])
-        .legend(diagram\Look.focal, label: "the whole guarantee")
-        .legend(diagram\Look.external, label: "agents and people")
-        .scope([vcs, jobs, describe, verify, guard, view]);
+export fun leaseLoopDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final vcs = magus\graph().dir("vcs");
+        final jobs = magus\graph().dir("internal/job");
+        final describe = magus\graph().dir("internal/describe");
+        final verify = magus\graph().dir("internal/changeset");
+        final guard = magus\graph().dir("internal/guard");
+        final view = magus\graph().dir("internal/handler/job");
+        final root = diagram\external("Orchestrator", sub: "partitions by write set", look: diagram\Look.plain);
+        final work = diagram\external("Workers", sub: "one write set each");
+        final human = diagram\external("The human", sub: "watches and decides");
+        return result\ok::<diagram\Diagram>(diagram\of("lease-loop",
+                title: "A declared plan, released early, verified by diff",
+                eyebrow: "lease",
+                desc: "An orchestrator checkpoints the revision, partitions the work by write set and "
+                    + "forks one job row per unit: goal, checkpoint, write paths. The guard reads the "
+                    + "row on every call. Holders release paths when done, so the plan shrinks while it "
+                    + "runs, and the change set verifies each job by diffing since its checkpoint "
+                    + "against what it claimed.",
+                direction: diagram\Direction.down)
+            .actor(root)
+            .box(vcs, label: "Checkpoint", sub: "revision + dirty digest")
+            .box(jobs, label: "Job store", sub: "goal, checkpoint, paths", focal: true)
+            .box(describe, label: "describe job", sub: "the spec a worker reads")
+            .actor(work)
+            .box(guard, label: "Guard", sub: "reads the row per call")
+            .box(verify, label: "Verify each lease", sub: "diff since its checkpoint")
+            .box(view, label: "Jobs view", sub: "rows, overlaps, stale")
+            .actor(human)
+            .edgesFromGraph()
+            .hideEdges([guard], dst: [vcs], why: "the guard reads the row, not the revision")
+            .markEdge(jobs, dst: vcs, label: "checkpoint")
+            .markEdge(jobs, dst: describe, label: "spec")
+            .markEdge(guard, dst: jobs, label: "lease")
+            .markEdge(view, dst: jobs, label: "job rows")
+            .flowIn(root, dst: jobs, label: "fork")
+            .flowIn(work, dst: jobs, label: "release", stroke: diagram\Stroke.focal)
+            .flowIn(work, dst: verify, label: "reports done")
+            .flowIn(human, dst: view, label: "watches")
+            .zone("the loop the orchestrator runs", dirs: [vcs, jobs, describe, verify, guard], actors: [root, work])
+            .zone("what a person watches", dirs: [view], actors: [human])
+            .legend(diagram\Look.focal, label: "the whole guarantee")
+            .legend(diagram\Look.external, label: "agents and people")
+            .scope([vcs, jobs, describe, verify, guard, view]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

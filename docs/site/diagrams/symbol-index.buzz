@@ -2,40 +2,45 @@ namespace symbolIndex;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun symbolIndexDiagram() > diagram\Diagram !> any {
-    final contract = magus\graph().dir("internal/symbols");
-    final golang = magus\graph().dir("internal/symbols/goindex");
-    final buzz = magus\graph().dir("internal/symbols/buzzindex");
-    final shell = magus\graph().dir("internal/symbols/shindex");
-    final scip = magus\graph().dir("libs/scipbuzz");
-    final bindings = magus\graph().dir("internal/interp/bindings");
-    final spell = magus\graph().dir("internal/spell");
-    final knowledge = magus\graph().dir("internal/graph/knowledge");
-    final index = diagram\external("index.scip", sub: "one per project", look: diagram\Look.store);
-    return diagram\of("symbol-index",
-            title: "A SCIP indexer per language writes the file the graph reads lazily",
-            eyebrow: "symbols",
-            direction: diagram\Direction.down,
-            desc: "Each language has an indexer behind one contract: the Go indexer wraps a Go "
-                + "analyzer, the Buzz indexer parses with scipbuzz, and the shell indexer reads "
-                + "scripts. Each writes one SCIP file per project when its sources change, and the "
-                + "knowledge graph opens that file one project at a time instead of loading every "
-                + "symbol.")
-        .box(contract, label: "Index contract", sub: "what an indexer returns", focal: true)
-        .box(golang, label: "Go indexer", sub: "packages, symbols")
-        .box(buzz, label: "Buzz indexer", sub: "parsed by scipbuzz")
-        .box(shell, label: "Shell indexer", sub: "functions, sources")
-        .box(scip, label: "scipbuzz", sub: "Buzz to SCIP", look: diagram\Look.input)
-        .box(bindings, label: "Host bindings", sub: "calls an indexer")
-        .box(spell, label: "Spell host", sub: "ops ask for symbols")
-        .box(knowledge, label: "Knowledge graph", sub: "opens a shard lazily")
-        .actor(index)
-        .edgesFromGraph()
-        .flowOut(contract, dst: index, label: "writes")
-        .flowIn(index, dst: knowledge, label: "read lazily")
-        .legend(diagram\Look.focal, label: "the contract")
-        .legend(diagram\Look.store, label: "the committed shape")
-        .legend(diagram\Look.input, label: "a parser")
-        .scope([contract, golang, buzz, shell, scip]);
+export fun symbolIndexDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final contract = magus\graph().dir("internal/symbols");
+        final golang = magus\graph().dir("internal/symbols/goindex");
+        final buzz = magus\graph().dir("internal/symbols/buzzindex");
+        final shell = magus\graph().dir("internal/symbols/shindex");
+        final scip = magus\graph().dir("libs/scipbuzz");
+        final bindings = magus\graph().dir("internal/interp/bindings");
+        final spell = magus\graph().dir("internal/spell");
+        final knowledge = magus\graph().dir("internal/graph/knowledge");
+        final index = diagram\external("index.scip", sub: "one per project", look: diagram\Look.store);
+        return result\ok::<diagram\Diagram>(diagram\of("symbol-index",
+                title: "A SCIP indexer per language writes the file the graph reads lazily",
+                eyebrow: "symbols",
+                direction: diagram\Direction.down,
+                desc: "Each language has an indexer behind one contract: the Go indexer wraps a Go "
+                    + "analyzer, the Buzz indexer parses with scipbuzz, and the shell indexer reads "
+                    + "scripts. Each writes one SCIP file per project when its sources change, and the "
+                    + "knowledge graph opens that file one project at a time instead of loading every "
+                    + "symbol.")
+            .box(contract, label: "Index contract", sub: "what an indexer returns", focal: true)
+            .box(golang, label: "Go indexer", sub: "packages, symbols")
+            .box(buzz, label: "Buzz indexer", sub: "parsed by scipbuzz")
+            .box(shell, label: "Shell indexer", sub: "functions, sources")
+            .box(scip, label: "scipbuzz", sub: "Buzz to SCIP", look: diagram\Look.input)
+            .box(bindings, label: "Host bindings", sub: "calls an indexer")
+            .box(spell, label: "Spell host", sub: "ops ask for symbols")
+            .box(knowledge, label: "Knowledge graph", sub: "opens a shard lazily")
+            .actor(index)
+            .edgesFromGraph()
+            .flowOut(contract, dst: index, label: "writes")
+            .flowIn(index, dst: knowledge, label: "read lazily")
+            .legend(diagram\Look.focal, label: "the contract")
+            .legend(diagram\Look.store, label: "the committed shape")
+            .legend(diagram\Look.input, label: "a parser")
+            .scope([contract, golang, buzz, shell, scip]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }
