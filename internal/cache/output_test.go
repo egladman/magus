@@ -1465,3 +1465,26 @@ func (s *LastFullTestSuite) TestACorruptStoreDoesNotReturnPartialHistory() {
 	s.Require().Error(err)
 	s.Nil(descs)
 }
+
+// TestListDescriptorsSkipsAnOldFormatDescriptor pins that a descriptor whose key_version is
+// still a number reads as a miss, so one old file never hides the store.
+func TestListDescriptorsSkipsAnOldFormatDescriptor(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	ref := mustPersist(t, s, "deadbeefcafef00d", []byte("log\n"), OutputDescriptor{Project: "api", Target: "test"})
+
+	oldDir := filepath.Join(s.outputsDir(), "0123456789abcdef")
+	require.NoError(t, os.MkdirAll(oldDir, 0o700))
+	oldDesc := filepath.Join(oldDir, "out0123456789ab"+descExt)
+	require.NoError(t, os.WriteFile(oldDesc, []byte(`{"ref":"out0123456789ab","project":"api","target":"ci","key_version":1}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(oldDir, "out0123456789ab"+outExt), []byte("old\n"), 0o600))
+
+	descs, err := s.ListDescriptors()
+	require.NoError(t, err)
+	require.Len(t, descs, 1)
+	assert.Equal(t, ref, descs[0].Ref)
+
+	_, err = readDescriptor(oldDesc)
+	assert.ErrorIs(t, err, errOldDescriptor)
+	_, err = s.DescriptorByRef("out0123456789ab")
+	assert.ErrorIs(t, err, errOldDescriptor)
+}
