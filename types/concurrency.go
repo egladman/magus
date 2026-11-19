@@ -62,6 +62,7 @@ func (p ConcurrencyProfile) Width(cores int) int {
 		n = cores / 2
 	case ProfileAggressive:
 		n = cores
+	case ProfileBalanced:
 	}
 	return max(n, 1)
 }

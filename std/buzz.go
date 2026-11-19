@@ -94,14 +94,11 @@ func braceClosers(toks []token.Token) map[ast.Pos]int {
 	closers := map[ast.Pos]int{}
 	var open []ast.Pos
 	for _, t := range toks {
-		switch t.Kind {
-		case token.LBrace:
+		if t.Kind == token.LBrace {
 			open = append(open, ast.Pos{Line: t.Line, Col: t.Col})
-		case token.RBrace:
-			if len(open) > 0 {
-				closers[open[len(open)-1]] = t.Line
-				open = open[:len(open)-1]
-			}
+		} else if t.Kind == token.RBrace && len(open) > 0 {
+			closers[open[len(open)-1]] = t.Line
+			open = open[:len(open)-1]
 		}
 	}
 	return closers

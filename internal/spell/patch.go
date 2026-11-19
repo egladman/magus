@@ -230,9 +230,9 @@ func applyOp(argv []string, op spells.PatchOp) ([]string, error) {
 			return nil, err
 		}
 		return slices.Insert(argv, i, v), nil
-	default:
-		return nil, fmt.Errorf("unknown JSON Patch op %q", op.Op)
+	case spells.OpNone:
 	}
+	return nil, fmt.Errorf("unknown JSON Patch op %q", op.Op)
 }
 
 // argvIndex resolves a single-token JSON Pointer into an array index. "/-" yields

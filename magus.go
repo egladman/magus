@@ -1852,6 +1852,7 @@ func newCallGraph(g *knowledge.Graph, owner func(string) string) callGraph {
 			if ns != "" && !slices.Contains(cg.namespaces[file], ns) {
 				cg.namespaces[file] = append(cg.namespaces[file], ns)
 			}
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationReferences, types.RelationSplits, types.RelationUses:
 		}
 	}
 	for _, c := range cg.callers {

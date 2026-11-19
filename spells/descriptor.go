@@ -72,9 +72,7 @@ const (
 // a charm rewrites individual args, never swaps the whole argv (let alone cmd).
 func ValidatePatch(ops []PatchOp) error {
 	for i, op := range ops {
-		switch op.Op {
-		case OpAdd, OpRemove, OpReplace, OpMove, OpCopy, OpTest:
-		default:
+		if !op.Op.known() {
 			return fmt.Errorf("magus/spell: op %d: unknown JSON Patch op %q", i, op.Op)
 		}
 		if op.Path == "" {
@@ -432,4 +430,13 @@ func (d Descriptor) ServiceOpNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func (k PatchOpKind) known() bool {
+	switch k {
+	case OpAdd, OpRemove, OpReplace, OpMove, OpCopy, OpTest:
+		return true
+	case OpNone:
+	}
+	return false
 }

@@ -67,7 +67,7 @@ func validateMCPTools(m Module) error {
 			params[p.Name] = true
 			switch p.Type {
 			case TypeString, TypeInt, TypeFloat, TypeBool, TypeStringSlice, TypeAnyMap:
-			default:
+			case TypeAny, TypeByteSlice, TypeFloatSlice, TypeIndex, TypeInvalid, TypeStringMap, TypeStringMapMap, TypeStringSliceSlice:
 				return fmt.Errorf("mcp tool %q: param %q has type %s, which has no supported JSON schema shape", tool.Name, p.Name, p.Type.GoType())
 			}
 		}

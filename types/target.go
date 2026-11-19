@@ -297,9 +297,9 @@ func (d DriftPolicy) Gates(declaresOutputs bool) bool {
 		return false
 	case DriftFail, DriftWarn:
 		return true
-	default:
-		return declaresOutputs
+	case DriftDefault:
 	}
+	return declaresOutputs
 }
 
 // Fails reports whether drift this change caused should fail the run rather than be
