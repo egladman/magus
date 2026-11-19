@@ -419,24 +419,20 @@ no-throw:
       spells/aws/s3-cache/spell.buzz: 4
       spells/endoflife-date/spell.buzz: 1
       spells/experimental/nx/spell.buzz: 1
-      spells/git/hooks.buzz: 3
-      spells/github/actions/spell.buzz: 10
-      spells/github/review/spell.buzz: 12
+      spells/git/hooks.buzz: 2
+      spells/github/actions/spell.buzz: 5
+      spells/github/review/spell.buzz: 5
       spells/golang/golangci.buzz: 2
       spells/golang/gomod.buzz: 1
       spells/harness/opencode/runtime/lib/hook.buzz: 2
       spells/harness/opencode/runtime/magus-reclaim-disk.buzz: 1
       spells/onepassword/spell.buzz: 1
       spells/python/spell.buzz: 1
-      spells/python/spell_test.buzz: 2
       spells/system-keychain/spell.buzz: 1
       spells/typescript/spell.buzz: 1
-      spells/typescript/spell_test.buzz: 2
-      std/examples/image/multi-arch.buzz: 2
-      std/examples/image/static-go.buzz: 1
       std/lib/diskwatch.buzz: 6
       std/lib/lcov.buzz: 2
-      std/lib/reclaimdisk.buzz: 20
+      std/lib/reclaimdisk.buzz: 5
 
 # An engineered zone: a path in this project whose complexity a measurement
 # licenses. reason is spec, performance or security; evidence names the files

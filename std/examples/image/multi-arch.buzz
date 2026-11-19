@@ -10,6 +10,7 @@ import "fs";
 import "proc";
 import "vcs";
 import "image";
+import "result";
 
 magus\project({
     "targets": {
@@ -27,25 +28,35 @@ fun slug(p: image\Platform) > str {
 }
 
 // go build for p without cgo; see static-go.buzz.
-fun goBuild(p: image\Platform) > void !> any {
+fun goBuild(p: image\Platform) > result\Result::<bool> {
     final argv: mut [str] = mut [];
-    foreach (key, value in image\goEnv(p)) {
-        argv.append("{key}={value}");
+    try {
+        foreach (key, value in image\goEnv(p)) {
+            argv.append("{key}={value}");
+        }
+        foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/{slug(p)}/app", "./cmd/app"]) {
+            argv.append(arg);
+        }
+        _ = proc\exec("env", args: argv);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    foreach (arg in ["CGO_ENABLED=0", "go", "build", "-trimpath", "-o", "out/{slug(p)}/app", "./cmd/app"]) {
-        argv.append(arg);
-    }
-    _ = proc\exec("env", args: argv);
+    return result\ok::<bool>(true);
 }
 
-fun assembleFor(p: image\Platform) > void !> any {
-    final layout = image\assemble(image\Spec{
-        scratch = true,
-        platform = p,
-        files = [image\File{ source = "out/{slug(p)}/app", path = "/app", mode = fs\mode("0755") }],
-        config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
-    }, layout: "out/image/{slug(p)}");
-    std\print("{slug(p)} {layout.descriptor.digest.string()}");
+fun assembleFor(p: image\Platform) > result\Result::<bool> {
+    try {
+        final layout = image\assemble(image\Spec{
+            scratch = true,
+            platform = p,
+            files = [image\File{ source = "out/{slug(p)}/app", path = "/app", mode = fs\mode("0755") }],
+            config = image\Config{ user = "65532:65532", entrypoint = ["/app"] },
+        }, layout: "out/image/{slug(p)}");
+        std\print("{slug(p)} {layout.descriptor.digest.string()}");
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
+    return result\ok::<bool>(true);
 }
 
 // One target per platform: the graph sees each edge, and image_index runs them in
@@ -54,27 +65,39 @@ fun assembleFor(p: image\Platform) > void !> any {
 export fun build_amd64(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/linux-amd64/app"]);
-    goBuild(AMD64);
+    final built = goBuild(AMD64);
+    if (built.error -> e) {
+        throw e.message;
+    }
 }
 
 export fun build_arm64(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/linux-arm64/app"]);
-    goBuild(ARM64);
+    final built = goBuild(ARM64);
+    if (built.error -> e) {
+        throw e.message;
+    }
 }
 
 export fun image_amd64(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(build_amd64);
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/image/linux-amd64/**"]);
-    assembleFor(AMD64);
+    final assembled = assembleFor(AMD64);
+    if (assembled.error -> e) {
+        throw e.message;
+    }
 }
 
 export fun image_arm64(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(build_arm64);
     ctx.readsFiles(["go.mod", "go.sum", "**/*.go"]);
     ctx.writesFiles(["out/image/linux-arm64/**"]);
-    assembleFor(ARM64);
+    final assembled = assembleFor(ARM64);
+    if (assembled.error -> e) {
+        throw e.message;
+    }
 }
 
 // Fans in: both platform images, then one Image Index over them. parsePlatforms refuses a

@@ -54,6 +54,7 @@ import "magus"
 import "magus/spell"
 import "serialize"
 import "os"
+import "result"
 import "std"
 
 // "GitHub Actions" is the product's canonical name; the bare leaf "actions" named
@@ -111,7 +112,13 @@ fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // Under Actions no provider is selected, so the built-in environment provider resolves
 // this to exactly the same variable getenv was reading. Same source, same value, one
 // meaningful difference.
-fun token() > str !> any { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); } //nolint:no-throw // magus reads a raise as a failed cache call
+fun token() > result\Result::<str> {
+    try {
+        return result\ok::<str>(magus\secret.read("ACTIONS_RUNTIME_TOKEN"));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
+}
 
 // has_token reports presence WITHOUT resolving, so the cache-path guards stay cheap and
 // cannot prompt.
@@ -128,14 +135,20 @@ fun cache_key(hash: str) > str { return "magus-" + hash; }
 
 // rpc POSTs a JSON Twirp request to the named CacheService method and returns the
 // host http response map ({status, body}).
-fun rpc(method: str, payload: any) > any !> any { //nolint:no-throw // magus reads a raise as a failed cache call
+fun rpc(method: str, payload: any) > result\Result::<any> {
+    final bearer = token();
+    if (bearer.error -> e) { return result\Result::<any>{ error = e }; }
     final url = base() + SERVICE + method;
     final headers = mut {
-        "Authorization": "Bearer " + token(),
+        "Authorization": "Bearer " + bearer.value!,
         "Content-Type": "application/json",
         "Accept": "application/json",
     };
-    return http\post(url, serialize\jsonEncode(payload), headers);
+    try {
+        return result\ok::<any>(http\post(url, serialize\jsonEncode(payload), headers));
+    } catch (err: any) {
+        return result\caught::<any>(err);
+    }
 }
 
 // url_field reads a signed URL out of a Twirp response under its protobuf name
@@ -157,28 +170,33 @@ fun snippet(body: str) > str {
     return body.sub(0, len: 200) + "...";
 }
 
-// cache_fail throws for a protocol step that did not do what the contract says. The
-// contract's false means miss (get) or already present (put), so a failure must not
+// cache_failure is the message for a protocol step that did not do what the contract says.
+// The contract's false means miss (get) or already present (put), so a failure must not
 // return one: a service rejecting every read would read as a cold cache.
-fun cache_fail(step: str, detail: str) > void !> any { //nolint:no-throw // magus reads a raise as a failed cache call
-    //nolint:no-throw // magus reads a raise as a failed cache call
-    throw "github-actions cache: {step}: {detail}";
+fun cache_failure(step: str, detail: str) > str {
+    return "github-actions cache: {step}: {detail}";
 }
 
 // download_url asks the service where the entry for hash is stored; "" when it holds
 // none. ok=false is the service's miss.
-fun download_url(hash: str) > str !> any { //nolint:no-throw // magus reads a raise as a failed cache call
-    final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
+fun download_url(hash: str) > result\Result::<str> {
+    final answered = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
+    if (answered.error -> e) { return result\Result::<str>{ error = e }; }
+    final res = answered.value!;
     if (res["status"] != 200) {
-        cache_fail("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}");
+        return result\fail::<str>(cache_failure("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}"));
     }
-    final decoded = serialize\jsonDecode(res["body"]);
-    if (!decoded.q("ok").booleanValue()) { return ""; }
-    final loc = url_field(decoded, "signed_download_url", "signedDownloadUrl");
-    if (loc == "") {
-        cache_fail("GetCacheEntryDownloadURL", "ok=true but no download URL: {snippet("{res["body"]}")}");
+    try {
+        final decoded = serialize\jsonDecode(res["body"]);
+        if (!decoded.q("ok").booleanValue()) { return result\ok::<str>(""); }
+        final loc = url_field(decoded, "signed_download_url", "signedDownloadUrl");
+        if (loc == "") {
+            return result\fail::<str>(cache_failure("GetCacheEntryDownloadURL", "ok=true but no download URL: {snippet("{res["body"]}")}"));
+        }
+        return result\ok::<str>(loc);
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return loc;
 }
 
 // get_artifact downloads the cache artifact for req.hash into req.path: ok on a hit
@@ -186,12 +204,14 @@ fun download_url(hash: str) > str !> any { //nolint:no-throw // magus reads a ra
 // failed request throws.
 export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) { return Ack{ ok = false }; }
-    final loc = download_url(req.hash);
+    final found = download_url(req.hash);
+    if (found.error -> e) { throw e.message; } //nolint:no-throw // magus reads a raise as a failed cache call
+    final loc = found.value!;
     if (loc == "") { return Ack{ ok = false }; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
     final dcode = http\download(loc, req.path, {}, http\Options{timeoutSeconds = BLOB_TIMEOUT_SECS});
     if (dcode != 200) {
-        cache_fail("blob GET", "status {dcode}");
+        throw cache_failure("blob GET", "status {dcode}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
     return Ack{ ok = true };
 }
@@ -200,7 +220,9 @@ export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //n
 // the lookup half of get_artifact.
 export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) { return Ack{ ok = false }; }
-    return Ack{ ok = download_url(req.hash) != "" };
+    final found = download_url(req.hash);
+    if (found.error -> e) { throw e.message; } //nolint:no-throw // magus reads a raise as a failed cache call
+    return Ack{ ok = found.value! != "" };
 }
 
 // put_artifact uploads the artifact at req.path for req.hash: ok once uploaded, not ok
@@ -208,22 +230,24 @@ export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //n
 // (ok=false), neither of which is a failure. A failed request throws.
 export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) {
-        cache_fail("put_artifact", "this step exports no ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN");
+        throw cache_failure("put_artifact", "this step exports no ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
     final src = req.path;
     final key = cache_key(req.hash);
 
     // 1. Reserve the entry → pre-signed Azure upload URL.
-    final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
+    final reserved = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
+    if (reserved.error -> e) { throw e.message; } //nolint:no-throw // magus reads a raise as a failed cache call
+    final cres = reserved.value!;
     if (cres["status"] == 409) { return Ack{ ok = false }; }
     if (cres["status"] != 200) {
-        cache_fail("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
+        throw cache_failure("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
     final created = serialize\jsonDecode(cres["body"]);
     if (!created.q("ok").booleanValue()) { return Ack{ ok = false }; }
     final upload = url_field(created, "signed_upload_url", "signedUploadUrl");
     if (upload == "") {
-        cache_fail("CreateCacheEntry", "ok=true but no upload URL: {snippet("{cres["body"]}")}");
+        throw cache_failure("CreateCacheEntry", "ok=true but no upload URL: {snippet("{cres["body"]}")}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
 
     // 2. Upload the artifact to Azure as a single Put Blob (chunk_size 0 = whole
@@ -231,18 +255,20 @@ export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //n
     final ures = http\upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
     final ucode = ures[0];
     if (ucode != 201 and ucode != 200) {
-        cache_fail("blob PUT", "status {ucode}: {snippet("{ures[1]}")}");
+        throw cache_failure("blob PUT", "status {ucode}: {snippet("{ures[1]}")}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
 
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
     //    so send size_bytes as a string.
-    final fres = rpc("FinalizeCacheEntryUpload",
+    final finalized = rpc("FinalizeCacheEntryUpload",
         {"key": key, "size_bytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
+    if (finalized.error -> e) { throw e.message; } //nolint:no-throw // magus reads a raise as a failed cache call
+    final fres = finalized.value!;
     if (fres["status"] != 200) {
-        cache_fail("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}");
+        throw cache_failure("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
     if (!serialize\jsonDecode(fres["body"]).q("ok").booleanValue()) {
-        cache_fail("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}");
+        throw cache_failure("FinalizeCacheEntryUpload", "ok=false: {snippet("{fres["body"]}")}"); //nolint:no-throw // magus reads a raise as a failed cache call
     }
     return Ack{ ok = true };
 }
@@ -425,7 +451,12 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //no
 
     var value = "";
     if (ref.startsWith(OIDC_PREFIX)) {
-        value = oidcToken(ref.sub(OIDC_PREFIX.len()));
+        final minted = oidcToken(ref.sub(OIDC_PREFIX.len()));
+        if (minted.error -> e) {
+            //nolint:no-throw // magus reads a raise as a failed secret lookup
+            throw e.message;
+        }
+        value = minted.value!;
     } else {
         value = workflowEnv(ref);
     }
@@ -484,21 +515,19 @@ fun workflowEnv(name: str) > str {
 // The audience identifies the relying party: "sts.amazonaws.com" for AWS, the
 // workload-identity-pool provider URL for GCP, whatever the trust policy on the
 // other end was written against.
-fun oidcToken(audience: str) > str !> any { //nolint:no-throw // magus reads a raise as a failed secret lookup
+fun oidcToken(audience: str) > result\Result::<str> {
     if (audience == "") {
-        //nolint:no-throw // magus reads a raise as a failed secret lookup
-        throw "github-actions: an oidc: reference needs an audience, as in "
-            + "magus\\secret.read(\"oidc:sts.amazonaws.com\")";
+        return result\fail::<str>("github-actions: an oidc: reference needs an audience, as in "
+            + "magus\\secret.read(\"oidc:sts.amazonaws.com\")");
     }
     final endpoint = getenv("ACTIONS_ID_TOKEN_REQUEST_URL");
     final request_token = getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN");
     if (endpoint == "" or request_token == "") {
-        //nolint:no-throw // magus reads a raise as a failed secret lookup
-        throw "github-actions: this job has no OIDC token endpoint.\n"
+        return result\fail::<str>("github-actions: this job has no OIDC token endpoint.\n"
             + "  Grant it permission to mint one:\n"
             + "      permissions:\n"
             + "        id-token: write\n"
-            + "  The permission is off by default, and a job without it is given no endpoint.";
+            + "  The permission is off by default, and a job without it is given no endpoint.");
     }
     // The endpoint is read from the environment and the request token is sent to it as
     // a bearer credential, so whoever names the endpoint receives that token. An earlier
@@ -509,31 +538,38 @@ fun oidcToken(audience: str) > str !> any { //nolint:no-throw // magus reads a r
     // different one entirely, so pinning a domain would break real installations while
     // this rejects the plaintext case outright.
     if (!endpoint.startsWith("https://")) {
-        //nolint:no-throw // magus reads a raise as a failed secret lookup
-        throw "github-actions: refusing to send the OIDC request token to a non-HTTPS "
+        return result\fail::<str>("github-actions: refusing to send the OIDC request token to a non-HTTPS "
             + "endpoint. ACTIONS_ID_TOKEN_REQUEST_URL is not an https:// URL, which the "
-            + "runner never produces - something in this job rewrote it.";
+            + "runner never produces - something in this job rewrote it.");
     }
 
-    final res = http\get(tokenURL(endpoint, audience),
-        mut {"Authorization": "Bearer " + request_token, "Accept": "application/json"});
+    var res: any = null;
+    try {
+        res = http\get(tokenURL(endpoint, audience),
+            mut {"Authorization": "Bearer " + request_token, "Accept": "application/json"});
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
     if (res["status"] != 200) {
         // The status, deliberately without the body. Every other failure path in this
         // file trims the provider's own stderr into the message, but this response body
         // is the one that can CONTAIN a token, and an error string is the least
         // redacted thing magus handles - it has not been resolved yet, so nothing is
         // registered for redaction at the moment it is thrown.
-        //nolint:no-throw // magus reads a raise as a failed secret lookup
-        throw "github-actions: the OIDC token endpoint answered {res["status"]} "
-            + "for audience {audience}";
+        return result\fail::<str>("github-actions: the OIDC token endpoint answered {res["status"]} "
+            + "for audience {audience}");
     }
-    final value = serialize\jsonDecode(res["body"]).q("value").stringValue();
+    var value = "";
+    try {
+        value = serialize\jsonDecode(res["body"]).q("value").stringValue();
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
     if (value == "") {
-        //nolint:no-throw // magus reads a raise as a failed secret lookup
-        throw "github-actions: the OIDC token endpoint returned no token for audience "
-            + audience;
+        return result\fail::<str>("github-actions: the OIDC token endpoint returned no token for audience "
+            + audience);
     }
-    return value;
+    return result\ok::<str>(value);
 }
 
 // tokenURL puts the audience on the runner's token endpoint. The separator is chosen
