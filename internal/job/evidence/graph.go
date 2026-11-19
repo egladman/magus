@@ -205,7 +205,7 @@ func (r *Graph) StaleIndexes(ctx context.Context) []types.KnowledgeStaleIndex {
 			}
 		}
 	})
-	return r.staleIdx
+	return slices.Clone(r.staleIdx)
 }
 
 // staleIndexHits reports whether s could hold a change inside paths: it names no changed
