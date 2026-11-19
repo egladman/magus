@@ -32,13 +32,21 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (codes == null) {
         return [support\missing(CODES)];
     }
-    final m = constant.match(support\read(codes!));
+    final readResult = support\read(codes!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final m = constant.match(readResult.value!);
     if (m == null) {
         return [Finding{ path = CODES, message = "declares no StaleGeneratedOutput code",
             fix = "Update this rule's pattern to where the engine's drift code is declared now." }];
     }
     final code = m![1];
-    final src = support\read(magusfile!);
+    final readResult2 = support\read(magusfile!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    final src = readResult2.value!;
     final i = src.indexOf(anchor);
     if (i == null) {
         return [Finding{ path = MAGUSFILE, message = "the whole-tree drift throw moved or was reworded",
@@ -58,20 +66,20 @@ export fun check(files: [Path]) > [Finding] !> any {
 final codesGo = "\tStaleGeneratedOutput      DiagnosticCode = \"MGS4006\"\n";
 
 test "a throw carrying the engine's code passes" {
-    final files = support\fixture({MAGUSFILE: "x\n    throw \"MGS4006: generate: regeneration changed generated files\";\n", CODES: codesGo});
+    final files = support\fixture({MAGUSFILE: "x\n    throw \"MGS4006: generate: regeneration changed generated files\";\n", CODES: codesGo}).value!;
     assert\equal(check(files).len(), want: 0, message: "clean");
 }
 
 test "a throw without the code is reported at its line" {
-    final got = check(support\fixture({MAGUSFILE: "x\n    throw \"generate: regeneration changed generated files\";\n", CODES: codesGo}));
+    final got = check(support\fixture({MAGUSFILE: "x\n    throw \"generate: regeneration changed generated files\";\n", CODES: codesGo}).value!);
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].line, want: 2, message: "line");
     assert\equal(got[0].message, want: "the whole-tree drift throw does not carry MGS4006", message: "message");
 }
 
 test "a reworded throw or a moved constant is reported" {
-    assert\equal(support\messages(check(support\fixture({MAGUSFILE: "x\n", CODES: codesGo}))),
+    assert\equal(support\messages(check(support\fixture({MAGUSFILE: "x\n", CODES: codesGo}).value!)),
         want: ["the whole-tree drift throw moved or was reworded"], message: "reworded");
-    assert\equal(support\messages(check(support\fixture({MAGUSFILE: "x\n", CODES: "package types\n"}))),
+    assert\equal(support\messages(check(support\fixture({MAGUSFILE: "x\n", CODES: "package types\n"}).value!)),
         want: ["declares no StaleGeneratedOutput code"], message: "constant moved");
 }

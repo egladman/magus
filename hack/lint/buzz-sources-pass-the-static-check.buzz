@@ -198,7 +198,7 @@ test "a file with a warning is reported and a clean one is not" {
         "hack/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
             + "    foreach (p in parts) \{\n        s = p + s;\n    }\n    return s;\n}\n",
         "internal/x/testdata/bad.buzz": "this is not buzz\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 1, message: "one finding: {support\messages(got)}");
     assert\equal(got[0].path, want: "hack/rebuilt.buzz", message: "the warning fails");
 }

@@ -8,6 +8,7 @@ namespace filesiblings;
 
 import "assert";
 import "path";
+import "result";
 import "std";
 import "magus";
 import "magus/lint";
@@ -250,40 +251,44 @@ fun suggestion(n: Name) > str {
 // The extra word must be a suffix that multi-word names end in across three
 // directories. types holds, per file group, the squashed type names its files
 // declare; one must start with the first word.
-export fun judge(files: [str], skipped: [str], types: {str: str}) > [Hit] !> any {
-    final every = mut {<str: bool>};
-    foreach (f in files) {
-        every[f] = true;
+export fun judge(files: [str], skipped: [str], types: {str: str}) > result\Result::<[Hit]> {
+    try {
+        final every = mut {<str: bool>};
+        foreach (f in files) {
+            every[f] = true;
+        }
+        final names = mut [<Name>];
+        final t = Tally{ counted = mut {<str: bool>}, bases = mut {<str: int>}, total = mut {<str: int>},
+            multi = mut {<str: int>}, suffixDirs = mut {<str: int>} };
+        foreach (f in files) {
+            if (path\matchesAny(skipped, path: f)) {
+                continue;
+            }
+            final n = parse(f);
+            if (n == null) {
+                continue;
+            }
+            names.append(n!);
+            tally(n!, t);
+        }
+        final hits = mut [<Hit>];
+        foreach (n in names) {
+            if (!hasUnsharedFirst(n, t) or hasConvention(n, t) or echoesDir(n)) {
+                continue;
+            }
+            if (!suffixQualifies(n, t) or !declaresFirst(n, types)) {
+                continue;
+            }
+            final suggest = suggestion(n);
+            if (every[suggest] != null) {
+                continue;
+            }
+            hits.append(Hit{ path = n.path, first = n.words[0], suggest = suggest, lang = n.lang });
+        }
+        return result\ok::<[Hit]>(hits);
+    } catch (err: any) {
+        return result\caught::<[Hit]>(err);
     }
-    final names = mut [<Name>];
-    final t = Tally{ counted = mut {<str: bool>}, bases = mut {<str: int>}, total = mut {<str: int>},
-        multi = mut {<str: int>}, suffixDirs = mut {<str: int>} };
-    foreach (f in files) {
-        if (path\matchesAny(skipped, path: f)) {
-            continue;
-        }
-        final n = parse(f);
-        if (n == null) {
-            continue;
-        }
-        names.append(n!);
-        tally(n!, t);
-    }
-    final hits = mut [<Hit>];
-    foreach (n in names) {
-        if (!hasUnsharedFirst(n, t) or hasConvention(n, t) or echoesDir(n)) {
-            continue;
-        }
-        if (!suffixQualifies(n, t) or !declaresFirst(n, types)) {
-            continue;
-        }
-        final suggest = suggestion(n);
-        if (every[suggest] != null) {
-            continue;
-        }
-        hits.append(Hit{ path = n.path, first = n.words[0], suggest = suggest, lang = n.lang });
-    }
-    return hits;
 }
 
 // findings reports each hit outside allow, and each allow entry naming no hit.
@@ -358,56 +363,72 @@ fun indexRow(idx: magus\SymbolIndexStatus) > any {
         "changed_count": idx.changedCount};
 }
 
-fun declaredTypes() > Declared !> any {
-    final data = magus\graph(languages: LANGUAGES).symbols();
-    final found = mut [<Finding>];
-    final indexed = mut {<str: bool>};
-    foreach (idx in data.indexes) {
-        if (LANGUAGES.indexOf(idx.language) == null) {
-            continue;
+fun declaredTypes() > result\Result::<Declared> {
+    try {
+        final data = magus\graph(languages: LANGUAGES).symbols();
+        final found = mut [<Finding>];
+        final indexed = mut {<str: bool>};
+        foreach (idx in data.indexes) {
+            if (LANGUAGES.indexOf(idx.language) == null) {
+                continue;
+            }
+            indexed[idx.language] = true;
+            foreach (f in support\staleness(indexRow(idx), judging: "file names").findings) {
+                found.append(f);
+            }
         }
-        indexed[idx.language] = true;
-        foreach (f in support\staleness(indexRow(idx), judging: "file names").findings) {
-            found.append(f);
+        final pairs = mut [<[str]>];
+        final seen = mut {<str: bool>};
+        foreach (s in data.symbols) {
+            if (LANGUAGES.indexOf(s.language) == null or s.owner != "" or TYPE_KINDS.indexOf(s.kind) == null) {
+                continue;
+            }
+            final colon = s.source.indexOf(":");
+            pairs.append([if (colon == null) s.source else s.source.sub(0, len: colon!), s.name]);
+            seen[s.language] = true;
         }
+        foreach (lang in LANGUAGES) {
+            if (indexed[lang] == null or seen[lang] == null) {
+                found.append(Finding{ path = ".",
+                    message = "no {lang} type was indexed, so its file names cannot be judged: silence, not a pass",
+                    fix = "Declare a {lang} symbol index and rebuild it with `magus graph build`." });
+            }
+        }
+        return result\ok::<Declared>(Declared{ types = typeIndex(pairs), findings = found });
+    } catch (err: any) {
+        return result\caught::<Declared>(err);
     }
-    final pairs = mut [<[str]>];
-    final seen = mut {<str: bool>};
-    foreach (s in data.symbols) {
-        if (LANGUAGES.indexOf(s.language) == null or s.owner != "" or TYPE_KINDS.indexOf(s.kind) == null) {
-            continue;
-        }
-        final colon = s.source.indexOf(":");
-        pairs.append([if (colon == null) s.source else s.source.sub(0, len: colon!), s.name]);
-        seen[s.language] = true;
-    }
-    foreach (lang in LANGUAGES) {
-        if (indexed[lang] == null or seen[lang] == null) {
-            found.append(Finding{ path = ".",
-                message = "no {lang} type was indexed, so its file names cannot be judged: silence, not a pass",
-                fix = "Declare a {lang} symbol index and rebuild it with `magus graph build`." });
-        }
-    }
-    return Declared{ types = typeIndex(pairs), findings = found };
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    final declared = declaredTypes();
+    final declaredResult = declaredTypes();
+    if (declaredResult.error != null) {
+        throw declaredResult.error!.message;
+    }
+    final declared = declaredResult.value!;
     if (declared.findings.len() > 0) {
         return declared.findings;
     }
-    return judged(files, allow: ALLOW, types: declared.types);
+    final found = judged(files, allow: ALLOW, types: declared.types);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // judged is check over the types a test names.
-export fun judged(files: [Path], allow: {str: str}, types: {str: str}) > [Finding] !> any {
+export fun judged(files: [Path], allow: {str: str}, types: {str: str}) > result\Result::<[Finding]> {
     final skipped = mut [<str>];
     foreach (g in SKIPPED) {
         skipped.append(g);
     }
     final attrs = support\named(files, p: ".gitattributes");
     if (attrs != null) {
-        foreach (g in support\attributeGlobs(support\read(attrs!))) {
+        final readResult = support\read(attrs!);
+        if (readResult.error != null) {
+            return result\Result::<[Finding]>{ error = readResult.error };
+        }
+        foreach (g in support\attributeGlobs(readResult.value!)) {
             skipped.append(g);
         }
     }
@@ -418,17 +439,27 @@ export fun judged(files: [Path], allow: {str: str}, types: {str: str}) > [Findin
         byPath[f.value] = f;
     }
     final kept = mut [<Hit>];
-    foreach (h in judge(paths, skipped: skipped, types: types)) {
-        if (h.lang == "go" and isGeneratedGo(support\read(byPath[h.path]!))) {
-            continue;
+    final judgedHits = judge(paths, skipped: skipped, types: types);
+    if (judgedHits.error != null) {
+        return result\Result::<[Finding]>{ error = judgedHits.error };
+    }
+    foreach (h in judgedHits.value!) {
+        if (h.lang == "go") {
+            final source = support\read(byPath[h.path]!);
+            if (source.error != null) {
+                return result\Result::<[Finding]>{ error = source.error };
+            }
+            if (isGeneratedGo(source.value!)) {
+                continue;
+            }
         }
         kept.append(h);
     }
-    return findings(kept, allow: allow);
+    return result\ok::<[Finding]>(findings(kept, allow: allow));
 }
 
 // hits pads files so each suffix ends names in three directories.
-fun hits(files: [str], suffixes: [str], declared: [[str]]) > [Hit] !> any {
+fun hits(files: [str], suffixes: [str], declared: [[str]]) > [Hit] {
     final all = mut [<str>];
     foreach (f in files) {
         all.append(f);
@@ -440,7 +471,7 @@ fun hits(files: [str], suffixes: [str], declared: [[str]]) > [Hit] !> any {
             all.append("{d}/x-{w}.buzz");
         }
     }
-    return judge(all, skipped: [<str>], types: typeIndex(declared));
+    return judge(all, skipped: [<str>], types: typeIndex(declared)).value!;
 }
 
 test "a lone two-word file is reported with its first word as the suggestion" {
@@ -494,9 +525,9 @@ test "hyphens and camelCase split alike, so a file and its test start with one w
 test "a suffix used in fewer than three directories is a meaning, not a qualifier" {
     final key = [["a/key_inputs.go", "Key"]];
     assert\equal(hits(["a/key_inputs.go", "a/x.go"], suffixes: ["inputs"], declared: key).len(), want: 1, message: "three directories");
-    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go", "pad2/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 1, message: "a and two more");
-    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 0, message: "two directories");
-    assert\equal(judge(["a/key_inputs.go", "a/x.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 0, message: "one directory");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go", "pad2/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).value!.len(), want: 1, message: "a and two more");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).value!.len(), want: 0, message: "two directories");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go"], skipped: [<str>], types: typeIndex(key)).value!.len(), want: 0, message: "one directory");
 }
 
 test "the file must declare a type named by the first word" {
@@ -536,20 +567,20 @@ test "a Buzz file splits on hyphens and drops _test" {
 
 test "a would-be collision is not reported" {
     final all = ["a/key_inputs.go", "a/key.go", "pad1/x_inputs.go", "pad2/x_inputs.go", "pad3/x_inputs.go"];
-    assert\equal(judge(all, skipped: ["a/key.go"], types: typeIndex([["a/key_inputs.go", "Key"]])).len(), want: 0, message: "key.go exists, skipped or not");
+    assert\equal(judge(all, skipped: ["a/key.go"], types: typeIndex([["a/key_inputs.go", "Key"]])).value!.len(), want: 0, message: "key.go exists, skipped or not");
 }
 
 test "a generated file and testdata are skipped" {
     final pads = ["pad1/x_inputs.go", "pad2/x_inputs.go", "pad3/x_inputs.go"];
     final key = typeIndex([["a/gen/key_inputs.go", "Key"], ["a/testdata/key_inputs.go", "Key"]]);
-    assert\equal(judge(["a/gen/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).len(), want: 0, message: "gen dir");
-    assert\equal(judge(["a/testdata/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).len(), want: 0, message: "testdata");
+    assert\equal(judge(["a/gen/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).value!.len(), want: 0, message: "gen dir");
+    assert\equal(judge(["a/testdata/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).value!.len(), want: 0, message: "testdata");
     final tree = support\fixture({".gitattributes": "a/key_inputs.go linguist-generated\n", "a/key_inputs.go": "package a\n",
         "a/other.go": "package a\n", "b/value_inputs.go": "// Code generated by x. DO NOT EDIT.\npackage b\n", "b/other.go": "package b\n",
         "c/last_inputs.go": "package c\n", "c/other.go": "package c\n", "pad1/x_inputs.go": "package p\n", "pad2/x_inputs.go": "package p\n",
-        "pad3/x_inputs.go": "package p\n"});
+        "pad3/x_inputs.go": "package p\n"}).value!;
     final types = typeIndex([["a/key_inputs.go", "Key"], ["b/value_inputs.go", "Value"], ["c/last_inputs.go", "Last"]]);
-    final got = judged(tree, allow: {<str: str>}, types: types);
+    final got = judged(tree, allow: {<str: str>}, types: types).value!;
     assert\equal(got.len(), want: 1, message: ".gitattributes and the header skip two, the third is reported");
     assert\equal(got[0].path, want: "c/last_inputs.go", message: "the file kept");
 }

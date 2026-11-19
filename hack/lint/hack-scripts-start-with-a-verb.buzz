@@ -79,7 +79,14 @@ export fun nameProblem(p: str) > str {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     final readme = support\named(files, p: "hack/README.md");
-    final listing = if (readme == null) "" else support\read(readme!);
+    var listing = "";
+    if (readme != null) {
+        final readmeText = support\read(readme!);
+        if (readmeText.error != null) {
+            throw readmeText.error!.message;
+        }
+        listing = readmeText.value!;
+    }
     foreach (f in files) {
         if (!f.value.endsWith(".buzz")) {
             continue;
@@ -133,7 +140,7 @@ test "the README lists every script and module, and nothing under lint or policy
         "hack/dev/count-things.buzz": "",
         "hack/magusfile/drift.buzz": "",
         "hack/lint/support.buzz": "",
-    }));
+    }).value!);
     assert\equal(support\messages(got), want: [
         "hack/README.md does not list hack/dev/count-things.buzz",
         "hack/README.md does not list hack/magusfile/drift.buzz",

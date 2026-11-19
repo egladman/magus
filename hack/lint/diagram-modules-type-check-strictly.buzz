@@ -87,7 +87,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     final library = mut [<Finding>];
     foreach (f in files) {
         if (f.value == LIBRARY) {
-            foreach (found in hostCalls(support\read(f))) { library.append(found); }
+            final readResult = support\read(f);
+            if (readResult.error != null) {
+                throw readResult.error!.message;
+            }
+            foreach (found in hostCalls(readResult.value!)) { library.append(found); }
         }
         if (f.value.startsWith(DIAGRAMS)) {
             argv.append(f.value.sub("docs/".len()));
@@ -139,7 +143,7 @@ test "a diagram with an unlabeled argument or a warning is reported, a clean one
         "docs/site/diagrams/positional.buzz": "namespace positional;\n\n" + lib + "fun sum() > int \{\n    return add(1, 2);\n}\n",
         "docs/site/diagrams/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
             + "    foreach (p in parts) \{\n        s = p + s;\n    }\n    return s;\n}\n",
-    }));
+    }).value!);
     final paths = mut [<str>];
     foreach (f in got) {
         paths.append("{f.path}:{f.line}");
@@ -158,7 +162,7 @@ test "the diagram library may name magus record types but not call the host" {
         + "fun refuse() > void !> str \{ throw \"takes a Dir from magus\\\\dir\"; }\n"
         + "fun reach() > [magus\\Dir] !> any \{ return magus\\graph().dirs(\"internal/**\"); }\n"
         + "fun log() > void !> any \{ magus\\log.info(\"x\"); }\n";
-    final got = check(support\fixture({"libs/diagram/diagram.buzz": src}));
+    final got = check(support\fixture({"libs/diagram/diagram.buzz": src}).value!);
     final lines = mut [<int>];
     foreach (f in got) { lines.append(f.line); }
     assert\equal(lines, want: [6, 7], message: "the host calls, not the types, the comment or the string: {support\messages(got)}");

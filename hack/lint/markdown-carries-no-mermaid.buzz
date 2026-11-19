@@ -17,7 +17,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
         var n = 0;
-        foreach (line in support\read(f).split("\n")) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (line in readResult.value!.split("\n")) {
             n = n + 1;
             final t = line.trim();
             if (t.startsWith("```mermaid") or t.startsWith("~~~mermaid")) {
@@ -31,7 +35,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 test "a mermaid fence is reported at its line" {
-    final got = check(support\fixture({"docs/a.md": "# A\n\n```mermaid\ngraph LR\n```\n", "b.md": "  ~~~mermaid\n~~~\n"}));
+    final got = check(support\fixture({"docs/a.md": "# A\n\n```mermaid\ngraph LR\n```\n", "b.md": "  ~~~mermaid\n~~~\n"}).value!);
     assert\equal(got.len(), want: 2, message: "two fences");
     final lines = mut {<str: int>};
     foreach (f in got) { lines[f.path] = f.line; }
@@ -40,6 +44,6 @@ test "a mermaid fence is reported at its line" {
 }
 
 test "other fences and prose naming mermaid pass" {
-    final got = check(support\fixture({"a.md": "Mermaid is gone.\n\n```buzz\nimport \"std\";\n```\n"}));
+    final got = check(support\fixture({"a.md": "Mermaid is gone.\n\n```buzz\nimport \"std\";\n```\n"}).value!);
     assert\equal(got.len(), want: 0, message: "clean");
 }

@@ -30,7 +30,11 @@ export fun blankLine(src: str) > int {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
-        final line = blankLine(support\read(f));
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final line = blankLine(readResult.value!);
         if (line > 0) {
             found.append(Finding{ path = f.value, line = line,
                 message = "{f.value} imports a module as _, so nothing in the diagram names it",
@@ -43,14 +47,14 @@ export fun check(files: [Path]) > [Finding] !> any {
 test "a diagram with named imports passes" {
     final got = check(support\fixture({
         "docs/site/diagrams/one.buzz": "import \"magus\";\nimport \"site/diagrams/packages\" as packages;\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 0, message: "clean");
 }
 
 test "a diagram with a blank import is reported at its line" {
     final got = check(support\fixture({
         "docs/site/diagrams/two.buzz": "import \"magus\";\nimport \"site/diagrams/packages\" as _;\n",
-    }));
+    }).value!);
     assert\equal(support\messages(got), want: [
         "docs/site/diagrams/two.buzz imports a module as _, so nothing in the diagram names it",
     ], message: "findings");

@@ -31,10 +31,18 @@ export fun reads() > [str] {
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    final skips = support\skipsCache();
+    final skipsResult = support\skipsCache();
+    if (skipsResult.error != null) {
+        throw skipsResult.error!.message;
+    }
+    final skips = skipsResult.value!;
     final targets = mut [<InstallTarget>];
     final sources = mut {<str: str>};
-    foreach (p in support\targets().projects) {
+    final targetsResult = support\targets();
+    if (targetsResult.error != null) {
+        throw targetsResult.error!.message;
+    }
+    foreach (p in targetsResult.value!.projects) {
         foreach (n in p.nodes) {
             var installs = false;
             foreach (use in n.spells) {
@@ -50,7 +58,11 @@ export fun check(files: [Path]) > [Finding] !> any {
                 skipsCache = skips["{p.path}:{n.name}"] ?? false });
             final magusfile = support\named(files, p: support\magusfilePath(p.path));
             if (magusfile != null) {
-                sources[magusfile!.value] = support\read(magusfile!);
+                final readResult = support\read(magusfile!);
+                if (readResult.error != null) {
+                    throw readResult.error!.message;
+                }
+                sources[magusfile!.value] = readResult.value!;
             }
         }
     }

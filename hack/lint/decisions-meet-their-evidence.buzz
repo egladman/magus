@@ -41,7 +41,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     final table = decisions\table([<str>]);
     final rules: {str: str} = table["rules"] ?? {<str: str>};
-    return judge(rules, catalog: catalog!, src: support\read(files[0]));
+    final readResult = support\read(files[0]);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    return judge(rules, catalog: catalog!, src: readResult.value!);
 }
 
 // judge is a finding per rule that rules denies below GATE. A rule the catalog

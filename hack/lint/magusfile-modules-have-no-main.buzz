@@ -34,7 +34,11 @@ export fun mainLine(src: str) > int {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
-        final line = mainLine(support\read(f));
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final line = mainLine(readResult.value!);
         if (f.value.startsWith(MODULES) and line > 0) {
             found.append(Finding{ path = f.value, line = line,
                 message = "{f.value} declares main, but a module a magusfile imports is never run",
@@ -53,7 +57,7 @@ test "a module without main and a script with one pass" {
         "hack/magusfile/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
         "hack/dev/ls-things.buzz": "namespace x;\n\nexport fun main(args: [str]) > void \{}\n",
         "hack/remote/on-mars.buzz": "namespace x;\n\nfun main(args: [str]) > void \{}\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 0, message: "clean");
 }
 
@@ -61,7 +65,7 @@ test "a module with main and a script without one are each reported" {
     final got = check(support\fixture({
         "hack/magusfile/index.buzz": "namespace index;\n\nexport fun main(args: [str]) > void \{}\n",
         "hack/ci/helpers.buzz": "namespace helpers;\n\nexport fun mainBranch() > str \{ return \"main\"; }\n",
-    }));
+    }).value!);
     assert\equal(support\messages(got), want: [
         "hack/ci/helpers.buzz declares no main, so nothing runs it",
         "hack/magusfile/index.buzz declares main, but a module a magusfile imports is never run",

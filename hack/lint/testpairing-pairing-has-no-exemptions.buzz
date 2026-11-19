@@ -12,6 +12,7 @@ namespace testpairing;
 import "assert";
 import "encoding/yaml";
 import "path";
+import "result";
 import "serialize";
 import "std";
 import "magus/lint";
@@ -38,12 +39,24 @@ export fun reads() > [str] {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
-        if (f.value == ".golangci.yml") {
-            configFindings(f, found: found);
-        } else if (f.value == "magusfile.buzz" or f.value == "hack/magusfile/run-golangci.buzz") {
-            runFindings(f, found: found);
-        } else if (f.value.indexOf("/testdata/") == null) {
-            directiveFindings(f, found: found);
+        final isConfig = f.value == ".golangci.yml";
+        final isRun = f.value == "magusfile.buzz" or f.value == "hack/magusfile/run-golangci.buzz";
+        if (!isConfig and !isRun and f.value.indexOf("/testdata/") != null) {
+            continue;
+        }
+        final text = support\read(f);
+        if (text.error != null) {
+            throw text.error!.message;
+        }
+        if (isConfig) {
+            final config = configFindings(f, src: text.value!, found: found);
+            if (config.error != null) {
+                throw config.error!.message;
+            }
+        } else if (isRun) {
+            runFindings(f, src: text.value!, found: found);
+        } else {
+            directiveFindings(f, src: text.value!, found: found);
         }
     }
     return found;
@@ -58,9 +71,14 @@ fun named(list: serialize\Boxed, name: str) > bool {
     return false;
 }
 
-fun configFindings(f: Path, found: mut [Finding]) > void !> any {
-    final src = support\read(f);
-    final doc = serialize\Boxed.init(yaml\parse(src));
+// configFindings appends to found what the golangci config leaves open to a pair exemption.
+fun configFindings(f: Path, src: str, found: mut [Finding]) > result\Result::<bool> {
+    var doc = serialize\Boxed.init(null);
+    try {
+        doc = serialize\Boxed.init(yaml\parse(src));
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
     final line = support\findLine(src, needle: LINTER);
     if (!named(doc.q(["linters", "enable"]), name: LINTER)) {
         found.append(Finding{ path = f.value, line = line,
@@ -97,11 +115,12 @@ fun configFindings(f: Path, found: mut [Finding]) > void !> any {
                 message = "exclusion rule {n} names testpair; it has no exemptions", fix = FIX });
         }
     }
+    return result\ok::<bool>(true);
 }
 
-fun runFindings(f: Path, found: mut [Finding]) > void !> any {
+fun runFindings(f: Path, src: str, found: mut [Finding]) > void {
     var n = 0;
-    foreach (line in support\read(f).split("\n")) {
+    foreach (line in src.split("\n")) {
         n = n + 1;
         if (line.indexOf("\"--enable-only\"") != null and line.indexOf(LINTER) == null) {
             found.append(Finding{ path = f.value, line = n,
@@ -118,9 +137,9 @@ fun quoted(before: str) > bool {
     return before.split("\"").len() % 2 == 0 or before.split("`").len() % 2 == 0;
 }
 
-fun directiveFindings(f: Path, found: mut [Finding]) > void !> any {
+fun directiveFindings(f: Path, src: str, found: mut [Finding]) > void {
     var n = 0;
-    foreach (line in support\read(f).split("\n")) {
+    foreach (line in src.split("\n")) {
         n = n + 1;
         // A directive opens its comment: `// see //nolint` is prose.
         final at = line.indexOf("//nolint");
@@ -145,12 +164,12 @@ fun directiveFindings(f: Path, found: mut [Finding]) > void !> any {
 final CONFIG = "version: \"2\"\nlinters:\n  enable:\n    - testpairing\n    - testpair\n  settings:\n    custom:\n      testpair:\n        type: module\n  exclusions:\n    rules:\n      - path: ^a\\.go$\n        linters: [testpairing]\n";
 
 test "a config enabling testpair with no way out passes" {
-    assert\equal(check(support\fixture({".golangci.yml": CONFIG})).len(), want: 0, message: "clean");
+    assert\equal(check(support\fixture({".golangci.yml": CONFIG}).value!).len(), want: 0, message: "clean");
 }
 
 test "every config escape hatch is reported" {
     final escaped = "version: \"2\"\nrun:\n  tests: false\nlinters:\n  enable:\n    - testpairing\n  disable:\n    - testpair\n  settings:\n    custom:\n      testpair:\n        settings:\n          allow: [x_test.go]\n  exclusions:\n    paths:\n      - conventions_test.go\n    rules:\n      - path: ^a_test\\.go$\n        linters: [testpair]\n      - path: ^b_test\\.go$\n";
-    assert\equal(support\messages(check(support\fixture({".golangci.yml": escaped}))), want: [
+    assert\equal(support\messages(check(support\fixture({".golangci.yml": escaped}).value!)), want: [
         "linters.enable leaves out testpair, so no test file is held to a pair",
         "linters.disable names testpair",
         "testpair carries a settings block; it takes none, and an option is an exemption",
@@ -163,14 +182,14 @@ test "every config escape hatch is reported" {
 
 test "a libs run that leaves testpair out is reported at its line" {
     final mf = "proc\\exec(gcl, [\"run\", \"--enable-only\", \"filenames,testpair\"]);\nproc\\exec(gcl, [\"run\", \"--enable-only\", \"filenames\"]);\n";
-    final got = check(support\fixture({"magusfile.buzz": mf}));
+    final got = check(support\fixture({"magusfile.buzz": mf}).value!);
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].line, want: 2, message: "the run without testpair");
 }
 
 test "a nolint covering testpair is reported and one naming other linters is not" {
     final src = "package a //nolint:testpairing // cycle\n//nolint:all // no\nvar x = 1 //nolint\nvar y = 2 //nolint:testpair,errcheck // no\nvar z = \"//nolint\"\n// the enable entry and //nolint name agree\n";
-    final got = check(support\fixture({"a/a_test.go": src, "a/testdata/b_test.go": "//nolint\n"}));
+    final got = check(support\fixture({"a/a_test.go": src, "a/testdata/b_test.go": "//nolint\n"}).value!);
     assert\equal(got.len(), want: 3, message: "all, bare and testpair");
     assert\equal(got[0].line, want: 2, message: "all");
     assert\equal(got[1].line, want: 3, message: "bare");

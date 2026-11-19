@@ -95,7 +95,11 @@ export fun policyFile(project: str) > str {
 
 export fun check(files: [Path]) > [Finding] !> any {
     final projects = mut [<str>];
-    foreach (p in support\projects().projects) {
+    final projectsResult = support\projects();
+    if (projectsResult.error != null) {
+        throw projectsResult.error!.message;
+    }
+    foreach (p in projectsResult.value!.projects) {
         projects.append(p.path);
     }
     final counts = mut {<str: Ceiling>};
@@ -109,7 +113,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (f.value == POLICY or f.value.endsWith("/" + POLICY)) {
             final project = owner(f.value, projects: projects);
             if (f.value == policyFile(project)) {
-                final text = support\read(f);
+                final readResult = support\read(f);
+                if (readResult.error != null) {
+                    throw readResult.error!.message;
+                }
+                final text = readResult.value!;
                 final doc: {str: any} = yaml\parse(text);
                 final p = policy(doc[SECTION] ?? {<str: any>}, text: text, project: project);
                 foreach (k, c in p.ceilings) {
@@ -122,11 +130,19 @@ export fun check(files: [Path]) > [Finding] !> any {
         } else if (tsScanned(f.value)) {
             ts.append(f);
         } else if (buzzScanned(f.value)) {
-            foreach (m in matches(f.value, src: support\read(f))) {
+            final readResult2 = support\read(f);
+            if (readResult2.error != null) {
+                throw readResult2.error!.message;
+            }
+            foreach (m in matches(f.value, src: readResult2.value!)) {
                 sites.append(m);
             }
         } else if (f.value.endsWith(".go")) {
-            foreach (n in nolints(f.value, src: support\read(f))) {
+            final readResult3 = support\read(f);
+            if (readResult3.error != null) {
+                throw readResult3.error!.message;
+            }
+            foreach (n in nolints(f.value, src: readResult3.value!)) {
                 found.append(n);
             }
         }

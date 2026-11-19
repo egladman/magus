@@ -140,7 +140,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (!f.value.endsWith(".buzz") or !judged(f.value)) {
             continue;
         }
-        final src = support\read(f);
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final src = readResult.value!;
         if (src.indexOf("term\\") == null and src.indexOf("hack/lib/prompt") == null) {
             continue;
         }

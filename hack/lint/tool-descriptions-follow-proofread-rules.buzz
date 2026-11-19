@@ -13,6 +13,7 @@ import "assert";
 import "path";
 import "proc";
 import "fs";
+import "result";
 import "encoding/json";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -81,15 +82,19 @@ export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Findin
     return found;
 }
 
-fun judged(bin: str, table: str, text: str) > [any] !> any {
-    final run = proc\exec(bin, args: ["tool-description", "--stdin", "--decisions", table],
-        opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
-    // Exit 1 is a deny finding, written to stdout like any other.
-    if (run.code != 0 and run.code != 1) {
-        throw "proofread exited {run.code}: " + run.stderr.trim();
+fun judged(bin: str, table: str, text: str) > result\Result::<[any]> {
+    try {
+        final run = proc\exec(bin, args: ["tool-description", "--stdin", "--decisions", table],
+            opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
+        // Exit 1 is a deny finding, written to stdout like any other.
+        if (run.code != 0 and run.code != 1) {
+            return result\fail::<[any]>("proofread exited {run.code}: " + run.stderr.trim());
+        }
+        final rows: [any] = json\parse(run.stdout);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
     }
-    final rows: [any] = json\parse(run.stdout);
-    return rows;
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -104,7 +109,11 @@ export fun check(files: [Path]) > [Finding] !> any {
                 found.append(support\missing(name));
                 continue;
             }
-            final text = support\read(source!);
+            final readResult = support\read(source!);
+            if (readResult.error != null) {
+                throw readResult.error!.message;
+            }
+            final text = readResult.value!;
             final lines = if (name == TOOLS) toolLines(text) else skillLines(text);
             final helps = clihelp\extract(lines);
             if (helps.len() == 0) {
@@ -115,7 +124,11 @@ export fun check(files: [Path]) > [Finding] !> any {
             final rows = mut {<str: [any]>};
             foreach (h in helps) {
                 if (rows[h.text] == null) {
-                    rows[h.text] = judged(bin, table: table, text: h.text);
+                    final row = judged(bin, table: table, text: h.text);
+                    if (row.error != null) {
+                        throw row.error!.message;
+                    }
+                    rows[h.text] = row.value!;
                 }
             }
             foreach (f in judge(name, helps: helps, rows: rows)) {
@@ -130,9 +143,13 @@ export fun check(files: [Path]) > [Finding] !> any {
     return found;
 }
 
-fun parsed(text: str) > [any] !> any {
-    final rows: [any] = json\parse(text);
-    return rows;
+fun parsed(text: str) > result\Result::<[any]> {
+    try {
+        final rows: [any] = json\parse(text);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
+    }
 }
 
 test "only a tool's own Description line is read, with its line number" {
@@ -164,8 +181,8 @@ test "a skill entry's description is read, and a line that is not an entry is no
 test "a deny is reported at its line and an advise is not" {
     final helps = [clihelp\Help{ line = 4, text = "A powerful tool" }, clihelp\Help{ line = 9, text = "Run it" }];
     final rows = mut {<str: [any]>};
-    rows["A powerful tool"] = parsed(`[{"rule": "tool-selling", "decision": "deny", "message": "Drop 'powerful'.", "match": "powerful", "url": "https://example.com/tool-selling/"}]`);
-    rows["Run it"] = parsed(`[{"rule": "tool-boundary", "decision": "advise", "message": "advice"}]`);
+    rows["A powerful tool"] = parsed(`[{"rule": "tool-selling", "decision": "deny", "message": "Drop 'powerful'.", "match": "powerful", "url": "https://example.com/tool-selling/"}]`).value!;
+    rows["Run it"] = parsed(`[{"rule": "tool-boundary", "decision": "advise", "message": "advice"}]`).value!;
     final got = judge(SKILLS, helps: helps, rows: rows);
     assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
     assert\equal(got[0].path, want: SKILLS, message: "the source");
@@ -178,7 +195,7 @@ test "the built proofread judges a description and a source with none is an erro
     final got = check(support\fixture({
         "internal/handler/mcp/gen/registry.go": "var x = 1\n\t\tDescription: \"A powerful tool.\",\n",
         "internal/agent/catalog.go": "package agent\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
     assert\equal(got[0].line, want: 2, message: "the line of the description");
     assert\equal(got[0].message.indexOf("[tool-selling]") != null, want: true, message: got[0].message);

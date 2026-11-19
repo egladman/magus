@@ -346,33 +346,6 @@ no-throw:
       evals/buzz/grade.buzz: 1
       evals/buzz/solutions/ports.buzz: 1
       hack/dev/bootstrap-checkout.buzz: 2
-      hack/lint/banned-words.buzz: 5
-      hack/lint/buzz-glue-is-wired-as-plain-argv.buzz: 1
-      hack/lint/cd-runs-agree-across-workflows.buzz: 1
-      hack/lint/cli-help-follows-proofread-rules.buzz: 3
-      hack/lint/code-follows-mined-precedents.buzz: 1
-      hack/lint/code-stays-within-the-conformance-ceiling.buzz: 1
-      hack/lint/diagnostic-codes-have-docs-pages.buzz: 1
-      hack/lint/file-name-words-tell-siblings-apart.buzz: 4
-      hack/lint/generated-go-packages-name-their-owner.buzz: 1
-      hack/lint/landing-rotator-slots-match-headline-count.buzz: 1
-      hack/lint/local-skills-reach-every-host.buzz: 1
-      hack/lint/markdown-proofread.buzz: 4
-      hack/lint/no-throw.buzz: 3
-      hack/lint/proofread-case-moves-name-their-origin.buzz: 1
-      hack/lint/provider-io-is-buzz.buzz: 9
-      hack/lint/published-magus-is-built-first-and-verified-by-digest.buzz: 2
-      hack/lint/root-project-declares-the-configs-its-tools-read.buzz: 1
-      hack/lint/run.buzz: 15
-      hack/lint/sdk-exports.buzz: 2
-      hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output.buzz: 3
-      hack/lint/skill-renders-follow-markdown-and-description-budgets.buzz: 6
-      hack/lint/skills-generate-declares-every-shipped-skill.buzz: 1
-      hack/lint/support.buzz: 4
-      hack/lint/symbol-docs-follow-proofread-rules.buzz: 1
-      hack/lint/testpairing-pairing-has-no-exemptions.buzz: 3
-      hack/lint/tool-descriptions-follow-proofread-rules.buzz: 2
-      hack/lint/trusted-jobs-restore-no-actions-cache.buzz: 2
       hack/magusfile/advisories.buzz: 3
       hack/magusfile/badges.buzz: 1
       hack/magusfile/bootstrap-timing.buzz: 2

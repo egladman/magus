@@ -6,6 +6,7 @@ namespace support;
 import "fs";
 import "std";
 import "magus";
+import "result";
 import "serialize";
 import "strings";
 import "encoding/yaml";
@@ -30,11 +31,15 @@ export fun scriptDir(p: str) > str {
 
 // read returns the file f names. The runner hands workspace-relative paths with no base;
 // a test's fixture carries its temporary directory as the base.
-export fun read(f: Path) > str !> any {
-    if (f.base == "") {
-        return fs\readFile(f.value);
+export fun read(f: Path) > result\Result::<str> {
+    try {
+        if (f.base == "") {
+            return result\ok::<str>(fs\readFile(f.value));
+        }
+        return result\ok::<str>(fs\readFile(f.base + "/" + f.value));
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return fs\readFile(f.base + "/" + f.value);
 }
 
 // named returns the handed-in file whose workspace path is p, or null.
@@ -103,36 +108,48 @@ var skipCacheMemo: {str: bool}? = null;
 
 // targets is magus\describe.graph(): every target of every project, read statically
 // from the magusfiles.
-export fun targets() > TargetGraph !> any {
-    if (graphMemo == null) {
-        graphMemo = magus\describe.graph();
+export fun targets() > result\Result::<TargetGraph> {
+    try {
+        if (graphMemo == null) {
+            graphMemo = magus\describe.graph();
+        }
+        return result\ok::<TargetGraph>(graphMemo!);
+    } catch (err: any) {
+        return result\caught::<TargetGraph>(err);
     }
-    return graphMemo!;
 }
 
 // projects is magus\describe.project(): each project with its resolved source globs.
-export fun projects() > Projects !> any {
-    if (projectsMemo == null) {
-        projectsMemo = magus\describe.project();
+export fun projects() > result\Result::<Projects> {
+    try {
+        if (projectsMemo == null) {
+            projectsMemo = magus\describe.project();
+        }
+        return result\ok::<Projects>(projectsMemo!);
+    } catch (err: any) {
+        return result\caught::<Projects>(err);
     }
-    return projectsMemo!;
 }
 
 // skipsCache is every target that declares skip_cache, keyed `<project>:<target>`,
 // read from each evaluated project's target policies.
-export fun skipsCache() > {str: bool} !> any {
-    if (skipCacheMemo == null) {
-        final acc = mut {<str: bool>};
-        foreach (p in magus\describe.evaluatedProject()) {
-            foreach (target, policy in p.targetPolicies) {
-                if (policy.skip_cache) {
-                    acc["{p.path}:{target}"] = true;
+export fun skipsCache() > result\Result::<{str: bool}> {
+    try {
+        if (skipCacheMemo == null) {
+            final acc = mut {<str: bool>};
+            foreach (p in magus\describe.evaluatedProject()) {
+                foreach (target, policy in p.targetPolicies) {
+                    if (policy.skip_cache) {
+                        acc["{p.path}:{target}"] = true;
+                    }
                 }
             }
+            skipCacheMemo = acc;
         }
-        skipCacheMemo = acc;
+        return result\ok::<{str: bool}>(skipCacheMemo!);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err);
     }
-    return skipCacheMemo!;
 }
 
 // scalar is a YAML scalar as its text, the way a workflow's runner reads it: `cache: false`
@@ -225,16 +242,20 @@ export fun missing(p: str) > Finding {
 
 // fixture writes files, each a workspace path and its content, under a new temporary
 // directory and returns them as the runner would hand them to a rule.
-export fun fixture(files: {str: str}) > [Path] !> any {
-    final root = fs\tempDir("lint-");
-    final paths = mut [<Path>];
-    foreach (p in sorted(files.keys())) {
-        final full = root + "/" + p;
-        fs\mkdirAll(fs\dirname(full));
-        fs\writeFile(full, content: files[p]!);
-        paths.append(Path{ value = p, base = root });
+export fun fixture(files: {str: str}) > result\Result::<[Path]> {
+    try {
+        final root = fs\tempDir("lint-");
+        final paths = mut [<Path>];
+        foreach (p in sorted(files.keys())) {
+            final full = root + "/" + p;
+            fs\mkdirAll(fs\dirname(full));
+            fs\writeFile(full, content: files[p]!);
+            paths.append(Path{ value = p, base = root });
+        }
+        return result\ok::<[Path]>(paths);
+    } catch (err: any) {
+        return result\caught::<[Path]>(err);
     }
-    return paths;
 }
 
 // messages is each finding's message, which is what most tests compare.
@@ -287,7 +308,7 @@ test "a stale index that lists only some changes, or none, fails at its project"
 }
 
 test "fixture round-trips through read" {
-    final files = fixture({"a/b.lock": "x\n"});
+    final files = fixture({"a/b.lock": "x\n"}).value!;
     assert\equal(files[0].value, want: "a/b.lock", message: "workspace path kept");
-    assert\equal(read(files[0]), want: "x\n", message: "content");
+    assert\equal(read(files[0]).value!, want: "x\n", message: "content");
 }

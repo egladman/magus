@@ -21,6 +21,7 @@ namespace bannedwords;
 
 import "assert";
 import "path";
+import "result";
 import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -99,31 +100,50 @@ final ACTS_IN_PLACE = std\pattern(`(?i)\bact(?:s|ed|ing)?[ _-]?in[ _-]?place`);
 final ACTS_IN_PLACE_FIX = "Say what it touches: the repository it runs in, the file it rewrites.";
 
 export fun check(files: [Path]) > [Finding] !> any {
-    return sanction(findings(files), sanctioned: SANCTIONED);
+    final found = findings(files);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return sanction(found.value!, sanctioned: SANCTIONED);
 }
 
 // findings is every banned word in the hand-written files, before SANCTIONED.
-export fun findings(files: [Path]) > [Finding] !> any {
+export fun findings(files: [Path]) > result\Result::<[Finding]> {
     final generated = mut ["**/gen/**", "MAGUS.md", "**/MAGUS.md"];
     final attrs = support\named(files, p: ".gitattributes");
     if (attrs != null) {
-        foreach (g in support\attributeGlobs(support\read(attrs!))) { generated.append(g); }
+        final attrsText = support\read(attrs!);
+        if (attrsText.error != null) {
+            return result\Result::<[Finding]>{ error = attrsText.error };
+        }
+        foreach (g in support\attributeGlobs(attrsText.value!)) { generated.append(g); }
     }
     final skipped = SKIPPED.keys();
     final found = mut [<Finding>];
     foreach (f in files) {
-        if (f.value == ".gitattributes" or path\matchesAny(generated, path: f.value) or path\matchesAny(skipped, path: f.value)) {
-            continue;
+        try {
+            if (f.value == ".gitattributes" or path\matchesAny(generated, path: f.value) or path\matchesAny(skipped, path: f.value)) {
+                continue;
+            }
+        } catch (err: any) {
+            return result\caught::<[Finding]>(err);
         }
         final src = support\read(f);
-        if (isGeneratedGo(f.value, src: src)) {
+        if (src.error != null) {
+            return result\Result::<[Finding]>{ error = src.error };
+        }
+        if (isGeneratedGo(f.value, src: src.value!)) {
             continue;
         }
-        foreach (finding in fileFindings(f.value, src: src)) {
+        final fileFound = fileFindings(f.value, src: src.value!);
+        if (fileFound.error != null) {
+            return result\Result::<[Finding]>{ error = fileFound.error };
+        }
+        foreach (finding in fileFound.value!) {
             found.append(finding);
         }
     }
-    return found;
+    return result\ok::<[Finding]>(found);
 }
 
 // isGeneratedGo reports a Go file carrying the standard `// Code generated ... DO NOT EDIT.`
@@ -144,14 +164,19 @@ fun isGeneratedGo(rel: str, src: str) > bool {
 }
 
 // fileFindings is every banned word in src, the file at rel.
-export fun fileFindings(rel: str, src: str) > [Finding] !> any {
+export fun fileFindings(rel: str, src: str) > result\Result::<[Finding]> {
     final lower = src.lower();
     if (lower.indexOf("surface") == null and lower.indexOf("lane") == null
         and lower.indexOf("corp") == null and lower.indexOf("recipe") == null and lower.indexOf("ratchet") == null
         and lower.indexOf("place") == null) {
-        return [<Finding>];
+        return result\ok::<[Finding]>([<Finding>]);
     }
-    final lanesAllowed = path\matchesAny(LANES_ARE_ROUTING, path: rel);
+    var lanesAllowed = false;
+    try {
+        lanesAllowed = path\matchesAny(LANES_ARE_ROUTING, path: rel);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
+    }
     final found = mut [<Finding>];
     var n = 0;
     foreach (raw in src.split("\n")) {
@@ -178,11 +203,11 @@ export fun fileFindings(rel: str, src: str) > [Finding] !> any {
             }
         }
     }
-    return found;
+    return result\ok::<[Finding]>(found);
 }
 
 // nounFindings reports each noun frame on line once, at the surface word it frames.
-fun nounFindings(rel: str, line: str, n: int) > [Finding] !> any {
+fun nounFindings(rel: str, line: str, n: int) > [Finding] {
     final low = line.lower();
     final seen = mut {<int: bool>};
     final found = mut [<Finding>];
@@ -207,7 +232,7 @@ fun nounFindings(rel: str, line: str, n: int) > [Finding] !> any {
 }
 
 // tokenFindings reports identifiers carrying surface, and lane, corpus, recipe or ratchet as any word.
-fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] !> any {
+fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] {
     final found = mut [<Finding>];
     var next = 0;
     foreach (t in TOKEN.matchAll(line) ?? [<[str]>]) {
@@ -285,9 +310,9 @@ fun quoted(message: str) > str {
     return message.split(" ")[2];
 }
 
-fun lines(rel: str, src: str) > [str] !> any {
+fun lines(rel: str, src: str) > [str] {
     final acc = mut [<str>];
-    foreach (f in fileFindings(rel, src: src)) {
+    foreach (f in fileFindings(rel, src: src).value!) {
         acc.append("{f.line}:{f.col} {f.message}");
     }
     return acc;
@@ -364,7 +389,7 @@ test "generated output and the skipped trees are not read" {
         "changes/unreleased/surface-names.md": "the lane\n",
         "hack/lint/banned-words.buzz": "the lane\n",
         "docs/page.md": "the lane\n",
-    }));
+    }).value!).value!;
     final paths = mut [<str>];
     foreach (f in got) { paths.append(f.path); }
     assert\equal(paths, want: ["docs/page.md"], message: "hand-written only");

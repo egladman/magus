@@ -24,6 +24,7 @@ import "path";
 import "crypto";
 import "encoding/json";
 import "env";
+import "result";
 import "std";
 import "time";
 import "vcs";
@@ -163,83 +164,118 @@ final KEPT_IGNORED = {".claude": true};
 // ignore rules, as root-relative paths, in the order a depth-first walk of
 // sorted directories meets them. The vcs module lists no tree, so on git one
 // ls-files lists it, and any other VCS is asked one directory at a time.
-export fun walk(root: str) > [str] !> any {
-    if (vcs\name() == "git") {
-        return walkListing(root);
+export fun walk(root: str) > result\Result::<[str]> {
+    try {
+        if (vcs\name() == "git") {
+            return walkListing(root);
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    final acc = mut [<str>];
-    walkInto(root, rel: "", kept: false, acc: acc);
-    return acc;
+    return walkInto(root, rel: "", kept: false);
 }
 
-fun walkInto(root: str, rel: str, kept: bool, acc: mut [str]) > void !> any {
-    final dir = if (rel == "") root else root + "/" + rel;
-    final names = fs\listDir(dir);
-    final ignored = mut {<str, bool>};
-    if (!kept) {
-        final paths = mut [<str>];
+// walkInto returns the files below rel, in the order a depth-first walk meets them.
+fun walkInto(root: str, rel: str, kept: bool) > result\Result::<[str]> {
+    try {
+        final acc = mut [<str>];
+        final dir = if (rel == "") root else root + "/" + rel;
+        final names = fs\listDir(dir);
+        final ignored = mut {<str, bool>};
+        if (!kept) {
+            final paths = mut [<str>];
+            foreach (name in names) {
+                paths.append(if (rel == "") name else rel + "/" + name);
+            }
+            foreach (p in vcs\ignoredFiles(paths, dir: root)) {
+                ignored[p] = true;
+            }
+        }
         foreach (name in names) {
-            paths.append(if (rel == "") name else rel + "/" + name);
+            final p = if (rel == "") name else rel + "/" + name;
+            if (ignored[p] != null and KEPT_IGNORED[p] == null) {
+                continue;
+            }
+            if ((PRUNED[name] != null and KEPT_PATHS[p] == null) or PRUNED_PATHS[p] != null) {
+                continue;
+            }
+            if (!fs\isDir(root + "/" + p)) {
+                acc.append(p);
+            } else {
+                final below = walkInto(root, rel: p, kept: kept or ignored[p] != null);
+                if (below.error != null) {
+                    return below;
+                }
+                foreach (b in below.value!) {
+                    acc.append(b);
+                }
+            }
         }
-        foreach (p in vcs\ignoredFiles(paths, dir: root)) {
-            ignored[p] = true;
-        }
-    }
-    foreach (name in names) {
-        final p = if (rel == "") name else rel + "/" + name;
-        if (ignored[p] != null and KEPT_IGNORED[p] == null) {
-            continue;
-        }
-        if ((PRUNED[name] != null and KEPT_PATHS[p] == null) or PRUNED_PATHS[p] != null) {
-            continue;
-        }
-        if (!fs\isDir(root + "/" + p)) {
-            acc.append(p);
-        } else {
-            walkInto(root, rel: p, kept: kept or ignored[p] != null, acc: acc);
-        }
+        return result\ok::<[str]>(acc);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
 }
 
 // walkListing is walk through one git ls-files. It asks the VCS which
 // tracked paths the ignore rules cover, as walkInto asks, and walks a
 // directory the listing does not enter with walkInto.
-fun walkListing(root: str) > [str] !> any {
-    final listed = mut [<ListedPath>];
-    final tracked = mut [<str>];
-    foreach (l in gitListing(root)) {
-        if (!isPruned(l.path)) {
-            listed.append(l);
-            if (l.tracked) {
-                tracked.append(l.path);
+fun walkListing(root: str) > result\Result::<[str]> {
+    try {
+        final listed = mut [<ListedPath>];
+        final tracked = mut [<str>];
+        final entries = gitListing(root);
+        if (entries.error != null) {
+            return result\Result::<[str]>{ error = entries.error };
+        }
+        foreach (l in entries.value!) {
+            if (!isPruned(l.path)) {
+                listed.append(l);
+                if (l.tracked) {
+                    tracked.append(l.path);
+                }
             }
         }
-    }
-    final ignored = mut {<str: bool>};
-    foreach (p in vcs\ignoredFiles(tracked, dir: root)) {
-        ignored[p] = true;
-    }
-    final acc = mut [<str>];
-    foreach (l in listed) {
-        if (ignored[l.path] != null) {
-            continue;
+        final ignored = mut {<str: bool>};
+        foreach (p in vcs\ignoredFiles(tracked, dir: root)) {
+            ignored[p] = true;
         }
-        if (l.dir) {
-            walkInto(root, rel: l.path, kept: false, acc: acc);
-        } else {
-            acc.append(l.path);
+        final acc = mut [<str>];
+        foreach (l in listed) {
+            if (ignored[l.path] != null) {
+                continue;
+            }
+            if (l.dir) {
+                final below = walkInto(root, rel: l.path, kept: false);
+                if (below.error != null) {
+                    return below;
+                }
+                foreach (b in below.value!) {
+                    acc.append(b);
+                }
+            } else {
+                acc.append(l.path);
+            }
         }
-    }
-    final kept = mut [<str>];
-    foreach (dir, _ in KEPT_IGNORED) {
-        if (fs\isDir(root + "/" + dir)) {
-            kept.append(dir);
+        final kept = mut [<str>];
+        foreach (dir, _ in KEPT_IGNORED) {
+            if (fs\isDir(root + "/" + dir)) {
+                kept.append(dir);
+            }
         }
+        foreach (dir in vcs\ignoredFiles(kept, dir: root)) {
+            final below = walkInto(root, rel: dir, kept: true);
+            if (below.error != null) {
+                return below;
+            }
+            foreach (b in below.value!) {
+                acc.append(b);
+            }
+        }
+        return result\ok::<[str]>(walkOrder(acc));
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    foreach (dir in vcs\ignoredFiles(kept, dir: root)) {
-        walkInto(root, rel: dir, kept: true, acc: acc);
-    }
-    return walkOrder(acc);
 }
 
 // ListedPath is one path git ls-files reports. dir marks one the listing
@@ -252,42 +288,46 @@ object ListedPath {
 
 // gitListing is each tracked path git ls-files reports still on disk, once
 // for all its index stages, and each untracked path no ignore rule covers.
-fun gitListing(root: str) > [ListedPath] !> any {
-    // -t tags a tracked path deleted from disk R beside its cached entry.
-    // -s adds the mode that marks a submodule or a symlink.
-    final stdout = vcs\cmd(["ls-files", "-z", "-t", "-s", "--cached", "--deleted", "--others", "--exclude-standard"],
-        opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
-    final gone = mut {<str: bool>};
-    final seen = mut {<str: bool>};
-    final listed = mut [<ListedPath>];
-    foreach (entry in stdout.split(std\char(0))) {
-        if (entry == "") {
-            continue;
-        }
-        if (entry.startsWith("? ")) {
-            final p = entry.sub(2, len: entry.len() - 2);
-            if (p.endsWith("/")) {
-                listed.append(ListedPath{ path = p.sub(0, len: p.len() - 1), tracked = false, dir = true });
-            } else {
-                listed.append(ListedPath{ path = p, tracked = false, dir = fs\isDir(root + "/" + p) });
+fun gitListing(root: str) > result\Result::<[ListedPath]> {
+    try {
+        // -t tags a tracked path deleted from disk R beside its cached entry.
+        // -s adds the mode that marks a submodule or a symlink.
+        final stdout = vcs\cmd(["ls-files", "-z", "-t", "-s", "--cached", "--deleted", "--others", "--exclude-standard"],
+            opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+        final gone = mut {<str: bool>};
+        final seen = mut {<str: bool>};
+        final listed = mut [<ListedPath>];
+        foreach (entry in stdout.split(std\char(0))) {
+            if (entry == "") {
+                continue;
             }
-            continue;
+            if (entry.startsWith("? ")) {
+                final p = entry.sub(2, len: entry.len() - 2);
+                if (p.endsWith("/")) {
+                    listed.append(ListedPath{ path = p.sub(0, len: p.len() - 1), tracked = false, dir = true });
+                } else {
+                    listed.append(ListedPath{ path = p, tracked = false, dir = fs\isDir(root + "/" + p) });
+                }
+                continue;
+            }
+            final tab = entry.indexOf("\t");
+            if (tab == null) {
+                return result\fail::<[ListedPath]>("lint: git ls-files -s printed \"{entry}\", which holds no tab before its path");
+            }
+            final p = entry.sub(tab! + 1, len: entry.len() - tab! - 1);
+            final mode = entry.sub(2, len: 6);
+            if (entry.startsWith("R ")) {
+                gone[p] = true;
+            } else if (seen[p] == null) {
+                seen[p] = true;
+                final linked = mode == "160000" or mode == "120000";
+                listed.append(ListedPath{ path = p, tracked = true, dir = linked and fs\isDir(root + "/" + p) });
+            }
         }
-        final tab = entry.indexOf("\t");
-        if (tab == null) {
-            throw "lint: git ls-files -s printed \"{entry}\", which holds no tab before its path";
-        }
-        final p = entry.sub(tab! + 1, len: entry.len() - tab! - 1);
-        final mode = entry.sub(2, len: 6);
-        if (entry.startsWith("R ")) {
-            gone[p] = true;
-        } else if (seen[p] == null) {
-            seen[p] = true;
-            final linked = mode == "160000" or mode == "120000";
-            listed.append(ListedPath{ path = p, tracked = true, dir = linked and fs\isDir(root + "/" + p) });
-        }
+        return result\ok::<[ListedPath]>(listed.filter(fun (index: int, l: ListedPath) > bool => gone[l.path] == null));
+    } catch (err: any) {
+        return result\caught::<[ListedPath]>(err);
     }
-    return listed.filter(fun (index: int, l: ListedPath) > bool => gone[l.path] == null);
 }
 
 // walkOrder sorts paths as a depth-first walk of sorted directories meets
@@ -328,62 +368,78 @@ export object RuleFiles {
 
 // select matches files against reads in one pass. Only a matched file can
 // hit a glob, so only it is tested against the globs no file has hit yet.
-export fun select(files: [str], reads: [str]) > RuleFiles !> any {
-    final matched = mut [<Path>];
-    var pending = reads;
-    foreach (f in files) {
-        if (!path\matchesAny(reads, path: f)) {
-            continue;
-        }
-        matched.append(Path{ value = f });
-        if (pending.len() > 0) {
-            final still = mut [<str>];
-            foreach (glob in pending) {
-                if (!path\matches(glob, path: f)) {
-                    still.append(glob);
-                }
+export fun select(files: [str], reads: [str]) > result\Result::<RuleFiles> {
+    try {
+        final matched = mut [<Path>];
+        var pending = reads;
+        foreach (f in files) {
+            if (!path\matchesAny(reads, path: f)) {
+                continue;
             }
-            pending = still;
+            matched.append(Path{ value = f });
+            if (pending.len() > 0) {
+                final still = mut [<str>];
+                foreach (glob in pending) {
+                    if (!path\matches(glob, path: f)) {
+                        still.append(glob);
+                    }
+                }
+                pending = still;
+            }
         }
+        return result\ok::<RuleFiles>(RuleFiles{ matched = matched, unmatched = pending });
+    } catch (err: any) {
+        return result\caught::<RuleFiles>(err);
     }
-    return RuleFiles{ matched = matched, unmatched = pending };
 }
 
 // filesByRule is select for each of rules, by rule name.
-fun filesByRule(rules: [Rule], files: [str]) > {str: RuleFiles} !> any {
+fun filesByRule(rules: [Rule], files: [str]) > result\Result::<{str: RuleFiles}> {
     final byRule = mut {<str: RuleFiles>};
     foreach (r in rules) {
-        byRule[r.name] = select(files, reads: r.reads);
+        final picked = select(files, reads: r.reads);
+        if (picked.error != null) {
+            return result\Result::<{str: RuleFiles}>{ error = picked.error };
+        }
+        byRule[r.name] = picked.value!;
     }
-    return byRule;
+    return result\ok::<{str: RuleFiles}>(byRule);
 }
 
 // run applies each rule to the files it reads and returns every finding, stamped with
 // its rule.
-export fun run(rules: [Rule], files: [str]) > [Finding] !> any {
-    return ruleFindings(rules, byRule: filesByRule(rules, files: files));
+export fun run(rules: [Rule], files: [str]) > result\Result::<[Finding]> {
+    final byRule = filesByRule(rules, files: files);
+    if (byRule.error != null) {
+        return result\Result::<[Finding]>{ error = byRule.error };
+    }
+    return ruleFindings(rules, byRule: byRule.value!);
 }
 
 // ruleFindings runs each of rules over its entry in byRule, which holds
 // them all.
-fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > [Finding] !> any {
-    final found = mut [<Finding>];
-    foreach (r in rules) {
-        final sel = byRule[r.name]!;
-        foreach (glob in sel.unmatched) {
-            found.append(Finding{ path = "hack/lint/" + r.name + ".buzz", rule = r.name,
-                message = "reads " + glob + ", which matches no file in the tree",
-                fix = "Restore the file, or update the rule's reads() to what it reads now." });
+fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > result\Result::<[Finding]> {
+    try {
+        final found = mut [<Finding>];
+        foreach (r in rules) {
+            final sel = byRule[r.name]!;
+            foreach (glob in sel.unmatched) {
+                found.append(Finding{ path = "hack/lint/" + r.name + ".buzz", rule = r.name,
+                    message = "reads " + glob + ", which matches no file in the tree",
+                    fix = "Restore the file, or update the rule's reads() to what it reads now." });
+            }
+            if (sel.unmatched.len() > 0) {
+                continue;
+            }
+            foreach (f in r.check(sel.matched)) {
+                found.append(Finding{ path = f.path, line = f.line, col = f.col, rule = r.name,
+                    message = f.message, fix = f.fix, url = f.url });
+            }
         }
-        if (sel.unmatched.len() > 0) {
-            continue;
-        }
-        foreach (f in r.check(sel.matched)) {
-            found.append(Finding{ path = f.path, line = f.line, col = f.col, rule = r.name,
-                message = f.message, fix = f.fix, url = f.url });
-        }
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    return found;
 }
 
 // FOOTPRINT names the runner's own check: conventions keys on exactly what the
@@ -397,39 +453,49 @@ export final SOURCES = ["hack/lint/*.buzz"];
 // claims reports whether a readsFiles glob of the root project keys rel. It mirrors
 // types.GlobClaims: a file inside a nested project is that project's, so only a glob
 // rooted at or inside that project reaches it, and `**/*.lock` stops at docs/.
-export fun claims(glob: str, rel: str, nested: [str]) > bool !> any {
-    if (!path\matches(glob, path: rel)) {
-        return false;
-    }
-    var owner = "";
-    foreach (d in nested) {
-        if (d.len() > owner.len() and rel.startsWith(d + "/")) {
-            owner = d;
+export fun claims(glob: str, rel: str, nested: [str]) > result\Result::<bool> {
+    try {
+        if (!path\matches(glob, path: rel)) {
+            return result\ok::<bool>(false);
         }
+        var owner = "";
+        foreach (d in nested) {
+            if (d.len() > owner.len() and rel.startsWith(d + "/")) {
+                owner = d;
+            }
+        }
+        if (owner == "") {
+            return result\ok::<bool>(true);
+        }
+        var base = glob;
+        final wild = std\pattern(`[*?\[\{]`).match(glob);
+        if (wild != null) {
+            final head = glob.sub(0, len: glob.indexOf(wild![0])!);
+            final slash = head.split("/");
+            base = slash.sub(0, len: slash.len() - 1).join("/");
+        }
+        return result\ok::<bool>(base == owner or base.startsWith(owner + "/"));
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    if (owner == "") {
-        return true;
-    }
-    var base = glob;
-    final wild = std\pattern(`[*?\[\{]`).match(glob);
-    if (wild != null) {
-        final head = glob.sub(0, len: glob.indexOf(wild![0])!);
-        final slash = head.split("/");
-        base = slash.sub(0, len: slash.len() - 1).join("/");
-    }
-    return base == owner or base.startsWith(owner + "/");
 }
 
 // footprintFindings holds the conventions target's declared readsFiles to read,
 // every file a rule was handed plus the linter's own sources: each is keyed,
 // and each glob keys one.
 // nested are the workspace's projects other than the root.
-export fun footprintFindings(read: [str], declared: [str], nested: [str], line: int) > [Finding] !> any {
+export fun footprintFindings(read: [str], declared: [str], nested: [str], line: int) > result\Result::<[Finding]> {
     final found = mut [<Finding>];
     foreach (rel in read) {
         var keyed = false;
         foreach (glob in declared) {
-            keyed = keyed or claims(glob, rel: rel, nested: nested);
+            if (!keyed) {
+                final claimed = claims(glob, rel: rel, nested: nested);
+                if (claimed.error != null) {
+                    return result\Result::<[Finding]>{ error = claimed.error };
+                }
+                keyed = claimed.value!;
+            }
         }
         if (!keyed) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
@@ -441,7 +507,13 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
     foreach (glob in declared) {
         var keys = false;
         foreach (rel in read) {
-            keys = keys or claims(glob, rel: rel, nested: nested);
+            if (!keys) {
+                final claimed = claims(glob, rel: rel, nested: nested);
+                if (claimed.error != null) {
+                    return result\Result::<[Finding]>{ error = claimed.error };
+                }
+                keys = claimed.value!;
+            }
         }
         if (!keys) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
@@ -449,49 +521,61 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
                 fix = "Drop it from the ctx.readsFiles of conventions, or point it at what a rule reads now." });
         }
     }
-    return found;
+    return result\ok::<[Finding]>(found);
 }
 
 // footprint runs footprintFindings against the tree: the files rules reads, the root's
 // conventions declaration and the workspace's nested projects. byRule
 // holds every one of rules.
-fun footprint(rules: [Rule], files: [str], byRule: {str: RuleFiles}) > [Finding] !> any {
-    final matched = mut {<str: bool>};
-    foreach (r in rules) {
-        foreach (f in byRule[r.name]!.matched) {
-            matched[f.value] = true;
-        }
-    }
-    final read = mut [<str>];
-    foreach (f in files) {
-        if (matched[f] != null or path\matchesAny(SOURCES, path: f)) {
-            read.append(f);
-        }
-    }
-    final nested = mut [<str>];
-    foreach (p in support\projects().projects) {
-        if (p.path != ".") {
-            nested.append(p.path);
-        }
-    }
-    var declared: [str]? = null;
-    foreach (p in support\targets().projects) {
-        foreach (n in p.nodes) {
-            if (p.path == "." and n.name == "conventions") {
-                final acc = mut [<str>];
-                foreach (ref in n.readsFiles) {
-                    acc.append(ref.glob);
-                }
-                declared = acc;
+fun footprint(rules: [Rule], files: [str], byRule: {str: RuleFiles}) > result\Result::<[Finding]> {
+    try {
+        final matched = mut {<str: bool>};
+        foreach (r in rules) {
+            foreach (f in byRule[r.name]!.matched) {
+                matched[f.value] = true;
             }
         }
+        final read = mut [<str>];
+        foreach (f in files) {
+            if (matched[f] != null or path\matchesAny(SOURCES, path: f)) {
+                read.append(f);
+            }
+        }
+        final nested = mut [<str>];
+        final projectsResult = support\projects();
+        if (projectsResult.error != null) {
+            return result\Result::<[Finding]>{ error = projectsResult.error };
+        }
+        foreach (p in projectsResult.value!.projects) {
+            if (p.path != ".") {
+                nested.append(p.path);
+            }
+        }
+        var declared: [str]? = null;
+        final targetsResult = support\targets();
+        if (targetsResult.error != null) {
+            return result\Result::<[Finding]>{ error = targetsResult.error };
+        }
+        foreach (p in targetsResult.value!.projects) {
+            foreach (n in p.nodes) {
+                if (p.path == "." and n.name == "conventions") {
+                    final acc = mut [<str>];
+                    foreach (ref in n.readsFiles) {
+                        acc.append(ref.glob);
+                    }
+                    declared = acc;
+                }
+            }
+        }
+        if (declared == null) {
+            return result\ok::<[Finding]>([Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no conventions target",
+                fix = "hack/lint/run.buzz is what conventions runs; update this check if the target was renamed." }]);
+        }
+        final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun conventions(");
+        return footprintFindings(read, declared: declared!, nested: nested, line: line);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    if (declared == null) {
-        return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no conventions target",
-            fix = "hack/lint/run.buzz is what conventions runs; update this check if the target was renamed." }];
-    }
-    final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun conventions(");
-    return footprintFindings(read, declared: declared!, nested: nested, line: line);
 }
 
 // render is a finding as the runner prints it.
@@ -533,74 +617,82 @@ export object Selection {
 // parse reads --rule, --record, --session and the paths. It refuses any
 // other flag, a rule not in names and a recorded run narrowed to paths.
 // A path after `--` may start with a dash.
-export fun parse(args: [str], names: [str]) > Selection !> any {
-    final parsed = flags\parse(args, switches: ["--record"], valued: ["--rule", "--session"]);
-    final paths = mut [<str>];
-    foreach (word in parsed.unknown) {
-        if (word.startsWith("-")) {
-            throw "lint: unknown flag {word}\n{usage}";
-        }
-        paths.append(word);
-    }
-    // A bare word ends the flags, so a flag after a path arrives here.
-    // Read as a path, it would match no rule and pass in silence.
-    final first = args.len() - parsed.positionals.len();
-    var literal = first > 0 and args[first - 1] == "--";
-    foreach (word in parsed.positionals) {
-        if (!literal and word == "--") {
-            literal = true;
-        } else if (!literal and word.startsWith("-")) {
-            throw "lint: flag {word} follows a path; flags go first\n{usage}";
-        } else {
+export fun parse(args: [str], names: [str]) > result\Result::<Selection> {
+    try {
+        final parsed = flags\parse(args, switches: ["--record"], valued: ["--rule", "--session"]);
+        final paths = mut [<str>];
+        foreach (word in parsed.unknown) {
+            if (word.startsWith("-")) {
+                return result\fail::<Selection>("lint: unknown flag {word}\n{usage}");
+            }
             paths.append(word);
         }
-    }
-    // walk yields paths with no ./ prefix, and at() compares against them.
-    final clean = mut [<str>];
-    foreach (p in paths) {
-        if (p.startsWith("./")) {
-            clean.append(p.sub(2, len: p.len() - 2));
-        } else {
-            clean.append(p);
+        // A bare word ends the flags, so a flag after a path arrives here.
+        // Read as a path, it would match no rule and pass in silence.
+        final first = args.len() - parsed.positionals.len();
+        var literal = first > 0 and args[first - 1] == "--";
+        foreach (word in parsed.positionals) {
+            if (!literal and word == "--") {
+                literal = true;
+            } else if (!literal and word.startsWith("-")) {
+                return result\fail::<Selection>("lint: flag {word} follows a path; flags go first\n{usage}");
+            } else {
+                paths.append(word);
+            }
         }
-    }
-    final rule = parsed.values["--rule"];
-    if (rule != null) {
-        var known = false;
-        foreach (n in names) {
-            known = known or n == rule!;
+        // walk yields paths with no ./ prefix, and at() compares against them.
+        final clean = mut [<str>];
+        foreach (p in paths) {
+            if (p.startsWith("./")) {
+                clean.append(p.sub(2, len: p.len() - 2));
+            } else {
+                clean.append(p);
+            }
         }
-        if (!known) {
-            throw "lint: no rule is named \"{rule!}\"; the rules are:\n  " + names.join("\n  ");
+        final rule = parsed.values["--rule"];
+        if (rule != null) {
+            var known = false;
+            foreach (n in names) {
+                known = known or n == rule!;
+            }
+            if (!known) {
+                return result\fail::<Selection>("lint: no rule is named \"{rule!}\"; the rules are:\n  " + names.join("\n  "));
+            }
         }
+        final record = parsed.values["--record"] != null;
+        if (record and clean.len() > 0) {
+            return result\fail::<Selection>("lint: --record reads the whole tree; a path would record a rule as clean over files it skipped\n{usage}");
+        }
+        if (!record and parsed.values["--session"] != null) {
+            return result\fail::<Selection>("lint: --session tags a recorded run; pass --record\n{usage}");
+        }
+        return result\ok::<Selection>(Selection{ rule = rule, paths = clean, record = record, session = parsed.values["--session"] ?? "" });
+    } catch (err: any) {
+        return result\caught::<Selection>(err);
     }
-    final record = parsed.values["--record"] != null;
-    if (record and clean.len() > 0) {
-        throw "lint: --record reads the whole tree; a path would record a rule as clean over files it skipped\n{usage}";
-    }
-    if (!record and parsed.values["--session"] != null) {
-        throw "lint: --session tags a recorded run; pass --record\n{usage}";
-    }
-    return Selection{ rule = rule, paths = clean, record = record, session = parsed.values["--session"] ?? "" };
 }
 
 // pick returns the rules sel runs: the one it names, or all, less those reading none of
 // its paths.
-export fun pick(all: [Rule], sel: Selection) > [Rule] !> any {
-    final picked = mut [<Rule>];
-    foreach (r in all) {
-        if (sel.rule != null and r.name != sel.rule!) {
-            continue;
+export fun pick(all: [Rule], sel: Selection) > result\Result::<[Rule]> {
+    try {
+        final picked = mut [<Rule>];
+        foreach (r in all) {
+            if (sel.rule != null and r.name != sel.rule!) {
+                continue;
+            }
+            var reads = sel.paths.len() == 0;
+            foreach (p in sel.paths) {
+                reads = reads or path\matchesAny(r.reads, path: p);
+            }
+            if (reads) {
+                picked.append(r);
+            }
         }
-        var reads = sel.paths.len() == 0;
-        foreach (p in sel.paths) {
-            reads = reads or path\matchesAny(r.reads, path: p);
-        }
-        if (reads) {
-            picked.append(r);
-        }
+        return result\ok::<[Rule]>(picked);
+    } catch (err: any) {
+        return result\caught::<[Rule]>(err);
     }
-    return picked;
 }
 
 // at keeps the findings located at one of paths, or every finding when paths is empty. A
@@ -634,22 +726,39 @@ export object Report {
 // every file it declares, since some rules relate several files and a subset would judge
 // half a relation. The footprint check runs only with no --rule, and only when its
 // findings, which sit at magusfile.buzz, could be reported.
-export fun check(sel: Selection) > Report !> any {
+export fun check(sel: Selection) > result\Result::<Report> {
     final all = rules();
     final picked = pick(all, sel: sel);
+    if (picked.error != null) {
+        return result\Result::<Report>{ error = picked.error };
+    }
     final files = walk(".");
+    if (files.error != null) {
+        return result\Result::<Report>{ error = files.error };
+    }
     var magusfile = sel.paths.len() == 0;
     foreach (p in sel.paths) {
         magusfile = magusfile or p == "magusfile.buzz";
     }
     final footprinted = sel.rule == null and magusfile;
     // The footprint reads every rule's matches, so its run selects for all.
-    final byRule = filesByRule(if (footprinted) all else picked, files: files);
-    var found = ruleFindings(picked, byRule: byRule);
-    if (footprinted) {
-        found = found + footprint(all, files: files, byRule: byRule);
+    final byRule = filesByRule(if (footprinted) all else picked.value!, files: files.value!);
+    if (byRule.error != null) {
+        return result\Result::<Report>{ error = byRule.error };
     }
-    return Report{ rules = picked.len(), findings = at(found, paths: sel.paths) };
+    final ruled = ruleFindings(picked.value!, byRule: byRule.value!);
+    if (ruled.error != null) {
+        return result\Result::<Report>{ error = ruled.error };
+    }
+    var found = ruled.value!;
+    if (footprinted) {
+        final footprinting = footprint(all, files: files.value!, byRule: byRule.value!);
+        if (footprinting.error != null) {
+            return result\Result::<Report>{ error = footprinting.error };
+        }
+        found = found + footprinting.value!;
+    }
+    return result\ok::<Report>(Report{ rules = picked.value!.len(), findings = at(found, paths: sel.paths) });
 }
 
 // Firing is one line of firings.jsonl. hack/retro/rule-precision.buzz reads
@@ -674,17 +783,25 @@ export fun fingerprint(rule: str, path: str, text: str) > str {
 }
 
 // stateFile is firings.jsonl under $XDG_STATE_HOME/magus. Never commit it.
-export fun stateFile() > str !> any {
-    final base = env\getOr("XDG_STATE_HOME", def: "");
-    final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
-    return fs\join(root, name: "magus/firings.jsonl");
+export fun stateFile() > result\Result::<str> {
+    try {
+        final base = env\getOr("XDG_STATE_HOME", def: "");
+        final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
+        return result\ok::<str>(fs\join(root, name: "magus/firings.jsonl"));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
-export fun firingLine(f: Firing) > str !> any {
-    return json\stringify({
-        "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
-        "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
-    });
+export fun firingLine(f: Firing) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({
+            "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
+            "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // firingsOf is the lines a recorded run appends: one per finding, and one
@@ -716,8 +833,16 @@ export fun main(args: [str]) > void !> any {
     foreach (r in rules()) {
         names.append(r.name);
     }
-    final sel = parse(args, names: names);
-    final report = check(sel);
+    final parsed = parse(args, names: names);
+    if (parsed.error != null) {
+        throw parsed.error!.message;
+    }
+    final sel = parsed.value!;
+    final checked = check(sel);
+    if (checked.error != null) {
+        throw checked.error!.message;
+    }
+    final report = checked.value!;
     foreach (f in report.findings) {
         std\print(render(f));
     }
@@ -727,8 +852,19 @@ export fun main(args: [str]) > void !> any {
             rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "",
             ts = std\toInt(time\parse("2006-01-02T15:04:05Z07:00", value: time\nowIso())), session = sel.session, commit = vcs\commit().id,
         };
-        final lines = firingsOf(report.findings, ran: ran, at: stamp).map(fun (index: int, f: Firing) > str !> any => firingLine(f));
-        final file = stateFile();
+        final lines = mut [<str>];
+        foreach (firing in firingsOf(report.findings, ran: ran, at: stamp)) {
+            final line = firingLine(firing);
+            if (line.error != null) {
+                throw line.error!.message;
+            }
+            lines.append(line.value!);
+        }
+        final state = stateFile();
+        if (state.error != null) {
+            throw state.error!.message;
+        }
+        final file = state.value!;
         fs\mkdirAll(fs\dirname(file));
         fs\appendFile(file, content: lines.join("\n") + "\n");
         std\print("lint: recorded {lines.len()} line(s) to {file}");
@@ -746,25 +882,24 @@ export fun main(args: [str]) > void !> any {
 
 // refusal is the message parse throws for args, or "" when it accepts them.
 fun refusal(args: [str]) > str {
-    try {
-        _ = parse(args, names: ["a", "b"]);
-    } catch (e) {
-        return "{e}";
+    final parsed = parse(args, names: ["a", "b"]);
+    if (parsed.error != null) {
+        return parsed.error!.message;
     }
     return "";
 }
 
 test "a bare run selects every rule over the whole tree" {
-    final sel = parse([<str>], names: ["a"]);
+    final sel = parse([<str>], names: ["a"]).value!;
     assert\equal(sel.rule, want: null, message: "no rule");
     assert\equal(sel.paths.len(), want: 0, message: "no paths");
 }
 
 test "--rule precedes the paths, and a dashed path follows --" {
-    final sel = parse(["--rule", "b", "./x.lock", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
+    final sel = parse(["--rule", "b", "./x.lock", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]).value!;
     assert\equal(sel.rule!, want: "b", message: "rule");
     assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
-    assert\equal(parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
+    assert\equal(parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).value!.paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
     assert\equal(refusal(["x.lock", "--rule", "b"]), want: "lint: flag --rule follows a path; flags go first\n" + usage, message: "a flag after a path");
 }
 
@@ -781,13 +916,13 @@ test "paths pick the rules that read them, and a path no rule reads picks none" 
         Rule{ name = "locks", reads = ["**/*.lock"], check = none },
         Rule{ name = "workflows", reads = [".github/workflows/*.yaml"], check = none },
     ];
-    assert\equal(pick(all, sel: Selection{ rule = null, paths = [<str>] }).len(), want: 2, message: "bare");
-    final locks = pick(all, sel: Selection{ rule = null, paths = ["docs/a.lock"] });
+    assert\equal(pick(all, sel: Selection{ rule = null, paths = [<str>] }).value!.len(), want: 2, message: "bare");
+    final locks = pick(all, sel: Selection{ rule = null, paths = ["docs/a.lock"] }).value!;
     assert\equal(locks.len(), want: 1, message: "one rule reads it");
     assert\equal(locks[0].name, want: "locks", message: "the lockfile rule");
-    assert\equal(pick(all, sel: Selection{ rule = null, paths = ["README.md"] }).len(), want: 0, message: "no rule reads it");
-    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = [<str>] })[0].name, want: "workflows", message: "--rule");
-    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = ["a.lock"] }).len(), want: 0, message: "--rule and a path it does not read");
+    assert\equal(pick(all, sel: Selection{ rule = null, paths = ["README.md"] }).value!.len(), want: 0, message: "no rule reads it");
+    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = [<str>] }).value![0].name, want: "workflows", message: "--rule");
+    assert\equal(pick(all, sel: Selection{ rule = "workflows", paths = ["a.lock"] }).value!.len(), want: 0, message: "--rule and a path it does not read");
 }
 
 test "with paths, only the findings at them are reported" {
@@ -801,7 +936,7 @@ test "with paths, only the findings at them are reported" {
 test "a job's write paths fail its lint only on a finding inside them" {
     final rule = Rule{ name = "every", reads = ["*.lock"],
         check = fun (files: [Path]) > [Finding] !> any => files.map(fun (i: int, f: Path) > Finding => Finding{ path = f.value, message = "m" }) };
-    final found = run([rule], files: ["mine.lock", "theirs.lock"]);
+    final found = run([rule], files: ["mine.lock", "theirs.lock"]).value!;
     assert\equal(at(found, paths: ["mine.lock"]).len(), want: 1, message: "the finding in the write path fails it");
     assert\equal(at(found, paths: ["other.lock"]).len(), want: 0, message: "a finding outside the write paths does not");
 }
@@ -822,7 +957,7 @@ test "render names the position, message, rule and indented fix" {
 test "every finding is stamped with the rule that found it" {
     final rule = Rule{ name = "always", reads = ["*.lock"],
         check = fun (files: [Path]) > [Finding] !> any => [Finding{ path = files[0].value, message = "m" }] };
-    final got = run([rule], files: ["x.lock", "y.txt"]);
+    final got = run([rule], files: ["x.lock", "y.txt"]).value!;
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].rule, want: "always", message: "stamped");
     assert\equal(got[0].path, want: "x.lock", message: "the matched file");
@@ -831,25 +966,25 @@ test "every finding is stamped with the rule that found it" {
 test "a glob that matches nothing is a finding, and its rule does not run" {
     final rule = Rule{ name = "absent", reads = ["x.lock", "gone.json"],
         check = fun (files: [Path]) > [Finding] !> any => [Finding{ message = "ran" }] };
-    assert\equal(run([rule], files: ["x.lock"]).len(), want: 1, message: "only the unmatched glob");
-    assert\equal(run([rule], files: ["x.lock"])[0].message, want: "reads gone.json, which matches no file in the tree", message: "message");
+    assert\equal(run([rule], files: ["x.lock"]).value!.len(), want: 1, message: "only the unmatched glob");
+    assert\equal(run([rule], files: ["x.lock"]).value![0].message, want: "reads gone.json, which matches no file in the tree", message: "message");
 }
 
 test "a glob keys a nested project's file only when rooted inside it" {
     final nested = ["docs", "docs/agents", "libs/gopherbuzz"];
-    assert\equal(claims("**/*.lock", rel: "benchmarks/v.lock", nested: nested), want: true, message: "root file");
-    assert\equal(claims("**/*.lock", rel: "docs/a.lock", nested: nested), want: false, message: "tree glob stops at docs");
-    assert\equal(claims("docs/**/*.lock", rel: "docs/a.lock", nested: nested), want: true, message: "rooted in docs");
-    assert\equal(claims("docs/**/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested), want: false, message: "stops at a grandchild");
-    assert\equal(claims("docs/agents/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested), want: true, message: "literal");
-    assert\equal(claims("libs/*/magusfile.buzz", rel: "libs/gopherbuzz/magusfile.buzz", nested: nested), want: false, message: "wildcard above the project");
+    assert\equal(claims("**/*.lock", rel: "benchmarks/v.lock", nested: nested).value!, want: true, message: "root file");
+    assert\equal(claims("**/*.lock", rel: "docs/a.lock", nested: nested).value!, want: false, message: "tree glob stops at docs");
+    assert\equal(claims("docs/**/*.lock", rel: "docs/a.lock", nested: nested).value!, want: true, message: "rooted in docs");
+    assert\equal(claims("docs/**/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested).value!, want: false, message: "stops at a grandchild");
+    assert\equal(claims("docs/agents/magusfile.buzz", rel: "docs/agents/magusfile.buzz", nested: nested).value!, want: true, message: "literal");
+    assert\equal(claims("libs/*/magusfile.buzz", rel: "libs/gopherbuzz/magusfile.buzz", nested: nested).value!, want: false, message: "wildcard above the project");
 }
 
 test "conventions keys exactly what the rules read" {
     final nested = ["docs"];
-    assert\equal(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "docs/**/*.lock"], nested: nested, line: 1).len(),
+    assert\equal(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "docs/**/*.lock"], nested: nested, line: 1).value!.len(),
         want: 0, message: "exact");
-    assert\equal(support\messages(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "console/*.lock"], nested: nested, line: 1)), want: [
+    assert\equal(support\messages(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "console/*.lock"], nested: nested, line: 1).value!), want: [
         "conventions reads docs/b.lock but its ctx.readsFiles does not key it",
         "conventions declares console/*.lock, which keys no file a rule reads",
     ], message: "unkeyed and stale");
@@ -863,7 +998,7 @@ test "the walk prunes what no rule reads" {
         fs\writeFile(root + "/" + p, content: "");
     }
     _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
-    final got = walk(root);
+    final got = walk(root).value!;
     assert\equal(got.len(), want: 3, message: "three files survive");
     assert\contains(got, item: "a.lock", message: "top level");
     assert\contains(got, item: ".claude/settings.json", message: ".claude outside worktrees");
@@ -878,7 +1013,7 @@ test "the walk skips what the VCS ignores and keeps what it does not" {
     }
     _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
     _ = vcs\cmd(["add", "tracked.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
-    final got = walk(root);
+    final got = walk(root).value!;
     assert\contains(got, item: "tracked.lock", message: "tracked file");
     assert\contains(got, item: "kept.lock", message: "untracked, not ignored");
     assert\contains(got, item: ".claude/skills/a/SKILL.md", message: "a file deep in a kept ignored tree");
@@ -894,7 +1029,7 @@ test "the walk leaves out a deleted tracked file and lists a directory before it
     _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
     _ = vcs\cmd(["add", "a.b", "gone.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
     fs\remove(root + "/gone.lock");
-    assert\equal(walk(root), want: ["a/c", "a-d", "a.b"], message: "sorted names, depth first");
+    assert\equal(walk(root).value!, want: ["a/c", "a-d", "a.b"], message: "sorted names, depth first");
 }
 
 test "the listing selects what the per-directory walk selects, ignored tracked files and nested repositories included" {
@@ -911,17 +1046,15 @@ test "the listing selects what the per-directory walk selects, ignored tracked f
     _ = vcs\cmd(["add", "--force", ".gitignore", "plain", "keep.log", "ig/t.txt"],
         opts: vcs\CommandOptions{ dir = root, quiet = true });
     final want = [".claude/skills/a/SKILL.md", ".gitignore", "kept.lock", "nest/g", "plain"];
-    assert\equal(walkListing(root), want: want, message: "one listing");
-    final walked = mut [<str>];
-    walkInto(root, rel: "", kept: false, acc: walked);
-    assert\equal(walked, want: want, message: "a directory at a time");
+    assert\equal(walkListing(root).value!, want: want, message: "one listing");
+    assert\equal(walkInto(root, rel: "", kept: false).value!, want: want, message: "a directory at a time");
 }
 
 test "--record and --session reach the selection, and a path with --record is refused" {
-    final sel = parse(["--record", "--session", "s9"], names: ["a"]);
+    final sel = parse(["--record", "--session", "s9"], names: ["a"]).value!;
     assert\isTrue(sel.record, message: "record");
     assert\equal(sel.session, want: "s9", message: "session");
-    assert\equal(parse([<str>], names: ["a"]).record, want: false, message: "off by default");
+    assert\equal(parse([<str>], names: ["a"]).value!.record, want: false, message: "off by default");
     assert\equal(
         refusal(["--record", "x.lock"]),
         want: "lint: --record reads the whole tree; a path would record a rule as clean over files it skipped\n" + usage,

@@ -13,6 +13,7 @@ namespace codepages;
 
 import "assert";
 import "fs";
+import "result";
 import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -34,21 +35,25 @@ export fun skipped(p: str) > bool {
 }
 
 // hasPage reports whether code has its docs page under base.
-export fun hasPage(code: str, base: str) > bool !> any {
-    final root = if (base == "") "" else base + "/";
-    if (code.startsWith("BZZ")) {
-        return fs\exists(root + BZZ_PAGES + code + ".md");
-    }
-    final dir = root + MGS_PAGES;
-    if (!fs\isDir(dir)) {
-        return false;
-    }
-    foreach (group in fs\listDir(dir)) {
-        if (fs\exists(dir + group + "/" + code + ".md")) {
-            return true;
+export fun hasPage(code: str, base: str) > result\Result::<bool> {
+    try {
+        final root = if (base == "") "" else base + "/";
+        if (code.startsWith("BZZ")) {
+            return result\ok::<bool>(fs\exists(root + BZZ_PAGES + code + ".md"));
         }
+        final dir = root + MGS_PAGES;
+        if (!fs\isDir(dir)) {
+            return result\ok::<bool>(false);
+        }
+        foreach (group in fs\listDir(dir)) {
+            if (fs\exists(dir + group + "/" + code + ".md")) {
+                return result\ok::<bool>(true);
+            }
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    return false;
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -59,7 +64,11 @@ export fun check(files: [Path]) > [Finding] !> any {
             continue;
         }
         var n = 0;
-        foreach (line in support\read(f).split("\n")) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (line in readResult.value!.split("\n")) {
             n = n + 1;
             if (line.trim().startsWith("//")) {
                 continue;
@@ -68,7 +77,11 @@ export fun check(files: [Path]) > [Finding] !> any {
                 final code = m[0];
                 var documented = known[code] ?? false;
                 if (known[code] == null) {
-                    documented = hasPage(code, base: f.base);
+                    final page = hasPage(code, base: f.base);
+                    if (page.error != null) {
+                        throw page.error!.message;
+                    }
+                    documented = page.value!;
                     known[code] = documented;
                 }
                 if (!documented) {
@@ -87,7 +100,7 @@ test "a code with a page passes and one without is reported" {
         "docs/reference/codes/auth/MGS1001.md": "# MGS1001\n",
         "a.buzz": "// BZZ3002 and MGS1001 have pages\n",
         "b.go": "package b\n\nconst x = \"BZZ9999\"\nconst y = \"MGS9998\"\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 2, message: "two findings: {support\messages(got)}");
     assert\equal(got[0].message, want: "BZZ9999 has no docs page", message: "the BZZ code");
     assert\equal(got[0].line, want: 3, message: "its line");
@@ -99,6 +112,6 @@ test "tests, testdata and the pages are skipped" {
         "x_test.go": "package x\n\nconst c = \"BZZ9999\"\n",
         "internal/testdata/a.buzz": "// MGS9999\n",
         "libs/gopherbuzz/docs/codes/BZZ1.buzz": "BZZ9999\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 0, message: "nothing judged: {support\messages(got)}");
 }

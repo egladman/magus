@@ -56,7 +56,11 @@ export fun check(files: [Path]) > [Finding] !> any {
             found.append(support\missing(p));
             continue;
         }
-        final raw = support\read(f!);
+        final readResult = support\read(f!);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final raw = readResult.value!;
         final cfg = serialize\Boxed.init(json\parse(raw));
         final events = cfg.q(["hooks"]).mapValue();
         foreach (event in support\sorted(events.keys())) {
@@ -89,11 +93,11 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 // configs is the shipped config wiring command on PreToolUse.
-fun configs(command: str) > [Path] !> any {
+fun configs(command: str) > [Path] {
     final body = "\{\n  \"hooks\": \{\n    \"PreToolUse\": [\n"
         + "      \{\"matcher\": \"Bash\", \"hooks\": [\{\"type\": \"command\", \"command\": \"" + command + "\"}]}\n"
         + "    ]\n  }\n}\n";
-    return support\fixture({HOSTS["codex"]!: body});
+    return support\fixture({HOSTS["codex"]!: body}).value!;
 }
 
 test "plain argv and a prefix on a command that runs no Buzz glue pass" {
