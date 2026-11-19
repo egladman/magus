@@ -10,6 +10,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                                                    |
 | `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                                   |
 | `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                              |
+| `accessorclone` | an exported accessor returning its own slice or map instead of `slices.Clone`, `maps.Clone` or an iterator; today's cases sit in a baseline that only shrinks |
 | `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                                        |
 | `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                                           |
 | `stutter`       | an exported package-level name opening with its package's name                                                                              |

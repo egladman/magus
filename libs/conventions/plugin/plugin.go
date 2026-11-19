@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/egladman/magus/libs/conventions/accessorclone"
 	"github.com/egladman/magus/libs/conventions/asciistrings"
 	"github.com/egladman/magus/libs/conventions/benchbeside"
 	"github.com/egladman/magus/libs/conventions/blankerror"
@@ -39,7 +40,8 @@ import (
 )
 
 func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register API registers only from init
-	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
+	register.Plugin("accessorclone", plugin("accessorclone", accessorclone.New))
+	register.Plugin("asciistrings",plugin("asciistrings", asciistrings.New))
 	register.Plugin("benchbeside", plugin("benchbeside", benchbeside.New))
 	register.Plugin("blankerror", plugin("blankerror", blankerror.New))
 	register.Plugin("diagmsg", plugin("diagmsg", diagmsg.New))
