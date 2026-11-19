@@ -63,6 +63,11 @@ type Command struct {
 	ExitStatus []ExitCode
 
 	Files []File // FILES section of the root page
+
+	// Run is what Execute calls once the command line names this command. A
+	// command with Children and no Run only dispatches to them. It is behavior,
+	// not part of the record.
+	Run Func `yaml:"-" json:"-"`
 }
 
 // ExitCode is one documented exit status. One code may carry two meanings; say both
@@ -167,6 +172,13 @@ type Flag struct {
 	// other than its Default. Empty keeps the command's Effect. An alias
 	// takes the Effect of the flag it spells.
 	Effect Effect
+
+	// Target is where BindFlags stores the parsed value: a *bool, *string, *int,
+	// *time.Duration or *[]string, matching Kind. BindFlags first sets it to
+	// Default. nil binds a variable nobody reads, as rendering does. An alias
+	// stores into the Target of the flag it spells. It is behavior, not part of
+	// the record.
+	Target any `yaml:"-" json:"-"`
 }
 
 // Operand is a word a command dispatches on, such as a target name.
@@ -202,9 +214,10 @@ func walk(path string, c Command, visit func(string, Command)) {
 	}
 }
 
-// BindFlags registers c's flags on fs to render or inspect them; the program parses
-// with its generated binders. It fails on an unknown Kind, on a Default whose
-// type does not match its Kind, and on what Check refuses.
+// BindFlags registers c's flags on fs, each storing into its Target. The
+// generated binders parse magus itself; Execute parses through BindFlags. It
+// fails on an unknown Kind, on a Default or Target whose type does not match its
+// Kind, and on what Check refuses.
 //
 // Each bool also gets its --no-<name> form, as the generated binders do.
 func (c Command) BindFlags(fs *flag.FlagSet) error {
@@ -212,52 +225,89 @@ func (c Command) BindFlags(fs *flag.FlagSet) error {
 		return err
 	}
 	for _, f := range c.Flags {
-		switch f.Kind {
-		case Bool:
-			def, err := TypedDefault[bool](f)
-			if err != nil {
-				return err
+		spelled := f
+		if f.AliasOf != "" {
+			if i := slices.IndexFunc(c.Flags, func(p Flag) bool { return p.Name == f.AliasOf }); i >= 0 {
+				spelled = c.Flags[i]
 			}
-			p := fs.Bool(f.Name, def, f.Doc)
-			if f.AliasOf == "" {
-				NegatedBoolVar(fs, p, f.Name)
-			}
-		case String, Custom:
-			def, err := TypedDefault[string](f)
-			if err != nil {
-				return err
-			}
-			fs.String(f.Name, def, f.Doc)
-		case Int:
-			def, err := TypedDefault[int](f)
-			if err != nil {
-				return err
-			}
-			fs.Int(f.Name, def, f.Doc)
-		case Duration:
-			def, err := TypedDefault[time.Duration](f)
-			if err != nil {
-				return err
-			}
-			unit, usage := f.Unit, f.Doc
-			if f.AliasOf == "" {
-				usage = DurationUsage(f)
-			} else if unit == "" {
-				for _, p := range c.Flags {
-					if p.Name == f.AliasOf {
-						unit = p.Unit
-						break
-					}
-				}
-			}
-			DurationVar(fs, new(time.Duration), f.Name, def, unit, usage)
-		case StringList:
-			StringListVar(fs, new([]string), f.Name, f.Doc)
-		default:
-			return fmt.Errorf("flag --%s has unknown kind %s", f.Name, string(f.Kind))
+		}
+		if err := bindFlag(fs, f, spelled); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// bindFlag registers f, storing into the Target of spelled: f itself, or the
+// flag f is an alias of.
+func bindFlag(fs *flag.FlagSet, f, spelled Flag) error {
+	switch f.Kind {
+	case Bool:
+		p, err := target[bool](f, spelled)
+		if err != nil {
+			return err
+		}
+		fs.BoolVar(p, f.Name, *p, f.Doc)
+		if f.AliasOf == "" {
+			NegatedBoolVar(fs, p, f.Name)
+		}
+	case String, Custom:
+		p, err := target[string](f, spelled)
+		if err != nil {
+			return err
+		}
+		fs.StringVar(p, f.Name, *p, f.Doc)
+	case Int:
+		p, err := target[int](f, spelled)
+		if err != nil {
+			return err
+		}
+		fs.IntVar(p, f.Name, *p, f.Doc)
+	case Duration:
+		p, err := target[time.Duration](f, spelled)
+		if err != nil {
+			return err
+		}
+		unit, usage := f.Unit, f.Doc
+		if f.AliasOf == "" {
+			usage = DurationUsage(f)
+		} else if unit == "" {
+			unit = spelled.Unit
+		}
+		DurationVar(fs, p, f.Name, *p, unit, usage)
+	case StringList:
+		p, err := target[[]string](f, spelled)
+		if err != nil {
+			return err
+		}
+		StringListVar(fs, p, f.Name, f.Doc)
+	default:
+		return fmt.Errorf("flag --%s has unknown kind %s", f.Name, string(f.Kind))
+	}
+	return nil
+}
+
+// target is the variable f stores into. With no Target it is a fresh one
+// holding f's Default. A Target takes the Default of the flag it belongs to,
+// and an alias leaves it as that flag set it.
+func target[T any](f, spelled Flag) (*T, error) {
+	def, err := TypedDefault[T](f)
+	if err != nil {
+		return nil, err
+	}
+	if spelled.Target == nil {
+		p := new(T)
+		*p = def
+		return p, nil
+	}
+	p, ok := spelled.Target.(*T)
+	if !ok {
+		return nil, fmt.Errorf("flag --%s is %s but its Target is a %T, want a %T", f.Name, f.Kind, spelled.Target, p)
+	}
+	if f.AliasOf == "" {
+		*p = def
+	}
+	return p, nil
 }
 
 // Check reports every flag declaration in root's tree the generators refuse: a bool
@@ -456,7 +506,19 @@ func TypedDefault[T any](f Flag) (T, error) {
 // Parse parses args into fs. -h still prints the full help; any other failure
 // returns one error naming the nearest flag and the command's -h instead of
 // dumping the whole usage, which an agent reads as context.
+//
+// The -h it names is magus's: fs is named for a magus subcommand, such as
+// "config set". Execute names any program's.
 func Parse(fs *flag.FlagSet, args []string) error {
+	cmd := strings.TrimSpace(strings.TrimPrefix("magus "+fs.Name(), "magus magus"))
+	if cmd == "" {
+		cmd = "magus"
+	}
+	return parse(fs, args, cmd)
+}
+
+// parse is Parse naming path's -h.
+func parse(fs *flag.FlagSet, args []string, path string) error {
 	usage, out := fs.Usage, fs.Output()
 	fs.Usage = func() {}
 	fs.SetOutput(io.Discard)
@@ -481,11 +543,7 @@ func Parse(fs *flag.FlagSet, args []string) error {
 			suggestion = "did you mean -" + near + "? "
 		}
 	}
-	cmd := strings.TrimSpace(strings.TrimPrefix("magus "+fs.Name(), "magus magus"))
-	if cmd == "" {
-		cmd = "magus"
-	}
-	return fmt.Errorf("%w: %s`%s -h` lists the flags", err, suggestion, cmd)
+	return fmt.Errorf("%w: %s`%s -h` lists the flags", err, suggestion, path)
 }
 
 // nearestFlag is the registered flag closest to name by edit distance, or ""
