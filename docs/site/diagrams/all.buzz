@@ -54,6 +54,7 @@ import "site/diagrams/config-load" as configLoad;
 import "site/diagrams/service" as service;
 import "site/diagrams/bindings-generate" as bindingsGenerate;
 import "site/diagrams/doctor" as doctor;
+import "site/diagrams/linters" as linters;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -70,6 +71,8 @@ final DRILL_HREF = "#diagram-\{id}";
 // allDiagrams builds every registered diagram. A typo in a directory or layer name raises
 // here, naming it.
 export fun allDiagrams() > [diagram\Diagram] !> any {
+    final lintersBoundary = linters\lintersBoundaryDiagram();
+    if (lintersBoundary.error -> err) { throw err.message; }
     return [
         serverHttp\serverHttpDiagram(),
         serverSocket\serverSocketDiagram(),
@@ -121,6 +124,8 @@ export fun allDiagrams() > [diagram\Diagram] !> any {
         service\serviceDiagram(),
         bindingsGenerate\bindingsGenerateDiagram(),
         doctor\doctorDiagram(),
+        linters\lintersLoopDiagram(),
+        lintersBoundary.value!,
     ];
 }
 

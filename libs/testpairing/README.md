@@ -9,6 +9,17 @@ registers each under its own name.
 | `testpair`    | every `X_test.go` with no `X.go` beside it                                   |
 | `testpairing` | a test file in an external test package; optionally `_unix` names and `main` |
 
+## How it fits
+
+magus measures and the analyzers judge. Their only settings sit in `.golangci.yml`,
+and no `analyzers.yaml` excuses them: they take no baseline and no exit.
+[How the linters work](../../docs/concepts/linters.md) explains the loop.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="../../docs/assets/gen/diagram-linters-loop-light.svg">
+  <img alt="magus measures, the analyzers judge, and the finding says what to fix" src="../../docs/assets/gen/diagram-linters-loop.svg">
+</picture>
+
 ## testpair: every test file has a pair
 
 ```text

@@ -1,0 +1,12 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 8,
+    "imports": 0
+  },
+  "diagram": "linters-loop",
+  "findings": [],
+  "level": "process",
+  "stamp": "sha256:2f7afcc12a1bdd480f1277cf04c83bb01f16f763fa34a1cd116f86e5529c02c1",
+  "undrilled": []
+}
