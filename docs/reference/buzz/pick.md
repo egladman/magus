@@ -28,6 +28,21 @@ Pick blocks until the user selects an item or aborts.
 
 **Returns:** int
 
+### many
+
+Many blocks until the user marks one or more items and confirms, or aborts.
+
+**Signature:** `pick\many(p, items, opts, marked) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
+
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `p`       | `int`            |          |             |
+| `items`   | `[]string`       |          |             |
+| `opts`    | `map[string]any` |          |             |
+| `marked`  | `any`            |          |             |
+
+**Returns:** any
+
 ### render
 
 RenderPick returns the block a picker WOULD draw for the given state, without opening a terminal or running an input loop.
@@ -39,6 +54,23 @@ RenderPick returns the block a picker WOULD draw for the given state, without op
 | `p`       | `int`            |          |             |
 | `items`   | `[]string`       |          |             |
 | `opts`    | `map[string]any` |          |             |
+| `filter`  | `string`         |          |             |
+| `cursor`  | `int`            |          |             |
+
+**Returns:** string
+
+### renderMany
+
+RenderMany returns the block a multi-select WOULD draw with marked marked, the counterpart of [Render] for [Many].
+
+**Signature:** `pick\renderMany(p, items, opts, marked, filter, cursor) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
+
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `p`       | `int`            |          |             |
+| `items`   | `[]string`       |          |             |
+| `opts`    | `map[string]any` |          |             |
+| `marked`  | `any`            |          |             |
 | `filter`  | `string`         |          |             |
 | `cursor`  | `int`            |          |             |
 

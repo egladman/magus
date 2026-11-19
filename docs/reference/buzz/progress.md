@@ -101,6 +101,29 @@ Lookup returns the loader called name, such as "glyph/dots".
 
 **Returns:** int
 
+### startSpinner
+
+StartSpinner starts a loader turning beside label on out and returns at once; the caller does its blocking work and then calls [Spinner.Stop].
+
+**Signature:** `progress\startSpinner(p, label) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `p`       | `int`    |          |             |
+| `label`   | `string` |          |             |
+
+**Returns:** int
+
+### spinnerStop
+
+Stop erases the line and returns once nothing more will be written, so the caller's next write cannot interleave with a frame.
+
+**Signature:** `progress\spinnerStop(spinner)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `spinner` | `int` |          |             |
+
 ### loaderName
 
 The Name field of a Loader.
@@ -214,6 +237,14 @@ The footprints.
 Fallback is the loader to draw when the terminal cannot show Unicode.
 
 **Signature:** `progress\fallback() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### spinLoader
+
+SpinLoader is the loader a [Spinner] turns where the terminal can draw Unicode: the one magus's own run band turns by default, so a script's wait looks like magus's.
+
+**Signature:** `progress\spinLoader() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 **Returns:** string
 

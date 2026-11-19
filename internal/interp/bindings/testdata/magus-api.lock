@@ -61,6 +61,7 @@ log.warn
 magus__ChangeRiskFunction__charged
 magus__Change__affected
 magus__Change__conformance
+magus__Change__conformanceBase
 magus__Change__diff
 magus__Change__impact
 magus__Change__mergeBase
