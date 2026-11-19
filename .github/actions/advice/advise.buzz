@@ -87,7 +87,11 @@ export fun failure(failed: [str]) > str {
 }
 
 fun main() > void !> any {
-    final advisors = enabled(advice\decodeInputs(os\env("ADVICE_INPUTS") ?? ""));
+    final inputs = advice\decodeInputs(os\env("ADVICE_INPUTS") ?? "");
+    if (inputs.error != null) {
+        throw inputs.error!.message;
+    }
+    final advisors = enabled(inputs.value!);
     requireToken(os\env("GITHUB_TOKEN") ?? "");
     if (advice\pullRequest().number == "") {
         std\print("advice: this event carries no pull request; nothing to advise");

@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
 import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 let mounted: AppInstance | null = null;
@@ -132,8 +133,7 @@ function serve(
         json: () => Promise.resolve({ code: payload.code, message: payload.message }),
       } as unknown as Response);
     }
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
 }
 

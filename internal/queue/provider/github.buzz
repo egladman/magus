@@ -64,6 +64,7 @@
 
 import "assert";
 import "os";
+import "result";
 import "serialize";
 import "std";
 import "mergequeue";
@@ -203,34 +204,54 @@ fun headers(ref: str) > {str: str} {
 
 // reading and writing fail with the variable's name when the credential is missing, and
 // return the headers to call with.
-fun reading(op: str) > {str: str} !> any {
-    final ref = readRef();
-    if (getenv(ref) == "") {
-        throw "github: {op} needs {READ_REF} or {WRITE_REF}, and neither is set";
+fun reading(op: str) > result\Result::<{str: str}> {
+    try {
+        final ref = readRef();
+        if (getenv(ref) == "") {
+            return result\fail::<{str: str}>("github: {op} needs {READ_REF} or {WRITE_REF}, and neither is set");
+        }
+        return result\ok::<{str: str}>(headers(ref));
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: reading");
     }
-    return headers(ref);
 }
 
-fun writing(op: str) > {str: str} !> any {
-    if (getenv(WRITE_REF) == "") {
-        throw "github: {op} writes, and needs {WRITE_REF}, the apply job's credential; it is not set";
+fun writing(op: str) > result\Result::<{str: str}> {
+    try {
+        if (getenv(WRITE_REF) == "") {
+            return result\fail::<{str: str}>("github: {op} writes, and needs {WRITE_REF}, the apply job's credential; it is not set");
+        }
+        return result\ok::<{str: str}>(headers(WRITE_REF));
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: writing");
     }
-    return headers(WRITE_REF);
 }
 
-fun get(url: str, hdrs: {str: str}) > {str: any} !> any {
-    return mergequeue\request("GET", url: url, body: "", headers: hdrs);
-}
-
-fun post(url: str, body: str, hdrs: {str: str}) > {str: any} !> any {
-    return mergequeue\request("POST", url: url, body: body, headers: hdrs);
-}
-
-fun expect(res: {str: any}, status: int, what: str) > str !> any {
-    if (res["status"] != status) {
-        throw "github: {what}: HTTP {res["status"]}: {res["body"]}";
+fun get(url: str, hdrs: {str: str}) > result\Result::<{str: any}> {
+    try {
+        return result\ok::<{str: any}>(mergequeue\request("GET", url: url, body: "", headers: hdrs));
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "github: get");
     }
-    return "{res["body"]}";
+}
+
+fun post(url: str, body: str, hdrs: {str: str}) > result\Result::<{str: any}> {
+    try {
+        return result\ok::<{str: any}>(mergequeue\request("POST", url: url, body: body, headers: hdrs));
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "github: post");
+    }
+}
+
+fun expect(res: result\Result::<{str: any}>, status: int, what: str) > str !> any {
+    if (res.error != null) {
+        throw res.error!.message;
+    }
+    final answer = res.value!;
+    if (answer["status"] != status) {
+        throw "github: {what}: HTTP {answer["status"]}: {answer["body"]}";
+    }
+    return "{answer["body"]}";
 }
 
 // graphqlURL derives the GraphQL endpoint from the REST one: github.com serves it beside
@@ -345,7 +366,9 @@ fun describeFrom(body: str, rules: str, setup: any, committer: any) > any !> any
 // and its token reads nothing more than it needs. The steps cost three more reads, one
 // of them needing checks read, which the apply job's token does not hold.
 export fun describe(req: QueueDescribeRequest) > any !> any {
-    final hdrs = reading("describe");
+    final hdrsRead = reading("describe");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = remoteRepo(req.remoteURL);
     final body = expect(get(apiBase() + "/repos/" + repo, hdrs: hdrs), status: 200, what: "describe {repo}");
     final base = req.base;
@@ -358,7 +381,9 @@ export fun describe(req: QueueDescribeRequest) > any !> any {
     final web = "https://" + apiHost(apiBase());
     final owner = repo.split("/")[0];
     final org = serialize\jsonDecode(body).q("owner").q("type").stringValue() == "Organization";
-    final named = parseApp(req.app);
+    final namedRead = parseApp(req.app);
+    if (namedRead.error != null) { throw namedRead.error!.message; }
+    final named = namedRead.value!;
     final slug = named["slug"] ?? "";
     final given = named["id"] ?? "";
     if (slug == "") {
@@ -366,12 +391,17 @@ export fun describe(req: QueueDescribeRequest) > any !> any {
             url: registrationURL(web, repo: repo, org: org), app: "<slug>");
     }
     final user = get(apiBase() + "/users/" + escape(slug + "[bot]"), hdrs: hdrs);
-    if (user["status"] == 404) {
+    if (user.error != null) { throw user.error!.message; }
+    if (user.value!["status"] == 404) {
         return refused("github: no GitHub App is named {slug}, since GitHub has no user {slug}[bot]; an app's slug ends the address of its settings page, and the apps are listed",
             url: appsPage(web, owner: owner, org: org), app: "<slug>");
     }
-    final bot = botFrom(slug, user: expect(user, status: 200, what: "read the bot of the app {slug}"));
-    final app = readApp(slug, given: given, owner: owner, org: org, hdrs: hdrs);
+    final botRead = botFrom(slug, user: expect(user, status: 200, what: "read the bot of the app {slug}"));
+    if (botRead.error != null) { throw botRead.error!.message; }
+    final bot = botRead.value!;
+    final appRead = readApp(slug, given: given, owner: owner, org: org, hdrs: hdrs);
+    if (appRead.error != null) { throw appRead.error!.message; }
+    final app = appRead.value!;
     if (app == null) {
         var reason = "github: GitHub shows the App ID of the private app {slug} to no token but its own installation's";
         if (org) {
@@ -382,15 +412,21 @@ export fun describe(req: QueueDescribeRequest) > any !> any {
     final steps = req.setupSteps;
     final branch = fetchSetup(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
         needs: "contents read on {repo}", hdrs: hdrs);
+    final checksRead = requiredChecksFrom(rules, branch: branch);
+    if (checksRead.error != null) { throw checksRead.error!.message; }
+    final checks = checksRead.value!;
     var reports = [<{str: str}>];
     var rulesets = {<str: str>};
     if (steps) {
-        final checks = requiredChecksFrom(rules, branch: branch);
-        reports = reportsOn(repo, base: base, wanted: checks, hdrs: hdrs);
-        rulesets = rulesetNames(repo, checks: checks, hdrs: hdrs);
+        final reportsRead = reportsOn(repo, base: base, wanted: checks, hdrs: hdrs);
+        if (reportsRead.error != null) { throw reportsRead.error!.message; }
+        reports = reportsRead.value!;
+        final rulesetsRead = rulesetNames(repo, checks: checks, hdrs: hdrs);
+        if (rulesetsRead.error != null) { throw rulesetsRead.error!.message; }
+        rulesets = rulesetsRead.value!;
     }
     final at = {"repo": repo, "base": base, "context": context, "web": web};
-    return {"capabilities": describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: requiredChecksFrom(rules, branch: branch),
+    return {"capabilities": describeFrom(body, rules: rules, setup: setupFrom(at, repoBody: body, checks: checks,
         reports: reports, rulesets: rulesets, app: app!, steps: steps), committer: bot)};
 }
 
@@ -403,17 +439,21 @@ fun refused(reason: str, url: str, app: str) > any {
 // parseApp reads the queue's app as a person names it: the GitHub App's slug, followed
 // by ":" and its App ID where GitHub hides the app from the token describe reads with.
 // Empty names none.
-fun parseApp(value: str) > {str: str} !> any {
-    final cut = value.indexOf(":");
-    if (cut == null) {
-        return {"slug": value, "id": ""};
+fun parseApp(value: str) > result\Result::<{str: str}> {
+    try {
+        final cut = value.indexOf(":");
+        if (cut == null) {
+            return result\ok::<{str: str}>({"slug": value, "id": ""});
+        }
+        final slug = value.sub(0, len: cut ?? 0);
+        final given = value.sub((cut ?? 0) + 1);
+        if (slug == "" or !isAppID(given)) {
+            return result\fail::<{str: str}>("github: the app '{value}' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero");
+        }
+        return result\ok::<{str: str}>({"slug": slug, "id": given});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: parseApp");
     }
-    final slug = value.sub(0, len: cut ?? 0);
-    final given = value.sub((cut ?? 0) + 1);
-    if (slug == "" or !isAppID(given)) {
-        throw "github: the app '{value}' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero";
-    }
-    return {"slug": slug, "id": given};
 }
 
 // appsPage lists the GitHub Apps owner registered: a user's under their settings, an
@@ -444,9 +484,13 @@ fun isAppID(s: str) > bool {
 
 // botFrom is the committer of what the app pushes: its bot user, from user, GitHub's
 // record of "<slug>[bot]".
-fun botFrom(slug: str, user: str) > {str: str} !> any {
-    final login = slug + "[bot]";
-    return {"name": login, "email": id(serialize\jsonDecode(user).q("id")) + "+" + login + "@users.noreply.github.com"};
+fun botFrom(slug: str, user: str) > result\Result::<{str: str}> {
+    try {
+        final login = slug + "[bot]";
+        return result\ok::<{str: str}>({"name": login, "email": id(serialize\jsonDecode(user).q("id")) + "+" + login + "@users.noreply.github.com"});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: botFrom");
+    }
 }
 
 // Where queue-apply.yaml reads the queue app's credential from, which setup-magus's
@@ -468,17 +512,25 @@ fun fetchSetup(url: str, what: str, needs: str, hdrs: {str: str}) > str !> any {
 }
 
 // checkRead is fetchSetup on an answer already read.
-fun checkRead(res: {str: any}, what: str, needs: str) > str !> any {
-    if (res["status"] == 403 or res["status"] == 404) {
-        throw "github: {what}: HTTP {res["status"]}: either it does not exist or the token lacks {needs}: {res["body"]}";
+fun checkRead(res: result\Result::<{str: any}>, what: str, needs: str) > str !> any {
+    if (res.error != null) {
+        throw res.error!.message;
+    }
+    final answer = res.value!;
+    if (answer["status"] == 403 or answer["status"] == 404) {
+        throw "github: {what}: HTTP {answer["status"]}: either it does not exist or the token lacks {needs}: {answer["body"]}";
     }
     return expect(res, status: 200, what: what);
 }
 
 // appFrom reads an app's integration id, client id and name.
-fun appFrom(body: str) > {str: str} !> any {
-    final a = serialize\jsonDecode(body);
-    return {"slug": a.q("slug").stringValue(), "id": id(a.q("id")), "client_id": a.q("client_id").stringValue(), "name": a.q("name").stringValue()};
+fun appFrom(body: str) > result\Result::<{str: str}> {
+    try {
+        final a = serialize\jsonDecode(body);
+        return result\ok::<{str: str}>({"slug": a.q("slug").stringValue(), "id": id(a.q("id")), "client_id": a.q("client_id").stringValue(), "name": a.q("name").stringValue()});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: appFrom");
+    }
 }
 
 // readApp reads the app slug names, or null when neither GitHub nor given says its id.
@@ -486,23 +538,34 @@ fun appFrom(body: str) > {str: str} !> any {
 // app's own installation's, its owner's included; an organization's owner still lists
 // the apps installed there. given is the id the person named, which GitHub's own answer
 // must match. What GitHub hides, the app's name and client id, stays empty.
-fun readApp(slug: str, given: str, owner: str, org: bool, hdrs: {str: str}) > {str: str}? !> any {
-    final res = get(apiBase() + "/apps/" + escape(slug), hdrs: hdrs);
-    if (res["status"] != 404) {
-        final app = appFrom(checkRead(res, what: "read the app {slug}", needs: "access to it"));
-        if (given != "" and given != (app["id"] ?? "")) {
-            throw "github: describe: the app {slug} is App ID {app["id"] ?? ""}, and the id given is {given}";
+fun readApp(slug: str, given: str, owner: str, org: bool, hdrs: {str: str}) > result\Result::<{str: str}?> {
+    try {
+        final res = get(apiBase() + "/apps/" + escape(slug), hdrs: hdrs);
+        if (res.error -> err) {
+            return result\Result::<{str: str}?>{ error = err };
         }
-        return app;
+        if (res.value!["status"] != 404) {
+            final appRead = appFrom(checkRead(res, what: "read the app {slug}", needs: "access to it"));
+            if (appRead.error -> err) {
+                return result\Result::<{str: str}?>{ error = err };
+            }
+            final app = appRead.value!;
+            if (given != "" and given != (app["id"] ?? "")) {
+                return result\fail::<{str: str}?>("github: describe: the app {slug} is App ID {app["id"] ?? ""}, and the id given is {given}");
+            }
+            return result\ok::<{str: str}?>(app);
+        }
+        var found = given;
+        if (found == "" and org) {
+            found = installedAppID(owner, slug: slug, hdrs: hdrs);
+        }
+        if (found == "") {
+            return result\ok::<{str: str}?>(null);
+        }
+        return result\ok::<{str: str}?>({"slug": slug, "id": found, "client_id": "", "name": ""});
+    } catch (err: any) {
+        return result\caught::<{str: str}?>(err, doing: "github: readApp");
     }
-    var found = given;
-    if (found == "" and org) {
-        found = installedAppID(owner, slug: slug, hdrs: hdrs);
-    }
-    if (found == "") {
-        return null;
-    }
-    return {"slug": slug, "id": found, "client_id": "", "name": ""};
 }
 
 // installedAppID is the App ID of the app slug installed on the organization org, or ""
@@ -513,7 +576,10 @@ fun installedAppID(org: str, slug: str, hdrs: {str: str}) > str !> any {
     var page = 1;
     while (found == "") {
         final res = get(apiBase() + "/orgs/" + escape(org) + "/installations?per_page=100&page={page}", hdrs: hdrs);
-        if (res["status"] == 404) {
+        if (res.error != null) {
+            throw res.error!.message;
+        }
+        if (res.value!["status"] == 404) {
             break;
         }
         final installations = serialize\jsonDecode(checkRead(res, what: "list the apps installed on {org}", needs: "an owner's read:org on {org}"))
@@ -535,65 +601,73 @@ fun installedAppID(org: str, slug: str, hdrs: {str: str}) > str !> any {
 // name the ruleset each came from) and its classic branch protection (branch), once per
 // context, integration and ruleset: each ruleset holding the queue's context needs its
 // own pin. An integration of "" accepts a status from anyone.
-fun requiredChecksFrom(rules: str, branch: str) > [{str: str}] !> any {
-    final seen = mut {<str: bool>};
-    final checks = mut [<{str: str}>];
-    foreach (rule in serialize\jsonDecode(rules).listValue()) {
-        if (rule.q("type").stringValue() != "required_status_checks") {
-            continue;
-        }
-        foreach (c in rule.q("parameters").q("required_status_checks").listValue()) {
-            final check = {"context": c.q("context").stringValue(), "integration": id(c.q("integration_id")), "ruleset": id(rule.q("ruleset_id"))};
-            final key = "{check["context"] ?? ""} {check["integration"] ?? ""} {check["ruleset"] ?? ""}";
-            if (seen[key] == null) {
-                seen[key] = true;
-                checks.append(check);
+fun requiredChecksFrom(rules: str, branch: str) > result\Result::<[{str: str}]> {
+    try {
+        final seen = mut {<str: bool>};
+        final checks = mut [<{str: str}>];
+        foreach (rule in serialize\jsonDecode(rules).listValue()) {
+            if (rule.q("type").stringValue() != "required_status_checks") {
+                continue;
+            }
+            foreach (c in rule.q("parameters").q("required_status_checks").listValue()) {
+                final check = {"context": c.q("context").stringValue(), "integration": id(c.q("integration_id")), "ruleset": id(rule.q("ruleset_id"))};
+                final key = "{check["context"] ?? ""} {check["integration"] ?? ""} {check["ruleset"] ?? ""}";
+                if (seen[key] == null) {
+                    seen[key] = true;
+                    checks.append(check);
+                }
             }
         }
-    }
-    final classic = serialize\jsonDecode(branch).q("protection").q("required_status_checks");
-    final pinned = classic.q("checks").listValue();
-    foreach (c in pinned) {
-        var integration = id(c.q("app_id"));
-        if (integration == "-1") {
-            integration = "";
-        }
-        final key = "{c.q("context").stringValue()} {integration} ";
-        if (seen[key] == null) {
-            seen[key] = true;
-            checks.append({"context": c.q("context").stringValue(), "integration": integration, "ruleset": ""});
-        }
-    }
-    if (pinned.len() == 0) {
-        foreach (c in classic.q("contexts").listValue()) {
-            final key = "{c.stringValue()}  ";
+        final classic = serialize\jsonDecode(branch).q("protection").q("required_status_checks");
+        final pinned = classic.q("checks").listValue();
+        foreach (c in pinned) {
+            var integration = id(c.q("app_id"));
+            if (integration == "-1") {
+                integration = "";
+            }
+            final key = "{c.q("context").stringValue()} {integration} ";
             if (seen[key] == null) {
                 seen[key] = true;
-                checks.append({"context": c.stringValue(), "integration": "", "ruleset": ""});
+                checks.append({"context": c.q("context").stringValue(), "integration": integration, "ruleset": ""});
             }
         }
+        if (pinned.len() == 0) {
+            foreach (c in classic.q("contexts").listValue()) {
+                final key = "{c.stringValue()}  ";
+                if (seen[key] == null) {
+                    seen[key] = true;
+                    checks.append({"context": c.stringValue(), "integration": "", "ruleset": ""});
+                }
+            }
+        }
+        return result\ok::<[{str: str}]>(checks);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: requiredChecksFrom");
     }
-    return checks;
 }
 
 // reportsFrom pairs each check run on a commit with the event of the workflow run that
 // reported it. A check run another app reports belongs to no workflow run and is left out.
-fun reportsFrom(checkRuns: str, runs: str) > [{str: str}] !> any {
-    final suites = mut {<str: str>};
-    foreach (r in serialize\jsonDecode(runs).q("workflow_runs").listValue()) {
-        suites[id(r.q("check_suite_id"))] = r.q("event").stringValue();
-    }
-    final seen = mut {<str: bool>};
-    final reports = mut [<{str: str}>];
-    foreach (c in serialize\jsonDecode(checkRuns).q("check_runs").listValue()) {
-        final event = suites[id(c.q("check_suite").q("id"))] ?? "";
-        final name = c.q("name").stringValue();
-        if (event != "" and seen[name + " " + event] == null) {
-            seen[name + " " + event] = true;
-            reports.append({"name": name, "event": event});
+fun reportsFrom(checkRuns: str, runs: str) > result\Result::<[{str: str}]> {
+    try {
+        final suites = mut {<str: str>};
+        foreach (r in serialize\jsonDecode(runs).q("workflow_runs").listValue()) {
+            suites[id(r.q("check_suite_id"))] = r.q("event").stringValue();
         }
+        final seen = mut {<str: bool>};
+        final reports = mut [<{str: str}>];
+        foreach (c in serialize\jsonDecode(checkRuns).q("check_runs").listValue()) {
+            final event = suites[id(c.q("check_suite").q("id"))] ?? "";
+            final name = c.q("name").stringValue();
+            if (event != "" and seen[name + " " + event] == null) {
+                seen[name + " " + event] = true;
+                reports.append({"name": name, "event": event});
+            }
+        }
+        return result\ok::<[{str: str}]>(reports);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: reportsFrom");
     }
-    return reports;
 }
 
 // SAMPLED_HEADS bounds how many recent pull request heads describe reads the checks of
@@ -616,30 +690,34 @@ fun sampleHeads(body: str, repo: str) > [str] !> any {
 // reportsOn reads which events report which checks on the newest pull request head that
 // carries one of the required checks (wanted), else on the newest that carries any: a
 // head whose runs have not finished carries only some of them.
-fun reportsOn(repo: str, base: str, wanted: [{str: str}], hdrs: {str: str}) > [{str: str}] !> any {
-    final prefix = apiBase() + "/repos/" + repo;
-    final heads = sampleHeads(fetchSetup(prefix + "/pulls?state=all&base=" + escape(base) + "&sort=updated&direction=desc&per_page=20",
-        what: "list pull requests into {base}", needs: "pull requests read on {repo}", hdrs: hdrs), repo: repo);
-    var chosen = "";
-    var chosenRuns = "";
-    foreach (head in heads) {
-        final checkRuns = fetchSetup(prefix + "/commits/" + head + "/check-runs?per_page=100", what: "list the checks on {head}",
-            needs: "checks read on {repo}", hdrs: hdrs);
-        final carries = carriesRequired(checkRuns, wanted: wanted);
-        if (carries or (chosen == "" and serialize\jsonDecode(checkRuns).q("check_runs").listValue().len() > 0)) {
-            chosen = head;
-            chosenRuns = checkRuns;
+fun reportsOn(repo: str, base: str, wanted: [{str: str}], hdrs: {str: str}) > result\Result::<[{str: str}]> {
+    try {
+        final prefix = apiBase() + "/repos/" + repo;
+        final heads = sampleHeads(fetchSetup(prefix + "/pulls?state=all&base=" + escape(base) + "&sort=updated&direction=desc&per_page=20",
+            what: "list pull requests into {base}", needs: "pull requests read on {repo}", hdrs: hdrs), repo: repo);
+        var chosen = "";
+        var chosenRuns = "";
+        foreach (head in heads) {
+            final checkRuns = fetchSetup(prefix + "/commits/" + head + "/check-runs?per_page=100", what: "list the checks on {head}",
+                needs: "checks read on {repo}", hdrs: hdrs);
+            final carries = carriesRequired(checkRuns, wanted: wanted);
+            if (carries or (chosen == "" and serialize\jsonDecode(checkRuns).q("check_runs").listValue().len() > 0)) {
+                chosen = head;
+                chosenRuns = checkRuns;
+            }
+            if (carries) {
+                break;
+            }
         }
-        if (carries) {
-            break;
+        if (chosen == "") {
+            return result\ok::<[{str: str}]>([<{str: str}>]);
         }
+        final runs = fetchSetup(prefix + "/actions/runs?head_sha=" + chosen + "&per_page=100", what: "list the workflow runs on {chosen}",
+            needs: "actions read on {repo}", hdrs: hdrs);
+        return reportsFrom(chosenRuns, runs: runs);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: reportsOn");
     }
-    if (chosen == "") {
-        return [<{str: str}>];
-    }
-    final runs = fetchSetup(prefix + "/actions/runs?head_sha=" + chosen + "&per_page=100", what: "list the workflow runs on {chosen}",
-        needs: "actions read on {repo}", hdrs: hdrs);
-    return reportsFrom(chosenRuns, runs: runs);
 }
 
 // carriesRequired reports whether a commit's check runs include one of the required checks.
@@ -656,16 +734,20 @@ fun carriesRequired(checkRuns: str, wanted: [{str: str}]) > bool !> any {
 
 // rulesetNames maps each ruleset a required check comes from to its name, and "" when it
 // holds anything beyond one required-status-checks rule of one check.
-fun rulesetNames(repo: str, checks: [{str: str}], hdrs: {str: str}) > {str: str} !> any {
-    final names = mut {<str: str>};
-    foreach (c in checks) {
-        final ruleset = c["ruleset"] ?? "";
-        if (ruleset != "" and names[ruleset] == null) {
-            names[ruleset] = ownRuleset(fetchSetup(apiBase() + "/repos/" + repo + "/rulesets/" + ruleset, what: "read ruleset {ruleset}",
-                needs: "metadata read on {repo}", hdrs: hdrs));
+fun rulesetNames(repo: str, checks: [{str: str}], hdrs: {str: str}) > result\Result::<{str: str}> {
+    try {
+        final names = mut {<str: str>};
+        foreach (c in checks) {
+            final ruleset = c["ruleset"] ?? "";
+            if (ruleset != "" and names[ruleset] == null) {
+                names[ruleset] = ownRuleset(fetchSetup(apiBase() + "/repos/" + repo + "/rulesets/" + ruleset, what: "read ruleset {ruleset}",
+                    needs: "metadata read on {repo}", hdrs: hdrs));
+            }
         }
+        return result\ok::<{str: str}>(names);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: rulesetNames");
     }
-    return names;
 }
 
 // ownRuleset returns the ruleset's name when it holds only the queue's rule, else "".
@@ -852,60 +934,72 @@ fun queueMethod(label: str) > str {
 
 // stackTops lists the stacks whose top pull request carries a queue label, on base:
 // {stack, number, label, method}. Whoever applied the label is checked separately.
-fun stackTops(pages: [str], base: str) > [{str: str}] !> any {
-    final tops = mut [<{str: str}>];
-    foreach (page in pages) {
-        foreach (pr in serialize\jsonDecode(page).listValue()) {
-            final stack = pr.q("stack");
-            final sid = id(stack.q("id"));
-            if (sid == "" or stack.q("position").integerValue() != stack.q("size").integerValue()) {
-                continue;
+fun stackTops(pages: [str], base: str) > result\Result::<[{str: str}]> {
+    try {
+        final tops = mut [<{str: str}>];
+        foreach (page in pages) {
+            foreach (pr in serialize\jsonDecode(page).listValue()) {
+                final stack = pr.q("stack");
+                final sid = id(stack.q("id"));
+                if (sid == "" or stack.q("position").integerValue() != stack.q("size").integerValue()) {
+                    continue;
+                }
+                if (stack.q("base").q("ref").stringValue() != base) {
+                    continue;
+                }
+                final label = queueLabel(pr);
+                if (label == "") {
+                    continue;
+                }
+                tops.append({"stack": sid, "number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
             }
-            if (stack.q("base").q("ref").stringValue() != base) {
-                continue;
-            }
-            final label = queueLabel(pr);
-            if (label == "") {
-                continue;
-            }
-            tops.append({"stack": sid, "number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
         }
+        return result\ok::<[{str: str}]>(tops);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: stackTops");
     }
-    return tops;
 }
 
 // labeledSingles lists the pull requests on base outside any stack that carry a queue
 // label and no auto-merge: {number, label, method}. Whoever applied the label is checked
 // separately, as for a stack top.
-fun labeledSingles(pages: [str], base: str) > [{str: str}] !> any {
-    final singles = mut [<{str: str}>];
-    foreach (page in pages) {
-        foreach (pr in serialize\jsonDecode(page).listValue()) {
-            if (id(pr.q("stack").q("id")) != "" or pr.q("base").q("ref").stringValue() != base
-                or pr.q("auto_merge").q("merge_method").stringValue() != "") {
-                continue;
-            }
-            final label = queueLabel(pr);
-            if (label != "") {
-                singles.append({"number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
+fun labeledSingles(pages: [str], base: str) > result\Result::<[{str: str}]> {
+    try {
+        final singles = mut [<{str: str}>];
+        foreach (page in pages) {
+            foreach (pr in serialize\jsonDecode(page).listValue()) {
+                if (id(pr.q("stack").q("id")) != "" or pr.q("base").q("ref").stringValue() != base
+                    or pr.q("auto_merge").q("merge_method").stringValue() != "") {
+                    continue;
+                }
+                final label = queueLabel(pr);
+                if (label != "") {
+                    singles.append({"number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
+                }
             }
         }
+        return result\ok::<[{str: str}]>(singles);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: labeledSingles");
     }
-    return singles;
 }
 
 // stackTopIn finds, in listing pages, the top pull request of stack sid: {number, label},
 // both "" when the stack has no open top.
-fun stackTopIn(pages: [str], sid: str) > {str: str} !> any {
-    foreach (page in pages) {
-        foreach (pr in serialize\jsonDecode(page).listValue()) {
-            final stack = pr.q("stack");
-            if (id(stack.q("id")) == sid and stack.q("position").integerValue() == stack.q("size").integerValue()) {
-                return {"number": "{pr.q("number").integerValue()}", "label": queueLabel(pr)};
+fun stackTopIn(pages: [str], sid: str) > result\Result::<{str: str}> {
+    try {
+        foreach (page in pages) {
+            foreach (pr in serialize\jsonDecode(page).listValue()) {
+                final stack = pr.q("stack");
+                if (id(stack.q("id")) == sid and stack.q("position").integerValue() == stack.q("size").integerValue()) {
+                    return result\ok::<{str: str}>({"number": "{pr.q("number").integerValue()}", "label": queueLabel(pr)});
+                }
             }
         }
+        return result\ok::<{str: str}>({"number": "", "label": ""});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: stackTopIn");
     }
-    return {"number": "", "label": ""};
 }
 
 fun openPulls(repo: str, hdrs: {str: str}) > [str] !> any {
@@ -1220,19 +1314,25 @@ fun onlyIn(pages: [str], number: str, repo: str) > [any] !> any {
 // its approvals takes, at one GraphQL query per 100 of its commits rather than per
 // queued pull request.
 export fun list_changes(req: QueueListChangesRequest) > any !> any {
-    final hdrs = reading("list_changes");
+    final hdrsRead = reading("list_changes");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = remoteRepo(req.remoteURL);
     final base = req.base;
     final only = req.only;
     final pulls = openPulls(repo, hdrs: hdrs);
     final stacks = mut {<str: str>};
-    foreach (top in stackTops(pulls, base: base)) {
+    final topsRead = stackTops(pulls, base: base);
+    if (topsRead.error != null) { throw topsRead.error!.message; }
+    foreach (top in topsRead.value!) {
         if (labeledByWriter(repo, number: top["number"] ?? "", label: top["label"] ?? "", hdrs: hdrs)) {
             stacks[top["stack"] ?? ""] = top["method"] ?? "";
         }
     }
     final labeled = mut {<str: str>};
-    foreach (single in labeledSingles(pulls, base: base)) {
+    final singlesRead = labeledSingles(pulls, base: base);
+    if (singlesRead.error != null) { throw singlesRead.error!.message; }
+    foreach (single in singlesRead.value!) {
         if (labeledByWriter(repo, number: single["number"] ?? "", label: single["label"] ?? "", hdrs: hdrs)) {
             labeled[single["number"] ?? ""] = single["method"] ?? "";
         }
@@ -1265,27 +1365,31 @@ fun requiredFrom(body: str) > int !> any {
 // counts, as on GitHub. Only a reviewer who can push to the repository counts at all, as
 // GitHub counts toward a required review: anyone can leave an approving review on a
 // public repository.
-fun standingFrom(pages: [str]) > {str: {str: str}} !> any {
-    final latest = mut {<str: {str: str}>};
-    final nodes = mut [<serialize\Boxed>];
-    foreach (page in pages) {
-        foreach (r in serialize\jsonDecode(page).q("data").q("repository").q("pullRequest").q("reviews").q("nodes").listValue()) {
-            nodes.append(r);
+fun standingFrom(pages: [str]) > result\Result::<{str: {str: str}}> {
+    try {
+        final latest = mut {<str: {str: str}>};
+        final nodes = mut [<serialize\Boxed>];
+        foreach (page in pages) {
+            foreach (r in serialize\jsonDecode(page).q("data").q("repository").q("pullRequest").q("reviews").q("nodes").listValue()) {
+                nodes.append(r);
+            }
         }
+        foreach (r in nodes) {
+            final state = r.q("state").stringValue();
+            if (state != "APPROVED" and state != "CHANGES_REQUESTED" and state != "DISMISSED") {
+                continue;
+            }
+            // A deleted account has no login, and its review proves nothing either way.
+            final who = r.q("author").q("login").stringValue();
+            if (who == "" or !r.q("authorCanPushToRepository").booleanValue()) {
+                continue;
+            }
+            latest[who] = {"state": state, "commit": r.q("commit").q("oid").stringValue(), "at": r.q("submittedAt").stringValue(), "id": id(r.q("databaseId"))};
+        }
+        return result\ok::<{str: {str: str}}>(latest);
+    } catch (err: any) {
+        return result\caught::<{str: {str: str}}>(err, doing: "github: standingFrom");
     }
-    foreach (r in nodes) {
-        final state = r.q("state").stringValue();
-        if (state != "APPROVED" and state != "CHANGES_REQUESTED" and state != "DISMISSED") {
-            continue;
-        }
-        // A deleted account has no login, and its review proves nothing either way.
-        final who = r.q("author").q("login").stringValue();
-        if (who == "" or !r.q("authorCanPushToRepository").booleanValue()) {
-            continue;
-        }
-        latest[who] = {"state": state, "commit": r.q("commit").q("oid").stringValue(), "at": r.q("submittedAt").stringValue(), "id": id(r.q("databaseId"))};
-    }
-    return latest;
 }
 
 // approvalFrom decides approval AT commit from the pages of a GraphQL pull-request answer.
@@ -1298,80 +1402,92 @@ fun standingFrom(pages: [str]) > {str: {str: str}} !> any {
 // covers what rulesets do not show (classic protection, code owners), so any requirement
 // it signals needs at least one approval; its APPROVED alone approves nothing, since it
 // can stand on a review of an older commit.
-fun approvalFrom(pages: [str], commit: str, required: int) > {str: any} !> any {
-    final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
-    final head = pr.q("headRefOid").stringValue();
-    if (head == "") {
-        throw "github: approval_at: the pull request was not found";
-    }
-    final decision = pr.q("reviewDecision").stringValue();
-    var changes = decision == "CHANGES_REQUESTED";
-    final at = mut {<str: int>};
-    final newestAt = mut {<str: str>};
-    foreach (_, review in standingFrom(pages)) {
-        final state = review["state"] ?? "";
-        if (state == "CHANGES_REQUESTED") {
-            changes = true;
+fun approvalFrom(pages: [str], commit: str, required: int) > result\Result::<{str: any}> {
+    try {
+        final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
+        final head = pr.q("headRefOid").stringValue();
+        if (head == "") {
+            return result\fail::<{str: any}>("github: approval_at: the pull request was not found");
         }
-        if (state == "APPROVED") {
-            final oid = review["commit"] ?? "";
-            at[oid] = (at[oid] ?? 0) + 1;
-            final when = review["at"] ?? "";
-            if (when > (newestAt[oid] ?? "")) {
-                newestAt[oid] = when;
+        final decision = pr.q("reviewDecision").stringValue();
+        var changes = decision == "CHANGES_REQUESTED";
+        final at = mut {<str: int>};
+        final newestAt = mut {<str: str>};
+        final standing = standingFrom(pages);
+        if (standing.error -> err) {
+            return result\Result::<{str: any}>{ error = err };
+        }
+        foreach (_, review in standing.value!) {
+            final state = review["state"] ?? "";
+            if (state == "CHANGES_REQUESTED") {
+                changes = true;
+            }
+            if (state == "APPROVED") {
+                final oid = review["commit"] ?? "";
+                at[oid] = (at[oid] ?? 0) + 1;
+                final when = review["at"] ?? "";
+                if (when > (newestAt[oid] ?? "")) {
+                    newestAt[oid] = when;
+                }
             }
         }
-    }
-    final approvals = at[commit] ?? 0;
-    var need = required;
-    if (decision != "" and need < 1) {
-        need = 1;
-    }
-    var reason = "";
-    if (changes) {
-        reason = "changes requested";
-    } else if (approvals < need) {
-        reason = "{approvals} of {need} approvals at this commit";
-    } else if (decision == "REVIEW_REQUIRED") {
-        reason = "a required review is missing";
-    }
-    var approvedCommit = "";
-    if (!changes and approvals < need) {
-        var best = "";
-        foreach (oid, n in at) {
-            if (oid == commit or n < need) {
-                continue;
-            }
-            final when = newestAt[oid] ?? "";
-            final bestWhen = newestAt[best] ?? "";
-            if (best == "" or when > bestWhen or (when == bestWhen and oid > best)) {
-                best = oid;
-            }
+        final approvals = at[commit] ?? 0;
+        var need = required;
+        if (decision != "" and need < 1) {
+            need = 1;
         }
-        approvedCommit = best;
+        var reason = "";
+        if (changes) {
+            reason = "changes requested";
+        } else if (approvals < need) {
+            reason = "{approvals} of {need} approvals at this commit";
+        } else if (decision == "REVIEW_REQUIRED") {
+            reason = "a required review is missing";
+        }
+        var approvedCommit = "";
+        if (!changes and approvals < need) {
+            var best = "";
+            foreach (oid, n in at) {
+                if (oid == commit or n < need) {
+                    continue;
+                }
+                final when = newestAt[oid] ?? "";
+                final bestWhen = newestAt[best] ?? "";
+                if (best == "" or when > bestWhen or (when == bestWhen and oid > best)) {
+                    best = oid;
+                }
+            }
+            approvedCommit = best;
+        }
+        return result\ok::<{str: any}>({"approved": reason == "", "head": head, "reason": reason, "approvedCommit": approvedCommit});
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "github: approvalFrom");
     }
-    return {"approved": reason == "", "head": head, "reason": reason, "approvedCommit": approvedCommit};
 }
 
 // targetFrom reads where a pull request merges and how: a stack member merges on the
 // stack's base, and a pull request with auto-merge with the method chosen there, one
 // outside a stack with its own queue label's method, else with the one it was queued
 // with.
-fun targetFrom(body: str, method: str) > {str: str} !> any {
-    final pr = serialize\jsonDecode(body);
-    var base = pr.q("stack").q("base").q("ref").stringValue();
-    if (base == "") {
-        base = pr.q("base").q("ref").stringValue();
+fun targetFrom(body: str, method: str) > result\Result::<{str: str}> {
+    try {
+        final pr = serialize\jsonDecode(body);
+        var base = pr.q("stack").q("base").q("ref").stringValue();
+        if (base == "") {
+            base = pr.q("base").q("ref").stringValue();
+        }
+        var m = pr.q("auto_merge").q("merge_method").stringValue().lower();
+        final label = queueLabel(pr);
+        if (m == "" and label != "" and id(pr.q("stack").q("id")) == "") {
+            m = queueMethod(label);
+        }
+        if (m == "") {
+            m = method;
+        }
+        return result\ok::<{str: str}>({"base": base, "method": m});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: targetFrom");
     }
-    var m = pr.q("auto_merge").q("merge_method").stringValue().lower();
-    final label = queueLabel(pr);
-    if (m == "" and label != "" and id(pr.q("stack").q("id")) == "") {
-        m = queueMethod(label);
-    }
-    if (m == "") {
-        m = method;
-    }
-    return {"base": base, "method": m};
 }
 
 // intent reports whether the pull request in body still carries merge intent: its own
@@ -1386,7 +1502,11 @@ fun intent(body: str, repo: str, hdrs: {str: str}) > bool !> any {
     if (sid == "") {
         return queueLabel(pr) != "";
     }
-    return (stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid)["label"] ?? "") != "";
+    final topRead = stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid);
+    if (topRead.error != null) {
+        throw topRead.error!.message;
+    }
+    return (topRead.value!["label"] ?? "") != "";
 }
 
 // sharedFrom lists the open pull requests in pages other than number: the ones sharing
@@ -1457,14 +1577,20 @@ fun ownerName(repo: str, op: str) > [str] !> any {
 }
 
 export fun approval_at(req: QueueApprovalRequest) > any !> any {
-    final hdrs = reading("approval_at");
+    final hdrsRead = reading("approval_at");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = req.repo;
     final parts = ownerName(repo, op: "approval_at");
     final number = req.id;
     final prBody = expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "read #{number}");
-    final target = targetFrom(prBody, method: req.method);
+    final targetRead = targetFrom(prBody, method: req.method);
+    if (targetRead.error != null) { throw targetRead.error!.message; }
+    final target = targetRead.value!;
     final rules = expect(get(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(target["base"] ?? ""), hdrs: hdrs), status: 200, what: "read the rules on {target["base"] ?? ""}");
-    final a = approvalFrom(reviewPages(parts, number: number, hdrs: hdrs), commit: req.commit, required: requiredFrom(rules));
+    final aRead = approvalFrom(reviewPages(parts, number: number, hdrs: hdrs), commit: req.commit, required: requiredFrom(rules));
+    if (aRead.error != null) { throw aRead.error!.message; }
+    final a = aRead.value!;
     final pr = serialize\jsonDecode(prBody);
     var shared = [<str>];
     final branch = pr.q("head").q("ref").stringValue();
@@ -1481,25 +1607,39 @@ export fun approval_at(req: QueueApprovalRequest) > any !> any {
 // reviewsFrom reads the head and the approvals standing on a pull request from the same
 // GraphQL pages approval_at reads, so both count the same reviews: each push-capable
 // reviewer's latest decisive review, kept when it approves.
-fun reviewsFrom(pages: [str]) > {str: any} !> any {
-    final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
-    final head = pr.q("headRefOid").stringValue();
-    if (head == "") {
-        throw "github: reviews: the pull request was not found";
-    }
-    final approving = mut [<{str: str}>];
-    foreach (who, review in standingFrom(pages)) {
-        if ((review["state"] ?? "") == "APPROVED") {
-            approving.append({"id": review["id"] ?? "", "reviewer": who, "commit": review["commit"] ?? ""});
+fun reviewsFrom(pages: [str]) > result\Result::<{str: any}> {
+    try {
+        final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
+        final head = pr.q("headRefOid").stringValue();
+        if (head == "") {
+            return result\fail::<{str: any}>("github: reviews: the pull request was not found");
         }
+        final approving = mut [<{str: str}>];
+        final standing = standingFrom(pages);
+        if (standing.error -> err) {
+            return result\Result::<{str: any}>{ error = err };
+        }
+        foreach (who, review in standing.value!) {
+            if ((review["state"] ?? "") == "APPROVED") {
+                approving.append({"id": review["id"] ?? "", "reviewer": who, "commit": review["commit"] ?? ""});
+            }
+        }
+        return result\ok::<{str: any}>({"head": head, "approving": approving});
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "github: reviewsFrom");
     }
-    return {"head": head, "approving": approving};
 }
 
 export fun reviews(req: QueueReviewsRequest) > any !> any {
-    final hdrs = reading("reviews");
+    final hdrsRead = reading("reviews");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final parts = ownerName(req.repo, op: "reviews");
-    return reviewsFrom(reviewPages(parts, number: req.id, hdrs: hdrs));
+    final read = reviewsFrom(reviewPages(parts, number: req.id, hdrs: hdrs));
+    if (read.error != null) {
+        throw read.error!.message;
+    }
+    return read.value!;
 }
 
 // dismissal reads GitHub's answer to a dismissal: "done" on 200, "reread" on 422, which
@@ -1526,7 +1666,9 @@ fun dismissedFrom(body: str, review: str) > bool !> any {
 }
 
 export fun dismiss_review(req: QueueDismissReviewRequest) > Ack !> any {
-    final hdrs = writing("dismiss_review");
+    final hdrsRead = writing("dismiss_review");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final review = req.review.id;
     final url = apiBase() + "/repos/{req.repo}/pulls/{req.id}/reviews/{escape(review)}";
     final payload = serialize\jsonEncode({"message": req.message, "event": "DISMISS"});
@@ -1568,33 +1710,37 @@ fun checkState(status: str, conclusion: str) > str {
 // checksFrom states each required context at one commit: an Actions job of that name
 // from jobs (one jobs listing per run, newest run first), else the commit status of that
 // context from status, else pending, since nothing reported it yet.
-fun checksFrom(required: [{str: str}], jobs: [str], status: str) > [{str: str}] !> any {
-    final states = mut {<str: str>};
-    foreach (page in jobs) {
-        foreach (j in serialize\jsonDecode(page).q("jobs").listValue()) {
-            final name = j.q("name").stringValue();
-            if (states[name] == null) {
-                states[name] = checkState(j.q("status").stringValue(), conclusion: j.q("conclusion").stringValue());
+fun checksFrom(required: [{str: str}], jobs: [str], status: str) > result\Result::<[{str: str}]> {
+    try {
+        final states = mut {<str: str>};
+        foreach (page in jobs) {
+            foreach (j in serialize\jsonDecode(page).q("jobs").listValue()) {
+                final name = j.q("name").stringValue();
+                if (states[name] == null) {
+                    states[name] = checkState(j.q("status").stringValue(), conclusion: j.q("conclusion").stringValue());
+                }
             }
         }
-    }
-    foreach (s in serialize\jsonDecode(status).q("statuses").listValue()) {
-        final name = s.q("context").stringValue();
-        if (states[name] == null) {
-            final state = s.q("state").stringValue();
-            states[name] = if (state == "error") "failure" else state;
+        foreach (s in serialize\jsonDecode(status).q("statuses").listValue()) {
+            final name = s.q("context").stringValue();
+            if (states[name] == null) {
+                final state = s.q("state").stringValue();
+                states[name] = if (state == "error") "failure" else state;
+            }
         }
-    }
-    final seen = mut {<str: bool>};
-    final checks = mut [<{str: str}>];
-    foreach (r in required) {
-        final name = r["context"] ?? "";
-        if (seen[name] == null) {
-            seen[name] = true;
-            checks.append({"name": name, "state": states[name] ?? "pending"});
+        final seen = mut {<str: bool>};
+        final checks = mut [<{str: str}>];
+        foreach (r in required) {
+            final name = r["context"] ?? "";
+            if (seen[name] == null) {
+                seen[name] = true;
+                checks.append({"name": name, "state": states[name] ?? "pending"});
+            }
         }
+        return result\ok::<[{str: str}]>(checks);
+    } catch (err: any) {
+        return result\caught::<[{str: str}]>(err, doing: "github: checksFrom");
     }
-    return checks;
 }
 
 // required_checks reads the checks the change's base requires, from its rulesets and its
@@ -1602,7 +1748,9 @@ fun checksFrom(required: [{str: str}], jobs: [str], status: str) > [{str: str}] 
 // commit's workflow runs rather than its check runs, which need a permission (checks)
 // the queue's app does not hold; actions and statuses it does.
 export fun required_checks(req: QueueRequiredChecksRequest) > any !> any {
-    final hdrs = reading("required_checks");
+    final hdrsRead = reading("required_checks");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = req.repo;
     final base = req.base;
     final commit = req.commit;
@@ -1617,7 +1765,15 @@ export fun required_checks(req: QueueRequiredChecksRequest) > any !> any {
     }
     final status = expect(get(prefix + "/commits/" + escape(commit) + "/status?per_page=100", hdrs: hdrs), status: 200,
         what: "read the statuses on {commit}");
-    return checksFrom(requiredChecksFrom(rules, branch: branch), jobs: jobs, status: status);
+    final required = requiredChecksFrom(rules, branch: branch);
+    if (required.error != null) {
+        throw required.error!.message;
+    }
+    final checked = checksFrom(required.value!, jobs: jobs, status: status);
+    if (checked.error != null) {
+        throw checked.error!.message;
+    }
+    return checked.value!;
 }
 
 final GREEN_QUERY = `query($owner: String!, $name: String!, $context: String!, $after: String) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { number headRefOid commits(last: 1) { nodes { commit { oid status { context(name: $context) { state } } } } } } } } }`;
@@ -1652,7 +1808,9 @@ fun greenNext(body: str) > str !> any {
 // whatever it targets: a stacked one is retargeted onto the base once the one beneath it
 // merges, and a success it carried then would count.
 export fun list_green(req: QueueListGreenRequest) > any !> any {
-    final hdrs = reading("list_green");
+    final hdrsRead = reading("list_green");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = remoteRepo(req.remoteURL);
     final parts = repo.split("/");
     final green = mut [<any>];
@@ -1688,7 +1846,9 @@ fun statusBody(state: str, context: str, description: str) > any {
 }
 
 export fun post_status(req: QueueStatusRequest) > Ack !> any {
-    final hdrs = writing("post_status");
+    final hdrsRead = writing("post_status");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final url = apiBase() + "/repos/{req.repo}/statuses/{req.commit}";
     final payload = statusBody(req.state, context: req.context, description: req.description);
     expect(post(url, body: serialize\jsonEncode(payload), hdrs: hdrs), status: 201, what: "post_status");
@@ -1696,7 +1856,9 @@ export fun post_status(req: QueueStatusRequest) > Ack !> any {
 }
 
 export fun retarget(req: QueueRetargetRequest) > Ack !> any {
-    final hdrs = writing("retarget");
+    final hdrsRead = writing("retarget");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final url = apiBase() + "/repos/{req.repo}/pulls/{req.id}";
     final res = mergequeue\request("PATCH", url: url, body: serialize\jsonEncode({"base": req.to}), headers: hdrs);
     expect(res, status: 200, what: "retarget");
@@ -1742,10 +1904,13 @@ fun mergeBody(pr: str, commit: str, method: str, message: str) > any !> any {
 // merge whose answer was lost to a retried request, not a refusal.
 fun merged(url: str, commit: str, hdrs: {str: str}) > bool !> any {
     final after = get(url, hdrs: hdrs);
-    if (after["status"] != 200) {
+    if (after.error != null) {
+        throw after.error!.message;
+    }
+    if (after.value!["status"] != 200) {
         return false;
     }
-    final now = serialize\jsonDecode("{after["body"]}");
+    final now = serialize\jsonDecode("{after.value!["body"]}");
     return now.q("merged").booleanValue() and now.q("head").q("sha").stringValue() == commit;
 }
 
@@ -1766,21 +1931,25 @@ fun movedFrom(repo: str, through: [QueuePinnedChange], hdrs: {str: str}) > str !
 // commit, what merge_change does next: {next, reason}, next being "merged" once it
 // merged there, "wait" while it is open at commit with auto-merge on, and "refuse"
 // otherwise, since then neither GitHub nor the queue may merge it.
-fun awaitFrom(body: str, commit: str) > {str: str} !> any {
-    final pr = serialize\jsonDecode(body);
-    if (pr.q("head").q("sha").stringValue() != commit) {
-        return {"next": "refuse", "reason": "head moved to {pr.q("head").q("sha").stringValue()} before GitHub merged it"};
+fun awaitFrom(body: str, commit: str) > result\Result::<{str: str}> {
+    try {
+        final pr = serialize\jsonDecode(body);
+        if (pr.q("head").q("sha").stringValue() != commit) {
+            return result\ok::<{str: str}>({"next": "refuse", "reason": "head moved to {pr.q("head").q("sha").stringValue()} before GitHub merged it"});
+        }
+        if (pr.q("merged").booleanValue()) {
+            return result\ok::<{str: str}>({"next": "merged", "reason": ""});
+        }
+        if (pr.q("state").stringValue() != "open") {
+            return result\ok::<{str: str}>({"next": "refuse", "reason": "closed before GitHub merged it"});
+        }
+        if (pr.q("auto_merge").q("merge_method").stringValue() == "") {
+            return result\ok::<{str: str}>({"next": "refuse", "reason": "auto-merge was disabled before GitHub merged it"});
+        }
+        return result\ok::<{str: str}>({"next": "wait", "reason": ""});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: awaitFrom");
     }
-    if (pr.q("merged").booleanValue()) {
-        return {"next": "merged", "reason": ""};
-    }
-    if (pr.q("state").stringValue() != "open") {
-        return {"next": "refuse", "reason": "closed before GitHub merged it"};
-    }
-    if (pr.q("auto_merge").q("merge_method").stringValue() == "") {
-        return {"next": "refuse", "reason": "auto-merge was disabled before GitHub merged it"};
-    }
-    return {"next": "wait", "reason": ""};
 }
 
 // mergedByOther reports whether anyone but app's bot merged the pull request in body:
@@ -1808,8 +1977,14 @@ fun mergeFailure(res: {str: any}) > any !> any {
 // read first, and the queue checks what merged afterwards. It is polled until this one
 // merged.
 export fun merge_change(req: QueueMergeRequest) > any !> any {
-    final hdrs = writing("merge_change");
-    final app = parseApp(req.app)["slug"] ?? "";
+    final hdrsRead = writing("merge_change");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
+    final named = parseApp(req.app);
+    if (named.error != null) {
+        throw named.error!.message;
+    }
+    final app = named.value!["slug"] ?? "";
     if (app == "") {
         throw "github: merge_change merges only as the queue's own GitHub App, and names none";
     }
@@ -1821,12 +1996,20 @@ export fun merge_change(req: QueueMergeRequest) > any !> any {
     final through = req.through;
     if (through.len() == 0) {
         if (serialize\jsonDecode(pr).q("auto_merge").q("merge_method").stringValue() != "") {
-            var state = awaitFrom(pr, commit: commit);
+            final first = awaitFrom(pr, commit: commit);
+            if (first.error != null) {
+                throw first.error!.message;
+            }
+            var state = first.value!;
             var polls = 0;
             while (state["next"] == "wait" and polls < AUTO_MERGE_POLLS) {
                 os\sleep(AUTO_MERGE_POLL_MS);
                 polls = polls + 1;
-                state = awaitFrom(expect(get(url, hdrs: hdrs), status: 200, what: "merge_change: read the pull request"), commit: commit);
+                final next = awaitFrom(expect(get(url, hdrs: hdrs), status: 200, what: "merge_change: read the pull request"), commit: commit);
+                if (next.error != null) {
+                    throw next.error!.message;
+                }
+                state = next.value!;
             }
             if (state["next"] == "merged") {
                 return {"merged": true, "byProvider": true, "reason": ""};
@@ -1840,8 +2023,18 @@ export fun merge_change(req: QueueMergeRequest) > any !> any {
             return {"merged": true, "byProvider": false, "reason": ""};
         }
         final now = get(url, hdrs: hdrs);
-        if (now["status"] == 200 and (awaitFrom("{now["body"]}", commit: commit)["next"] ?? "") == "merged") {
-            return {"merged": true, "byProvider": mergedByOther("{now["body"]}", app: app), "reason": ""};
+        if (now.error != null) {
+            throw now.error!.message;
+        }
+        final seen = now.value!;
+        if (seen["status"] == 200) {
+            final awaited = awaitFrom("{seen["body"]}", commit: commit);
+            if (awaited.error != null) {
+                throw awaited.error!.message;
+            }
+            if ((awaited.value!["next"] ?? "") == "merged") {
+                return {"merged": true, "byProvider": mergedByOther("{seen["body"]}", app: app), "reason": ""};
+            }
         }
         return mergeFailure(res);
     }
@@ -1978,7 +2171,9 @@ fun kickComment(req: QueueKickBackRequest, web: str, requeue: str) > str !> any 
     }
     final source = req.source;
     if (source != "") {
-        final run = parseRunSpec(source);
+        final runRead = parseRunSpec(source);
+        if (runRead.error != null) { throw runRead.error!.message; }
+        final run = runRead.value!;
         final host = apiHost(web);
         var repoArg = run["repo"] ?? "";
         if (host != "github.com") {
@@ -2100,7 +2295,9 @@ fun unlabel(repo: str, number: str, label: str, hdrs: {str: str}) > void !> any 
 // the removal already happened, so a failure there is printed to stderr (the apply
 // job's log) and the kick-back still succeeds.
 export fun kick_back(req: QueueKickBackRequest) > Ack !> any {
-    final hdrs = writing("kick_back");
+    final hdrsRead = writing("kick_back");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = req.repo;
     final number = req.id;
     final decoded = serialize\jsonDecode(expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "kick_back: read the pull request"));
@@ -2108,7 +2305,11 @@ export fun kick_back(req: QueueKickBackRequest) > Ack !> any {
     final sid = id(decoded.q("stack").q("id"));
     var top = {"number": "", "label": ""};
     if (sid != "") {
-        top = stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid);
+        final topRead = stackTopIn(openPulls(repo, hdrs: hdrs), sid: sid);
+        if (topRead.error != null) {
+            throw topRead.error!.message;
+        }
+        top = topRead.value!;
     }
     var label = top["label"] ?? "";
     var labeled = top["number"] ?? "";
@@ -2142,7 +2343,10 @@ export fun kick_back(req: QueueKickBackRequest) > Ack !> any {
 fun createLabel(repo: str, label: str, description: str, color: str, hdrs: {str: str}) > void !> any {
     final body = serialize\jsonEncode({"name": label, "description": description, "color": color});
     final res = post(apiBase() + "/repos/" + repo + "/labels", body: body, hdrs: hdrs);
-    labelCreated(label, status: res["status"], body: "{res["body"]}");
+    if (res.error != null) {
+        throw res.error!.message;
+    }
+    labelCreated(label, status: res.value!["status"], body: "{res.value!["body"]}");
 }
 
 // labelCreated accepts GitHub's answer to creating label: created, or refused only
@@ -2189,7 +2393,9 @@ fun labelCreated(label: str, status: any, body: str) > void !> any {
 // mark leaves the pull request showing the label of req's mark and no other mark's, from
 // one read of its labels; a pull request already showing it takes no write.
 export fun mark(req: QueueMarkRequest) > Ack !> any {
-    final hdrs = writing("mark");
+    final hdrsRead = writing("mark");
+    if (hdrsRead.error != null) { throw hdrsRead.error!.message; }
+    final hdrs = hdrsRead.value!;
     final repo = req.repo;
     final number = req.id;
     final want = req.mark;
@@ -2208,12 +2414,16 @@ export fun mark(req: QueueMarkRequest) > Ack !> any {
 }
 
 // parseRunSpec reads "<owner>/<name>/runs/<id>" into {repo, id}, or throws.
-fun parseRunSpec(spec: str) > {str: str} !> any {
-    final parts = spec.split("/");
-    if (parts.len() != 4 or parts[0] == "" or parts[1] == "" or parts[2] != "runs" or (std\parseInt(parts[3]) ?? 0) < 1) {
-        throw "github: a run is <owner>/<name>/runs/<id>, got '{spec}'";
+fun parseRunSpec(spec: str) > result\Result::<{str: str}> {
+    try {
+        final parts = spec.split("/");
+        if (parts.len() != 4 or parts[0] == "" or parts[1] == "" or parts[2] != "runs" or (std\parseInt(parts[3]) ?? 0) < 1) {
+            return result\fail::<{str: str}>("github: a run is <owner>/<name>/runs/<id>, got '{spec}'");
+        }
+        return result\ok::<{str: str}>({"repo": parts[0] + "/" + parts[1], "id": parts[3]});
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "github: parseRunSpec");
     }
-    return {"repo": parts[0] + "/" + parts[1], "id": parts[3]};
 }
 
 // artifactsFrom reads one page of a run's artifact listing into {name, url} records.
@@ -2232,21 +2442,25 @@ final BRANCH_EVENTS = ["push", "workflow_dispatch"];
 
 // originFrom reads a run's JSON into the run record list_artifacts returns. repo is the
 // repository the source named; a run of any other is an error, not a record.
-fun originFrom(body: str, repo: str) > {str: any} !> any {
-    final run = serialize\jsonDecode(body);
-    final own = run.q("repository").q("full_name").stringValue();
-    if (own != repo) {
-        throw "github: run {run.q("id").integerValue()} belongs to '{own}', not '{repo}'";
+fun originFrom(body: str, repo: str) > result\Result::<{str: any}> {
+    try {
+        final run = serialize\jsonDecode(body);
+        final own = run.q("repository").q("full_name").stringValue();
+        if (own != repo) {
+            return result\fail::<{str: any}>("github: run {run.q("id").integerValue()} belongs to '{own}', not '{repo}'");
+        }
+        final event = run.q("event").stringValue();
+        return result\ok::<{str: any}>({
+            "repo": own,
+            "headRepo": run.q("head_repository").q("full_name").stringValue(),
+            "headBranch": run.q("head_branch").stringValue(),
+            "event": event,
+            "branchEvent": BRANCH_EVENTS.indexOf(event) != null,
+            "definition": run.q("path").stringValue(),
+        });
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "github: originFrom");
     }
-    final event = run.q("event").stringValue();
-    return {
-        "repo": own,
-        "headRepo": run.q("head_repository").q("full_name").stringValue(),
-        "headBranch": run.q("head_branch").stringValue(),
-        "event": event,
-        "branchEvent": BRANCH_EVENTS.indexOf(event) != null,
-        "definition": run.q("path").stringValue(),
-    };
 }
 
 // list_artifacts reads the run's status BEFORE listing its artifacts, so a listing that
@@ -2259,11 +2473,15 @@ export fun list_artifacts(req: QueueListArtifactsRequest) > any !> any {
         throw "github: list_artifacts reads with {ARTIFACTS_REF}, the apply job's own token; it is not set";
     }
     final hdrs = headers(ARTIFACTS_REF);
-    final run = parseRunSpec(req.source);
+    final runRead = parseRunSpec(req.source);
+    if (runRead.error != null) { throw runRead.error!.message; }
+    final run = runRead.value!;
     final base = apiBase();
     final prefix = base + "/repos/" + (run["repo"] ?? "") + "/actions/runs/" + (run["id"] ?? "");
     final view = expect(get(prefix, hdrs: hdrs), status: 200, what: "run {run["id"] ?? ""}");
-    final origin = originFrom(view, repo: run["repo"] ?? "");
+    final originRead = originFrom(view, repo: run["repo"] ?? "");
+    if (originRead.error != null) { throw originRead.error!.message; }
+    final origin = originRead.value!;
     final status = serialize\jsonDecode(view).q("status").stringValue();
     final artifacts = mut [<any>];
     var page = 1;
@@ -2335,7 +2553,7 @@ final SINGLES = `[
 ]`;
 
 test "a queue label on a pull request outside a stack queues it whatever GitHub says of its mergeability" {
-    final singles = labeledSingles([SINGLES], base: "main");
+    final singles = labeledSingles([SINGLES], base: "main").value!;
     assert\equal(singles.len(), want: 1, message: "auto-merge wins over a label, another base is not this queue's, and a mark is no intent");
     assert\equal(singles[0], want: {"number": "40", "label": "merge-queue: rebase", "method": "rebase"}, message: "the label's method");
     final got = changesFrom([SINGLES], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {"40": "rebase"});
@@ -2345,7 +2563,9 @@ test "a queue label on a pull request outside a stack queues it whatever GitHub 
     assert\equal(serialize\Boxed.init(got[1]).q("method").stringValue(), want: "squash", message: "auto-merge's method");
     assert\equal(changesFrom([SINGLES], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 1,
         message: "a label nobody with write access applied queues nothing");
-    final target = targetFrom(`{"base": {"ref": "main"}, "auto_merge": null, "labels": [{"name": "merge-queue: merge"}]}`, method: "squash");
+    final targetRead = targetFrom(`{"base": {"ref": "main"}, "auto_merge": null, "labels": [{"name": "merge-queue: merge"}]}`, method: "squash");
+    if (targetRead.error != null) { throw targetRead.error!.message; }
+    final target = targetRead.value!;
     assert\equal(target["method"], want: "merge", message: "the label as it stands at the re-check");
     assert\equal(intent(`{"auto_merge": null, "labels": [{"name": "merge-queue: merge"}]}`, repo: "acme/acme", hdrs: {<str: str>}), want: true, message: "the label is its intent");
     assert\equal(intent(`{"auto_merge": null, "labels": [{"name": "queue: kicked back"}]}`, repo: "acme/acme", hdrs: {<str: str>}), want: false, message: "a mark is not");
@@ -2368,19 +2588,19 @@ final STACK = `[
 ]`;
 
 test "a labeled stack top queues the stack, each member naming the one below" {
-    final tops = stackTops([STACK], base: "main");
+    final tops = stackTops([STACK], base: "main").value!;
     assert\equal(tops.len(), want: 1, message: "one labeled top");
     assert\equal(tops[0]["number"], want: "21", message: "the top");
     assert\equal(tops[0]["method"], want: "squash", message: "the label's method");
     assert\equal(tops[0]["label"], want: "merge-queue: squash", message: "only a method's exact name is intent");
-    assert\equal(stackTops([STACK], base: "release").len(), want: 0, message: "a stack on another trunk is not this queue's");
+    assert\equal(stackTops([STACK], base: "release").value!.len(), want: 0, message: "a stack on another trunk is not this queue's");
     final got = changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {"5": "squash"}, labeled: {<str: str>});
     assert\equal(got.len(), want: 2, message: "both members");
     assert\equal(serialize\Boxed.init(got[0]).q("parent").stringValue(), want: "", message: "the bottom sits on the trunk");
     assert\equal(serialize\Boxed.init(got[1]).q("parent").stringValue(), want: "20", message: "the top names the bottom");
     assert\equal(serialize\Boxed.init(got[1]).q("base").stringValue(), want: "main", message: "a member merges on the stack's base");
     assert\equal(changesFrom([STACK], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 0, message: "an unlabeled stack is not queued");
-    final top = stackTopIn([STACK], sid: "5");
+    final top = stackTopIn([STACK], sid: "5").value!;
     assert\equal(top["number"], want: "21", message: "a member finds its stack's top");
     assert\equal(top["label"], want: "merge-queue: squash", message: "and the label that queues it");
 }
@@ -2426,7 +2646,7 @@ test "the provider never reads its own mark labels as merge intent" {
         final label = MARK_LABELS[m] ?? "";
         assert\equal(label.startsWith("queue: ") and !label.startsWith(QUEUE_LABEL), want: true, message: "{m}'s label is the queue's, not a person's");
     }
-    assert\equal(stackTops([MARKED], base: "main").len(), want: 0, message: "a stack top showing a mark is not queued by it");
+    assert\equal(stackTops([MARKED], base: "main").value!.len(), want: 0, message: "a stack top showing a mark is not queued by it");
     assert\equal(changesFrom([MARKED], repo: "acme/acme", base: "main", stacks: {<str: str>}, labeled: {<str: str>}).len(), want: 0, message: "nothing is queued");
 }
 
@@ -2525,8 +2745,8 @@ test "merged changes are the ones merged into the base at a head the change carr
 test "an approval counts only at the commit asked about" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "new", "reviewDecision": "APPROVED",
         "reviews": {"nodes": [{"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "old"}}]}}}}}`;
-    assert\equal(approvalFrom([body],commit: "old", required: 1)["approved"], want: true, message: "approved at old");
-    final atNew = approvalFrom([body],commit: "new", required: 1);
+    assert\equal(approvalFrom([body],commit: "old", required: 1).value!["approved"], want: true, message: "approved at old");
+    final atNew = approvalFrom([body],commit: "new", required: 1).value!;
     assert\equal(atNew["approved"], want: false, message: "not approved at a commit nobody reviewed");
     assert\equal(atNew["head"], want: "new", message: "the current head rides along");
     assert\equal(atNew["reason"], want: "0 of 1 approvals at this commit", message: "says why");
@@ -2540,8 +2760,8 @@ test "the commit approvals carry over from is the one approved most recently" {
             {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "first"}},
             {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "c"}, "commit": {"oid": "first"}}
         ]}}}}}`;
-    assert\equal(approvalFrom([body],commit: "new", required: 1)["approvedCommit"], want: "second", message: "whatever order the reviewers come in");
-    assert\equal(approvalFrom([body],commit: "new", required: 2)["approvedCommit"], want: "first", message: "among the commits holding enough");
+    assert\equal(approvalFrom([body],commit: "new", required: 1).value!["approvedCommit"], want: "second", message: "whatever order the reviewers come in");
+    assert\equal(approvalFrom([body],commit: "new", required: 2).value!["approvedCommit"], want: "first", message: "among the commits holding enough");
 }
 
 test "a reviewer's latest decisive review wins, and changes requested blocks" {
@@ -2551,7 +2771,7 @@ test "a reviewer's latest decisive review wins, and changes requested blocks" {
             {"state": "COMMENTED", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "abc"}},
             {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": true, "author": {"login": "b"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    final got = approvalFrom([body],commit: "abc", required: 1);
+    final got = approvalFrom([body],commit: "abc", required: 1).value!;
     assert\equal(got["approved"], want: false, message: "changes requested blocks");
     assert\equal(got["reason"], want: "changes requested", message: "a comment does not undo an approval, and says why not");
     assert\equal(got["approvedCommit"], want: "", message: "nothing carries over past a change request");
@@ -2565,7 +2785,7 @@ test "only a reviewer who can push counts, whatever reviewDecision says" {
             {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": null, "commit": {"oid": "abc"}},
             {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "old"}}
         ]}}}}}`;
-    final got = approvalFrom([body],commit: "abc", required: 1);
+    final got = approvalFrom([body],commit: "abc", required: 1).value!;
     assert\equal(got["approved"], want: false, message: "a stale APPROVED decision and approvals from accounts that cannot push approve nothing");
     assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "counts the writer's review only, at the commit it covers");
     assert\equal(got["approvedCommit"], want: "old", message: "the writer's approval still stands where it was given");
@@ -2582,7 +2802,7 @@ test "reviews lists the approvals approval_at counts, with the id a dismissal ta
             {"databaseId": 16, "state": "DISMISSED", "authorCanPushToRepository": true, "author": {"login": "gone"}, "commit": {"oid": "old"}},
             {"databaseId": 17, "state": "CHANGES_REQUESTED", "authorCanPushToRepository": true, "author": {"login": "critic"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    final got = serialize\Boxed.init(reviewsFrom([body]));
+    final got = serialize\Boxed.init(reviewsFrom([body]).value!);
     assert\equal(got.q("head").stringValue(), want: "abc", message: "the head, read with the reviews");
     final seen = mut [<str>];
     foreach (r in got.q("approving").listValue()) {
@@ -2607,21 +2827,17 @@ test "reviews read every page, a later page's review replacing an earlier one" {
     assert\equal(reviewsNext(first), want: "c1", message: "the first page names where the second starts");
     assert\equal(reviewsNext(second), want: "", message: "the last page names none");
     final seen = mut [<str>];
-    foreach (r in serialize\Boxed.init(reviewsFrom([first, second])).q("approving").listValue()) {
+    foreach (r in serialize\Boxed.init(reviewsFrom([first, second]).value!).q("approving").listValue()) {
         seen.append(r.q("reviewer").stringValue());
     }
     assert\equal(seen.len(), want: 2, message: "ann's approval was dismissed on the second page: " + seen.join(" "));
     assert\equal(seen.indexOf("bob") != null and seen.indexOf("cy") != null, want: true, message: "bob from the first page, cy from the second: " + seen.join(" "));
-    assert\equal(approvalFrom([first, second], commit: "abc", required: 1)["approved"], want: true, message: "approval_at counts the second page too");
+    assert\equal(approvalFrom([first, second], commit: "abc", required: 1).value!["approved"], want: true, message: "approval_at counts the second page too");
 }
 
 test "reviews of a pull request that does not exist is an error" {
     var failed = false;
-    try {
-        reviewsFrom([`{"data": {"repository": {"pullRequest": null}}}`]);
-    } catch (e) {
-        failed = true;
-    }
+    failed = reviewsFrom([`{"data": {"repository": {"pullRequest": null}}}`]).error != null;
     assert\equal(failed, want: true, message: "no head");
 }
 
@@ -2651,19 +2867,19 @@ test "a change request from an account that cannot push blocks nothing" {
             {"state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "abc"}},
             {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": false, "author": {"login": "drive-by"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    assert\equal(approvalFrom([body],commit: "abc", required: 1)["approved"], want: true, message: "as on GitHub, where it does not count either");
+    assert\equal(approvalFrom([body],commit: "abc", required: 1).value!["approved"], want: true, message: "as on GitHub, where it does not count either");
 }
 
 test "no review requirement approves with no reviews" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": null,
         "reviews": {"nodes": []}}}}}`;
-    assert\equal(approvalFrom([body],commit: "abc", required: 0)["approved"], want: true, message: "nothing is required");
+    assert\equal(approvalFrom([body],commit: "abc", required: 0).value!["approved"], want: true, message: "nothing is required");
 }
 
 test "a requirement the rulesets do not show still needs one approval at the commit" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "REVIEW_REQUIRED",
         "reviews": {"nodes": []}}}}}`;
-    final got = approvalFrom([body],commit: "abc", required: 0);
+    final got = approvalFrom([body],commit: "abc", required: 0).value!;
     assert\equal(got["approved"], want: false, message: "classic protection or code owners");
     assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "at least one");
 }
@@ -2678,10 +2894,10 @@ test "required approvals come from the strictest pull_request rule" {
 }
 
 test "a pull request merges on its stack's base with its auto-merge method" {
-    final member = targetFrom(`{"base": {"ref": "s1"}, "stack": {"base": {"ref": "main"}}, "auto_merge": null}`, method: "squash");
+    final member = targetFrom(`{"base": {"ref": "s1"}, "stack": {"base": {"ref": "main"}}, "auto_merge": null}`, method: "squash").value!;
     assert\equal(member["base"], want: "main", message: "the stack's base, not the branch below");
     assert\equal(member["method"], want: "squash", message: "the method it was queued with");
-    final plain = targetFrom(`{"base": {"ref": "main"}, "auto_merge": {"merge_method": "REBASE"}}`, method: "squash");
+    final plain = targetFrom(`{"base": {"ref": "main"}, "auto_merge": {"merge_method": "REBASE"}}`, method: "squash").value!;
     assert\equal(plain["base"], want: "main", message: "its own base");
     assert\equal(plain["method"], want: "rebase", message: "auto-merge's method, as the contract spells it");
 }
@@ -2701,7 +2917,7 @@ test "describe lists the methods the repository allows" {
 }
 
 test "the app's bot commits under its noreply address" {
-    assert\equal(botFrom("acme-magus-queue", user: `{"login": "acme-magus-queue[bot]", "id": 41898282}`),
+    assert\equal(botFrom("acme-magus-queue", user: `{"login": "acme-magus-queue[bot]", "id": 41898282}`).value!,
         want: {"name": "acme-magus-queue[bot]", "email": "41898282+acme-magus-queue[bot]@users.noreply.github.com"}, message: "the bot's user id");
 }
 
@@ -2770,16 +2986,16 @@ test "a squash carries the pull request title and the change's own commits" {
 
 test "merge_change waits for auto-merge while the pull request is open at the commit" {
     final at = "abc";
-    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": {"merge_method": "squash"}}`, commit: at)["next"],
+    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": {"merge_method": "squash"}}`, commit: at).value!["next"],
         want: "wait", message: "GitHub has yet to merge it");
-    assert\equal(awaitFrom(`{"state": "closed", "merged": true, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["next"],
+    assert\equal(awaitFrom(`{"state": "closed", "merged": true, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at).value!["next"],
         want: "merged", message: "GitHub merged it, and auto-merge is cleared by then");
-    final moved = awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "def"}, "auto_merge": {"merge_method": "squash"}}`, commit: at);
+    final moved = awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "def"}, "auto_merge": {"merge_method": "squash"}}`, commit: at).value!;
     assert\equal(moved["next"], want: "refuse", message: "a new head is not what was validated");
     assert\equal(moved["reason"], want: "head moved to def before GitHub merged it", message: "says where it moved");
-    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["reason"],
+    assert\equal(awaitFrom(`{"state": "open", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at).value!["reason"],
         want: "auto-merge was disabled before GitHub merged it", message: "a withdrawn intent is not merged by the queue either");
-    assert\equal(awaitFrom(`{"state": "closed", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at)["reason"],
+    assert\equal(awaitFrom(`{"state": "closed", "merged": false, "head": {"sha": "abc"}, "auto_merge": null}`, commit: at).value!["reason"],
         want: "closed before GitHub merged it", message: "closed unmerged");
 }
 
@@ -2983,7 +3199,9 @@ test "a long status description is cut to what GitHub accepts" {
 }
 
 test "a run names its repository and id, and its artifacts download from the API" {
-    final run = parseRunSpec("acme/widgets/runs/7");
+    final runRead = parseRunSpec("acme/widgets/runs/7");
+    if (runRead.error != null) { throw runRead.error!.message; }
+    final run = runRead.value!;
     assert\equal(run["repo"], want: "acme/widgets", message: "repository");
     assert\equal(run["id"], want: "7", message: "run id");
     final got = artifactsFrom(`{"artifacts": [{"id": 100, "name": "mergequeue-plan"}]}`, base: "https://api.github.com", repo: "acme/widgets");
@@ -2997,32 +3215,27 @@ fun runJSON(event: str, branch: str, headRepo: str) > str {
 
 
 test "a run says what started it and what it ran" {
-    final push = serialize\Boxed.init(originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
+    final push = serialize\Boxed.init(originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets").value!);
     assert\equal(push.q("repo").stringValue(), want: "acme/widgets", message: "repository");
     assert\equal(push.q("headRepo").stringValue(), want: "acme/widgets", message: "head repository");
     assert\equal(push.q("headBranch").stringValue(), want: "main", message: "branch");
     assert\equal(push.q("event").stringValue(), want: "push", message: "event");
     assert\equal(push.q("branchEvent").booleanValue(), want: true, message: "a push runs the branch's own workflow file");
     assert\equal(push.q("definition").stringValue(), want: ".github/workflows/queue.yaml", message: "workflow file");
-    final dispatched = serialize\Boxed.init(originFrom(runJSON("workflow_dispatch", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
+    final dispatched = serialize\Boxed.init(originFrom(runJSON("workflow_dispatch", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets").value!);
     assert\equal(dispatched.q("branchEvent").booleanValue(), want: true, message: "so does a dispatch");
 }
 
 test "a run a pull request started never runs the branch's own workflow file" {
     foreach (event in ["pull_request", "pull_request_review", "pull_request_target", "workflow_run", "schedule"]) {
-        final got = serialize\Boxed.init(originFrom(runJSON(event, branch: "main", headRepo: "mallory/widgets"), repo: "acme/widgets"));
+        final got = serialize\Boxed.init(originFrom(runJSON(event, branch: "main", headRepo: "mallory/widgets"), repo: "acme/widgets").value!);
         assert\equal(got.q("branchEvent").booleanValue(), want: false, message: event);
         assert\equal(got.q("headRepo").stringValue(), want: "mallory/widgets", message: "a fork's head repository is reported as it is");
     }
 }
 
 test "a run of another repository than the source names is an error" {
-    var refused = false;
-    try {
-        originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/other");
-    } catch (e) {
-        refused = true;
-    }
+    final refused = originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/other").error != null;
     assert\equal(refused, want: true, message: "the listing names the run's own repository");
 }
 
@@ -3044,23 +3257,23 @@ final CLASSIC = `{"protection": {"required_status_checks": {"contexts": ["lint",
     "checks": [{"context": "lint", "app_id": null}, {"context": "merge-queue", "app_id": 812}]}}}`;
 
 test "required checks come from rulesets and classic protection, once per ruleset and pin" {
-    final got = requiredChecksFrom(RULES, branch: CLASSIC);
+    final got = requiredChecksFrom(RULES, branch: CLASSIC).value!;
     assert\equal(got.len(), want: 5, message: "merge-queue in each ruleset, ci gate, lint, merge-queue from 812");
     assert\equal(got[0], want: {"context": "merge-queue", "integration": "15368", "ruleset": "9"}, message: "a ruleset pin names its ruleset");
     assert\equal(got[1], want: {"context": "ci gate", "integration": "", "ruleset": "9"}, message: "no pin accepts anyone");
     assert\equal(got[2], want: {"context": "merge-queue", "integration": "15368", "ruleset": "4"}, message: "each ruleset needs its own pin");
     assert\equal(got[3], want: {"context": "lint", "integration": "", "ruleset": ""}, message: "classic protection names no ruleset");
     assert\equal(got[4], want: {"context": "merge-queue", "integration": "812", "ruleset": ""}, message: "classic pins by app_id");
-    final old = requiredChecksFrom("[]", branch: `{"protection": {"required_status_checks": {"contexts": ["build"]}}}`);
+    final old = requiredChecksFrom("[]", branch: `{"protection": {"required_status_checks": {"contexts": ["build"]}}}`).value!;
     assert\equal(old, want: [{"context": "build", "integration": "", "ruleset": ""}], message: "contexts alone, pinned to nothing");
-    assert\equal(requiredChecksFrom("[]", branch: `{"protected": false}`).len(), want: 0, message: "an unprotected base requires nothing");
+    assert\equal(requiredChecksFrom("[]", branch: `{"protected": false}`).value!.len(), want: 0, message: "an unprotected base requires nothing");
 }
 
 test "a check's events are the workflow runs that reported it" {
     final reports = reportsFrom(`{"check_runs": [
         {"name": "ci gate", "check_suite": {"id": 1}}, {"name": "ci gate", "check_suite": {"id": 2}},
         {"name": "ci gate", "check_suite": {"id": 1}}, {"name": "codecov", "check_suite": {"id": 5}}]}`,
-        runs: `{"workflow_runs": [{"check_suite_id": 1, "event": "pull_request"}, {"check_suite_id": 2, "event": "push"}]}`);
+        runs: `{"workflow_runs": [{"check_suite_id": 1, "event": "pull_request"}, {"check_suite_id": 2, "event": "push"}]}`).value!;
     assert\equal(contextEvents(reports, context: "ci gate"), want: ["pull_request", "push"], message: "each event once");
     assert\equal(contextEvents(reports, context: "codecov").len(), want: 0, message: "another app's check has no workflow event");
 }
@@ -3102,16 +3315,13 @@ test "an App ID is a positive integer as GitHub writes one" {
 }
 
 test "the app is a slug, with its App ID after a colon where GitHub hides it" {
-    assert\equal(parseApp(""), want: {"slug": "", "id": ""}, message: "none");
-    assert\equal(parseApp("magus-queue"), want: {"slug": "magus-queue", "id": ""}, message: "a slug");
-    assert\equal(parseApp("magus-queue:2034567"), want: {"slug": "magus-queue", "id": "2034567"}, message: "a slug and its App ID");
+    assert\equal(parseApp("").value!, want: {"slug": "", "id": ""}, message: "none");
+    assert\equal(parseApp("magus-queue").value!, want: {"slug": "magus-queue", "id": ""}, message: "a slug");
+    assert\equal(parseApp("magus-queue:2034567").value!, want: {"slug": "magus-queue", "id": "2034567"}, message: "a slug and its App ID");
     foreach (value in [":2034567", "magus-queue:", "magus-queue:0812", "magus-queue:Iv23li", "magus-queue:1:2"]) {
-        var reason = "";
-        try {
-            final _ = parseApp(value);
-        } catch (e) {
-            reason = "{e}";
-        }
+        final parsed = parseApp(value).value!;
+        assert\isTrue(parsed.error != null, message: value);
+        final reason = parsed.error!.message;
         assert\equal(reason, want: "github: the app '{value}' is not <slug> or <slug>:<App ID>, an App ID being a positive integer with no leading zero", message: value);
     }
 }
@@ -3227,7 +3437,7 @@ test "a required check's state is the newest run's job of its name, else its com
         {"context": "e2e", "integration": "", "ruleset": ""}, {"context": "deploy", "integration": "", "ruleset": ""},
         {"context": "merge-queue", "integration": "", "ruleset": ""}, {"context": "absent", "integration": "", "ruleset": ""},
     ];
-    assert\equal(checksFrom(required, jobs: jobs, status: status), want: [
+    assert\equal(checksFrom(required, jobs: jobs, status: status).value!, want: [
         {"name": "ci gate", "state": "failure"},
         {"name": "lint", "state": "pending"},
         {"name": "docs", "state": "success"},

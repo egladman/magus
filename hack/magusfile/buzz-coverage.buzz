@@ -134,7 +134,11 @@ export fun report(fragments: [str]) > Report !> any {
     if (fragments.len() == 0) {
         throw "buzz-test: no LCOV fragments under {FRAGMENTS}/; --coverprofile did not write";
     }
-    return Report{ percent = lcov\mergePercent(fragments, keep: ""), tracefile = fragments.join("") };
+    final merged = lcov\mergePercent(fragments, keep: "");
+    if (merged.error != null) {
+        throw merged.error!.message;
+    }
+    return Report{ percent = merged.value!, tracefile = fragments.join("") };
 }
 
 test "a module runs from the root and writes its own fragment" {
@@ -216,7 +220,7 @@ test "fragments join into one tracefile and a percentage" {
     final parts = ["SF:a.buzz\nDA:1,1\nend_of_record\n", "SF:b.buzz\nDA:1,0\nend_of_record\n"];
     final got = report(parts);
     assert\equal(got.tracefile, want: parts.join(""), message: "joined");
-    assert\equal(got.percent, want: lcov\mergePercent(parts, keep: ""), message: "percent");
+    assert\equal(got.percent, want: lcov\mergePercent(parts, keep: "").value!, message: "percent");
 }
 
 test "no fragment is an error, never a 0%" {

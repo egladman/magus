@@ -68,15 +68,7 @@ final POD_TEMPLATES: {str: [str]} = {
 // build reads the kustomization in dir and returns the objects `kustomize build dir` would
 // emit, in the same order of transformers. A field, directive or source it does not read
 // raises naming it, never builds something kustomize would not.
-export fun build(dir: str) > [Resource] !> any { //nolint:no-throw // callers catch the refusal that names the field
-    final r = built(dir);
-    if (r.error -> e) {
-        throw e.message; //nolint:no-throw // callers catch the refusal that names the field
-    }
-    return r.value!;
-}
-
-fun built(dir: str) > result\Result::<[Resource]> {
+export fun build(dir: str) > result\Result::<[Resource]> {
     try {
         final found = kustomizationFile(dir);
         if (found.error -> e) {
@@ -182,12 +174,16 @@ fun built(dir: str) > result\Result::<[Resource]> {
 }
 
 // manifests is the build as one multi-document YAML stream, for kubeconform.
-export fun manifests(objects: [Resource]) > str !> any { //nolint:no-throw // callers catch a stringify failure
-    final docs = mut [<str>];
-    foreach (r in objects) {
-        docs.append(yaml\stringify(r.doc));
+export fun manifests(objects: [Resource]) > result\Result::<str> {
+    try {
+        final docs = mut [<str>];
+        foreach (r in objects) {
+            docs.append(yaml\stringify(r.doc));
+        }
+        return result\ok::<str>(docs.join("---\n"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "kustomize: manifests");
     }
-    return docs.join("---\n");
 }
 
 fun kustomizationFile(dir: str) > result\Result::<str> {
@@ -213,7 +209,7 @@ fun load(dir: str, entry: str, file: str) > result\Result::<[Resource]> {
     try {
         final path = fs\join(dir, entry);
         if (fs\isDir(path)) {
-            return built(path);
+            return build(path);
         }
         final objects = mut [<Resource>];
         final docs = documents(fs\readFile(path), origin: path);
@@ -1062,78 +1058,82 @@ object Drawing {
 // no rules draws as the policy denying the workloads it selects. An object a pod names that
 // the build does not hold is drawn as outside it. Nothing here is a directory, so the
 // diagram is unscoped.
-export fun diagram(objects: [Resource], id: str, title: str, eyebrow: str = "", desc: str = "") > magusdiagram\Diagram !> any { //nolint:no-throw // callers catch the refusal that names the policy
-    final d = Drawing{ actors = mut {<str: magusdiagram\Actor>}, order = mut [<str>], edges = mut [<str>], looks = mut {<str: bool>} };
-    final f = magusdiagram\of(id, title: title, eyebrow: eyebrow, desc: desc)
-        .unscoped(why: "Kubernetes objects read from kustomize YAML, not directories: no package in the tree holds them");
-    final held = mut {<str: bool>};
-    foreach (r in objects) {
-        held["{r.kind()}/{r.ns()}/{r.name()}"] = true;
-    }
-    final workloads = objects.filter(fun (i: int, r: Resource) > bool => POD_TEMPLATES[r.kind()] != null);
-    foreach (w in workloads) {
-        _ = actor(d, f: f, r: w, look: magusdiagram\Look.focal);
-    }
-    foreach (svc in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "Service")) {
-        final selector = (dig(svc.doc, path: ["spec", "selector"]) as? {str: any}) ?? {<str: any>};
-        final picked = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == svc.ns() and selector.len() > 0 and matches(selector, labels: templateLabels(w)));
-        final src = actor(d, f: f, r: svc, look: magusdiagram\Look.plain);
-        foreach (w in picked) {
-            flow(d, f: f, src: src, dst: actorNamed(d, r: w), label: "selects");
+export fun diagram(objects: [Resource], id: str, title: str, eyebrow: str = "", desc: str = "") > result\Result::<magusdiagram\Diagram> {
+    try {
+        final d = Drawing{ actors = mut {<str: magusdiagram\Actor>}, order = mut [<str>], edges = mut [<str>], looks = mut {<str: bool>} };
+        final f = magusdiagram\of(id, title: title, eyebrow: eyebrow, desc: desc)
+            .unscoped(why: "Kubernetes objects read from kustomize YAML, not directories: no package in the tree holds them");
+        final held = mut {<str: bool>};
+        foreach (r in objects) {
+            held["{r.kind()}/{r.ns()}/{r.name()}"] = true;
         }
-    }
-    foreach (w in workloads) {
-        final spec = (dig(w.doc, path: POD_TEMPLATES[w.kind()]! + ["spec"]) as? {str: any}) ?? {<str: any>};
-        final src = actorNamed(d, r: w);
-        final sa = text(spec["serviceAccountName"]);
-        if (sa != "") {
-            flow(d, f: f, src: src, dst: referenced(d, f: f, kind: "ServiceAccount", name: sa, ns: w.ns(), held: held, look: magusdiagram\Look.plain), label: "runs as");
+        final workloads = objects.filter(fun (i: int, r: Resource) > bool => POD_TEMPLATES[r.kind()] != null);
+        foreach (w in workloads) {
+            _ = actor(d, f: f, r: w, look: magusdiagram\Look.focal);
         }
-        foreach (v in lists(spec["volumes"])) {
-            final vol = (v as? {str: any}) ?? {<str: any>};
-            foreach (kind, path in VOLUME_REFS) {
-                final name = text(dig(vol, path: path));
-                if (name != "") {
-                    final look = if (kind == "PersistentVolumeClaim") magusdiagram\Look.store else magusdiagram\Look.input;
-                    flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: look), label: "mounts");
-                }
+        foreach (svc in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "Service")) {
+            final selector = (dig(svc.doc, path: ["spec", "selector"]) as? {str: any}) ?? {<str: any>};
+            final picked = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == svc.ns() and selector.len() > 0 and matches(selector, labels: templateLabels(w)));
+            final src = actor(d, f: f, r: svc, look: magusdiagram\Look.plain);
+            foreach (w in picked) {
+                flow(d, f: f, src: src, dst: actorNamed(d, r: w), label: "selects");
             }
         }
-        foreach (c in lists(spec["containers"]) + lists(spec["initContainers"])) {
-            final container = (c as? {str: any}) ?? {<str: any>};
-            foreach (e in lists(container["envFrom"])) {
-                foreach (kind, field in {"ConfigMap": "configMapRef", "Secret": "secretRef"}) {
-                    final name = text(dig(e, path: [field, "name"]));
+        foreach (w in workloads) {
+            final spec = (dig(w.doc, path: POD_TEMPLATES[w.kind()]! + ["spec"]) as? {str: any}) ?? {<str: any>};
+            final src = actorNamed(d, r: w);
+            final sa = text(spec["serviceAccountName"]);
+            if (sa != "") {
+                flow(d, f: f, src: src, dst: referenced(d, f: f, kind: "ServiceAccount", name: sa, ns: w.ns(), held: held, look: magusdiagram\Look.plain), label: "runs as");
+            }
+            foreach (v in lists(spec["volumes"])) {
+                final vol = (v as? {str: any}) ?? {<str: any>};
+                foreach (kind, path in VOLUME_REFS) {
+                    final name = text(dig(vol, path: path));
                     if (name != "") {
-                        flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: magusdiagram\Look.input), label: "reads env");
+                        final look = if (kind == "PersistentVolumeClaim") magusdiagram\Look.store else magusdiagram\Look.input;
+                        flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: look), label: "mounts");
                     }
                 }
             }
-            foreach (e in lists(container["env"])) {
-                foreach (kind, field in {"ConfigMap": "configMapKeyRef", "Secret": "secretKeyRef"}) {
-                    final name = text(dig(e, path: ["valueFrom", field, "name"]));
-                    if (name != "") {
-                        flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: magusdiagram\Look.input), label: "reads env");
+            foreach (c in lists(spec["containers"]) + lists(spec["initContainers"])) {
+                final container = (c as? {str: any}) ?? {<str: any>};
+                foreach (e in lists(container["envFrom"])) {
+                    foreach (kind, field in {"ConfigMap": "configMapRef", "Secret": "secretRef"}) {
+                        final name = text(dig(e, path: [field, "name"]));
+                        if (name != "") {
+                            flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: magusdiagram\Look.input), label: "reads env");
+                        }
+                    }
+                }
+                foreach (e in lists(container["env"])) {
+                    foreach (kind, field in {"ConfigMap": "configMapKeyRef", "Secret": "secretKeyRef"}) {
+                        final name = text(dig(e, path: ["valueFrom", field, "name"]));
+                        if (name != "") {
+                            flow(d, f: f, src: src, dst: referenced(d, f: f, kind: kind, name: name, ns: w.ns(), held: held, look: magusdiagram\Look.input), label: "reads env");
+                        }
                     }
                 }
             }
         }
-    }
-    foreach (np in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "NetworkPolicy")) {
-        if (policy(d, f: f, np: np, workloads: workloads) -> refused) {
-            throw refused; //nolint:no-throw // callers catch the refusal that names the policy
+        foreach (np in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "NetworkPolicy")) {
+            if (policy(d, f: f, np: np, workloads: workloads) -> refused) {
+                return result\fail::<magusdiagram\Diagram>(refused);
+            }
         }
-    }
-    final legend: {str: str} = {
-        "focal": "workload", "plain": "object", "store": "claim", "input": "config or secret",
-        "external": "outside the build", "optional": "named, not built",
-    };
-    foreach (look in [magusdiagram\Look.focal, magusdiagram\Look.plain, magusdiagram\Look.store, magusdiagram\Look.input, magusdiagram\Look.optional, magusdiagram\Look.external]) {
-        if (d.looks[look.value] ?? false) {
-            _ = f.legend(look, label: legend[look.value]!);
+        final legend: {str: str} = {
+            "focal": "workload", "plain": "object", "store": "claim", "input": "config or secret",
+            "external": "outside the build", "optional": "named, not built",
+        };
+        foreach (look in [magusdiagram\Look.focal, magusdiagram\Look.plain, magusdiagram\Look.store, magusdiagram\Look.input, magusdiagram\Look.optional, magusdiagram\Look.external]) {
+            if (d.looks[look.value] ?? false) {
+                _ = f.legend(look, label: legend[look.value]!);
+            }
         }
+        return result\ok::<magusdiagram\Diagram>(f);
+    } catch (err: any) {
+        return result\caught::<magusdiagram\Diagram>(err, doing: "kustomize: diagram");
     }
-    return f;
 }
 
 fun policy(d: Drawing, f: mut magusdiagram\Diagram, np: Resource, workloads: [Resource]) > str? {
@@ -1370,18 +1370,30 @@ fun maps(value: any) > [{str: any}] {
 // ---- tests over testdata and the committed overlay ----
 
 // An importer runs these tests from its own cwd, so paths hang off the root.
-fun testdataDir() > str !> any { //nolint:no-throw // a test helper; a raise fails the test
-    return fs\join(vcs\root(), name: "libs/kustomize/testdata");
+fun testdataDir() > result\Result::<str> {
+    try {
+        return result\ok::<str>(fs\join(vcs\root(), name: "libs/kustomize/testdata"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "kustomize: testdataDir");
+    }
 }
 
 // staged copies testdata files into a fresh directory, kustomization first.
-fun staged(kustomization: str, files: [str]) > str !> any { //nolint:no-throw // a test helper; a raise fails the test
-    final dir = fs\tempDir("kustomize-test-");
-    fs\copyFile(fs\join(testdataDir(), name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
-    foreach (name in files) {
-        fs\copyFile(fs\join(testdataDir(), name: name), dst: fs\join(dir, name: name));
+fun staged(kustomization: str, files: [str]) > result\Result::<str> {
+    try {
+        final data = testdataDir();
+        if (data.error -> e) {
+            return result\Result::<str>{ error = e };
+        }
+        final dir = fs\tempDir("kustomize-test-");
+        fs\copyFile(fs\join(data.value!, name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
+        foreach (name in files) {
+            fs\copyFile(fs\join(data.value!, name: name), dst: fs\join(dir, name: name));
+        }
+        return result\ok::<str>(dir);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "kustomize: staged");
     }
-    return dir;
 }
 
 fun named(objects: [Resource], kind: str) > Resource? {
@@ -1394,15 +1406,15 @@ fun named(objects: [Resource], kind: str) > Resource? {
 }
 
 fun buildError(kustomization: str) > str {
-    try {
-        return built(staged(kustomization, files: ["app.yaml"])).error?.message ?? "";
-    } catch (e: str) {
-        return e;
+    final dir = staged(kustomization, files: ["app.yaml"]);
+    if (dir.error -> e) {
+        return e.message;
     }
+    return build(dir.value!).error?.message ?? "";
 }
 
 test "namespace, prefix, suffix and commonLabels match kustomize build" {
-    final objects = build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"])) catch [<Resource>];
+    final objects = build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"]).value!).value!;
     std\assert(objects.len() == 8, message: "eight objects, got {objects.len()}");
     final deploy = (named(objects, kind: "Deployment") ?? Resource{ doc = {<str: any>}, origin = "" });
     std\assert(deploy.name() == "x-app-v1" and deploy.ns() == "team", message: deploy.id());
@@ -1431,7 +1443,7 @@ test "a field the reader does not know raises naming it" {
 }
 
 test "the dev overlay builds the paranoid base into magus-dev" {
-    final objects = build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")) catch [<Resource>];
+    final objects = build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")).value!;
     std\assert(objects.len() == 9, message: "nine objects, got {objects.len()}");
     foreach (r in objects) {
         std\assert(r.kind() == "Namespace" or r.ns() == "magus-dev", message: "{r.id()} outside magus-dev");
@@ -1448,28 +1460,32 @@ test "the dev overlay builds the paranoid base into magus-dev" {
     std\assert(text(dig(claim.doc, path: ["spec", "resources", "requests", "storage"])) == "2Gi", message: "dev claim size");
 }
 
-fun edgeLabels(f: magusdiagram\Diagram) > [str] !> any { //nolint:no-throw // a test helper; a raise fails the test
-    final labels = mut [<str>];
-    final laid = f.layout();
-    if (laid.error != null) {
-        throw laid.error!.message;
+fun edgeLabels(f: magusdiagram\Diagram) > result\Result::<[str]> {
+    try {
+        final labels = mut [<str>];
+        final laid = f.layout();
+        if (laid.error != null) {
+            return result\fail::<[str]>(laid.error!.message);
+        }
+        foreach (e in laid.value!.edges) {
+            labels.append(e.label);
+        }
+        _ = labels.sort(fun (a: str, b: str) > bool => a < b);
+        return result\ok::<[str]>(labels);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "kustomize: edgeLabels");
     }
-    foreach (e in laid.value!.edges) {
-        labels.append(e.label);
-    }
-    _ = labels.sort(fun (a: str, b: str) > bool => a < b);
-    return labels;
 }
 
 test "the dev overlay draws one edge per relation" {
-    final f = diagram(build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")) catch [<Resource>], id: "t", title: "dev") catch magusdiagram\of("empty");
-    final labels = edgeLabels(f) catch [<str>];
+    final f = diagram(build(fs\join(vcs\root(), name: "deploy/kustomize/overlays/dev")).value!, id: "t", title: "dev").value!;
+    final labels = edgeLabels(f).value!;
     std\assert(labels.join("|") == "allow 443|allow 53|deny all|mounts|mounts|runs as|selects", message: "{labels}");
     std\assert(f.unscopedWhy != "", message: "the diagram says why it draws no directory");
 }
 
 test "a secret outside the build and a peer outside the namespace draw as actors" {
-    final f = diagram(build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"])) catch [<Resource>], id: "t", title: "app") catch magusdiagram\of("empty");
+    final f = diagram(build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"]).value!).value!, id: "t", title: "app").value!;
     final names = mut [<str>];
     foreach (b in f.boxes) {
         if (b.actor -> a) {
@@ -1482,6 +1498,6 @@ test "a secret outside the build and a peer outside the namespace draw as actors
     }
     std\assert(names.indexOf("secret/creds (optional)") != null, message: "{names}");
     std\assert(names.indexOf("team/web,back (external)") != null, message: "{names}");
-    final labels = edgeLabels(f) catch [<str>];
+    final labels = edgeLabels(f).value!;
     std\assert(labels.indexOf("allow 8080") != null and labels.indexOf("deny ingress") != null and labels.indexOf("reads env") != null, message: "{labels}");
 }

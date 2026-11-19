@@ -10,6 +10,7 @@ import { persisted, type Persisted } from "../../lib/persist";
 import { setDefaultHost } from "../../lib/settings";
 import type { Keymap } from "../../desktop/commands";
 import type { PageController } from "../../desktop/page";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 let host: HTMLElement;
@@ -238,8 +239,7 @@ function serveTokens(revoked: string[]): void {
       revoked.push(String(init?.body ?? ""));
       return json({});
     }
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
 }
 

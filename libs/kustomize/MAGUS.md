@@ -9,7 +9,7 @@ Query: `magus query project=libs/kustomize`
 | Target           | What it does                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                  |
-| `test`           | test runs the in-file test blocks, which build the dev overlay and lay out its figure.                                    |
+| `test`           | test runs the in-file test blocks, which build the dev overlay and lay out its diagram.                                   |
 | `ci`             | ci regenerates MAGUS.md, then runs lint and test.                                                                         |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                                                                          |
 | `lint`           | lint type-checks the library upstream-strict, then validates what each kustomization builds against the vendored schemas. |

@@ -10,6 +10,7 @@ namespace diskwatch;
 
 import "std";
 import "fs";
+import "result";
 import "time";
 import "encoding/json";
 
@@ -75,28 +76,36 @@ export object Report {
 }
 
 /// storePath is the store's path, creating its directory.
-export fun storePath() > str !> any { //nolint:no-throw // a std call; its callers catch the raise
-    return fs\join(fs\stateDir("disk"), name: "space.jsonl");
+export fun storePath() > result\Result::<str> {
+    try {
+        return result\ok::<str>(fs\join(fs\stateDir("disk"), name: "space.jsonl"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "diskwatch: open the store directory");
+    }
 }
 
 /// thresholds reads the disk section of `magus config view -o json`. A key the config does
 /// not carry is an error naming it, never a default: the binary that printed the config is
 /// the one that knows the defaults.
-export fun thresholds(config: str) > Thresholds !> any { //nolint:no-throw // a std call; its callers catch the raise
-    final disk = json\parse(config)["disk"];
-    if (disk == null) {
-        throw "diskwatch: the config has no disk section; the magus that printed it predates disk.*"; //nolint:no-throw // a std call; its callers catch the raise
+export fun thresholds(config: str) > result\Result::<Thresholds> {
+    try {
+        final disk = json\parse(config)["disk"];
+        if (disk == null) {
+            return result\fail::<Thresholds>("diskwatch: the config has no disk section; the magus that printed it predates disk.*");
+        }
+        final every = time\parseDuration("{disk["sample_every"]}") catch -1.0;
+        if (every < 0.0) {
+            return result\fail::<Thresholds>("diskwatch: disk.sample_every is not a duration: {disk["sample_every"]}");
+        }
+        return result\ok::<Thresholds>(Thresholds{
+            minFreeBytes = std\toInt(disk["min_free_mb"]) * MIB,
+            criticalFreeBytes = std\toInt(disk["critical_free_mb"]) * MIB,
+            growthBytesPerHour = std\toInt(disk["growth_mb_per_hour"]) * MIB,
+            everyMs = every,
+        });
+    } catch (err: any) {
+        return result\caught::<Thresholds>(err, doing: "diskwatch: read the disk thresholds");
     }
-    final every = time\parseDuration("{disk["sample_every"]}") catch -1.0;
-    if (every < 0.0) {
-        throw "diskwatch: disk.sample_every is not a duration: {disk["sample_every"]}"; //nolint:no-throw // a std call; its callers catch the raise
-    }
-    return Thresholds{
-        minFreeBytes = std\toInt(disk["min_free_mb"]) * MIB,
-        criticalFreeBytes = std\toInt(disk["critical_free_mb"]) * MIB,
-        growthBytesPerHour = std\toInt(disk["growth_mb_per_hour"]) * MIB,
-        everyMs = every,
-    };
 }
 
 /// due is the rate limit: a store last written at lastMs is sampled again only once everyMs
@@ -197,39 +206,68 @@ export fun pendingLine(samples: [DiskSample], now: double) > str? {
     return said;
 }
 
-export fun encode(s: DiskSample) > str !> any { //nolint:no-throw // a std call; its callers catch the raise
-    return json\stringify({"at": s.at, "path": s.path, "total_bytes": s.totalBytes, "free_bytes": s.freeBytes, "action": s.action, "detail": s.detail});
+export fun encode(s: DiskSample) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({"at": s.at, "path": s.path, "total_bytes": s.totalBytes, "free_bytes": s.freeBytes, "action": s.action, "detail": s.detail}));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "diskwatch: encode a sample");
+    }
 }
 
-export fun decode(text: str) > DiskSample !> any { //nolint:no-throw // a std call; its callers catch the raise
-    final doc = json\parse(text);
-    if (doc["total_bytes"] == null or doc["free_bytes"] == null) {
-        throw "diskwatch: a line carries no total_bytes or free_bytes, so it is no sample: {text}";
+export fun decode(text: str) > result\Result::<DiskSample> {
+    try {
+        final doc = json\parse(text);
+        if (doc["total_bytes"] == null or doc["free_bytes"] == null) {
+            return result\fail::<DiskSample>("diskwatch: a line carries no total_bytes or free_bytes, so it is no sample: {text}");
+        }
+        return result\ok::<DiskSample>(DiskSample{
+            at = std\toDouble(doc["at"]),
+            path = "{doc["path"]}",
+            totalBytes = std\toInt(doc["total_bytes"]),
+            freeBytes = std\toInt(doc["free_bytes"]),
+            action = "{doc["action"]}",
+            detail = "{doc["detail"] ?? ""}",
+        });
+    } catch (err: any) {
+        return result\caught::<DiskSample>(err, doing: "diskwatch: decode a line");
     }
-    return DiskSample{
-        at = std\toDouble(doc["at"]),
-        path = "{doc["path"]}",
-        totalBytes = std\toInt(doc["total_bytes"]),
-        freeBytes = std\toInt(doc["free_bytes"]),
-        action = "{doc["action"]}",
-        detail = "{doc["detail"] ?? ""}",
-    };
 }
 
 /// read decodes every line of the store at path; a missing store is empty.
-export fun read(path: str) > [DiskSample] !> any { //nolint:no-throw // a std call; its callers catch the raise
-    if (!fs\exists(path)) { return [<DiskSample>]; }
-    return fs\readLines(path).map(fun (index: int, text: str) > DiskSample !> any => decode(text)); //nolint:no-throw // the same std call
+export fun read(path: str) > result\Result::<[DiskSample]> {
+    try {
+        if (!fs\exists(path)) { return result\ok::<[DiskSample]>([<DiskSample>]); }
+        final samples = mut [<DiskSample>];
+        foreach (text in fs\readLines(path)) {
+            final decoded = decode(text);
+            if (decoded.error -> err) {
+                return result\Result::<[DiskSample]>{ error = err };
+            }
+            samples.append(decoded.value!);
+        }
+        return result\ok::<[DiskSample]>(samples);
+    } catch (err: any) {
+        return result\caught::<[DiskSample]>(err, doing: "diskwatch: read the store {path}");
+    }
 }
 
 /// append adds s to the store, then compacts it by rename once it holds twice keepLines.
-export fun append(path: str, s: DiskSample) > void !> any { //nolint:no-throw // a std call; its callers catch the raise
-    fs\appendFile(path, content: encode(s) + "\n");
-    final lines = fs\readLines(path);
-    if (lines.len() > keepLines * 2) {
-        final tmp = path + ".compact";
-        fs\writeLines(tmp, lines: lines.sub(lines.len() - keepLines));
-        fs\rename(tmp, dst: path);
+export fun append(path: str, s: DiskSample) > result\Result::<bool> {
+    try {
+        final line = encode(s);
+        if (line.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        fs\appendFile(path, content: line.value! + "\n");
+        final lines = fs\readLines(path);
+        if (lines.len() > keepLines * 2) {
+            final tmp = path + ".compact";
+            fs\writeLines(tmp, lines: lines.sub(lines.len() - keepLines));
+            fs\rename(tmp, dst: path);
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "diskwatch: append to the store {path}");
     }
 }
 
@@ -299,18 +337,13 @@ test "a running tick says it is running, a result is told once, and a dead tick 
 
 test "a sample round-trips through its line" {
     final s = DiskSample{ at = 12.0, path = "/w", totalBytes = 3, freeBytes = 2, action = "reclaimed", detail = "d" };
-    final back = decode(encode(s));
+    final back = decode(encode(s).value!).value!;
     assert\equal(back.detail, want: "d", message: "detail");
     assert\equal(back.freeBytes, want: 2, message: "freeBytes");
 }
 
 test "a line with no byte counts is refused" {
     final old = `\{"at":1,"path":"/w","totalBytes":2,"freeBytes":1,"action":"sample","detail":""\}`;
-    var refused = false;
-    try {
-        refused = decode(old).totalBytes < 0;
-    } catch (err: any) {
-        refused = true;
-    }
+    final refused = decode(old).error != null;
     assert\isTrue(refused, message: "a line without the keys does not read as a sample of nothing");
 }

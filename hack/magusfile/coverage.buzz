@@ -229,19 +229,27 @@ export fun goSourceFiles(dir: str) > result\Result::<[str]> {
 // goModules maps each directory holding a go.mod to its module path, keyed relative to
 // dir with "." for the root. Every module in the tree is included, not just the two the
 // root go.mod replaces: the figure is a statement about the whole codebase.
-export fun goModules(dir: str) > {str: str} !> any {
-    final found = mut {<str: str>};
-    foreach (name in sort\strings(fs\listDir(dir))) {
-        final path = if (dir == ".") name else dir + "/" + name;
-        if (fs\isDir(path)) {
-            if (isSourceDir(name)) {
-                foreach (d, m in goModules(path)) { found[d] = m; }
+export fun goModules(dir: str) > result\Result::<{str: str}> {
+    try {
+        final found = mut {<str: str>};
+        foreach (name in sort\strings(fs\listDir(dir))) {
+            final path = if (dir == ".") name else dir + "/" + name;
+            if (fs\isDir(path)) {
+                if (isSourceDir(name)) {
+                    final inner = goModules(path);
+                    if (inner.error -> err) {
+                        return result\Result::<{str: str}>{ error = err };
+                    }
+                    foreach (d, m in inner.value!) { found[d] = m; }
+                }
+                continue;
             }
-            continue;
+            if (name == "go.mod") { found[dir] = modulePath(fs\readFile(path)); }
         }
-        if (name == "go.mod") { found[dir] = modulePath(fs\readFile(path)); }
+        return result\ok::<{str: str}>(found);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "coverage: list the go.mod files under {dir}");
     }
-    return found;
 }
 
 // coverageImportPath names a file the way a coverage profile does: the import path of the
@@ -342,29 +350,36 @@ export fun blockTableForFile(path: str, scratch: str) > result\Result::<[str]> {
 // are excluded, matching what stripGenerated removes from the numerator.
 //
 // Roughly 1,000 `go tool cover` invocations, about 18s on an M-series laptop.
-export fun staticBlockTables() > {str: [str]} !> any {
-    final modules = goModules(".");
-    final scratch = fs\tempFile("magus-cover-");
-    final tables = mut {<str: [str]>};
-    final sources = goSourceFiles(".");
-    if (sources.error != null) {
-        throw sources.error!.message;
-    }
-    foreach (rel in sources.value!) {
-        final body = fs\readFile(rel);
-        if (isGeneratedSource(body) or isBuildIgnored(body)) { continue; }
-        final named = coverageImportPath(rel, modules: modules);
-        if (named.error != null) {
-            throw named.error!.message;
+export fun staticBlockTables() > result\Result::<{str: [str]}> {
+    try {
+        final modules = goModules(".");
+        if (modules.error -> err) {
+            return result\Result::<{str: [str]}>{ error = err };
         }
-        final table = blockTableForFile(rel, scratch: scratch);
-        if (table.error != null) {
-            throw table.error!.message;
+        final scratch = fs\tempFile("magus-cover-");
+        final tables = mut {<str: [str]>};
+        final sources = goSourceFiles(".");
+        if (sources.error -> err) {
+            return result\Result::<{str: [str]}>{ error = err };
         }
-        tables[named.value!] = table.value!;
+        foreach (rel in sources.value!) {
+            final body = fs\readFile(rel);
+            if (isGeneratedSource(body) or isBuildIgnored(body)) { continue; }
+            final named = coverageImportPath(rel, modules: modules.value!);
+            if (named.error -> err) {
+                return result\Result::<{str: [str]}>{ error = err };
+            }
+            final table = blockTableForFile(rel, scratch: scratch);
+            if (table.error -> err) {
+                return result\Result::<{str: [str]}>{ error = err };
+            }
+            tables[named.value!] = table.value!;
+        }
+        fs\remove(scratch);
+        return result\ok::<{str: [str]}>(tables);
+    } catch (err: any) {
+        return result\caught::<{str: [str]}>(err, doing: "coverage: enumerate the statement blocks");
     }
-    fs\remove(scratch);
-    return tables;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,19 +397,19 @@ export fun staticBlockTables() > {str: [str]} !> any {
 // Generated files are NOT filtered here. staticBlockTables never enumerates them, and
 // the merge only ever credits a block the denominator lists, so they fall out of both
 // halves without a second pass over the tree.
-export fun coveredBlocks(profile: str) > {str: bool} !> any {
+export fun coveredBlocks(profile: str) > result\Result::<{str: bool}> {
     final blocks = mut {<str: bool>};
     foreach (line in profile.split("\n")) {
         if (line == "" or line.startsWith("mode:")) { continue; }
         final fields = line.split(" ");
-        if (fields.len() < 3) { throw "coverage: malformed profile line \"" + line + "\""; }
+        if (fields.len() < 3) { return result\fail::<{str: bool}>("coverage: malformed profile line \"" + line + "\""); }
         if (fields[2] != "0") {
             blocks[fields[0]] = true;
         } else if (blocks[fields[0]] == null) {
             blocks[fields[0]] = false;
         }
     }
-    return blocks;
+    return result\ok::<{str: bool}>(blocks);
 }
 
 // treeTotals is the whole-tree figure {covered, statements}: every block the static
@@ -634,7 +649,7 @@ test "coveredBlocks ORs a block reported by several test binaries" {
         + "m/a.go:1.1,2.2 3 0\n"
         + "m/a.go:1.1,2.2 3 7\n"
         + "m/a.go:3.3,4.4 2 0\n";
-    final covered = coveredBlocks(profile);
+    final covered = coveredBlocks(profile).value!;
     assert\equal(covered["m/a.go:1.1,2.2"], want: true, message: "run by one binary counts");
     assert\equal(covered["m/a.go:3.3,4.4"], want: false, message: "compiled, never entered");
     assert\equal(covered["m/win.go:1.1,2.2"] == null, want: true, message: "never compiled here");

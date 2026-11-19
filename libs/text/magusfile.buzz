@@ -15,7 +15,10 @@ magus\project({
 
 // Regenerates MAGUS.md. Without the rw charm it only checks for drift.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    gomod\replaceWorkspaceModules(ctx, go, "libs/text");
+    final replaced = gomod\replaceWorkspaceModules(ctx, go, "libs/text");
+    if (replaced.error != null) {
+        throw replaced.error!.message;
+    }
     ctx.needs(index_generate);
 }
 

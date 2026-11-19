@@ -37,14 +37,18 @@ export fun expand(paths: [str]) > result\Result::<[str]> {
 }
 
 // hashes digests every file under paths, taking the "before" side of a gate.
-export fun hashes(paths: [str]) > {str: str} !> any {
-    var digests: mut {str: str} = mut {<str: str>};
-    final files = expand(paths);
-    if (files.error != null) {
-        throw files.error!.message;
+export fun hashes(paths: [str]) > result\Result::<{str: str}> {
+    try {
+        var digests: mut {str: str} = mut {<str: str>};
+        final files = expand(paths);
+        if (files.error -> err) {
+            return result\Result::<{str: str}>{ error = err };
+        }
+        foreach (p in files.value!) { digests[p] = crypto\sha256File(p); }
+        return result\ok::<{str: str}>(digests);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "drift: hash the files under the generated paths");
     }
-    foreach (p in files.value!) { digests[p] = crypto\sha256File(p); }
-    return digests;
 }
 
 // vcsHashes snapshots exactly the paths VCS named, rather than expanding a directory
@@ -53,14 +57,18 @@ export fun hashes(paths: [str]) > {str: str} !> any {
 // `node_modules/` into an unbounded, unrelated hash job. Directories are still
 // represented, so a generator creating or removing one is drift; only mutations under
 // a directory that was already opaque are outside this gate's ownership.
-export fun vcsHashes(paths: [str]) > {str: str} !> any {
-    var digests: mut {str: str} = mut {<str: str>};
-    foreach (p in paths) {
-        if (!fs\exists(p)) { continue; }
-        if (fs\isDir(p)) { digests[p] = "dir"; }
-        else { digests[p] = crypto\sha256File(p); }
+export fun vcsHashes(paths: [str]) > result\Result::<{str: str}> {
+    try {
+        var digests: mut {str: str} = mut {<str: str>};
+        foreach (p in paths) {
+            if (!fs\exists(p)) { continue; }
+            if (fs\isDir(p)) { digests[p] = "dir"; }
+            else { digests[p] = crypto\sha256File(p); }
+        }
+        return result\ok::<{str: str}>(digests);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "drift: hash the paths VCS named");
     }
-    return digests;
 }
 
 // vcsChangedSince compares the same opaque VCS entries vcsHashes took. It is for a
@@ -68,7 +76,11 @@ export fun vcsHashes(paths: [str]) > {str: str} !> any {
 // keep using changedSince, whose recursive scope is intentional and bounded.
 export fun vcsChangedSince(before: {str: str}, paths: [str]) > [str] !> any {
     var moved: mut [str] = mut [<str>];
-    final now = vcsHashes(paths);
+    final hashed = vcsHashes(paths);
+    if (hashed.error != null) {
+        throw hashed.error!.message;
+    }
+    final now = hashed.value!;
     foreach (p in now.keys()) {
         if (before[p] == null or before[p] != now[p]) { moved.append(p); }
     }
@@ -162,7 +174,7 @@ test "VCS snapshots keep an existing untracked directory opaque" {
     fs\mkdirAll(fs\dirname(dependency));
     fs\writeFile(dependency, content: "export type T = string;");
 
-    final before = vcsHashes([evals]);
+    final before = vcsHashes([evals]).value!;
     assert\equal(before[evals], want: "dir", message: "directory marker");
     assert\equal(vcsChangedSince(before, [evals]), want: [], message: "unchanged opaque directory");
 

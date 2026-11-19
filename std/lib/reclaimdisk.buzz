@@ -378,14 +378,8 @@ export fun headline(items: [Item], applied: bool, trimmed: str) > str {
     return "removed {count(items, kind: "worktree", result: "removed")} of {strings\pluralCount(t.removableWorktrees, one: "removable worktree", many: "removable worktrees")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {strings\pluralCount(t.branches, one: "agent branch", many: "agent branches")}{tail}";
 }
 
-/// timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline is 0, and
-/// a raise once the deadline has passed, so a chunk stops between steps.
-export fun timeLeft(deadline: double, now: double) > double !> any { //nolint:no-throw // a caller outside this file reads the raise
-    final left = budget(deadline, now: now);
-    if (left.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    return left.value!;
-}
-
+/// budget is the timeoutMs a call at now may take, 0 for no bound.
+/// It errors once the deadline has passed, so a chunk stops between steps.
 fun budget(deadline: double, now: double) > result\Result::<double> {
     if (deadline <= 0.0) { return result\ok::<double>(0.0); }
     if (now >= deadline) { return result\fail::<double>("reclaimdisk: past its deadline"); }
@@ -421,13 +415,17 @@ fun countLines(text: str) > int {
 }
 
 /// status reads one worktree's dirt; a directory that is gone reads dirty -1.
-export fun status(path: str, deadline: double) > Status !> any { //nolint:no-throw // a caller outside this file reads the raise
-    if (!fs\isDir(path)) { return Status{ dirty = -1, unpushed = 0 }; }
-    final porcelain = git(path, args: ["--no-optional-locks", "status", "--porcelain"], deadline: deadline);
-    if (porcelain.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    final ahead = git(path, args: ["rev-list", "--count", "HEAD", "--not", "--remotes"], deadline: deadline);
-    if (ahead.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    return Status{ dirty = countLines(porcelain.value!), unpushed = std\parseInt(ahead.value!.trim()) ?? 0 };
+export fun status(path: str, deadline: double) > result\Result::<Status> {
+    try {
+        if (!fs\isDir(path)) { return result\ok::<Status>(Status{ dirty = -1, unpushed = 0 }); }
+        final porcelain = git(path, args: ["--no-optional-locks", "status", "--porcelain"], deadline: deadline);
+        if (porcelain.error -> e) { return result\Result::<Status>{ error = e }; }
+        final ahead = git(path, args: ["rev-list", "--count", "HEAD", "--not", "--remotes"], deadline: deadline);
+        if (ahead.error -> e) { return result\Result::<Status>{ error = e }; }
+        return result\ok::<Status>(Status{ dirty = countLines(porcelain.value!), unpushed = std\parseInt(ahead.value!.trim()) ?? 0 });
+    } catch (err: any) {
+        return result\caught::<Status>(err, doing: "reclaimdisk: read a worktree's dirt");
+    }
 }
 
 /// readGitDir is a linked worktree's administrative directory, from the gitdir line of its
@@ -556,12 +554,9 @@ fun agentBranches(root: str, base: str, baseOk: bool, deadline: double) > result
 }
 
 fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) > result\Result::<Observed> {
-    var st = Status{ dirty = -1, unpushed = 0 };
-    try {
-        st = status(t.path, deadline: deadline);
-    } catch (err: any) {
-        return result\caught::<Observed>(err);
-    }
+    final read = status(t.path, deadline: deadline);
+    if (read.error -> e) { return result\Result::<Observed>{ error = e }; }
+    final st = read.value!;
     var unique = 0;
     if (st.dirty >= 0 and st.unpushed > 0) {
         unique = st.unpushed;
@@ -592,47 +587,51 @@ fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) >
 
 /// survey reads every worktree and agent branch of the repository at the working directory
 /// and returns the plan, unranked; measure runs du on each removable worktree.
-export fun survey(base: str, now: double, keepRecent: double, measure: bool, deadline: double) > Survey !> any { //nolint:no-throw // a caller outside this file reads the raise
-    final root = vcs\root();
-    final listed = git(root, args: ["worktree", "list", "--porcelain"], deadline: deadline);
-    if (listed.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    final trees = parseWorktrees(listed.value!);
-    final main = if (trees.len() > 0) trees[0].path else "";
-    final verified = gitOk(root, args: ["rev-parse", "--verify", "--quiet", base + "^0"], deadline: deadline);
-    if (verified.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    final baseOk = verified.value!;
-    final jobs = jobLeases();
-    if (jobs.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    final leases = liveLeases(jobs.value!);
-    final cwds = processCwds(deadline);
-    if (cwds.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    final pids = pidsByWorktree(cwds.value!, paths: trees.map(fun (i: int, t: Worktree) > str => t.path));
+export fun survey(base: str, now: double, keepRecent: double, measure: bool, deadline: double) > result\Result::<Survey> {
+    try {
+        final root = vcs\root();
+        final listed = git(root, args: ["worktree", "list", "--porcelain"], deadline: deadline);
+        if (listed.error -> e) { return result\Result::<Survey>{ error = e }; }
+        final trees = parseWorktrees(listed.value!);
+        final main = if (trees.len() > 0) trees[0].path else "";
+        final verified = gitOk(root, args: ["rev-parse", "--verify", "--quiet", base + "^0"], deadline: deadline);
+        if (verified.error -> e) { return result\Result::<Survey>{ error = e }; }
+        final baseOk = verified.value!;
+        final jobs = jobLeases();
+        if (jobs.error -> e) { return result\Result::<Survey>{ error = e }; }
+        final leases = liveLeases(jobs.value!);
+        final cwds = processCwds(deadline);
+        if (cwds.error -> e) { return result\Result::<Survey>{ error = e }; }
+        final pids = pidsByWorktree(cwds.value!, paths: trees.map(fun (i: int, t: Worktree) > str => t.path));
 
-    final items = mut [<Item>];
-    final held = mut {<str: str>};
-    final removable = mut [<str>];
-    foreach (t in trees) {
-        final seen = observe(t, main: main, base: base, baseOk: baseOk, deadline: deadline);
-        if (seen.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-        final it = classify(seen.value!, main: main, own: root, leases: leases, pids: pids, now: now, keepRecent: keepRecent, shown: displayPath(t.path, main: main));
-        if (t.branch != "" and t.branch != "(detached)") { held[t.branch] = t.path; }
-        if (it.class == "removable") {
-            removable.append(t.path);
-            if (measure) {
-                final size = duKiB(t.path, deadline: deadline);
-                if (size.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-                final found = caches(t.path, deadline: deadline);
-                if (found.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-                items.append(copyItem(it, kib: size.value!, caches: found.value!, result: ""));
-                continue;
+        final items = mut [<Item>];
+        final held = mut {<str: str>};
+        final removable = mut [<str>];
+        foreach (t in trees) {
+            final seen = observe(t, main: main, base: base, baseOk: baseOk, deadline: deadline);
+            if (seen.error -> e) { return result\Result::<Survey>{ error = e }; }
+            final it = classify(seen.value!, main: main, own: root, leases: leases, pids: pids, now: now, keepRecent: keepRecent, shown: displayPath(t.path, main: main));
+            if (t.branch != "" and t.branch != "(detached)") { held[t.branch] = t.path; }
+            if (it.class == "removable") {
+                removable.append(t.path);
+                if (measure) {
+                    final size = duKiB(t.path, deadline: deadline);
+                    if (size.error -> e) { return result\Result::<Survey>{ error = e }; }
+                    final found = caches(t.path, deadline: deadline);
+                    if (found.error -> e) { return result\Result::<Survey>{ error = e }; }
+                    items.append(copyItem(it, kib: size.value!, caches: found.value!, result: ""));
+                    continue;
+                }
             }
+            items.append(it);
         }
-        items.append(it);
+        final branches = agentBranches(root, base: base, baseOk: baseOk, deadline: deadline);
+        if (branches.error -> e) { return result\Result::<Survey>{ error = e }; }
+        foreach (b in branchItems(branches.value!["tips"]!, held: held, removable: removable, unique: branches.value!["unique"]!.keys())) { items.append(b); }
+        return result\ok::<Survey>(Survey{ root = root, base = base, items = items });
+    } catch (err: any) {
+        return result\caught::<Survey>(err, doing: "reclaimdisk: survey the worktrees");
     }
-    final branches = agentBranches(root, base: base, baseOk: baseOk, deadline: deadline);
-    if (branches.error -> e) { throw e.message; } //nolint:no-throw // a passed deadline stops a chunk by raising
-    foreach (b in branchItems(branches.value!["tips"]!, held: held, removable: removable, unique: branches.value!["unique"]!.keys())) { items.append(b); }
-    return Survey{ root = root, base = base, items = items };
 }
 
 fun copyItem(it: Item, kib: int, caches: [Cache], result: str) > Item {
@@ -797,7 +796,7 @@ export fun trimLine(t: CacheTrim, fence: double) > str? {
 
 /// trimDeclared trims every cache a spell gives a budget and returns each
 /// result. A cache that fails names itself, and the others still run.
-export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any { //nolint:no-throw // a passed deadline raises through it
+export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any {
     final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
     final done = mut [<CacheTrim>];
     foreach (c in plan.caches) {
@@ -809,8 +808,10 @@ export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any { 
 /// chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 /// worktrees untouched longest and the agent branches they and none hold.
 /// It returns the whole plan with each row's result, and raises past deadline.
-export fun chunk(deadline: double) > [Item] !> any { //nolint:no-throw // a passed deadline raises through it
-    final s = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
+export fun chunk(deadline: double) > [Item] !> any {
+    final surveyed = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
+    if (surveyed.error != null) { throw surveyed.error!.message; }
+    final s = surveyed.value!;
     final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
     final byName = mut {<str: Item>};
     foreach (it in done) { byName[it.name] = it; }
@@ -847,7 +848,7 @@ fun readConfig(cwd: str) > result\Result::<diskwatch\Thresholds> {
     if (bin.error -> e) { return result\Result::<diskwatch\Thresholds>{ error = e }; }
     try {
         final config = proc\exec(bin.value!, args: ["config", "view", "-o", "json"], dir: cwd, opts: proc\ExecOptions{ quiet = true, timeoutMs = 5000.0 });
-        return result\ok::<diskwatch\Thresholds>(diskwatch\thresholds(config.stdout));
+        return diskwatch\thresholds(config.stdout);
     } catch (err: any) {
         return result\caught::<diskwatch\Thresholds>(err);
     }
@@ -882,25 +883,32 @@ fun trimInto(did: mut [str], fence: double, now: double, deadline: double) > res
 
 fun runTick(cwd: str, deadline: double, force: bool) > result\Result::<TickReport> {
     try {
-        final store = diskwatch\storePath();
+        final located = diskwatch\storePath();
+        if (located.error -> e) { return result\Result::<TickReport>{ error = e }; }
+        final store = located.value!;
         final now = os\time();
         final config = readConfig(cwd);
         if (config.error -> e) { return result\Result::<TickReport>{ error = e }; }
         final t = config.value!;
         if (!force and !diskwatch\due(lastWrite(store), now: now, everyMs: t.everyMs)) { return result\ok::<TickReport>(TickReport{ ran = false }); }
-        final samples = diskwatch\read(store);
+        final stored = diskwatch\read(store);
+        if (stored.error -> e) { return result\Result::<TickReport>{ error = e }; }
+        final samples = stored.value!;
         final du = fs\diskUsage(cwd);
         final cur = diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes };
         final d = diskwatch\decide(diskwatch\lastOf(samples, path: du.path), cur: cur, t: t);
-        diskwatch\append(store, s: cur);
+        final wrote1 = diskwatch\append(store, s: cur);
+        if (wrote1.error -> e) { return result\Result::<TickReport>{ error = e }; }
         if (!d.reclaim and !d.critical and !force) { return result\ok::<TickReport>(TickReport{ ran = false }); }
         if (diskwatch\chunkRunning(samples, now: now)) { return result\ok::<TickReport>(TickReport{ ran = false }); }
         if (!d.reclaim and !force) {
             final critical = diskwatch\criticalLine(cur);
-            diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes, action = "reclaimed", detail = critical });
+            final wrote2 = diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes, action = "reclaimed", detail = critical });
+            if (wrote2.error -> e) { return result\Result::<TickReport>{ error = e }; }
             return result\ok::<TickReport>(TickReport{ ran = false, line = critical });
         }
-        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = if (d.why == "") "asked directly" else d.why });
+        final wrote3 = diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = if (d.why == "") "asked directly" else d.why });
+        if (wrote3.error -> e) { return result\Result::<TickReport>{ error = e }; }
 
         final did = mut [<str>];
         var freed = false;
@@ -927,9 +935,11 @@ fun runTick(cwd: str, deadline: double, force: bool) > result\Result::<TickRepor
         final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
         final waiting = if (kept == "") "" else waitingLine(plan.listCommand);
         final said = diskwatch\personLine(diskwatch\Report{ freeBytes = after.freeBytes, totalBytes = after.totalBytes, path = after.path, did = did, kept = kept, waiting = waiting });
-        diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, totalBytes = after.totalBytes, freeBytes = after.freeBytes, action = "reclaimed", detail = said });
+        final wrote4 = diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, totalBytes = after.totalBytes, freeBytes = after.freeBytes, action = "reclaimed", detail = said });
+        if (wrote4.error -> e) { return result\Result::<TickReport>{ error = e }; }
         if (!freed and !d.critical and !force) {
-            diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, action = "said", detail = "nothing freed" });
+            final wrote5 = diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, action = "said", detail = "nothing freed" });
+            if (wrote5.error -> e) { return result\Result::<TickReport>{ error = e }; }
             return result\ok::<TickReport>(TickReport{ ran = true });
         }
         magus\workspace().fileDiskAttention(said);
@@ -946,10 +956,9 @@ export fun tick(cwd: str, deadline: double, force: bool = false) > TickResult {
     final ticked = runTick(cwd, deadline: deadline, force: force);
     if (ticked.error -> e) {
         final failure = e.message;
-        try {
-            diskwatch\append(diskwatch\storePath(), s: diskwatch\DiskSample{ at = os\time(), path = cwd, action = "reclaimed", detail = "magus: a disk reclaim stopped: {failure}" });
-        } catch (ignored) {
-            return TickResult{ error = failure };
+        final located = diskwatch\storePath();
+        if (located.error == null) {
+            _ = diskwatch\append(located.value!, s: diskwatch\DiskSample{ at = os\time(), path = cwd, action = "reclaimed", detail = "magus: a disk reclaim stopped: {failure}" });
         }
         return TickResult{ error = failure };
     }
@@ -1012,14 +1021,14 @@ test "an agent branch is listed only when nothing on it would be lost" {
 }
 
 test "a deadline bounds each call by what is left, and stops the chunk once it passes" {
-    assert\equal(timeLeft(0.0, now: 5.0), want: 0.0, message: "no deadline, no bound");
-    assert\equal(timeLeft(100.0, now: 40.0), want: 60.0, message: "what is left");
-    assert\equal(timeLeft(100.0, now: 100.0) catch -1.0, want: -1.0, message: "past it");
+    assert\equal(budget(0.0, now: 5.0).value!, want: 0.0, message: "no deadline, no bound");
+    assert\equal(budget(100.0, now: 40.0).value!, want: 60.0, message: "what is left");
+    assert\isTrue(budget(100.0, now: 100.0).error != null, message: "past it");
 }
 
 test "a slow subprocess is cut off by the timeout its deadline leaves" {
     final start = os\time();
-    final res = proc\exec("sleep", args: ["30"], opts: proc\ExecOptions{ quiet = true, timeoutMs = timeLeft(start + 300.0, now: start) }) catch null;
+    final res = proc\exec("sleep", args: ["30"], opts: proc\ExecOptions{ quiet = true, timeoutMs = budget(start + 300.0, now: start).value! }) catch null;
     assert\equal(res, want: null, message: "the call raised");
     assert\isTrue(os\time() - start < 10000.0, message: "it did not wait the 30s out");
 }

@@ -25,6 +25,7 @@ import {
   setDefaultHost,
   subscribeDefaultHost,
 } from "../lib/settings";
+import { held, rejected } from "../lib/rejected";
 
 const HOST = "127.0.0.1:7391";
 const OTHER_HOST = "127.0.0.1:7392";
@@ -202,8 +203,7 @@ describe("Activity", () => {
   // Activity once read only the host the dashboard remembered, so an address set in Settings left
   // it saying "No server connected" until the dashboard had been opened.
   test("reads the Settings address, and follows it when it changes", async () => {
-    // platform double: fetch
-    globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
+    globalThis.fetch = (() => rejected(new TypeError("refused"))) as typeof fetch;
     setDefaultHost(HOST);
     const host = mount();
     await settle();
@@ -217,13 +217,11 @@ describe("Activity", () => {
 
   // The slow address answering last must not repaint the page for an address nobody is on any more.
   test("an answer from the previous address is dropped", async () => {
-    let failFirst: (e: unknown) => void = () => {};
+    const first = held();
     globalThis.fetch = ((input: RequestInfo | URL) => {
       const url = String(input instanceof Request ? input.url : input);
-      // platform double: fetch
-      if (url.includes(HOST)) return new Promise((_, reject) => (failFirst = reject));
-      // platform double: fetch
-      return Promise.reject(new TypeError("refused"));
+      if (url.includes(HOST)) return first.promise;
+      return rejected(new TypeError("refused"));
     }) as typeof fetch;
     setDefaultHost(HOST);
     const host = mount();
@@ -234,7 +232,7 @@ describe("Activity", () => {
     await settle();
     assert.ok((host.textContent ?? "").includes(OTHER_HOST));
 
-    failFirst(new TypeError("refused"));
+    first.reject(new TypeError("refused"));
     await settle();
     assert.ok(
       (host.textContent ?? "").includes(OTHER_HOST),

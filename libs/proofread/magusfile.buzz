@@ -30,7 +30,10 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-d
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    gomod\replaceWorkspaceModules(ctx, go, "libs/proofread");
+    final replaced = gomod\replaceWorkspaceModules(ctx, go, "libs/proofread");
+    if (replaced.error != null) {
+        throw replaced.error!.message;
+    }
     ctx.needs(index_generate);
 }
 

@@ -291,56 +291,54 @@ fun reportedDryRun(at: Layout, dir: str) > result\Result::<bool> {
 // when dir names no git hook or a hook exists that install did not write.
 // It also removes shims it wrote for a script under dir that no longer has a <hook>.buzz,
 // and the log lists each removal.
-export fun install(ctx: magus\Context, dir: str) > void !> any { //nolint:no-throw // a target calls it and install raises its refusals
+export fun install(ctx: magus\Context, dir: str) > result\Result::<bool> {
     final located = layout();
     if (located.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
+        return result\Result::<bool>{ error = e };
     }
     final at = located.value!;
     final dry = reportedDryRun(at, dir: dir);
     if (dry.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
+        return result\Result::<bool>{ error = e };
     }
-    if (dry.value!) { return; }
+    if (dry.value!) { return result\ok::<bool>(true); }
     final steps = installSteps(at, dir: dir);
     if (steps.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
+        return result\Result::<bool>{ error = e };
     }
-    final applied = apply(ctx, steps: steps.value!);
-    if (applied.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
-    }
+    return apply(ctx, steps: steps.value!);
 }
 
 // remove deletes every shim install wrote for a script under dir, and every
 // shim whose script the checkout no longer holds, and nothing else.
-export fun remove(ctx: magus\Context, dir: str) > void !> any { //nolint:no-throw // a target calls it and remove raises its refusals
-    final located = layout();
-    if (located.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
-    }
-    final at = located.value!;
-    final dry = reportedDryRun(at, dir: dir);
-    if (dry.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
-    }
-    if (dry.value!) { return; }
-    final steps = removeSteps(at, dir: dir);
-    if (steps.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
-    }
-    final orphans = orphanSteps(at, top: vcs\root());
-    if (orphans.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
-    }
-    final removals = steps.value!.cloneMutable();
-    final listed = removals.map(fun (index: int, step: Step) > str => step.path);
-    foreach (orphan in orphans.value!) {
-        if (listed.indexOf(orphan.path) == null) { removals.append(orphan); }
-    }
-    final applied = apply(ctx, steps: removals);
-    if (applied.error -> e) {
-        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
+export fun remove(ctx: magus\Context, dir: str) > result\Result::<bool> {
+    try {
+        final located = layout();
+        if (located.error -> e) {
+            return result\Result::<bool>{ error = e };
+        }
+        final at = located.value!;
+        final dry = reportedDryRun(at, dir: dir);
+        if (dry.error -> e) {
+            return result\Result::<bool>{ error = e };
+        }
+        if (dry.value!) { return result\ok::<bool>(true); }
+        final steps = removeSteps(at, dir: dir);
+        if (steps.error -> e) {
+            return result\Result::<bool>{ error = e };
+        }
+        final orphans = orphanSteps(at, top: vcs\root());
+        if (orphans.error -> e) {
+            return result\Result::<bool>{ error = e };
+        }
+        final removals = steps.value!.cloneMutable();
+        final listed = removals.map(fun (index: int, step: Step) > str => step.path);
+        foreach (orphan in orphans.value!) {
+            if (listed.indexOf(orphan.path) == null) { removals.append(orphan); }
+        }
+        return apply(ctx, steps: removals);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "githooks: remove the shims");
     }
 }
 

@@ -27,6 +27,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import { setDefaultHost } from "../../../lib/settings";
 import { dispatchCommand, listCommands } from "../../../desktop/commands";
 import { activate, type JobsInstance } from "./main";
+import { rejected } from "../../../lib/rejected";
 
 const HOST = "127.0.0.1:7391";
 const JSON_HEADERS = new Headers({ "content-type": "application/json" });
@@ -124,8 +125,7 @@ function serve(routes: {
       // tests need the read to SUCCEED, not to carry rows.
       return ok({ outputs: [] });
     }
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
 }
 
@@ -1284,8 +1284,7 @@ test("a listing that answers after the switch to Targets cannot paint it", async
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("JobService/ListJobs")) return held as Promise<Response>;
     if (url.includes("/api/v1/plan")) return Promise.resolve(okPlan(RUN_BODY)() as Response);
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
 
   const { host, teardown } = mount();

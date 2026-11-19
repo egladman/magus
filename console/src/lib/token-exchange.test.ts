@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { redeemLinkCode } from "./token-exchange";
 import { getLiveToken } from "./server";
+import { rejected } from "./rejected";
 
 // withStorage stubs the two Web Storage objects the exchange reads and writes, seeded with
 // an existing bearer. Async because the exchange is, unlike the sync harness in
@@ -94,8 +95,7 @@ test("a used or expired code, or a server that is down, stores nothing", async (
     () => new Response('{"error":{"code":401}}', { status: 401 }),
     () => new Response("not json", { status: 200 }),
     () => new Response('{"token":""}', { status: 200 }),
-    // platform double: fetch
-    () => Promise.reject(new TypeError("connection refused")),
+    () => rejected(new TypeError("connection refused")),
   ]) {
     await withStorage({}, async () => {
       await withFetch(respond, async () => {

@@ -428,7 +428,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // index these shards never build.
     final GENERATED = ["MAGUS.md", "glossary.md", "src/gen/magus/types.ts"] + CONTENT;
     // Hashed before and after: a dirty tree or a git worktree must not disarm the gate.
-    final before = drift\hashes(GENERATED);
+    final hashed = drift\hashes(GENERATED);
+    if (hashed.error != null) {
+        throw hashed.error!.message;
+    }
+    final before = hashed.value!;
     // The indexes rewrite pages the content families read, so they finish first.
     ctx.needs(glossary_index_generate, design_index_generate);
     ctx.needs(content_generate, index_generate, types_generate);
@@ -563,7 +567,11 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         kustomizeproject\file("*.buzz"), workspace\file("deploy/kustomize/**/*.yaml")]);
     ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
-    final before = drift\hashes(GENERATED);
+    final hashed = drift\hashes(GENERATED);
+    if (hashed.error != null) {
+        throw hashed.error!.message;
+    }
+    final before = hashed.value!;
     final r2 = renderer\site_diagrams("assets/gen");
     if (r2.error -> failed) { throw failed.message; }
     final findings = r2.value!;

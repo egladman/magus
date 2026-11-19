@@ -57,7 +57,15 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     final scratch = fs\tempDir("kubeconform-");
     foreach (i, dir in KUSTOMIZATIONS) {
         final manifest = fs\join(scratch, name: "build-{i}.yaml");
-        fs\writeFile(manifest, content: kustomize\manifests(kustomize\build(dir)));
+        final built = kustomize\build(dir);
+        if (built.error != null) {
+            throw built.error!.message;
+        }
+        final stream = kustomize\manifests(built.value!);
+        if (stream.error != null) {
+            throw stream.error!.message;
+        }
+        fs\writeFile(manifest, content: stream.value!);
         _ = proc\exec("kubeconform", args: ["-strict", "-summary", "-schema-location", SCHEMAS, manifest]);
     }
     fs\removeAll(scratch);

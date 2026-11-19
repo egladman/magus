@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { test, beforeEach, afterEach } from "node:test";
 import { rememberHost, setDefaultHost } from "../../lib/settings";
 import { activate, deactivate } from "./main";
+import { rejected } from "../../lib/rejected";
 
 const HOST = "127.0.0.1:7391";
 const scaffold = readFileSync("src/apps/dashboard/scaffold.html", "utf8");
@@ -59,8 +60,7 @@ function serve(up: boolean): void {
     if (up && url.endsWith("/api/v1/events")) {
       return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200 }));
     }
-    // platform double: fetch
-    return Promise.reject(new TypeError("Failed to fetch"));
+    return rejected(new TypeError("Failed to fetch"));
   }) as typeof fetch;
 }
 
@@ -156,8 +156,7 @@ test("a signed-in dashboard on the server's own origin connects to that origin",
     asked.push(url);
     if (url.endsWith("/api/v1/events"))
       return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200 }));
-    // platform double: fetch
-    return Promise.reject(new TypeError("Failed to fetch"));
+    return rejected(new TypeError("Failed to fetch"));
   }) as typeof fetch;
   try {
     mount();

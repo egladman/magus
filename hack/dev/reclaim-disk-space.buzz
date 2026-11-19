@@ -107,7 +107,11 @@ export fun main(args: [str]) > void !> any {
         throw "reclaim-disk-space: --keep-within takes a duration of whole hours such as 24h, at least 1h\n{USAGE}";
     }
 
-    final s = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
+    final surveyed = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
+    if (surveyed.error != null) {
+        throw surveyed.error!.message;
+    }
+    final s = surveyed.value!;
     final planned = reclaim\rank(s.items);
     final t = reclaim\totals(planned);
     var go = applied;

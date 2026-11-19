@@ -668,7 +668,11 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
             if (jobs.error -> err) {
                 return result\Result::<[regressions\Regression]>{ error = err };
             }
-            runs[i] = regressions\CiRun{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs.value!, keyOf: regressions\checkKey) };
+            final keyed = regressions\parseJobs(jobs.value!, keyOf: regressions\checkKey);
+            if (keyed.error -> err) {
+                return result\Result::<[regressions\Regression]>{ error = err };
+            }
+            runs[i] = regressions\CiRun{ id = runs[i].id, sha = runs[i].sha, keys = keyed.value! };
             if (i == 0) {
                 red = regressions\redKeys(runs[0]);
             }

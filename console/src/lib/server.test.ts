@@ -17,6 +17,7 @@ import {
   setLiveToken,
   signInCommand,
 } from "./server";
+import { rejected } from "./rejected";
 
 // The loopback lock and the #port/LAN-share grammar. validateLoopbackHost is the pure
 // loopback check for a configured/entered host; normalizeServerHost adds bare-port expansion;
@@ -271,7 +272,6 @@ test("readRefusal shows a body that is not an envelope as text", async () => {
 
 test("readRefusal answers null for an empty body and an error for an unreadable one", async () => {
   assert.deepEqual(await readRefusal(new Response("  ")), { value: null });
-  // platform double: Response.text
-  const unreadable = { text: () => Promise.reject(new Error("aborted")) } as unknown as Response;
+  const unreadable = { text: () => rejected(new Error("aborted")) } as unknown as Response;
   assert.ok((await readRefusal(unreadable)).error);
 });

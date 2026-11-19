@@ -9,6 +9,7 @@ import { dispatchCommand } from "../../desktop/commands";
 import { activate } from "./main";
 import { guardOutline, guardReply, OUTLINE_PASTE_REFUSAL } from "./outline";
 import { copyThreadText } from "./thread-copy";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 
@@ -17,8 +18,7 @@ beforeEach(() => {
   sessionStorage.clear();
   document.body.replaceChildren();
   globalThis.fetch = (() =>
-    // platform double: fetch
-    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
+    rejected(new Error("demo mode must not reach the network"))) as typeof fetch;
 });
 
 afterEach(() => {
@@ -188,8 +188,7 @@ test("Copy thread toasts the server's refusal and copies nothing", async () => {
 });
 
 test("Copy thread toasts an unreachable server and a clipboard that refuses", async () => {
-  // platform double: fetch
-  globalThis.fetch = (() => Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch;
+  globalThis.fetch = (() => rejected(new TypeError("Failed to fetch"))) as typeof fetch;
   const unreachable = await toastsDuring(async () => {
     assert.ok(
       (await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {}))
@@ -202,8 +201,7 @@ test("Copy thread toasts an unreachable server and a clipboard that refuses", as
     new Response(JSON.stringify({ id: "t1", text: "b" }))) as typeof fetch;
   const refused = await toastsDuring(async () => {
     const copied = await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, () =>
-      // platform double: navigator.clipboard.writeText
-      Promise.reject(new Error("denied")),
+      rejected(new Error("denied")),
     );
     assert.ok(copied.error);
   });

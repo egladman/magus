@@ -365,19 +365,23 @@ fun pnpmKey(key: str) > str {
     return k;
 }
 
-fun pnpmInventory(lockfile: str) > {str: bool} !> any {
-    var inventory = mut {<str: bool>};
-    if (lockfile == "") {
-        return inventory;
+fun pnpmInventory(lockfile: str) > result\Result::<{str: bool}> {
+    try {
+        var inventory = mut {<str: bool>};
+        if (lockfile == "") {
+            return result\ok::<{str: bool}>(inventory);
+        }
+        final doc = yaml\parse(lockfile);
+        if (doc["packages"] == null) {
+            return result\ok::<{str: bool}>(inventory);
+        }
+        foreach (key, _ in doc["packages"]) {
+            inventory[pnpmKey(key)] = true;
+        }
+        return result\ok::<{str: bool}>(inventory);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err, doing: "advisories: read the pnpm lockfile");
     }
-    final doc = yaml\parse(lockfile);
-    if (doc["packages"] == null) {
-        return inventory;
-    }
-    foreach (key, _ in doc["packages"]) {
-        inventory[pnpmKey(key)] = true;
-    }
-    return inventory;
 }
 
 test "a pnpm lockfile inventory keys on name@version" {
@@ -389,11 +393,11 @@ packages:
     resolution: {integrity: sha512-y}
   /react-dom@18.2.0(react@18.2.0):
     resolution: {integrity: sha512-z}
-`);
+`).value!;
     assert\isTrue(inventory["@babel/core@7.24.0"] ?? false, message: "scoped name");
     assert\isTrue(inventory["nanoid@3.3.16"] ?? false, message: "plain name");
     assert\isTrue(inventory["react-dom@18.2.0"] ?? false, message: "v6 slash and peer suffix dropped");
-    assert\equal(pnpmInventory("").len(), want: 0, message: "absent at the base");
+    assert\equal(pnpmInventory("").value!.len(), want: 0, message: "absent at the base");
 }
 
 // audit scans the current project and fails ONLY on findings that are actionable today
@@ -465,7 +469,11 @@ export fun audit(inheritedFatal: bool = false) > void !> any {
         final lock = deviations\readBase("pnpm-lock.yaml");
         var inventory: {str: bool}? = null;
         if (lock.text != null) {
-            inventory = pnpmInventory(lock.text!);
+            final read = pnpmInventory(lock.text!);
+            if (read.error != null) {
+                throw read.error!.message;
+            }
+            inventory = read.value!;
         }
         base = Base{ inventory = inventory, changed = lock.changed and !inheritedFatal, missing = lock.missing };
     }
@@ -505,31 +513,35 @@ fun goKey(module: str, version: str) > str {
 
 // goInventory reads `go mod edit -json` output. A replacement's version is what the build
 // uses, so it is keyed under the replaced path too.
-fun goInventory(modJSON: str) > {str: bool} !> any {
-    var inventory = mut {<str: bool>};
-    if (modJSON == "") {
-        return inventory;
-    }
-    final mod = json\parse(modJSON);
-    if (mod["Require"] != null) {
-        foreach (req in mod["Require"]) {
-            inventory[goKey(req["Path"], version: req["Version"] ?? "")] = true;
+fun goInventory(modJSON: str) > result\Result::<{str: bool}> {
+    try {
+        var inventory = mut {<str: bool>};
+        if (modJSON == "") {
+            return result\ok::<{str: bool}>(inventory);
         }
-    }
-    if (mod["Replace"] != null) {
-        foreach (rep in mod["Replace"]) {
-            final version = rep["New"]["Version"] ?? "";
-            if (version != "") {
-                inventory[goKey(rep["Old"]["Path"], version: version)] = true;
+        final mod = json\parse(modJSON);
+        if (mod["Require"] != null) {
+            foreach (req in mod["Require"]) {
+                inventory[goKey(req["Path"], version: req["Version"] ?? "")] = true;
             }
         }
+        if (mod["Replace"] != null) {
+            foreach (rep in mod["Replace"]) {
+                final version = rep["New"]["Version"] ?? "";
+                if (version != "") {
+                    inventory[goKey(rep["Old"]["Path"], version: version)] = true;
+                }
+            }
+        }
+        final line = mod["Toolchain"] ?? mod["Go"] ?? "";
+        if (line != "") {
+            inventory[goKey("stdlib", version: line)] = true;
+            inventory[goKey("toolchain", version: line)] = true;
+        }
+        return result\ok::<{str: bool}>(inventory);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err, doing: "advisories: read go.mod");
     }
-    final line = mod["Toolchain"] ?? mod["Go"] ?? "";
-    if (line != "") {
-        inventory[goKey("stdlib", version: line)] = true;
-        inventory[goKey("toolchain", version: line)] = true;
-    }
-    return inventory;
 }
 
 // goFindings reads govulncheck's `-format json` stream into one Finding per OSV id. The
@@ -666,7 +678,7 @@ test "a go.mod inventory carries requires, replacements and the go line" {
     {"Old": {"Path": "example.com/a"}, "New": {"Path": "example.com/fork", "Version": "v1.2.0"}},
     {"Old": {"Path": "example.com/b"}, "New": {"Path": "../b"}}
   ]
-}`);
+}`).value!;
     assert\isTrue(inventory["golang.org/x/net@v0.30.0"] ?? false, message: "indirect requires count");
     assert\isTrue(inventory["example.com/a@v1.2.0"] ?? false, message: "keyed under the replaced path");
     assert\isTrue(inventory["stdlib@1.26"] ?? false, message: "the go line");
@@ -700,7 +712,11 @@ export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
                 parsed = go["go-mod-json"](run, {"args": [path]}).stdout;
                 fs\remove(path);
             }
-            inventory = goInventory(parsed);
+            final read = goInventory(parsed);
+            if (read.error != null) {
+                throw read.error!.message;
+            }
+            inventory = read.value!;
         }
         base = Base{ inventory = inventory, changed = mod.changed and !inheritedFatal, missing = mod.missing };
     }

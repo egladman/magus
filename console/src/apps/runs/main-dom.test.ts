@@ -21,6 +21,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import { setDefaultHost } from "../../lib/settings";
 import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
+import { rejected } from "../../lib/rejected";
 
 const HOST = "127.0.0.1:7391";
 const realFetch = globalThis.fetch;
@@ -87,16 +88,14 @@ function serve(outputs: unknown[], runs: unknown[]): void {
     if (url.endsWith("/livez")) {
       return Promise.resolve({ ok: true, status: 200 } as unknown as Response);
     }
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
 }
 
 // serveNothing is a configured server address with nothing listening behind it.
 function serveNothing(): void {
   setDefaultHost(HOST);
-  // platform double: fetch
-  globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
+  globalThis.fetch = (() => rejected(new Error("stub: refused"))) as typeof fetch;
 }
 
 const NOW = Date.now();

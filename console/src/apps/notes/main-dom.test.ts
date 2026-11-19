@@ -9,6 +9,7 @@ import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
 import { NOTIFY_EVENT } from "../../lib/notifications";
 import { setDefaultHost } from "../../lib/settings";
+import { rejected } from "../../lib/rejected";
 
 let mounted: AppInstance | null = null;
 let host: HTMLElement;
@@ -235,8 +236,7 @@ test("a body shows a skeleton while it loads; a failure is a danger alert whose 
       if (getNote === 1) return json({ code: "unavailable", message: "store busy" }, 503);
       return json({ name: "a", title: "A note", body: "Hello there." });
     }
-    // platform double: fetch
-    return Promise.reject(new Error("stub: no network"));
+    return rejected(new Error("stub: no network"));
   }) as typeof fetch;
   try {
     await mount();
@@ -272,8 +272,7 @@ test("a copy that the browser refuses is reported, not silent", async () => {
   document.addEventListener(NOTIFY_EVENT, onNotify);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
-    // platform double: navigator.clipboard.writeText
-    value: { writeText: () => Promise.reject(new Error("denied")) },
+    value: { writeText: () => rejected(new Error("denied")) },
   });
   rows()[0]?.click();
   detail().querySelector<HTMLButtonElement>("button[aria-label='Copy path']")?.click();

@@ -30,6 +30,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { MagusGuard } from "./opencode-plugin.installed.ts";
+import { rejected } from "../../../../console/src/lib/rejected";
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
@@ -51,9 +52,8 @@ function stubBun(
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
     const call = { bin: spawned[0], argv: spawned.slice(1), stdin };
     calls.push(call);
-    // platform double: Bun.spawn
-    if (reply === null) throw new Error("spawn failed: no such file or directory");
-    const verdict = reply(call);
+    const failed = reply === null;
+    const verdict = reply === null ? null : reply(call);
     const body = verdict === null ? "" : JSON.stringify(verdict);
     return {
       stdout: new ReadableStream<Uint8Array>({
@@ -68,7 +68,7 @@ function stubBun(
           controller.close();
         },
       }),
-      exited: Promise.resolve(0),
+      exited: failed ? rejected(new Error("spawn failed: no such file or directory")) : Promise.resolve(0),
     };
   };
   (globalThis as unknown as { Bun: unknown }).Bun = {

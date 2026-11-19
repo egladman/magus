@@ -30,7 +30,10 @@ magus\project({
 // Regenerates MAGUS.md and draws the mark. Without the rw charm it only checks
 // MAGUS.md for drift.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    gomod\replaceWorkspaceModules(ctx, go, "libs/safetyscissors");
+    final replaced = gomod\replaceWorkspaceModules(ctx, go, "libs/safetyscissors");
+    if (replaced.error != null) {
+        throw replaced.error!.message;
+    }
     ctx.needs(index_generate, mark_generate);
 }
 

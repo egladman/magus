@@ -14,6 +14,7 @@ import { NOTIFY_EVENT } from "../../lib/notifications";
 import { activate } from "./main";
 import { demoReview, demoSession } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 
@@ -22,8 +23,7 @@ beforeEach(() => {
   sessionStorage.clear();
   document.body.replaceChildren();
   globalThis.fetch = (() =>
-    // platform double: fetch
-    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
+    rejected(new Error("demo mode must not reach the network"))) as typeof fetch;
 });
 
 afterEach(() => {

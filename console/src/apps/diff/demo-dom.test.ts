@@ -12,6 +12,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import { activate } from "./main";
 import { dispatchCommand } from "../../desktop/commands";
 import { DEMO_RUN_MS } from "./demo";
+import { rejected } from "../../lib/rejected";
 
 const realFetch = globalThis.fetch;
 
@@ -20,8 +21,7 @@ beforeEach(() => {
   sessionStorage.clear();
   document.body.replaceChildren();
   globalThis.fetch = (() =>
-    // platform double: fetch
-    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
+    rejected(new Error("demo mode must not reach the network"))) as typeof fetch;
 });
 
 afterEach(() => {

@@ -26,8 +26,8 @@ fun tail(message: str) > str {
 
 /// Fails the current test unconditionally.
 /// @param message Why the test failed
-export fun fail(message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
-    throw "assert\\fail: {message}"; //nolint:no-throw // the assertion API raises to fail a test
+export fun fail(message: str) > void !> str {
+    throw "assert\\fail: {message}";
 }
 
 /// Skips the current test: stops the block and marks it skipped (not failed), the
@@ -45,9 +45,9 @@ export fun skip(message: str) > void {
 /// @param got The value under test
 /// @param want The expected value
 /// @param message The assertion message
-export fun equal(got: any, want: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun equal(got: any, want: any, message: str) > void !> str {
     if (!assertcore\deepEqual(got, want)) {
-        throw "assert\\equal failed{tail(message)}: got `{got}` want `{want}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\equal failed{tail(message)}: got `{got}` want `{want}`";
     }
 }
 
@@ -55,45 +55,45 @@ export fun equal(got: any, want: any, message: str) > void !> str { //nolint:no-
 /// @param got The value under test
 /// @param want The value it should differ from
 /// @param message The assertion message
-export fun notEqual(got: any, want: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun notEqual(got: any, want: any, message: str) > void !> str {
     if (assertcore\deepEqual(got, want)) {
-        throw "assert\\notEqual failed{tail(message)}: both values are `{got}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\notEqual failed{tail(message)}: both values are `{got}`";
     }
 }
 
 /// Asserts that `got` is true.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isTrue(got: bool, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun isTrue(got: bool, message: str) > void !> str {
     if (!got) {
-        throw "assert\\isTrue failed{tail(message)}"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\isTrue failed{tail(message)}";
     }
 }
 
 /// Asserts that `got` is false.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isFalse(got: bool, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun isFalse(got: bool, message: str) > void !> str {
     if (got) {
-        throw "assert\\isFalse failed{tail(message)}"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\isFalse failed{tail(message)}";
     }
 }
 
 /// Asserts that `got` is null.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isNull(got: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun isNull(got: any, message: str) > void !> str {
     if (got != null) {
-        throw "assert\\isNull failed{tail(message)}: got `{got}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\isNull failed{tail(message)}: got `{got}`";
     }
 }
 
 /// Asserts that `got` is not null.
 /// @param got The value under test
 /// @param message The assertion message
-export fun notNull(got: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun notNull(got: any, message: str) > void !> str {
     if (got == null) {
-        throw "assert\\notNull failed{tail(message)}"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\notNull failed{tail(message)}";
     }
 }
 
@@ -102,9 +102,9 @@ export fun notNull(got: any, message: str) > void !> str { //nolint:no-throw // 
 /// @param container The str, list, or map to search
 /// @param item The substring, element, or key to find
 /// @param message The assertion message
-export fun contains(container: any, item: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun contains(container: any, item: any, message: str) > void !> str {
     if (!assertcore\contains(container, item)) {
-        throw "assert\\contains failed{tail(message)}: `{container}` does not contain `{item}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\contains failed{tail(message)}: `{container}` does not contain `{item}`";
     }
 }
 
@@ -113,26 +113,26 @@ export fun contains(container: any, item: any, message: str) > void !> str { //n
 /// @param container The str, list, or map to measure
 /// @param want The expected length
 /// @param message The assertion message
-export fun len(container: any, want: int, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun len(container: any, want: int, message: str) > void !> str {
     final got = assertcore\length(container);
     if (got == null) {
-        throw "assert\\len failed{tail(message)}: `{container}` has no length"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\len failed{tail(message)}: `{container}` has no length";
     }
     if (got != want) {
-        throw "assert\\len failed{tail(message)}: got length {got} want {want}"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\len failed{tail(message)}: got length {got} want {want}";
     }
 }
 
 /// Asserts that `container` is empty (zero-length str, list, or map).
 /// @param container The str, list, or map to measure
 /// @param message The assertion message
-export fun isEmpty(container: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun isEmpty(container: any, message: str) > void !> str {
     final got = assertcore\length(container);
     if (got == null) {
-        throw "assert\\isEmpty failed{tail(message)}: `{container}` has no length"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\isEmpty failed{tail(message)}: `{container}` has no length";
     }
     if (got != 0) {
-        throw "assert\\isEmpty failed{tail(message)}: length is {got}"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\isEmpty failed{tail(message)}: length is {got}";
     }
 }
 
@@ -140,13 +140,13 @@ export fun isEmpty(container: any, message: str) > void !> str { //nolint:no-thr
 /// @param a The value expected to be larger
 /// @param b The value expected to be smaller
 /// @param message The assertion message
-export fun greater(a: any, b: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun greater(a: any, b: any, message: str) > void !> str {
     final order = assertcore\compare(a, b);
     if (order == null) {
-        throw "assert\\greater failed{tail(message)}: `{a}` and `{b}` are not comparable"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\greater failed{tail(message)}: `{a}` and `{b}` are not comparable";
     }
     if (order != 1) {
-        throw "assert\\greater failed{tail(message)}: `{a}` is not greater than `{b}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\greater failed{tail(message)}: `{a}` is not greater than `{b}`";
     }
 }
 
@@ -154,13 +154,13 @@ export fun greater(a: any, b: any, message: str) > void !> str { //nolint:no-thr
 /// @param a The value expected to be smaller
 /// @param b The value expected to be larger
 /// @param message The assertion message
-export fun less(a: any, b: any, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun less(a: any, b: any, message: str) > void !> str {
     final order = assertcore\compare(a, b);
     if (order == null) {
-        throw "assert\\less failed{tail(message)}: `{a}` and `{b}` are not comparable"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\less failed{tail(message)}: `{a}` and `{b}` are not comparable";
     }
     if (order != -1) {
-        throw "assert\\less failed{tail(message)}: `{a}` is not less than `{b}`"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\less failed{tail(message)}: `{a}` is not less than `{b}`";
     }
 }
 
@@ -168,18 +168,18 @@ export fun less(a: any, b: any, message: str) > void !> str { //nolint:no-throw 
 /// function rejects bad input.
 /// @param fn The zero-argument function expected to throw
 /// @param message The assertion message
-export fun throws(fn: fun () > void, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun throws(fn: fun () > void, message: str) > void !> str {
     if (!didThrow(fn)) {
-        throw "assert\\throws failed{tail(message)}: function did not throw"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\throws failed{tail(message)}: function did not throw";
     }
 }
 
 /// Asserts that calling `fn` does NOT raise.
 /// @param fn The zero-argument function expected to complete
 /// @param message The assertion message
-export fun doesNotThrow(fn: fun () > void, message: str) > void !> str { //nolint:no-throw // the assertion API raises to fail a test
+export fun doesNotThrow(fn: fun () > void, message: str) > void !> str {
     if (didThrow(fn)) {
-        throw "assert\\doesNotThrow failed{tail(message)}: function threw"; //nolint:no-throw // the assertion API raises to fail a test
+        throw "assert\\doesNotThrow failed{tail(message)}: function threw";
     }
 }
 
