@@ -24,8 +24,8 @@
 // unobservable for those dimensions rather than zero. Declaring commands=yes on
 // the strength of what the other hosts supply is the failure this line exists
 // to prevent.
-// magus-guard-template: 39
-// magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
+// magus-guard-template: magus.guard-template/v1alpha1
+// magus-session-coverage: api_version=magus.session-coverage/v1alpha1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a rollout this run cannot read is not a
 // reason to abandon the rest.

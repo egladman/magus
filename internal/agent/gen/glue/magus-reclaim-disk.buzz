@@ -22,7 +22,7 @@
 //
 // NO magus-guard-coverage line: it carries no verdict on any input.
 //
-// magus-guard-template: 39
+// magus-guard-template: magus.guard-template/v1alpha1
 
 import "io";
 import "std";

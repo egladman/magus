@@ -328,7 +328,7 @@ export fun sessionParityFindings(adapters: {str: str}, guide: str, guideFile: st
             continue;
         }
         foreach (dimension, stance in decl) {
-            if (dimension == "schema" or dimension == "host") { continue; }
+            if (dimension == "api_version" or dimension == "host") { continue; }
             final cell = row![dimension];
             if (cell == null) {
                 found.append("{guideFile}: the session parity table has no {dimension} column");
@@ -444,14 +444,14 @@ test "exampleFindings wants each go block in the examples, tabs as four spaces" 
 }
 
 test "guardParityFindings compares cells to declarations both ways" {
-    final templates = {"t.sh": "# magus-guard-coverage: schema=2 host=claude-code,codex input=command deny=model advise=none\n"};
+    final templates = {"t.sh": "# magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=claude-code,codex input=command deny=model advise=none\n"};
     final guide = "## Parity across hosts\n\n| | command rules | declared-output rule | deny | advise |\n| --- | --- | --- | --- | --- |\n| Claude Code | yes | no | yes | no |\n| Codex | yes | no | yes | yes |\n| Cursor | no | no | no | no |\n";
     final f = guardParityFindings(templates, guide: guide, guideFile: "g.md");
     assert\equal(f.len(), want: 2, message: "codex advise disagrees, cursor is undeclared");
 }
 
 test "sessionParityFindings compares cells to declarations" {
-    final adapters = {"a.sh": "# magus-session-coverage: schema=1 host=codex commands=yes hook-output=none\n"};
+    final adapters = {"a.sh": "# magus-session-coverage: api_version=magus.session-coverage/v1alpha1 host=codex commands=yes hook-output=none\n"};
     final ok = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | none |\n";
     assert\equal(sessionParityFindings(adapters, guide: ok, guideFile: "s.md").len(), want: 0, message: "agrees");
     final bad = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | yes |\n";

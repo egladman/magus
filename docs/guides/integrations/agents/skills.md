@@ -122,8 +122,8 @@ have:
 
 ```yaml
 metadata:
-  agent-skill-version: 37
-  knowledge-schema-version: 9
+  skill-stamp-format: magus.skill-stamp/v1alpha1
+  knowledge-api-version: magus.knowledge/v1alpha1
   skill-content: 45653b90928c
   skill-variant: short
 ```

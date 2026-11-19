@@ -20,7 +20,7 @@ export object Counter {
 // starts with declaration. A counter missing here is not guarded.
 export final counters = [
     Counter{ name = "skill-stamp-format", file = "internal/agent/catalog.go", declaration = "const skillStampFormat types.APIVersion = " },
-    Counter{ name = "guard-template-version", file = "internal/agent/guard.go", declaration = "const GuardTemplateVersion = " },
+    Counter{ name = "guard-template-version", file = "internal/agent/guard.go", declaration = "const GuardTemplateVersion types.APIVersion = " },
     Counter{ name = "guard-schema-version", file = "libs/safetyscissors/internal/apigroup/apigroup.go", declaration = "const Verdict = " },
     Counter{ name = "agent-session-schema-version", file = "internal/agent/session.go", declaration = "const SessionAPIVersion types.APIVersion = " },
     Counter{ name = "harness-schema-version", file = "internal/agent/harness.go", declaration = "const HarnessAPIVersion types.APIVersion = " },
@@ -181,17 +181,17 @@ fun fakeBase(files: {str: str}) > fun (path: str) > str? !> str {
 final counterFile = "internal/agent/guard.go";
 
 fun counterText(value: str) > str {
-    return "package agent\n\nconst GuardTemplateVersion = {value}\n\nfunc x() \{\}\n";
+    return "package agent\n\nconst GuardTemplateVersion types.APIVersion = {value}\n\nfunc x() \{\}\n";
 }
 
 test "the first bump on a branch is allowed" {
-    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 1", newText = "const GuardTemplateVersion = 2" };
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion types.APIVersion = 1", newText = "const GuardTemplateVersion types.APIVersion = 2" };
     final v = decide(edit, current: fakeFiles({counterFile: counterText("1")}), base: fakeBase({counterFile: counterText("1")}));
     std\assert(v == null, message: "first bump");
 }
 
 test "a second bump on a branch is denied naming the counter, the base value and the branch value" {
-    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 3" };
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion types.APIVersion = 2", newText = "const GuardTemplateVersion types.APIVersion = 3" };
     final v = decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: fakeBase({counterFile: counterText("1")}));
     std\assert(v != null and v!.decision == magus\GuardDecision.deny, message: "second bump denied");
     final reason = v!.reason;
@@ -210,7 +210,7 @@ test "a whole-file write that bumps again is denied, and one that keeps the valu
 }
 
 test "an edit back to the base value is allowed" {
-    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 1" };
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion types.APIVersion = 2", newText = "const GuardTemplateVersion types.APIVersion = 1" };
     std\assert(decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: fakeBase({counterFile: counterText("1")})) == null, message: "revert");
 }
 
@@ -239,7 +239,7 @@ test "an unreadable base advises instead of judging" {
     final base = fun (path: str) > str? !> str {
         throw "no base";
     };
-    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 3" };
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion types.APIVersion = 2", newText = "const GuardTemplateVersion types.APIVersion = 3" };
     final v = decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: base);
     std\assert(v != null and v!.decision == magus\GuardDecision.advise, message: "advised");
 }

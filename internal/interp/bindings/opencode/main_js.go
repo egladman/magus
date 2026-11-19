@@ -11,12 +11,12 @@ import (
 )
 
 // abiVersion is the API version the loader script checks before use.
-const abiVersion = 1
+const abiVersion = "magus.opencode-wasm/v1alpha1"
 
 // Serve publishes the wasm API on globalThis and blocks for the life of the
 // JavaScript runtime.
 func Serve() {
-	js.Global().Set("__magusOpenCodeWasmV1", map[string]any{"version": abiVersion, "create": js.FuncOf(create), "createPlugin": js.FuncOf(createPluginHook)})
+	js.Global().Set("__magusOpenCodeWasm", map[string]any{"version": abiVersion, "create": js.FuncOf(create), "createPlugin": js.FuncOf(createPluginHook)})
 	select {}
 }
 

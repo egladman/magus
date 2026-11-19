@@ -17,8 +17,8 @@ async function initialize() {
     );
     await Promise.race([running, new Promise((resolve) => setTimeout(resolve, 0))]);
     if (failure) return { api: null, error: failure };
-    const api = globalThis.__magusOpenCodeWasmV1;
-    if (api?.version !== 1 || typeof api.createPlugin !== "function") {
+    const api = globalThis.__magusOpenCodeWasm;
+    if (api?.version !== "magus.opencode-wasm/v1alpha1" || typeof api.createPlugin !== "function") {
       return { api: null, error: new Error("magus OpenCode runtime ABI mismatch") };
     }
     return { api, error: null };

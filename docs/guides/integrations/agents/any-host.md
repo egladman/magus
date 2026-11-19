@@ -102,7 +102,7 @@ Three decisions are yours to make:
   has to carry the deny to the model. The orchestrator or the person rebuilds `./magus`; a
   leased worker asks the orchestrator to place one.
 
-If you contribute the result back, add a `magus-guard-coverage: schema=2` line
+If you contribute the result back, add a `magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1` line
 declaring what your glue carries per `input=` and decision. A parity gate reads those lines
 and fails the build when a host was never asked about a decision the contract
 grew.
