@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -26,39 +25,27 @@ import (
 	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
 
-func runRoundSample(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread-train calibrate round sample", flag.ContinueOnError)
-	fset.SetOutput(stderr)
-	rulesList := fset.String("rules", "", "sample firings of these comma-separated `rules`")
-	seed := fset.Int64("seed", 0, "draw with this `seed`, fixed before anyone sees the sample")
-	perRule := fset.Int("per-rule", 40, "draw at most `n` firings of each rule")
-	minPerSource := fset.Int("min-per-source", 10, "give each source with enough fresh firings at least `n`, so its own gate runs")
-	maxPerText := fset.Int("max-per-text", 2, "keep at most `n` firings of a rule from one text")
-	decisionsPath := fset.String("decisions", "", "judge with the decisions table in this `file`; by default every sampled rule is deny")
-	outDir := fset.String("out", "", "write the round into this `dir`")
-	roundNum := fset.Int("round", 0, "the round `number` the candidate ids carry; by default read from an --out named round<N>")
-	field := fset.String("field", "text", "the comma-separated `fields` joined by newlines into each text")
-	kindField := fset.String("kind-field", "kind", "the `field` naming each record's kind")
-	kindName := fset.String("kind", "", "judge a record whose --kind-field is empty as this `kind`")
+type roundSampleFlags struct {
+	rules, decisions, out, field, kindField, kind  string
+	seed, perRule, minPerSource, maxPerText, round int
+	excludes                                       []string
+}
 
-	var excludes repeated
+func runRoundSample(o *roundSampleFlags, args []string, stdout, stderr io.Writer) int {
+	rulesList, seed, perRule, minPerSource, maxPerText := &o.rules, int64(o.seed), &o.perRule, &o.minPerSource, &o.maxPerText
+	decisionsPath, outDir, roundNum, field, kindField, kindName := &o.decisions, &o.out, &o.round, &o.field, &o.kindField, &o.kind
+	excludes := o.excludes
 
-	fset.Var(&excludes, "exclude", "drop firings whose text, sentence or context this candidates.jsonl or case `dir` holds; repeatable")
-
-	if err := fset.Parse(args); err != nil {
-		return exitError
-	}
-
-	if fset.NArg() == 0 {
+	if len(args) == 0 {
 		return failure(stderr, errors.New("round sample needs at least one SOURCE file"))
 	}
 
 	cfg := sampleConfig{
-		seed: *seed, perRule: *perRule, minPerSource: *minPerSource, maxPerText: *maxPerText,
+		seed: seed, perRule: *perRule, minPerSource: *minPerSource, maxPerText: *maxPerText,
 		fields: splitFields(*field), kindField: *kindField, outDir: *outDir,
 	}
 
-	if err := cfg.resolve(*rulesList, *decisionsPath, *kindName, *roundNum, fset.Args(), excludes); err != nil {
+	if err := cfg.resolve(*rulesList, *decisionsPath, *kindName, *roundNum, args, excludes); err != nil {
 		return failure(stderr, err)
 	}
 

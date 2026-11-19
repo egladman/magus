@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -148,20 +147,10 @@ type freezeRecord struct {
 	VoidIf           string         `json:"void_if"`
 }
 
-func runRoundFreeze(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread-train calibrate round freeze", flag.ContinueOnError)
-	fset.SetOutput(stderr)
-	dir := fset.String("dir", "", "freeze the round sampled into this `dir`")
-	guideline := fset.String("guideline", "", "the guideline `file` labelers judge by")
-	gateList := fset.String("gates", "", "comma-separated key=value `gates` over the defaults: z, advise-lower, advise-firings, "+
-		"deny-rounds, deny-firings, deny-wrong, agree-per, alpha, source-firings")
-	purpose := fset.String("purpose", "", "one line on what the round confirms")
+func runRoundFreeze(dirFlag, guidelineFlag, gateFlag, purposeFlag string, args []string, stdout, stderr io.Writer) int {
+	dir, guideline, gateList, purpose := &dirFlag, &guidelineFlag, &gateFlag, &purposeFlag
 
-	if err := fset.Parse(args); err != nil {
-		return exitError
-	}
-
-	if *dir == "" || *guideline == "" || fset.NArg() > 0 {
+	if *dir == "" || *guideline == "" || len(args) > 0 {
 		return failure(stderr, errors.New("round freeze takes --dir DIR --guideline FILE and no operand"))
 	}
 

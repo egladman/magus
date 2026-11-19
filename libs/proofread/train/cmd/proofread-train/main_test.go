@@ -13,8 +13,8 @@ func TestRunRefusesAMissingOrUnknownSubcommand(t *testing.T) {
 			t.Errorf("run(%q): exit %d, want %d", args, code, exitError)
 		}
 
-		if !strings.Contains(stderr.String(), "usage: proofread-train") {
-			t.Errorf("run(%q): stderr %q, want the usage", args, stderr.String())
+		if !strings.Contains(stderr.String(), "proofread-train: ") {
+			t.Errorf("run(%q): stderr %q, want one line naming the command", args, stderr.String())
 		}
 	}
 }

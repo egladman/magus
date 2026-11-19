@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -13,37 +13,49 @@ import (
 	"sync"
 	"text/tabwriter"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/proofread"
 	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 )
+
+// calibrateOpts holds the flags of the one command a process runs.
+var calibrateOpts calibrateFlags
+
+type calibrateFlags struct {
+	cases, format, sample, kind, field, group string
+	gates                                     bool
+}
+
+var calibrateCmd = command.Command{
+	Name:   "calibrate",
+	Short:  "replay the labeled cases and print each rule's precision and recall",
+	Effect: command.EffectRead,
+	Flags: []command.Flag{
+		{Name: "cases", Kind: command.String, Doc: "read labeled case files from this `dir` instead of the ones proofread carries", Target: &calibrateOpts.cases},
+		{Name: "o", Kind: command.String, Default: "table", Doc: "write `table` or json", Target: &calibrateOpts.format},
+		{Name: "sample", Kind: command.String, Doc: "judge the records of this JSON-lines `file`, or - for stdin", Target: &calibrateOpts.sample},
+		{Name: "kind", Kind: command.String, Doc: "with --sample, judge each text as this `kind`", Target: &calibrateOpts.kind},
+		{Name: "field", Kind: command.String, Default: "body", Doc: "with --sample, the comma-separated `fields` joined by newlines into each text", Target: &calibrateOpts.field},
+		{Name: "group", Kind: command.String, Doc: "with --sample, the comma-separated `fields` whose values group the rates", Target: &calibrateOpts.group},
+		{Name: "gates", Kind: command.Bool, Default: false, Doc: "hold each rule's shipped default against the precision its cases support, and exit 1 when one outruns it", Target: &calibrateOpts.gates},
+	},
+	Children: []command.Command{roundCmd},
+	Run: func(_ context.Context, inv command.Invocation) error {
+		return reported(runCalibrate(&calibrateOpts, inv.Args, inv.Stdin, inv.Stdout, inv.Stderr))
+	},
+}
 
 // runCalibrate replays the labeled cases and prints each rule's precision and
 // recall, or with -gates each rule's shipped default against what that
 // precision supports. With -sample it instead judges one field of each JSON-lines record
 // as -kind and prints each rule's firing rate per value of -group. calibrate
 // round sample, freeze and score run a labeling round, and round pool decides
-// a deny over two (see runRound).
-func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "round" {
-		return runRound(args[1:], stdout, stderr)
-	}
+// a deny over two (see roundCommand).
+func runCalibrate(o *calibrateFlags, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	casesDir, format, sample, kind, field, group, gates := &o.cases, &o.format, &o.sample, &o.kind, &o.field, &o.group, &o.gates
 
-	fset := flag.NewFlagSet("proofread-train calibrate", flag.ContinueOnError)
-	fset.SetOutput(stderr)
-	casesDir := fset.String("cases", "", "read labeled case files from this `dir` instead of the ones proofread carries")
-	format := fset.String("o", "table", "write `table` or json")
-	sample := fset.String("sample", "", "judge the records of this JSON-lines `file`, or - for stdin")
-	kind := fset.String("kind", "", "with --sample, judge each text as this `kind`")
-	field := fset.String("field", "body", "with --sample, the comma-separated `fields` joined by newlines into each text")
-	group := fset.String("group", "", "with --sample, the comma-separated `fields` whose values group the rates")
-	gates := fset.Bool("gates", false, "hold each rule's shipped default against the precision its cases support, and exit 1 when one outruns it")
-
-	if err := fset.Parse(args); err != nil {
-		return exitError
-	}
-
-	if fset.NArg() > 0 {
-		return failure(stderr, fmt.Errorf("calibrate takes no operand, got %q", fset.Arg(0)))
+	if len(args) > 0 {
+		return failure(stderr, fmt.Errorf("calibrate takes no operand, got %q", args[0]))
 	}
 
 	if *format != "table" && *format != "json" {
