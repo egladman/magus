@@ -3,6 +3,7 @@
 // `plugin("...") not found`. Nothing here falls back to the stock binary.
 namespace golangci;
 
+import "result";
 import "fs";
 import "os";
 import "proc";
@@ -25,25 +26,33 @@ export final LINTER_SOURCES = ["libs/testpairing/.custom-gcl.yml", "libs/testpai
 final LINKED_FROM = ".magus/custom-gcl.inputs";
 
 // binary is the workspace's custom build; it throws, naming the target that builds it, when absent.
-export fun binary() > str !> any {
-    final path = magus\describe.project().workspace + "/.magus/custom-gcl";
-    if (!fs\exists(path)) {
-        throw "{path} is missing; build it with `magus run install-linter .`. The stock golangci-lint cannot read .golangci.yml";
+export fun binary() > result\Result::<str> {
+    try {
+        final path = magus\describe.project().workspace + "/.magus/custom-gcl";
+        if (!fs\exists(path)) {
+            return result\fail::<str>("{path} is missing; build it with `magus run install-linter .`. The stock golangci-lint cannot read .golangci.yml");
+        }
+        return result\ok::<str>(path);
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return path;
 }
 
 // linkerInputs is the digest of every file LINTER_SOURCES matches under root.
-fun linkerInputs(root: str) > str !> any {
-    final lines = mut [<str>];
-    foreach (pattern in LINTER_SOURCES) {
-        foreach (path in fs\glob(root + "/" + pattern)) {
-            final rel = path.value.sub(root.len() + 1, len: path.value.len() - root.len() - 1);
-            lines.append("{rel} {crypto\sha256File(path.value)}");
+fun linkerInputs(root: str) > result\Result::<str> {
+    try {
+        final lines = mut [<str>];
+        foreach (pattern in LINTER_SOURCES) {
+            foreach (path in fs\glob(root + "/" + pattern)) {
+                final rel = path.value.sub(root.len() + 1, len: path.value.len() - root.len() - 1);
+                lines.append("{rel} {crypto\sha256File(path.value)}");
+            }
         }
+        _ = lines.sort(fun (left: str, right: str) > bool => left < right);
+        return result\ok::<str>(crypto\sha256Hex(lines.join("\n")));
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    _ = lines.sort(fun (left: str, right: str) > bool => left < right);
-    return crypto\sha256Hex(lines.join("\n"));
 }
 
 // whyRelink says why the build must be linked again, or "" when it may run.
@@ -62,7 +71,11 @@ fun whyRelink(linked: bool, linkedFrom: str, inputs: str) > str {
 // install-linter declares no outputs, so its replay restores no binary.
 export fun linkFresh() > void !> any {
     final root = magus\describe.project().workspace;
-    final inputs = linkerInputs(root);
+    final linked = linkerInputs(root);
+    if (linked.error != null) {
+        throw linked.error!.message;
+    }
+    final inputs = linked.value!;
     final why = whyRelink(fs\exists(root + "/.magus/custom-gcl"), linkedFrom: fs\readFile(root + "/" + LINKED_FROM) catch "", inputs: inputs);
     if (why == "") {
         return;
@@ -90,7 +103,11 @@ export fun readLibFiles(ctx: magus\Context) > void !> any {
 // run executes the custom build with the workspace config. dir is workspace-relative.
 export fun run(dir: str, args: [str]) > void !> any {
     final root = magus\describe.project().workspace;
-    final bin = binary();
+    final built = binary();
+    if (built.error != null) {
+        throw built.error!.message;
+    }
+    final bin = built.value!;
     // An in-checkout cache: golangci-lint keys findings by absolute path, so sibling
     // worktrees would replay each other's. The go spell's sandbox entry reaches only its ops.
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
@@ -155,21 +172,25 @@ export fun atOrUnder(files: [str], paths: [str]) > [str] {
 // issuesIn reads a `--output.json.path stdout --path-mode abs` report and keeps each issue
 // at one of files, workspace-relative under root, as `path:line: text (linter)`. An issue at
 // any other file is dropped: a package holds files the caller did not write.
-export fun issuesIn(report: str, root: str, files: [str]) > [str] !> any {
-    final doc: {str: any} = json\parse(report);
-    final issues: [any] = doc["Issues"] ?? [<any>];
-    final kept = mut [<str>];
-    foreach (issue in issues) {
-        final abs: str = issue["Pos"]["Filename"] ?? "";
-        final rel = if (abs.startsWith(root + "/")) abs.sub(root.len() + 1, len: abs.len() - root.len() - 1) else abs;
-        if (files.indexOf(rel) != null) {
-            final line = std\toInt(issue["Pos"]["Line"] ?? 0);
-            final linter: str = issue["FromLinter"] ?? "";
-            final text: str = issue["Text"] ?? "";
-            kept.append("{rel}:{line}: {text} ({linter})");
+export fun issuesIn(report: str, root: str, files: [str]) > result\Result::<[str]> {
+    try {
+        final doc: {str: any} = json\parse(report);
+        final issues: [any] = doc["Issues"] ?? [<any>];
+        final kept = mut [<str>];
+        foreach (issue in issues) {
+            final abs: str = issue["Pos"]["Filename"] ?? "";
+            final rel = if (abs.startsWith(root + "/")) abs.sub(root.len() + 1, len: abs.len() - root.len() - 1) else abs;
+            if (files.indexOf(rel) != null) {
+                final line = std\toInt(issue["Pos"]["Line"] ?? 0);
+                final linter: str = issue["FromLinter"] ?? "";
+                final text: str = issue["Text"] ?? "";
+                kept.append("{rel}:{line}: {text} ({linter})");
+            }
         }
+        return result\ok::<[str]>(kept);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return kept;
 }
 
 // reportArgs is the argument list issuesAt runs. The default text writer and
@@ -186,34 +207,37 @@ export fun reportArgs(root: str, dir: str, packages: [str]) > [str] {
 // workspace-relative.
 export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
     final root = magus\describe.project().workspace;
-    final bin = binary();
+    final built = binary();
+    if (built.error != null) {
+        throw built.error!.message;
+    }
+    final bin = built.value!;
     final args = reportArgs(root, dir: dir, packages: packages);
     var run = proc\ExecResult{};
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
         run = proc\exec(bin, args: args, dir: root + "/" + dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
     });
-    return reportOf(run, root: root, dir: dir, packages: packages, files: files);
+    final reported = reportOf(run, root: root, dir: dir, packages: packages, files: files);
+    if (reported.error != null) {
+        throw reported.error!.message;
+    }
+    return reported.value!;
 }
 
 // reportOf reads a finished run. With --issues-exit-code 0, a non-zero exit
 // is a failure to lint, and stderr is its only account.
-fun reportOf(run: proc\ExecResult, root: str, dir: str, packages: [str], files: [str]) > [str] !> any {
+fun reportOf(run: proc\ExecResult, root: str, dir: str, packages: [str], files: [str]) > result\Result::<[str]> {
     if (!run.ok) {
         final stderr = run.stderr.trim();
         final named = packages.join(" ");
-        throw "golangci-lint exited {run.code} with no report: {stderr} (module {dir}, packages {named})";
+        return result\fail::<[str]>("golangci-lint exited {run.code} with no report: {stderr} (module {dir}, packages {named})");
     }
     return issuesIn(run.stdout, root: root, files: files);
 }
 
 test "a non-zero exit with no report raises with its code, stderr and module" {
     final failed = proc\ExecResult{code = 7, stderr = "  config: unknown linter\n", ok = false};
-    var message = "";
-    try {
-        _ = reportOf(failed, root: "/w", dir: "libs/x", packages: ["./y"], files: ["libs/x/y/a.go"]);
-    } catch (err: any) {
-        message = "{err}";
-    }
+    final message = reportOf(failed, root: "/w", dir: "libs/x", packages: ["./y"], files: ["libs/x/y/a.go"]).error?.message ?? "";
     assert\equal(message.indexOf("exited 7 with no report") != null, want: true, message: "the exit code is named");
     assert\equal(message.indexOf("config: unknown linter (module libs/x, packages ./y)") != null, want: true, message: "stderr is trimmed and the module and packages are named");
 }
@@ -251,8 +275,8 @@ test "only the issues at the files are kept" {
     final mine = `{"FromLinter":"revive","Text":"mine","Pos":{"Filename":"/w/internal/job/a.go","Line":3}}`;
     final theirs = `{"FromLinter":"revive","Text":"theirs","Pos":{"Filename":"/w/internal/job/b.go","Line":9}}`;
     final report = "\{\"Issues\":[" + mine + "," + theirs + "]\}";
-    assert\equal(issuesIn(report, root: "/w", files: ["internal/job/a.go"]), want: ["internal/job/a.go:3: mine (revive)"], message: "one inside, one outside");
-    assert\equal(issuesIn(`{"Issues":null}`, root: "/w", files: ["a.go"]).len(), want: 0, message: "a clean run");
+    assert\equal(issuesIn(report, root: "/w", files: ["internal/job/a.go"]).value!, want: ["internal/job/a.go:3: mine (revive)"], message: "one inside, one outside");
+    assert\equal(issuesIn(`{"Issues":null}`, root: "/w", files: ["a.go"]).value!.len(), want: 0, message: "a clean run");
 }
 
 test "the text report goes to stderr so stdout stays JSON" {
@@ -267,11 +291,6 @@ test "the text report goes to stderr so stdout stays JSON" {
 
 test "a report followed by the text writer's line is refused as invalid JSON" {
     final mixed = "\{\"Issues\":null\}\n0 issues.\n";
-    var message = "";
-    try {
-        _ = issuesIn(mixed, root: "/w", files: ["a.go"]);
-    } catch (err: any) {
-        message = "{err}";
-    }
+    final message = issuesIn(mixed, root: "/w", files: ["a.go"]).error?.message ?? "";
     assert\equal(message.indexOf("json.parse") != null, want: true, message: "the parse error names the mixed input");
 }

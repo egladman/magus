@@ -45,6 +45,7 @@ import "encoding/yaml";
 import "semver";
 import "time";
 import "flags";
+import "result";
 import "hack/magusfile/deviations" as deviations;
 // Used by the test blocks, which run under buzz_test now that it globs hack/.
 import "assert";
@@ -110,81 +111,85 @@ test "a registry that does not answer fails the audit with the pnpm view error" 
 // `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
 // keys "created" and "modified", which are skipped. A version that fails to parse is
 // skipped rather than fatal: an odd tag upstream must not take a build down.
-fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
-    // "<0.0.0" is the advisory database's way of saying no patch has been published.
-    if (patched == "" or patched == "<0.0.0") {
-        return false;
-    }
-    final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
-        opts: proc\ExecOptions{allowFailure = true});
-    final unreachable = registryFailure(pkg, code: res.code, stderr: res.stderr);
-    if (unreachable != "") {
-        throw unreachable;
-    }
-
-    final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
-    final cutoff = time\add(now, duration: coolingHours);
-    // The advisory's patched range is used AS the constraint, underived.
-    //
-    // Two earlier shapes were both wrong. `">= " + patched.replace(">=", ...)` built
-    // `">= ^1.2.3"` for a caret range, which semver\satisfies RAISES on. Replacing
-    // that with a derived floor fixed the caret and broke something worse: taking
-    // only the first version token DISCARDS the rest of the range, so
-    // `">=0.2.1 <1.0.0 || >=1.2.6"` became `">= 0.2.1"` and reported the VULNERABLE
-    // 1.2.5 as an installable patch (measured). `"<1.2.3"` inverted outright.
-    //
-    // semver\satisfies accepts npm range syntax directly - caret, tilde, bounded, and
-    // ||-joined were all measured against this workspace's binary - so there is
-    // nothing to derive. Validate it once here rather than per candidate, so an
-    // unusable range is reported instead of silently deferring the advisory.
+fun hasInstallablePatch(pkg: str, patched: str, installed: str) > result\Result::<bool> {
     try {
-        _ = semver\satisfies(installed, constraint: patched);
-    } catch (e) {
-        std\print("audit: {pkg}: patched range \"{patched}\" is not a usable constraint; treating as no installable patch");
-        return false;
-    }
-
-    // A candidate must be reachable from where the tree actually sits, which means
-    // the SAME MAJOR as the installed version.
-    //
-    // Without this the gate fails over patches nothing can install. nanoid is the
-    // worked example: the advisory patches at ">=3.3.17", the tree is on 3.3.16
-    // via stylelint -> postcss, and 3.3.17 was four days old against a ten-day
-    // cooling period - so pnpm refused it outright. But ">=3.3.17" also matches
-    // nanoid 4, 5 and 6, majors published long enough ago to clear cooling, so the
-    // check found one and reported a fix "this policy would install today". It
-    // would not: postcss pins the 3.x range, and no override can move a transitive
-    // dependency across a major its dependent does not accept.
-    //
-    // A major bump is therefore deferred, deliberately and permanently. It is not
-    // a thing this gate can be right about: it needs the dependent to widen its
-    // range, which is a human change, and the gate's contract is to fail only on
-    // what is actionable TODAY. It stays printed loudly on every run.
-    final installedMajor = std\parseInt(installed.split(".")[0]) ?? 0;
-    final nextMajor = "{installedMajor + 1}.0.0";
-
-    foreach (version, published in json\parse(res.stdout)) {
-        if (version == "created" or version == "modified") {
-            continue;
+        // "<0.0.0" is the advisory database's way of saying no patch has been published.
+        if (patched == "" or patched == "<0.0.0") {
+            return result\ok::<bool>(false);
         }
+        final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
+            opts: proc\ExecOptions{allowFailure = true});
+        final unreachable = registryFailure(pkg, code: res.code, stderr: res.stderr);
+        if (unreachable != "") {
+            return result\fail::<bool>(unreachable);
+        }
+
+        final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
+        final cutoff = time\add(now, duration: coolingHours);
+        // The advisory's patched range is used AS the constraint, underived.
+        //
+        // Two earlier shapes were both wrong. `">= " + patched.replace(">=", ...)` built
+        // `">= ^1.2.3"` for a caret range, which semver\satisfies RAISES on. Replacing
+        // that with a derived floor fixed the caret and broke something worse: taking
+        // only the first version token DISCARDS the rest of the range, so
+        // `">=0.2.1 <1.0.0 || >=1.2.6"` became `">= 0.2.1"` and reported the VULNERABLE
+        // 1.2.5 as an installable patch (measured). `"<1.2.3"` inverted outright.
+        //
+        // semver\satisfies accepts npm range syntax directly - caret, tilde, bounded, and
+        // ||-joined were all measured against this workspace's binary - so there is
+        // nothing to derive. Validate it once here rather than per candidate, so an
+        // unusable range is reported instead of silently deferring the advisory.
         try {
-            if (!semver\satisfies(version, constraint: patched)) {
+            _ = semver\satisfies(installed, constraint: patched);
+        } catch (e) {
+            std\print("audit: {pkg}: patched range \"{patched}\" is not a usable constraint; treating as no installable patch");
+            return result\ok::<bool>(false);
+        }
+
+        // A candidate must be reachable from where the tree actually sits, which means
+        // the SAME MAJOR as the installed version.
+        //
+        // Without this the gate fails over patches nothing can install. nanoid is the
+        // worked example: the advisory patches at ">=3.3.17", the tree is on 3.3.16
+        // via stylelint -> postcss, and 3.3.17 was four days old against a ten-day
+        // cooling period - so pnpm refused it outright. But ">=3.3.17" also matches
+        // nanoid 4, 5 and 6, majors published long enough ago to clear cooling, so the
+        // check found one and reported a fix "this policy would install today". It
+        // would not: postcss pins the 3.x range, and no override can move a transitive
+        // dependency across a major its dependent does not accept.
+        //
+        // A major bump is therefore deferred, deliberately and permanently. It is not
+        // a thing this gate can be right about: it needs the dependent to widen its
+        // range, which is a human change, and the gate's contract is to fail only on
+        // what is actionable TODAY. It stays printed loudly on every run.
+        final installedMajor = std\parseInt(installed.split(".")[0]) ?? 0;
+        final nextMajor = "{installedMajor + 1}.0.0";
+
+        foreach (version, published in json\parse(res.stdout)) {
+            if (version == "created" or version == "modified") {
                 continue;
             }
-            if (installedMajor > 0 and !semver\satisfies(version, constraint: "< " + nextMajor)) {
-                continue; // a different major: not reachable without a dependent change
+            try {
+                if (!semver\satisfies(version, constraint: patched)) {
+                    continue;
+                }
+                if (installedMajor > 0 and !semver\satisfies(version, constraint: "< " + nextMajor)) {
+                    continue; // a different major: not reachable without a dependent change
+                }
+                if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {
+                    return result\ok::<bool>(true); // a fix exists and our own policy would let it in
+                }
+            } catch (e) {
+                // Only an unparsable VERSION or timestamp reaches here now - the
+                // constraint was validated once above, so this can no longer swallow a
+                // range bug for every candidate at once.
+                continue
             }
-            if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {
-                return true; // a fix exists and our own policy would let it in
-            }
-        } catch (e) {
-            // Only an unparsable VERSION or timestamp reaches here now - the
-            // constraint was validated once above, so this can no longer swallow a
-            // range bug for every candidate at once.
-            continue
         }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    return false;
 }
 
 // Finding is one advisory reduced to what the verdict reads.
@@ -294,50 +299,55 @@ fun anyActionable(findings: [Finding]) > bool {
 
 // verdict prints every finding with its classes, then the summary line, and throws
 // failure when one is fatal.
-fun verdict(tool: str, findings: [Finding], base: Base, deferNote: str, failure: str) > void !> any {
-    if (base.inventory == null) {
-        std\print("{tool}: no base ref; provenance not computed ({base.missing})");
-    }
-    var introduced = 0;
-    var inherited = 0;
-    var unknown = 0;
-    var deferred = 0;
-    var fatal = mut [<str>];
-    foreach (f in findings) {
-        final what = f.id + " " + f.installed.join(", ") + ": " + f.summary;
-        if (!f.actionable) {
-            deferred = deferred + 1;
-            std\print("{tool} [deferred] " + what + " - " + f.deferral);
-            continue;
+fun verdict(tool: str, findings: [Finding], base: Base, deferNote: str, failure: str) > result\Result::<bool> {
+    try {
+        if (base.inventory == null) {
+            std\print("{tool}: no base ref; provenance not computed ({base.missing})");
         }
-        final provenance = classify(f.installed, base: base.inventory);
-        if (provenance == "introduced") {
-            introduced = introduced + 1;
-        } else if (provenance == "inherited") {
-            inherited = inherited + 1;
-        } else {
-            unknown = unknown + 1;
+        var introduced = 0;
+        var inherited = 0;
+        var unknown = 0;
+        var deferred = 0;
+        var fatal = mut [<str>];
+        foreach (f in findings) {
+            final what = f.id + " " + f.installed.join(", ") + ": " + f.summary;
+            if (!f.actionable) {
+                deferred = deferred + 1;
+                std\print("{tool} [deferred] " + what + " - " + f.deferral);
+                continue;
+            }
+            final provenance = classify(f.installed, base: base.inventory);
+            if (provenance == "introduced") {
+                introduced = introduced + 1;
+            } else if (provenance == "inherited") {
+                inherited = inherited + 1;
+            } else {
+                unknown = unknown + 1;
+            }
+            if (isFatal(provenance, changed: base.changed)) {
+                fatal.append("{tool} [BLOCKING] [{provenance}] " + what + " - " + f.fix);
+            } else {
+                std\print("{tool} [inherited] " + what + " - " + f.fix
+                    + "; the base carries it too, so it fails main, not this change");
+            }
         }
-        if (isFatal(provenance, changed: base.changed)) {
-            fatal.append("{tool} [BLOCKING] [{provenance}] " + what + " - " + f.fix);
-        } else {
-            std\print("{tool} [inherited] " + what + " - " + f.fix
-                + "; the base carries it too, so it fails main, not this change");
+        if (deferred > 0 and deferNote != "") {
+            std\print(deferNote);
         }
-    }
-    if (deferred > 0 and deferNote != "") {
-        std\print(deferNote);
-    }
-    var summary = "security: {introduced} introduced, {inherited} inherited, {deferred} deferred";
-    if (unknown > 0) {
-        summary = summary + ", {unknown} unknown";
-    }
-    std\print(summary);
-    if (fatal.len() > 0) {
-        foreach (line in fatal) {
-            std\print(line);
+        var summary = "security: {introduced} introduced, {inherited} inherited, {deferred} deferred";
+        if (unknown > 0) {
+            summary = summary + ", {unknown} unknown";
         }
-        throw failure;
+        std\print(summary);
+        if (fatal.len() > 0) {
+            foreach (line in fatal) {
+                std\print(line);
+            }
+            return result\fail::<bool>(failure);
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -424,9 +434,17 @@ export fun audit(inheritedFatal: bool = false) > void !> any {
 
         var actionable = false;
         var deferral = "";
+        var patchable = false;
+        if (isBlockingSeverity(severity)) {
+            final patch = hasInstallablePatch(pkg, patched: patched, installed: installed);
+            if (patch.error != null) {
+                throw patch.error!.message;
+            }
+            patchable = patch.value!;
+        }
         if (!isBlockingSeverity(severity)) {
             deferral = "below the failing threshold";
-        } else if (hasInstallablePatch(pkg, patched, installed)) {
+        } else if (patchable) {
             actionable = true;
         } else {
             deferral = "patched " + patched + " is inside the cooling period, unpublished,"
@@ -451,10 +469,13 @@ export fun audit(inheritedFatal: bool = false) > void !> any {
         }
         base = Base{ inventory = inventory, changed = lock.changed and !inheritedFatal, missing = lock.missing };
     }
-    verdict("audit", findings: findings, base: base,
+    final judged = verdict("audit", findings: findings, base: base,
         deferNote: "audit: deferred findings are NOT actionable today. Each one starts"
             + " failing this gate on its own once a patch clears the cooling period.",
         failure: "audit: an advisory has a fix this policy would install today; upgrade it");
+    if (judged.error != null) {
+        throw judged.error!.message;
+    }
 }
 
 // goLine is a Go version's language line: "go1.26.1", "v1.26.1" and "1.26" all give
@@ -518,55 +539,59 @@ fun goInventory(modJSON: str) > {str: bool} !> any {
 // govulncheck reports a vulnerability at module, package and symbol level. Only a
 // symbol-level finding (a frame with a function) means this code calls it, which is what
 // a plain `govulncheck ./...` exit code fails on; the rest are deferred.
-fun goFindings(stream: str) > [Finding] !> any {
-    final body = stream.trim();
-    var findings = mut [<Finding>];
-    if (body == "") {
-        return findings;
+fun goFindings(stream: str) > result\Result::<[Finding]> {
+    try {
+        final body = stream.trim();
+        var findings = mut [<Finding>];
+        if (body == "") {
+            return result\ok::<[Finding]>(findings);
+        }
+        final messages = json\parse("[" + body.replace("\n}\n\{", with: "\n},\n\{") + "]");
+        var summaries = mut {<str: str>};
+        var order = mut [<str>];
+        var copies = mut {<str: str>};
+        var called = mut {<str: bool>};
+        var fixes = mut {<str: str>};
+        foreach (message in messages) {
+            if (message["osv"] != null) {
+                summaries[message["osv"]["id"]] = message["osv"]["summary"] ?? "";
+            }
+            if (message["finding"] == null) {
+                continue;
+            }
+            final found = message["finding"];
+            final id: str = found["osv"];
+            final frame = found["trace"][0];
+            final calls = (frame["function"] ?? "") != "";
+            if (copies[id] == null) {
+                order.append(id);
+            }
+            if (copies[id] == null or (calls and !(called[id] ?? false))) {
+                copies[id] = goKey(frame["module"], version: frame["version"] ?? "");
+            }
+            if (calls) {
+                called[id] = true;
+            }
+            fixes[id] = found["fixed_version"] ?? "";
+        }
+        foreach (id in order) {
+            var fix = "no fixed version published";
+            if ((fixes[id] ?? "") != "") {
+                fix = "fixed in " + fixes[id]!;
+            }
+            findings.append(Finding{
+                id = id,
+                installed = [copies[id]!],
+                summary = summaries[id] ?? "",
+                fix = fix,
+                actionable = called[id] ?? false,
+                deferral = "imported or required, but this code does not call it",
+            });
+        }
+        return result\ok::<[Finding]>(findings);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    final messages = json\parse("[" + body.replace("\n}\n\{", with: "\n},\n\{") + "]");
-    var summaries = mut {<str: str>};
-    var order = mut [<str>];
-    var copies = mut {<str: str>};
-    var called = mut {<str: bool>};
-    var fixes = mut {<str: str>};
-    foreach (message in messages) {
-        if (message["osv"] != null) {
-            summaries[message["osv"]["id"]] = message["osv"]["summary"] ?? "";
-        }
-        if (message["finding"] == null) {
-            continue;
-        }
-        final found = message["finding"];
-        final id: str = found["osv"];
-        final frame = found["trace"][0];
-        final calls = (frame["function"] ?? "") != "";
-        if (copies[id] == null) {
-            order.append(id);
-        }
-        if (copies[id] == null or (calls and !(called[id] ?? false))) {
-            copies[id] = goKey(frame["module"], version: frame["version"] ?? "");
-        }
-        if (calls) {
-            called[id] = true;
-        }
-        fixes[id] = found["fixed_version"] ?? "";
-    }
-    foreach (id in order) {
-        var fix = "no fixed version published";
-        if ((fixes[id] ?? "") != "") {
-            fix = "fixed in " + fixes[id]!;
-        }
-        findings.append(Finding{
-            id = id,
-            installed = [copies[id]!],
-            summary = summaries[id] ?? "",
-            fix = fix,
-            actionable = called[id] ?? false,
-            deferral = "imported or required, but this code does not call it",
-        });
-    }
-    return findings;
 }
 
 test "govulncheck's stream becomes one finding per vulnerability" {
@@ -619,7 +644,7 @@ test "govulncheck's stream becomes one finding per vulnerability" {
     ]
   }
 }
-`);
+`).value!;
     assert\equal(findings.len(), want: 2, message: "one per OSV id");
     assert\equal(findings[0].id, want: "GO-2025-0001", message: "stream order kept");
     assert\equal(findings[0].installed[0], want: "golang.org/x/net@v0.30.0", message: "trace[0] names the module");
@@ -628,7 +653,7 @@ test "govulncheck's stream becomes one finding per vulnerability" {
     assert\equal(findings[0].summary, want: "Quadratic parsing in x/net/html", message: "osv summary");
     assert\isFalse(findings[1].actionable, message: "a package-level finding is not called");
     assert\equal(findings[1].installed[0], want: "stdlib@1.26", message: "stdlib keyed at its line");
-    assert\equal(goFindings("\n").len(), want: 0, message: "an empty stream");
+    assert\equal(goFindings("\n").value!.len(), want: 0, message: "an empty stream");
 }
 
 test "a go.mod inventory carries requires, replacements and the go line" {
@@ -657,7 +682,11 @@ test "a go.mod inventory carries requires, replacements and the go line" {
 // `-format json` exits 0 whatever it finds, so the verdict below is the only one.
 export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
     final res = go["govulncheck"](run, {"args": ["-format", "json", "./..."]});
-    final findings = goFindings(res.stdout);
+    final scanned = goFindings(res.stdout);
+    if (scanned.error != null) {
+        throw scanned.error!.message;
+    }
+    final findings = scanned.value!;
 
     var base = Base{ inventory = {<str: bool>} };
     if (anyActionable(findings)) {
@@ -675,7 +704,10 @@ export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
         }
         base = Base{ inventory = inventory, changed = mod.changed and !inheritedFatal, missing = mod.missing };
     }
-    verdict("govulncheck", findings: findings, base: base,
+    final judged = verdict("govulncheck", findings: findings, base: base,
         deferNote: "",
         failure: "govulncheck: this code calls a vulnerable symbol; upgrade the module that carries it");
+    if (judged.error != null) {
+        throw judged.error!.message;
+    }
 }

@@ -811,11 +811,11 @@ fun plannedFromStack(root: str, values: {str: str}) > result\Result::<stack\Bran
     final source = readSource(values["--stack"]!);
     if (source.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
     var s = stack\BranchStack{ base = "", layers = [<stack\StackLayer>] };
-    try {
-        s = stack\orderLayers(stack\readStack(source.value!));
-    } catch (err: any) {
-        return result\caught::<stack\BranchStack>(err, doing: "merge-job-branches: read the stack");
-    }
+    final read = stack\readStack(source.value!);
+    if (read.error -> err) { return result\fail::<stack\BranchStack>("merge-job-branches: read the stack: {err.message}"); }
+    final ordered = stack\orderLayers(read.value!);
+    if (ordered.error -> err) { return result\fail::<stack\BranchStack>("merge-job-branches: read the stack: {err.message}"); }
+    s = ordered.value!;
     final storeRun = storeRows();
     if (storeRun.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
     final rows = storeRun.value!;
@@ -1093,7 +1093,7 @@ test "jobs merge after the jobs they depend_on, and a dependency left out is nam
     assert\equal(s.layers[2].parent, want: "feat/api", message: "each later layer goes on the one merged before it");
     assert\equal(s.layers[2].reason, want: "after feat/api: its job depends_on api; depends_on elsewhere, which this merge leaves out", message: "reason");
     assert\equal(s.layers[1].postconditions[0].id, want: "lint", message: "the row's check postconditions travel with the layer");
-    assert\equal(stack\orderLayers(s).layers.len(), want: 3, message: "the plan is a stack the module orders");
+    assert\equal(stack\orderLayers(s).value!.layers.len(), want: 3, message: "the plan is a stack the module orders");
 }
 
 test "a branch based on another merges after it, and ready branches keep their input order" {
@@ -1337,7 +1337,7 @@ test "a split stack merged back yields the original change's tree" {
         stack\StackLayer{ branch = "part-2", parent = "part-1", paths = ["src/a.txt"], declarations = [<str>], postconditions = [<stack\CheckPostcondition>], status = "created" },
         stack\StackLayer{ branch = "part-1", parent = "main", paths = ["src/x.txt", "gen/list.txt"], declarations = [<str>], postconditions = [<stack\CheckPostcondition>], status = "created" },
     ] });
-    final plan = stack\orderLayers(stack\readStack(written));
+    final plan = stack\orderLayers(stack\readStack(written).value!).value!;
     var tree = "";
     final ran = withTree(root, rev: plan.base, dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);

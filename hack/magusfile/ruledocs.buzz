@@ -1,5 +1,6 @@
 namespace ruledocs;
 
+import "result";
 import "magus";
 import "fs";
 import "std";
@@ -202,9 +203,14 @@ export fun renderIndex(rules: [magus\Rule]) > str {
     return page + "\n";
 }
 
-fun writeIfChanged(path: str, body: str) > void !> any {
-    if (fs\exists(path) and fs\readFile(path) == body) { return; }
-    fs\writeFile(path, content: body);
+fun writeIfChanged(path: str, body: str) > result\Result::<bool> {
+    try {
+        if (fs\exists(path) and fs\readFile(path) == body) { return result\ok::<bool>(true); }
+        fs\writeFile(path, content: body);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // write renders one page per rule plus index.md into dir, rewriting only pages whose
@@ -219,10 +225,16 @@ export fun write(dir: str, rules: [magus\Rule]) > void !> any {
     fs\mkdirAll(dir);
     final keep = mut {"index.md": true};
     foreach (r in rules) {
-        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderRule(r));
+        final page = writeIfChanged(fs\join(dir, r.name + ".md"), body: renderRule(r));
+        if (page.error != null) {
+            throw page.error!.message;
+        }
         keep[r.name + ".md"] = true;
     }
-    writeIfChanged(fs\join(dir, "index.md"), body: renderIndex(rules));
+    final index = writeIfChanged(fs\join(dir, "index.md"), body: renderIndex(rules));
+    if (index.error != null) {
+        throw index.error!.message;
+    }
     foreach (name in fs\listDir(dir)) {
         final path = fs\join(dir, name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
@@ -264,30 +276,34 @@ fun dimensionCost(dimension: str) > str? {
 // proofreadRules reads the JSON `proofread rules` writes. A catalog that is empty or
 // not a rule list raises: proofread moved, not the rules. So does a rule whose
 // dimension no page can explain.
-export fun proofreadRules(raw: str) > [ProofreadRule] !> any {
-    final entries: [any] = json\parse(raw);
-    if (entries.len() == 0) {
-        throw "the proofread rule catalog is empty; proofread stopped listing its rules";
-    }
-    final rules = mut [<ProofreadRule>];
-    foreach (e in entries) {
-        final kinds: [str] = e["kinds"];
-        final decisions: {str: str} = e["decisions"];
-        final house: bool = e["house"];
-        final name: str = e["name"];
-        final code: str = e["code"];
-        final dimension: str = e["dimension"] ?? "";
-        final catches: str = e["catches"];
-        final why: str = e["why"];
-        if (dimensionCost(dimension) == null) {
-            throw "proofread rule {name} has dimension \"{dimension}\", which is none of evidence, stance, structure, economy or conventions";
+export fun proofreadRules(raw: str) > result\Result::<[ProofreadRule]> {
+    try {
+        final entries: [any] = json\parse(raw);
+        if (entries.len() == 0) {
+            return result\fail::<[ProofreadRule]>("the proofread rule catalog is empty; proofread stopped listing its rules");
         }
-        rules.append(ProofreadRule{
-            name = name, code = code, kinds = kinds, decisions = decisions, house = house,
-            dimension = dimension, catches = catches, why = why,
-        });
+        final rules = mut [<ProofreadRule>];
+        foreach (e in entries) {
+            final kinds: [str] = e["kinds"];
+            final decisions: {str: str} = e["decisions"];
+            final house: bool = e["house"];
+            final name: str = e["name"];
+            final code: str = e["code"];
+            final dimension: str = e["dimension"] ?? "";
+            final catches: str = e["catches"];
+            final why: str = e["why"];
+            if (dimensionCost(dimension) == null) {
+                return result\fail::<[ProofreadRule]>("proofread rule {name} has dimension \"{dimension}\", which is none of evidence, stance, structure, economy or conventions");
+            }
+            rules.append(ProofreadRule{
+                name = name, code = code, kinds = kinds, decisions = decisions, house = house,
+                dimension = dimension, catches = catches, why = why,
+            });
+        }
+        return result\ok::<[ProofreadRule]>(rules);
+    } catch (err: any) {
+        return result\caught::<[ProofreadRule]>(err);
     }
-    return rules;
 }
 
 fun kindLabel(kind: str) > str {
@@ -529,14 +545,24 @@ export fun renderProofreadIndex(rules: [ProofreadRule]) > str {
 // write does: a renamed rule would otherwise leave a page describing a rule no finding
 // names. raw is `proofread rules`, so a page cannot exist under a name no finding reports.
 export fun writeProofread(dir: str, raw: str) > void !> any {
-    final rules = proofreadRules(raw);
+    final read = proofreadRules(raw);
+    if (read.error != null) {
+        throw read.error!.message;
+    }
+    final rules = read.value!;
     fs\mkdirAll(dir);
     final keep = mut {"index.md": true};
     foreach (r in rules) {
-        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProofreadRule(r));
+        final page = writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProofreadRule(r));
+        if (page.error != null) {
+            throw page.error!.message;
+        }
         keep[r.name + ".md"] = true;
     }
-    writeIfChanged(fs\join(dir, "index.md"), body: renderProofreadIndex(rules));
+    final index = writeIfChanged(fs\join(dir, "index.md"), body: renderProofreadIndex(rules));
+    if (index.error != null) {
+        throw index.error!.message;
+    }
     foreach (name in fs\listDir(dir)) {
         final path = fs\join(dir, name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
@@ -698,7 +724,7 @@ fun proofreadCatalog() > str {
 }
 
 test "a proofread rule page names its code, per-kind defaults and override" {
-    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final rules = proofreadRules(proofreadCatalog()).value ?? [<ProofreadRule>];
     final page = renderProofreadRule(rules[1]);
     std\assert(page.startsWith("---\ntitle: \"verdict\"\n"
         + "description: \"A rule that denies on `review-reply` and advises on `change-description` by default: it reports a judgment word.\"\n"
@@ -714,12 +740,7 @@ test "a proofread rule with no known dimension raises" {
     final unknown = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"dimension":"tone","catches":"x","why":""}]`;
     final missing = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"catches":"x","why":""}]`;
     foreach (raw in [unknown, missing]) {
-        var message = "";
-        try {
-            _ = proofreadRules(raw);
-        } catch (err: str) {
-            message = err;
-        }
+        final message = proofreadRules(raw).error?.message ?? "";
         std\assert(message.startsWith("proofread rule blame has dimension"), message: "got: " + message);
     }
 }
@@ -727,7 +748,7 @@ test "a proofread rule with no known dimension raises" {
 test "a rule that is off on a kind is not called a deny rule" {
     final raw = `[{"name":"a","code":"PRF1","kinds":["reference","review-reply"],"decisions":{"reference":"off","review-reply":"deny"},"house":false,"dimension":"stance","catches":"x","why":""},`
         + `{"name":"b","code":"PRF2","kinds":["reference"],"decisions":{"reference":"off"},"house":false,"dimension":"stance","catches":"x","why":""}]`;
-    final rules = proofreadRules(raw) catch [<ProofreadRule>];
+    final rules = proofreadRules(raw).value ?? [<ProofreadRule>];
     std\assert(proofreadDescribe(rules[0]) == "A rule that denies on `review-reply` and is off on `reference` by default: it reports x.",
         message: proofreadDescribe(rules[0]));
     std\assert(proofreadDescribe(rules[1]) == "A rule that is off by default: it reports x once a decisions table turns it on.",
@@ -735,14 +756,14 @@ test "a rule that is off on a kind is not called a deny rule" {
 }
 
 test "a house rule says it ships off" {
-    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final rules = proofreadRules(proofreadCatalog()).value ?? [<ProofreadRule>];
     final page = renderProofreadRule(rules[2]);
     std\assert(page.indexOf("A house-style rule, off until a decisions table turns it on") != null, message: page);
     std\assert(page.indexOf("House style ships `off`") != null, message: page);
 }
 
 test "the proofread index groups rules by family and pads the tables" {
-    final page = renderProofreadIndex(proofreadRules(proofreadCatalog()) catch [<ProofreadRule>]);
+    final page = renderProofreadIndex(proofreadRules(proofreadCatalog()).value ?? [<ProofreadRule>]);
     final want = "## Tone\n\n"
         + "| Rule                  | Code    | Dimension | Default        | Catches                            |\n"
         + "| --------------------- | ------- | --------- | -------------- | ---------------------------------- |\n"
@@ -758,11 +779,6 @@ test "the proofread index groups rules by family and pads the tables" {
 }
 
 test "an empty proofread catalog raises" {
-    var raised = false;
-    try {
-        _ = proofreadRules("[]");
-    } catch (err: str) {
-        raised = true;
-    }
+    final raised = proofreadRules("[]").error != null;
     std\assert(raised, message: "an empty catalog must raise");
 }

@@ -9,6 +9,7 @@
 // change these bytes?) and an unrelated edit no longer hides the answer.
 namespace drift;
 
+import "result";
 import "fs";
 import "crypto";
 import "vcs";
@@ -19,22 +20,30 @@ import "magus";
 // a gate can name a generated TREE the way its outputs are declared and not have to know
 // which entries are directories. A path that does not exist yet is dropped; changedSince
 // notices it when the generator creates it.
-export fun expand(paths: [str]) > [str] !> any {
-    var files: mut [str] = mut [<str>];
-    foreach (p in paths) {
-        if (!fs\exists(p)) { continue; }
-        if (!fs\isDir(p)) { files.append(p); continue; }
-        foreach (f in fs\glob(p + "/**/*")) {
-            if (!fs\isDir(f.value)) { files.append(f.value); }
+export fun expand(paths: [str]) > result\Result::<[str]> {
+    try {
+        var files: mut [str] = mut [<str>];
+        foreach (p in paths) {
+            if (!fs\exists(p)) { continue; }
+            if (!fs\isDir(p)) { files.append(p); continue; }
+            foreach (f in fs\glob(p + "/**/*")) {
+                if (!fs\isDir(f.value)) { files.append(f.value); }
+            }
         }
+        return result\ok::<[str]>(files);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return files;
 }
 
 // hashes digests every file under paths, taking the "before" side of a gate.
 export fun hashes(paths: [str]) > {str: str} !> any {
     var digests: mut {str: str} = mut {<str: str>};
-    foreach (p in expand(paths)) { digests[p] = crypto\sha256File(p); }
+    final files = expand(paths);
+    if (files.error != null) {
+        throw files.error!.message;
+    }
+    foreach (p in files.value!) { digests[p] = crypto\sha256File(p); }
     return digests;
 }
 
@@ -129,7 +138,11 @@ export fun restore(outputs: [str], saved: str, dirtyBefore: [str]) > void !> any
 export fun changedSince(before: {str: str}, paths: [str]) > [str] !> any {
     var moved: mut [str] = mut [<str>];
     var seen: mut {str: bool} = mut {<str: bool>};
-    foreach (p in expand(paths)) {
+    final files = expand(paths);
+    if (files.error != null) {
+        throw files.error!.message;
+    }
+    foreach (p in files.value!) {
         seen[p] = true;
         if (before[p] == null) { moved.append(p); }
         else if (crypto\sha256File(p) != before[p]) { moved.append(p); }

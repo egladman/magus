@@ -2572,7 +2572,7 @@ test "the --by symbols plan is the branch stack merge-job-branches reads back" {
     fs\removeAll(repo.root);
     final text = branchstack\writeStack(symbolStack(p, base: "main"));
     assert\equal(text, want: fs\readFile("hack/testdata/branch-stack-split-symbols.json").trim(), message: "golden stack");
-    final back = branchstack\orderLayers(branchstack\readStack(text));
+    final back = branchstack\orderLayers(branchstack\readStack(text).value!).value!;
     assert\equal(branchstack\writeStack(back), want: text, message: "the stack reads back in order");
 }
 

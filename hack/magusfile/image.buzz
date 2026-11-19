@@ -1,6 +1,7 @@
 // magus's own container images (ADR 0018). Each function returns its
 // error in its result; the magusfile target that calls it raises.
 
+import "result";
 import "fs";
 import "image";
 import "serialize";
@@ -129,18 +130,23 @@ fun blobPath(d: image\Digest) > str {
 // nameIndex names each manifest in layout's index.json for tag. A daemon on
 // the containerd image store loads from index.json and ignores RepoTags, so
 // without the name it loads the image untagged.
-fun nameIndex(layout: str, tag: str) > void !> any {
-    final path = layout + "/index.json";
-    final index: mut {str: any} = (json\parse(fs\readFile(path)) as {str: any}).cloneMutable();
-    final name = if (tag.indexOf("/") == null) "docker.io/library/{tag}" else tag;
-    final named = mut [<any>];
-    foreach (entry in index["manifests"] as [any]) {
-        final m: mut {str: any} = (entry as {str: any}).cloneMutable();
-        m["annotations"] = {"io.containerd.image.name": name};
-        named.append(m);
+fun nameIndex(layout: str, tag: str) > result\Result::<bool> {
+    try {
+        final path = layout + "/index.json";
+        final index: mut {str: any} = (json\parse(fs\readFile(path)) as {str: any}).cloneMutable();
+        final name = if (tag.indexOf("/") == null) "docker.io/library/{tag}" else tag;
+        final named = mut [<any>];
+        foreach (entry in index["manifests"] as [any]) {
+            final m: mut {str: any} = (entry as {str: any}).cloneMutable();
+            m["annotations"] = {"io.containerd.image.name": name};
+            named.append(m);
+        }
+        index["manifests"] = named;
+        fs\writeFile(path, content: json\stringify(index));
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    index["manifests"] = named;
-    fs\writeFile(path, content: json\stringify(index));
 }
 
 // prepareLoad writes the docker-save manifest.json classic `docker load` needs
@@ -164,7 +170,10 @@ export fun prepareLoad(layout: str, tag: str) > LoadedID {
             "Layers": layers,
         }]));
         fs\writeFile(layout + "/manifest.json", content: body);
-        nameIndex(layout, tag: tag);
+        final named = nameIndex(layout, tag: tag);
+        if (named.error != null) {
+            return LoadedID{ error = "image-build: prepareLoad {layout}: {named.error!.message}" };
+        }
         return LoadedID{ id = "{config.algorithm}:{config.encoded}" };
     } catch (e) {
         return LoadedID{ error = "image-build: prepareLoad {layout}: {e}" };

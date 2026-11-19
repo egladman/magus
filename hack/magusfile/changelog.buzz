@@ -4,6 +4,7 @@
 // changes/testdata/fragments.txtar.
 namespace changelog;
 
+import "result";
 import "std";
 import "fs";
 import "sort";
@@ -69,11 +70,11 @@ export fun problems(text: str) > [str] {
     return [<str>];
 }
 
-// parse returns the fragment text holds, or throws "<path>: <problem>; <problem>".
-export fun parse(path: str, text: str) > Fragment !> str {
+// parse returns the fragment text holds, or fails with "<path>: <problem>; <problem>".
+export fun parse(path: str, text: str) > result\Result::<Fragment> {
     final found = problems(text);
     if (found.len() > 0) {
-        throw "{path}: " + found.join("; ");
+        return result\fail::<Fragment>("{path}: " + found.join("; "));
     }
     var group = "";
     final lines = mut [<str>];
@@ -84,7 +85,7 @@ export fun parse(path: str, text: str) > Fragment !> str {
             lines.append(line);
         }
     }
-    return Fragment{ path = path, group = group, entry = lines.join("\n") };
+    return result\ok::<Fragment>(Fragment{ path = path, group = group, entry = lines.join("\n") });
 }
 
 // lint returns one "<path>: <problems>" line per malformed fragment among paths, empty
@@ -130,7 +131,11 @@ export fun read(dir: str) > [Fragment] !> str {
             errs.append(these[0]);
             continue;
         }
-        frags.append(parse(path, text: fs\readFile(path) catch ""));
+        final parsed = parse(path, text: fs\readFile(path) catch "");
+        if (parsed.error != null) {
+            throw parsed.error!.message;
+        }
+        frags.append(parsed.value!);
     }
     if (errs.len() > 0) {
         throw errs.join("\n");
@@ -534,11 +539,11 @@ test "every valid fixture parses and every invalid one names its problem" {
 
 test "parse keeps the group and the entry as written" {
     final text = (cases() catch mut {<str: str>})["valid/removed-breaking.md"] ?? "";
-    final got = parse("f.md", text: text) catch Fragment{ path = "", group = "", entry = "" };
+    final got = parse("f.md", text: text).value ?? Fragment{ path = "", group = "", entry = "" };
     std\assert(got.path == "f.md" and got.group == "Removed", message: "{got.path} {got.group}");
     std\assert(got.entry == "- **Breaking: the `exclusive` option.** Delete\n  the key.", message: got.entry);
-    final err = parse("f.md", text: "### Fix\n\n- **A thing.**\n") catch "threw";
-    std\assert(err is str, message: "an unknown group throws");
+    final err = parse("f.md", text: "### Fix\n\n- **A thing.**\n").error;
+    std\assert(err != null, message: "an unknown group fails");
 }
 
 test "lint names every malformed path and passes good ones" {

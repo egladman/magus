@@ -4,6 +4,7 @@
 
 import "encoding/xml";
 import "std";
+import "result";
 import "assert";
 
 final GLYPH_WIDTH = 7;    // estimated px per glyph at the 11px font
@@ -26,12 +27,12 @@ fun halve(doubled: int) > str {
 // whole_percent reads a figure's integer part ("56.8" -> 56). std\parseInt returns null on
 // non-numeric input, which we turn into a clear error so a bad figure fails loudly instead
 // of rendering wrong.
-fun whole_percent(figure: str) > int !> str {
+fun whole_percent(figure: str) > result\Result::<int> {
     final n = std\parseInt(figure.split(".")[0]);
     if (n == null) {
-        throw "badge: coverage figure \"{figure}\" is not a number";
+        return result\fail::<int>("badge: coverage figure \"{figure}\" is not a number");
     }
-    return n!;
+    return result\ok::<int>(n!);
 }
 
 // normalize_percent drops a trailing "%", so "56.8" and "56.8%" both work. The figure stays
@@ -58,11 +59,14 @@ final RED_GRADIENT = ["#D73A49", "#CB2431"];
 // severity_gradient maps coverage to a band: green from 80, yellow from 50, red below.
 // Three bands rather than the six of a shields badge, because the Actions palette has
 // three states and a finer scale would need colors GitHub never uses.
-fun severity_gradient(figure: str) > [str] !> str {
+fun severity_gradient(figure: str) > result\Result::<[str]> {
     final whole = whole_percent(figure);
-    if (whole >= 80) { return GREEN_GRADIENT; }
-    if (whole >= 50) { return YELLOW_GRADIENT; }
-    return RED_GRADIENT;
+    if (whole.error != null) {
+        return result\Result::<[str]>{ error = whole.error };
+    }
+    if (whole.value! >= 80) { return result\ok::<[str]>(GREEN_GRADIENT); }
+    if (whole.value! >= 50) { return result\ok::<[str]>(YELLOW_GRADIENT); }
+    return result\ok::<[str]>(RED_GRADIENT);
 }
 
 // coverage is the only public entry: a label, a percentage figure ("56.8", trailing "%"
@@ -70,45 +74,69 @@ fun severity_gradient(figure: str) > [str] !> str {
 // figure, never passed. Throws on a non-numeric figure.
 export fun coverage(label: str, percent: str, radius: int) > str !> any {
     final figure = normalize_percent(percent);
-    return flat_badge(label, value: "{figure}%", gradient: severity_gradient(figure), radius: radius);
+    final gradient = severity_gradient(figure);
+    if (gradient.error != null) {
+        throw gradient.error!.message;
+    }
+    final badge = flat_badge(label, value: "{figure}%", gradient: gradient.value!, radius: radius);
+    if (badge.error != null) {
+        throw badge.error!.message;
+    }
+    return badge.value!;
 }
 
 // gradient is one vertical two-stop gradient, the shape the Actions badge draws both of
 // its cells with.
-fun two_stop(id: str, stops: [str]) > any !> any {
-    return xml\element("linearGradient", attrs: ["id", id, "x1", "50%", "y1", "0%", "x2", "50%", "y2", "100%"], children: [
-        xml\element("stop", attrs: ["stop-color", stops[0], "offset", "0%"], children: []),
-        xml\element("stop", attrs: ["stop-color", stops[1], "offset", "100%"], children: []),
-    ]);
+fun two_stop(id: str, stops: [str]) > result\Result::<any> {
+    try {
+        return result\ok::<any>(xml\element("linearGradient", attrs: ["id", id, "x1", "50%", "y1", "0%", "x2", "50%", "y2", "100%"], children: [
+            xml\element("stop", attrs: ["stop-color", stops[0], "offset", "0%"], children: []),
+            xml\element("stop", attrs: ["stop-color", stops[1], "offset", "100%"], children: []),
+        ]));
+    } catch (err: any) {
+        return result\caught::<any>(err);
+    }
 }
 
 // flat_badge builds the SVG: a label cell, a value cell, each on its own gradient, and
 // centered text. Private, the gradient arrives already derived.
-fun flat_badge(label: str, value: str, gradient: [str], radius: int) > str !> any {
-    final label_width = text_width(label);
-    final value_width = text_width(value);
-    final total_width = label_width + value_width;
-    final label_center_x = halve(label_width + 2);
-    final value_center_x = halve(2 * label_width + value_width - 2);
+fun flat_badge(label: str, value: str, gradient: [str], radius: int) > result\Result::<str> {
+    try {
+        final label_width = text_width(label);
+        final value_width = text_width(value);
+        final total_width = label_width + value_width;
+        final label_center_x = halve(label_width + 2);
+        final value_center_x = halve(2 * label_width + value_width - 2);
 
-    final tree = xml\element("svg", attrs: ["xmlns", "http://www.w3.org/2000/svg", "xmlns:xlink", "http://www.w3.org/1999/xlink", "width", "{total_width}", "height", "20"], children: [
-        two_stop("label-fill", stops: LABEL_GRADIENT),
-        two_stop("value-fill", stops: gradient),
-        xml\element("mask", attrs: ["id", "round"], children: [
-            xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "rx", "{radius}", "fill", "#fff"], children: []),
-        ]),
-        xml\element("g", attrs: ["mask", "url(#round)"], children: [
-            xml\element("rect", attrs: ["width", "{label_width}", "height", "20", "fill", "url(#label-fill)"], children: []),
-            xml\element("rect", attrs: ["x", "{label_width}", "width", "{value_width}", "height", "20", "fill", "url(#value-fill)"], children: []),
-        ]),
-        xml\element("g", attrs: ["fill", "#fff", "text-anchor", "middle", "font-family", "DejaVu Sans,Verdana,Geneva,sans-serif", "font-size", "11"], children: [
-            xml\element("text", attrs: ["x", label_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [label]),
-            xml\element("text", attrs: ["x", label_center_x, "y", "14"], children: [label]),
-            xml\element("text", attrs: ["x", value_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [value]),
-            xml\element("text", attrs: ["x", value_center_x, "y", "14"], children: [value]),
-        ]),
-    ]);
-    return xml\render(tree);
+        final labelFill = two_stop("label-fill", stops: LABEL_GRADIENT);
+        if (labelFill.error != null) {
+            return result\Result::<str>{ error = labelFill.error };
+        }
+        final valueFill = two_stop("value-fill", stops: gradient);
+        if (valueFill.error != null) {
+            return result\Result::<str>{ error = valueFill.error };
+        }
+        final tree = xml\element("svg", attrs: ["xmlns", "http://www.w3.org/2000/svg", "xmlns:xlink", "http://www.w3.org/1999/xlink", "width", "{total_width}", "height", "20"], children: [
+            labelFill.value!,
+            valueFill.value!,
+            xml\element("mask", attrs: ["id", "round"], children: [
+                xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "rx", "{radius}", "fill", "#fff"], children: []),
+            ]),
+            xml\element("g", attrs: ["mask", "url(#round)"], children: [
+                xml\element("rect", attrs: ["width", "{label_width}", "height", "20", "fill", "url(#label-fill)"], children: []),
+                xml\element("rect", attrs: ["x", "{label_width}", "width", "{value_width}", "height", "20", "fill", "url(#value-fill)"], children: []),
+            ]),
+            xml\element("g", attrs: ["fill", "#fff", "text-anchor", "middle", "font-family", "DejaVu Sans,Verdana,Geneva,sans-serif", "font-size", "11"], children: [
+                xml\element("text", attrs: ["x", label_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [label]),
+                xml\element("text", attrs: ["x", label_center_x, "y", "14"], children: [label]),
+                xml\element("text", attrs: ["x", value_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [value]),
+                xml\element("text", attrs: ["x", value_center_x, "y", "14"], children: [value]),
+            ]),
+        ]);
+        return result\ok::<str>(xml\render(tree));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 test "text_width estimates width from length" {
@@ -139,8 +167,8 @@ test "radius 0 is square" {
 }
 
 test "severity_gradient maps the three Actions bands" {
-    assert\equal(severity_gradient("92.0")[0], want: "#34D058", message: "80+ is the passing green");
-    assert\equal(severity_gradient("80")[1], want: "#28A745", message: "the band starts at 80");
-    assert\equal(severity_gradient("56.8")[0], want: "#d4a72c", message: "50s are yellow");
-    assert\equal(severity_gradient("40")[1], want: "#CB2431", message: "below 50 is the failing red");
+    assert\equal(severity_gradient("92.0").value![0], want: "#34D058", message: "80+ is the passing green");
+    assert\equal(severity_gradient("80").value![1], want: "#28A745", message: "the band starts at 80");
+    assert\equal(severity_gradient("56.8").value![0], want: "#d4a72c", message: "50s are yellow");
+    assert\equal(severity_gradient("40").value![1], want: "#CB2431", message: "below 50 is the failing red");
 }
