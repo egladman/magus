@@ -17,9 +17,10 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -27,59 +28,73 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 func main() {
-	format := flag.String("format", "roff", "output format: roff or md")
-	out := flag.String("out", "", "output directory (default: manpage for roff, docs/reference/manpage for md)")
-	date := flag.String("date", "", "date for .TH header; empty omits it (roff mode)")
-	// The committed man pages carry no version: baking one turns every release bump
-	// into spurious churn across all pages. The .TH source field stays a neutral
-	// "magus" by default; a release build passes -version vX.Y.Z to stamp the copies
-	// it ships, which are never committed.
-	ver := flag.String("version", "", "version for the .TH source field, e.g. v0.2.0; empty (the default) stays version-neutral for committed pages (roff mode)")
-	flag.Parse()
+	var format, out, date, ver string
+	command.Main(command.Command{
+		Name:  "magus-manpage",
+		Short: "Render magus's man pages from its command tree.",
+		Flags: []command.Flag{
+			{Name: "format", Kind: command.String, Default: "roff", Doc: "output format: roff or md", Target: &format},
+			{Name: "out", Kind: command.String, Doc: "output directory (default: manpage for roff, docs/reference/manpage for md)", Target: &out},
+			{Name: "date", Kind: command.String, Doc: "date for .TH header; empty omits it (roff mode)", Target: &date},
+			// The committed man pages carry no version: baking one turns every release bump
+			// into spurious churn across all pages. The .TH source field stays a neutral
+			// "magus" by default; a release build passes -version vX.Y.Z to stamp the copies
+			// it ships, which are never committed.
+			{Name: "version", Kind: command.String, Doc: "version for the .TH source field, e.g. v0.2.0; empty (the default) stays version-neutral for committed pages (roff mode)", Target: &ver},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return render(format, out, date, ver, inv.Stderr)
+		},
+	})
+}
 
+func render(format, out, date, ver string, log io.Writer) error {
 	root := commands.Root.Spec.Command
 	var pages []generate.Page
 	var ext string
 	var err error
-	switch *format {
+	switch format {
 	case "roff":
-		if *out == "" {
-			*out = "manpage"
+		if out == "" {
+			out = "manpage"
 		}
-		pages, err = generate.Roff(root, config.Spec, *date, *ver)
+		pages, err = generate.Roff(root, config.Spec, date, ver)
 		ext = ".1"
 	case "md":
-		if *out == "" {
-			*out = "docs/reference/manpage"
+		if out == "" {
+			out = "docs/reference/manpage"
 		}
 		pages, err = generate.Markdown(root, config.Spec, "internal/commands/registry.go")
 		ext = ".md"
 	default:
-		fatalf("unknown -format %q; want roff or md", *format)
+		return exit.Usagef("unknown -format %q; want roff or md", format)
 	}
 	if err != nil {
-		fatalf("render the %s pages: %v", *format, err)
+		return fmt.Errorf("render the %s pages: %w", format, err)
 	}
 
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		fatalf("mkdir %s: %v", *out, err)
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", out, err)
 	}
 	wrote := make(map[string]bool, len(pages))
 	for _, page := range pages {
-		if err := os.WriteFile(filepath.Join(*out, page.Name), page.Content, 0o644); err != nil {
-			fatalf("%s: %v", page.Name, err)
+		if err := os.WriteFile(filepath.Join(out, page.Name), page.Content, 0o644); err != nil {
+			return fmt.Errorf("%s: %w", page.Name, err)
 		}
 		wrote[page.Name] = true
 	}
-	pruned, err := prune(*out, ext, wrote)
+	pruned, err := prune(out, ext, wrote)
 	if err != nil {
-		fatalf("prune %s: %v", *out, err)
+		return fmt.Errorf("prune %s: %w", out, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus-manpage: wrote %d %s file(s) to %s, pruned %d\n", len(pages), ext, *out, pruned)
+	fmt.Fprintf(log, "magus-manpage: wrote %d %s file(s) to %s, pruned %d\n", len(pages), ext, out, pruned)
+	return nil
 }
 
 // prune deletes pages a previous run wrote that this one did not. Both output dirs
@@ -122,9 +137,4 @@ func prune(outDir, ext string, keep map[string]bool) (int, error) {
 // file that merely shares the prefix (magusfile.md) is never a deletion candidate.
 func generatedPage(name, ext string) bool {
 	return name == "magus"+ext || strings.HasPrefix(name, "magus-") && strings.HasSuffix(name, ext)
-}
-
-func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "magus-manpage: %s\n", fmt.Sprintf(format, args...))
-	os.Exit(1)
 }

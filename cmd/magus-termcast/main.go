@@ -33,16 +33,16 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/rogpeppe/go-internal/txtar"
-
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit/screen"
+	"github.com/rogpeppe/go-internal/txtar"
 )
 
 // background is the context the recorder runs and renders under. Redaction refuses a
@@ -85,49 +85,48 @@ const (
 	prompt = "\x1b[38;5;73m$\x1b[0m "
 )
 
-func main() {
-	name, mode, args := "magus-termcast", runCast, os.Args[1:]
-	if len(args) > 0 && args[0] == "shots" {
-		name, mode, args = "magus-termcast shots", runShots, args[1:]
-	}
-	if err := mode(args); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
-		os.Exit(1)
+func main() { command.Main(root()) }
+
+// root declares the cast, the mode with no subcommand, and shots. It builds
+// fresh flag targets on each call, so tests can invoke it repeatedly.
+func root() command.Command {
+	var record, showcase bool
+	var out, materializeTo string
+	return command.Command{
+		Name:  "magus-termcast",
+		Short: "Record or render the core loop and the showcase.",
+		Usage: "magus-termcast [flags]\n       magus-termcast shots [-out dir]",
+		Flags: []command.Flag{
+			{Name: "record", Kind: command.Bool, Default: false, Doc: "re-record " + capturePath + " by running " + sessionPath + " for real", Target: &record},
+			{Name: "out", Kind: command.String, Default: svgPath, Doc: "path to write the rendered SVG to", Target: &out},
+			{Name: "materialize", Kind: command.String, Doc: "write the demo workspace from " + fixturePath + " into this directory and exit", Target: &materializeTo},
+			{Name: "showcase", Kind: command.Bool, Default: false, Doc: "re-record " + showCapture + " by driving a real interactive session", Target: &showcase},
+		},
+		Children: []command.Command{shotsCommand()},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			// Without this a mistyped subcommand would be ignored and the default
+			// render would run in its place.
+			if len(inv.Args) > 0 {
+				return exit.Usagef("unknown subcommand %q, the only one is shots", inv.Args[0])
+			}
+			return cast(record, showcase, out, materializeTo)
+		},
 	}
 }
 
-// runCast is the mode with no subcommand: record or render the core loop and
-// the showcase.
-func runCast(args []string) error {
-	fs := flag.NewFlagSet("magus-termcast", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprint(fs.Output(), "usage: magus-termcast [flags]\n       magus-termcast shots [-out dir]\n\nflags:\n")
-		fs.PrintDefaults()
-	}
-	record := fs.Bool("record", false, "re-record "+capturePath+" by running "+sessionPath+" for real")
-	out := fs.String("out", svgPath, "path to write the rendered SVG to")
-	materializeTo := fs.String("materialize", "", "write the demo workspace from "+fixturePath+" into this directory and exit")
-	showcase := fs.Bool("showcase", false, "re-record "+showCapture+" by driving a real interactive session")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	// Without this a mistyped subcommand would be ignored and the default
-	// render would run in its place.
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unknown subcommand %q, the only one is shots", fs.Arg(0))
-	}
-
-	if *showcase {
+// cast records or renders the core loop and the showcase.
+func cast(record, showcase bool, out, materializeTo string) error {
+	if showcase {
 		if err := recordShowcaseSession(); err != nil {
 			return err
 		}
 	}
 
-	if *materializeTo != "" {
-		return materialize(*materializeTo)
+	if materializeTo != "" {
+		return materialize(materializeTo)
 	}
 
-	if *record {
+	if record {
 		if err := recordSession(); err != nil {
 			return err
 		}
@@ -151,7 +150,7 @@ func runCast(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := write(screen.VariantPath(*out, v.Suffix), svg); err != nil {
+		if err := write(screen.VariantPath(out, v.Suffix), svg); err != nil {
 			return err
 		}
 	}

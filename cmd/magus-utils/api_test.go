@@ -12,7 +12,7 @@ import (
 // TestRunAPIEmitsASortedLock: the .lock's whole value is that its diff reads as
 // added/removed API elements, which only holds while the lines stay sorted.
 func TestRunAPIEmitsASortedLock(t *testing.T) {
-	got := readGenerated(t, runAPI, func(out string) []string { return []string{"-out", out} })
+	got := readGenerated(t, scribe("api"), func(out string) []string { return []string{"-out", out} })
 
 	require.True(t, strings.HasSuffix(got, "\n"))
 	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
@@ -22,5 +22,5 @@ func TestRunAPIEmitsASortedLock(t *testing.T) {
 }
 
 func TestRunAPIRejectsAnUnknownFlag(t *testing.T) {
-	assert.Error(t, runAPI([]string{"-nosuchflag"}))
+	assert.Error(t, scribe("api")([]string{"-nosuchflag"}))
 }

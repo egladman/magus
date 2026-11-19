@@ -271,6 +271,53 @@ exhaustive-switch:
   # Switches a person accepted, each with the reason it stays.
   exits: []
 
+clikitmain:
+  settings:
+    hint: "declare the command as a libs/clikit command.Command, each flag storing into its Target, and run it with command.Main"
+  # file: count of hand-parsed reads (a flag defined or parsed through package flag, or os.Args)
+  baseline:
+    # magus parses through its generated binders (cmd/magus/gen) but still binds
+    # some flags, its FlagSets and its early os.Args peeks by hand; moving it onto
+    # command.Execute is its own change.
+    cmd/magus/affected.go: 1
+    cmd/magus/agent.go: 3
+    cmd/magus/attention.go: 1
+    cmd/magus/broker.go: 3
+    cmd/magus/checkpoint.go: 1
+    cmd/magus/detach.go: 1
+    cmd/magus/diff.go: 1
+    cmd/magus/doctor.go: 2
+    cmd/magus/drift.go: 3
+    cmd/magus/globals.go: 12
+    cmd/magus/helpers.go: 1
+    cmd/magus/init.go: 2
+    cmd/magus/job.go: 13
+    cmd/magus/job_grant.go: 4
+    cmd/magus/main.go: 20
+    cmd/magus/notes.go: 11
+    cmd/magus/notify.go: 1
+    cmd/magus/query.go: 1
+    cmd/magus/refs.go: 2
+    cmd/magus/run.go: 2
+    cmd/magus/server.go: 1
+    cmd/magus/session.go: 5
+    cmd/magus/shell.go: 1
+    cmd/magus/spell.go: 8
+    cmd/magus/vcs.go: 2
+    cmd/magus/watch.go: 1
+    cmd/magus/where.go: 6
+    cmd/magus/x.go: 1
+    # moduledecls still parses its own -outdir: the file belongs to another
+    # change in flight, so magus-utils hands the flag back to it.
+    cmd/magus-utils/module_decls.go: 2
+    # The benchmark harness tools sit outside the clikit migration's files.
+    benchmarks/agent/cmd/benchreport/main.go: 13
+    benchmarks/agent/cmd/benchtasks/main.go: 11
+    benchmarks/agent/cmd/swegrade/main.go: 2
+    benchmarks/aggregate/main.go: 2
+  # - {path, reason}
+  exits: []
+
 no-throw:
   exits:
     - path: spells/harness/opencode/plugins/magus.js

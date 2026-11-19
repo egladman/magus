@@ -38,7 +38,7 @@ func TestShotsUpToDate(t *testing.T) {
 func TestShotsSubcommandWritesUnderOut(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	require.NoError(t, runShots([]string{"-out", dir}))
+	require.NoError(t, termcast([]string{"shots", "-out", dir}))
 
 	want, err := renderShots()
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestShotsSubcommandWritesUnderOut(t *testing.T) {
 
 func TestShotsSubcommandRejectsAStrayArgument(t *testing.T) {
 	t.Parallel()
-	err := runShots([]string{"-out", t.TempDir(), "extra"})
+	err := termcast([]string{"shots", "-out", t.TempDir(), "extra"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"extra"`)
 }
@@ -61,7 +61,7 @@ func TestShotsSubcommandRejectsAStrayArgument(t *testing.T) {
 // than ignore it and overwrite the committed SVGs with a default render.
 func TestCastRejectsAnUnknownSubcommand(t *testing.T) {
 	t.Parallel()
-	err := runCast([]string{"shot"})
+	err := termcast([]string{"shot"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"shot"`)
 }

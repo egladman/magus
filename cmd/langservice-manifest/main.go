@@ -19,13 +19,15 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"go/format"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // outFile is the destination from the REPO ROOT, which is where a bare
@@ -35,15 +37,18 @@ import (
 const outFile = "internal/langservice/manifest_data.go"
 
 func main() {
-	out := flag.String("out", outFile, "destination for the generated manifest")
-	flag.Parse()
-	if err := run(*out); err != nil {
-		fmt.Fprintln(os.Stderr, "langservice-manifest:", err)
-		os.Exit(1)
-	}
+	var out string
+	command.Main(command.Command{
+		Name:  "langservice-manifest",
+		Short: "Regenerate the host module snapshot the playground's completion and hover read.",
+		Flags: []command.Flag{{Name: "out", Kind: command.String, Default: outFile, Doc: "destination for the generated manifest", Target: &out}},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return run(out, inv.Stdout)
+		},
+	})
 }
 
-func run(out string) error {
+func run(out string, log io.Writer) error {
 	src, emitted, err := render()
 	if err != nil {
 		return err
@@ -51,7 +56,7 @@ func run(out string) error {
 	if err := os.WriteFile(filepath.FromSlash(out), src, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", out, err)
 	}
-	fmt.Printf("wrote %s (%d modules)\n", out, emitted)
+	fmt.Fprintf(log, "wrote %s (%d modules)\n", out, emitted)
 	return nil
 }
 

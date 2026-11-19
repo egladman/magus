@@ -402,13 +402,13 @@ func TestPublicGoPackagesNamesDistinctPackages(t *testing.T) {
 }
 
 func TestRunGoAPIRejectsAnUnknownFlag(t *testing.T) {
-	assert.Error(t, runGoAPI([]string{"-nosuchflag"}))
+	assert.Error(t, scribe("goapi")([]string{"-nosuchflag"}))
 }
 
 func renderRepositoryLock(t *testing.T) []string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "api-go.lock")
-	require.NoError(t, runGoAPI([]string{"-dir", "../..", "-out", out}))
+	require.NoError(t, scribe("goapi")([]string{"-dir", "../..", "-out", out}))
 	body, err := os.ReadFile(out)
 	require.NoError(t, err)
 	return strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")

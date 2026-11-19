@@ -5,52 +5,57 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
 	"strings"
 
 	"github.com/egladman/magus/internal/marker"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
-// runDevShims refuses a release while tracked source still holds a
+// devShimsCommand refuses a release while tracked source still holds a
 // development-only shim, one whose compat condition is marker.NextRelease.
 //
 // Usage: `magus-utils dev-shims [-root .]`.
-func runDevShims(args []string) error {
-	fset := flag.NewFlagSet("dev-shims", flag.ContinueOnError)
-	root := fset.String("root", ".", "checkout whose tracked files are scanned")
-	if err := fset.Parse(args); err != nil {
-		return err
+func devShimsCommand() command.Command {
+	var root string
+	return command.Command{
+		Name:  "dev-shims",
+		Short: "Refuse a release while a development-only shim remains",
+		Flags: []command.Flag{
+			{Name: "root", Kind: command.String, Default: ".", Doc: "checkout whose tracked files are scanned", Target: &root},
+		},
+		Run: func(ctx context.Context, inv command.Invocation) error {
+			if len(inv.Args) != 0 {
+				return exit.Usagef("dev-shims takes no arguments, got %q", inv.Args)
+			}
+			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+			if err != nil {
+				return err
+			}
+			if res.VCS == nil {
+				return errors.New("no version control says which files are tracked, so no release can be judged")
+			}
+			tracked, err := res.VCS.TrackedFiles(ctx, root, []string{"."})
+			if err != nil {
+				return err
+			}
+			dirs, err := checkDevShims(os.DirFS(root), tracked)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("no development-only shim remains in %d tracked files", len(tracked)-len(dirs))
+			if len(dirs) > 0 {
+				fmt.Printf("; %d tracked directory entries were not scanned: %s", len(dirs), strings.Join(dirs, ", "))
+			}
+			fmt.Println()
+			return nil
+		},
 	}
-	if fset.NArg() != 0 {
-		return fmt.Errorf("dev-shims takes no arguments, got %q", fset.Args())
-	}
-	ctx := context.Background()
-	res, err := vcs.Resolve(ctx, *root, "", types.VCSOptions{})
-	if err != nil {
-		return err
-	}
-	if res.VCS == nil {
-		return errors.New("no version control says which files are tracked, so no release can be judged")
-	}
-	tracked, err := res.VCS.TrackedFiles(ctx, *root, []string{"."})
-	if err != nil {
-		return err
-	}
-	dirs, err := checkDevShims(os.DirFS(*root), tracked)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("no development-only shim remains in %d tracked files", len(tracked)-len(dirs))
-	if len(dirs) > 0 {
-		fmt.Printf("; %d tracked directory entries were not scanned: %s", len(dirs), strings.Join(dirs, ", "))
-	}
-	fmt.Println()
-	return nil
 }
 
 // checkDevShims names each file:line in paths with a dev-only shim or a near

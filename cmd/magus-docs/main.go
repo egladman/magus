@@ -8,8 +8,9 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/dry"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/render/md"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/std"
 )
 
@@ -87,33 +89,35 @@ func main() {
 	// Default is where the docs ACTUALLY live, which is what docs/magusfile.buzz passes
 	// explicitly. It used to name docs/buzz/modules, a path nothing reads, so running
 	// the generator without flags wrote a second copy nobody regenerates or ships.
-	outDir := flag.String("out", "docs/reference/buzz", "output directory for module docs")
-	flag.Parse()
+	var outDir string
+	command.Main(command.Command{
+		Name:  "magus-docs",
+		Short: "Render the Buzz host module reference.",
+		Flags: []command.Flag{{Name: "out", Kind: command.String, Default: "docs/reference/buzz", Doc: "output directory for module docs", Target: &outDir}},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return write(outDir, inv.Stderr)
+		},
+	})
+}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-docs: mkdir %s: %v\n", *outDir, err)
-		os.Exit(1)
+func write(outDir string, log io.Writer) error {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
-
 	modules := loadModules()
-
 	for _, m := range modules {
-		if err := writeModule(*outDir, m); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-docs: %s: %v\n", m.Name, err)
-			os.Exit(1)
+		if err := writeModule(outDir, m); err != nil {
+			return fmt.Errorf("%s: %w", m.Name, err)
 		}
 	}
-
-	if err := writeIndex(*outDir, modules); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-docs: index: %v\n", err)
-		os.Exit(1)
+	if err := writeIndex(outDir, modules); err != nil {
+		return fmt.Errorf("index: %w", err)
 	}
-	if err := prune(*outDir, modules); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-docs: prune %s: %v\n", *outDir, err)
-		os.Exit(1)
+	if err := prune(outDir, modules); err != nil {
+		return fmt.Errorf("prune %s: %w", outDir, err)
 	}
-
-	fmt.Fprintf(os.Stderr, "magus-docs: wrote %d module docs to %s\n", len(modules), *outDir)
+	fmt.Fprintf(log, "magus-docs: wrote %d module docs to %s\n", len(modules), outDir)
+	return nil
 }
 
 // prune removes stale pages this generator owns. Output globs are intentionally

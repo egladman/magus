@@ -20,6 +20,7 @@ func TestPluginsRegister(t *testing.T) {
 		"asciistrings":  map[string]any{"module": "", "files": []any{"types/*.go"}},
 		"benchbeside":   map[string]any{"module": "example.com/m"},
 		"blankerror":    map[string]any{"base": "origin/main"},
+		"clikitmain":    map[string]any{"module": "example.com/m"},
 		"closedswitch":  map[string]any{"module": "example.com/m"},
 		"diagmsg": map[string]any{
 			"max-runes": 160, "prefixes": []any{"magus workspace:"},

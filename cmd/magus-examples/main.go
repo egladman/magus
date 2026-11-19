@@ -11,14 +11,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -106,28 +107,34 @@ var examples = []example{
 }
 
 func main() {
-	docsDir := flag.String("dir", "docs", "the directory holding the Markdown files whose <!-- example:<slug> --> blocks to fill")
-	flag.Parse()
-
-	rendered, err := renderExamples()
-	if err != nil {
-		fatalf("%v", err)
-	}
-	// Grouped by page, because inject treats a rendered example with no marker as a hard error,
-	// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
-	// every example that belongs on a different page.
-	byDoc := map[string]map[string]string{}
-	for _, ex := range examples {
-		if byDoc[ex.docs] == nil {
-			byDoc[ex.docs] = map[string]string{}
-		}
-		byDoc[ex.docs][ex.slug] = rendered[ex.slug]
-	}
-	for doc, snippets := range byDoc {
-		if err := inject(filepath.Join(*docsDir, doc), snippets); err != nil {
-			fatalf("%v", err)
-		}
-	}
+	var docsDir string
+	command.Main(command.Command{
+		Name:  "magus-examples",
+		Short: "Fill the docs' example blocks with what magus prints against a fixture workspace.",
+		Flags: []command.Flag{{Name: "dir", Kind: command.String, Default: "docs", Doc: "the directory holding the Markdown files whose <!-- example:<slug> --> blocks to fill", Target: &docsDir}},
+		Run: func(context.Context, command.Invocation) error {
+			rendered, err := renderExamples()
+			if err != nil {
+				return err
+			}
+			// Grouped by page, because inject treats a rendered example with no marker as a hard error,
+			// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
+			// every example that belongs on a different page.
+			byDoc := map[string]map[string]string{}
+			for _, ex := range examples {
+				if byDoc[ex.docs] == nil {
+					byDoc[ex.docs] = map[string]string{}
+				}
+				byDoc[ex.docs][ex.slug] = rendered[ex.slug]
+			}
+			for doc, snippets := range byDoc {
+				if err := inject(filepath.Join(docsDir, doc), snippets); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	})
 }
 
 // writeFixture writes files into a fresh temp directory and returns it.
@@ -282,9 +289,4 @@ func inject(path string, rendered map[string]string) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
-}
-
-func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "magus-examples: %s\n", fmt.Sprintf(format, args...))
-	os.Exit(1)
 }

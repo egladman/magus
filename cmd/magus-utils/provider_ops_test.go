@@ -47,7 +47,7 @@ func TestRunBoundaryDecodeEmitsTheProviderOps(t *testing.T) {
 	dir := t.TempDir()
 	run := func(n string) (dec, opType, opVars string) {
 		t.Helper()
-		require.NoError(t, runBoundaryDecode([]string{
+		require.NoError(t, scribe("boundarydecode")([]string{
 			"-out", filepath.Join(dir, n+"decode.go"), "-list", filepath.Join(dir, n+"list_test.go"), "-bindings-pkg", "bindgen",
 			"-ops", filepath.Join(dir, n+"boundary_ops.go"), "-op-vars", filepath.Join(dir, n, "providerops.go"),
 		}))
@@ -84,7 +84,7 @@ func TestRunBoundaryDecodeEmitsTheProviderOps(t *testing.T) {
 	assert.Equal(t, opVars, opVars2)
 
 	t.Run("-ops without -op-vars", func(t *testing.T) {
-		err := runBoundaryDecode([]string{"-out", "a.go", "-list", "b.go", "-bindings-pkg", "bindgen", "-ops", "c.go"})
+		err := scribe("boundarydecode")([]string{"-out", "a.go", "-list", "b.go", "-bindings-pkg", "bindgen", "-ops", "c.go"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})

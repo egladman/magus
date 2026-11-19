@@ -20,6 +20,8 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/egladman/magus/libs/apiversion v0.1.0 // indirect
+	github.com/egladman/magus/libs/clikit v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.11.1
@@ -27,3 +29,7 @@ require (
 )
 
 replace github.com/egladman/magus/libs/diagnostics => ../diagnostics
+
+replace github.com/egladman/magus/libs/clikit => ../clikit
+
+replace github.com/egladman/magus/libs/apiversion => ../apiversion

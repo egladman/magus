@@ -1,0 +1,15 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+clikitmain:
+  settings:
+    hint: "declare the command as a libs/clikit command.Command, each flag storing into its Target, and run it with command.Main"
+  # file: count of hand-parsed reads (a flag defined or parsed through package flag, or os.Args)
+  baseline:
+    # proofread dispatches on kinds a decisions table may declare at run time
+    # and owns a 0/1/2 exit contract of its own; its move onto clikit is its own
+    # change.
+    cmd/proofread/main.go: 18
+    cmd/proofread/outcomes.go: 2
+    cmd/proofread/voice.go: 17

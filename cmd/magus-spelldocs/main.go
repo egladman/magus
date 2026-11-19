@@ -15,8 +15,9 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
@@ -134,22 +136,30 @@ const spellOptsSource = "internal/interp/bindings/spell_object.go"
 var spellsDir = "spells"
 
 func main() {
-	outDir := flag.String("out", "docs/spells", "output directory for spell docs")
-	spellsFlag := flag.String("spells", "spells", "path to the repo's spells/ directory, relative to cwd")
-	flag.Parse()
-	spellsDir = *spellsFlag
+	var outDir string
+	command.Main(command.Command{
+		Name:  "magus-spelldocs",
+		Short: "Render a page per built-in spell and the spell list on its concept page.",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Default: "docs/spells", Doc: "output directory for spell docs", Target: &outDir},
+			{Name: "spells", Kind: command.String, Default: "spells", Doc: "path to the repo's spells/ directory, relative to cwd", Target: &spellsDir},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return write(outDir, inv.Stderr)
+		},
+	})
+}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-spelldocs: mkdir %s: %v\n", *outDir, err)
-		os.Exit(1)
+func write(outDir string, log io.Writer) error {
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
 
 	builtins := spell.Builtins()
 	names := make([]string, 0, len(builtins))
 	for name := range builtins {
 		if _, ok := spellMeta[name]; !ok {
-			fmt.Fprintf(os.Stderr, "magus-spelldocs: built-in spell %q has no spellMeta entry; add one\n", name)
-			os.Exit(1)
+			return fmt.Errorf("built-in spell %q has no spellMeta entry, so add one", name)
 		}
 		names = append(names, name)
 	}
@@ -157,9 +167,8 @@ func main() {
 
 	for _, name := range names {
 		d := builtins[name]
-		if err := os.WriteFile(filepath.Join(*outDir, name+".md"), []byte(renderSpell(d)), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-spelldocs: %s: %v\n", name, err)
-			os.Exit(1)
+		if err := os.WriteFile(filepath.Join(outDir, name+".md"), []byte(renderSpell(d)), 0o644); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
 	// Renaming a spell used to leave its page behind, because this walked the registry
@@ -168,22 +177,21 @@ func main() {
 	// `magus clean docs` swept them (they are declared outputs) and the site's link
 	// gate then failed on pages every checkout still had. Prune here so the rename in
 	// the registry is the only edit a rename needs.
-	if err := pruneUnregistered(*outDir, names); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-spelldocs: %v\n", err)
-		os.Exit(1)
+	if err := pruneUnregistered(outDir, names); err != nil {
+		return err
 	}
 	// The at-a-glance list of all spells lives on the concept page (docs/spells.md,
 	// the /spells/ landing) rather than a separate index, so /spells/ both explains
 	// what a spell is and lists every one. Injected between markers so it stays
 	// generated (drift-gated), not hand-maintained. docs/spells.md is the sibling
 	// of the per-spell output dir.
-	spellsMd := filepath.Join(filepath.Dir(*outDir), "spells.md")
+	spellsMd := filepath.Join(filepath.Dir(outDir), "spells.md")
 	if err := injectSpellList(spellsMd, builtins, names); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-spelldocs: inject spell list: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("inject spell list: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "magus-spelldocs: wrote %d spell docs to %s\n", len(names), *outDir)
+	fmt.Fprintf(log, "magus-spelldocs: wrote %d spell docs to %s\n", len(names), outDir)
+	return nil
 }
 
 // resolvedArgv joins an op's command and arguments into the shell-free argv a

@@ -21,7 +21,7 @@ func TestRunBoundaryDecode(t *testing.T) {
 		return []string{"-out", filepath.Join(dir, n+"decode.go"), "-list", filepath.Join(dir, n+"list_test.go"), "-bindings-pkg", "bindgen"}
 	}
 	read := func(n string) (string, string) {
-		require.NoError(t, runBoundaryDecode(args(n)))
+		require.NoError(t, scribe("boundarydecode")(args(n)))
 		dec, err := os.ReadFile(filepath.Join(dir, n+"decode.go"))
 		require.NoError(t, err)
 		list, err := os.ReadFile(filepath.Join(dir, n+"list_test.go"))
@@ -51,7 +51,7 @@ func TestRunBoundaryDecode(t *testing.T) {
 	assert.Equal(t, list, list2)
 
 	t.Run("no -out", func(t *testing.T) {
-		err := runBoundaryDecode(nil)
+		err := scribe("boundarydecode")(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})
