@@ -41,6 +41,9 @@ func marshal(v any) ([]byte, error) {
 	if err := s.document(nil, reflect.Value{}); err != nil {
 		var syntax *SyntaxError
 		if errors.As(err, &syntax) {
+			if errors.Is(syntax.Err, ErrInvalidUTF8) {
+				return nil, &EncodeError{Err: fmt.Errorf("writing a string: %w", ErrInvalidUTF8)}
+			}
 			return nil, &EncodeError{Err: syntax.Err}
 		}
 		return nil, err
