@@ -8,7 +8,11 @@ export fun mergeQueueRiskDiagram() > diagram\Diagram !> any {
     final queueDir = magus\graph().dir("internal/queue");
     final risk = magus\graph().dir("internal/risk");
     final nested: [magus\Dir] = magus\graph().dirs("internal/queue/*");
-    final queue = diagram\without(nested + [queueDir], drop: [provider]);
+    final inQueue = diagram\without(nested + [queueDir], drop: [provider]);
+    if (inQueue.error != null) {
+        throw inQueue.error!.message;
+    }
+    final queue = inQueue.value!;
     final flows = diagram\external("Queue workflows", sub: "queue-intent, queue, queue-apply");
     final low = diagram\external("low risk?", look: diagram\Look.decision);
     final gate = diagram\external("Gate the projects", sub: "every one when unbounded", look: diagram\Look.plain);

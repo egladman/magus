@@ -13,6 +13,10 @@ export fun diagramPipelineDiagram() > diagram\Diagram !> any {
     final files = diagram\external("SVGs + receipts", sub: "diagrams-generate", look: diagram\Look.store);
     final site = diagram\external("Site render", sub: "inlines the page copy", look: diagram\Look.plain);
     final console = diagram\external("Console view", sub: "static SVG, then wasm", look: diagram\Look.plain);
+    final otherServices = diagram\without(magus\graph().layer("handler").dirs, drop: [server]);
+    if (otherServices.error != null) {
+        throw otherServices.error!.message;
+    }
     return diagram\of("diagram-pipeline",
             title: "One library draws every diagram, here and in the console",
             eyebrow: "diagrams",
@@ -81,6 +85,6 @@ export fun diagramPipelineDiagram() > diagram\Diagram !> any {
             why: "the termkit host modules; a diagram source reads the graph through the magus module alone")
         .except(packages\goPackages("std/encoding/**"),
             why: "the encoding host modules; a diagram source reads the graph through the magus module alone")
-        .except(diagram\without(magus\graph().layer("handler").dirs, drop: [server]),
+        .except(otherServices.value!,
             why: "the console's other services; none embeds magus/diagram");
 }

@@ -12,6 +12,10 @@ export fun workspaceLoadDiagram() > diagram\Diagram !> any {
     final cache = magus\graph().dir("internal/cache");
     final rootMf = diagram\external("Root magusfile", sub: "declares project .", look: diagram\Look.input);
     final nestedMf = diagram\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: diagram\Look.input);
+    final seam = diagram\without(packages\goPackages("internal/interp/**"), drop: [interp]);
+    if (seam.error != null) {
+        throw seam.error!.message;
+    }
     return diagram\of("workspace-load",
             title: "A target exists because a magusfile exported it",
             eyebrow: "workspace",
@@ -44,7 +48,7 @@ export fun workspaceLoadDiagram() > diagram\Diagram !> any {
         .scope(packages\goPackages("internal/cache/**"))
         .except([magus\graph().dir("project/impact")],
             why: "the blast radius of a changeset, which affected reads after the load")
-        .except(diagram\without(packages\goPackages("internal/interp/**"), drop: [interp]),
+        .except(seam.value!,
             why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
         .except(packages\dataTypes(),
             why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no part of the project model")
