@@ -329,7 +329,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NoError(t, err)
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
-	ctx := withSecrets(context.Background())
+	ctx := testkit.WithEnvResolver(context.Background())
 	w, err := magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })

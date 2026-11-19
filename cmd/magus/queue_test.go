@@ -715,7 +715,7 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 		defer func() { _ = w.Close() }()
 		var out []keyed
 		for _, target := range targets {
-			key, lines, err := w.ComputeTargetKey(withSecrets(t.Context()), project, target, charms)
+			key, lines, err := w.ComputeTargetKey(testkit.WithEnvResolver(t.Context()), project, target, charms)
 			require.NoError(t, err)
 			out = append(out, keyed{key, lines})
 		}

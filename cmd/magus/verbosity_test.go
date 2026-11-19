@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 )
@@ -56,7 +57,7 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 // each default handler the CLI installs: pretty leads the message with it, as
 // the tag in the message text used to, and text keeps it an attribute.
 func TestDirHandlerRendersComponentByFormat(t *testing.T) {
-	ctx := std.WithCurrentWorkingDirectory(withSecrets(context.Background()), "/ws/api")
+	ctx := std.WithCurrentWorkingDirectory(testkit.WithEnvResolver(context.Background()), "/ws/api")
 
 	var pretty bytes.Buffer
 	slog.New(dirHandler{cache.NewLogHandler(&pretty, "pretty", &slog.HandlerOptions{Level: slog.LevelInfo})}).
@@ -69,4 +70,21 @@ func TestDirHandlerRendersComponentByFormat(t *testing.T) {
 		With(attr.ComponentKey, "knowledge").
 		WarnContext(ctx, "cannot decode symbol index", "index", "a.scip")
 	assert.Contains(t, text.String(), `msg="cannot decode symbol index" component=knowledge index=a.scip dir=/ws/api`)
+}
+
+// resolverHandler adds the resolver to the context a record is handled under.
+// slog.Info hands its handler a bare background context, which the pretty and plain
+// handlers cannot redact under.
+type resolverHandler struct{ slog.Handler }
+
+func (h resolverHandler) Handle(ctx context.Context, r slog.Record) error {
+	return h.Handler.Handle(testkit.WithEnvResolver(ctx), r)
+}
+
+func (h resolverHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return resolverHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h resolverHandler) WithGroup(name string) slog.Handler {
+	return resolverHandler{h.Handler.WithGroup(name)}
 }

@@ -230,7 +230,7 @@ func checkReviewWorkspace(t *testing.T, provider string, opts ...magus.Option) (
 	bindings.SetReviewProvider(provider)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 
-	return withMagus(withSecrets(context.Background()), m), root, m
+	return withMagus(testkit.WithEnvResolver(context.Background()), m), root, m
 }
 
 // reviewIn registers a provider whose review 482 on acme/acme is in state and holds threads.
@@ -456,7 +456,7 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 	assert.Equal(t, 1, own.shutdowns, "a one-shot process flushes before it exits")
 
 	shared := &shutdownRecorder{Provider: base}
-	shutdownOneShotTelemetry(withMagus(withSecrets(context.Background()), m), shared)
+	shutdownOneShotTelemetry(withMagus(testkit.WithEnvResolver(context.Background()), m), shared)
 	assert.Zero(t, shared.shutdowns, "the server's provider is not the job's to shut down")
 }
 
