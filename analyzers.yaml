@@ -351,7 +351,6 @@ no-throw:
       hack/ci/show-failures.buzz: 5
       hack/dev/bootstrap-checkout.buzz: 14
       hack/dev/bootstrap-harnesses.buzz: 1
-      hack/dev/issue-release.buzz: 2
       hack/dev/ls-worktrees.buzz: 1
       hack/dev/rebase-branches-onto-base.buzz: 2
       hack/dev/rename-gate-to-verification.buzz: 1

@@ -1450,7 +1450,11 @@ test "the dev overlay builds the paranoid base into magus-dev" {
 
 fun edgeLabels(f: magusdiagram\Diagram) > [str] !> any { //nolint:no-throw // a test helper; a raise fails the test
     final labels = mut [<str>];
-    foreach (e in f.layout().edges) {
+    final laid = f.layout();
+    if (laid.error != null) {
+        throw laid.error!.message;
+    }
+    foreach (e in laid.value!.edges) {
         labels.append(e.label);
     }
     _ = labels.sort(fun (a: str, b: str) > bool => a < b);

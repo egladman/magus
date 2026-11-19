@@ -50,18 +50,22 @@ fun bare(version: str) > str {
 }
 
 // candidate is the version level moves cur to.
-export fun candidate(cur: str, level: str) > str !> any {
-    final next = releases\nextVersions(cur);
-    if (level == "patch") {
-        return bare(next.patch);
+export fun candidate(cur: str, level: str) > result\Result::<str> {
+    if (LEVELS.indexOf(level) == null) {
+        return result\fail::<str>("{level} is not one of {LEVELS.join(", ")}");
     }
-    if (level == "minor") {
-        return bare(next.minor);
+    try {
+        final next = releases\nextVersions(cur);
+        if (level == "patch") {
+            return result\ok::<str>(bare(next.patch));
+        }
+        if (level == "minor") {
+            return result\ok::<str>(bare(next.minor));
+        }
+        return result\ok::<str>(bare(next.major));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "release: next version of {cur}");
     }
-    if (level == "major") {
-        return bare(next.major);
-    }
-    throw "{level} is not one of {LEVELS.join(", ")}";
 }
 
 // levelOf is the level a picker row or a --bump value names: the row's first word.
@@ -135,8 +139,12 @@ fun at(m: Mod) > str {
 }
 
 // rehearse runs the target without the cd charm, so it changes nothing.
-fun rehearse(release: [str]) > magus\ExecResult !> any {
-    return magus\run(["release", ".", "--"] + release, opts: magus\CommandOptions{ quiet = true, allowFailure = true });
+fun rehearse(release: [str]) > result\Result::<magus\ExecResult> {
+    try {
+        return result\ok::<magus\ExecResult>(magus\run(["release", ".", "--"] + release, opts: magus\CommandOptions{ quiet = true, allowFailure = true }));
+    } catch (err: any) {
+        return result\caught::<magus\ExecResult>(err, doing: "release: dry run");
+    }
 }
 
 export fun main(args: [str]) > void !> any {
@@ -189,7 +197,11 @@ export fun main(args: [str]) > void !> any {
         final m = found!;
         final rows = mut [<str>];
         foreach (level in LEVELS) {
-            rows.append("{level}  ->  {candidate(m.current, level: level)}");
+            final version = candidate(m.current, level: level);
+            if (version.error != null) {
+                throw version.error!.message;
+            }
+            rows.append("{level}  ->  {version.value!}");
         }
         final choice = prompt\choose(bumps.value![key], flag: "--bump {key}=<patch|minor|major>", items: rows,
             question: "{key} ({at(m)}): next version");
@@ -197,17 +209,25 @@ export fun main(args: [str]) > void !> any {
             throw choice.error!.message;
         }
         final level = levelOf(choice.value!);
-        release.append("{key}@{candidate(m.current, level: level)}");
+        final version = candidate(m.current, level: level);
+        if (version.error != null) {
+            throw version.error!.message;
+        }
+        release.append("{key}@{version.value!}");
     }
     if (release.len() == 0) {
         throw "release: no module chosen";
     }
 
     std\print("releasing: {release.join(" ")}");
-    final spun = fun () > any !> any {
+    final spun = fun () > any {
         return rehearse(release);
     };
-    final dry: magus\ExecResult = if (term\isInteractive()) term\spin("dry run: magus run release", run: spun) else rehearse(release);
+    final rehearsed: result\Result::<magus\ExecResult> = if (term\isInteractive()) term\spin("dry run: magus run release", run: spun) else rehearse(release);
+    if (rehearsed.error != null) {
+        throw rehearsed.error!.message;
+    }
+    final dry = rehearsed.value!;
     final checks = parseChecks(dry.stdout + "\n" + dry.stderr);
     foreach (line in renderTable(checks)) {
         std\print(line);
@@ -230,9 +250,9 @@ export fun main(args: [str]) > void !> any {
 }
 
 test "a bump names a level and a version" {
-    assert\equal(candidate("v0.4.3", level: "patch"), want: "0.4.4", message: "patch");
-    assert\equal(candidate("v0.4.3", level: "minor"), want: "0.5.0", message: "minor");
-    assert\equal(candidate("", level: "minor"), want: "0.1.0", message: "unreleased");
+    assert\equal(candidate("v0.4.3", level: "patch").value, want: "0.4.4", message: "patch");
+    assert\equal(candidate("v0.4.3", level: "minor").value, want: "0.5.0", message: "minor");
+    assert\equal(candidate("", level: "minor").value, want: "0.1.0", message: "unreleased");
     assert\equal(levelOf("minor  ->  0.5.0"), want: "minor", message: "a picker row");
     assert\equal(levelOf("major"), want: "major", message: "a flag value");
 }
