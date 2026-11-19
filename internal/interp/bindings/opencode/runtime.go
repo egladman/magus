@@ -13,11 +13,11 @@ import (
 )
 
 // The harness spell embeds ./wasm built as js/wasm, so the outputs are
-// committed, unstamped so an unchanged source keeps its bytes. The wasm embeds the
-// Go runtime, so GOTOOLCHAIN pins the compiler to mise.toml's go; go.mod's floor
-// alone lets each machine build with whatever patch release it has installed.
+// committed, unstamped so an unchanged source keeps its bytes. GOTOOLCHAIN=local
+// builds with the Go mise provides, so mise.toml stays the one version source; a
+// machine without that Go fails rather than downloading another.
 //
-//go:generate env GOTOOLCHAIN=go1.26.11 GOEXPERIMENT=jsonv2 GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
+//go:generate env GOTOOLCHAIN=local GOEXPERIMENT=jsonv2 GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
 //go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
 
 // moduleName is the Buzz module plugin.buzz imports.
