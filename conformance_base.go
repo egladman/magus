@@ -416,8 +416,9 @@ func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, err
 		return "", fmt.Errorf("conformance: %w", err)
 	}
 	key := conformanceKey{
-		commit:   commit,
-		version:  baseMeasureVersion,
+		commit: commit,
+		// The name is one path segment, its parts split on "-", and the remote tier's key is its base.
+		version:  strings.NewReplacer("/", ".", "-", ".").Replace(baseMeasureVersion),
 		policy:   shortDigest(sha256.Sum256(policy)),
 		indexers: shortDigest([sha256.Size]byte(indexers.Sum(nil))),
 	}
