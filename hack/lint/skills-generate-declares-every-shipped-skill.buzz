@@ -9,6 +9,7 @@ namespace skills;
 
 import "assert";
 import "path";
+import "result";
 import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -52,7 +53,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (catalog == null) {
         return [support\missing(CATALOG)];
     }
-    final suffix = suffixDecl.match(support\read(catalog!));
+    final readResult = support\read(catalog!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final suffix = suffixDecl.match(readResult.value!);
     if (suffix == null) {
         return [Finding{ path = CATALOG, message = "declares no fullTwinSuffix",
             fix = "Update this rule's pattern to where the full twin's suffix is declared now." }];
@@ -64,7 +69,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
     }
     final outputs = mut [<str>];
-    foreach (p in support\targets().projects) {
+    final targetsResult = support\targets();
+    if (targetsResult.error != null) {
+        throw targetsResult.error!.message;
+    }
+    foreach (p in targetsResult.value!.projects) {
         if (p.path != ".") {
             continue;
         }
@@ -76,45 +85,57 @@ export fun check(files: [Path]) > [Finding] !> any {
             }
         }
     }
-    return findings(outputs, shipped: shipped, twinSuffix: suffix![1], magusfile: support\read(magusfile!));
+    final readResult2 = support\read(magusfile!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    final found = findings(outputs, shipped: shipped, twinSuffix: suffix![1], magusfile: readResult2.value!);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // findings grades skills_generate's declared output globs against the shipped skill
 // names, each installed with its twin, and against HAND_AUTHORED.
-export fun findings(outputs: [str], shipped: [str], twinSuffix: str, magusfile: str) > [Finding] !> any {
-    if (outputs.len() == 0) {
-        return [Finding{ path = "magusfile.buzz", message = "declares no installed-skill outputs",
-            fix = "Declare each installed SKILL.md path in skills_generate's writesFiles." }];
-    }
-    final line = support\findLine(magusfile, needle: "export fun skills_generate(");
-    final found = mut [<Finding>];
-    foreach (name in support\sorted(shipped)) {
-        foreach (dest in DESTINATIONS) {
-            foreach (installed in [name, name + twinSuffix]) {
-                final p = dest + "/" + installed + "/SKILL.md";
-                if (path\matchesAny(outputs, path: p)) {
+export fun findings(outputs: [str], shipped: [str], twinSuffix: str, magusfile: str) > result\Result::<[Finding]> {
+    try {
+        if (outputs.len() == 0) {
+            return result\ok::<[Finding]>([Finding{ path = "magusfile.buzz", message = "declares no installed-skill outputs",
+                fix = "Declare each installed SKILL.md path in skills_generate's writesFiles." }]);
+        }
+        final line = support\findLine(magusfile, needle: "export fun skills_generate(");
+        final found = mut [<Finding>];
+        foreach (name in support\sorted(shipped)) {
+            foreach (dest in DESTINATIONS) {
+                foreach (installed in [name, name + twinSuffix]) {
+                    final p = dest + "/" + installed + "/SKILL.md";
+                    if (path\matchesAny(outputs, path: p)) {
+                        continue;
+                    }
+                    found.append(Finding{ path = "magusfile.buzz", line = line,
+                        message = "{SHIPPED} ships {name}, but no declared output covers {p}",
+                        fix = "An undeclared installed skill classifies as hand-editable source, and the merge\n"
+                            + "driver stops covering it. Add the pattern to skills_generate." });
+                }
+            }
+        }
+        foreach (name in HAND_AUTHORED) {
+            foreach (dest in DESTINATIONS) {
+                final p = dest + "/" + name + "/SKILL.md";
+                if (!path\matchesAny(outputs, path: p)) {
                     continue;
                 }
                 found.append(Finding{ path = "magusfile.buzz", line = line,
-                    message = "{SHIPPED} ships {name}, but no declared output covers {p}",
-                    fix = "An undeclared installed skill classifies as hand-editable source, and the merge\n"
-                        + "driver stops covering it. Add the pattern to skills_generate." });
+                    message = "declares {p} as a generated output, but magus never writes it",
+                    fix = "describe file will call it generated and the path guard will warn an author off it.\n"
+                        + "Narrow the skills_generate pattern so it misses the hand-authored skill." });
             }
         }
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    foreach (name in HAND_AUTHORED) {
-        foreach (dest in DESTINATIONS) {
-            final p = dest + "/" + name + "/SKILL.md";
-            if (!path\matchesAny(outputs, path: p)) {
-                continue;
-            }
-            found.append(Finding{ path = "magusfile.buzz", line = line,
-                message = "declares {p} as a generated output, but magus never writes it",
-                fix = "describe file will call it generated and the path guard will warn an author off it.\n"
-                    + "Narrow the skills_generate pattern so it misses the hand-authored skill." });
-        }
-    }
-    return found;
 }
 
 fun skillOutputGlobs(names: [str]) > [str] {
@@ -128,20 +149,20 @@ fun skillOutputGlobs(names: [str]) > [str] {
 }
 
 test "every shipped skill and its twin declared, no hand-authored one, passes" {
-    assert\equal(findings(skillOutputGlobs(["magus-run", "magus-query"]), shipped: ["magus-run", "magus-query"], twinSuffix: "-full", magusfile: "").len(),
+    assert\equal(findings(skillOutputGlobs(["magus-run", "magus-query"]), shipped: ["magus-run", "magus-query"], twinSuffix: "-full", magusfile: "").value!.len(),
         want: 0, message: "clean");
 }
 
 test "a shipped skill with no output is reported at skills_generate" {
     final got = findings(skillOutputGlobs(["magus-run"]), shipped: ["magus-run", "magus-new"], twinSuffix: "-full",
-        magusfile: "x\nexport fun skills_generate(ctx: magus\\Context) > void \{}\n");
+        magusfile: "x\nexport fun skills_generate(ctx: magus\\Context) > void \{}\n").value!;
     assert\equal(got.len(), want: 6, message: "three destinations, each with its twin");
     assert\equal(got[0].message, want: "internal/agent/skills ships magus-new, but no declared output covers .claude/skills/magus-new/SKILL.md", message: "message");
     assert\equal(got[0].line, want: 2, message: "line");
 }
 
 test "an output claiming a hand-authored skill is reported" {
-    final got = findings([".claude/skills/**"], shipped: [<str>], twinSuffix: "-full", magusfile: "");
+    final got = findings([".claude/skills/**"], shipped: [<str>], twinSuffix: "-full", magusfile: "").value!;
     assert\equal(support\messages(got), want: [
         "declares .claude/skills/magus-skill-authoring/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/magus-local-development/SKILL.md as a generated output, but magus never writes it",

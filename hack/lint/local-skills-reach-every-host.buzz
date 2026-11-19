@@ -20,13 +20,21 @@ export fun check(files: [Path]) > [Finding] !> any {
     final skills = mut [<str>];
     foreach (f in files) {
         if (!path\matches(AGENTS + "/*/SKILL.md", path: f.value)) { continue; }
-        if (support\read(f).indexOf(STAMP) != null) { continue; }
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        if (readResult.value!.indexOf(STAMP) != null) { continue; }
         skills.append(f.value.sub(AGENTS.len() + 1, len: f.value.len() - AGENTS.len() - "/SKILL.md".len() - 1));
     }
-    return findings(skills, ignore: support\read(ignore!));
+    final readResult2 = support\read(ignore!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    return findings(skills, ignore: readResult2.value!);
 }
 
-export fun findings(skills: [str], ignore: str) > [Finding] !> any {
+export fun findings(skills: [str], ignore: str) > [Finding] {
     final found = mut [<Finding>];
     final lines = "\n" + ignore + "\n";
     foreach (name in support\sorted(skills)) {

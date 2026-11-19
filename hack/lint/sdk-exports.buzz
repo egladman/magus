@@ -7,6 +7,7 @@
 namespace sdkexports;
 
 import "assert";
+import "result";
 import "magus/lint";
 import "encoding/json";
 import "encoding/yaml";
@@ -27,7 +28,19 @@ export fun check(files: [Path]) > [Finding] !> any {
         return [Finding{ path = ALLOWED, message = "the allow list or the API lock was not handed in",
             fix = "Restore " + LOCK + " and " + ALLOWED + "." }];
     }
-    return judge(exported(support\read(lock!)), allowed: support\read(allowed!));
+    final readResult = support\read(lock!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final readResult2 = support\read(allowed!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    final found = judge(exported(readResult.value!), allowed: readResult2.value!);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // exported is the root package's top-level names and the methods of its types, as the lock
@@ -52,22 +65,30 @@ export fun exported(lock: str) > [str] {
 
 // reasons is each allow-list key's reason by name. The file is a YAML map of name to
 // reason; a name listed twice is the parser's error.
-export fun reasons(src: str) > {str: str} !> any {
-    final got = mut {<str: str>};
-    if (src.trim() == "") {
-        return got;
+export fun reasons(src: str) > result\Result::<{str: str}> {
+    try {
+        final got = mut {<str: str>};
+        if (src.trim() == "") {
+            return result\ok::<{str: str}>(got);
+        }
+        final doc: {str: str} = yaml\parse(src);
+        foreach (name, reason in doc) {
+            got[name] = reason;
+        }
+        return result\ok::<{str: str}>(got);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err);
     }
-    final doc: {str: str} = yaml\parse(src);
-    foreach (name, reason in doc) {
-        got[name] = reason;
-    }
-    return got;
 }
 
 // judge is each finding for the exported names against the allow list.
-export fun judge(names: [str], allowed: str) > [Finding] !> any {
+export fun judge(names: [str], allowed: str) > result\Result::<[Finding]> {
     final found = mut [<Finding>];
-    final have = reasons(allowed);
+    final haveResult = reasons(allowed);
+    if (haveResult.error != null) {
+        return result\Result::<[Finding]>{ error = haveResult.error };
+    }
+    final have = haveResult.value!;
     final seen = mut {<str: bool>};
     foreach (name in names) {
         seen[name] = true;
@@ -86,7 +107,7 @@ export fun judge(names: [str], allowed: str) > [Finding] !> any {
                 fix = "Delete its key from " + ALLOWED + "." });
         }
     }
-    return found;
+    return result\ok::<[Finding]>(found);
 }
 
 test "exported keeps top-level names and methods but not fields" {
@@ -94,25 +115,29 @@ test "exported keeps top-level names and methods but not fields" {
     assert\equal(exported(lock), want: ["Open", "Magus", "Magus.Run"], message: "names");
 }
 
-fun row(name: str, reason: str) > str !> any {
-    return json\stringify(name) + ": " + json\stringify(reason) + "\n";
+fun row(name: str, reason: str) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify(name) + ": " + json\stringify(reason) + "\n");
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 test "a listed name with a reason passes" {
-    assert\equal(support\messages(judge(["Open"], allowed: row("Open", reason: "entry point"))), want: [<str>], message: "clean");
+    assert\equal(support\messages(judge(["Open"], allowed: row("Open", reason: "entry point").value!).value!), want: [<str>], message: "clean");
 }
 
 test "an export absent from the allow list fails and names the remedy" {
-    final got = judge(["Magus.ModelRows"], allowed: "");
+    final got = judge(["Magus.ModelRows"], allowed: "").value!;
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].message, want: "the root package exports Magus.ModelRows, which the SDK allow list leaves out", message: "message");
     assert\equal(got[0].fix.startsWith("Prefer not exporting it."), want: true, message: "remedy");
 }
 
 test "a blank reason fails" {
-    assert\equal(judge(["Open"], allowed: row("Open", reason: "")).len(), want: 1, message: "blank");
+    assert\equal(judge(["Open"], allowed: row("Open", reason: "").value!).value!.len(), want: 1, message: "blank");
 }
 
 test "an allow-list key for a removed export is stale" {
-    assert\equal(support\messages(judge([<str>], allowed: row("Gone", reason: "x"))), want: ["the SDK allow list names Gone, which the root package no longer exports"], message: "stale");
+    assert\equal(support\messages(judge([<str>], allowed: row("Gone", reason: "x").value!).value!), want: ["the SDK allow list names Gone, which the root package no longer exports"], message: "stale");
 }

@@ -51,6 +51,7 @@ import "assert";
 import "fs";
 import "path";
 import "proc";
+import "result";
 import "std";
 import "encoding/json";
 import "magus/lint";
@@ -110,46 +111,73 @@ final FRAGMENTS = ["changes/unreleased/*.md"];
 // kindOf is proofread's kind for the hand-written file at rel: a skill body the
 // agent package renders, a skill or an AGENTS.md an agent loads as written, a changelog fragment, a
 // guide, a design-principle page, or any other Markdown, which a reader looks things up in.
-export fun kindOf(rel: str) > str !> any {
-    if (path\matchesAny(PRINCIPLES, path: rel)) {
-        return "principle";
+export fun kindOf(rel: str) > result\Result::<str> {
+    try {
+        if (path\matchesAny(PRINCIPLES, path: rel)) {
+            return result\ok::<str>("principle");
+        }
+        if (path\matchesAny(FRAGMENTS, path: rel)) {
+            return result\ok::<str>("changelog");
+        }
+        if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
+            return result\ok::<str>("skill-template");
+        }
+        if (path\matchesAny([".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
+            return result\ok::<str>("agent-brief");
+        }
+        if (path\matchesAny(GUIDES, path: rel)) {
+            return result\ok::<str>("guide");
+        }
+        return result\ok::<str>("reference");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    if (path\matchesAny(FRAGMENTS, path: rel)) {
-        return "changelog";
-    }
-    if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
-        return "skill-template";
-    }
-    if (path\matchesAny([".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
-        return "agent-brief";
-    }
-    if (path\matchesAny(GUIDES, path: rel)) {
-        return "guide";
-    }
-    return "reference";
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
     final generated = mut [<str>];
     final attrs = support\named(files, p: ".gitattributes");
     if (attrs != null) {
-        foreach (g in support\attributeGlobs(support\read(attrs!))) { generated.append(g); }
+        final readResult = support\read(attrs!);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (g in support\attributeGlobs(readResult.value!)) { generated.append(g); }
     }
     final ignore = support\named(files, p: ".markdownlintignore");
     if (ignore != null) {
-        foreach (g in ignoreGlobs(support\read(ignore!))) { generated.append(g); }
+        final readResult2 = support\read(ignore!);
+        if (readResult2.error != null) {
+            throw readResult2.error!.message;
+        }
+        foreach (g in ignoreGlobs(readResult2.value!)) { generated.append(g); }
     }
     final found = mut [<Finding>];
     final pages = mut [<Page>];
     final bases = mut [<str>];
     foreach (f in files) {
-        if (!f.value.endsWith(".md") or isGenerated(f.value, globs: generated)) {
+        if (!f.value.endsWith(".md")) {
             continue;
         }
-        foreach (finding in proseFindings(f.value, md: support\read(f))) {
+        final generatedPage = isGenerated(f.value, globs: generated);
+        if (generatedPage.error != null) {
+            throw generatedPage.error!.message;
+        }
+        if (generatedPage.value!) {
+            continue;
+        }
+        final readResult3 = support\read(f);
+        if (readResult3.error != null) {
+            throw readResult3.error!.message;
+        }
+        foreach (finding in proseFindings(f.value, md: readResult3.value!)) {
             found.append(finding);
         }
-        pages.append(Page{ base = f.base, rel = f.value, kind = kindOf(f.value) });
+        final kind = kindOf(f.value);
+        if (kind.error != null) {
+            throw kind.error!.message;
+        }
+        pages.append(Page{ base = f.base, rel = f.value, kind = kind.value! });
         if (bases.indexOf(f.base) == null) {
             bases.append(f.base);
         }
@@ -162,7 +190,11 @@ export fun check(files: [Path]) > [Finding] !> any {
                     rels.append(p.rel);
                 }
             }
-            foreach (finding in judge(rels, base: base, module: proofread\home, kind: kind)) {
+            final judged = judge(rels, base: base, module: proofread\home, kind: kind);
+            if (judged.error != null) {
+                throw judged.error!.message;
+            }
+            foreach (finding in judged.value!) {
                 found.append(finding);
             }
         }
@@ -181,30 +213,34 @@ object Page {
 // judge runs the writing rules of kind over files, workspace paths relative to base, in
 // one run of the proofread built in module. It runs from base, so a finding names the
 // file as given and the decisions table's path globs match workspace paths.
-fun judge(files: [str], base: str, module: str, kind: str) > [Finding] !> any {
-    if (files.len() == 0) {
-        return [<Finding>];
+fun judge(files: [str], base: str, module: str, kind: str) > result\Result::<[Finding]> {
+    try {
+        if (files.len() == 0) {
+            return result\ok::<[Finding]>([<Finding>]);
+        }
+        final bin = path\abs("{module}/{proofread\binary}");
+        final table = decisions\writeDecisions(files);
+        final args = mut [kind, "--decisions", table];
+        foreach (rel in support\sorted(files)) {
+            args.append(rel);
+        }
+        final fix = "Run `{proofread\build}`, then {module}/{proofread\binary} {kind} <file>, and read why it stopped.";
+        final run = proc\exec(bin, args: args, dir: if (base == "") "." else base,
+            opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
+        fs\remove(table) catch void;
+        // Exit 1 is a deny finding, written to stdout like any other.
+        if (run == null or (run!.code != 0 and run!.code != 1)) {
+            final why = if (run == null) "proofread did not start" else "it exited {run!.code}: " + run!.stderr.trim();
+            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no Markdown was judged; " + why, fix = fix }]);
+        }
+        final rows: [any]? = json\parse(run!.stdout) catch null;
+        if (rows == null) {
+            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread printed no JSON array, so no Markdown was judged", fix = fix }]);
+        }
+        return result\ok::<[Finding]>(judgedFindings(rows!));
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    final bin = path\abs("{module}/{proofread\binary}");
-    final table = decisions\writeDecisions(files);
-    final args = mut [kind, "--decisions", table];
-    foreach (rel in support\sorted(files)) {
-        args.append(rel);
-    }
-    final fix = "Run `{proofread\build}`, then {module}/{proofread\binary} {kind} <file>, and read why it stopped.";
-    final run = proc\exec(bin, args: args, dir: if (base == "") "." else base,
-        opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
-    fs\remove(table) catch void;
-    // Exit 1 is a deny finding, written to stdout like any other.
-    if (run == null or (run!.code != 0 and run!.code != 1)) {
-        final why = if (run == null) "proofread did not start" else "it exited {run!.code}: " + run!.stderr.trim();
-        return [Finding{ path = JUDGE, message = "proofread did not run, so no Markdown was judged; " + why, fix = fix }];
-    }
-    final rows: [any]? = json\parse(run!.stdout) catch null;
-    if (rows == null) {
-        return [Finding{ path = JUDGE, message = "proofread printed no JSON array, so no Markdown was judged", fix = fix }];
-    }
-    return judgedFindings(rows!);
 }
 
 // judgedFindings reports proofread's rows the decisions table denies, each at the file it
@@ -244,11 +280,15 @@ export fun ignoreGlobs(src: str) > [str] {
     return globs;
 }
 
-fun isGenerated(rel: str, globs: [str]) > bool !> any {
-    if (rel == "MAGUS.md" or rel.endsWith("/MAGUS.md")) {
-        return true;
+fun isGenerated(rel: str, globs: [str]) > result\Result::<bool> {
+    try {
+        if (rel == "MAGUS.md" or rel.endsWith("/MAGUS.md")) {
+            return result\ok::<bool>(true);
+        }
+        return result\ok::<bool>(path\matchesAny(globs, path: rel));
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    return path\matchesAny(globs, path: rel);
 }
 
 // fenceRun is the fence a line opens or closes, or "".
@@ -391,7 +431,7 @@ export fun dashColumns(line: str, text: str) > [int] {
 }
 
 // proseFindings checks one file's lines outside code.
-export fun proseFindings(file: str, md: str) > [Finding] !> any {
+export fun proseFindings(file: str, md: str) > [Finding] {
     final found = mut [<Finding>];
     final lines = md.split("\n");
     final texts = proseLines(lines);
@@ -491,7 +531,7 @@ fun lowerOrAllowed(w: str) > bool {
 }
 
 test "typographic punctuation outside code is proofread's, under this repository's table" {
-    final got = check(support\fixture({"docs/a.md": "# A page\n\nOne — two.\nIt’s `a — b` fine.\n```\n“quoted”\n```\nWait…\nThen -- go.\n"}));
+    final got = check(support\fixture({"docs/a.md": "# A page\n\nOne — two.\nIt’s `a — b` fine.\n```\n“quoted”\n```\nWait…\nThen -- go.\n"}).value!);
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
@@ -527,7 +567,7 @@ test "code, list markers and table cells are not dashes" {
 }
 
 test "arrows and box drawing stay" {
-    assert\equal(support\messages(check(support\fixture({"docs/a.md": "# A page\n\nThe key goes a → b.\n\n├── c\n"}))),
+    assert\equal(support\messages(check(support\fixture({"docs/a.md": "# A page\n\nThe key goes a → b.\n\n├── c\n"}).value!)),
         want: [<str>], message: "clean");
 }
 
@@ -565,7 +605,7 @@ test "generated Markdown is skipped by .gitattributes, .markdownlintignore and M
         "libs/x/MAGUS.md": "## Bad Heading\n",
         "changes/unreleased/frag.md": "### Added\n\n- One — two.\n",
         "docs/page.md": "## Bad Heading\n",
-    }));
+    }).value!);
     final paths = mut [<str>];
     foreach (f in got) { paths.append(f.path); }
     assert\equal(support\sorted(paths), want: ["changes/unreleased/frag.md", "docs/page.md"], message: "hand-written only");
@@ -593,7 +633,7 @@ test "proofread runs once over every hand-written file and reports at the file's
         "blog/p.md": "# A post\n\n" + post,
         "docs/page.md": "# A page\n\n" + post,
         "docs/note.md": "# A note\n\nRun it in order to replay.\n",
-    }));
+    }).value!);
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
@@ -605,32 +645,32 @@ test "proofread runs once over every hand-written file and reports at the file's
 }
 
 test "a judge that does not run is an error, not a pass" {
-    final got = judge(["docs/a.md"], base: "", module: "libs/no-such-module", kind: "reference");
+    final got = judge(["docs/a.md"], base: "", module: "libs/no-such-module", kind: "reference").value!;
     assert\equal(got.len(), want: 1, message: "one error");
     assert\equal(got[0].path, want: JUDGE, message: "at proofread");
     assert\equal(got[0].message.startsWith("proofread did not run"), want: true, message: got[0].message);
-    assert\equal(judge([<str>], base: "", module: "libs/no-such-module", kind: "reference").len(), want: 0,
+    assert\equal(judge([<str>], base: "", module: "libs/no-such-module", kind: "reference").value!.len(), want: 0,
         message: "no file, no run");
 }
 
 test "a skill body, a loaded skill, a guide and any other page each take their own kind" {
-    assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md"), want: "skill-template", message: "a body");
-    assert\equal(kindOf(".claude/skills/babysit-pull-requests/SKILL.md"), want: "agent-brief", message: "a loaded skill");
-    assert\equal(kindOf("internal/agent/agents-section.md"), want: "agent-brief", message: "the AGENTS.md block");
-    assert\equal(kindOf("AGENTS.md"), want: "agent-brief", message: "loaded every session");
-    assert\equal(kindOf("console/AGENTS.md"), want: "agent-brief", message: "a nested AGENTS.md");
-    assert\equal(kindOf(".claude/skills/x/notes.md"), want: "reference", message: "not a SKILL.md");
+    assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md").value!, want: "skill-template", message: "a body");
+    assert\equal(kindOf(".claude/skills/babysit-pull-requests/SKILL.md").value!, want: "agent-brief", message: "a loaded skill");
+    assert\equal(kindOf("internal/agent/agents-section.md").value!, want: "agent-brief", message: "the AGENTS.md block");
+    assert\equal(kindOf("AGENTS.md").value!, want: "agent-brief", message: "loaded every session");
+    assert\equal(kindOf("console/AGENTS.md").value!, want: "agent-brief", message: "a nested AGENTS.md");
+    assert\equal(kindOf(".claude/skills/x/notes.md").value!, want: "reference", message: "not a SKILL.md");
     foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/guides/setup.md",
         "docs/guides/setup/linux.md", "docs/guides/migrating/from-nx.md"]) {
-        assert\equal(kindOf(page), want: "guide", message: page);
+        assert\equal(kindOf(page).value!, want: "guide", message: page);
     }
-    assert\equal(kindOf("docs/concepts/cache.md"), want: "reference", message: "a concept page");
-    assert\equal(kindOf("docs/design.md"), want: "reference", message: "the design index");
-    assert\equal(kindOf("docs/design/principles/clear-is-better-than-clever.md"), want: "principle", message: "a principle");
-    assert\equal(kindOf("docs/design/judgment/no-silent-defaults.md"), want: "principle", message: "a judgment call");
-    assert\equal(kindOf("docs/design/refusals.md"), want: "reference", message: "the refusals table");
-    assert\equal(kindOf("changes/unreleased/affected-ci-sizes-its-gate.md"), want: "changelog", message: "a fragment");
-    assert\equal(kindOf("changes/README.md"), want: "reference", message: "the fragments' own page");
+    assert\equal(kindOf("docs/concepts/cache.md").value!, want: "reference", message: "a concept page");
+    assert\equal(kindOf("docs/design.md").value!, want: "reference", message: "the design index");
+    assert\equal(kindOf("docs/design/principles/clear-is-better-than-clever.md").value!, want: "principle", message: "a principle");
+    assert\equal(kindOf("docs/design/judgment/no-silent-defaults.md").value!, want: "principle", message: "a judgment call");
+    assert\equal(kindOf("docs/design/refusals.md").value!, want: "reference", message: "the refusals table");
+    assert\equal(kindOf("changes/unreleased/affected-ci-sizes-its-gate.md").value!, want: "changelog", message: "a fragment");
+    assert\equal(kindOf("changes/README.md").value!, want: "reference", message: "the fragments' own page");
 }
 
 test "a fragment is judged as a changelog" {
@@ -638,7 +678,7 @@ test "a fragment is judged as a changelog" {
         "changes/unreleased/a.md": "### Bug fixes\n\n- **The key is stable.**\n",
         "changes/unreleased/b.md": "### Fixed\n\n- **`Resolve`.**\n",
         "changes/unreleased/c.md": "### Fixed\n\n- **Run it in order to replay.**\n",
-    }));
+    }).value!);
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
@@ -649,7 +689,7 @@ test "a fragment is judged as a changelog" {
 
 test "a guide is held to the guide rules and a concept page is not" {
     final page = "# A page\n\nWe keep it easy.\n\n1. Run `magus init`.\n2. The target builds.\n";
-    final got = check(support\fixture({"docs/guides/a.md": page, "docs/concepts/a.md": page}));
+    final got = check(support\fixture({"docs/guides/a.md": page, "docs/concepts/a.md": page}).value!);
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
@@ -664,7 +704,7 @@ test "a brief and a full form are graded on wordy phrases, and a compact short f
         ".claude/skills/y/SKILL.md": "---\nname: y\ndescription: \"Y.\"\n---\n\n# Y\n\nRun it in order to replay.\n",
         "docs/page.md": "# A page\n\nRun it to replay the build from the cache when the inputs match the key it was stored under, "
             + "so a warm tree skips every step it already ran on this machine.\n",
-    }));
+    }).value!);
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));

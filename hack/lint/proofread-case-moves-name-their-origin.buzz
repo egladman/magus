@@ -2,6 +2,7 @@
 namespace casemoves;
 
 import "assert";
+import "result";
 import "vcs";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -34,24 +35,32 @@ export fun check(files: [Path]) > [Finding] !> any {
     final before = fun (p: str) > str? {
         return fileAt(base, p: p);
     };
-    return checkAgainst(files, before: before);
+    final found = checkAgainst(files, before: before);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // checkAgainst reports each moved case of files, given the text each file had at the base.
-export fun checkAgainst(files: [Path], before: fun (p: str) > str?) > [Finding] !> any {
+export fun checkAgainst(files: [Path], before: fun (p: str) > str?) > result\Result::<[Finding]> {
     final found = mut [<Finding>];
     foreach (f in files) {
         final was = before(f.value);
         if (was == null) {
             continue;
         }
-        foreach (moved in moves(was!, now: support\read(f))) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            return result\Result::<[Finding]>{ error = readResult.error };
+        }
+        foreach (moved in moves(was!, now: readResult.value!)) {
             found.append(Finding{ path = f.value, line = moved.line,
                 message = "this case was an fp at the merge base and is a pass now with no was= note: " + brief(moved.value),
                 fix = "Put `was=fp:<round>:<id>` on the section header, as in `-- pass/<kind> was=fp:round4:c17 --`, naming the round and case id the fp carried." });
         }
     }
-    return found;
+    return result\ok::<[Finding]>(found);
 }
 
 // mergeBase is the commit the checked-out revision branched from, "" when there is no git
@@ -234,21 +243,21 @@ test "a text that stays fp, a new pass case and a hit moved to pass are not move
 }
 
 test "a file with no base copy has no moves, and a deleted fp is not a move" {
-    final files = support\fixture({"libs/proofread/internal/calibrate/cases/absolute.txtar": "-- pass/change-description --\n- It never fired.\n"});
+    final files = support\fixture({"libs/proofread/internal/calibrate/cases/absolute.txtar": "-- pass/change-description --\n- It never fired.\n"}).value!;
     final none = fun (p: str) > str? {
         return null;
     };
-    assert\equal(checkAgainst(files, before: none).len(), want: 0, message: "new file");
+    assert\equal(checkAgainst(files, before: none).value!.len(), want: 0, message: "new file");
     assert\equal(moves(baseFile, now: "-- pass/change-description --\n- Resolve never returns nil.\n").len(), want: 0, message: "dropped");
 }
 
 test "a finding names the file, the line and the note to add" {
     final path = "libs/proofread/internal/calibrate/cases/absolute.txtar";
-    final files = support\fixture({path: "-- pass/change-description --\n- It never fired.\n"});
+    final files = support\fixture({path: "-- pass/change-description --\n- It never fired.\n"}).value!;
     final before = fun (p: str) > str? {
         return baseFile;
     };
-    final got = checkAgainst(files, before: before);
+    final got = checkAgainst(files, before: before).value!;
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].path, want: path, message: "path");
     assert\equal(got[0].line, want: 2, message: "line");

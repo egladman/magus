@@ -9,6 +9,7 @@ namespace rootconfigs;
 
 import "assert";
 import "path";
+import "result";
 import "magus/lint";
 import "hack/lint/support" as support;
 
@@ -39,7 +40,11 @@ export fun reads() > [str] {
 
 export fun check(files: [Path]) > [Finding] !> any {
     var sources = [<str>];
-    foreach (p in support\projects().projects) {
+    final projectsResult = support\projects();
+    if (projectsResult.error != null) {
+        throw projectsResult.error!.message;
+    }
+    foreach (p in projectsResult.value!.projects) {
         if (p.path == ".") {
             sources = p.sources;
         }
@@ -48,26 +53,38 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (magusfile == null) {
         return [support\missing("magusfile.buzz")];
     }
-    return findings(sources, magusfile: support\read(magusfile!));
+    final readResult = support\read(magusfile!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final found = findings(sources, magusfile: readResult.value!);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // findings grades the root project's resolved source globs against CONFIGS.
-export fun findings(sources: [str], magusfile: str) > [Finding] !> any {
-    final found = mut [<Finding>];
-    final line = support\findLine(magusfile, needle: "\"sources\":");
-    foreach (p in support\sorted(CONFIGS.keys())) {
-        if (path\matchesAny(sources, path: p)) {
-            continue;
+export fun findings(sources: [str], magusfile: str) > result\Result::<[Finding]> {
+    try {
+        final found = mut [<Finding>];
+        final line = support\findLine(magusfile, needle: "\"sources\":");
+        foreach (p in support\sorted(CONFIGS.keys())) {
+            if (path\matchesAny(sources, path: p)) {
+                continue;
+            }
+            found.append(Finding{ path = "magusfile.buzz", line = line,
+                message = p + " is read by " + CONFIGS[p]! + " but no root source glob names it",
+                fix = "Editing it reruns every root target while keying none of them. Declare it in the project's sources." });
         }
-        found.append(Finding{ path = "magusfile.buzz", line = line,
-            message = p + " is read by " + CONFIGS[p]! + " but no root source glob names it",
-            fix = "Editing it reruns every root target while keying none of them. Declare it in the project's sources." });
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    return found;
 }
 
 test "every config under a source glob passes" {
-    assert\equal(findings(["**/*.go"] + CONFIGS.keys(), magusfile: "").len(), want: 0, message: "clean");
+    assert\equal(findings(["**/*.go"] + CONFIGS.keys(), magusfile: "").value!.len(), want: 0, message: "clean");
 }
 
 test "an undeclared config is reported at the sources block" {
@@ -77,7 +94,7 @@ test "an undeclared config is reported at the sources block" {
             sources.append(p);
         }
     }
-    final got = findings(sources, magusfile: "x\n  \"sources\": [\n");
+    final got = findings(sources, magusfile: "x\n  \"sources\": [\n").value!;
     assert\equal(support\messages(got), want: ["mise.toml is read by every op in this project, through the toolchain it pins but no root source glob names it"], message: "message");
     assert\equal(got[0].line, want: 2, message: "line");
 }

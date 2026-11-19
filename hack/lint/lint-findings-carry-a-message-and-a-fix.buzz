@@ -25,7 +25,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (!f.value.startsWith("hack/lint/") or !f.value.endsWith(".buzz")) {
             continue;
         }
-        foreach (finding in judge(f.value, src: support\read(f))) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (finding in judge(f.value, src: readResult.value!)) {
             found.append(finding);
         }
     }

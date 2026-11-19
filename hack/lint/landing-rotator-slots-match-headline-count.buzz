@@ -41,7 +41,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (markupFile == null) {
         return [support\missing(MARKUP)];
     }
-    final headlines = count(support\read(markupFile!), needle: "class=\"landing-rotate\"");
+    final readResult = support\read(markupFile!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final headlines = count(readResult.value!, needle: "class=\"landing-rotate\"");
     if (headlines == 0) {
         return [Finding{ path = MARKUP, message = "no rotating headlines found",
             fix = "If the markup changed, update this rule's class anchor." }];
@@ -49,7 +53,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (stylesFile == null) {
         return [support\missing(STYLES)];
     }
-    final styles = support\read(stylesFile!);
+    final readResult2 = support\read(stylesFile!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    final styles = readResult2.value!;
 
     // The first span needs no rule: its slot is delay 0. So the delays cover 2..N, and
     // the highest selector must be exactly N.
@@ -127,12 +135,12 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 // rotator is a landing page with headlines spans and a stylesheet of the given rules.
-fun rotator(headlines: int, rules: [str]) > [Path] !> any {
+fun rotator(headlines: int, rules: [str]) > [Path] {
     final spans = mut [<str>];
     foreach (i in 0..headlines) {
         spans.append("<span class=\"landing-rotate\">x</span>\n");
     }
-    return support\fixture({MARKUP: spans.join(""), STYLES: rules.join("\n") + "\n"});
+    return support\fixture({MARKUP: spans.join(""), STYLES: rules.join("\n") + "\n"}).value!;
 }
 
 final threeSlots = [

@@ -19,7 +19,11 @@ export fun reads() > [str] {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
-        final src = support\read(f);
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final src = readResult.value!;
         if (support\has(serialize\Boxed.init(json\parse(src)), key: "scripts")) {
             found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\"scripts\""),
                 message = "package.json carries scripts, but a manifest declares the package, not how to build it",
@@ -32,21 +36,21 @@ export fun check(files: [Path]) > [Finding] !> any {
 test "a manifest with scripts is reported at the key's line" {
     final got = check(support\fixture({
         "console/package.json": "\{\n  \"name\": \"x\",\n  \"scripts\": \{\"build\": \"esbuild\"}\n}\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].path, want: "console/package.json", message: "path");
     assert\equal(got[0].line, want: 3, message: "line of the scripts key");
 }
 
 test "an empty scripts map is still reported" {
-    assert\equal(check(support\fixture({"package.json": "\{\"scripts\": \{}}\n"})).len(), want: 1, message: "empty map");
+    assert\equal(check(support\fixture({"package.json": "\{\"scripts\": \{}}\n"}).value!).len(), want: 1, message: "empty map");
 }
 
 test "a manifest without scripts passes, even when a dependency is named scripts" {
     final files = support\fixture({
         "libs/a/package.json": "\{\"name\": \"a\", \"type\": \"module\"}\n",
         "libs/b/package.json": "\{\"dependencies\": \{\"scripts\": \"1.0.0\"}}\n",
-    });
+    }).value!;
     assert\equal(check(files).len(), want: 0, message: "clean");
 }
 

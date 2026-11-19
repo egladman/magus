@@ -34,7 +34,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
         var prev = "";
         var n = 0;
-        foreach (line in support\read(f).split("\n")) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (line in readResult.value!.split("\n")) {
             n = n + 1;
             final entry = line.trim();
             if (entry == "" or entry.startsWith("#")) {
@@ -62,12 +66,12 @@ test "sorted blocks and encoder-ordered files pass" {
     final files = support\fixture({
         "versions.lock": "# tools\na 1\nb 2\n\n# a new block restarts the order\na 3\n",
         "proto/buf.lock": "z\na\n",
-    });
+    }).value!;
     assert\equal(check(files).len(), want: 0, message: "clean");
 }
 
 test "an entry out of order or duplicated is reported at its line" {
-    final got = check(support\fixture({"docs/active.urls.lock": "https://b\nhttps://a\nhttps://a\n", "proto/buf.lock": ""}));
+    final got = check(support\fixture({"docs/active.urls.lock": "https://b\nhttps://a\nhttps://a\n", "proto/buf.lock": ""}).value!);
     assert\equal(got.len(), want: 2, message: "two findings");
     assert\equal(got[0].line, want: 2, message: "first line");
     assert\equal(got[0].message, want: "lockfile entry out of byte order (or duplicated) within its block: https://a follows https://b", message: "order");

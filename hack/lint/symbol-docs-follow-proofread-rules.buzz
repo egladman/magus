@@ -117,7 +117,7 @@ fun judgedCounts(symbols: [any]) > {str: int} {
 
 // judge is check over the runner's findings, the symbols each language judged and the
 // symbol indexes. It reads nothing else, so its tests need no workspace.
-export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] !> any {
+export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] {
     final found = mut [<Finding>];
     var judgeable = true;
     final unindexed = outOfScope(indexes);

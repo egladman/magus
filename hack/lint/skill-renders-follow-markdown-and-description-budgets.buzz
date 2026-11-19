@@ -22,6 +22,7 @@ import "assert";
 import "fs";
 import "path";
 import "proc";
+import "result";
 import "std";
 import "encoding/json";
 import "magus";
@@ -142,90 +143,131 @@ export fun lintFindings(file: str, rows: [any]) > [Finding] {
 
 // render installs every shipped skill in both forms under a new temporary directory and
 // returns it; the skills land in its skills/ directory.
-fun render() > str !> any {
-    final dir = fs\tempDir("skill-renders-");
-    _ = magus\cmd("agent", args: ["install", "--dir", dir, "--skill-form", "both", "skills"], opts: magus\CommandOptions{ quiet = true });
-    return dir;
+fun render() > result\Result::<str> {
+    try {
+        final dir = fs\tempDir("skill-renders-");
+        _ = magus\cmd("agent", args: ["install", "--dir", dir, "--skill-form", "both", "skills"], opts: magus\CommandOptions{ quiet = true });
+        return result\ok::<str>(dir);
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // pairsIn reads each skill's two descriptions from the renders under dir, in name order.
-fun pairsIn(dir: str) > [Pair] !> any {
-    final pairs = mut [<Pair>];
-    foreach (name in support\sorted(fs\listDir("{dir}/skills"))) {
-        if (name.endsWith("-full")) {
-            continue;
+fun pairsIn(dir: str) > result\Result::<[Pair]> {
+    try {
+        final pairs = mut [<Pair>];
+        foreach (name in support\sorted(fs\listDir("{dir}/skills"))) {
+            if (name.endsWith("-full")) {
+                continue;
+            }
+            final short = descriptionOf(fs\readFile("{dir}/skills/{name}/SKILL.md"));
+            final full = descriptionOf(fs\readFile("{dir}/skills/{name}-full/SKILL.md"));
+            if (short == null or full == null) {
+                return result\fail::<[Pair]>("{name} or its full twin rendered no description");
+            }
+            if (short!.indexOf("\{\{") != null or full!.indexOf("\{\{") != null) {
+                return result\fail::<[Pair]>("{name}'s description holds a template action, which the judge would read as one");
+            }
+            pairs.append(Pair{ name = name, short = short!, full = full! });
         }
-        final short = descriptionOf(fs\readFile("{dir}/skills/{name}/SKILL.md"));
-        final full = descriptionOf(fs\readFile("{dir}/skills/{name}-full/SKILL.md"));
-        if (short == null or full == null) {
-            throw "{name} or its full twin rendered no description";
-        }
-        if (short!.indexOf("\{\{") != null or full!.indexOf("\{\{") != null) {
-            throw "{name}'s description holds a template action, which the judge would read as one";
-        }
-        pairs.append(Pair{ name = name, short = short!, full = full! });
+        return result\ok::<[Pair]>(pairs);
+    } catch (err: any) {
+        return result\caught::<[Pair]>(err);
     }
-    return pairs;
 }
 
 // markdownlint runs markdownlint over every full render under dir.
-fun markdownlint(dir: str) > [Finding] !> any {
-    final files = mut [<str>];
-    foreach (name in support\sorted(fs\listDir("{dir}/skills"))) {
-        if (!name.endsWith("-full")) {
-            continue;
-        }
-        foreach (file in support\sorted(fs\listDir("{dir}/skills/{name}"))) {
-            if (file.endsWith(".md")) {
-                files.append("skills/{name}/{file}");
+fun markdownlint(dir: str) > result\Result::<[Finding]> {
+    try {
+        final files = mut [<str>];
+        foreach (name in support\sorted(fs\listDir("{dir}/skills"))) {
+            if (!name.endsWith("-full")) {
+                continue;
+            }
+            foreach (file in support\sorted(fs\listDir("{dir}/skills/{name}"))) {
+                if (file.endsWith(".md")) {
+                    files.append("skills/{name}/{file}");
+                }
             }
         }
-    }
-    if (files.len() == 0) {
-        throw "no full render was written";
-    }
-    final found = mut [<Finding>];
-    foreach (f in files) {
-        foreach (finding in lintFindings(f, rows: markdownlintText(fs\readFile("{dir}/{f}"), results: "{dir}/markdownlint.json"))) {
-            found.append(finding);
+        if (files.len() == 0) {
+            return result\fail::<[Finding]>("no full render was written");
         }
+        final found = mut [<Finding>];
+        foreach (f in files) {
+            final rows = markdownlintText(fs\readFile("{dir}/{f}"), results: "{dir}/markdownlint.json");
+            if (rows.error != null) {
+                return result\Result::<[Finding]>{ error = rows.error };
+            }
+            foreach (finding in lintFindings(f, rows: rows.value!)) {
+                found.append(finding);
+            }
+        }
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    return found;
 }
 
 // markdownlintText runs markdownlint over text on stdin and returns its results, which it
 // writes to the file results names. It runs from the workspace root, where mise resolves
 // the pinned markdownlint and CONFIG sits; a render outside the root would be read against
 // .markdownlintignore as a path climbing out of it, which markdownlint refuses.
-fun markdownlintText(text: str, results: str) > [any] !> any {
-    fs\remove(results) catch void;
-    final run = proc\exec("markdownlint", args: ["--config", CONFIG, "--json", "--output", results, "--stdin"],
-        opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
-    if (run.code == 0) {
-        return [<any>];
+fun markdownlintText(text: str, results: str) > result\Result::<[any]> {
+    try {
+        fs\remove(results) catch void;
+        final run = proc\exec("markdownlint", args: ["--config", CONFIG, "--json", "--output", results, "--stdin"],
+            opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
+        if (run.code == 0) {
+            return result\ok::<[any]>([<any>]);
+        }
+        if (run.code != 1 or !fs\exists(results)) {
+            return result\fail::<[any]>("markdownlint exited {run.code}: " + (run.stderr + run.stdout).trim());
+        }
+        final rows: [any] = json\parse(fs\readFile(results));
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
     }
-    if (run.code != 1 or !fs\exists(results)) {
-        throw "markdownlint exited {run.code}: " + (run.stderr + run.stdout).trim();
-    }
-    final rows: [any] = json\parse(fs\readFile(results));
-    return rows;
 }
 
 // judge runs the description rules over setText(pairs) in one run of the built proofread.
-fun judge(dir: str, pairs: [Pair]) > [any] !> any {
-    final listing = "{dir}/skills.md";
-    fs\writeFile(listing, content: setText(pairs));
-    final table = decisions\writeDecisions([<str>]);
-    final run = proc\exec(path\abs("{proofread\home}/{proofread\binary}"),
-        args: ["skill-template", "--decisions", table, "--only", RULES, listing],
-        opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
-    fs\remove(table) catch void;
-    // Exit 1 is a deny finding, written to stdout like any other.
-    if (run == null or (run!.code != 0 and run!.code != 1)) {
-        throw if (run == null) "proofread did not start" else "proofread exited {run!.code}: " + run!.stderr.trim();
+fun judge(dir: str, pairs: [Pair]) > result\Result::<[any]> {
+    try {
+        final listing = "{dir}/skills.md";
+        fs\writeFile(listing, content: setText(pairs));
+        final table = decisions\writeDecisions([<str>]);
+        final run = proc\exec(path\abs("{proofread\home}/{proofread\binary}"),
+            args: ["skill-template", "--decisions", table, "--only", RULES, listing],
+            opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
+        fs\remove(table) catch void;
+        // Exit 1 is a deny finding, written to stdout like any other.
+        if (run == null or (run!.code != 0 and run!.code != 1)) {
+            return result\fail::<[any]>(if (run == null) "proofread did not start" else "proofread exited {run!.code}: " + run!.stderr.trim());
+        }
+        final rows: [any] = json\parse(run!.stdout);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
     }
-    final rows: [any] = json\parse(run!.stdout);
-    return rows;
+}
+
+// judgeDescriptions judges every skill's two descriptions under dir against the catalog.
+fun judgeDescriptions(dir: str, catalog: Path) > result\Result::<[Finding]> {
+    final pairs = pairsIn(dir);
+    if (pairs.error != null) {
+        return result\Result::<[Finding]>{ error = pairs.error };
+    }
+    final text = support\read(catalog);
+    if (text.error != null) {
+        return result\Result::<[Finding]>{ error = text.error };
+    }
+    final rows = judge(dir, pairs: pairs.value!);
+    if (rows.error != null) {
+        return result\Result::<[Finding]>{ error = rows.error };
+    }
+    return result\ok::<[Finding]>(judgedFindings(rows.value!, pairs: pairs.value!, catalog: text.value!));
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -233,38 +275,42 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (catalog == null) {
         return [support\missing(CATALOG)];
     }
-    var dir = "";
-    try {
-        dir = render();
-    } catch (e) {
-        return [Finding{ path = SKILLS, message = "the skills did not render, so none was judged: {e}",
+    final rendered = render();
+    if (rendered.error != null) {
+        return [Finding{ path = SKILLS, message = "the skills did not render, so none was judged: {rendered.error!.message}",
             fix = "Run `magus agent install --dir <tmp> --skill-form both skills` and read why it stopped." }];
     }
+    final dir = rendered.value!;
     final found = mut [<Finding>];
-    try {
-        foreach (f in markdownlint(dir)) {
-            found.append(f);
-        }
-    } catch (e) {
-        found.append(Finding{ path = SKILLS, message = "markdownlint did not run, so no full render was judged: {e}",
+    final linted = markdownlint(dir);
+    if (linted.error != null) {
+        found.append(Finding{ path = SKILLS, message = "markdownlint did not run, so no full render was judged: {linted.error!.message}",
             fix = "markdownlint is installed by mise (npm:markdownlint-cli); run `mise install`." });
-    }
-    try {
-        final pairs = pairsIn(dir);
-        foreach (f in judgedFindings(judge(dir, pairs: pairs), pairs: pairs, catalog: support\read(catalog!))) {
+    } else {
+        foreach (f in linted.value!) {
             found.append(f);
         }
-    } catch (e) {
-        found.append(Finding{ path = JUDGE, message = "proofread did not run, so no skill description was judged: {e}",
+    }
+    final judgedFound = judgeDescriptions(dir, catalog: catalog!);
+    if (judgedFound.error != null) {
+        found.append(Finding{ path = JUDGE, message = "proofread did not run, so no skill description was judged: {judgedFound.error!.message}",
             fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} skill-template, and read why it stopped." });
+    } else {
+        foreach (f in judgedFound.value!) {
+            found.append(f);
+        }
     }
     fs\removeAll(dir) catch void;
     return found;
 }
 
-fun parsed(text: str) > [any] !> any {
-    final rows: [any] = json\parse(text);
-    return rows;
+fun parsed(text: str) > result\Result::<[any]> {
+    try {
+        final rows: [any] = json\parse(text);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
+    }
 }
 
 test "a render's description is read without its quotes, and a body line is not one" {
@@ -287,7 +333,7 @@ test "a deny lands on its skill's catalog entry, a set finding on the catalog, a
         {"node": "/t/skills.md", "source": "/t/skills.md:7", "rule": "skill-description-budget", "decision": "deny", "message": "Cut it."},
         {"node": "/t/skills.md", "source": "/t/skills.md", "rule": "skill-set-description-budget", "decision": "deny", "message": "Cut them."},
         {"node": "/t/skills.md", "source": "/t/skills.md:3", "rule": "skill-description-budget", "decision": "advise", "message": "Maybe."}
-    ]`);
+    ]`).value!;
     final got = judgedFindings(rows, pairs: pairs, catalog: catalog);
     assert\equal(support\messages(got), want: ["magus-b: Cut it. [skill-description-budget]",
         "the shipped set: Cut them. [skill-set-description-budget]"], message: "{support\messages(got)}");
@@ -304,7 +350,7 @@ test "markdownlint reads only the full renders, under the repository's config" {
     var got = [<Finding>];
     var failed = "";
     try {
-        got = markdownlint(dir);
+        got = markdownlint(dir).value!;
     } catch (e) {
         failed = "{e}";
     }
@@ -318,7 +364,7 @@ test "markdownlint reads only the full renders, under the repository's config" {
 test "a markdownlint result on a full render lands on its template" {
     final rows = parsed(`[{"fileName": "stdin", "lineNumber": 12,
         "ruleNames": ["MD032", "blanks-around-lists"], "ruleDescription": "Lists should be surrounded by blank lines",
-        "errorDetail": null}]`);
+        "errorDetail": null}]`).value!;
     final got = lintFindings("skills/magus-run-full/SKILL.md", rows: rows);
     assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
     assert\equal(got[0].path, want: "internal/agent/skills/magus-run/SKILL.md", message: "the template");

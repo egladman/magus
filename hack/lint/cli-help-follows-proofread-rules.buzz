@@ -18,6 +18,7 @@ import "assert";
 import "fs";
 import "path";
 import "proc";
+import "result";
 import "encoding/json";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -173,53 +174,75 @@ export fun judge(helps: [Help], rows: {str: [any]}, baseline: [str]) > [Finding]
 }
 
 // judged runs the built proofread's cli-help kind over text and returns its rows.
-fun judged(bin: str, table: str, text: str) > [any] !> any {
-    final run = proc\exec(bin, args: ["cli-help", "--stdin", "--decisions", table],
-        opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
-    // Exit 1 is a deny finding, written to stdout like any other.
-    if (run.code != 0 and run.code != 1) {
-        throw "proofread exited {run.code}: " + run.stderr.trim();
+fun judged(bin: str, table: str, text: str) > result\Result::<[any]> {
+    try {
+        final run = proc\exec(bin, args: ["cli-help", "--stdin", "--decisions", table],
+            opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
+        // Exit 1 is a deny finding, written to stdout like any other.
+        if (run.code != 0 and run.code != 1) {
+            return result\fail::<[any]>("proofread exited {run.code}: " + run.stderr.trim());
+        }
+        final rows: [any] = json\parse(run.stdout);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
     }
-    final rows: [any] = json\parse(run.stdout);
-    return rows;
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    return checkAgainst(files, baseline: BASELINE);
+    final found = checkAgainst(files, baseline: BASELINE);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // checkAgainst is check under a baseline of the caller's choosing.
-fun checkAgainst(files: [Path], baseline: [str]) > [Finding] !> any {
+fun checkAgainst(files: [Path], baseline: [str]) > result\Result::<[Finding]> {
     final registry = support\named(files, p: REGISTRY);
     if (registry == null) {
-        return [support\missing(REGISTRY)];
+        return result\ok::<[Finding]>([support\missing(REGISTRY)]);
     }
-    final helps = extract(support\read(registry!));
+    final source = support\read(registry!);
+    if (source.error != null) {
+        return result\Result::<[Finding]>{ error = source.error };
+    }
+    final helps = extract(source.value!);
     final fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} cli-help, and read why it stopped.";
     if (helps.len() == 0) {
-        return [Finding{ path = REGISTRY, message = "no help text was found, so none was judged: silence, not a pass",
-            fix = "The rule reads the quoted Doc, Short and Description fields; update it if the registry changed shape." }];
+        return result\ok::<[Finding]>([Finding{ path = REGISTRY, message = "no help text was found, so none was judged: silence, not a pass",
+            fix = "The rule reads the quoted Doc, Short and Description fields; update it if the registry changed shape." }]);
     }
-    final bin = path\abs("{proofread\home}/{proofread\binary}");
-    final table = decisions\writeDecisions([<str>]);
-    final rows = mut {<str: [any]>};
+    var bin = "";
+    var table = "";
     try {
-        foreach (h in helps) {
-            if (rows[h.text] == null) {
-                rows[h.text] = judged(bin, table: table, text: h.text);
+        bin = path\abs("{proofread\home}/{proofread\binary}");
+        table = decisions\writeDecisions([<str>]);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
+    }
+    final rows = mut {<str: [any]>};
+    foreach (h in helps) {
+        if (rows[h.text] == null) {
+            final row = judged(bin, table: table, text: h.text);
+            if (row.error != null) {
+                fs\remove(table) catch void;
+                return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no help text was judged: {row.error!.message}", fix = fix }]);
             }
+            rows[h.text] = row.value!;
         }
-    } catch (e) {
-        fs\remove(table) catch void;
-        return [Finding{ path = JUDGE, message = "proofread did not run, so no help text was judged: {e}", fix = fix }];
     }
     fs\remove(table) catch void;
-    return judge(helps, rows: rows, baseline: baseline);
+    return result\ok::<[Finding]>(judge(helps, rows: rows, baseline: baseline));
 }
 
-fun parsed(text: str) > [any] !> any {
-    final rows: [any] = json\parse(text);
-    return rows;
+fun parsed(text: str) > result\Result::<[any]> {
+    try {
+        final rows: [any] = json\parse(text);
+        return result\ok::<[any]>(rows);
+    } catch (err: any) {
+        return result\caught::<[any]>(err);
+    }
 }
 
 test "the quoted Doc, Short and Description fields are read, with their escapes" {
@@ -245,9 +268,9 @@ test "a deny is reported at its line, a baselined text is kept, and a stale base
     final helps = [Help{ line = 4, text = "Simply pass it" }, Help{ line = 9, text = "Pass it" },
         Help{ line = 12, text = "A text already past the cap" }];
     final rows = mut {<str: [any]>};
-    rows["Simply pass it"] = parsed(`[{"rule": "filler", "decision": "deny", "message": "Drop 'Simply'.", "match": "Simply", "url": "https://example.com/filler/"}]`);
-    rows["Pass it"] = parsed(`[{"rule": "aside", "decision": "advise", "message": "advice"}]`);
-    rows["A text already past the cap"] = parsed(`[{"rule": "help-length", "decision": "deny", "message": "too long"}]`);
+    rows["Simply pass it"] = parsed(`[{"rule": "filler", "decision": "deny", "message": "Drop 'Simply'.", "match": "Simply", "url": "https://example.com/filler/"}]`).value!;
+    rows["Pass it"] = parsed(`[{"rule": "aside", "decision": "advise", "message": "advice"}]`).value!;
+    rows["A text already past the cap"] = parsed(`[{"rule": "help-length", "decision": "deny", "message": "too long"}]`).value!;
     final got = judge(helps, rows: rows, baseline: ["A text already past the cap", "A text since reworded"]);
     assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
     assert\equal(got[0].path, want: REGISTRY, message: "the registry");
@@ -259,7 +282,7 @@ test "a deny is reported at its line, a baselined text is kept, and a stale base
 }
 
 test "the baseline names only texts the registry still holds, and nothing outside it fails" {
-    final registry = support\read(Path{ value = REGISTRY, base = "" }) catch "";
+    final registry = support\read(Path{ value = REGISTRY, base = "" }).value ?? "";
     assert\equal(registry != "", want: true, message: "the registry is readable");
     final keys = mut [<str>];
     foreach (h in extract(registry)) {
@@ -272,15 +295,15 @@ test "the baseline names only texts the registry still holds, and nothing outsid
 
 test "the registry's help text is judged by the built proofread" {
     final long = "Pass the flag to replay the build from the cache when the key matches. ".repeat(5);
-    final got = checkAgainst(support\fixture({"internal/commands/registry.go": "var x = 1\n\tDoc: \"{long}\",\n\tShort: \"Pass the flag\",\n"}),
-        baseline: [<str>]);
+    final got = checkAgainst(support\fixture({"internal/commands/registry.go": "var x = 1\n\tDoc: \"{long}\",\n\tShort: \"Pass the flag\",\n"}).value!,
+        baseline: [<str>]).value!;
     assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
     assert\equal(got[0].line, want: 2, message: "the line of the text");
     assert\equal(got[0].message.indexOf("[help-length]") != null, want: true, message: got[0].message);
 }
 
 test "a registry holding no help text is an error, not a pass" {
-    final got = check(support\fixture({"internal/commands/registry.go": "package commands\n"}));
+    final got = check(support\fixture({"internal/commands/registry.go": "package commands\n"}).value!);
     assert\equal(got.len(), want: 1, message: "one error");
     assert\equal(got[0].message.indexOf("silence, not a pass") != null, want: true, message: got[0].message);
 }

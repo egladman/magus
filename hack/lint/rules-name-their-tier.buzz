@@ -27,7 +27,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (!f.value.startsWith("hack/lint/") or !f.value.endsWith(".buzz") or NOT_RULES.indexOf(f.value) != null) {
             continue;
         }
-        foreach (finding in judge(f.value, src: support\read(f))) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (finding in judge(f.value, src: readResult.value!)) {
             found.append(finding);
         }
     }
@@ -87,7 +91,7 @@ test "a tier line with the wrong name fails at its line" {
 
 test "check skips the runner and its helpers" {
     final got = check(support\fixture({"hack/lint/run.buzz": "namespace run;\n", "hack/lint/support.buzz": "namespace support;\n",
-        "hack/lint/x.buzz": "namespace x;\n"}));
+        "hack/lint/x.buzz": "namespace x;\n"}).value!);
     assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
     assert\equal(got[0].path, want: "hack/lint/x.buzz", message: "only the rule");
 }

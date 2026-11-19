@@ -45,7 +45,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     foreach (f in todo) {
         final was = fileAt(base, p: f.value) ?? "";
-        foreach (hit in judge(f.value, now: support\read(f), was: was)) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (hit in judge(f.value, now: readResult.value!, was: was)) {
             found.append(hit);
         }
     }

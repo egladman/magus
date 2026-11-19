@@ -65,7 +65,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 // judge is check over a magus\graph().precedents() report.
-export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] !> any {
+export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] {
     final found = mut [<Finding>];
     final indexes = report.indexes;
     final rows = report.holds;

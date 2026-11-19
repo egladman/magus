@@ -22,7 +22,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
         var n = 0;
-        foreach (line in support\read(f).split("\n")) {
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        foreach (line in readResult.value!.split("\n")) {
             n = n + 1;
             if (TEST_BLOCK.match(line.trim()) != null) {
                 found.append(Finding{ path = f.value, line = n,
@@ -35,13 +39,13 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 test "a magusfile with a test block is reported at its line" {
-    final got = check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n\ntest \"x\" \{\n    std\\assert(true);\n}\n"}));
+    final got = check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n\ntest \"x\" \{\n    std\\assert(true);\n}\n"}).value!);
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].line, want: 3, message: "line of the test block");
 }
 
 test "a magusfile without a test block passes" {
-    assert\equal(check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n"})).len(), want: 0, message: "clean");
+    assert\equal(check(support\fixture({"magusfile.buzz": "magus\\project(\{});\n"}).value!).len(), want: 0, message: "clean");
 }
 
 test "reads() matches magusfiles and tour steps, not a library module" {

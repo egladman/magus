@@ -61,7 +61,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (f.value.endsWith(".d.ts") or f.value == UNREACHABLE) {
             continue;
         }
-        judge(f.value, src: support\read(f), found: found);
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        judge(f.value, src: readResult.value!, found: found);
     }
     return found;
 }
@@ -153,7 +157,7 @@ fun judge(path: str, src: str, found: mut [Finding]) > void {
 
 test "a throw, a reject and a rejecting promise in app code are each reported" {
     final src = "export function a(): void \{\n  throw new Error(\"no\");\n}\nconst b = () => Promise.reject(new Error(\"no\"));\nconst c = new Promise<void>((resolve, reject) => reject(1));\nconst d = new Promise((resolve) => resolve(1));\n";
-    final got = check(support\fixture({"console/src/lib/a.ts": src}));
+    final got = check(support\fixture({"console/src/lib/a.ts": src}).value!);
     assert\equal(support\messages(got), want: [
         "a throw in hand-written TypeScript; a fallible call here returns a Result",
         "a Promise.reject in hand-written TypeScript; a fallible call here returns a Result",
@@ -164,25 +168,25 @@ test "a throw, a reject and a rejecting promise in app code are each reported" {
 
 test "prose and strings about throwing pass" {
     final src = "// a caller that throws here unwinds\n  * nothing can throw\nconst words = \"set static this throw true try\";\nconst x = 1; // throw new Error(\"x\")\n";
-    assert\equal(check(support\fixture({"console/src/a.ts": src})).len(), want: 0, message: "clean");
+    assert\equal(check(support\fixture({"console/src/a.ts": src}).value!).len(), want: 0, message: "clean");
 }
 
 test "a test double passes only under a marker naming a platform API" {
     final src = "// platform double: fetch\nglobalThis.fetch = () => Promise.reject(new TypeError(\"x\"));\n// platform double: localStorage\nconst s = () => \{ throw new Error(\"x\"); };\nconst t = () => \{ throw new Error(\"x\"); };\n";
-    final got = check(support\fixture({"console/src/a.test.ts": src}));
+    final got = check(support\fixture({"console/src/a.test.ts": src}).value!);
     assert\equal(got.len(), want: 2, message: "an unlisted API and no marker");
     assert\equal(got[0].line, want: 4, message: "the unlisted API");
     assert\equal(got[1].line, want: 5, message: "no marker");
 }
 
 test "a throw in the mod's tsx is read with or without a semicolon" {
-    final got = check(support\fixture({"docs/guides/integrations/agents/claude-code/mod/hooks/a.tsx": "  throw err\n  throw err;\n"}));
+    final got = check(support\fixture({"docs/guides/integrations/agents/claude-code/mod/hooks/a.tsx": "  throw err\n  throw err;\n"}).value!);
     assert\equal(got.len(), want: 2, message: "with and without a semicolon");
 }
 
 test "a throw passes under a listed platform contract and fails under any other" {
     final src = "// platform contract: opencode tool.execute.before\nthrow new Error(reason);\n// platform contract: express middleware\nthrow new Error(reason);\nthrow new Error(reason);\n";
-    final got = check(support\fixture({"docs/guides/integrations/agents/a.ts": src}));
+    final got = check(support\fixture({"docs/guides/integrations/agents/a.ts": src}).value!);
     assert\equal(got.len(), want: 2, message: "an unlisted contract and no marker");
     assert\equal(got[0].line, want: 4, message: "the unlisted contract");
     assert\equal(got[1].line, want: 5, message: "no marker");
@@ -190,5 +194,5 @@ test "a throw passes under a listed platform contract and fails under any other"
 
 test "a platform contract excuses a throw only, never a reject" {
     final src = "// platform contract: opencode tool.execute.before\nconst a = Promise.reject(new Error(\"x\"));\n";
-    assert\equal(check(support\fixture({"console/src/a.ts": src})).len(), want: 1, message: "the reject");
+    assert\equal(check(support\fixture({"console/src/a.ts": src}).value!).len(), want: 1, message: "the reject");
 }

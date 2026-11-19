@@ -25,7 +25,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (support\scriptDir(f.value) == "") {
             continue;
         }
-        final src = support\read(f);
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final src = readResult.value!;
         final line = modules\mainLine(src);
         if (line == 0 or IMPORTS_FLAGS.match(src) != null) {
             continue;
@@ -42,14 +46,14 @@ test "a script importing flags, and a module without main, pass" {
     final got = check(support\fixture({
         "hack/dev/ls-things.buzz": "namespace x;\n\nimport \"flags\";\n\nexport fun main(args: [str]) > void \{}\n",
         "hack/magusfile/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
-    }));
+    }).value!);
     assert\equal(got.len(), want: 0, message: "clean");
 }
 
 test "a run script that does not import flags is reported at its main" {
     final got = check(support\fixture({
         "hack/remote/on-mars.buzz": "namespace x;\n\nimport \"std\";\n\nfun main(args: [str]) > void \{}\n",
-    }));
+    }).value!);
     assert\equal(support\messages(got), want: ["hack/remote/on-mars.buzz is run but reads its argv without the flags module"], message: "finding");
     assert\equal(got[0].line, want: 5, message: "the line declaring main");
 }

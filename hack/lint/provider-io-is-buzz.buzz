@@ -96,7 +96,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (outOfScope(f.value) or allowed(f.value)) {
             continue;
         }
-        final src = support\read(f);
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final src = readResult.value!;
         var n = 0;
         foreach (line in src.split("\n")) {
             n = n + 1;
@@ -151,11 +155,11 @@ test "a real gh call outside the allowlist is reported" {
     final got = check(support\fixture(withNamedStubs({
         "internal/queue/candidate.buzz": `namespace queue;
 
-fun poll() > void !> any \{
+fun poll() > void \{
     final r = proc\exec("gh", args: ["pr", "list"]);
 \}
 `,
-    })));
+    })).value!);
     assert\equal(support\messages(got), want: ["runs gh outside the Buzz files that may reach a provider"], message: "gh outside the allowlist");
     assert\equal(got[0].line, want: 4, message: "the call, line");
 }
@@ -168,7 +172,7 @@ fun cases() > [[str]] \{
     return [["gh", "pr", "checks", "183"]];
 \}
 `,
-    })));
+    })).value!);
     assert\equal(got.len(), want: 0, message: "a string literal naming gh is not a call");
 }
 
@@ -176,17 +180,17 @@ test "curl at a provider host outside the allowlist is reported, curl elsewhere 
     final got = check(support\fixture(withNamedStubs({
         "hack/registry/mirror.buzz": `namespace mirror;
 
-fun sync() > void !> any \{
+fun sync() > void \{
     proc\exec("curl", args: ["-sS", "https://api.github.com/repos/x"]);
 \}
 `,
         "docs/tour/24-secret-grants.buzz": `namespace tour;
 
-fun run() > void !> any \{
+fun run() > void \{
     proc\exec("curl", args: [os\env("OPENAI_BASE_URL") + "/get"]);
 \}
 `,
-    })));
+    })).value!);
     assert\equal(support\messages(got), want: ["curls a CI/VCS provider host outside the Buzz files that may reach one"],
         message: "only the literal provider host is reported; docs/ is out of scope and the other call names no provider host");
 }
@@ -195,11 +199,11 @@ test "an http module call at a provider host outside the allowlist is reported" 
     final got = check(support\fixture(withNamedStubs({
         "internal/job/notify.buzz": `namespace notify;
 
-fun ping() > void !> any \{
+fun ping() > void \{
     http\get("https://api.github.com/repos/x");
 \}
 `,
-    })));
+    })).value!);
     assert\equal(support\messages(got), want: ["calls the http module against a CI/VCS provider host outside the Buzz files that may reach one"],
         message: "http\\get at a provider host");
 }
@@ -208,25 +212,25 @@ test "the allowed dirs, hack/ drivers and named files pass; another hack/ file d
     final got = check(support\fixture(withNamedStubs({
         "spells/github/actions/spell.buzz": `namespace x;
 
-fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+fun a() > void \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
         "hack/ci/labels.buzz": `namespace x;
 
-fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+fun a() > void \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
         "hack/ci/merge-queue.buzz": `namespace x;
 
-fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+fun a() > void \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
         "magusfile.buzz": `namespace x;
 
-fun a() > void !> any \{ proc\exec("gh", args: ["pr", "create"]); \}
+fun a() > void \{ proc\exec("gh", args: ["pr", "create"]); \}
 `,
         "hack/lint/other-rule.buzz": `namespace x;
 
-fun a() > void !> any \{ proc\exec("gh", args: ["api", "x"]); \}
+fun a() > void \{ proc\exec("gh", args: ["api", "x"]); \}
 `,
-    })));
+    })).value!);
     assert\equal(support\messages(got), want: ["runs gh outside the Buzz files that may reach a provider"],
         message: "only the hack/lint file, outside the script directories, is reported");
 }

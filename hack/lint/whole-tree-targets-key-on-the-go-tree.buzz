@@ -35,7 +35,11 @@ export fun reads() > [str] {
 
 export fun check(files: [Path]) > [Finding] !> any {
     final footprints = mut {<str: [str]>};
-    foreach (p in support\targets().projects) {
+    final targetsResult = support\targets();
+    if (targetsResult.error != null) {
+        throw targetsResult.error!.message;
+    }
+    foreach (p in targetsResult.value!.projects) {
         if (p.path != ".") {
             continue;
         }
@@ -54,7 +58,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     if (magusfile == null) {
         return [support\missing("magusfile.buzz")];
     }
-    return findings(footprints, magusfile: support\read(magusfile!));
+    final readResult = support\read(magusfile!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    return findings(footprints, magusfile: readResult.value!);
 }
 
 // findings grades each whole-tree target's declared footprint, keyed by target; a target

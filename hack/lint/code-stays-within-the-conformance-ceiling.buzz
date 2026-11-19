@@ -42,7 +42,7 @@ export fun indexFix(op: str, detail: str) > str {
 }
 
 // judge is check's verdict over the head lens and the base measure.
-export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) > [Finding] !> any {
+export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) > [Finding] {
     final found = mut [<Finding>];
     final indexes = report.indexes;
     foreach (idx in indexes) {

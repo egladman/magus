@@ -14,6 +14,7 @@ namespace cdruns;
 import "assert";
 import "encoding/yaml";
 import "fs";
+import "result";
 import "serialize";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -23,7 +24,11 @@ export fun reads() > [str] {
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
-    return findings(files);
+    final found = findings(files);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    return found.value!;
 }
 
 // Run is one step that runs a cd target.
@@ -59,65 +64,73 @@ fun cdCommand(line: str) > str {
     return "";
 }
 
-export fun findings(files: [Path]) > [Finding] !> any {
-    final runs = mut {<str: mut [Run]>};
-    foreach (f in files) {
-        final raw = support\read(f);
-        final wf = serialize\Boxed.init(yaml\parse(raw));
-        final at = yaml\positions(raw);
-        final file = fs\basename(f.value);
-        final jobs = wf.q(["jobs"]).mapValue();
-        foreach (name in support\sorted(jobs.keys())) {
-            final steps = jobs[name]!.q(["steps"]).listValue();
-            foreach (i in 0..steps.len()) {
-                final step = steps[i];
-                foreach (line in support\scalar(step.q(["run"])).split("\n")) {
-                    final command = cdCommand(line);
-                    if (command == "") {
-                        continue;
+export fun findings(files: [Path]) > result\Result::<[Finding]> {
+    try {
+        final runs = mut {<str: mut [Run]>};
+        foreach (f in files) {
+            final read = support\read(f);
+            if (read.error != null) {
+                return result\Result::<[Finding]>{ error = read.error };
+            }
+            final raw = read.value!;
+            final wf = serialize\Boxed.init(yaml\parse(raw));
+            final at = yaml\positions(raw);
+            final file = fs\basename(f.value);
+            final jobs = wf.q(["jobs"]).mapValue();
+            foreach (name in support\sorted(jobs.keys())) {
+                final steps = jobs[name]!.q(["steps"]).listValue();
+                foreach (i in 0..steps.len()) {
+                    final step = steps[i];
+                    foreach (line in support\scalar(step.q(["run"])).split("\n")) {
+                        final command = cdCommand(line);
+                        if (command == "") {
+                            continue;
+                        }
+                        if (runs[command] == null) {
+                            runs[command] = mut [<Run>];
+                        }
+                        runs[command]!.append(Run{
+                            path = f.value,
+                            where = file + "/" + name,
+                            line = at.lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0,
+                            env = support\sorted(step.q(["env"]).mapValue().keys()),
+                        });
                     }
-                    if (runs[command] == null) {
-                        runs[command] = mut [<Run>];
-                    }
-                    runs[command]!.append(Run{
-                        path = f.value,
-                        where = file + "/" + name,
-                        line = at.lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0,
-                        env = support\sorted(step.q(["env"]).mapValue().keys()),
-                    });
                 }
             }
         }
-    }
 
-    final found = mut [<Finding>];
-    foreach (command in support\sorted(runs.keys())) {
-        final copies = runs[command]!;
-        if (copies.len() < 2) {
-            continue;
-        }
-        foreach (run in copies) {
-            final lacking = mut [<str>];
-            final passing = mut [<str>];
-            foreach (other in copies) {
-                foreach (name in other.env) {
-                    if (run.env.indexOf(name) == null and lacking.indexOf(name) == null) {
-                        lacking.append(name);
-                        if (passing.indexOf(other.where) == null) {
-                            passing.append(other.where);
+        final found = mut [<Finding>];
+        foreach (command in support\sorted(runs.keys())) {
+            final copies = runs[command]!;
+            if (copies.len() < 2) {
+                continue;
+            }
+            foreach (run in copies) {
+                final lacking = mut [<str>];
+                final passing = mut [<str>];
+                foreach (other in copies) {
+                    foreach (name in other.env) {
+                        if (run.env.indexOf(name) == null and lacking.indexOf(name) == null) {
+                            lacking.append(name);
+                            if (passing.indexOf(other.where) == null) {
+                                passing.append(other.where);
+                            }
                         }
                     }
                 }
+                if (lacking.len() == 0) {
+                    continue;
+                }
+                found.append(Finding{ path = run.path, line = run.line,
+                    message = "{run.where} runs `magus run {command}` without {support\sorted(lacking).join(", ")}, which {passing.join(", ")} passes",
+                    fix = "Pass the same env names at every step that runs it, and check the job grants what they need (GHCR_TOKEN needs packages: write)." });
             }
-            if (lacking.len() == 0) {
-                continue;
-            }
-            found.append(Finding{ path = run.path, line = run.line,
-                message = "{run.where} runs `magus run {command}` without {support\sorted(lacking).join(", ")}, which {passing.join(", ")} passes",
-                fix = "Pass the same env names at every step that runs it, and check the job grants what they need (GHCR_TOKEN needs packages: write)." });
         }
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    return found;
 }
 
 fun step(env: str, command: str) > str {
@@ -142,16 +155,16 @@ test "copies with the same env names agree, whatever their values" {
     final files = support\fixture({
         ".github/workflows/a.yaml": workflow(step(creds + "          REASON: one\n", command: "index:cd -- \"$REASON\"")),
         ".github/workflows/b.yaml": workflow(step(creds + "          REASON: two\n", command: "index:cd -- \"$REASON\"")),
-    });
-    assert\equal(findings(files).len(), want: 0, message: "same names");
+    }).value!;
+    assert\equal(findings(files).value!.len(), want: 0, message: "same names");
 }
 
 test "a copy lacking a name another passes is reported at its step" {
     final files = support\fixture({
         ".github/workflows/a.yaml": workflow(step(creds, command: "index:cd")),
         ".github/workflows/b.yaml": workflow(step("          KEY: $\{\{ secrets.KEY }}\n", command: "index:cd")),
-    });
-    final got = findings(files);
+    }).value!;
+    final got = findings(files).value!;
     assert\equal(support\messages(got), want: ["b.yaml/publish runs `magus run index:cd` without GHCR_TOKEN, which a.yaml/publish passes"], message: "message");
     assert\equal(got[0].path, want: ".github/workflows/b.yaml", message: "path");
     assert\equal(got[0].line, want: 6, message: "line");
@@ -161,6 +174,6 @@ test "a lone cd run, and repeated runs without cd, are left alone" {
     final files = support\fixture({
         ".github/workflows/a.yaml": workflow(step(creds, command: "index:cd") + step("          OS: linux\n", command: "build")),
         ".github/workflows/b.yaml": workflow(step("          OS: mac\n          CC: clang\n", command: "build")),
-    });
-    assert\equal(findings(files).len(), want: 0, message: "nothing to compare");
+    }).value!;
+    assert\equal(findings(files).value!.len(), want: 0, message: "nothing to compare");
 }

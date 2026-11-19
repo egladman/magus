@@ -24,6 +24,7 @@ namespace nothrow;
 
 import "assert";
 import "proc";
+import "result";
 import "std";
 import "encoding/json";
 import "encoding/yaml";
@@ -123,7 +124,11 @@ export fun policyFile(project: str) > str {
 
 export fun check(files: [Path]) > [Finding] !> any {
     final projects = mut [<str>];
-    foreach (p in support\projects().projects) {
+    final projectsResult = support\projects();
+    if (projectsResult.error != null) {
+        throw projectsResult.error!.message;
+    }
+    foreach (p in projectsResult.value!.projects) {
         projects.append(p.path);
     }
     final ceilings = mut {<str: Ceiling>};
@@ -134,7 +139,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (f.value == POLICY or f.value.endsWith("/" + POLICY)) {
             final project = owner(f.value, projects: projects);
             if (f.value == policyFile(project)) {
-                final rule = yaml\parse(support\read(f))["no-throw"];
+                final readResult = support\read(f);
+                if (readResult.error != null) {
+                    throw readResult.error!.message;
+                }
+                final rule = yaml\parse(readResult.value!)["no-throw"];
                 if (rule != null) {
                     final p = policy(rule, project: project);
                     foreach (k, c in p.ceilings) {
@@ -148,12 +157,20 @@ export fun check(files: [Path]) > [Finding] !> any {
         } else if (scanned(f.value)) {
             sources.append(f);
         } else if (scannedBuzz(f.value)) {
-            foreach (s in buzzSites(f.value, src: support\read(f))) {
+            final readResult2 = support\read(f);
+            if (readResult2.error != null) {
+                throw readResult2.error!.message;
+            }
+            foreach (s in buzzSites(f.value, src: readResult2.value!)) {
                 found.append(s);
             }
         }
     }
-    foreach (s in sites(sources)) {
+    final ran = sites(sources);
+    if (ran.error != null) {
+        throw ran.error!.message;
+    }
+    foreach (s in ran.value!) {
         found.append(s);
     }
     return judge(found, ceilings: ceilings, entries: exits, projects: projects);
@@ -284,29 +301,33 @@ export fun scanned(p: str) > bool {
 }
 
 // sites runs the parser once per base directory the files sit under.
-export fun sites(files: [Path]) > [Site] !> any {
-    final byBase = mut {<str: mut [str]>};
-    foreach (f in files) {
-        final base = if (f.base == "") "." else f.base;
-        if (byBase[base] == null) {
-            byBase[base] = mut [<str>];
+export fun sites(files: [Path]) > result\Result::<[Site]> {
+    try {
+        final byBase = mut {<str: mut [str]>};
+        foreach (f in files) {
+            final base = if (f.base == "") "." else f.base;
+            if (byBase[base] == null) {
+                byBase[base] = mut [<str>];
+            }
+            byBase[base]!.append(f.value);
         }
-        byBase[base]!.append(f.value);
-    }
-    final found = mut [<Site>];
-    foreach (base in support\sorted(byBase.keys())) {
-        final run = proc\exec("node", args: [PARSER, base],
-            opts: proc\ExecOptions{ stdin = byBase[base]!.join("\n"), quiet = true, allowFailure = true });
-        if (run.code != 0) {
-            throw "{PARSER} exited {run.code}: " + run.stderr.trim();
-        }
-        foreach (line in run.stdout.split("\n")) {
-            if (line != "") {
-                found.append(site(json\parse(line)));
+        final found = mut [<Site>];
+        foreach (base in support\sorted(byBase.keys())) {
+            final run = proc\exec("node", args: [PARSER, base],
+                opts: proc\ExecOptions{ stdin = byBase[base]!.join("\n"), quiet = true, allowFailure = true });
+            if (run.code != 0) {
+                throw "{PARSER} exited {run.code}: " + run.stderr.trim();
+            }
+            foreach (line in run.stdout.split("\n")) {
+                if (line != "") {
+                    found.append(site(json\parse(line)));
+                }
             }
         }
+        return result\ok::<[Site]>(found);
+    } catch (err: any) {
+        return result\caught::<[Site]>(err);
     }
-    return found;
 }
 
 fun site(row: {str: any}) > Site {
@@ -447,15 +468,15 @@ fun lines(found: [Finding]) > [str] {
 }
 
 test "a throw at the module's top level or in unreachable(x: never) passes" {
-    final files = support\fixture({"entry.ts": ENTRY_TS});
-    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [<str>],
+    final files = support\fixture({"entry.ts": ENTRY_TS}).value!;
+    assert\equal(lines(judge(sites(files).value!, ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [<str>],
         message: "entry throws");
 }
 
 test "a throw in a function, an arrow, a method or a mistyped unreachable fails" {
-    final files = support\fixture({"helper.ts": HELPER_TS});
+    final files = support\fixture({"helper.ts": HELPER_TS}).value!;
     final over = ", below the top-level entry: helper.ts holds 4, over the 0 that the no-throw.baseline of analyzers.yaml allows";
-    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [
+    assert\equal(lines(judge(sites(files).value!, ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."])), want: [
         "helper.ts:5 exported async load returns no Result, below the top-level entry: helper.ts holds 1, "
             + "over the 0 that the no-throw.baseline of analyzers.yaml allows",
         "helper.ts:2 throw in parse" + over,
@@ -467,8 +488,8 @@ test "a throw in a function, an arrow, a method or a mistyped unreachable fails"
 
 test "tsx and mjs parse as their own kinds" {
     final files = support\fixture({"a.tsx": `export const A = () => \{ if (!ok) throw new Error("x"); return <div />; };`,
-        "b.mjs": `export function b() \{ throw new Error("b"); }`});
-    assert\equal(sites(files).len(), want: 2, message: "one throw each");
+        "b.mjs": `export function b() \{ throw new Error("b"); }`}).value!;
+    assert\equal(sites(files).value!.len(), want: 2, message: "one throw each");
 }
 
 test "a file at its count passes, over it fails, and a count above the file fails" {
@@ -509,26 +530,25 @@ test "a project's analyzers.yaml counts its own files and no other project's" {
     assert\equal(policyFile("."), want: "analyzers.yaml", message: "root file");
 }
 
-final BUZZ_SRC = `fun helper(path: str) > str !> any \{
-    return path;
-}
-export fun target(ctx: magus\Context, args: [str]) > void !> any \{}
-fun inner(ctx: magus\Context, args: [str]) > void !> any \{}
-export fun check(files: [Path]) > [Finding] !> any \{
-    return [<Finding>];
-}
-fun main(args: [str]) > void !> any \{}
-export fun pure(n: int) > int \{
-    return n;
-}
-fun takes(run: fun (n: int) > void !> any) > void \{}
-fun split(
-    a: int,
-    b: int
-) > int !> str \{
-    return a;
-}
-`;
+final BUZZ_SRC = "fun helper(path: str) > str !> any \{\n"
+    + "    return path;\n"
+    + "}\n"
+    + "export fun target(ctx: magus\\Context, args: [str]) > void !> any \{}\n"
+    + "fun inner(ctx: magus\\Context, args: [str]) > void !> any \{}\n"
+    + "export fun check(files: [Path]) > [Finding] !> any \{\n"
+    + "    return [<Finding>];\n"
+    + "}\n"
+    + "fun main(args: [str]) > void !> any \{}\n"
+    + "export fun pure(n: int) > int \{\n"
+    + "    return n;\n"
+    + "}\n"
+    + "fun takes(run: fun (n: int) > void !> any) > void \{}\n"
+    + "fun split(\n"
+    + "    a: int,\n"
+    + "    b: int\n"
+    + ") > int !> str \{\n"
+    + "    return a;\n"
+    + "}\n";
 
 test "a Buzz function declaring !> fails unless it is an entry" {
     final names = mut [<str>];
@@ -546,7 +566,7 @@ test "generated and planted Buzz is not read" {
 
 test "an exported async function with no Result return is counted" {
     final src = "type Read = Result<number>;\nexport async function a(): Promise<Result<number>> \{ return x; }\nexport async function b(): Promise<Read> \{ return x; }\nexport async function c(): Promise<void> \{}\nexport const d = async () => 1;\nasync function e() \{}\n";
-    final got = lines(judge(sites(support\fixture({"a.ts": src})), ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."]));
+    final got = lines(judge(sites(support\fixture({"a.ts": src}).value!).value!, ceilings: {<str: Ceiling>}, entries: [<Entry>], projects: ["."]));
     final over = " returns no Result, below the top-level entry: a.ts holds 2, over the 0 that the no-throw.baseline of analyzers.yaml allows";
     assert\equal(got, want: ["a.ts:4 exported async c" + over, "a.ts:5 exported async d" + over], message: "async sites");
 }

@@ -8,6 +8,7 @@ namespace publishedmagus;
 import "assert";
 import "encoding/yaml";
 import "fs";
+import "result";
 import "serialize";
 import "std";
 import "magus/lint";
@@ -29,14 +30,30 @@ export fun check(files: [Path]) > [Finding] !> any {
     final workflows = mut {<str: str>};
     foreach (f in files) {
         if (f.value != ACTION) {
-            workflows[f.value] = support\read(f);
+            final readResult = support\read(f);
+            if (readResult.error != null) {
+                throw readResult.error!.message;
+            }
+            workflows[f.value] = readResult.value!;
         }
     }
     final found = mut [<Finding>];
-    foreach (f in actionFindings(support\read(action!))) {
+    final readResult2 = support\read(action!);
+    if (readResult2.error != null) {
+        throw readResult2.error!.message;
+    }
+    final actionFound = actionFindings(readResult2.value!);
+    if (actionFound.error != null) {
+        throw actionFound.error!.message;
+    }
+    foreach (f in actionFound.value!) {
         found.append(f);
     }
-    foreach (f in workflowFindings(workflows)) {
+    final workflowFound = workflowFindings(workflows);
+    if (workflowFound.error != null) {
+        throw workflowFound.error!.message;
+    }
+    foreach (f in workflowFound.value!) {
         found.append(f);
     }
     return found;
@@ -44,133 +61,145 @@ export fun check(files: [Path]) > [Finding] !> any {
 
 // actionFindings holds setup-magus to uploading the binary it built before it extracts
 // any cache entry.
-export fun actionFindings(raw: str) > [Finding] !> any {
-    final steps = serialize\Boxed.init(yaml\parse(raw)).q(["runs", "steps"]).listValue();
-    final lines = yaml\positions(raw).lines;
-    var publish = -1;
-    var restore = -1;
-    foreach (i in 0..steps.len()) {
-        if (support\scalar(steps[i].q(["id"])) == "publish") {
-            publish = i;
+export fun actionFindings(raw: str) > result\Result::<[Finding]> {
+    try {
+        final steps = serialize\Boxed.init(yaml\parse(raw)).q(["runs", "steps"]).listValue();
+        final lines = yaml\positions(raw).lines;
+        var publish = -1;
+        var restore = -1;
+        foreach (i in 0..steps.len()) {
+            if (support\scalar(steps[i].q(["id"])) == "publish") {
+                publish = i;
+            }
+            if (support\scalar(steps[i].q(["uses"])).startsWith("actions/cache/restore@")) {
+                restore = i;
+            }
         }
-        if (support\scalar(steps[i].q(["uses"])).startsWith("actions/cache/restore@")) {
-            restore = i;
+        if (publish < 0) {
+            return result\ok::<[Finding]>([Finding{ path = ACTION, message = "setup-magus has no step with id publish",
+                fix = "The step uploading the binary it built carries id: publish." }]);
         }
+        if (restore < 0) {
+            return result\ok::<[Finding]>([Finding{ path = ACTION, message = "setup-magus restores no run history",
+                fix = "Update this rule if the history restore moved out of setup-magus." }]);
+        }
+        if (publish > restore) {
+            return result\ok::<[Finding]>([Finding{ path = ACTION, line = lines["/runs/steps/{restore}"] ?? 0,
+                message = "setup-magus extracts a cache entry before it uploads the binary it built",
+                fix = "Move the publish step above the restore: an extracted entry could overwrite the binary." }]);
+        }
+        return result\ok::<[Finding]>([<Finding>]);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    if (publish < 0) {
-        return [Finding{ path = ACTION, message = "setup-magus has no step with id publish",
-            fix = "The step uploading the binary it built carries id: publish." }];
-    }
-    if (restore < 0) {
-        return [Finding{ path = ACTION, message = "setup-magus restores no run history",
-            fix = "Update this rule if the history restore moved out of setup-magus." }];
-    }
-    if (publish > restore) {
-        return [Finding{ path = ACTION, line = lines["/runs/steps/{restore}"] ?? 0,
-            message = "setup-magus extracts a cache entry before it uploads the binary it built",
-            fix = "Move the publish step above the restore: an extracted entry could overwrite the binary." }];
-    }
-    return [<Finding>];
 }
 
 // workflowFindings holds every job that publishes magus to building it first, and every
 // job that installs a published one to the digest and commit its publisher recorded.
 // workflows maps each workflow's workspace path to its text.
-export fun workflowFindings(workflows: {str: str}) > [Finding] !> any {
-    final found = mut [<Finding>];
-    var published = 0;
-    foreach (p in support\sorted(workflows.keys())) {
-        final raw = workflows[p]!;
-        final lines = yaml\positions(raw).lines;
-        final file = fs\basename(p);
-        final jobs = serialize\Boxed.init(yaml\parse(raw)).q(["jobs"]).mapValue();
-        foreach (name in support\sorted(jobs.keys())) {
-            final job = jobs[name]!;
-            final steps = job.q(["steps"]).listValue();
-            foreach (i in 0..steps.len()) {
-                final step = steps[i];
-                if (support\scalar(step.q(["uses"])) != setupMagus) {
-                    continue;
-                }
-                final line = lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0;
-                final flag = fun (message: str, fix: str) > void {
-                    found.append(Finding{ path = p, line = line, message = "{file}/{name}: " + message, fix = fix });
-                };
-                if (support\scalar(step.q(["with", "publish-artifact"])) != "") {
-                    published = published + 1;
-                    foreach (j in 0..i) {
-                        final prior = support\scalar(steps[j].q(["uses"]));
-                        if (!prior.startsWith("actions/checkout@")) {
-                            flag("\"{prior}{support\scalar(steps[j].q(["run"]))}\" runs before the magus it publishes is built",
-                                fix: "Publish from a job that checks out and then builds magus first.");
+export fun workflowFindings(workflows: {str: str}) > result\Result::<[Finding]> {
+    try {
+        final found = mut [<Finding>];
+        var published = 0;
+        foreach (p in support\sorted(workflows.keys())) {
+            final raw = workflows[p]!;
+            final lines = yaml\positions(raw).lines;
+            final file = fs\basename(p);
+            final jobs = serialize\Boxed.init(yaml\parse(raw)).q(["jobs"]).mapValue();
+            foreach (name in support\sorted(jobs.keys())) {
+                final job = jobs[name]!;
+                final steps = job.q(["steps"]).listValue();
+                foreach (i in 0..steps.len()) {
+                    final step = steps[i];
+                    if (support\scalar(step.q(["uses"])) != setupMagus) {
+                        continue;
+                    }
+                    final line = lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0;
+                    final flag = fun (message: str, fix: str) > void {
+                        found.append(Finding{ path = p, line = line, message = "{file}/{name}: " + message, fix = fix });
+                    };
+                    if (support\scalar(step.q(["with", "publish-artifact"])) != "") {
+                        published = published + 1;
+                        foreach (j in 0..i) {
+                            final prior = support\scalar(steps[j].q(["uses"]));
+                            if (!prior.startsWith("actions/checkout@")) {
+                                flag("\"{prior}{support\scalar(steps[j].q(["run"]))}\" runs before the magus it publishes is built",
+                                    fix: "Publish from a job that checks out and then builds magus first.");
+                            }
                         }
                     }
-                }
-                // An expression that can choose artifact is a consumer like the literal: the
-                // run that picks it installs a published binary all the same.
-                final strategy = support\scalar(step.q(["with", "installation-strategy"]));
-                if (strategy != "artifact" and strategy.indexOf("'artifact'") == null) {
-                    continue;
-                }
-                final m = jobOutput.match(support\scalar(step.q(["with", "artifact-sha256"])));
-                if (m == null) {
-                    flag("artifact-sha256 is not a job output of the publisher",
-                        fix: "Pass $\{\{ needs.<publisher>.outputs.<name> }}, the digest the publisher recorded.");
-                    continue;
-                }
-                final publisher = m![1];
-                final output = m![2];
-                final needs = mut [<str>];
-                final declared = job.q(["needs"]);
-                if (declared.string() != null) {
-                    needs.append(declared.string()!);
-                }
-                foreach (n in declared.listValue()) {
-                    needs.append(support\scalar(n));
-                }
-                if (needs.indexOf(publisher) == null) {
-                    flag("reads {publisher}'s output but does not need {publisher}", fix: "Add {publisher} to the job's needs.");
-                }
-                var producer = "";
-                foreach (s in jobs[publisher]?.q(["steps"]).listValue() ?? [<serialize\Boxed>]) {
-                    if (support\scalar(s.q(["uses"])) == setupMagus and support\scalar(s.q(["with", "publish-artifact"])) != "") {
-                        producer = support\scalar(s.q(["id"]));
+                    // An expression that can choose artifact is a consumer like the literal: the
+                    // run that picks it installs a published binary all the same.
+                    final strategy = support\scalar(step.q(["with", "installation-strategy"]));
+                    if (strategy != "artifact" and strategy.indexOf("'artifact'") == null) {
+                        continue;
                     }
-                }
-                if (producer == "") {
-                    flag("{publisher} publishes magus from no step with an id",
-                        fix: "Give {publisher}'s publishing setup-magus step an id; its sha256 output is the digest.");
-                    continue;
-                }
-                final want = "$\{\{ steps.{producer}.outputs.sha256 }}";
-                final got = support\scalar(jobs[publisher]!.q(["outputs", output]));
-                if (got != want) {
-                    flag("{publisher}'s output {output} is \"{got}\"", fix: "Set it to \"{want}\".");
-                }
-                // The run's own commit, or one a needed job resolved: a release dispatched from
-                // main builds the tag it names, which github.sha is not.
-                final commit = support\scalar(step.q(["with", "artifact-commit"]));
-                final resolved = jobOutput.match(commit);
-                if (commit != "$\{\{ github.sha }}" and (resolved == null or needs.indexOf(resolved![1]) == null)) {
-                    flag("artifact-commit is neither $\{\{ github.sha }} nor a needed job's output",
-                        fix: "Install the binary built from the commit this run builds.");
+                    final m = jobOutput.match(support\scalar(step.q(["with", "artifact-sha256"])));
+                    if (m == null) {
+                        flag("artifact-sha256 is not a job output of the publisher",
+                            fix: "Pass $\{\{ needs.<publisher>.outputs.<name> }}, the digest the publisher recorded.");
+                        continue;
+                    }
+                    final publisher = m![1];
+                    final output = m![2];
+                    final needs = mut [<str>];
+                    final declared = job.q(["needs"]);
+                    if (declared.string() != null) {
+                        needs.append(declared.string()!);
+                    }
+                    foreach (n in declared.listValue()) {
+                        needs.append(support\scalar(n));
+                    }
+                    if (needs.indexOf(publisher) == null) {
+                        flag("reads {publisher}'s output but does not need {publisher}", fix: "Add {publisher} to the job's needs.");
+                    }
+                    var producer = "";
+                    foreach (s in jobs[publisher]?.q(["steps"]).listValue() ?? [<serialize\Boxed>]) {
+                        if (support\scalar(s.q(["uses"])) == setupMagus and support\scalar(s.q(["with", "publish-artifact"])) != "") {
+                            producer = support\scalar(s.q(["id"]));
+                        }
+                    }
+                    if (producer == "") {
+                        flag("{publisher} publishes magus from no step with an id",
+                            fix: "Give {publisher}'s publishing setup-magus step an id; its sha256 output is the digest.");
+                        continue;
+                    }
+                    final want = "$\{\{ steps.{producer}.outputs.sha256 }}";
+                    final got = support\scalar(jobs[publisher]!.q(["outputs", output]));
+                    if (got != want) {
+                        flag("{publisher}'s output {output} is \"{got}\"", fix: "Set it to \"{want}\".");
+                    }
+                    // The run's own commit, or one a needed job resolved: a release dispatched from
+                    // main builds the tag it names, which github.sha is not.
+                    final commit = support\scalar(step.q(["with", "artifact-commit"]));
+                    final resolved = jobOutput.match(commit);
+                    if (commit != "$\{\{ github.sha }}" and (resolved == null or needs.indexOf(resolved![1]) == null)) {
+                        flag("artifact-commit is neither $\{\{ github.sha }} nor a needed job's output",
+                            fix: "Install the binary built from the commit this run builds.");
+                    }
                 }
             }
         }
+        if (published == 0) {
+            found.append(Finding{ path = ".github/workflows", message = "no job publishes magus for later jobs to install",
+                fix = "ci.yaml builds magus once and shares it; update this rule if that changed." });
+        }
+        return result\ok::<[Finding]>(found);
+    } catch (err: any) {
+        return result\caught::<[Finding]>(err);
     }
-    if (published == 0) {
-        found.append(Finding{ path = ".github/workflows", message = "no job publishes magus for later jobs to install",
-            fix = "ci.yaml builds magus once and shares it; update this rule if that changed." });
-    }
-    return found;
 }
 
-fun shipped() > {str: str} !> any {
-    final acc = mut {<str: str>};
-    foreach (p in fs\glob(".github/workflows/*.yaml")) {
-        acc[p.value] = fs\readFile(p.value);
+fun shipped() > result\Result::<{str: str}> {
+    try {
+        final acc = mut {<str: str>};
+        foreach (p in fs\glob(".github/workflows/*.yaml")) {
+            acc[p.value] = fs\readFile(p.value);
+        }
+        return result\ok::<{str: str}>(acc);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err);
     }
-    return acc;
 }
 
 final publisher = "jobs:\n  plan:\n    outputs:\n      magus_sha256: $\{\{ steps.magus.outputs.sha256 }}\n    steps:\n"
@@ -182,49 +211,49 @@ fun consumer(needs: str, sha: str) > str {
 }
 
 test "the shipped action and workflows pass" {
-    assert\equal(support\messages(actionFindings(fs\readFile(ACTION))), want: [<str>], message: "action");
-    assert\equal(support\messages(workflowFindings(shipped())), want: [<str>], message: "workflows");
+    assert\equal(support\messages(actionFindings(fs\readFile(ACTION)).value!), want: [<str>], message: "action");
+    assert\equal(support\messages(workflowFindings(shipped().value!).value!), want: [<str>], message: "workflows");
 }
 
 test "a publisher and a verifying consumer pass" {
-    final got = workflowFindings({".github/workflows/ci.yaml": publisher + consumer("[plan]", sha: "$\{\{ needs.plan.outputs.magus_sha256 }}")});
+    final got = workflowFindings({".github/workflows/ci.yaml": publisher + consumer("[plan]", sha: "$\{\{ needs.plan.outputs.magus_sha256 }}")}).value!;
     assert\equal(support\messages(got), want: [<str>], message: "clean");
 }
 
 test "an unverified or unneeded consumer is reported at its step" {
-    final got = workflowFindings({".github/workflows/ci.yaml": publisher + consumer("lint", sha: "abc")});
+    final got = workflowFindings({".github/workflows/ci.yaml": publisher + consumer("lint", sha: "abc")}).value!;
     assert\equal(support\messages(got), want: ["ci.yaml/test: artifact-sha256 is not a job output of the publisher"], message: "digest");
     assert\equal(got[0].line, want: 14, message: "line");
-    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + consumer("lint", sha: "$\{\{ needs.plan.outputs.magus_sha256 }}")})),
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + consumer("lint", sha: "$\{\{ needs.plan.outputs.magus_sha256 }}")}).value!),
         want: ["ci.yaml/test: reads plan's output but does not need plan"], message: "needs");
 }
 
 test "a strategy expression that can choose artifact is checked like the literal" {
     final chosen = consumer("lint", sha: "abc").replace("installation-strategy: artifact",
         with: "installation-strategy: $\{\{ needs.plan.outputs.build == 'true' && 'artifact' || 'prebuilt' }}");
-    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + chosen})),
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + chosen}).value!),
         want: ["ci.yaml/test: artifact-sha256 is not a job output of the publisher"], message: "expression");
 }
 
 test "artifact-commit may come from a needed job, never an unneeded one" {
     final sha = "$\{\{ needs.plan.outputs.magus_sha256 }}";
     final resolved = consumer("[plan]", sha: sha).replace("$\{\{ github.sha }}", with: "$\{\{ needs.plan.outputs.commit }}");
-    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + resolved})),
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + resolved}).value!),
         want: [<str>], message: "a needed job's commit");
     final stray = consumer("[plan]", sha: sha).replace("$\{\{ github.sha }}", with: "$\{\{ needs.other.outputs.commit }}");
-    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + stray})),
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + stray}).value!),
         want: ["ci.yaml/test: artifact-commit is neither $\{\{ github.sha }} nor a needed job's output"], message: "unneeded");
 }
 
 test "a publisher building after another step, or none at all, is reported" {
     final late = publisher.replace("      - uses: actions/checkout@v4\n", with: "      - run: make\n");
-    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": late})),
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": late}).value!),
         want: ["ci.yaml/plan: \"make\" runs before the magus it publishes is built"], message: "late");
-    assert\equal(support\messages(workflowFindings({})), want: ["no job publishes magus for later jobs to install"], message: "none");
+    assert\equal(support\messages(workflowFindings({}).value!), want: ["no job publishes magus for later jobs to install"], message: "none");
 }
 
 test "a restore ahead of the publish is reported" {
-    final got = actionFindings("runs:\n  steps:\n    - uses: actions/cache/restore@v4\n    - id: publish\n      run: x\n");
+    final got = actionFindings("runs:\n  steps:\n    - uses: actions/cache/restore@v4\n    - id: publish\n      run: x\n").value!;
     assert\equal(support\messages(got), want: ["setup-magus extracts a cache entry before it uploads the binary it built"], message: "order");
     assert\equal(got[0].line, want: 3, message: "line");
 }
