@@ -4,12 +4,15 @@ package std
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // The whole point of this module's design: a prompt must be impossible to reach
@@ -17,7 +20,7 @@ import (
 // exercise the real non-interactive path rather than a simulated one.
 
 func TestTermPickRaisesWithoutATerminal(t *testing.T) {
-	_, err := TermPick(context.Background(), []string{"a", "b"}, "pick one", "", 0, 0)
+	_, err := TermPick(context.Background(), []string{"a", "b"}, "pick one", "", 0, 0, nil)
 	require.Error(t, err, "pick must never block waiting for input that cannot arrive")
 	// The message has to name the guard, not just the condition: someone hitting
 	// this in CI needs to know what to write.
@@ -26,7 +29,7 @@ func TestTermPickRaisesWithoutATerminal(t *testing.T) {
 }
 
 func TestTermPickRejectsAnEmptyList(t *testing.T) {
-	_, err := TermPick(context.Background(), nil, "", "", 0, 0)
+	_, err := TermPick(context.Background(), nil, "", "", 0, 0, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no items")
 }
@@ -35,12 +38,12 @@ func TestTermPickIsSkippedInRecordMode(t *testing.T) {
 	// A dry run must never block on a human, and must not raise either: it
 	// reports a plausible answer the way fs.temp_dir names a path it did not
 	// create.
-	idx, err := TermPick(types.WithTrace(context.Background()), []string{"a", "b"}, "", "", 0, 0)
+	idx, err := TermPick(types.WithTrace(context.Background()), []string{"a", "b"}, "", "", 0, 0, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
 
 	// Even with no items, because the record pass is not asserting a real choice.
-	idx, err = TermPick(types.WithTrace(context.Background()), nil, "", "", 0, 0)
+	idx, err = TermPick(types.WithTrace(context.Background()), nil, "", "", 0, 0, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, idx)
 }
@@ -145,4 +148,130 @@ func TestNotifyStyle(t *testing.T) {
 	} {
 		assert.Equalf(t, tc.want, notifyStyle(tc.level), "notifyStyle(%q)", string(tc.level))
 	}
+}
+
+// TermPromptsSuite covers confirm, pickMany, pick's query and spin. Under `go
+// test` stdin is not a terminal, so the refusals exercise the real
+// non-interactive path rather than a simulated one.
+type TermPromptsSuite struct{ suite.Suite }
+
+func TestTermPromptsSuite(t *testing.T) { suite.Run(t, new(TermPromptsSuite)) }
+
+func (s *TermPromptsSuite) TestConfirmRaisesWithoutATerminal() {
+	_, err := TermConfirm(context.Background(), "remove 3 worktrees?")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "term.confirm")
+	s.Contains(err.Error(), "isInteractive", "the message names the guard to write")
+}
+
+func (s *TermPromptsSuite) TestConfirmDeclinesInRecordMode() {
+	yes, err := TermConfirm(types.WithTrace(context.Background()), "push?")
+	s.Require().NoError(err)
+	s.False(yes, "a dry run never takes the step a confirm guards")
+}
+
+func (s *TermPromptsSuite) TestConfirmRefusesAnEmptyQuestion() {
+	_, err := TermConfirm(context.Background(), "")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "no question")
+}
+
+func (s *TermPromptsSuite) TestConfirmHighlightsNoFirst() {
+	s.Equal([]string{"no", "yes"}, confirmAnswers, "Enter alone must decline")
+}
+
+func (s *TermPromptsSuite) TestPickManyRaisesWithoutATerminal() {
+	_, err := TermPickMany(context.Background(), []string{"a", "b"}, "branches", "", nil, 0)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "term.pickMany")
+	s.Contains(err.Error(), "isInteractive")
+}
+
+func (s *TermPromptsSuite) TestPickManyMarksNothingInRecordMode() {
+	got, err := TermPickMany(types.WithTrace(context.Background()), []string{"a", "b"}, "", "", []string{"a"}, 0)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *TermPromptsSuite) TestPickManyRejectsAnEmptyList() {
+	_, err := TermPickMany(context.Background(), nil, "", "", nil, 0)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "no items")
+}
+
+func (s *TermPromptsSuite) TestPickManyRejectsADuplicateItem() {
+	_, err := TermPickMany(context.Background(), []string{"a", "b", "a"}, "", "", nil, 0)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `"a" is listed twice`)
+}
+
+func (s *TermPromptsSuite) TestPickManyRejectsAMarkThatIsNotAnItem() {
+	_, err := TermPickMany(context.Background(), []string{"a", "b"}, "", "", []string{"c"}, 0)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `marked names "c"`)
+}
+
+func (s *TermPromptsSuite) TestMarkedIndicesFollowItems() {
+	got, err := termMarkedIndices([]string{"a", "b", "c"}, []string{"c", "a"})
+	s.Require().NoError(err)
+	s.Equal([]int{2, 0}, got)
+}
+
+func (s *TermPromptsSuite) TestPickWithAQueryNeedsNoItems() {
+	query := func(context.Context, string) (any, error) { return []any{"x"}, nil }
+	_, err := TermPick(context.Background(), nil, "symbol", "", 0, 0, query)
+	s.Require().Error(err, "still no terminal")
+	s.NotContains(err.Error(), "no items", "a live query supplies the items")
+	s.Contains(err.Error(), "isInteractive")
+}
+
+func (s *TermPromptsSuite) TestQueryResultAcceptsAListOfStrings() {
+	got, err := termQueryResult([]any{"a", "b"})
+	s.Require().NoError(err)
+	s.Equal([]string{"a", "b"}, got)
+
+	got, err = termQueryResult([]string{"c"})
+	s.Require().NoError(err)
+	s.Equal([]string{"c"}, got)
+}
+
+func (s *TermPromptsSuite) TestQueryResultNamesAWrongShape() {
+	_, err := termQueryResult("a")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "want a list of strings")
+
+	_, err = termQueryResult([]any{"a", int64(2)})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "at index 1")
+}
+
+func (s *TermPromptsSuite) TestPromptErrorNamesACancel() {
+	s.Equal("term.confirm: cancelled", termPromptError("term.confirm", pick.ErrAborted).Error())
+	s.Equal("term.pick: wrapped", termPromptError("term.pick", errors.New("wrapped")).Error())
+}
+
+func (s *TermPromptsSuite) TestSpinRaisesWithoutATerminalAndDoesNotRun() {
+	ran := false
+	_, err := TermSpin(context.Background(), "surveying", func(context.Context) (any, error) {
+		ran = true
+		return nil, nil
+	})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "term.spin")
+	s.Contains(err.Error(), "isInteractive")
+	s.False(ran, "the work must not start behind a refusal")
+}
+
+func (s *TermPromptsSuite) TestSpinRunsTheWorkInRecordMode() {
+	got, err := TermSpin(types.WithTrace(context.Background()), "surveying", func(context.Context) (any, error) {
+		return "done", nil
+	})
+	s.Require().NoError(err)
+	s.Equal("done", got)
+}
+
+func (s *TermPromptsSuite) TestSpinRefusesNoFunction() {
+	_, err := TermSpin(context.Background(), "surveying", nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "no function")
 }

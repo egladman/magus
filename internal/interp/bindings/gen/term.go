@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterTerm builds the "term" module map and returns it.
-// Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal.
+// Terminal interaction: capability probes, prompts (pick, pickMany, confirm), a spinner, and styled output. Renders to stderr; every prompt and the spinner raise rather than hanging when there is no terminal.
 func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -55,11 +55,41 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		initialFilter := ffi.String(bzArgs, 2)
 		initial := ffi.Int(bzArgs, 3, 0)
 		maxRows := ffi.Int(bzArgs, 4, 0)
-		ret0, err := std.TermPick(ctx, items, prompt, initialFilter, initial, maxRows)
+		query := callbackStringReturnsAny(sess, bzArgs, 5)
+		ret0, err := std.TermPick(ctx, items, prompt, initialFilter, initial, maxRows, query)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("pickMany", vm.DirectValue("term.pickMany", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		items := ffi.StringSlice(bzArgs, 0)
+		prompt := ffi.String(bzArgs, 1)
+		initialFilter := ffi.String(bzArgs, 2)
+		marked := ffi.StringSlice(bzArgs, 3)
+		maxRows := ffi.Int(bzArgs, 4, 0)
+		ret0, err := std.TermPickMany(ctx, items, prompt, initialFilter, marked, maxRows)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringSliceVal(ret0), nil
+	}))
+	m.MapSet("confirm", vm.DirectValue("term.confirm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		question := ffi.String(bzArgs, 0)
+		ret0, err := std.TermConfirm(ctx, question)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.BoolVal(ret0), nil
+	}))
+	m.MapSet("spin", vm.DirectValue("term.spin", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		label := ffi.String(bzArgs, 0)
+		run := callbackReturnsAny(sess, bzArgs, 1)
+		ret0, err := std.TermSpin(ctx, label, run)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("notify", vm.DirectValue("term.notify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		message := ffi.String(bzArgs, 0)

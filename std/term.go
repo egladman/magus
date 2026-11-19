@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/notify"
 	"github.com/egladman/magus/libs/termkit/pick"
+	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,7 +41,7 @@ import (
 // picker still pipes cleanly.
 var Term = Module{
 	Name: "term",
-	Doc:  "Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal.",
+	Doc:  "Terminal interaction: capability probes, prompts (pick, pickMany, confirm), a spinner, and styled output. Renders to stderr; every prompt and the spinner raise rather than hanging when there is no terminal.",
 	Methods: []Method{
 		{
 			Name:    "is_interactive",
@@ -72,17 +73,53 @@ var Term = Module{
 		},
 		{
 			Name: "pick",
-			Doc:  "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.",
+			Doc:  "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr. query, when given, replaces the filter with a live lookup: it is called with the filter text on first paint and after every keystroke and returns the strings to show, best first, so a picker can search something too large to list up front. items may then be empty, the index returned is into the list query returned last, and a query that raises ends the prompt with its error.",
 			Args: []Arg{
 				{Name: "items"},
 				{Name: "prompt", Optional: true},
 				{Name: "initialFilter", Optional: true},
 				{Name: "initial", Optional: true},
 				{Name: "maxRows", Optional: true},
+				{Name: "query", Optional: true},
 			},
 			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TermPick,
+		},
+		{
+			Name: "pick_many",
+			Doc:  "Prompt the reader to mark any number of items and return the marked ones, in the order items lists them. Type to filter as pick does; Tab marks or unmarks the highlighted row, and a mark survives a change of filter. Enter confirms, and does nothing while nothing is marked, so the highlighted row is never taken for a choice. marked lists the items marked on first paint. Items must be distinct, since the answer is the items themselves, and an entry of marked that is not one of items raises. RAISES when there is no terminal to prompt on - guard with is_interactive - and when the reader aborts with ESC, Ctrl-C or Ctrl-D. Renders to stderr.",
+			Args: []Arg{
+				{Name: "items"},
+				{Name: "prompt", Optional: true},
+				{Name: "initialFilter", Optional: true},
+				{Name: "marked", Optional: true},
+				{Name: "maxRows", Optional: true},
+			},
+			Returns: []Ret{{}},
+			Raises:  true,
+			Impl:    TermPickMany,
+		},
+		{
+			Name: "confirm",
+			Doc:  "Ask the reader a yes or no question and return true only for yes. Ask once per run, just before a step that cannot be taken back or that reaches outside the machine (a delete, a push, an opened pull request), and print what the step will do before asking: a confirm between read-only steps trains the reader to answer without reading. no is highlighted first, so Enter alone declines. RAISES when there is no terminal to ask on - guard with is_interactive, and let the flag that already says yes (--apply, --push) answer for an unattended run - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D. Renders to stderr.",
+			Args: []Arg{
+				{Name: "question"},
+			},
+			Returns: []Ret{{}},
+			Raises:  true,
+			Impl:    TermConfirm,
+		},
+		{
+			Name: "spin",
+			Doc:  "Call run and return what it returns, while a loader turns beside label on standard error, so a person watching a long blocking step (a subprocess, a survey of the disk) can tell it from a hang. The loader is erased when run returns or raises, and run's raise is raised again unchanged. Anything run writes to standard error lands under the loader's line, so give it quiet work, such as a proc call whose output is captured. RAISES without calling run when there is no terminal to draw on - guard with is_interactive and call run directly for an unattended run.",
+			Args: []Arg{
+				{Name: "label"},
+				{Name: "run"},
+			},
+			Returns: []Ret{{}},
+			Raises:  true,
+			Impl:    TermSpin,
 		},
 		{
 			Name: "notify",
@@ -144,39 +181,185 @@ func TermColorize(_ context.Context, s, style string) (string, error) {
 }
 
 // TermPick prompts for a choice among items and returns the chosen index.
-func TermPick(ctx context.Context, items []string, prompt, initialFilter string, initial, maxRows int) (int, error) {
+func TermPick(ctx context.Context, items []string, prompt, initialFilter string, initial, maxRows int, query func(ctx context.Context, filter string) (any, error)) (int, error) {
 	if types.Stubbed(ctx, "term.pick") {
 		// Dry run: report the first item without painting anything. A record pass
 		// must never block on a human, and every other host effect is skipped the
 		// same way.
 		return 0, nil
 	}
-	if len(items) == 0 {
+	if len(items) == 0 && query == nil {
 		return -1, errors.New("term.pick: no items to choose from")
 	}
-	interactive, _ := TermIsInteractive(ctx)
-	if !interactive {
-		// The message names the guard rather than just the condition: an author
-		// hitting this in CI needs to know what to write, not only what went wrong.
-		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals), " +
-			"guard the call with term.isInteractive() and choose a default for unattended runs")
+	if err := termPromptable("term.pick"); err != nil {
+		return -1, err
 	}
-	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, items, pick.Options{
+	opts := pick.Options{
 		Prompt:        prompt,
 		InitialFilter: initialFilter,
 		Initial:       initial,
 		MaxRows:       maxRows,
-	})
-	if err != nil {
-		if errors.Is(err, pick.ErrAborted) {
-			// An abort RAISES rather than returning -1. Ctrl-C means stop, and a
-			// sentinel return would let a magusfile that forgot to check it carry on
-			// with a choice the reader explicitly declined to make.
-			return -1, errors.New("term.pick: cancelled")
+	}
+	if query != nil {
+		opts.Query = func(ctx context.Context, filter string) ([]string, error) {
+			got, err := query(ctx, filter)
+			if err != nil {
+				return nil, err
+			}
+			return termQueryResult(got)
 		}
-		return -1, fmt.Errorf("term.pick: %w", err)
+	}
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, items, opts)
+	if err != nil {
+		return -1, termPromptError("term.pick", err)
 	}
 	return idx, nil
+}
+
+// termQueryResult reads a Buzz query's result as the labels to show. The
+// callback crosses as any, so a wrong shape is named here rather than drawn as
+// an empty list.
+func termQueryResult(got any) ([]string, error) {
+	if strs, ok := got.([]string); ok {
+		return strs, nil
+	}
+	list, ok := got.([]any)
+	if !ok {
+		return nil, fmt.Errorf("query returned %T, want a list of strings", got)
+	}
+	out := make([]string, len(list))
+	for i, v := range list {
+		s, isStr := v.(string)
+		if !isStr {
+			return nil, fmt.Errorf("query returned a %T at index %d, want a list of strings", v, i)
+		}
+		out[i] = s
+	}
+	return out, nil
+}
+
+// TermPickMany prompts for any number of items and returns the marked ones.
+func TermPickMany(ctx context.Context, items []string, prompt, initialFilter string, marked []string, maxRows int) ([]string, error) {
+	if types.Stubbed(ctx, "term.pickMany") {
+		// Nothing marked commits a recording pass to nothing.
+		return []string{}, nil
+	}
+	if len(items) == 0 {
+		return nil, errors.New("term.pickMany: no items to choose from")
+	}
+	start, err := termMarkedIndices(items, marked)
+	if err != nil {
+		return nil, err
+	}
+	if err := termPromptable("term.pickMany"); err != nil {
+		return nil, err
+	}
+	got, err := pick.Many(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, items, pick.Options{
+		Prompt:        prompt,
+		InitialFilter: initialFilter,
+		MaxRows:       maxRows,
+	}, start)
+	if err != nil {
+		return nil, termPromptError("term.pickMany", err)
+	}
+	out := make([]string, len(got))
+	for i, idx := range got {
+		out[i] = items[idx]
+	}
+	return out, nil
+}
+
+// termMarkedIndices maps marked onto indices into items, refusing a duplicate
+// item (the answer could not say which one was meant) and a marked entry that is
+// not an item.
+func termMarkedIndices(items, marked []string) ([]int, error) {
+	index := make(map[string]int, len(items))
+	for i, it := range items {
+		if _, dup := index[it]; dup {
+			return nil, fmt.Errorf("term.pickMany: %q is listed twice, and the answer is the items themselves, so each must be distinct", it)
+		}
+		index[it] = i
+	}
+	out := make([]int, 0, len(marked))
+	for _, m := range marked {
+		i, ok := index[m]
+		if !ok {
+			return nil, fmt.Errorf("term.pickMany: marked names %q, which is not one of the items", m)
+		}
+		out = append(out, i)
+	}
+	return out, nil
+}
+
+// confirmAnswers lists no first so that Enter alone declines.
+var confirmAnswers = []string{"no", "yes"}
+
+// TermConfirm asks a yes or no question and reports whether the answer was yes.
+//
+// A pick over two rows rather than a y/N line read: the picker already owns raw
+// mode, cancel and cleanup, and typing "y" filters to yes.
+func TermConfirm(ctx context.Context, question string) (bool, error) {
+	if types.Stubbed(ctx, "term.confirm") {
+		// Decline: the step a confirm guards is the one a dry run exists not to take.
+		return false, nil
+	}
+	if question == "" {
+		return false, errors.New("term.confirm: no question to ask")
+	}
+	if err := termPromptable("term.confirm"); err != nil {
+		return false, err
+	}
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, confirmAnswers, pick.Options{Prompt: question})
+	if err != nil {
+		return false, termPromptError("term.confirm", err)
+	}
+	return confirmAnswers[idx] == "yes", nil
+}
+
+// termPromptable refuses a prompt when there is nothing to prompt on. The
+// message names the guard: an author hitting this in CI needs to know what to
+// write, not only what went wrong.
+func termPromptable(member string) error {
+	interactive, _ := TermIsInteractive(context.Background())
+	if interactive {
+		return nil
+	}
+	return fmt.Errorf("%s: nothing to prompt on (standard input and standard error are not both terminals), "+
+		"guard the call with term.isInteractive() and choose a default for unattended runs", member)
+}
+
+// termPromptError names an abort as a cancel and wraps anything else.
+//
+// An abort RAISES rather than returning a sentinel. Ctrl-C means stop, and a
+// sentinel would let a script that forgot to check it carry on with a choice
+// the reader declined to make.
+func termPromptError(member string, err error) error {
+	if errors.Is(err, pick.ErrAborted) {
+		return fmt.Errorf("%s: cancelled", member)
+	}
+	return fmt.Errorf("%s: %w", member, err)
+}
+
+// TermSpin calls run while a loader turns beside label on stderr.
+func TermSpin(ctx context.Context, label string, run func(ctx context.Context) (any, error)) (any, error) {
+	if run == nil {
+		return nil, errors.New("term.spin: no function to run")
+	}
+	if types.Stubbed(ctx, "term.spin") {
+		// The work still runs: its own effects are what a recording pass records.
+		return run(ctx)
+	}
+	interactive, _ := TermIsInteractive(ctx)
+	if !interactive {
+		return nil, errors.New("term.spin: nothing to draw on (standard input and standard error are not both terminals), " +
+			"guard the call with term.isInteractive() and call the function directly for unattended runs")
+	}
+	spinner, err := progress.StartSpinner(os.Stderr, termkit.SystemProbe, label)
+	if err != nil {
+		return nil, fmt.Errorf("term.spin: %w", err)
+	}
+	defer spinner.Stop()
+	return run(ctx)
 }
 
 // defaultNotifyTTL is how long a notification shows when the caller does not

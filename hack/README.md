@@ -14,6 +14,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `bench/` | measurements of magus itself | a person comparing two builds |
 | `ci/` | workflow steps, and the scripts that act on pull requests and the repository | CI, the merge queue, a maintainer |
 | `magusfile/` | modules with no `main` | magusfiles and CI, through targets |
+| `lib/` | modules a script's `main` imports and no magusfile, hook or target may | the scripts in `dev/`, `remote/` and `bench/` |
 | `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `conventions` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
@@ -195,6 +196,15 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
+
+## lib/
+
+A script's `main` imports these. A prompt waits on a person, so nothing a hook, a target
+or a bootstrap runs may import them; `hack/lint/prompts-stay-interactive.buzz` holds that.
+
+| module | holds |
+| --- | --- |
+| `hack/lib/prompt.buzz` | a flag's value, else a prompt on an interactive terminal, else a failure naming the flag; each answer a `result\Result` |
 
 ## lint/
 

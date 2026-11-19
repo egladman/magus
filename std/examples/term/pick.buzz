@@ -1,21 +1,22 @@
 import "std";
 import "term";
 
-// pick RAISES when there is no terminal, so an interactive step that also has to
-// run unattended guards on isInteractive and declares its own default. It raises
-// again when the reader aborts with ESC or Ctrl-C, which is why the call is
-// caught rather than merely guarded: a cancel is not a choice.
+// A prompt is the interactive spelling of a flag. The flag wins when it was
+// passed, and a person on a terminal who left it off is asked. With nothing to
+// ask on, or when the reader cancels with ESC or Ctrl-C (pick raises), nothing
+// is chosen: the run says which flag it needed.
 final projects = ["console", "docs", "libs/gopherbuzz"];
+final given: str? = null;
 
-fun choose() > str {
-    if (!term\isInteractive()) {
-        return projects[0];
-    }
+if (given -> project) {
+    std\print(project);
+} else if (!term\isInteractive()) {
+    std\print("--project is required (no terminal to ask on)");
+} else {
     try {
-        return projects[term\pick(projects, prompt: "project")];
+        final picked = projects[term\pick(projects, prompt: "project")];
+        std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
     } catch (e) {
-        return projects[0];
+        std\print("no project chosen: pass --project");
     }
 }
-
-std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));

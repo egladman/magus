@@ -1,0 +1,16 @@
+import "std";
+import "term";
+
+// Ask once, right before the step that cannot be taken back, after printing
+// what it will do. The flag that already says yes answers for an unattended
+// run, and a cancel (confirm raises) is a no.
+final apply = false;
+std\print("would remove 3 worktrees, freeing 2.1 GiB");
+
+var proceed = apply;
+if (!apply and term\isInteractive()) {
+    proceed = term\confirm("remove 3 worktrees?") catch false;
+}
+if (!proceed) {
+    std\print("dry run: pass --apply to remove them");
+}

@@ -1,0 +1,215 @@
+// prompts-stay-interactive holds every terminal prompt to the one place a person is
+// there to answer it. A call to term\pick, term\pickMany, term\confirm or term\spin
+// comes after a term\isInteractive() guard in the same function, and sits in a script's
+// main. A hook, a target or a bootstrap runs with nobody at the keyboard, so a prompt
+// in a module one of them imports would raise there, or wait on a key that never
+// comes. hack/lib/prompt.buzz is the one module that may prompt outside a main; its
+// callers are held to main like a direct call, and only a script may import it. The
+// scripts that run unattended (bootstrap-*, hack/ci) take no prompt at all.
+//
+// Tier 1, mechanical: the fix moves the call into main behind the guard, or replaces it
+// with the flag it stands for.
+namespace promptsstayinteractive;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// HELPER is the shared flag-or-prompt-or-error module.
+final HELPER = "hack/lib/prompt.buzz";
+
+// UNATTENDED are the path prefixes of scripts nobody answers: the workspace bootstrap,
+// the worker bootstrap, and everything CI and the merge queue run.
+final UNATTENDED = ["hack/dev/bootstrap-", "hack/ci/"];
+
+final GUARD = "term\\isInteractive()";
+final PROMPT = std\pattern(`\bterm\\(pick|pickMany|confirm|spin)\s*\(`);
+final FUN = std\pattern(`^(?:export\s+)?fun\s+([A-Za-z_][A-Za-z0-9_]*)`);
+final TOP = std\pattern(`^(?:export\s+)?(?:fun|test|object|enum|protocol|final|var)\b`);
+final HELPER_IMPORT = std\pattern(`^import\s+"hack/lib/prompt"(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?\s*;`);
+final MAIN = std\pattern(`^(?:export\s+)?fun\s+main\s*\(`);
+
+final FIX_GUARD = "Branch on term\\isInteractive() first and give the unattended run its flag, "
+    + "or call the hack/lib/prompt helper, which does both.";
+final FIX_MAIN = "Move the prompt into the script's main and pass the answer down; "
+    + "a function a module shares runs under hooks and targets too.";
+final FIX_UNATTENDED = "Take the answer as a flag: nobody is at the keyboard when this script runs.";
+final FIX_IMPORT = "Import hack/lib/prompt only from a script with a main; a module that imports it "
+    + "lets a hook or target that imports the module prompt.";
+
+export fun reads() > [str] {
+    return ["**/*.buzz"];
+}
+
+// judged reports whether p is source that runs: lint fixtures, generated code, test data
+// and the std/examples doc fragments only quote prompt calls.
+fun judged(p: str) > bool {
+    final rooted = "/" + p;
+    return rooted.indexOf("/testdata/") == null and rooted.indexOf("/gen/") == null
+        and !p.startsWith("hack/lint/") and !p.startsWith("std/examples/");
+}
+
+fun unattended(p: str) > bool {
+    foreach (prefix in UNATTENDED) {
+        if (p.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// helperAlias is the name src calls hack/lib/prompt by, or "" when it does not import it.
+fun helperAlias(src: str) > str {
+    foreach (line in src.split("\n")) {
+        if (HELPER_IMPORT.match(line) -> m) {
+            return if (m.len() > 1 and m[1] != "") m[1] else "prompt";
+        }
+    }
+    return "";
+}
+
+// scope names what a top-level line opens, for a message.
+fun scope(line: str) > str {
+    if (FUN.match(line) -> m) {
+        return "fun {m[1]}";
+    }
+    return "top-level code";
+}
+
+// judge is each finding for the file at path whose source is src.
+export fun judge(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    final alias = helperAlias(src);
+    final helperCall = if (alias != "") "{alias}\\" else "";
+    final isHelper = path == HELPER;
+    final hasMain = src.split("\n").filter(fun (i: int, l: str) > bool => MAIN.match(l) != null).len() > 0;
+    var where = "top-level code";
+    var guarded = false;
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        final trimmed = line.trim();
+        if (trimmed.startsWith("//")) {
+            continue;
+        }
+        if (TOP.match(line) != null) {
+            where = scope(line);
+            guarded = false;
+        }
+        if (HELPER_IMPORT.match(line) != null and !hasMain) {
+            found.append(Finding{ path = path, line = n,
+                message = "{path} imports hack/lib/prompt but has no main, so whatever imports it can prompt",
+                fix = FIX_IMPORT });
+        }
+        final guardAt = line.indexOf(GUARD);
+        final direct = PROMPT.match(line);
+        final viaHelper = helperCall != "" and line.indexOf(helperCall) != null;
+        if (direct == null and !viaHelper) {
+            if (guardAt != null) {
+                guarded = true;
+            }
+            continue;
+        }
+        final call = if (direct != null) "term\\{direct![1]}" else "{alias}\\";
+        if (direct != null) {
+            final callAt = line.indexOf("term\\{direct![1]}")!;
+            if (!guarded and (guardAt == null or guardAt! > callAt)) {
+                found.append(Finding{ path = path, line = n,
+                    message = "{call} in {where} has no {GUARD} guard before it", fix = FIX_GUARD });
+            }
+        }
+        if (guardAt != null) {
+            guarded = true;
+        }
+        if (unattended(path)) {
+            found.append(Finding{ path = path, line = n,
+                message = "{call} in {path}, which runs with nobody to answer it", fix = FIX_UNATTENDED });
+        } else if (!isHelper and where != "fun main") {
+            found.append(Finding{ path = path, line = n,
+                message = "{call} in {where}, outside a script's main", fix = FIX_MAIN });
+        }
+    }
+    return found;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.endsWith(".buzz") or !judged(f.value)) {
+            continue;
+        }
+        final src = support\read(f);
+        if (src.indexOf("term\\") == null and src.indexOf("hack/lib/prompt") == null) {
+            continue;
+        }
+        foreach (finding in judge(f.value, src: src)) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+test "a guarded prompt in main passes" {
+    final src = "import \"term\";\n\nfun main(args: [str]) > void !> any \{\n"
+        + "    if (term\\isInteractive()) \{\n        _ = term\\confirm(\"push?\");\n    }\n}\n";
+    assert\equal(judge("hack/dev/push-things.buzz", src: src).len(), want: 0, message: "clean");
+}
+
+test "a guard on the same line as the call counts" {
+    final src = "fun main(args: [str]) > void !> any \{\n"
+        + "    final v = if (term\\isInteractive()) term\\spin(\"x\", run: f) else f();\n}\n";
+    assert\equal(judge("hack/dev/run-things.buzz", src: src).len(), want: 0, message: "clean");
+}
+
+test "an unguarded prompt is reported at its line" {
+    final src = "fun main(args: [str]) > void !> any \{\n    _ = term\\pick([\"a\"]);\n}\n";
+    final got = judge("hack/dev/pick-things.buzz", src: src);
+    assert\equal(support\messages(got), want: ["term\\pick in fun main has no term\\isInteractive() guard before it"], message: "finding");
+    assert\equal(got[0].line, want: 2, message: "the call's line");
+}
+
+test "a guard in another function does not count" {
+    final src = "fun helper() > bool \{\n    return term\\isInteractive();\n}\n\n"
+        + "fun main(args: [str]) > void !> any \{\n    _ = term\\pickMany([\"a\"]);\n}\n";
+    assert\equal(support\messages(judge("hack/dev/pick-things.buzz", src: src)),
+        want: ["term\\pickMany in fun main has no term\\isInteractive() guard before it"], message: "finding");
+}
+
+test "a guarded prompt outside main is reported" {
+    final src = "export fun ask() > bool !> any \{\n    if (!term\\isInteractive()) \{\n        return false;\n    }\n"
+        + "    return term\\confirm(\"go?\");\n}\n";
+    assert\equal(support\messages(judge("hack/magusfile/ask.buzz", src: src)),
+        want: ["term\\confirm in fun ask, outside a script's main"], message: "finding");
+}
+
+test "the helper may prompt outside main, and its callers may not" {
+    final helper = "export fun choose() > bool \{\n    if (!term\\isInteractive()) \{\n        return false;\n    }\n"
+        + "    return term\\confirm(\"go?\");\n}\n";
+    assert\equal(judge(HELPER, src: helper).len(), want: 0, message: "the helper");
+
+    final caller = "import \"hack/lib/prompt\" as ask;\n\nfun pickOne() > str \{\n    return ask\\choose(null, flag: \"--x\");\n}\n\n"
+        + "fun main(args: [str]) > void \{\n    _ = ask\\choose(null, flag: \"--x\");\n}\n";
+    assert\equal(support\messages(judge("hack/dev/pick-things.buzz", src: caller)),
+        want: ["ask\\ in fun pickOne, outside a script's main"], message: "the caller");
+}
+
+test "an unattended script takes no prompt, guarded or not" {
+    final src = "import \"hack/lib/prompt\";\n\nfun main(args: [str]) > void \{\n    _ = prompt\\choose(null, flag: \"--x\");\n}\n";
+    assert\equal(support\messages(judge("hack/dev/bootstrap-things.buzz", src: src)),
+        want: ["prompt\\ in hack/dev/bootstrap-things.buzz, which runs with nobody to answer it"], message: "finding");
+}
+
+test "a module importing the helper is reported at the import" {
+    final src = "namespace x;\n\nimport \"hack/lib/prompt\";\n\nexport fun measure() > void \{}\n";
+    final got = judge("hack/magusfile/measure.buzz", src: src);
+    assert\equal(support\messages(got), want: ["hack/magusfile/measure.buzz imports hack/lib/prompt but has no main, so whatever imports it can prompt"], message: "finding");
+    assert\equal(got[0].line, want: 3, message: "the import line");
+}
+
+test "fixtures, generated code and doc fragments are not judged" {
+    assert\equal(judged("hack/lint/prompts-stay-interactive.buzz"), want: false, message: "lint fixtures");
+    assert\equal(judged("std/examples/term/pick.buzz"), want: false, message: "doc fragments");
+    assert\equal(judged("internal/spell/gen/decls/term.buzz"), want: false, message: "generated");
+    assert\equal(judged("hack/dev/reclaim-disk-space.buzz"), want: true, message: "a script");
+}

@@ -356,7 +356,12 @@ func externDecl(m std.Method) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("arg %s: %w", a.Name, err)
 			}
-			params = append(params, fmt.Sprintf("%s: %s", a.Name, typ))
+			p := fmt.Sprintf("%s: %s", a.Name, typ)
+			if a.Optional {
+				// The adapter turns an absent function into a nil Go func.
+				p += "? = null"
+			}
+			params = append(params, p)
 			continue
 		}
 		typ, err := buzzArgType(a.Type)

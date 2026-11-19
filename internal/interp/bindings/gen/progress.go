@@ -81,6 +81,22 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.IntVal(ret0), nil
 	}))
+	m.MapSet("startSpinner", vm.DirectValue("progress.startSpinner", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		p := ffi.Int(bzArgs, 0, 0)
+		label := ffi.String(bzArgs, 1)
+		ret0, err := progress.ImplStartSpinner(ctx, p, label)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("spinnerStop", vm.DirectValue("progress.spinnerStop", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		spinner := ffi.Int(bzArgs, 0, 0)
+		if err := progress.ImplSpinnerStop(ctx, spinner); err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return vm.Null, nil
+	}))
 	m.MapSet("loaderName", vm.DirectValue("progress.loaderName", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		loader := ffi.Int(bzArgs, 0, 0)
 		ret0, err := progress.ImplLoaderName(ctx, loader)
@@ -165,6 +181,13 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("fallback", vm.DirectValue("progress.fallback", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := progress.ImplFallback(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("spinLoader", vm.DirectValue("progress.spinLoader", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplSpinLoader(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

@@ -60,6 +60,7 @@ import "hack/lint/no-throw" as nothrow;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
 import "hack/lint/proofread-case-moves-name-their-origin" as casemoves;
+import "hack/lint/prompts-stay-interactive" as promptsinteractive;
 import "hack/lint/provider-io-is-buzz" as providerio;
 import "hack/lint/prose-names-targets-that-exist" as prosetargets;
 import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
@@ -110,6 +111,7 @@ export fun rules() > [Rule] {
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
+        Rule{ name = "prompts-stay-interactive", reads = promptsinteractive\reads(), check = promptsinteractive\check },
         Rule{ name = "figure-imports-are-named", reads = figureimports\reads(), check = figureimports\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },

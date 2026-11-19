@@ -1,0 +1,14 @@
+import "proc";
+import "std";
+import "term";
+
+// A loader turns while the subprocess blocks and is erased when it returns.
+// proc captures the command's output, so nothing writes under the loader.
+final survey = fun () > any !> any => proc\exec("du", args: ["-sk", "."]).stdout;
+
+try {
+    final usage = if (term\isInteractive()) term\spin("surveying the disk", run: survey) else survey();
+    std\print("{usage}");
+} catch (e) {
+    std\print("du failed");
+}

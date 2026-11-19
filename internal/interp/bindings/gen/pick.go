@@ -29,6 +29,17 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.IntVal(ret0), nil
 	}))
+	m.MapSet("many", vm.DirectValue("pick.many", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		p := ffi.Int(bzArgs, 0, 0)
+		items := ffi.StringSlice(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
+		marked := ffi.Any(bzArgs, 3)
+		ret0, err := pick.ImplMany(ctx, p, items, opts, marked)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.AnyVal(ret0), nil
+	}))
 	m.MapSet("render", vm.DirectValue("pick.render", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
 		items := ffi.StringSlice(bzArgs, 1)
@@ -36,6 +47,19 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 		filter := ffi.String(bzArgs, 3)
 		cursor := ffi.Int(bzArgs, 4, 0)
 		ret0, err := pick.ImplRender(ctx, p, items, opts, filter, cursor)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("renderMany", vm.DirectValue("pick.renderMany", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		p := ffi.Int(bzArgs, 0, 0)
+		items := ffi.StringSlice(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
+		marked := ffi.Any(bzArgs, 3)
+		filter := ffi.String(bzArgs, 4)
+		cursor := ffi.Int(bzArgs, 5, 0)
+		ret0, err := pick.ImplRenderMany(ctx, p, items, opts, marked, filter, cursor)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
