@@ -112,7 +112,7 @@ import "magus";
 export fun greet(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
-	_, err := interp.RunDir(testCtx(), dir, "greet", nil)
+	_, err := interp.RunDir(testContext(), dir, "greet", nil)
 	require.NoError(t, err)
 }
 
@@ -123,7 +123,7 @@ func TestIntegration_UnknownTarget(t *testing.T) {
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
-	_, err := interp.RunDir(testCtx(), dir, "notexist", nil)
+	_, err := interp.RunDir(testContext(), dir, "notexist", nil)
 	assert.Error(t, err, "expected error for unknown target")
 }
 
@@ -138,7 +138,7 @@ magus\project(".", {
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
-	_, err := interp.RunDir(testCtx(), dir, "build", nil)
+	_, err := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, err)
 }
 

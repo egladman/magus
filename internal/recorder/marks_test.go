@@ -35,7 +35,7 @@ func (s *MarksSuite) TestFeedbackMarksRoundTrip() {
 	_, err = appendMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
-	marks, err := readMarks(testCtx(t), dir)
+	marks, err := readMarks(testContext(t), dir)
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
@@ -83,14 +83,14 @@ func (s *MarksSuite) TestReadFeedbackMarksNamesAnUndecodableLine() {
 	t := s.T()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, marksFile), []byte("{\"id\":\"fb0123456789ab\"}\nnot json\n"), 0o644))
-	_, err := readMarks(testCtx(t), dir)
+	_, err := readMarks(testContext(t), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), marksFile+":2")
 }
 
 func (s *MarksSuite) TestReadFeedbackMarksOfAnEmptyStore() {
 	t := s.T()
-	marks, err := readMarks(testCtx(t), t.TempDir())
+	marks, err := readMarks(testContext(t), t.TempDir())
 	require.NoError(t, err)
 	assert.Empty(t, marks)
 }

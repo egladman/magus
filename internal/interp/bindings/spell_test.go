@@ -94,13 +94,13 @@ export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 		// wsRoot is derived from src.Dir so it stays symlink-consistent (t.TempDir
 		// resolves through /private on macOS). callerRel is then "a", so the resolver
 		// yields "b/go.mod" and magus.inputs (a runtime no-op) accepts it.
-		ctx := types.WithWorkspace(testCtx(), rootOnlyWS{root: filepath.Dir(src.Dir)})
+		ctx := types.WithWorkspace(testContext(), rootOnlyWS{root: filepath.Dir(src.Dir)})
 		_, err := interp.RunDir(ctx, filepath.Join(root, "a"), "build", nil)
 		require.NoError(t, err, "b.file(...) must resolve and feed magus.inputs without error")
 	})
 
 	t.Run("without a workspace degrades without error", func(t *testing.T) {
-		_, err := interp.RunDir(testCtx(), filepath.Join(root, "a"), "build", nil)
+		_, err := interp.RunDir(testContext(), filepath.Join(root, "a"), "build", nil)
 		require.NoError(t, err, "a bare script must degrade the resolver, not error")
 	})
 }
@@ -118,7 +118,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {
     final _graph: Graph = null;
 }`)
 
-	_, err := interp.RunDir(testCtx(), dir, "preflight", nil)
+	_, err := interp.RunDir(testContext(), dir, "preflight", nil)
 	require.NoError(t, err)
 }
 
@@ -185,7 +185,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 }
 `)
 
-	_, err := interp.RunDir(testCtx(), dir, "check", nil)
+	_, err := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, err)
 }
 
@@ -235,7 +235,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     widget.capture(ctx.withCwd("sub"), {"args": ["alpha", "beta"]});
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, runErr, "invoking spell method with opts")
 
 	// The file must land in the context's cwd (sub/), proving withCwd was honored, and
@@ -269,7 +269,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     widget.capture(ctx.withEnv({"MYVAR": "overridden"}));
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, runErr, "invoking spell method with env")
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
@@ -299,7 +299,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     if (r.ok != true) { throw "ok mismatch"; }
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, runErr, "captured buzz target")
 }
 
@@ -324,7 +324,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     if (r.stdout != "abc123") { throw "stdout mismatch: " + r.stdout; }
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, runErr, "quiet captured buzz target")
 }
 
@@ -368,7 +368,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     if (b.stdout != "ALPHA") { throw "pipe mismatch: " + b.stdout; }
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "build", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, runErr, "pipe stdin")
 }
 
@@ -395,7 +395,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (c.id == "") { throw "id empty"; }
 }`)
 
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr, "vcs.commit facade")
 }
 
@@ -424,7 +424,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     }
     if (!raised) { magus\fatal("vcs.commit should raise outside a repo, not return a zero object"); }
 }`)
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr, "vcs.commit raises outside a repo")
 }
 
@@ -588,7 +588,7 @@ export fun go(ctx: magus\Context, args: [str]) > void {}`)
 	w.Write("b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
-	_, runErr := interp.RunDir(testCtx(), filepath.Join(root, "a"), "go", nil)
+	_, runErr := interp.RunDir(testContext(), filepath.Join(root, "a"), "go", nil)
 	require.NoError(t, runErr,
 		"a project/ import must resolve when a target is run, not only parsed")
 }
@@ -613,7 +613,7 @@ export fun go(ctx: magus\Context, args: [str]) > void {
 	w.Write("b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
-	_, runErr := interp.RunDir(testCtx(), filepath.Join(root, "a"), "go", nil)
+	_, runErr := interp.RunDir(testContext(), filepath.Join(root, "a"), "go", nil)
 	require.NoError(t, runErr,
 		"ctx.needs(b.build) and the direct b.build() call must both resolve the cross handle")
 }
@@ -650,7 +650,7 @@ export fun check(ctx: magus\Context, _args: [str]) > void {
     if (go["go-vet"] == null) { throw "fork go-vet must be a function (overlay)"; }
 }
 `)
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -669,7 +669,7 @@ export fun check(ctx: magus\Context, _args: [str]) > void !> any {
     if (docker["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
 }
 `)
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -683,7 +683,7 @@ import "magus";
 import "magus/spell/dockr";
 magus\project(".", {"spells": [dockr]});
 `)
-	_, err := interp.RunDir(testCtx(), dir, "noop", nil)
+	_, err := interp.RunDir(testContext(), dir, "noop", nil)
 	assert.Error(t, err, "expected a compile error for the misspelled module")
 }
 
@@ -709,7 +709,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 }
 magus\project(".", {"spells": [locreq]});
 `)
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -728,7 +728,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
     if (go["go-fmt"] == null) { throw "go-fmt must be a function"; }
 }
 `)
-	_, runErr := interp.RunDir(testCtx(), dir, "check", nil)
+	_, runErr := interp.RunDir(testContext(), dir, "check", nil)
 	require.NoError(t, runErr)
 }
 
@@ -1063,7 +1063,7 @@ func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
-	err := checkReady(testCtx(), readiness, op, t.TempDir())
+	err := checkReady(testContext(), readiness, op, t.TempDir())
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.ToolNotReady), "want MGS3004, got %v", err)
 	assert.Contains(t, err.Error(), "faketool")
@@ -1080,7 +1080,7 @@ func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
-	err := checkReady(testCtx(), readiness, op, t.TempDir())
+	err := checkReady(testContext(), readiness, op, t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "/var/run/x.sock", "the probe's own message was discarded")
 	assert.True(t, errors.Is(err, types.ToolNotReady), "wrapping must not lose the code")
@@ -1094,7 +1094,7 @@ func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
-	err := checkReady(testCtx(), readiness, op, t.TempDir())
+	err := checkReady(testContext(), readiness, op, t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "needs it running")
 	assert.True(t, errors.Is(err, types.ToolNotReady))
@@ -1107,7 +1107,7 @@ func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
-	require.NoError(t, checkReady(testCtx(), readiness, op, t.TempDir()))
+	require.NoError(t, checkReady(testContext(), readiness, op, t.TempDir()))
 }
 
 // An op whose tool declares no probe is never gated: the hadolint-beside-docker case.
@@ -1117,7 +1117,7 @@ func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
 		"docker": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	lint := spells.Op{Command: spells.Command{Bin: "hadolint"}}
-	require.NoError(t, checkReady(testCtx(), readiness, lint, t.TempDir()),
+	require.NoError(t, checkReady(testContext(), readiness, lint, t.TempDir()),
 		"linting a Dockerfile must not wait on the docker daemon")
 }
 
@@ -1132,8 +1132,8 @@ func TestReadinessProbeRunsOncePerBinAndDir(t *testing.T) {
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
-	require.NoError(t, checkReady(testCtx(), readiness, op, dir))
-	require.NoError(t, checkReady(testCtx(), readiness, op, dir),
+	require.NoError(t, checkReady(testContext(), readiness, op, dir))
+	require.NoError(t, checkReady(testContext(), readiness, op, dir),
 		"probe re-ran; a forked check must run once per (bin, dir)")
 }
 
@@ -1149,7 +1149,7 @@ func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
 	start := time.Now()
-	err := checkReady(testCtx(), readiness, op, t.TempDir())
+	err := checkReady(testContext(), readiness, op, t.TempDir())
 	elapsed := time.Since(start)
 
 	require.Error(t, err)
@@ -1177,7 +1177,7 @@ func TestReadinessCancelledProbeIsNotKept(t *testing.T) {
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
-	cancelled, cancel := context.WithCancel(testCtx())
+	cancelled, cancel := context.WithCancel(testContext())
 	cancel()
 	err := checkReady(cancelled, readiness, op, dir)
 	require.Error(t, err)
@@ -1190,7 +1190,7 @@ func TestReadinessCancelledProbeIsNotKept(t *testing.T) {
 	// A later call with a live context must re-probe rather than return the stale
 	// cancellation; swap in a passing probe to prove the probe actually re-ran.
 	readiness["faketool"] = spells.Tool{Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}}
-	require.NoError(t, checkReady(testCtx(), readiness, op, dir))
+	require.NoError(t, checkReady(testContext(), readiness, op, dir))
 }
 
 // A failed probe quotes the tool's own reason. The exit status alone was the whole
@@ -1200,7 +1200,7 @@ func TestVersionProberQuotesTheToolsReason(t *testing.T) {
 	script := "#!/bin/sh\necho undefined\necho ' ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command \"tsc\" not found'\nexit 254\n"
 	require.NoError(t, os.WriteFile(bin, []byte(script), 0o755))
 
-	_, err := versionProber(testCtx(), spells.Command{Bin: bin, Args: []string{"exec", "tsc", "--version"}}, t.TempDir())
+	_, err := versionProber(testContext(), spells.Command{Bin: bin, Args: []string{"exec", "tsc", "--version"}}, t.TempDir())
 
 	require.Error(t, err)
 	var exit *exec.ExitError

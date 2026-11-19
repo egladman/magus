@@ -72,7 +72,7 @@ func requireDirect(t *testing.T, obj vm.Value, name string) vm.Value {
 // session's, and a test calls the same DirectValue with the same handle twice.
 func callVoidDirect(t *testing.T, fn vm.Value, args ...vm.Value) error {
 	t.Helper()
-	_, err := callSession(t).CallValue(testCtx(), fn, args)
+	_, err := callSession(t).CallValue(testContext(), fn, args)
 	return err
 }
 
@@ -914,7 +914,7 @@ func runUsesTarget(t *testing.T, target string) (trace string, err error) {
 	t.Chdir(dir)
 	w.Magusfile(usesMagusfile)
 
-	_, err = interp.RunDir(testCtx(), dir, target, nil)
+	_, err = interp.RunDir(testContext(), dir, target, nil)
 	raw, readError := os.ReadFile(filepath.Join(dir, "trace.txt"))
 	if readError != nil {
 		return "", err
@@ -952,7 +952,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 `
 	w.Magusfile(src)
-	_, err := interp.RunDir(testCtx(), dir, "build", nil)
+	_, err := interp.RunDir(testContext(), dir, "build", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be a fiber")
 }
@@ -1001,7 +1001,7 @@ func TestConditionalNeedsDispatchesOnlyTheTakenBranch(t *testing.T) {
 	t.Chdir(dir)
 	w.Magusfile(conditionalNeedsMagusfile)
 
-	_, err := interp.RunDir(testCtx(), dir, "build", nil)
+	_, err := interp.RunDir(testContext(), dir, "build", nil)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(dir, "ran.txt"))
@@ -1038,7 +1038,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 			dir := w.Root()
 			t.Chdir(dir)
 			w.Magusfile(mf)
-			ctx := testCtx()
+			ctx := testContext()
 			if tc.narrowing != nil {
 				ctx = project.WithOpNarrowing(ctx, *tc.narrowing)
 			}
