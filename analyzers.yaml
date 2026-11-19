@@ -171,12 +171,8 @@ no-throw:
       hack/policy/stale.buzz: 2
       internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
-      spells/git/hooks.buzz: 2
       spells/golang/golangci.buzz: 2
-      spells/golang/gomod.buzz: 1
-      std/lib/diskwatch.buzz: 6
-      std/lib/lcov.buzz: 2
-      std/lib/reclaimdisk.buzz: 5
+      std/lib/reclaimdisk.buzz: 2
 
 # An engineered zone: a path in this project whose complexity a measurement
 # licenses. reason is spec, performance or security; evidence names the files
