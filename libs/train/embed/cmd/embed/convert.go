@@ -15,7 +15,7 @@ import (
 )
 
 // potion is the model convert reads, pinned by the potion-code-16M-v2/ entries of
-// inputs.jsonl.
+// inputs.yaml.
 const potion = "potion-code-16M-v2"
 
 // convertPipeline and convertGOARCH are what a converted table records as its pipeline
@@ -33,8 +33,8 @@ const (
 func runConvert(args []string) error {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	vocabPath := fs.String("vocab", "", "the vocabulary, JSON lines of {\"token\", \"count\"} as `embed vocab -vocab` writes them")
-	inputs := fs.String("inputs", "embed/inputs.jsonl", "the pinned inputs file")
-	cache := fs.String("cache", cacheRoot(), "the cache root inputs.jsonl paths are relative to")
+	inputs := fs.String("inputs", "embed/inputs.yaml", "the pinned inputs file")
+	cache := fs.String("cache", cacheRoot(), "the cache root inputs.yaml paths are relative to")
 	run := fs.String("run", "", "this run's id, recorded in the table")
 	out := fs.String("out", "", "where to write the table")
 	_ = fs.Parse(args)
@@ -93,7 +93,7 @@ func loadPotion(inputsPath, cache string) (*teacher.WordPiece, *tensors.Tensor, 
 			return nil, nil, "", err
 		}
 		if rev != "" && in.Revision != rev {
-			return nil, nil, "", fmt.Errorf("inputs.jsonl pins %s at %s and %s", potion, rev, in.Revision)
+			return nil, nil, "", fmt.Errorf("inputs.yaml pins %s at %s and %s", potion, rev, in.Revision)
 		}
 		rev = in.Revision
 	}

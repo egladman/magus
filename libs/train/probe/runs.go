@@ -4,7 +4,6 @@
 package probe
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,24 +16,29 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-// Input is one line of libs/train/inputs.jsonl: a pinned download. Path is relative to
-// the cache root.
+// Input is one entry of libs/train/inputs.yaml: a pinned download. Path is relative to
+// the cache root. The cutoff entry also carries Date, Status and Note and is no download.
 type Input struct {
-	Name        string `json:"name"`
-	Source      string `json:"source"`
-	Revision    string `json:"revision"`
-	SHA256      string `json:"sha256"`
-	Size        int64  `json:"size"`
-	License     string `json:"license"`
-	LicenseFile string `json:"license_file"`
-	LicenseNote string `json:"license_note,omitempty"`
-	Path        string `json:"path"`
+	Name        string `yaml:"name"`
+	Source      string `yaml:"source"`
+	Revision    string `yaml:"revision"`
+	SHA256      string `yaml:"sha256"`
+	Size        int64  `yaml:"size"`
+	License     string `yaml:"license"`
+	LicenseFile string `yaml:"license_file"`
+	LicenseNote string `yaml:"license_note,omitempty"`
+	Path        string `yaml:"path"`
+	Date        string `yaml:"date,omitempty"`
+	Status      string `yaml:"status,omitempty"`
+	Note        string `yaml:"note,omitempty"`
 }
 
-// ReadInputs reads an inputs.jsonl. A row without a name, source, sha256 or relative
-// path is an error.
+// ReadInputs reads an inputs.yaml. A field it does not know, or an entry without a name,
+// source, sha256 or relative path, is an error.
 func ReadInputs(path string) ([]Input, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -42,18 +46,17 @@ func ReadInputs(path string) ([]Input, error) {
 	}
 	defer f.Close()
 	var out []Input
-	sc := bufio.NewScanner(f)
-	for n := 1; sc.Scan(); n++ {
-		var in Input
-		if err := json.Unmarshal(sc.Bytes(), &in); err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", path, n, err)
-		}
-		if in.Name == "" || in.Source == "" || len(in.SHA256) != 64 || in.Path == "" || filepath.IsAbs(in.Path) {
-			return nil, fmt.Errorf("%s:%d: needs name, source, sha256 and a relative path", path, n)
-		}
-		out = append(out, in)
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&out); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return out, sc.Err()
+	for n, in := range out {
+		if in.Name == "" || in.Source == "" || len(in.SHA256) != 64 || in.Path == "" || filepath.IsAbs(in.Path) {
+			return nil, fmt.Errorf("%s: entry %d (%q) needs name, source, sha256 and a relative path", path, n+1, in.Name)
+		}
+	}
+	return out, nil
 }
 
 // WithPrefix returns the inputs whose name starts with prefix, or an error naming the
@@ -66,7 +69,7 @@ func WithPrefix(inputs []Input, prefix string) ([]Input, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("inputs.jsonl pins nothing named %s*", prefix)
+		return nil, fmt.Errorf("inputs.yaml pins nothing named %s*", prefix)
 	}
 	return out, nil
 }
@@ -83,7 +86,7 @@ func Present(cache string, inputs []Input) (map[string]string, error) {
 			return nil, fmt.Errorf("input %s (magus run models libs/train fetches it): %w", in.Name, err)
 		}
 		if st.Size() != in.Size {
-			return nil, fmt.Errorf("input %s is %d bytes, inputs.jsonl pins %d", in.Name, st.Size(), in.Size)
+			return nil, fmt.Errorf("input %s is %d bytes, inputs.yaml pins %d", in.Name, st.Size(), in.Size)
 		}
 		sums[in.Name] = in.SHA256
 	}

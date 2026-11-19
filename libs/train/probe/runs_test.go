@@ -35,7 +35,7 @@ type RunsSuite struct{ tempDir }
 func TestRuns(t *testing.T) { suite.Run(t, new(RunsSuite)) }
 
 func (s *RunsSuite) TestReadInputsRefusesAnAbsolutePath() {
-	path := s.write("inputs.jsonl", `{"name":"m/a","source":"https://x","sha256":"`+sum("")+`","path":"/abs"}`+"\n")
+	path := s.write("inputs.yaml", "- name: m/a\n  source: https://x\n  sha256: \""+sum("")+"\"\n  path: /abs\n")
 	_, err := ReadInputs(path)
 	s.ErrorContains(err, "relative path")
 }
@@ -48,7 +48,7 @@ func (s *RunsSuite) TestWithPrefixNamesAPrefixNothingMatches() {
 func (s *RunsSuite) TestPresentRefusesAWrongSize() {
 	s.write("cache/m/a", "abc")
 	_, err := Present(filepath.Join(s.dir, "cache"), []Input{{Name: "m/a", Path: "m/a", Size: 4, SHA256: sum("abcd")}})
-	s.ErrorContains(err, "is 3 bytes, inputs.jsonl pins 4")
+	s.ErrorContains(err, "is 3 bytes, inputs.yaml pins 4")
 }
 
 func (s *RunsSuite) TestPresentReturnsThePinnedSums() {

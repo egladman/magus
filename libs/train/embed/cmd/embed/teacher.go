@@ -27,6 +27,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/gobackend"
 	_ "github.com/gomlx/go-xla/compute/xla"
+	"gopkg.in/yaml.v3"
 )
 
 // docPrefix is each teacher's document prompt, from its model card. CodeRankEmbed prompts
@@ -36,16 +37,16 @@ var docPrefix = map[string]string{
 	"nomic-embed-text-v1.5": "search_document: ",
 }
 
-// inputRecord is one line of inputs.jsonl: a pinned file, where it comes from and where it
+// inputRecord is one entry of inputs.yaml: a pinned file, where it comes from and where it
 // lives under the cache root.
 type inputRecord struct {
-	Name     string `json:"name"`
-	Source   string `json:"source"`
-	Revision string `json:"revision"`
-	SHA256   string `json:"sha256"`
-	Size     int64  `json:"size"`
-	License  string `json:"license"`
-	Path     string `json:"path"`
+	Name     string `yaml:"name"`
+	Source   string `yaml:"source"`
+	Revision string `yaml:"revision"`
+	SHA256   string `yaml:"sha256"`
+	Size     int64  `yaml:"size"`
+	License  string `yaml:"license"`
+	Path     string `yaml:"path"`
 }
 
 func readInputs(path string) ([]inputRecord, error) {
@@ -55,18 +56,17 @@ func readInputs(path string) ([]inputRecord, error) {
 	}
 	defer f.Close()
 	var out []inputRecord
-	sc := bufio.NewScanner(f)
-	for n := 1; sc.Scan(); n++ {
-		var in inputRecord
-		if err := json.Unmarshal(sc.Bytes(), &in); err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", path, n, err)
-		}
-		if in.Name == "" || in.Source == "" || len(in.SHA256) != 64 || in.Path == "" || filepath.IsAbs(in.Path) {
-			return nil, fmt.Errorf("%s:%d: needs name, source, sha256 and a relative path", path, n)
-		}
-		out = append(out, in)
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	if err := dec.Decode(&out); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return out, sc.Err()
+	for n, in := range out {
+		if in.Name == "" || in.Source == "" || len(in.SHA256) != 64 || in.Path == "" || filepath.IsAbs(in.Path) {
+			return nil, fmt.Errorf("%s: entry %d (%q) needs name, source, sha256 and a relative path", path, n+1, in.Name)
+		}
+	}
+	return out, nil
 }
 
 func findInput(inputs []inputRecord, name string) (inputRecord, error) {
@@ -75,7 +75,7 @@ func findInput(inputs []inputRecord, name string) (inputRecord, error) {
 			return in, nil
 		}
 	}
-	return inputRecord{}, fmt.Errorf("inputs.jsonl pins no %s", name)
+	return inputRecord{}, fmt.Errorf("inputs.yaml pins no %s", name)
 }
 
 // verify fails unless the input's file under cache matches its pinned digest.
@@ -86,7 +86,7 @@ func verify(cache string, in inputRecord) (string, error) {
 		return "", fmt.Errorf("input %s (embed fetch %s fetches it): %w", in.Name, in.Name, err)
 	}
 	if sum != in.SHA256 {
-		return "", fmt.Errorf("%s has sha256 %s, inputs.jsonl pins %s", path, sum, in.SHA256)
+		return "", fmt.Errorf("%s has sha256 %s, inputs.yaml pins %s", path, sum, in.SHA256)
 	}
 	return path, nil
 }
@@ -107,8 +107,8 @@ func (c *common) register(fs *flag.FlagSet) {
 	if dir, err := xdg.CacheDir(); err == nil {
 		cache = filepath.Join(dir, "magus-embed")
 	}
-	fs.StringVar(&c.inputs, "inputs", "embed/inputs.jsonl", "the pinned inputs file")
-	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.jsonl paths are relative to")
+	fs.StringVar(&c.inputs, "inputs", "embed/inputs.yaml", "the pinned inputs file")
+	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.yaml paths are relative to")
 	fs.StringVar(&c.model, "model", "", "the teacher: CodeRankEmbed or nomic-embed-text-v1.5")
 	fs.StringVar(&c.backend, "backend", "xla", "xla (PJRT CPU plugin) or go (pure Go, no cgo kernels)")
 	fs.IntVar(&c.threads, "threads", 6, "CPU threads for the backend and the Go runtime")

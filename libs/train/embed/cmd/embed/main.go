@@ -29,7 +29,7 @@ import (
 const usage = `usage: embed <command> [flags]
 
 commands:
-  fetch           download the pinned inputs named in inputs.jsonl and verify their sha256
+  fetch           download the pinned inputs named in inputs.yaml and verify their sha256
   texts           write the training texts and forced tokens from embed-mine's source manifest
   vocab           build the vocabulary; write its token texts for a teacher run and its counts for convert
   teacher         embed a texts file with a teacher model into resumable, content-addressed shards

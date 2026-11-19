@@ -1,6 +1,6 @@
 // sdk-exports holds the root package, the public SDK, to a committed allow list: every
-// exported name and method in api-go.lock needs a line in hack/lint/sdk-exports.jsonl saying
-// why it is exported, and a line naming something no longer exported is stale. The SDK is a
+// exported name and method in api-go.lock needs a key in hack/lint/sdk-exports.yaml saying
+// why it is exported, and a key naming something no longer exported is stale. The SDK is a
 // substrate that should shrink, so growing it takes a stated reason.
 //
 // Tier 3, judgment: whether a new export belongs in the SDK is a person's call.
@@ -9,10 +9,11 @@ namespace sdkexports;
 import "assert";
 import "magus/lint";
 import "encoding/json";
+import "encoding/yaml";
 import "hack/lint/support" as support;
 
 final LOCK = "internal/commands/testdata/api-go.lock";
-final ALLOWED = "hack/lint/sdk-exports.jsonl";
+final ALLOWED = "hack/lint/sdk-exports.yaml";
 final PREFIX = "github.com/egladman/magus.";
 
 export fun reads() > [str] {
@@ -49,16 +50,15 @@ export fun exported(lock: str) > [str] {
     return names;
 }
 
-// reasons is each allow-list line's reason by name; the last line for a name wins.
+// reasons is each allow-list key's reason by name. The file is a YAML map of name to
+// reason; a name listed twice is the parser's error.
 export fun reasons(src: str) > {str: str} !> any {
     final got = mut {<str: str>};
-    foreach (line in src.split("\n")) {
-        if (line.trim() == "") {
-            continue;
-        }
-        final doc = json\parse(line);
-        final name: str = doc["name"] ?? "";
-        final reason: str = doc["reason"] ?? "";
+    if (src.trim() == "") {
+        return got;
+    }
+    final doc: {str: str} = yaml\parse(src);
+    foreach (name, reason in doc) {
         got[name] = reason;
     }
     return got;
@@ -74,7 +74,7 @@ export fun judge(names: [str], allowed: str) > [Finding] !> any {
         final reason = have[name];
         if (reason == null) {
             found.append(Finding{ path = ALLOWED, message = "the root package exports " + name + ", which the SDK allow list leaves out",
-                fix = "Prefer not exporting it. If the SDK needs it, append a line with a name and a reason for " + name + " to " + ALLOWED + "." });
+                fix = "Prefer not exporting it. If the SDK needs it, add a key for " + name + " with its reason to " + ALLOWED + "." });
         } else if (reason!.trim() == "") {
             found.append(Finding{ path = ALLOWED, message = "the SDK allow list names " + name + " with no reason",
                 fix = "Give " + name + " a one-line reason in " + ALLOWED + "." });
@@ -83,7 +83,7 @@ export fun judge(names: [str], allowed: str) > [Finding] !> any {
     foreach (name in support\sorted(have.keys())) {
         if (seen[name] == null) {
             found.append(Finding{ path = ALLOWED, message = "the SDK allow list names " + name + ", which the root package no longer exports",
-                fix = "Delete its line from " + ALLOWED + "." });
+                fix = "Delete its key from " + ALLOWED + "." });
         }
     }
     return found;
@@ -95,7 +95,7 @@ test "exported keeps top-level names and methods but not fields" {
 }
 
 fun row(name: str, reason: str) > str !> any {
-    return json\stringify({"name": name, "reason": reason}) + "\n";
+    return json\stringify(name) + ": " + json\stringify(reason) + "\n";
 }
 
 test "a listed name with a reason passes" {
@@ -109,11 +109,10 @@ test "an export absent from the allow list fails and names the remedy" {
     assert\equal(got[0].fix.startsWith("Prefer not exporting it."), want: true, message: "remedy");
 }
 
-test "a blank reason fails and the last line for a name wins" {
+test "a blank reason fails" {
     assert\equal(judge(["Open"], allowed: row("Open", reason: "")).len(), want: 1, message: "blank");
-    assert\equal(judge(["Open"], allowed: row("Open", reason: "") + row("Open", reason: "why")).len(), want: 0, message: "last wins");
 }
 
-test "an allow-list line for a removed export is stale" {
+test "an allow-list key for a removed export is stale" {
     assert\equal(support\messages(judge([<str>], allowed: row("Gone", reason: "x"))), want: ["the SDK allow list names Gone, which the root package no longer exports"], message: "stale");
 }

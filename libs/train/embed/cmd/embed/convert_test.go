@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/train/embed/teacher"
@@ -66,7 +67,7 @@ func writeConvertSafetensors(t *testing.T, path string) {
 	require.NoError(t, os.WriteFile(path, append(append(out, hb...), data...), 0o644))
 }
 
-// convertFixture writes potion's two pinned files under a cache root, the inputs.jsonl
+// convertFixture writes potion's two pinned files under a cache root, the inputs.yaml
 // pinning them, and the vocabulary a table is converted over.
 type convertFixture struct {
 	cache, inputs, vocab string
@@ -75,23 +76,23 @@ type convertFixture struct {
 func newConvertFixture(t *testing.T) convertFixture {
 	t.Helper()
 	dir := t.TempDir()
-	f := convertFixture{cache: filepath.Join(dir, "cache"), inputs: filepath.Join(dir, "inputs.jsonl"),
+	f := convertFixture{cache: filepath.Join(dir, "cache"), inputs: filepath.Join(dir, "inputs.yaml"),
 		vocab: filepath.Join(dir, "vocab.jsonl")}
 	snap := filepath.Join("hf", potion, convertRevision)
 	require.NoError(t, os.MkdirAll(filepath.Join(f.cache, snap), 0o755))
 	writeConvertTokenizer(t, filepath.Join(f.cache, snap, "tokenizer.json"))
 	writeConvertSafetensors(t, filepath.Join(f.cache, snap, "model.safetensors"))
-	var lines []byte
+	var recs []inputRecord
 	for _, name := range []string{"tokenizer.json", "model.safetensors"} {
 		rel := filepath.Join(snap, name)
 		sum, err := teacher.FileSHA256(filepath.Join(f.cache, rel))
 		require.NoError(t, err)
-		b, err := json.Marshal(inputRecord{Name: potion + "/" + name, Source: "https://example.com/" + name,
+		recs = append(recs, inputRecord{Name: potion + "/" + name, Source: "https://example.com/" + name,
 			Revision: convertRevision, SHA256: sum, License: "MIT", Path: rel})
-		require.NoError(t, err)
-		lines = append(append(lines, b...), '\n')
 	}
-	require.NoError(t, os.WriteFile(f.inputs, lines, 0o644))
+	b, err := yaml.Marshal(recs)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(f.inputs, b, 0o644))
 	vocab := `{"token":"config","count":2}` + "\n" + `{"token":"load","count":1}` + "\n" + `{"token":"parse","count":2}` + "\n" +
 		`{"token":"parse_config","count":2}` + "\n" + `{"token":"parser","count":2}` + "\n"
 	require.NoError(t, os.WriteFile(f.vocab, []byte(vocab), 0o644))

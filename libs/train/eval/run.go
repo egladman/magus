@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/libs/train/completion/fim"
 	"github.com/egladman/magus/libs/train/dedup"
+	"github.com/egladman/magus/libs/train/probe"
 )
 
 // Languages are the three the split, the FIM sets and the dedup cover, in report order.
@@ -193,31 +194,28 @@ func RunDedup(e Env) (dedup.Report, error) {
 	return rep, nil
 }
 
-// Cutoff is the temporal holdout's commit, as inputs.jsonl pins it.
+// Cutoff is the temporal holdout's commit, as inputs.yaml pins it.
 type Cutoff struct {
 	Commit string `json:"revision"`
 	Date   string `json:"date"`
 	Status string `json:"status"`
 }
 
-// ReadCutoff reads the cutoff row of inputs.jsonl, the one whose name starts "cutoff/".
+// ReadCutoff reads the cutoff entry of inputs.yaml, the one whose name starts "cutoff/".
 func ReadCutoff(inputs string) (Cutoff, error) {
-	rows, err := ReadRows[struct {
-		Name string `json:"name"`
-		Cutoff
-	}](inputs)
+	rows, err := probe.ReadInputs(inputs)
 	if err != nil {
 		return Cutoff{}, err
 	}
 	for _, r := range rows {
 		if strings.HasPrefix(r.Name, "cutoff/") {
-			if len(r.Commit) != 40 {
-				return Cutoff{}, fmt.Errorf("%s: cutoff revision %q is not a full commit", inputs, r.Commit)
+			if len(r.Revision) != 40 {
+				return Cutoff{}, fmt.Errorf("%s: cutoff revision %q is not a full commit", inputs, r.Revision)
 			}
-			return r.Cutoff, nil
+			return Cutoff{Commit: r.Revision, Date: r.Date, Status: r.Status}, nil
 		}
 	}
-	return Cutoff{}, fmt.Errorf("%s pins no cutoff row", inputs)
+	return Cutoff{}, fmt.Errorf("%s pins no cutoff entry", inputs)
 }
 
 // gitBlobSHA is the sha git gives a blob of data.

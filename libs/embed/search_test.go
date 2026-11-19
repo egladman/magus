@@ -943,7 +943,7 @@ func percentInterval(v, lo, hi float64) string {
 }
 
 // The potion-code-16M-v2 snapshot the Python baseline fetched, pinned by digest since
-// libs/train/embed/inputs.jsonl does not list it.
+// libs/train/embed/inputs.yaml does not list it.
 const (
 	potionRevision        = "e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b"
 	potionWeightsSHA256   = "75cf7a6c2171b230ad19b1e7d8e0b1aee86da5a02af8e7cacedd9921d227623c"
