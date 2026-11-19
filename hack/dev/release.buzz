@@ -1,0 +1,257 @@
+// Cost: one dry run of `magus run release`, which builds the release commit in a scratch clone.
+//
+// The interactive front of the `release` target, which takes flags only. It lists the
+// releasable modules with their current versions, asks which to release and by how much,
+// runs the target's dry run and shows its checks as a table, asks once, then runs
+// `release:cd` with the same arguments. It never pushes: the target tags locally and says
+// what to push.
+//
+//	magus buzz --embedded hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]
+//
+// Every choice has a flag, and with no terminal a missing one fails naming it. Without
+// --yes and without a terminal the run ends after the dry run, with the command that
+// would release. Any failed check ends the run before the question.
+namespace releasewizard;
+
+import "assert";
+import "flags";
+import "magus";
+import "result";
+import "term";
+import "std";
+import "hack/lib/prompt";
+import "hack/magusfile/releases" as releases;
+
+final USAGE = "usage: magus buzz --embedded hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]";
+final HELP = "cost: one dry run of `magus run release`\n{USAGE}";
+final LEVELS = ["patch", "minor", "major"];
+final CHECK = std\pattern(`release: (OK|FAIL|NOTE)\s+(.+?) - (.*)$`);
+
+// Mod is a releasable module and what it is at now.
+object Mod {
+    key: str,
+    // current is the highest stable tag, "" for a module never released.
+    current: str,
+}
+
+// Check is one line of the target's dry run: status is OK, FAIL or NOTE.
+export object Check {
+    status: str,
+    name: str,
+    detail: str,
+}
+
+// bare drops the leading v the semver candidates carry; the target takes none.
+fun bare(version: str) > str {
+    if (version.startsWith("v")) {
+        return version.sub(1);
+    }
+    return version;
+}
+
+// candidate is the version level moves cur to.
+export fun candidate(cur: str, level: str) > str !> any {
+    final next = releases\nextVersions(cur);
+    if (level == "patch") {
+        return bare(next.patch);
+    }
+    if (level == "minor") {
+        return bare(next.minor);
+    }
+    if (level == "major") {
+        return bare(next.major);
+    }
+    throw "{level} is not one of {LEVELS.join(", ")}";
+}
+
+// levelOf is the level a picker row or a --bump value names: the row's first word.
+export fun levelOf(choice: str) > str {
+    return choice.trim().split(" ")[0];
+}
+
+// parseBumps reads --bump <key>=<level> entries into a map of key to level.
+export fun parseBumps(entries: [str]) > result\Result::<{str: str}> {
+    final bumps = mut {<str: str>};
+    foreach (entry in entries) {
+        final eq = entry.indexOf("=");
+        if (eq == null or eq == 0) {
+            return result\fail::<{str: str}>("--bump {entry}: expected <key>=<patch|minor|major>");
+        }
+        final level = entry.sub(eq + 1);
+        if (LEVELS.indexOf(level) == null) {
+            return result\fail::<{str: str}>("--bump {entry}: {level} is not one of {LEVELS.join(", ")}");
+        }
+        bumps[entry.sub(0, len: eq)] = level;
+    }
+    return result\ok::<{str: str}>(bumps);
+}
+
+// parseChecks is the OK, FAIL and NOTE lines of the target's output, in order.
+export fun parseChecks(text: str) > [Check] {
+    final checks = mut [<Check>];
+    foreach (line in text.split("\n")) {
+        if (CHECK.match(line) -> m) {
+            checks.append(Check{ status = m[1], name = m[2], detail = m[3] });
+        }
+    }
+    return checks;
+}
+
+// failed counts the FAIL rows.
+export fun failed(checks: [Check]) > int {
+    return checks.filter(fun (i: int, c: Check) > bool => c.status == "FAIL").len();
+}
+
+// pad is s with spaces added up to width.
+fun pad(s: str, width: int) > str {
+    if (s.len() >= width) {
+        return s;
+    }
+    return s + " ".repeat(width - s.len());
+}
+
+// renderTable is one aligned row per check under a header.
+export fun renderTable(checks: [Check]) > [str] {
+    var width = 5;
+    foreach (c in checks) {
+        if (c.name.len() > width) {
+            width = c.name.len();
+        }
+    }
+    final lines = mut [<str>];
+    lines.append("status  " + pad("check", width: width) + "  detail");
+    foreach (c in checks) {
+        lines.append(pad(c.status, width: 6) + "  " + pad(c.name, width: width) + "  " + c.detail);
+    }
+    return lines;
+}
+
+// at is how a module's current version reads.
+fun at(m: Mod) > str {
+    if (m.current == "") {
+        return "unreleased";
+    }
+    return "at {m.current}";
+}
+
+// rehearse runs the target without the cd charm, so it changes nothing.
+fun rehearse(release: [str]) > magus\ExecResult !> any {
+    final dry = fun () > any !> any {
+        return magus\run(["release", ".", "--"] + release, opts: magus\CommandOptions{ quiet = true, allowFailure = true });
+    };
+    if (term\isInteractive()) {
+        return term\spin("dry run: magus run release", dry);
+    }
+    return dry();
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--yes", "--help"], valued: [<str>], repeated: ["--module", "--bump"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "release: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+
+    final mods = mut [<Mod>];
+    foreach (m in releases\releasableModules(magus\describe.project().projects)) {
+        mods.append(Mod{ key = m["key"]!, current = releases\currentVersion(m["prefix"]!) });
+    }
+    final byLabel = mut {<str: str>};
+    final labels = mut [<str>];
+    foreach (m in mods) {
+        final label = "{m.key}  ({at(m)})";
+        labels.append(label);
+        byLabel[label] = m.key;
+    }
+
+    final picked = prompt\chooseMany(parsed.lists["--module"] ?? [<str>], flag: "--module <key>", items: labels,
+        question: "modules to release");
+    if (picked.error != null) {
+        throw picked.error!.message;
+    }
+    final keys = mut [<str>];
+    foreach (p in picked.value!) {
+        keys.append(byLabel[p] ?? p);
+    }
+    final bumps = parseBumps(parsed.lists["--bump"] ?? [<str>]);
+    if (bumps.error != null) {
+        throw bumps.error!.message;
+    }
+
+    final release = mut [<str>];
+    foreach (key in keys) {
+        var found: Mod? = null;
+        foreach (m in mods) {
+            if (m.key == key) {
+                found = m;
+            }
+        }
+        if (found == null) {
+            throw "release: unknown module {key}; the modules are {mods.map(fun (i: int, m: Mod) > str => m.key).join(", ")}";
+        }
+        final m = found!;
+        final rows = mut [<str>];
+        foreach (level in LEVELS) {
+            rows.append("{level}  ->  {candidate(m.current, level: level)}");
+        }
+        final choice = prompt\choose(bumps.value![key], flag: "--bump {key}=<patch|minor|major>", items: rows,
+            question: "{key} ({at(m)}): next version");
+        if (choice.error != null) {
+            throw choice.error!.message;
+        }
+        final level = levelOf(choice.value!);
+        release.append("{key}@{candidate(m.current, level: level)}");
+    }
+    if (release.len() == 0) {
+        throw "release: no module chosen";
+    }
+
+    std\print("releasing: {release.join(" ")}");
+    final dry = rehearse(release);
+    final checks = parseChecks(dry.stdout + "\n" + dry.stderr);
+    foreach (line in renderTable(checks)) {
+        std\print(line);
+    }
+    if (!dry.ok or failed(checks) > 0) {
+        throw "release: the dry run failed ({failed(checks)} failed check(s)); nothing was released";
+    }
+
+    final line = "magus run release:cd . -- {release.join(" ")}";
+    final yes = prompt\confirmed(parsed.values["--yes"] != null, flag: "--yes", question: "release {release.join(" ")}? It tags locally and pushes nothing");
+    if (yes.error != null) {
+        throw yes.error!.message;
+    }
+    if (!yes.value!) {
+        std\print("dry run only; nothing released. Pass --yes, or run:\n  {line}");
+        return;
+    }
+    _ = magus\run(["release:cd", ".", "--"] + release);
+    std\print("tagged locally; nothing was pushed. Push the branch and the module tags, then the root's.");
+}
+
+test "a bump names a level and a version" {
+    assert\equal(candidate("v0.4.3", level: "patch"), want: "0.4.4", message: "patch");
+    assert\equal(candidate("v0.4.3", level: "minor"), want: "0.5.0", message: "minor");
+    assert\equal(candidate("", level: "minor"), want: "0.1.0", message: "unreleased");
+    assert\equal(levelOf("minor  ->  0.5.0"), want: "minor", message: "a picker row");
+    assert\equal(levelOf("major"), want: "major", message: "a flag value");
+}
+
+test "--bump entries parse or name the bad one" {
+    assert\equal(parseBumps(["magus=minor", "libs/x=patch"]).value!["libs/x"], want: "patch", message: "key with a slash");
+    assert\equal(parseBumps(["magus"]).error!.message, want: "--bump magus: expected <key>=<patch|minor|major>", message: "no level");
+    assert\equal(parseBumps(["magus=big"]).error!.message, want: "--bump magus=big: big is not one of patch, minor, major", message: "bad level");
+}
+
+test "the target's lines become a table and failures count" {
+    final text = "release: magus - at v0.4.3, next: x\n[info] release: OK   requires - every require names a tag\nrelease: FAIL changelog - none\nrelease: NOTE tree - dirty";
+    final checks = parseChecks(text);
+    assert\equal(checks.len(), want: 3, message: "three rows");
+    assert\equal(checks[1].name, want: "changelog", message: "name");
+    assert\equal(checks[1].detail, want: "none", message: "detail");
+    assert\equal(failed(checks), want: 1, message: "failures");
+    assert\equal(renderTable(checks)[1], want: "OK      requires   every require names a tag", message: "row");
+}
