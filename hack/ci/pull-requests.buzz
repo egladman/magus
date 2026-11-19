@@ -1203,7 +1203,7 @@ fun decideAction(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdi
         }
         if (facts.squashed -> squashed) {
             final e = newEvidence(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
-            final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches {branchesFrom(p, open: open).join(",")} --base origin/{p.base}";
+            final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches {branchesFrom(p, open: open).join(",")} --base origin/{p.base} --push";
             return newRecord(p, action: "rebase-branches-onto-base", model: "sonnet",
                 reason: "carries #{squashed.pr}, which squash-merged into {p.base}; rebase its own commits onto {p.base}",
                 evidence: Evidence{ failing = e.failing, pending = e.pending, conflicts = paths, sensitive = sensitive,
@@ -2786,7 +2786,7 @@ test "a pull request still carrying a squash-merged base is rebased onto it, wit
     final r = classify(p, open: [p, above], facts: facts);
     assert\equal([r.stage, r.action, r.model], want: ["conflicting", "rebase-branches-onto-base", "sonnet"], message: "routed");
     assert\equal(r.reason, want: "carries #606, which squash-merged into main; rebase its own commits onto main", message: "reason");
-    final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches guard-gaps,guard-more --base origin/main";
+    final line = "magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches guard-gaps,guard-more --base origin/main --push";
     assert\equal([r.evidence.squashed ?? 0, r.evidence.rebase], want: [606, line], message: "evidence");
     final rendered = render(r);
     assert\equal(rendered.indexOf("\"evidence\":\{\"conflicts\":[\"internal/x.go\"],\"squashed_base\":606,\"rebase\":\"{line}\"}") != null, want: true, message: rendered);
