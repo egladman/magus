@@ -107,8 +107,8 @@ func TestConvertWritesTheSameTableEveryRun(t *testing.T) {
 	f := newConvertFixture(t)
 	dir := t.TempDir()
 	first, second := filepath.Join(dir, "first.mset"), filepath.Join(dir, "second.mset")
-	require.NoError(t, runConvert(f.args(first)))
-	require.NoError(t, runConvert(f.args(second)))
+	require.NoError(t, invoke(convertCmd, f.args(first)))
+	require.NoError(t, invoke(convertCmd, f.args(second)))
 	a, err := os.ReadFile(first)
 	require.NoError(t, err)
 	b, err := os.ReadFile(second)
@@ -135,7 +135,7 @@ func TestConvertWritesTheSameTableEveryRun(t *testing.T) {
 func TestConvertWritesPinnedBytes(t *testing.T) {
 	f := newConvertFixture(t)
 	out := filepath.Join(t.TempDir(), "table.mset")
-	require.NoError(t, runConvert(f.args(out)))
+	require.NoError(t, invoke(convertCmd, f.args(out)))
 	b, err := os.ReadFile(out)
 	require.NoError(t, err)
 	assert.Equal(t, "2abfb85c53f86c0a38cf0991fd5ef79fd08d8e236c413db27b610b453579634a", sha256Hex(b))
@@ -159,7 +159,7 @@ func TestReadVocabRanksByCount(t *testing.T) {
 func TestConvertRefusesAnUnfetchedInput(t *testing.T) {
 	f := newConvertFixture(t)
 	require.NoError(t, os.Remove(filepath.Join(f.cache, "hf", potion, convertRevision, "model.safetensors")))
-	err := runConvert(f.args(filepath.Join(t.TempDir(), "table.mset")))
+	err := invoke(convertCmd, f.args(filepath.Join(t.TempDir(), "table.mset")))
 	assert.ErrorContains(t, err, "embed fetch "+potion+"/model.safetensors")
 }
 

@@ -9,81 +9,47 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/egladman/magus/libs/train/eval"
 	"github.com/egladman/magus/libs/train/probe"
 	"github.com/egladman/magus/libs/xdg"
 )
 
-const usage = `usage: train <command> [flags]
-
-commands:
-  fertility   append tokens per byte of held-in hand-written Buzz, Go and TS under each tokenizer
-  pilot       run one mlx_lm.lora pilot on train-split Buzz and append its throughput and memory
-  gguf-bench  run llama-bench (pp512, tg128) over each pinned GGUF and append its rates
-  dedup       find exact and near-duplicate files among the split's candidates (stage S1)
-  pin-split   pin the split split.buzz wrote in gen/split.digest (stage S1)
-  eval-sets   write the FIM dev and test sets and the Buzz pass@k tasks (stage S1)
-  fim         write the FIM training samples, decontaminated against the eval sets (stage S1)
-  g1          recount the G1 bullets from the datasets and write the report (stage S1)
-  eval-complete  serve each base with llama-server, complete the FIM test sets and score them (stage S3)
-  pass-at-k   sample the Buzz pass@k tasks from each base and grade them with magus buzz -t (stage S3)
-  latency     replay FIM-Buzz dev spans in typing order against each base (stage S3)
-
-run "train <command> -h" for a command's flags`
-
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	var err error
-	switch os.Args[1] {
-	case "fertility":
-		err = runFertility(os.Args[2:])
-	case "pilot":
-		err = runPilot(os.Args[2:])
-	case "gguf-bench":
-		err = runBench(os.Args[2:])
-	case "dedup", "pin-split", "eval-sets", "fim", "g1":
-		err = runS1(os.Args[1], os.Args[2:])
-	case "eval-complete", "pass-at-k", "latency":
-		err = runS3(os.Args[1], os.Args[2:])
-	default:
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "train %s: %v\n", os.Args[1], err)
-		os.Exit(1)
+	command.Main(root())
+}
+
+// root is the train command: one child for each stage's probe or step.
+func root() command.Command {
+	return command.Command{
+		Name:  "train",
+		Short: "run the stage S0 to S3 probes of the local-models plan",
+		Children: []command.Command{
+			fertilityCmd, pilotCmd, benchCmd,
+			s1Command("dedup", "find exact and near-duplicate files among the split's candidates (stage S1)"),
+			s1Command("pin-split", "pin the split split.buzz wrote in gen/split.digest (stage S1)"),
+			s1Command("eval-sets", "write the FIM dev and test sets and the Buzz pass@k tasks (stage S1)"),
+			s1Command("fim", "write the FIM training samples, decontaminated against the eval sets (stage S1)"),
+			s1Command("g1", "recount the G1 bullets from the datasets and write the report (stage S1)"),
+			evalCompleteCmd, passAtKCmd, latencyCmd,
+		},
 	}
 }
 
 type common struct {
 	inputs, cache, runs, sources, root string
-}
-
-func (c *common) register(fs *flag.FlagSet) {
-	cache := ""
-	if dir, err := xdg.CacheDir(); err == nil {
-		cache = filepath.Join(dir, "magus")
-	}
-	fs.StringVar(&c.inputs, "inputs", "inputs.yaml", "the pinned inputs file")
-	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.yaml paths are relative to")
-	fs.StringVar(&c.runs, "runs", "runs.jsonl", "the run log rows are appended to")
-	fs.StringVar(&c.sources, "sources", "embed/gen/sources.jsonl", "the dealt split of tracked files")
-	fs.StringVar(&c.root, "root", "../..", "the workspace root sources.jsonl paths are relative to")
 }
 
 func (c *common) heldIn(languages ...string) ([]probe.Text, string, int, error) {
@@ -99,12 +65,7 @@ func (c *common) heldIn(languages ...string) ([]probe.Text, string, int, error) 
 	return texts, sum, stale, err
 }
 
-func runFertility(args []string) error {
-	fs := flag.NewFlagSet("fertility", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	tokenizers := fs.String("tokenizers", "qwen2.5-coder-0.5b/tokenizer.json,mellum2-12b-a2.5b-base/tokenizer.json", "comma-separated input names of tokenizer.json files")
-	_ = fs.Parse(args)
+func runFertility(c *common, tokenizers string) error {
 	inputs, err := probe.ReadInputs(c.inputs)
 	if err != nil {
 		return err
@@ -113,7 +74,7 @@ func runFertility(args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range strings.Split(*tokenizers, ",") {
+	for _, name := range strings.Split(tokenizers, ",") {
 		pinned, err := probe.WithPrefix(inputs, name)
 		if err != nil {
 			return err
@@ -156,15 +117,13 @@ func sortedKeys[V any](m map[string]V) []string {
 
 var fineTuneRE = regexp.MustCompile(`(?m)^fine_tune_type:\s*(\w+)\s*$`)
 
-func runPilot(args []string) error {
-	fs := flag.NewFlagSet("pilot", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	config := fs.String("config", "", "the committed mlx-lm YAML, e.g. config/pilot-qwen2.5-coder-0.5b-full.yaml")
-	model := fs.String("model", "", "the input name prefix of the model directory, e.g. qwen2.5-coder-0.5b/")
-	maxBytes := fs.Int("max-bytes", 12000, "chunk size; Buzz runs about 3 bytes a token, so 12000 bytes fill most of a 4,096-token sequence")
-	validEvery := fs.Int("valid-every", 25, "every n-th chunk goes to valid.jsonl")
-	_ = fs.Parse(args)
+type pilotOptions struct {
+	config, model        string
+	maxBytes, validEvery int
+}
+
+func runPilot(c *common, o *pilotOptions) error {
+	config, model, maxBytes, validEvery := &o.config, &o.model, &o.maxBytes, &o.validEvery
 	if *config == "" || *model == "" {
 		return errors.New("needs -config and -model")
 	}
@@ -311,18 +270,12 @@ func rel(root, path string) string {
 	return r
 }
 
-func runBench(args []string) error {
-	fs := flag.NewFlagSet("gguf-bench", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	prefix := fs.String("prefix", "gguf/", "benchmark every pinned .gguf whose name starts with this")
-	reps := fs.String("r", "5", "llama-bench repetitions per test")
-	_ = fs.Parse(args)
+func runBench(c *common, prefix, reps string) error {
 	inputs, err := probe.ReadInputs(c.inputs)
 	if err != nil {
 		return err
 	}
-	pinned, err := probe.WithPrefix(inputs, *prefix)
+	pinned, err := probe.WithPrefix(inputs, prefix)
 	if err != nil {
 		return err
 	}
@@ -340,7 +293,7 @@ func runBench(args []string) error {
 		}
 		row := probe.BenchRow{Kind: "gguf-bench", Model: in.Name, Inputs: sums}
 		cmd := exec.Command("/usr/bin/time", "-l", bench, "-m", filepath.Join(c.cache, in.Path),
-			"-p", "512", "-n", "128", "-r", *reps, "-o", "json")
+			"-p", "512", "-n", "128", "-r", reps, "-o", "json")
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = io.MultiWriter(&stderr, os.Stderr)
@@ -372,16 +325,14 @@ func runBench(args []string) error {
 	return nil
 }
 
+type s1Options struct {
+	rev, digests, magus string
+}
+
 // runS1 runs one stage S1 command. Every dataset goes under the cache root's train/s1
 // directory; only the digests it pins reach git.
-func runS1(cmd string, args []string) error {
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	var c common
-	c.register(fs)
-	rev := fs.String("rev", "HEAD", "the commit the split, the dedup and the test sets read")
-	digests := fs.String("digests", "gen/split.digest", "the digest file datasets are pinned in")
-	binary := fs.String("magus", "../../magus", "the magus binary --check runs with")
-	_ = fs.Parse(args)
+func runS1(cmd string, c *common, o *s1Options) error {
+	rev, digests, binary := &o.rev, &o.digests, &o.magus
 	cutoff, err := eval.ReadCutoff(c.inputs)
 	if err != nil {
 		return err
@@ -459,71 +410,184 @@ func printJSON(v any) error {
 	return nil
 }
 
-// s3Tools binds the flags that name binaries and logs.
-func s3Tools(fs *flag.FlagSet, cfg *eval.Config) {
-	fs.StringVar(&cfg.Run, "run", "", "the run name: its predictions and scratch trees live under <cache>/tmp/codemodel-eval/<run>, and a rerun with the same name resumes")
-	fs.StringVar(&cfg.Llama, "llama-server", "llama-server", "the llama-server binary, built at the pinned commit")
-	fs.StringVar(&cfg.Magus, "magus", "../../magus", "the magus binary --check and -t run with")
-	fs.StringVar(&cfg.Evals, "evals", "evals.jsonl", "the evaluation log rows are appended to")
-	fs.StringVar(&cfg.Digests, "digests", "gen/split.digest", "the digest file datasets are pinned in")
+// s3Common is the flags the three stage S3 commands share, bound into an eval.Config.
+type s3Common struct {
+	cfg             eval.Config
+	run, llama      string
+	magus, evals    string
+	digests         string
+	systems, ctxArg string
 }
 
-// s3Models binds the flags that name what is served.
-func s3Models(fs *flag.FlagSet, cfg *eval.Config, defaultSystems string) {
-	fs.StringVar(&cfg.Systems, "systems", defaultSystems, "comma-separated base names under gguf/ in inputs.yaml, each name[:psm|:spm]; the first is the reference the others' p-values pair against")
-	fs.StringVar(&cfg.Context, "context", "none", "the context provider in front of each base; none until stage S2 builds one, and any other name needs spans that carry context chunks")
+// config copies the shared flags into an eval.Config.
+func (s *s3Common) config() *eval.Config {
+	cfg := &eval.Config{Run: s.run, Llama: s.llama, Magus: s.magus, Evals: s.evals, Digests: s.digests, Systems: s.systems, Context: s.ctxArg}
+	cfg.Inputs, cfg.Cache, cfg.Runs, cfg.Root = shared.inputs, shared.cache, shared.runs, shared.root
+	return cfg
 }
 
-// s3Flags binds the flags the three stage S3 commands share into an eval.Config. The
-// returned function parses args and then copies the shared flags in.
-func s3Flags(fs *flag.FlagSet, defaultSystems string) (*eval.Config, func(args []string)) {
-	var c common
-	c.register(fs)
-	cfg := &eval.Config{}
-	s3Tools(fs, cfg)
-	s3Models(fs, cfg, defaultSystems)
-	return cfg, func(args []string) {
-		_ = fs.Parse(args)
-		cfg.Inputs, cfg.Cache, cfg.Runs, cfg.Root = c.inputs, c.cache, c.runs, c.root
+// Only one command runs per process, so the commands share one set of option variables, as
+// the command trees of the other mains do.
+var (
+	shared      common
+	fertilize   fertilityOptions
+	pilot       pilotOptions
+	gguf        benchOptions
+	stageOne    s1Options
+	stageThree  s3Common
+	completion  completeOptions
+	passAtK     passOptions
+	latencyOpts latencyOptions
+)
+
+type (
+	fertilityOptions struct{ tokenizers string }
+	benchOptions     struct{ prefix, reps string }
+	completeOptions  struct{ sets, max string }
+	passOptions      struct{ tasks int }
+	latencyOptions   struct {
+		n   int
+		set string
+	}
+)
+
+var commonFlags = []command.Flag{
+	{Name: "inputs", Kind: command.String, Default: "inputs.yaml", Doc: "the pinned inputs file", Target: &shared.inputs},
+	{Name: "cache", Kind: command.String, Default: cacheDefault(), Doc: "the cache root inputs.yaml paths are relative to", Target: &shared.cache},
+	{Name: "runs", Kind: command.String, Default: "runs.jsonl", Doc: "the run log rows are appended to", Target: &shared.runs},
+	{Name: "sources", Kind: command.String, Default: "embed/gen/sources.jsonl", Doc: "the dealt split of tracked files", Target: &shared.sources},
+	{Name: "root", Kind: command.String, Default: "../..", Doc: "the workspace root sources.jsonl paths are relative to", Target: &shared.root},
+}
+
+// cacheDefault is the cache root the commands default to, empty when no cache directory resolves.
+func cacheDefault() string {
+	dir, err := xdg.CacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "magus")
+}
+
+var fertilityCmd = command.Command{
+	Name:   "fertility",
+	Short:  "append tokens per byte of held-in hand-written Buzz, Go and TS under each tokenizer",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "tokenizers", Kind: command.String, Default: "qwen2.5-coder-0.5b/tokenizer.json,mellum2-12b-a2.5b-base/tokenizer.json", Doc: "comma-separated input names of tokenizer.json files", Target: &fertilize.tokenizers},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error {
+		return runFertility(&shared, fertilize.tokenizers)
+	},
+}
+
+var pilotCmd = command.Command{
+	Name:   "pilot",
+	Short:  "run one mlx_lm.lora pilot on train-split Buzz and append its throughput and memory",
+	Effect: command.EffectRun,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "config", Kind: command.String, Doc: "the committed mlx-lm YAML, e.g. config/pilot-qwen2.5-coder-0.5b-full.yaml", Target: &pilot.config},
+		{Name: "model", Kind: command.String, Doc: "the input name prefix of the model directory, e.g. qwen2.5-coder-0.5b/", Target: &pilot.model},
+		{Name: "max-bytes", Kind: command.Int, Default: 12000, Doc: "chunk size; Buzz runs about 3 bytes a token, so 12000 bytes fill most of a 4,096-token sequence", Target: &pilot.maxBytes},
+		{Name: "valid-every", Kind: command.Int, Default: 25, Doc: "every n-th chunk goes to valid.jsonl", Target: &pilot.validEvery},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error { return runPilot(&shared, &pilot) },
+}
+
+var benchCmd = command.Command{
+	Name:   "gguf-bench",
+	Short:  "run llama-bench (pp512, tg128) over each pinned GGUF and append its rates",
+	Effect: command.EffectRun,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "prefix", Kind: command.String, Default: "gguf/", Doc: "benchmark every pinned .gguf whose name starts with this", Target: &gguf.prefix},
+		{Name: "r", Kind: command.String, Default: "5", Doc: "llama-bench repetitions per test", Target: &gguf.reps},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error { return runBench(&shared, gguf.prefix, gguf.reps) },
+}
+
+var s1Flags = slices.Concat(commonFlags, []command.Flag{
+	{Name: "rev", Kind: command.String, Default: "HEAD", Doc: "the commit the split, the dedup and the test sets read", Target: &stageOne.rev},
+	{Name: "digests", Kind: command.String, Default: "gen/split.digest", Doc: "the digest file datasets are pinned in", Target: &stageOne.digests},
+	{Name: "magus", Kind: command.String, Default: "../../magus", Doc: "the magus binary --check runs with", Target: &stageOne.magus},
+})
+
+func s1Command(name, short string) command.Command {
+	return command.Command{
+		Name:   name,
+		Short:  short,
+		Effect: command.EffectLocalWrite,
+		Flags:  s1Flags,
+		Run:    func(_ context.Context, _ command.Invocation) error { return runS1(name, &shared, &stageOne) },
 	}
 }
 
-func runS3(cmd string, args []string) error {
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	ctx := context.Background()
-	switch cmd {
-	case "eval-complete":
-		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm,mellum-4b-base:spm")
-		sets := fs.String("sets", "buzz-test,go-test,typescript-test", "comma-separated <language>-<test|dev> sets")
-		max := fs.String("max", "", "comma-separated set=N caps on a set's span count, kept by span id order; absent keeps the whole set")
-		parse(args)
-		e, systems, err := cfg.Open()
+// s3Flags are the flags the three stage S3 commands share, less --systems, whose default each names.
+var s3Flags = slices.Concat(commonFlags, []command.Flag{
+	{Name: "run", Kind: command.String, Doc: "the run name: its predictions and scratch trees live under <cache>/tmp/codemodel-eval/<run>, and a rerun with the same name resumes", Target: &stageThree.run},
+	{Name: "llama-server", Kind: command.String, Default: "llama-server", Doc: "the llama-server binary, built at the pinned commit", Target: &stageThree.llama},
+	{Name: "magus", Kind: command.String, Default: "../../magus", Doc: "the magus binary --check and -t run with", Target: &stageThree.magus},
+	{Name: "evals", Kind: command.String, Default: "evals.jsonl", Doc: "the evaluation log rows are appended to", Target: &stageThree.evals},
+	{Name: "digests", Kind: command.String, Default: "gen/split.digest", Doc: "the digest file datasets are pinned in", Target: &stageThree.digests},
+	{Name: "context", Kind: command.String, Default: "none", Doc: "the context provider in front of each base; none until stage S2 builds one, and any other name needs spans that carry context chunks", Target: &stageThree.ctxArg},
+})
+
+// systemsFlag is --systems with the bases a command serves by default.
+func systemsFlag(defaults string) command.Flag {
+	return command.Flag{Name: "systems", Kind: command.String, Default: defaults, Doc: "comma-separated base names under gguf/ in inputs.yaml, each name[:psm|:spm]; the first is the reference the others' p-values pair against", Target: &stageThree.systems}
+}
+
+var evalCompleteCmd = command.Command{
+	Name:   "eval-complete",
+	Short:  "serve each base with llama-server, complete the FIM test sets and score them (stage S3)",
+	Effect: command.EffectRun,
+	Flags: slices.Concat(s3Flags, []command.Flag{
+		systemsFlag("qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm,mellum-4b-base:spm"),
+		{Name: "sets", Kind: command.String, Default: "buzz-test,go-test,typescript-test", Doc: "comma-separated <language>-<test|dev> sets", Target: &completion.sets},
+		{Name: "max", Kind: command.String, Doc: "comma-separated set=N caps on a set's span count, kept by span id order; absent keeps the whole set", Target: &completion.max},
+	}),
+	Run: func(ctx context.Context, _ command.Invocation) error {
+		e, systems, err := stageThree.config().Open()
 		if err != nil {
 			return err
 		}
-		specs, err := eval.ParseSets(*sets, *max)
+		specs, err := eval.ParseSets(completion.sets, completion.max)
 		if err != nil {
 			return err
 		}
 		return e.CompleteAll(ctx, systems, specs, os.Stderr)
-	case "pass-at-k":
-		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm")
-		tasks := fs.Int("tasks", 0, "sample and grade only this many tasks, by id order; 0 takes all")
-		parse(args)
-		e, systems, err := cfg.Open()
+	},
+}
+
+var passAtKCmd = command.Command{
+	Name:   "pass-at-k",
+	Short:  "sample the Buzz pass@k tasks from each base and grade them with magus buzz -t (stage S3)",
+	Effect: command.EffectRun,
+	Flags: slices.Concat(s3Flags, []command.Flag{
+		systemsFlag("qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm"),
+		{Name: "tasks", Kind: command.Int, Default: 0, Doc: "sample and grade only this many tasks, by id order; 0 takes all", Target: &passAtK.tasks},
+	}),
+	Run: func(ctx context.Context, _ command.Invocation) error {
+		e, systems, err := stageThree.config().Open()
 		if err != nil {
 			return err
 		}
-		return e.PassAll(ctx, systems, *tasks, os.Stderr)
-	default:
-		cfg, parse := s3Flags(fs, "qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm")
-		n := fs.Int("n", 1000, "replay this many dev spans in typing order, or all of them when the set is smaller")
-		set := fs.String("set", "buzz-dev", "the dev set to replay")
-		parse(args)
-		e, systems, err := cfg.Open()
+		return e.PassAll(ctx, systems, passAtK.tasks, os.Stderr)
+	},
+}
+
+var latencyCmd = command.Command{
+	Name:   "latency",
+	Short:  "replay FIM-Buzz dev spans in typing order against each base (stage S3)",
+	Effect: command.EffectRun,
+	Flags: slices.Concat(s3Flags, []command.Flag{
+		systemsFlag("qwen2.5-coder-0.5b:spm,qwen2.5-coder-1.5b:spm"),
+		{Name: "n", Kind: command.Int, Default: 1000, Doc: "replay this many dev spans in typing order, or all of them when the set is smaller", Target: &latencyOpts.n},
+		{Name: "set", Kind: command.String, Default: "buzz-dev", Doc: "the dev set to replay", Target: &latencyOpts.set},
+	}),
+	Run: func(ctx context.Context, _ command.Invocation) error {
+		e, systems, err := stageThree.config().Open()
 		if err != nil {
 			return err
 		}
-		return e.LatencyAll(ctx, systems, *set, *n, os.Stderr)
-	}
+		return e.LatencyAll(ctx, systems, latencyOpts.set, latencyOpts.n, os.Stderr)
+	},
 }

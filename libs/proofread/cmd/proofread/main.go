@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/proofread"
 )
@@ -66,7 +68,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "proofread: %v\n", err)
 		os.Exit(1)
 	}
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	command.Main(root())
 }
 
 // subcommand is one word the first argument may be. A kind judges text of
@@ -134,47 +136,6 @@ var subcommands = []subcommand{
 	{"agent-reply", proofread.KindAgentReply, inputStdin, "--stdin", "judge what a coding agent writes back to its person, on stdin"},
 	{"tool-description", proofread.KindToolDescription, inputStdin, "--stdin", "judge a tool's or a skill's description, on stdin"},
 	{"stylesheet", proofread.KindStylesheet, inputStdin, "FILE...|--stdin", "judge the comments of stylesheets, or of one on stdin"},
-	{"rules", "", inputNone, "", "write every rule as the docs render it, as JSON"},
-	{"stats", "", inputNone, "", "print each rule's recorded outcomes and not-useful rate"},
-	{"explain", "", inputNone, "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
-	{"voice build", "", inputNone, "FILE...|--stdin", "measure your own texts into the voice file --voice reads"},
-	{"voice eval", "", inputNone, "", "score which shape features tell --owner's JSON-lines texts from --other's, per kind; --pool N measures chunks of N+ words, --seed S shuffles them"},
-}
-
-// usage lists every subcommand and the flags a kind takes.
-func usage() string {
-	var b strings.Builder
-
-	b.WriteString("usage: proofread <subcommand> [flags] [operand]\n\nsubcommands:\n")
-
-	for _, s := range subcommands {
-		fmt.Fprintf(&b, "  %-28s %-16s %s\n", s.name, s.operand, s.summary)
-	}
-
-	fmt.Fprintf(&b, "  %-28s %-16s %s\n", "KIND", "FILE...|--stdin", "judge text of a kind the --decisions table declares")
-	b.WriteString("\nflags, after a kind:\n")
-	b.WriteString("  --stdin              read the text to judge from stdin\n")
-	b.WriteString("  --decisions FILE     read the decisions table from FILE, or - for stdin\n")
-	b.WriteString("  --only RULES         judge by these comma-separated rules alone\n")
-	b.WriteString("  --thread-length N    the count of replies the author already posted in the thread\n")
-	b.WriteString("  --event EVENT        the verdict a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT\n")
-	b.WriteString("  --future-sections H  let the sections under these comma-separated headings speak in the future tense\n")
-	b.WriteString("  --local-branches FILE  report the branches FILE names, one a line, as only this machine's\n")
-	b.WriteString("  --anchored           with review-reply, judge as review-inline\n")
-	b.WriteString("  --voice FILE         judge with the voice file proofread voice build wrote\n")
-	b.WriteString("  -o FORMAT            write findings as json (default), sarif, rdjson or text\n")
-	b.WriteString("  --minimum GRADE      the grade, 0 to 100, under which a text fails, when --decisions sets none for the kind\n")
-	b.WriteString("  --record             keep this run's findings on this machine, to count what later runs fix\n")
-	b.WriteString("  --baseline FILE      write only the findings past the counts FILE holds\n")
-	b.WriteString("  --prune              with --baseline, rewrite FILE to this run's counts and write no findings\n")
-	b.WriteString("  --metrics            write each text's readability metrics instead of its findings\n")
-	b.WriteString("\nvoice build flags: --stdin, --kind, --field, --kind-field, --out; ")
-	b.WriteString("voice eval flags: --owner, --other, --kind, --field, --kind-field, -o, --pool, --seed\n")
-	b.WriteString("\nA text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n")
-	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 no deny finding; 1 a deny finding, a grade under its minimum included; ")
-	b.WriteString("2 unusable subcommand, flags, decisions or input.\n")
-
-	return b.String()
 }
 
 // The process exit codes: 0 for a run with no deny finding, 1 for one with a
@@ -186,45 +147,81 @@ const (
 	exitError    = 2
 )
 
+// root is the proofread command: a child for each built-in kind and for the
+// catalog and voice commands. A name no child holds is a kind a decisions table
+// may declare, or an alias of a built-in kind, which judgeDeclared resolves.
+func root() command.Command {
+	r := rootCmd
+	r.Children = append([]command.Command{rulesCommand(), statsCommand(), explainCommand(), voiceCmd}, kindChildren()...)
+
+	return r
+}
+
+// rootCmd is the root less its children, which root fills.
+var rootCmd = command.Command{
+	Name:  "proofread",
+	Short: "judge prose and doc comments by rule",
+	Long: "A text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n\n" +
+		"Findings are a JSON array on stdout. A name that is no subcommand judges text of the kind the --decisions table declares.",
+	Usage: "proofread <subcommand> [flags] [operand]",
+	ExitStatus: []command.ExitCode{
+		{Code: exitOK, Meaning: "no deny finding"},
+		{Code: exitFindings, Meaning: "a deny finding, a grade under its minimum included"},
+		{Code: exitError, Meaning: "unusable subcommand, flags, decisions or input"},
+	},
+	Run: judgeDeclared,
+}
+
+// kindChildren is the command that judges each built-in kind.
+func kindChildren() []command.Command {
+	out := make([]command.Command, 0, len(subcommands))
+
+	for _, s := range subcommands {
+		out = append(out, judgeCommand(s.name, s.kind, s.operand, s.summary))
+	}
+
+	return out
+}
+
+// judgeDeclared judges text of a kind no child names: an alias of a built-in
+// kind, or one a decisions table declares, which runKind resolves once it has read
+// the table.
+func judgeDeclared(ctx context.Context, inv command.Invocation) error {
+	if len(inv.Args) == 0 {
+		return exit.Usagef("a subcommand is required: `%s -h` lists them", inv.Path)
+	}
+
+	name := inv.Args[0]
+	kind := proofread.Kind(name)
+
+	if k, ok := proofread.ParseKind(name); ok { // compat: see proofread's kindAliases
+		kind = k
+	}
+
+	c := judgeCommand(name, kind, "FILE...|--stdin", "judge text of a kind the --decisions table declares")
+	c.Name = "proofread " + name
+
+	return reported(command.Execute(ctx, c, inv.Args[1:], inv.Streams))
+}
+
+// reported turns a status that was already explained on stderr into the error
+// that exits with it.
+func reported(code int) error {
+	if code == exitOK {
+		return nil
+	}
+
+	return exit.Reported(code)
+}
+
 // run returns the process exit code. A deny finding fails the run, a grade
 // under its kind's minimum among them; an advise finding only lowers the grade.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage())
-
-		return exitError
-	}
-
-	name, rest := args[0], args[1:]
-
-	switch name {
-	case "rules":
-		return runRules(rest, stdout, stderr)
-	case "explain":
-		return runExplain(rest, stdout, stderr)
-	case "stats":
-		return runStats(rest, stdout, stderr)
-	case "voice":
-		return runVoice(rest, stdin, stdout, stderr)
-	}
-
-	if kind, ok := proofread.ParseKind(name); ok { // compat: see proofread's kindAliases
-		if s, ok := kindCommand(kind); ok {
-			return runKind(s.kind, rest, stdin, stdout, stderr)
-		}
-	}
-
-	if strings.HasPrefix(name, "-") {
-		return unknownSubcommand(stderr, name)
-	}
-
-	// Any other name may be a kind the decisions table declares, which
-	// runKind resolves once it has read the table.
-	return runKind(proofread.Kind(name), rest, stdin, stdout, stderr)
+	return command.Execute(context.Background(), root(), args, command.Streams{Stdin: stdin, Stdout: stdout, Stderr: stderr})
 }
 
 func unknownSubcommand(stderr io.Writer, name string) int {
-	fmt.Fprintf(stderr, "proofread: unknown subcommand %q\n\n%s", name, usage())
+	fmt.Fprintf(stderr, "proofread: unknown subcommand %q: `proofread -h` lists them\n", name)
 
 	return exitError
 }
@@ -254,51 +251,83 @@ func failure(stderr io.Writer, err error) int {
 	return exitError
 }
 
-func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("proofread "+string(kind), flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fromStdin := fs.Bool("stdin", false, "read the text to judge from stdin")
-	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
-	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
-	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
-	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
-	futureSections := fs.String("future-sections", "", "let the sections under these comma-separated `headings` speak in the future tense")
-	localBranchesPath := fs.String("local-branches", "", "report the branches this `file` names, one a line, as only this machine's")
-	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
-	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out")
-	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
+// kindOptions are the flags a kind takes.
+type kindOptions struct {
+	stdin          bool
+	decisions      string
+	only           string
+	threadLength   int
+	event          string
+	futureSections string
+	localBranches  string
+	anchored       bool
+	voice          string
+	format         string
+	minimum        string
+	record         bool
+	baseline       string
+	prune          bool
+	metrics        bool
+	set            bool
+}
 
+// kindOpts holds the flags of the one command a process runs, which every kind's command shares.
+var kindOpts kindOptions
+
+// kindFlags are the flags a kind takes.
+var kindFlags = []command.Flag{
+	{Name: "stdin", Kind: command.Bool, Default: false, Doc: "read the text to judge from stdin", Target: &kindOpts.stdin},
+	{Name: "decisions", Kind: command.String, Doc: "read the decisions table from this `file`, or - for stdin", Target: &kindOpts.decisions},
+	{Name: "only", Kind: command.String, Doc: "judge by these comma-separated `rules` alone", Target: &kindOpts.only},
+	{Name: "thread-length", Kind: command.Int, Default: 0, Doc: "the `count` of replies the author already posted in the thread", Target: &kindOpts.threadLength},
+	{Name: "event", Kind: command.String, Doc: "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT", Target: &kindOpts.event},
+	{Name: "future-sections", Kind: command.String, Doc: "let the sections under these comma-separated `headings` speak in the future tense", Target: &kindOpts.futureSections},
+	{Name: "local-branches", Kind: command.String, Doc: "report the branches this `file` names, one a line, as only this machine's", Target: &kindOpts.localBranches},
+	{Name: "anchored", Kind: command.Bool, Default: false, Doc: "with review-reply, judge as review-inline", Target: &kindOpts.anchored},
+	{Name: "voice", Kind: command.String, Doc: "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out", Target: &kindOpts.voice},
+	{Name: "o", Kind: command.String, Default: "json", Doc: "write findings as `json`, sarif, rdjson or text", Target: &kindOpts.format},
+	{Name: "minimum", Kind: command.String, Doc: "the `grade`, 0 to 100, under which a text fails, for a decisions table with no minimum for the kind", Target: &kindOpts.minimum},
+	{Name: "record", Kind: command.Bool, Default: false, Doc: "keep this run's findings on this machine to count what later runs fix", Target: &kindOpts.record},
+	{Name: "baseline", Kind: command.String, Doc: "report only findings past the counts this baseline `file` holds", Target: &kindOpts.baseline},
+	{Name: "prune", Kind: command.Bool, Default: false, Doc: "with --baseline, rewrite the file to the counts this run found", Target: &kindOpts.prune},
+	{Name: "metrics", Kind: command.Bool, Default: false, Doc: "write each text's readability metrics instead of its findings", Target: &kindOpts.metrics},
+	{Name: "set", Kind: command.Bool, Default: false, Doc: "with --stdin, judge the NUL-separated texts as one set by the rules a short text is too small to show", Target: &kindOpts.set},
+}
+
+// judgeCommand declares the command that judges text of kind: name is its word,
+// operand the operands its usage line shows.
+func judgeCommand(name string, kind proofread.Kind, operand, summary string) command.Command {
+	return command.Command{
+		Name:  name,
+		Short: summary,
+		Usage: "proofread " + name + " [flags] " + operand,
+		Flags: kindFlags,
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return reported(runKind(kind, &kindOpts, inv.Args, inv.Stdin, inv.Stdout, inv.Stderr))
+		},
+	}
+}
+
+func runKind(kind proofread.Kind, o *kindOptions, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var minimum *int
 
-	fs.Func("minimum", "the `grade`, 0 to 100, under which a text fails, for a decisions table with no minimum for the kind",
-		func(s string) error {
-			n, err := strconv.Atoi(s)
-			if err != nil || n < 0 || n > 100 {
-				return fmt.Errorf("want a grade from 0 to 100, not %q", s)
-			}
+	if o.minimum != "" {
+		n, err := strconv.Atoi(o.minimum)
+		if err != nil || n < 0 || n > 100 {
+			return failure(stderr, fmt.Errorf("--minimum: want a grade from 0 to 100, not %q", o.minimum))
+		}
 
-			minimum = &n
-
-			return nil
-		})
-	record := fs.Bool("record", false, "keep this run's findings on this machine to count what later runs fix")
-	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
-	prune := fs.Bool("prune", false, "with --baseline, rewrite the file to the counts this run found")
-	metrics := fs.Bool("metrics", false, "write each text's readability metrics instead of its findings")
-	asSet := fs.Bool("set", false, "with --stdin, judge the NUL-separated texts as one set by the rules a short text is too small to show")
-
-	if err := fs.Parse(args); err != nil {
-		return exitError
+		minimum = &n
 	}
 
 	// compat(until: no caller passes -anchored, the guard and the docs/guides
 	// proofread-reply scripts included): before review-inline was a kind, an inline
 	// comment was a review-reply with this flag.
-	if *anchored && kind == proofread.KindReviewReply {
+	if o.anchored && kind == proofread.KindReviewReply {
 		kind = proofread.KindReviewInline
 	}
 
-	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
+	t, err := readTable(o.decisions, kind, stdin, args)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -308,50 +337,50 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		return unknownSubcommand(stderr, string(kind))
 	}
 
-	if err := checkInput(kind, *fromStdin, fs.Args()); err != nil {
+	if err := checkInput(kind, o.stdin, args); err != nil {
 		return failure(stderr, err)
 	}
 
-	if *metrics {
+	if o.metrics {
 		if declared(kind) {
 			return failure(stderr, fmt.Errorf("--metrics measures the built-in kinds, and %s is declared", kind))
 		}
 
-		return runMetrics(kind, fs.Args(), stdin, stdout, stderr)
+		return runMetrics(kind, args, stdin, stdout, stderr)
 	}
 
-	if !slices.Contains([]string{"", "APPROVE", "REQUEST_CHANGES", "COMMENT"}, *event) {
-		return failure(stderr, fmt.Errorf("unknown --event %q: want APPROVE, REQUEST_CHANGES or COMMENT", *event))
+	if !slices.Contains([]string{"", "APPROVE", "REQUEST_CHANGES", "COMMENT"}, o.event) {
+		return failure(stderr, fmt.Errorf("unknown --event %q: want APPROVE, REQUEST_CHANGES or COMMENT", o.event))
 	}
 
-	if *record && !fromFiles(kind, fs.Args()) {
+	if o.record && !fromFiles(kind, args) {
 		return failure(stderr, errors.New("--record needs a file to judge, since an outcome is kept per path"))
 	}
 
-	onlyRules, err := onlyList(*only, t)
+	onlyRules, err := onlyList(o.only, t)
 	if err != nil {
 		return failure(stderr, err)
 	}
 
 	opts := []proofread.Option{
-		proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength), proofread.WithEvent(proofread.Event(*event)),
+		proofread.WithOnly(onlyRules...), proofread.WithThreadLength(o.threadLength), proofread.WithEvent(proofread.Event(o.event)),
 		proofread.WithKinds(t.kinds...),
 	}
 
-	if *futureSections != "" {
-		opts = append(opts, proofread.WithFutureSections(strings.Split(*futureSections, ",")...))
+	if o.futureSections != "" {
+		opts = append(opts, proofread.WithFutureSections(strings.Split(o.futureSections, ",")...))
 	}
 
-	if *localBranchesPath != "" {
-		body, err := os.ReadFile(*localBranchesPath)
+	if o.localBranches != "" {
+		body, err := os.ReadFile(o.localBranches)
 		if err != nil {
 			return failure(stderr, fmt.Errorf("--local-branches: %w", err))
 		}
 		opts = append(opts, proofread.WithLocalBranches(strings.Fields(string(body))...))
 	}
 
-	if *voicePath != "" {
-		voice, err := voiceOptions(*voicePath, stderr)
+	if o.voice != "" {
+		voice, err := voiceOptions(o.voice, stderr)
 		if err != nil {
 			return failure(stderr, err)
 		}
@@ -365,7 +394,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	// A set runs no grade, so it needs no minimum.
-	grades := !*asSet && slices.Contains(s.RuleList(), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
+	grades := !o.set && slices.Contains(s.RuleList(), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
 		(len(onlyRules) == 0 || slices.Contains(onlyRules, proofread.RuleGrade))
 
 	switch {
@@ -381,31 +410,31 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	judgeInput := judge
-	if *asSet {
-		judgeInput = judgeSet(*fromStdin, stderr)
+	if o.set {
+		judgeInput = judgeSet(o.stdin, stderr)
 	}
 
-	out, err := judgeInput(kind, fs.Args(), stdin, t, opts)
+	out, err := judgeInput(kind, args, stdin, t, opts)
 	if err != nil {
 		return failure(stderr, err)
 	}
 
-	if *record {
-		if err := recordRun(kind, fs.Args(), t, onlyRules, opts, out); err != nil {
+	if o.record {
+		if err := recordRun(kind, args, t, onlyRules, opts, out); err != nil {
 			return failure(stderr, err)
 		}
 	}
 
-	out, err = applyBaseline(*baselinePath, *prune, out)
+	out, err = applyBaseline(o.baseline, o.prune, out)
 	if err != nil {
 		return failure(stderr, err)
 	}
 
-	if err := writeFindings(stdout, *format, out); err != nil {
+	if err := writeFindings(stdout, o.format, out); err != nil {
 		return failure(stderr, err)
 	}
 
-	if *format == "text" {
+	if o.format == "text" {
 		fmt.Fprint(stderr, textSummary(out))
 	}
 
@@ -414,6 +443,24 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	return exitOK
+}
+
+func rulesCommand() command.Command {
+	return command.Command{
+		Name: "rules", Short: "write every rule as the docs render it, as JSON", Effect: command.EffectRead,
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return reported(runRules(inv.Args, inv.Stdout, inv.Stderr))
+		},
+	}
+}
+
+func explainCommand() command.Command {
+	return command.Command{
+		Name: "explain", Short: "print what a rule catches, why, its default decisions and its page", Usage: "proofread explain RULE|CODE", Effect: command.EffectRead,
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return reported(runExplain(inv.Args, inv.Stdout, inv.Stderr))
+		},
+	}
 }
 
 func runRules(args []string, stdout, stderr io.Writer) int {

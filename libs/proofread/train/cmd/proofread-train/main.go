@@ -1,14 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"os"
-	"strings"
+
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	command.Main(root())
 }
 
 // The process exit codes: 0 for a run that passed, 1 for a calibrate -gates
@@ -19,39 +21,33 @@ const (
 	exitError      = 2
 )
 
-// run returns the process exit code.
-func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage())
-
-		return exitError
+// root is the proofread-train command: train and calibrate, which holds round.
+func root() command.Command {
+	return command.Command{
+		Name:  "proofread-train",
+		Short: "train proofread's word-class model and calibrate its rules",
+		ExitStatus: []command.ExitCode{
+			{Code: exitOK, Meaning: "passed"},
+			{Code: exitGateFailed, Meaning: "a rule ships a decision its cases do not support (calibrate --gates)"},
+			{Code: exitError, Meaning: "unusable subcommand, flags or input"},
+		},
+		Children: []command.Command{trainCmd, calibrateCmd},
 	}
-
-	switch args[0] {
-	case "train":
-		return runTrain(args[1:], stdout, stderr)
-	case "calibrate":
-		return runCalibrate(args[1:], stdin, stdout, stderr)
-	}
-
-	fmt.Fprintf(stderr, "proofread-train: unknown subcommand %q\n\n%s", args[0], usage())
-
-	return exitError
 }
 
-func usage() string {
-	var b strings.Builder
+// run returns the process exit code.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return command.Execute(context.Background(), root(), args, command.Streams{Stdin: stdin, Stdout: stdout, Stderr: stderr})
+}
 
-	b.WriteString("usage: proofread-train <subcommand> [flags]\n\nsubcommands:\n")
-	b.WriteString("  train            train the word-class model on UD English EWT into --model, its test split into --testdata\n")
-	b.WriteString("  calibrate        replay the labeled cases and print each rule's precision and recall\n")
-	b.WriteString("  calibrate round  sample, freeze or score a labeling round, or pool two rounds to decide a deny\n")
-	b.WriteString("\ntrain flags: --model, --testdata, --iterations, --seed, --levels\n")
-	b.WriteString("calibrate flags: --cases, -o, --gates, --sample, --kind, --field, --group\n")
-	b.WriteString("\nExit codes: 0 passed, 1 a rule ships a decision its cases do not support (calibrate --gates), ")
-	b.WriteString("2 unusable subcommand, flags or input.\n")
+// reported turns a status that was already explained on stderr into the error
+// that exits with it.
+func reported(code int) error {
+	if code == exitOK {
+		return nil
+	}
 
-	return b.String()
+	return exit.Reported(code)
 }
 
 func failure(stderr io.Writer, err error) int {

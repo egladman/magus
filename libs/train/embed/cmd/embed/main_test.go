@@ -2,14 +2,23 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/train/embed/teacher"
 )
+
+// invoke parses args against c and runs it, returning its error.
+func invoke(c command.Command, args []string) error {
+	_, err := command.Invoke(context.Background(), c, args, command.Streams{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+	return err
+}
 
 func TestChunks(t *testing.T) {
 	cases := []struct {

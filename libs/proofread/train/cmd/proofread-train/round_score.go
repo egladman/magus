@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -68,19 +67,10 @@ type scoresRecord struct {
 	Rules      map[string]*ruleScore `json:"rules"`
 }
 
-func runRoundScore(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread-train calibrate round score", flag.ContinueOnError)
-	fset.SetOutput(stderr)
-	dir := fset.String("dir", "", "score the round labeled in this `dir`")
-	out := fset.String("out", "", "write the scores to this `file` (default DIR/scores.json)")
-	replay := fset.Bool("replay", false, "score a round whose rule files changed since its freeze, to reproduce its numbers; "+
-		"the result decides nothing")
+func runRoundScore(dirFlag, outFlag string, replayFlag bool, args []string, stdout, stderr io.Writer) int {
+	dir, out, replay := &dirFlag, &outFlag, &replayFlag
 
-	if err := fset.Parse(args); err != nil {
-		return exitError
-	}
-
-	if *dir == "" || fset.NArg() > 0 {
+	if *dir == "" || len(args) > 0 {
 		return failure(stderr, errors.New("round score takes --dir DIR and no operand"))
 	}
 

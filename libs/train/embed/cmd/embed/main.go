@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -20,60 +20,37 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/train/embed/distill"
 	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/egladman/magus/libs/xdg"
 )
 
-const usage = `usage: embed <command> [flags]
-
-commands:
-  fetch           download the pinned inputs named in inputs.yaml and verify their sha256
-  texts           write the training texts and forced tokens from embed-mine's source manifest
-  vocab           build the vocabulary; write its token texts for a teacher run and its counts for convert
-  teacher         embed a texts file with a teacher model into resumable, content-addressed shards
-  teacher-parity  check the Go teacher against the reference vectors and report texts/s
-  train           distill, train and quantize the table from finished teacher runs
-  convert         write potion-code-16M-v2 as a table over the vocabulary, mean of each token's word pieces
-  bench           write CodeRankEmbed's runs over a subset the external benchmark exported
-  oov             append each pinned non-Go repo's share of identifier tokens with no vocabulary row to evals.jsonl
-
-run "embed <command> -h" for a command's flags`
-
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
+	command.Main(root())
+}
+
+// root is the embed command: one child for each step of the table's pipeline.
+func root() command.Command {
+	return command.Command{
+		Name:  "embed",
+		Short: "build the code embedding table: fetch, texts, vocab, teacher, train, convert, bench, oov",
+		Children: []command.Command{
+			fetchCmd, textsCmd, vocabCmd, teacherCmd, parityCmd,
+			trainCmd, convertCmd, benchCmd, oovCmd,
+		},
 	}
-	var err error
-	switch os.Args[1] {
-	case "fetch":
-		err = runFetch(os.Args[2:])
-	case "texts":
-		err = runTexts(os.Args[2:])
-	case "vocab":
-		err = runVocab(os.Args[2:])
-	case "teacher":
-		err = runTeacher(os.Args[2:])
-	case "teacher-parity":
-		err = runParity(os.Args[2:])
-	case "train":
-		err = runTrain(os.Args[2:])
-	case "convert":
-		err = runConvert(os.Args[2:])
-	case "bench":
-		err = runBench(os.Args[2:])
-	case "oov":
-		err = runOOV(os.Args[2:])
-	default:
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
+}
+
+// parseFloat reads the value of the float flag name, which a flag binds as text since
+// command.Flag binds no float.
+func parseFloat(name, value string) (float64, error) {
+	f, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "embed %s: %v\n", os.Args[1], err)
-		os.Exit(1)
+		return 0, fmt.Errorf("-%s: %q is not a number", name, value)
 	}
+	return f, nil
 }
 
 // textsSalt orders the training texts by hash, so each teacher shard samples the whole
@@ -111,26 +88,27 @@ func excludedReason(r sourceRecord) string {
 	return ""
 }
 
+// textsOptions are the flags of texts.
+type textsOptions struct {
+	sources, root, rev, cache, out, skip, eval, noEval, cornstack string
+	chunkBytes, common                                            int
+}
+
 // runTexts turns the source manifest into the texts file vocab, teacher and train read.
 // Every train-split file excludedReason lets in is cut into line-bounded chunks, each
 // diagram outside eval fold 0 becomes its title and description, and CoRNStack rows add
 // a query and the head of its document, one row per in-repo text at -cornstack 1. Files
 // are read at the commit that last wrote the manifest, and each must hash to its pinned
 // digest, so the texts do not move when the tree does.
-func runTexts(args []string) error {
-	fs := flag.NewFlagSet("texts", flag.ExitOnError)
-	sourcesPath := fs.String("sources", "embed/gen/sources.jsonl", "embed-mine's source manifest")
-	root := fs.String("root", "../..", "the repository the manifest's paths are relative to")
-	rev := fs.String("rev", "", "the commit to read files at; default: the last commit that changed -sources")
-	cache := fs.String("cache", cacheRoot(), "the cache root the manifest's input paths are relative to")
-	out := fs.String("out", "", "the directory to write texts.jsonl and forced.txt to; default <cache>/training")
-	maxBytes := fs.Int("chunk-bytes", 512, "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it")
-	ratio := fs.Float64("cornstack", 1, "CoRNStack rows per in-repo text; each row adds two texts")
-	skip := fs.String("skip", "", "comma-separated input names left out; an input with no reader must be named here")
-	evalDir := fs.String("eval", "", "the directory of external eval sets, one <name>/ per set whose queries.jsonl and corpus.jsonl hold {\"id\", \"text\"} lines, the layout embed bench reads")
-	noEval := fs.String("no-eval", "", "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl")
-	common := fs.Int("common", 10, "a 13-word window more eval texts than this hold is boilerplate and drops nothing")
-	_ = fs.Parse(args)
+func runTexts(o *textsOptions, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("texts takes no operands, got %q", args[0])
+	}
+	sourcesPath, root, rev, cache, out, maxBytes, skip, evalDir, noEval, common := &o.sources, &o.root, &o.rev, &o.cache, &o.out, &o.chunkBytes, &o.skip, &o.eval, &o.noEval, &o.common
+	ratio, err := parseFloat("cornstack", o.cornstack)
+	if err != nil {
+		return err
+	}
 	if *out == "" {
 		*out = filepath.Join(*cache, "training")
 	}
@@ -176,7 +154,7 @@ func runTexts(args []string) error {
 	}
 	repo := len(mix.texts)
 
-	if err := mix.addCornstack(*cache, skipped, *ratio, *maxBytes); err != nil {
+	if err := mix.addCornstack(*cache, skipped, ratio, *maxBytes); err != nil {
 		return err
 	}
 	return writeTextsArtifacts(&mix, records, files, repo, *rev, *cache, *out)
@@ -754,4 +732,27 @@ func writeAtomic(path string, b []byte) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// textsOpts holds the flags of the one command a process runs.
+var textsOpts textsOptions
+
+var textsCmd = command.Command{
+	Name:   "texts",
+	Short:  "write the training texts and forced tokens from embed-mine's source manifest",
+	Effect: command.EffectLocalWrite,
+	Flags: []command.Flag{
+		{Name: "sources", Kind: command.String, Default: "embed/gen/sources.jsonl", Doc: "embed-mine's source manifest", Target: &textsOpts.sources},
+		{Name: "root", Kind: command.String, Default: "../..", Doc: "the repository the manifest's paths are relative to", Target: &textsOpts.root},
+		{Name: "rev", Kind: command.String, Doc: "the commit to read files at; default: the last commit that changed -sources", Target: &textsOpts.rev},
+		{Name: "cache", Kind: command.String, Default: cacheRoot(), Doc: "the cache root the manifest's input paths are relative to", Target: &textsOpts.cache},
+		{Name: "out", Kind: command.String, Doc: "the directory to write texts.jsonl and forced.txt to; default <cache>/training", Target: &textsOpts.out},
+		{Name: "chunk-bytes", Kind: command.Int, Default: 512, Doc: "a text holds at most this many bytes, so the teacher's 256-token cap rarely cuts it", Target: &textsOpts.chunkBytes},
+		{Name: "cornstack", Kind: command.String, Default: "1", Doc: "CoRNStack rows per in-repo text; each row adds two texts", Target: &textsOpts.cornstack},
+		{Name: "skip", Kind: command.String, Doc: "comma-separated input names left out; an input with no reader must be named here", Target: &textsOpts.skip},
+		{Name: "eval", Kind: command.String, Doc: "the directory of external eval sets, one <name>/ per set whose queries.jsonl and corpus.jsonl hold {\"id\", \"text\"} lines, the layout embed bench reads", Target: &textsOpts.eval},
+		{Name: "no-eval", Kind: command.String, Doc: "comma-separated eval sets left out of decontamination, each recorded in runs.jsonl", Target: &textsOpts.noEval},
+		{Name: "common", Kind: command.Int, Default: 10, Doc: "a 13-word window more eval texts than this hold is boilerplate and drops nothing", Target: &textsOpts.common},
+	},
+	Run: func(_ context.Context, inv command.Invocation) error { return runTexts(&textsOpts, inv.Args) },
 }

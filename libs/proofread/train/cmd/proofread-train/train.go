@@ -1,30 +1,44 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"io"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/proofread/train/wordclass"
 )
 
-func runTrain(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("proofread-train train", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+// trainOpts holds the flags of the one command a process runs.
+var trainOpts struct {
+	model, testdata          string
+	iterations, seed, levels int
+}
 
-	var o wordclass.Options
+var trainCmd = command.Command{
+	Name:   "train",
+	Short:  "train the word-class model on UD English EWT into --model, its test split into --testdata",
+	Effect: command.EffectLocalWrite,
+	Flags: []command.Flag{
+		{Name: "model", Kind: command.String, Doc: "write the gzipped model to this `file`", Target: &trainOpts.model},
+		{Name: "testdata", Kind: command.String, Doc: "write the gzipped EWT test split to this `file`", Target: &trainOpts.testdata},
+		{Name: "iterations", Kind: command.Int, Default: wordclass.DefaultIterations, Doc: "passes over the training split", Target: &trainOpts.iterations},
+		{Name: "seed", Kind: command.Int, Default: wordclass.DefaultSeed, Doc: "seed for the per-pass shuffle", Target: &trainOpts.seed},
+		{Name: "levels", Kind: command.Int, Default: wordclass.DefaultLevels, Doc: "the largest quantized weight", Target: &trainOpts.levels},
+	},
+	Run: func(_ context.Context, inv command.Invocation) error {
+		if trainOpts.seed < 0 {
+			return reported(failure(inv.Stderr, errors.New("-seed is negative: want a whole number from 0")))
+		}
 
-	fs.StringVar(&o.ModelPath, "model", "", "write the gzipped model to this `file`")
-	fs.StringVar(&o.TestPath, "testdata", "", "write the gzipped EWT test split to this `file`")
-	fs.IntVar(&o.Iterations, "iterations", wordclass.DefaultIterations, "passes over the training split")
-	fs.Uint64Var(&o.Seed, "seed", wordclass.DefaultSeed, "seed for the per-pass shuffle")
-	fs.IntVar(&o.Levels, "levels", wordclass.DefaultLevels, "the largest quantized weight")
+		o := wordclass.Options{ModelPath: trainOpts.model, TestPath: trainOpts.testdata, Iterations: trainOpts.iterations, Seed: uint64(trainOpts.seed), Levels: trainOpts.levels}
 
-	if err := fs.Parse(args); err != nil {
-		return exitError
-	}
+		return reported(runTrain(o, inv.Args, inv.Stdout, inv.Stderr))
+	},
+}
 
-	if fs.NArg() > 0 {
+func runTrain(o wordclass.Options, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
 		return failure(stderr, errors.New("train takes no arguments"))
 	}
 

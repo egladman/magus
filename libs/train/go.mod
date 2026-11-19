@@ -3,6 +3,7 @@ module github.com/egladman/magus/libs/train
 go 1.26.5
 
 require (
+	github.com/egladman/magus/libs/clikit v0.1.0
 	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/egladman/magus/libs/xdg v0.1.0
@@ -19,6 +20,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/egladman/magus/libs/apiversion v0.1.0 // indirect
 	github.com/egladman/magus/libs/diagnostics v0.2.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -40,3 +42,7 @@ replace github.com/egladman/magus/libs/xdg => ../xdg
 replace github.com/egladman/magus/libs/gopherbuzz => ../gopherbuzz
 
 replace github.com/egladman/magus/libs/diagnostics => ../diagnostics
+
+replace github.com/egladman/magus/libs/clikit => ../clikit
+
+replace github.com/egladman/magus/libs/apiversion => ../apiversion

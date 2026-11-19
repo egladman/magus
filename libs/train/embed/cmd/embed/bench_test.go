@@ -58,9 +58,9 @@ func TestBenchWriteTextsLeavesAnEqualFileAlone(t *testing.T) {
 }
 
 func TestBenchRefusesAnotherModel(t *testing.T) {
-	err := runBench([]string{"-subset", t.TempDir(), "-model", "potion-code-16M-v2"})
+	err := invoke(benchCmd, []string{"-subset", t.TempDir(), "-model", "potion-code-16M-v2"})
 	assert.ErrorContains(t, err, "is not CodeRankEmbed")
-	assert.ErrorContains(t, runBench([]string{"-model", "CodeRankEmbed"}), "-subset is required")
+	assert.ErrorContains(t, invoke(benchCmd, []string{"-model", "CodeRankEmbed"}), "-subset is required")
 }
 
 func TestBenchPromptsFollowTheModelCards(t *testing.T) {

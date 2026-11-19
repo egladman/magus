@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"maps"
 	"math"
 	"slices"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/train/embed/distill"
 	"github.com/egladman/magus/libs/train/embed/teacher"
@@ -30,14 +31,9 @@ const (
 // embeds a text as the normalized sum of its pieces' vectors, so each token stands for
 // the sum over its own pieces. embed.Tokens repeats a word's parts, so the table only
 // approximates potion. The same inputs and flags write the same bytes.
-func runConvert(args []string) error {
-	fs := flag.NewFlagSet("convert", flag.ExitOnError)
-	vocabPath := fs.String("vocab", "", "the vocabulary, JSON lines of {\"token\", \"count\"} as `embed vocab -vocab` writes them")
-	inputs := fs.String("inputs", "embed/inputs.yaml", "the pinned inputs file")
-	cache := fs.String("cache", cacheRoot(), "the cache root inputs.yaml paths are relative to")
-	run := fs.String("run", "", "this run's id, recorded in the table")
-	out := fs.String("out", "", "where to write the table")
-	_ = fs.Parse(args)
+
+func runConvert(o *convertOptions) error {
+	vocabPath, inputs, cache, run, out := &o.vocab, &o.inputs, &o.cache, &o.run, &o.out
 	if *vocabPath == "" || *run == "" || *out == "" {
 		return errors.New("-vocab, -run and -out are required")
 	}
@@ -154,4 +150,25 @@ func pieceModel(tokens []string, tok *teacher.WordPiece, emb *tensors.Tensor) (*
 	}
 	m, err := distill.NewModel(dirs, weights)
 	return m, total, err
+}
+
+// convertOpts holds the flags of the one command a process runs.
+var convertOpts convertOptions
+
+type convertOptions struct {
+	vocab, inputs, cache, run, out string
+}
+
+var convertCmd = command.Command{
+	Name:   "convert",
+	Short:  "write potion-code-16M-v2 as a table over the vocabulary, mean of each token's word pieces",
+	Effect: command.EffectLocalWrite,
+	Flags: []command.Flag{
+		{Name: "vocab", Kind: command.String, Doc: "the vocabulary, JSON lines of {\"token\", \"count\"} as `embed vocab -vocab` writes them", Target: &convertOpts.vocab},
+		{Name: "inputs", Kind: command.String, Default: "embed/inputs.yaml", Doc: "the pinned inputs file", Target: &convertOpts.inputs},
+		{Name: "cache", Kind: command.String, Default: cacheRoot(), Doc: "the cache root inputs.yaml paths are relative to", Target: &convertOpts.cache},
+		{Name: "run", Kind: command.String, Doc: "this run's id, recorded in the table", Target: &convertOpts.run},
+		{Name: "out", Kind: command.String, Doc: "where to write the table", Target: &convertOpts.out},
+	},
+	Run: func(_ context.Context, _ command.Invocation) error { return runConvert(&convertOpts) },
 }

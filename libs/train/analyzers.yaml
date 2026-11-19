@@ -12,13 +12,4 @@ clikitmain:
   settings:
     hint: "declare the command as a libs/clikit command.Command, each flag storing into its Target, and run it with command.Main"
   # file: count of hand-parsed reads (a flag defined or parsed through package flag, or os.Args)
-  baseline:
-    # Both commands' files belong to another change in flight (jsonl-to-yaml),
-    # so they move onto clikit after it lands.
-    cmd/train/main.go: 42
-    embed/cmd/embed/bench.go: 3
-    embed/cmd/embed/convert.go: 6
-    embed/cmd/embed/main.go: 24
-    embed/cmd/embed/oov.go: 4
-    embed/cmd/embed/teacher.go: 19
-    embed/cmd/embed/train.go: 28
+  baseline: {}

@@ -3,10 +3,10 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/embed/rankeval"
 )
@@ -133,18 +134,8 @@ func loadShippedVocab(vocabPath, tablePath string) (map[string]bool, string, err
 	return set, table.Digest(), nil
 }
 
-func runOOV(args []string) error {
-	fs := flag.NewFlagSet("oov", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	vocabPath := fs.String("vocab", filepath.Join("embed", "gen", "vocab.jsonl"), "the shipped vocabulary")
-	tablePath := fs.String("table", "", "the converted table; default <cache>/potion-code-16M-v2.table")
-	evals := fs.String("evals", filepath.Join("..", "embed", "evals.jsonl"), "the eval records file the rates are appended to")
-	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "usage: embed oov [flags] [repo ...]\n\nfor each pinned repo (default all), appends the share of identifier tokens with no vocabulary row to evals.jsonl")
-		fs.PrintDefaults()
-	}
-	_ = fs.Parse(args)
+func runOOV(c *common, vocabFlag, tableFlag, evalsFlag string, args []string) error {
+	vocabPath, tablePath, evals := &vocabFlag, &tableFlag, &evalsFlag
 	if *tablePath == "" {
 		*tablePath = filepath.Join(c.cache, "potion-code-16M-v2.table")
 	}
@@ -157,7 +148,7 @@ func runOOV(args []string) error {
 		return err
 	}
 	for _, r := range oovRepos {
-		if fs.NArg() > 0 && !slices.Contains(fs.Args(), path.Base(r.name)) {
+		if len(args) > 0 && !slices.Contains(args, path.Base(r.name)) {
 			continue
 		}
 		in, err := findInput(inputs, r.name)
@@ -187,4 +178,23 @@ func runOOV(args []string) error {
 		fmt.Printf("%-18s %-10s %9d tokens in %5d files  oov %.4f [%.4f, %.4f]\n", r.name, r.language, rec.Queries, len(files), rec.Value, rec.Low, rec.High)
 	}
 	return nil
+}
+
+// oovOpts holds the flags of the one command a process runs.
+var oovOpts struct{ vocab, table, evals string }
+
+var oovCmd = command.Command{
+	Name:   "oov",
+	Short:  "append each pinned non-Go repo's share of identifier tokens with no vocabulary row to evals.jsonl",
+	Usage:  "embed oov [flags] [repo ...]",
+	Long:   "For each pinned repo (default all), appends the share of identifier tokens with no vocabulary row to evals.jsonl.",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "vocab", Kind: command.String, Default: filepath.Join("embed", "gen", "vocab.jsonl"), Doc: "the shipped vocabulary", Target: &oovOpts.vocab},
+		{Name: "table", Kind: command.String, Doc: "the converted table; default <cache>/potion-code-16M-v2.table", Target: &oovOpts.table},
+		{Name: "evals", Kind: command.String, Default: filepath.Join("..", "embed", "evals.jsonl"), Doc: "the eval records file the rates are appended to", Target: &oovOpts.evals},
+	}),
+	Run: func(_ context.Context, inv command.Invocation) error {
+		return runOOV(&shared, oovOpts.vocab, oovOpts.table, oovOpts.evals, inv.Args)
+	},
 }

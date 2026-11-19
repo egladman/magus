@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -67,20 +66,10 @@ type poolRecord struct {
 	Rules   map[string]*poolRule `json:"rules"`
 }
 
-func runRoundPool(args []string, stdout, stderr io.Writer) int {
-	fset := flag.NewFlagSet("proofread-train calibrate round pool", flag.ContinueOnError)
-	fset.SetOutput(stderr)
+func runRoundPool(dirs []string, outFlag string, args []string, stdout, stderr io.Writer) int {
+	out := &outFlag
 
-	var dirs repeated
-
-	fset.Var(&dirs, "dir", "a scored round `dir`, given twice")
-	out := fset.String("out", "", "write the pool to this `file` and print a table, instead of printing the JSON")
-
-	if err := fset.Parse(args); err != nil {
-		return exitError
-	}
-
-	if len(dirs) != 2 || fset.NArg() > 0 {
+	if len(dirs) != 2 || len(args) > 0 {
 		return failure(stderr, errors.New("round pool takes --dir DIR twice and no operand"))
 	}
 
