@@ -2913,18 +2913,18 @@ function termMatches(node: GNode, term: QueryTerm) {
   if (term.field === "kind") {
     hit = node.kind === v;
   } else if (term.field === "project") {
-      // Knowledge-graph ids: project nodes are "project:<name>", target nodes
-      // are "target:<project>:<name>". Target-graph ids: project nodes are the
-      // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
-      hit =
-        node.id === "project:" + v ||
-        (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
-        (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
-        node.id.toLowerCase() === v ||
-        // Everything the project CONTAINS, transitively - its dirs, docs, files and the
-        // functions inside them. The id comparisons above only ever reach the project node
-        // and its targets.
-        (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
+    // Knowledge-graph ids: project nodes are "project:<name>", target nodes
+    // are "target:<project>:<name>". Target-graph ids: project nodes are the
+    // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
+    hit =
+      node.id === "project:" + v ||
+      (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
+      (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
+      node.id.toLowerCase() === v ||
+      // Everything the project CONTAINS, transitively - its dirs, docs, files and the
+      // functions inside them. The id comparisons above only ever reach the project node
+      // and its targets.
+      (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
   } else if (term.field === "relation") {
     // relIndex is always built by the callers that run relation queries; treat an
     // absent index as no match rather than asserting it non-null.
