@@ -203,3 +203,28 @@ var hookTrail = hooks.join(",");
 		"lifecycle hooks fire around each it via -> narrowing",
 	)
 }
+
+func TestAssertMatchersRaiseOnFailure(t *testing.T) {
+	ctx := context.Background()
+	run := func(body string) error {
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+		Register(sess)
+		return sess.Exec(ctx, "import \"assert\";\n"+body)
+	}
+
+	require.NoError(t, run(`assert\equal([1, 2], want: [1, 2], message: "same");`))
+	require.NoError(t, run(`assert\throws(fun () > void { throw "boom"; }, message: "raises");`))
+
+	raises := func(body, want string) {
+		err := run(body)
+		require.Error(t, err, body)
+		assert.Contains(t, err.Error(), want, body)
+	}
+	raises(`assert\equal(1, want: 2, message: "lbl");`, "assert\\equal failed (lbl): got `1` want `2`")
+	raises(`assert\isTrue(false, message: "");`, "assert\\isTrue failed")
+	raises(`assert\len("abc", want: 2, message: "");`, "assert\\len failed: got length 3 want 2")
+	raises(`assert\throws(fun () > void {}, message: "quiet");`, "assert\\throws failed (quiet): function did not throw")
+	raises(`assert\fail("stop");`, "assert\\fail: stop")
+	raises(`assert\greater(1, b: 2, message: "");`, "assert\\greater failed")
+	raises(`assert\doesNotThrow(fun () > void { throw "x"; }, message: "");`, "assert\\doesNotThrow failed")
+}
