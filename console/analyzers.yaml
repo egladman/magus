@@ -5,35 +5,6 @@
 exhaustive-switch:
   # Functions that may still hold a switch over a closed set that misses a member or keeps a default
   # arm. A count may only shrink; a function holding fewer switches than its row fails.
-  baseline:
-    - {path: src/apps/activity/adapter.ts, symbol: kindLabel}
-    - {path: src/apps/dashboard/plan/feed.ts, symbol: feedRow}
-    - {path: src/apps/dashboard/plan/run.ts, symbol: anchorPhrase}
-    - {path: src/apps/diff/agent.ts, symbol: turnLabel}
-    - {path: src/apps/diff/demo.ts, symbol: applyDemoOp}
-    - {path: src/apps/diff/main.ts, symbol: markActiveFile}
-    - {path: src/apps/diff/main.ts, symbol: renderVerdict}
-    - {path: src/apps/graph/diagrams/api.ts, symbol: readFailure}
-    - {path: src/apps/graph/diagrams/interact.ts, symbol: attachDiagram}
-    - {path: src/apps/graph/diagrams/interact.ts, symbol: diagramKey}
-    - {path: src/apps/graph/main.ts, symbol: activateView}
-    - {path: src/apps/graph/main.ts, symbol: preferredModeForView}
-    - {path: src/apps/graph/main.ts, symbol: recomputeMatchSet}
-    - {path: src/apps/graph/main.ts, symbol: termMatches}
-    - {path: src/apps/graph/main.ts, symbol: viewCommandStr}
-    - {path: src/apps/graph/shapes.ts, symbol: traceNodeShape}
-    - {path: src/apps/logs/runindex.ts, symbol: facetValues}
-    - {path: src/apps/logs/runindex.ts, symbol: matchesFilter}
-    - {path: src/apps/logs/runtree.ts, symbol: onTreeKey}
-    - {path: src/apps/pulls/view.ts, symbol: ciText}
-    - {path: src/apps/pulls/view.ts, symbol: mergeableText}
-    - {path: src/apps/pulls/view.ts, symbol: reviewText}
-    - {path: src/apps/settings/install.ts, symbol: statusText}
-    - {path: src/apps/settings/tokens.ts, symbol: classLabel}
-    - {path: src/apps/tools/model.ts, symbol: lifecycleNote}
-    - {path: src/desktop/connectPrompt.ts, symbol: renderConnectPrompt}
-    - {path: src/lib/qr.ts, symbol: maskFn}
-    - {path: src/render/treeKeys.ts, symbol: attachTreeKeys}
-    - {path: src/ui/menu.ts, symbol: wireMenu}
+  baseline: []
   # Switches a person accepted, each with the reason it stays.
   exits: []

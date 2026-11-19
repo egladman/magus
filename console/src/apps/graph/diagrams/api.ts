@@ -87,24 +87,25 @@ export function renderDiagram(
 // used verbatim since it names the fix.
 export function readFailure(status: number, body: string, what: string): DiagramFailure {
   const detail = body.trim();
-  switch (status) {
-    case 422:
-      return { kind: "refused", detail: detail || "The server refused to draw " + what + "." };
-    case 409:
-      return {
-        kind: "unindexed",
-        detail: detail || "The server has no symbol index for " + what + ".",
-      };
-    case 400:
-      return { kind: "bad-lens", detail: detail || "The server did not accept this lens." };
-    case 404:
-      return { kind: "absent", detail: "This server does not serve " + what + "." };
-    default:
-      return {
-        kind: "unreadable",
-        detail: "The server answered HTTP " + status + " for " + what + ".",
-      };
+  if (status === 422) {
+    return { kind: "refused", detail: detail || "The server refused to draw " + what + "." };
   }
+  if (status === 409) {
+    return {
+      kind: "unindexed",
+      detail: detail || "The server has no symbol index for " + what + ".",
+    };
+  }
+  if (status === 400) {
+    return { kind: "bad-lens", detail: detail || "The server did not accept this lens." };
+  }
+  if (status === 404) {
+    return { kind: "absent", detail: "This server does not serve " + what + "." };
+  }
+  return {
+    kind: "unreadable",
+    detail: "The server answered HTTP " + status + " for " + what + ".",
+  };
 }
 
 async function read<T>(

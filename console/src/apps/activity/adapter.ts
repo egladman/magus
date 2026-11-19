@@ -10,36 +10,26 @@ import type { Duration } from "@bufbuild/protobuf/wkt";
 import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import type { RenderModel, Section } from "../../render/model";
 
-// kindLabel is the short source tag shown in the head (the enum's stable, terse name).
+const KIND_LABELS: Record<Kind, string> = {
+  [Kind.UNSPECIFIED]: "event",
+  [Kind.MCP_TOOL_CALL]: "mcp",
+  [Kind.JOB]: "job",
+  [Kind.CONFIG_CHANGE]: "config",
+  [Kind.TOKEN_LIFECYCLE]: "token",
+  [Kind.SANDBOX_DENIAL]: "sandbox",
+  [Kind.GUARD_POLICY]: "guard",
+  [Kind.AGENT_COMMAND]: "agent",
+  [Kind.CREDENTIAL_GRANT]: "credential",
+  [Kind.AGENT_SPAWN]: "spawn",
+  [Kind.NOTES]: "notes",
+  [Kind.FILE_CHANGE]: "file",
+  [Kind.RUN]: "run",
+};
+
+// kindLabel is the short source tag shown in the head. A kind from a newer
+// server reads "event".
 export function kindLabel(kind: Kind): string {
-  switch (kind) {
-    case Kind.MCP_TOOL_CALL:
-      return "mcp";
-    case Kind.JOB:
-      return "job";
-    case Kind.CONFIG_CHANGE:
-      return "config";
-    case Kind.TOKEN_LIFECYCLE:
-      return "token";
-    case Kind.SANDBOX_DENIAL:
-      return "sandbox";
-    case Kind.GUARD_POLICY:
-      return "guard";
-    case Kind.AGENT_COMMAND:
-      return "agent";
-    case Kind.CREDENTIAL_GRANT:
-      return "credential";
-    case Kind.AGENT_SPAWN:
-      return "spawn";
-    case Kind.NOTES:
-      return "notes";
-    case Kind.FILE_CHANGE:
-      return "file";
-    case Kind.RUN:
-      return "run";
-    default:
-      return "event";
-  }
+  return KIND_LABELS[kind] ?? "event";
 }
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or null when absent.

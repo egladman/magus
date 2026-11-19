@@ -57,34 +57,26 @@ export function attachTreeKeys(tree: HTMLElement): () => void {
     const all = items();
     const at = all.indexOf(item);
     const expanded = item.getAttribute("aria-expanded");
-    switch (ev.key) {
-      case "ArrowDown":
-        go(all[at + 1]);
-        break;
-      case "ArrowUp":
-        go(all[at - 1]);
-        break;
-      case "Home":
-        go(all[0]);
-        break;
-      case "End":
-        go(all[all.length - 1]);
-        break;
-      case "ArrowRight":
-        if (expanded === "false") treeNode(item)?.click();
-        else if (expanded === "true") go(all[at + 1]);
-        break;
-      case "ArrowLeft":
-        if (expanded === "true") treeNode(item)?.click();
-        else go(parentItem(item) ?? undefined);
-        break;
-      case "Enter":
-      case " ":
-        if (ev.target !== item) return;
-        treeNode(item)?.click();
-        break;
-      default:
-        return;
+    const key = ev.key;
+    if (key === "ArrowDown") {
+      go(all[at + 1]);
+    } else if (key === "ArrowUp") {
+      go(all[at - 1]);
+    } else if (key === "Home") {
+      go(all[0]);
+    } else if (key === "End") {
+      go(all[all.length - 1]);
+    } else if (key === "ArrowRight") {
+      if (expanded === "false") treeNode(item)?.click();
+      else if (expanded === "true") go(all[at + 1]);
+    } else if (key === "ArrowLeft") {
+      if (expanded === "true") treeNode(item)?.click();
+      else go(parentItem(item) ?? undefined);
+    } else if (key === "Enter" || key === " ") {
+      if (ev.target !== item) return;
+      treeNode(item)?.click();
+    } else {
+      return;
     }
     ev.preventDefault();
   });

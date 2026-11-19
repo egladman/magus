@@ -130,16 +130,14 @@ export const columns = (now: () => number = Date.now): Column<ToolRowView>[] => 
 // would let that pass as "all fine".
 export const lifecycleNote = (l: LifecycleView | undefined): string => {
   if (!l) return "";
-  switch (l.state) {
-    case "offline":
-      return "end of life not fetched: MAGUS_OFFLINE is set on the server";
-    case "unreached": {
-      const why = l.detail ? " (" + l.detail + ")" : "";
-      return "end of life unknown: " + l.provider + " did not answer" + why;
-    }
-    default:
-      return "";
+  if (l.state === "offline") {
+    return "end of life not fetched: MAGUS_OFFLINE is set on the server";
   }
+  if (l.state === "unreached") {
+    const why = l.detail ? " (" + l.detail + ")" : "";
+    return "end of life unknown: " + l.provider + " did not answer" + why;
+  }
+  return "";
 };
 
 // lifecycleSource names the provider and how fresh its answer is. "" unless there is an answer to

@@ -11,6 +11,7 @@
 
 import type { InstallState, InstallStore } from "../../lib/install";
 import { showToast } from "../../lib/refresh-toast";
+import { unreachable } from "../../lib/unreachable";
 import { h } from "../../desktop/view";
 
 // What installing actually buys, said once. Every state below is a variation on whether it is available.
@@ -42,6 +43,7 @@ function statusText(state: InstallState, hint: string): string {
       // this must not read as a dead end.
       return "Your browser has not offered to install the console from this address. The automatic prompt needs a secure origin: the loopback address the server prints, or an https:// URL. A plain http:// address on the local network never qualifies. Your browser's own menu may still offer Add to Home Screen.";
   }
+  return unreachable(state);
 }
 
 // buildInstallSection builds the section body and keeps it in step with the store. Returns the body and

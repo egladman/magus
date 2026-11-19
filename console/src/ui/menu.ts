@@ -108,21 +108,16 @@ export function wireMenu(
       if (list.length === 0) return;
       const at = list.indexOf(document.activeElement as HTMLElement);
       let next: number;
-      switch (e.key) {
-        case "ArrowDown":
-          next = at < 0 ? 0 : (at + 1) % list.length;
-          break;
-        case "ArrowUp":
-          next = at < 0 ? list.length - 1 : (at - 1 + list.length) % list.length;
-          break;
-        case "Home":
-          next = 0;
-          break;
-        case "End":
-          next = list.length - 1;
-          break;
-        default:
-          return;
+      if (e.key === "ArrowDown") {
+        next = at < 0 ? 0 : (at + 1) % list.length;
+      } else if (e.key === "ArrowUp") {
+        next = at < 0 ? list.length - 1 : (at - 1 + list.length) % list.length;
+      } else if (e.key === "Home") {
+        next = 0;
+      } else if (e.key === "End") {
+        next = list.length - 1;
+      } else {
+        return;
       }
       e.preventDefault();
       focusItem(list[next]);

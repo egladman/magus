@@ -4,6 +4,8 @@
 // Unlike the graph explorer, a plain wheel scrolls the page, since the diagram sits in one; only
 // ctrl/cmd+wheel, which a trackpad pinch also sends, zooms.
 
+import { unreachable } from "../../../lib/unreachable";
+
 export interface ViewBox {
   readonly x: number;
   readonly y: number;
@@ -174,26 +176,21 @@ export interface KeyInput {
   readonly altKey: boolean;
 }
 
+const DIAGRAM_KEYS = new Map<string, DiagramAction>([
+  ["f", "fit"],
+  ["+", "zoom-in"],
+  ["=", "zoom-in"],
+  ["-", "zoom-out"],
+  ["_", "zoom-out"],
+  ["0", "actual"],
+  ["Escape", "clear"],
+]);
+
 // diagramKey maps a key pressed inside the diagram. A modified key is never ours: ctrl/cmd with
 // +, -, 0 is the browser's page zoom, and the console's chords all carry a modifier.
 export function diagramKey(e: KeyInput): DiagramAction | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
-  switch (e.key) {
-    case "f":
-      return "fit";
-    case "+":
-    case "=":
-      return "zoom-in";
-    case "-":
-    case "_":
-      return "zoom-out";
-    case "0":
-      return "actual";
-    case "Escape":
-      return "clear";
-    default:
-      return null;
-  }
+  return DIAGRAM_KEYS.get(e.key) ?? null;
 }
 
 export interface DiagramOptions {
@@ -493,20 +490,21 @@ export function attachDiagram(opts: DiagramOptions): DiagramController {
       switch (action) {
         case "fit":
           controller.fit();
-          break;
+          return;
         case "zoom-in":
           controller.zoom(ZOOM_STEP);
-          break;
+          return;
         case "zoom-out":
           controller.zoom(1 / ZOOM_STEP);
-          break;
+          return;
         case "actual":
           controller.actual();
-          break;
+          return;
         case "clear":
           controller.focusNode(null);
-          break;
+          return;
       }
+      return unreachable(action);
     },
     on,
   );

@@ -26,6 +26,7 @@ import {
 } from "../../../lib/server";
 import { fail, fromPromise, ok, type Result } from "../../../gen/magus/types";
 import { reportFailure } from "../../../lib/notifications";
+import { unreachable } from "../../../lib/unreachable";
 import type { Status } from "../../../ui/status";
 import { str } from "./jobs";
 
@@ -196,9 +197,11 @@ export function anchorPhrase(model: RunPlanModel): string {
       return "following the running " + model.target;
     case "recent":
       return "last run: " + model.target;
-    default:
+    case "default":
+    case "explicit":
       return model.target;
   }
+  return unreachable(model.anchor);
 }
 
 // runOverviewLine is the one sentence the polite live region announces: how the view is anchored,

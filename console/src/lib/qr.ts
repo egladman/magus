@@ -404,27 +404,20 @@ function placeData(grid: Grid, codewords: number[], mask: number): Result<void> 
   return done;
 }
 
+const MASKS: readonly ((r: number, c: number) => boolean)[] = [
+  (r, c) => (r + c) % 2 === 0,
+  (r) => r % 2 === 0,
+  (_r, c) => c % 3 === 0,
+  (r, c) => (r + c) % 3 === 0,
+  (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+  (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+  (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+  (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+];
+
+// A mask outside 0-7 never darkens a module.
 function maskFn(mask: number, r: number, c: number): boolean {
-  switch (mask) {
-    case 0:
-      return (r + c) % 2 === 0;
-    case 1:
-      return r % 2 === 0;
-    case 2:
-      return c % 3 === 0;
-    case 3:
-      return (r + c) % 3 === 0;
-    case 4:
-      return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
-    case 5:
-      return ((r * c) % 2) + ((r * c) % 3) === 0;
-    case 6:
-      return (((r * c) % 2) + ((r * c) % 3)) % 2 === 0;
-    case 7:
-      return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0;
-    default:
-      return false;
-  }
+  return MASKS[mask]?.(r, c) ?? false;
 }
 
 // bchFormat computes the 15-bit BCH-coded format information for EC level M and

@@ -485,46 +485,35 @@ function onTreeKey(
     seatTabStop(ctx, n);
     n.focus();
   };
-  switch (k) {
-    case "ArrowDown":
-      focus(visible[i + 1]);
-      break;
-    case "ArrowUp":
-      focus(visible[i - 1]);
-      break;
-    case "ArrowRight":
-      if (hasKids && !li.classList.contains("pf-m-expanded")) {
-        ev.preventDefault();
-        setExpanded(li, true, ctx, spec.id);
-      } else if (hasKids) {
-        focus(visible[i + 1]);
-      }
-      break;
-    case "ArrowLeft":
-      if (hasKids && li.classList.contains("pf-m-expanded")) {
-        ev.preventDefault();
-        setExpanded(li, false, ctx, spec.id);
-      } else {
-        const parent = li.parentElement?.closest<HTMLLIElement>(".pf-v6-c-tree-view__list-item");
-        focus(parent ?? undefined);
-      }
-      break;
-    case "Home":
-      focus(visible[0]);
-      break;
-    case "End":
-      focus(visible[visible.length - 1]);
-      break;
-    case "Enter":
-    case " ":
-      // SELECT only, deliberately unlike the click. The arrow keys already own expansion here, so a
-      // Enter that also toggled would collapse the branch the reader just opened with ArrowRight.
+  if (k === "ArrowDown") {
+    focus(visible[i + 1]);
+  } else if (k === "ArrowUp") {
+    focus(visible[i - 1]);
+  } else if (k === "ArrowRight") {
+    if (hasKids && !li.classList.contains("pf-m-expanded")) {
       ev.preventDefault();
-      if (spec.select) activate();
-      else if (hasKids) setExpanded(li, !li.classList.contains("pf-m-expanded"), ctx, spec.id);
-      break;
-    default:
-      return;
+      setExpanded(li, true, ctx, spec.id);
+    } else if (hasKids) {
+      focus(visible[i + 1]);
+    }
+  } else if (k === "ArrowLeft") {
+    if (hasKids && li.classList.contains("pf-m-expanded")) {
+      ev.preventDefault();
+      setExpanded(li, false, ctx, spec.id);
+    } else {
+      const parent = li.parentElement?.closest<HTMLLIElement>(".pf-v6-c-tree-view__list-item");
+      focus(parent ?? undefined);
+    }
+  } else if (k === "Home") {
+    focus(visible[0]);
+  } else if (k === "End") {
+    focus(visible[visible.length - 1]);
+  } else if (k === "Enter" || k === " ") {
+    // SELECT only, deliberately unlike the click. The arrow keys already own expansion here, so a
+    // Enter that also toggled would collapse the branch the reader just opened with ArrowRight.
+    ev.preventDefault();
+    if (spec.select) activate();
+    else if (hasKids) setExpanded(li, !li.classList.contains("pf-m-expanded"), ctx, spec.id);
   }
 }
 
