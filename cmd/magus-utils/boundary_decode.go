@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"go/format"
 	"os"
@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-// runBoundaryDecode emits a strict Buzz-to-Go decoder per inbound type into
+// boundaryDecodeCommand emits a strict Buzz-to-Go decoder per inbound type into
 // internal/interp/bindings/gen/decode, plus the list of inbound types its round-trip
 // test iterates and the provider op table. -ops and -op-vars, given together, also emit
 // the ProviderOp type into bindgen and its values into package providerops.
@@ -28,62 +30,67 @@ import (
 // miss one it does.
 //
 // The decode package imports only vm and the boundaryPackages, so internal/spell can import it.
-func runBoundaryDecode(args []string) error {
-	fs := flag.NewFlagSet("boundarydecode", flag.ExitOnError)
-	outPath := fs.String("out", "", "output Go file path for the decoders")
-	listPath := fs.String("list", "", "output Go test file path for the inbound type list, in the bindings package")
-	bindingsPkg := fs.String("bindings-pkg", "", "package clause of internal/interp/bindings/gen, whose encoders the list calls")
-	opsPath := fs.String("ops", "", "output Go file path for the ProviderOp type, in the bindings package")
-	opVarsPath := fs.String("op-vars", "", "output Go file path for package providerops")
-	if err := fs.Parse(args); err != nil {
-		return err
+func boundaryDecodeCommand() command.Command {
+	var outPath, listPath, bindingsPkg, opsPath, opVarsPath string
+	return command.Command{
+		Name:  "boundarydecode",
+		Short: "Generate the Buzz-to-Go decoder of each inbound type",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Doc: "output Go file path for the decoders", Target: &outPath},
+			{Name: "list", Kind: command.String, Doc: "output Go test file path for the inbound type list, in the bindings package", Target: &listPath},
+			{Name: "bindings-pkg", Kind: command.String, Doc: "package clause of internal/interp/bindings/gen, whose encoders the list calls", Target: &bindingsPkg},
+			{Name: "ops", Kind: command.String, Doc: "output Go file path for the ProviderOp type, in the bindings package", Target: &opsPath},
+			{Name: "op-vars", Kind: command.String, Doc: "output Go file path for package providerops", Target: &opVarsPath},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if outPath == "" || listPath == "" || bindingsPkg == "" || (opsPath == "") != (opVarsPath == "") {
+				return exit.Usagef("usage: magus-utils boundarydecode -out <decode.go> -list <inbound_list_test.go> -bindings-pkg <package> [-ops <boundary_ops.go> -op-vars <providerops.go>]")
+			}
+			entries := inboundTypes()
+			e := newDecodeEmitter(entries)
+			for _, entry := range entries {
+				if err := e.emitStruct(entry); err != nil {
+					return fmt.Errorf("inbound type %s: %w", entry.Name, err)
+				}
+			}
+			if err := emitProviderFuncs(e); err != nil {
+				return err
+			}
+			src, err := e.file()
+			if err != nil {
+				return err
+			}
+			if err := emit.File(outPath, src); err != nil {
+				return err
+			}
+			list, err := e.listFile(entries, bindingsPkg)
+			if err != nil {
+				return err
+			}
+			if err := emit.File(listPath, list); err != nil {
+				return err
+			}
+			if opsPath == "" {
+				return nil
+			}
+			opType, err := renderProviderOpType(bindingsPkg)
+			if err != nil {
+				return err
+			}
+			if err := emit.File(opsPath, opType); err != nil {
+				return err
+			}
+			opVars, err := renderProviderOpVars(bindingsPkg)
+			if err != nil {
+				return err
+			}
+			// providerops is its own package, so a fresh checkout may not hold its directory yet.
+			if err := os.MkdirAll(filepath.Dir(opVarsPath), 0o755); err != nil {
+				return err
+			}
+			return emit.File(opVarsPath, opVars)
+		},
 	}
-	if *outPath == "" || *listPath == "" || *bindingsPkg == "" || (*opsPath == "") != (*opVarsPath == "") {
-		return fmt.Errorf("usage: magus-utils boundarydecode -out <decode.go> -list <inbound_list_test.go> -bindings-pkg <package> [-ops <boundary_ops.go> -op-vars <providerops.go>]")
-	}
-	entries := inboundTypes()
-	e := newDecodeEmitter(entries)
-	for _, entry := range entries {
-		if err := e.emitStruct(entry); err != nil {
-			return fmt.Errorf("inbound type %s: %w", entry.Name, err)
-		}
-	}
-	if err := emitProviderFuncs(e); err != nil {
-		return err
-	}
-	src, err := e.file()
-	if err != nil {
-		return err
-	}
-	if err := emit.File(*outPath, src); err != nil {
-		return err
-	}
-	list, err := e.listFile(entries, *bindingsPkg)
-	if err != nil {
-		return err
-	}
-	if err := emit.File(*listPath, list); err != nil {
-		return err
-	}
-	if *opsPath == "" {
-		return nil
-	}
-	opType, err := renderProviderOpType(*bindingsPkg)
-	if err != nil {
-		return err
-	}
-	if err := emit.File(*opsPath, opType); err != nil {
-		return err
-	}
-	opVars, err := renderProviderOpVars(*bindingsPkg)
-	if err != nil {
-		return err
-	}
-	// providerops is its own package, so a fresh checkout may not hold its directory yet.
-	if err := os.MkdirAll(filepath.Dir(*opVarsPath), 0o755); err != nil {
-		return err
-	}
-	return emit.File(*opVarsPath, opVars)
 }
 
 // decodeEmitter renders decoders the way buzzValueEmitter renders encoders: plain field

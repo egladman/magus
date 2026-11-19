@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/importer"
@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/codec"
 )
 
@@ -31,30 +32,35 @@ var publicGoPackages = []string{
 	"github.com/egladman/magus/std",
 }
 
-// runGoAPI writes the exported Go API of the public packages as a sorted .lock, in
+// goAPICommand writes the exported Go API of the public packages as a sorted .lock, in
 // the same one-line-per-element shape as api.lock: a removed or changed line is a
 // break for every program that imports magus as a library.
-func runGoAPI(args []string) error {
-	fs := flag.NewFlagSet("goapi", flag.ContinueOnError)
-	out := fs.String("out", "", "write the Go API lock to this path (default: stdout)")
-	dir := fs.String("dir", ".", "module root the packages are listed from")
-	if err := fs.Parse(args); err != nil {
-		return err
+func goAPICommand() command.Command {
+	var out, dir string
+	return command.Command{
+		Name:  "goapi",
+		Short: "Write the public Go API lock",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Doc: "write the Go API lock to this path (default: stdout)", Target: &out},
+			{Name: "dir", Kind: command.String, Default: ".", Doc: "module root the packages are listed from", Target: &dir},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			pkgs, err := loadGoPackages(dir)
+			if err != nil {
+				return err
+			}
+			if leaks := internalLeaks(pkgs); len(leaks) > 0 {
+				return fmt.Errorf("goapi: %d exported declarations name an internal type, which no caller outside this module can construct,"+
+					" so unexport, move or retype each before the lock is written: %s", len(leaks), strings.Join(leaks, ", "))
+			}
+			data := []byte(strings.Join(renderGoAPI(pkgs), "\n") + "\n")
+			if out == "" {
+				_, err := os.Stdout.Write(data)
+				return err
+			}
+			return emit.File(out, data)
+		},
 	}
-	pkgs, err := loadGoPackages(*dir)
-	if err != nil {
-		return err
-	}
-	if leaks := internalLeaks(pkgs); len(leaks) > 0 {
-		return fmt.Errorf("goapi: %d exported declarations name an internal type, which no caller outside this module can construct,"+
-			" so unexport, move or retype each before the lock is written: %s", len(leaks), strings.Join(leaks, ", "))
-	}
-	data := []byte(strings.Join(renderGoAPI(pkgs), "\n") + "\n")
-	if *out == "" {
-		_, err := os.Stdout.Write(data)
-		return err
-	}
-	return emit.File(*out, data)
 }
 
 // listedPackage is the part of `go list -json` this tool reads.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -283,7 +286,7 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 	return manifests, nil
 }
 
-// runCut folds the changelog fragments in unreleasedDir into a
+// cutCommand folds the changelog fragments in unreleasedDir into a
 // releases/v<version>.yaml manifest, alongside the size and SHA-256 of every
 // artifact in artifactsDir, and deletes the fragments it folded: the manifest owns
 // that text now, and the docs changelog page renders it from there.
@@ -296,30 +299,29 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 //
 // The MAGUS_SIGNING_KEY env var is NOT required here; signing SHA256SUMS is a
 // separate step (the release-sign target). The manifest itself is not signed; only
-// index.json is signed (by runReleaseIndex).
-func runCut(args []string) error {
-	// Simple flag parsing without flag package to avoid import bloat.
+// index.json is signed (by releaseIndexCommand).
+func cutCommand() command.Command {
 	var version, artifactsDir, unreleasedDir, outDir string
-	for i := 0; i < len(args)-1; i++ {
-		switch args[i] {
-		case "-version":
-			version = args[i+1]
-			i++
-		case "-artifacts":
-			artifactsDir = args[i+1]
-			i++
-		case "-unreleased":
-			unreleasedDir = args[i+1]
-			i++
-		case "-out":
-			outDir = args[i+1]
-			i++
-		}
+	return command.Command{
+		Name:  "cut",
+		Short: "Fold the changelog fragments into a release manifest",
+		Usage: "magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases",
+		Flags: []command.Flag{
+			{Name: "version", Kind: command.String, Doc: "the `version` to cut, such as v0.2.0", Target: &version},
+			{Name: "artifacts", Kind: command.String, Doc: "the `dir` holding the release artifacts", Target: &artifactsDir},
+			{Name: "unreleased", Kind: command.String, Doc: "the `dir` holding the changelog fragments", Target: &unreleasedDir},
+			{Name: "out", Kind: command.String, Doc: "the `dir` the manifest is written to", Target: &outDir},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if version == "" || artifactsDir == "" || unreleasedDir == "" || outDir == "" {
+				return exit.Usagef("usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases")
+			}
+			return cut(version, artifactsDir, unreleasedDir, outDir)
+		},
 	}
-	if version == "" || artifactsDir == "" || unreleasedDir == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases")
-	}
+}
 
+func cut(version, artifactsDir, unreleasedDir, outDir string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", outDir, err)
 	}
@@ -423,7 +425,7 @@ func removeFragments(frags []fragment) error {
 	return nil
 }
 
-// runReleaseIndex builds index.json from releases/*.yaml and signs those exact
+// releaseIndexCommand builds index.json from releases/*.yaml and signs those exact
 // bytes into index.json.sig. Both land in outDir, which is the tracked
 // docs/gen/public/release/; the site render copies that directory out verbatim
 // rather than regenerating it, so the signature covers the bytes a client
@@ -435,31 +437,29 @@ func removeFragments(frags []fragment) error {
 // index.json is rendered on every main push and signed only on a tag, so a
 // renderer that could write it would overwrite a signed file with an unsigned one
 // the next time anything merged.
-func runReleaseIndex(args []string) error {
+func releaseIndexCommand() command.Command {
 	var releasesDir, outDir, expiresAt string
-	var skipSign bool
-	for i := 0; i < len(args)-1; i++ {
-		switch args[i] {
-		case "-releases":
-			releasesDir = args[i+1]
-			i++
-		case "-out":
-			outDir = args[i+1]
-			i++
-		case "-expires":
-			expiresAt = args[i+1]
-			i++
-		}
+	var sign bool
+	return command.Command{
+		Name:  "release-index",
+		Short: "Build and sign the release index",
+		Usage: "magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]",
+		Flags: []command.Flag{
+			{Name: "releases", Kind: command.String, Doc: "the `dir` holding releases/*.yaml", Target: &releasesDir},
+			{Name: "out", Kind: command.String, Doc: "the `dir` index.json and its signature are written to", Target: &outDir},
+			{Name: "expires", Kind: command.String, Doc: "when the index expires, as an RFC3339 `time`", Target: &expiresAt},
+			{Name: "sign", Kind: command.Bool, Default: true, Doc: "sign index.json into index.json.sig", Target: &sign},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if releasesDir == "" || outDir == "" {
+				return exit.Usagef("usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]")
+			}
+			return releaseIndex(releasesDir, outDir, expiresAt, !sign)
+		},
 	}
-	for _, a := range args {
-		if a == "-no-sign" {
-			skipSign = true
-		}
-	}
-	if releasesDir == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils release-index -releases ./releases -out ./docs/gen/public/release [-expires <RFC3339>] [-no-sign]")
-	}
+}
 
+func releaseIndex(releasesDir, outDir, expiresAt string, skipSign bool) error {
 	manifests, err := loadManifests(releasesDir)
 	if err != nil {
 		return err

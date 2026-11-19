@@ -120,7 +120,7 @@ var _ time.Time
 }
 
 func TestRunContract(t *testing.T) {
-	table := readGenerated(t, runContract, func(out string) []string {
+	table := readGenerated(t, scribe("contract"), func(out string) []string {
 		return []string{"-src", contractSrc, "-out", out}
 	})
 	assert.Contains(t, table, `{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false,`)
@@ -133,17 +133,17 @@ func TestRunContract(t *testing.T) {
 	assert.Contains(t, table, "func decodeContractTargets(v vm.Value) (map[string]spells.Command, error) {")
 	assert.Contains(t, table, "func decodeContractRequiredGlobs(v vm.Value) ([]types.Path, error) {")
 
-	page := readGenerated(t, runContract, func(out string) []string { return []string{"-src", contractSrc, "-docs", out} })
+	page := readGenerated(t, scribe("contract"), func(out string) []string { return []string{"-src", contractSrc, "-docs", out} })
 	assert.Contains(t, page, "generated_from: internal/spell/contract.go")
 	assert.Contains(t, page, "## mgs_listTargets\n\n```buzz\nexport fun mgs_listTargets() > {str: fun(Target) Command}\n```")
 	assert.Contains(t, page, "Required. The spell's name")
 
-	assertDeterministic(t, runContract, func(out string) []string {
+	assertDeterministic(t, scribe("contract"), func(out string) []string {
 		return []string{"-src", contractSrc, "-out", out}
 	})
 
 	t.Run("no -src", func(t *testing.T) {
-		err := runContract([]string{"-out", "x.go"})
+		err := scribe("contract")([]string{"-out", "x.go"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})

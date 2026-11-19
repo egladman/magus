@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,15 +18,25 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// TestUsageNamesEverySubcommand: the usage line was maintained by hand and named
-// 13 of the 20 registered scribes, so seven subcommands were unreachable to
-// anyone who did not read the source.
-func TestUsageNamesEverySubcommand(t *testing.T) {
-	got := usageLine()
-	for name := range scribes {
-		require.Contains(t, got, name, "usage does not name %q", name)
+// TestEveryScribeIsDeclared: Invoke checks the whole tree before it parses, so
+// -h passes only when every scribe declares runnable flags and a Run. The help
+// it prints names each one.
+func TestEveryScribeIsDeclared(t *testing.T) {
+	var stdout strings.Builder
+	_, err := command.Invoke(context.Background(), root(), []string{"-h"}, command.Streams{Stdout: &stdout, Stderr: io.Discard})
+	require.ErrorIs(t, err, flag.ErrHelp)
+	for _, c := range root().Children {
+		require.Contains(t, stdout.String(), fmt.Sprintf("  %s ", c.Name))
 	}
-	require.Equal(t, len(scribes)-1, strings.Count(got, "|"), "one separator per subcommand pair")
+}
+
+// scribe runs the named scribe as the command line would, returning its error.
+func scribe(name string) func(args []string) error {
+	return func(args []string) error {
+		_, err := command.Invoke(context.Background(), root(), append([]string{name}, args...),
+			command.Streams{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard})
+		return err
+	}
 }
 
 // readGenerated runs one scribe into a fresh path and returns what it wrote.

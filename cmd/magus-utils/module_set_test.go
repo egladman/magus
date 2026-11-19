@@ -56,7 +56,7 @@ func TestRenderModuleSet(t *testing.T) {
 func TestRunModuleSet(t *testing.T) {
 	t.Run("writes both build-tagged files", func(t *testing.T) {
 		dir := t.TempDir()
-		require.NoError(t, runModuleSet([]string{"-outdir", dir, "-pkg", "bindgen"}))
+		require.NoError(t, scribe("moduleset")([]string{"-outdir", dir, "-pkg", "bindgen"}))
 
 		native, err := os.ReadFile(filepath.Join(dir, "modules.go"))
 		require.NoError(t, err)
@@ -72,19 +72,19 @@ func TestRunModuleSet(t *testing.T) {
 	})
 
 	t.Run("no -outdir", func(t *testing.T) {
-		err := runModuleSet(nil)
+		err := scribe("moduleset")(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})
 
 	t.Run("no -pkg", func(t *testing.T) {
-		err := runModuleSet([]string{"-outdir", t.TempDir()})
+		err := scribe("moduleset")([]string{"-outdir", t.TempDir()})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "-pkg <package>")
 	})
 
 	t.Run("missing outdir", func(t *testing.T) {
-		err := runModuleSet([]string{"-outdir", filepath.Join(t.TempDir(), "absent"), "-pkg", "bindgen"})
+		err := scribe("moduleset")([]string{"-outdir", filepath.Join(t.TempDir(), "absent"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "modules.go")
 	})

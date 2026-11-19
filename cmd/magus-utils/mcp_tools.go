@@ -12,47 +12,54 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/std"
 )
 
-func runMCPTools(args []string) error {
-	fs := flag.NewFlagSet("mcptools", flag.ExitOnError)
-	out := fs.String("out", "", "output path for the generated registry .go file")
-	pkg := fs.String("pkg", "", "package clause of the generated file")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *out == "" || *pkg == "" {
-		return fmt.Errorf("usage: magus-utils mcptools -out <file> -pkg <package>")
-	}
+func mcpToolsCommand() command.Command {
+	var out, pkg string
+	return command.Command{
+		Name:  "mcptools",
+		Short: "Generate the MCP tool registry",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Doc: "output path for the generated registry .go file", Target: &out},
+			{Name: "pkg", Kind: command.String, Doc: "package clause of the generated file", Target: &pkg},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if out == "" || pkg == "" {
+				return exit.Usagef("usage: magus-utils mcptools -out <file> -pkg <package>")
+			}
 
-	mods := hostmodules.All()
-	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
+			mods := hostmodules.All()
+			slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 
-	var tools []std.MCPTool
-	for _, m := range mods {
-		tools = append(tools, m.MCPTools...)
-	}
-	if len(tools) == 0 {
-		return fmt.Errorf("no module declares an MCP tool, refusing to write an empty registry")
-	}
+			var tools []std.MCPTool
+			for _, m := range mods {
+				tools = append(tools, m.MCPTools...)
+			}
+			if len(tools) == 0 {
+				return fmt.Errorf("no module declares an MCP tool, refusing to write an empty registry")
+			}
 
-	src, err := renderMCPTools(tools, *pkg)
-	if err != nil {
-		return err
+			src, err := renderMCPTools(tools, pkg)
+			if err != nil {
+				return err
+			}
+			if err := emit.Go(out, src); err != nil {
+				return fmt.Errorf("write %s: %w", out, err)
+			}
+			fmt.Printf("wrote %s (%d tools)\n", out, len(tools))
+			return nil
+		},
 	}
-	if err := emit.Go(*out, src); err != nil {
-		return fmt.Errorf("write %s: %w", *out, err)
-	}
-	fmt.Printf("wrote %s (%d tools)\n", *out, len(tools))
-	return nil
 }
 
 // mcpParamType maps a declared param type to the type name

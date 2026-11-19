@@ -1,63 +1,59 @@
 package main
 
 import (
-	"fmt"
-	"maps"
-	"os"
-	"slices"
-	"strings"
+	"context"
+
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
-// scribes maps a subcommand name to its generator. Each reads a source of truth
-// and writes the derived artifact; see the per-subcommand file for the details.
-var scribes = map[string]func(args []string) error{
-	"types":           runTypes,
-	"tstypes":         runTSTypes,
-	"boundarylist":    runBoundaryList,
-	"boundaryobjects": runBoundaryObjects,
-	"boundarydecode":  runBoundaryDecode,
-	"contract":        runContract,
-	"mcptools":        runMCPTools,
-	"jobschema":       runJobSchema,
-	"moduledecls":     runModuleDecls,
-	"moduleset":       runModuleSet,
-	"bindings":        runBindings,
-	"libmodules":      runLibModules,
-	"completions":     runCompletions,
-	"diffdemo":        runDiffDemo,
-	"cliflags":        runCLIFlags,
-	"config":          runConfig,
-	"api":             runAPI,
-	"goapi":           runGoAPI,
-	"cut":             runCut,
-	"dev-shims":       runDevShims,
-	"release-index":   runReleaseIndex,
-}
+func main() { command.Main(root()) }
 
-func main() {
-	if len(os.Args) < 2 {
-		usage()
-		os.Exit(2)
-	}
-	sub := os.Args[1]
-	run, ok := scribes[sub]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "magus-utils: unknown subcommand %q\n", sub)
-		usage()
-		os.Exit(2)
-	}
-	if err := run(os.Args[2:]); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-utils %s: %v\n", sub, err)
-		os.Exit(1)
+// root declares every scribe. Each reads a source of truth and writes the
+// derived artifact; see the per-subcommand file for the details. It builds
+// fresh flag targets on each call, so tests can invoke it repeatedly.
+func root() command.Command {
+	return command.Command{
+		Name:  "magus-utils",
+		Short: "Generate the artifacts magus derives from its sources of truth.",
+		Children: []command.Command{
+			apiCommand(),
+			bindingsCommand(),
+			boundaryDecodeCommand(),
+			boundaryListCommand(),
+			boundaryObjectsCommand(),
+			cliFlagsCommand(),
+			completionsCommand(),
+			configCommand(),
+			contractCommand(),
+			cutCommand(),
+			devShimsCommand(),
+			diffDemoCommand(),
+			goAPICommand(),
+			jobSchemaCommand(),
+			libModulesCommand(),
+			mcpToolsCommand(),
+			moduleDeclsCommand(),
+			moduleSetCommand(),
+			releaseIndexCommand(),
+			tsTypesCommand(),
+			typesCommand(),
+		},
 	}
 }
 
-// usageLine lists every registered subcommand. Derived from scribes rather than
-// written out: the hand-maintained list named 13 of the 20 that existed.
-func usageLine() string {
-	return fmt.Sprintf("usage: magus-utils <%s> [flags]", strings.Join(slices.Sorted(maps.Keys(scribes)), "|"))
-}
-
-func usage() {
-	fmt.Fprintln(os.Stderr, usageLine())
+// moduleDeclsCommand declares moduledecls, whose own flag parsing lives in
+// module_decls.go: another change owns that file, so this hands it its one flag
+// back as arguments until that file declares its command here.
+func moduleDeclsCommand() command.Command {
+	var outDir string
+	return command.Command{
+		Name:  "moduledecls",
+		Short: "Write the per-module .buzz declarations",
+		Flags: []command.Flag{
+			{Name: "outdir", Kind: command.String, Doc: "output directory for the per-module .buzz declarations", Target: &outDir},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return runModuleDecls(append([]string{"-outdir", outDir}, inv.Args...))
+		},
+	}
 }

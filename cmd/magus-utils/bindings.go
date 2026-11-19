@@ -6,7 +6,7 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"go/format"
 	"path"
@@ -17,60 +17,67 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	"golang.org/x/sync/errgroup"
 )
 
-func runBindings(args []string) error {
-	fs := flag.NewFlagSet("bindings", flag.ExitOnError)
-	moduleName := fs.String("module", "", "module name to generate (e.g. fs)")
-	lang := fs.String("lang", "buzz", "codegen target: buzz")
-	outPath := fs.String("out", "", "output file path")
-	outDir := fs.String("outdir", "", "with -all, the directory each <module>.go is written to")
-	all := fs.Bool("all", false, "generate every module with an Impl, concurrently")
-	pkg := fs.String("pkg", "", "package clause of the generated file")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *all {
-		if *outDir == "" || *pkg == "" {
-			return fmt.Errorf("usage: magus-utils bindings -all -outdir <dir> -pkg <package>")
-		}
-		return runAllBindings(*outDir, *pkg)
-	}
+func bindingsCommand() command.Command {
+	var moduleName, lang, outPath, outDir, pkg string
+	var all bool
+	return command.Command{
+		Name:  "bindings",
+		Short: "Generate the Buzz bindings of a host module",
+		Flags: []command.Flag{
+			{Name: "module", Kind: command.String, Doc: "module name to generate (e.g. fs)", Target: &moduleName},
+			{Name: "lang", Kind: command.String, Default: "buzz", Doc: "codegen target: buzz", Target: &lang},
+			{Name: "out", Kind: command.String, Doc: "output file path", Target: &outPath},
+			{Name: "outdir", Kind: command.String, Doc: "with -all, the directory each <module>.go is written to", Target: &outDir},
+			{Name: "all", Kind: command.Bool, Default: false, Doc: "generate every module with an Impl, concurrently", Target: &all},
+			{Name: "pkg", Kind: command.String, Doc: "package clause of the generated file", Target: &pkg},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if all {
+				if outDir == "" || pkg == "" {
+					return exit.Usagef("usage: magus-utils bindings -all -outdir <dir> -pkg <package>")
+				}
+				return runAllBindings(outDir, pkg)
+			}
 
-	if *moduleName == "" || *outPath == "" || *pkg == "" {
-		return fmt.Errorf("usage: magus-utils bindings -module <name> -lang buzz -out <path> -pkg <package>")
-	}
+			if moduleName == "" || outPath == "" || pkg == "" {
+				return exit.Usagef("usage: magus-utils bindings -module <name> -lang buzz -out <path> -pkg <package>")
+			}
 
-	m, ok := hostmodules.Get(*moduleName)
-	if !ok {
-		return fmt.Errorf("unknown module %q", *moduleName)
-	}
+			m, ok := hostmodules.Get(moduleName)
+			if !ok {
+				return fmt.Errorf("unknown module %q", moduleName)
+			}
 
-	if *lang != "buzz" {
-		return fmt.Errorf("unknown lang %q (have: buzz)", *lang)
-	}
+			if lang != "buzz" {
+				return fmt.Errorf("unknown lang %q (have: buzz)", lang)
+			}
 
-	// Checked across EVERY module, not just the one being generated: the
-	// declarations are one table, and a per-module check would report a mismatch
-	// only when that module happened to be the regenerate target.
-	if err := checkObjectDecls(hostmodules.All()); err != nil {
-		return err
+			// Checked across EVERY module, not just the one being generated: the
+			// declarations are one table, and a per-module check would report a mismatch
+			// only when that module happened to be the regenerate target.
+			if err := checkObjectDecls(hostmodules.All()); err != nil {
+				return err
+			}
+			out, err := emitBuzz(m, pkg)
+			if err != nil {
+				return fmt.Errorf("render buzz declarations: %w", err)
+			}
+			if err := emit.File(outPath, out); err != nil {
+				return fmt.Errorf("write %s: %w", outPath, err)
+			}
+			return nil
+		},
 	}
-	out, err := emitBuzz(m, *pkg)
-	if err != nil {
-		return fmt.Errorf("render buzz declarations: %w", err)
-	}
-	if err := emit.File(*outPath, out); err != nil {
-		return fmt.Errorf("write %s: %w", *outPath, err)
-	}
-	return nil
 }
 
 // runAllBindings writes every module's trampolines in one process, one

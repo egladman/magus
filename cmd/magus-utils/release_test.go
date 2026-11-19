@@ -313,7 +313,7 @@ func TestRunReleaseIndex_UnsetKeyIsFatal(t *testing.T) {
 	t.Setenv("MAGUS_SIGNING_KEY", "")
 	relDir, outDir := seedReleaseIndexInput(t)
 
-	err := runReleaseIndex([]string{"-releases", relDir, "-out", outDir})
+	err := scribe("release-index")([]string{"-releases", relDir, "-out", outDir})
 	require.Error(t, err, "an unsigned index must not pass silently")
 	require.Contains(t, err.Error(), "-no-sign", "the error must name the opt-out")
 }
@@ -323,7 +323,7 @@ func TestRunReleaseIndex_NoSign(t *testing.T) {
 	t.Setenv("MAGUS_SIGNING_KEY", "")
 	relDir, outDir := seedReleaseIndexInput(t)
 
-	require.NoError(t, runReleaseIndex([]string{"-releases", relDir, "-out", outDir, "-no-sign"}))
+	require.NoError(t, scribe("release-index")([]string{"-releases", relDir, "-out", outDir, "-no-sign"}))
 
 	_, err := os.Stat(filepath.Join(outDir, "index.json"))
 	require.NoError(t, err, "index.json is written even unsigned")
@@ -341,7 +341,7 @@ func TestRunReleaseIndex_WithEphemeralKey(t *testing.T) {
 	t.Cleanup(func() { overrideVerifyPubKey = nil })
 
 	relDir, outDir := seedReleaseIndexInput(t)
-	require.NoError(t, runReleaseIndex([]string{"-releases", relDir, "-out", outDir}))
+	require.NoError(t, scribe("release-index")([]string{"-releases", relDir, "-out", outDir}))
 
 	idxData, err := os.ReadFile(filepath.Join(outDir, "index.json"))
 	require.NoError(t, err)
@@ -363,7 +363,7 @@ func TestRunReleaseIndex_SigningKeyMustMatchTheEmbeddedKey(t *testing.T) {
 	t.Setenv("MAGUS_SIGNING_KEY", hex.EncodeToString(priv))
 
 	relDir, outDir := seedReleaseIndexInput(t)
-	err = runReleaseIndex([]string{"-releases", relDir, "-out", outDir})
+	err = scribe("release-index")([]string{"-releases", relDir, "-out", outDir})
 	require.Error(t, err, "signing with a key no binary carries must fail the release")
 	require.Contains(t, err.Error(), "signature verification failed")
 }
@@ -372,7 +372,7 @@ func TestRunReleaseIndex_SigningKeyMustMatchTheEmbeddedKey(t *testing.T) {
 // than published: SelectRelease rejects an index with no releases, so an empty
 // one strands every client that fetches it.
 func TestRunReleaseIndex_NoManifests(t *testing.T) {
-	err := runReleaseIndex([]string{"-releases", t.TempDir(), "-out", t.TempDir()})
+	err := scribe("release-index")([]string{"-releases", t.TempDir(), "-out", t.TempDir()})
 	require.Error(t, err, "must fail when there is nothing to index")
 }
 
@@ -444,7 +444,7 @@ func TestIsReleaseAsset(t *testing.T) {
 	}
 }
 
-// TestRunCut_HappyPath verifies that runCut writes a complete ReleaseManifest
+// TestRunCut_HappyPath verifies that scribe("cut") writes a complete ReleaseManifest
 // from a directory containing real artifacts and the changelog fragments, and
 // deletes the fragments it folded.
 func TestRunCut_HappyPath(t *testing.T) {
@@ -460,7 +460,7 @@ func TestRunCut_HappyPath(t *testing.T) {
 	writeFragment(t, unreleasedDir, "a-feature.md", "### Added\n\n- **Brand new feature.**\n")
 
 	outDir := t.TempDir()
-	require.NoError(t, runCut([]string{
+	require.NoError(t, scribe("cut")([]string{
 		"-version", "v0.2.0",
 		"-artifacts", artifactsDir,
 		"-unreleased", unreleasedDir,
@@ -529,7 +529,7 @@ func TestCutLeavesNoFragmentBehind(t *testing.T) {
 
 	relDir := t.TempDir()
 	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
-	require.NoError(t, runCut([]string{
+	require.NoError(t, scribe("cut")([]string{
 		"-version", "v0.2.0", "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
 	}))
 
@@ -551,7 +551,7 @@ func TestRunCut_PrereleaseKeepsFragmentsForTheFinalCut(t *testing.T) {
 	cut := func(version string) {
 		t.Helper()
 		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, fmt.Sprintf("magus_%s_linux_amd64_static.tar.gz", version)), []byte(version), 0o644))
-		require.NoError(t, runCut([]string{
+		require.NoError(t, scribe("cut")([]string{
 			"-version", version, "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
 		}))
 	}
@@ -594,7 +594,7 @@ func TestRunCut_PrereleaseKeepsFragmentsForTheFinalCut(t *testing.T) {
 	}, manifests)
 }
 
-// TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is
+// TestRunCut_ImmutabilityGuard covers all three things scribe("cut") does when the manifest is
 // already there. A publish job can fail at any step after the cut, so "already cut" has to
 // be a state a rerun passes THROUGH when the bytes agree, and a refusal when they do not.
 func TestRunCut_ImmutabilityGuard(t *testing.T) {
@@ -608,7 +608,7 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 		return artifactsDir, unreleasedDir, t.TempDir()
 	}
 	cut := func(artifactsDir, unreleasedDir, outDir string) error {
-		return runCut([]string{
+		return scribe("cut")([]string{
 			"-version", "v0.1.0", "-artifacts", artifactsDir,
 			"-unreleased", unreleasedDir, "-out", outDir,
 		})
@@ -680,11 +680,11 @@ func TestRunCut_FailedFragmentDeleteIsRetryable(t *testing.T) {
 
 	outDir := t.TempDir()
 	args := []string{"-version", "v0.2.0", "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", outDir}
-	require.ErrorContains(t, runCut(args), "rerun cut to finish")
+	require.ErrorContains(t, scribe("cut")(args), "rerun cut to finish")
 	require.FileExists(t, filepath.Join(outDir, "v0.2.0.yaml"), "the notes landed before any delete")
 
 	require.NoError(t, os.Chmod(unreleasedDir, 0o755))
-	require.NoError(t, runCut(args), "the retry must not be wedged on an immutable manifest")
+	require.NoError(t, scribe("cut")(args), "the retry must not be wedged on an immutable manifest")
 	require.NoFileExists(t, filepath.Join(unreleasedDir, "x.md"))
 }
 
@@ -698,7 +698,7 @@ func TestRunCut_FailedManifestWriteLeavesNoTemp(t *testing.T) {
 	outDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(outDir, "v0.2.0.yaml", "occupied"), 0o755))
 
-	require.Error(t, runCut([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
+	require.Error(t, scribe("cut")([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
 		"-unreleased", unreleasedDir, "-out", outDir}))
 
 	entries, err := os.ReadDir(outDir)
@@ -717,13 +717,13 @@ func TestRunCut_RefusesNoFragments(t *testing.T) {
 	artifactsDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
 	outDir := t.TempDir()
-	err := runCut([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
+	err := scribe("cut")([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
 		"-unreleased", filepath.Join(t.TempDir(), "absent"), "-out", outDir})
 	require.ErrorContains(t, err, "holds no changelog fragments")
 	require.NoFileExists(t, filepath.Join(outDir, "v0.2.0.yaml"))
 }
 
-// TestRunCut_NoArtifactsGuard verifies that runCut refuses to write a hollow
+// TestRunCut_NoArtifactsGuard verifies that scribe("cut") refuses to write a hollow
 // manifest when the artifacts directory contains no recognized release assets.
 func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	artifactsDir := t.TempDir()
@@ -733,7 +733,7 @@ func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	unreleasedDir := t.TempDir()
 	writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
 
-	err := runCut([]string{
+	err := scribe("cut")([]string{
 		"-version", "v0.2.0",
 		"-artifacts", artifactsDir,
 		"-unreleased", unreleasedDir,

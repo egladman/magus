@@ -67,20 +67,20 @@ func TestResultModuleHoldsTheRenderedMirrors(t *testing.T) {
 
 func TestRunTypes(t *testing.T) {
 	t.Run("writes the mirror", func(t *testing.T) {
-		got := readGenerated(t, runTypes, func(out string) []string {
+		got := readGenerated(t, scribe("types"), func(out string) []string {
 			return []string{"-type", "ExecResult", "-out", out}
 		})
 		assert.Contains(t, got, "export object ExecResult {")
 	})
 
 	t.Run("deterministic", func(t *testing.T) {
-		assertDeterministic(t, runTypes, func(out string) []string {
+		assertDeterministic(t, scribe("types"), func(out string) []string {
 			return []string{"-type", "ExecResult", "-out", out}
 		})
 	})
 
 	t.Run("no -out", func(t *testing.T) {
-		err := runTypes([]string{"-type", "ExecResult"})
+		err := scribe("types")([]string{"-type", "ExecResult"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})
@@ -88,7 +88,7 @@ func TestRunTypes(t *testing.T) {
 	// A renamed or misspelled boundary type used to surface as "usage:", which reads
 	// as CLI misuse rather than as the registry gap it is.
 	t.Run("unknown type", func(t *testing.T) {
-		err := runTypes([]string{"-type", "NotDeclared", "-out", filepath.Join(t.TempDir(), "x.buzz")})
+		err := scribe("types")([]string{"-type", "NotDeclared", "-out", filepath.Join(t.TempDir(), "x.buzz")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown boundary type")
 		assert.Contains(t, err.Error(), "boundaryRoots")

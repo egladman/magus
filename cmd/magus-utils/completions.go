@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,13 +33,18 @@ var completionScripts = map[string]string{
 	"magus.ps1":  "powershell",
 }
 
-func runCompletions(args []string) error {
-	fs := flag.NewFlagSet("completions", flag.ExitOnError)
-	outDir := fs.String("out", "completions", "Directory holding the completion scripts")
-	if err := fs.Parse(args); err != nil {
-		return err
+func completionsCommand() command.Command {
+	var outDir string
+	return command.Command{
+		Name:  "completions",
+		Short: "Write magus's shell completion scripts",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Default: "completions", Doc: "Directory holding the completion scripts", Target: &outDir},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			return writeCompletions(outDir, slices.Concat(commands.Root.Spec.Children, []command.Command{commands.Help}))
+		},
 	}
-	return writeCompletions(*outDir, slices.Concat(commands.Root.Spec.Children, []command.Command{commands.Help}))
 }
 
 // writeCompletions fills the marked region of each completion script in dir with subs.

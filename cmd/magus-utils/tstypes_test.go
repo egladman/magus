@@ -15,7 +15,7 @@ func TestRunTSTypes(t *testing.T) {
 	t.Run("writes every -out", func(t *testing.T) {
 		dir := t.TempDir()
 		a, b := filepath.Join(dir, "a.ts"), filepath.Join(dir, "b.ts")
-		require.NoError(t, runTSTypes([]string{"-out", a, "-out", b}))
+		require.NoError(t, scribe("tstypes")([]string{"-out", a, "-out", b}))
 		gotA, err := os.ReadFile(a)
 		require.NoError(t, err)
 		gotB, err := os.ReadFile(b)
@@ -24,11 +24,11 @@ func TestRunTSTypes(t *testing.T) {
 	})
 
 	t.Run("deterministic", func(t *testing.T) {
-		assertDeterministic(t, runTSTypes, func(out string) []string { return []string{"-out", out} })
+		assertDeterministic(t, scribe("tstypes"), func(out string) []string { return []string{"-out", out} })
 	})
 
 	t.Run("no -out", func(t *testing.T) {
-		require.ErrorContains(t, runTSTypes(nil), "usage:")
+		require.ErrorContains(t, scribe("tstypes")(nil), "usage:")
 	})
 }
 

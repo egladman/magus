@@ -19,57 +19,60 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
+	"golang.org/x/sync/errgroup"
 )
 
-func runTypes(args []string) error {
-	fs := flag.NewFlagSet("types", flag.ExitOnError)
-	typeName := fs.String("type", "", "value type to mirror (e.g. ExecResult)")
-	outPath := fs.String("out", "", "output .buzz file path")
+func typesCommand() command.Command {
+	var typeName, outPath string
 	var from []string
-	fs.Func("from", "a Go file whose types go:generate lines are all rendered, concurrently; repeatable", func(v string) error {
-		from = append(from, v)
-		return nil
-	})
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if len(from) > 0 {
-		var g errgroup.Group
-		for _, goFile := range from {
-			g.Go(func() error { return renderListedMirrors(goFile) })
-		}
-		return g.Wait()
-	}
-	if *outPath == "" {
-		return fmt.Errorf("usage: magus-utils types -type <Name> -out <path.buzz>")
-	}
-	// Distinguished from the usage error above: a renamed or misspelled boundary type
-	// used to surface as "usage:", which reads as CLI misuse rather than as the registry
-	// gap it actually is.
-	entry, ok := boundaryTypeNamed(*typeName)
-	if !ok {
-		return fmt.Errorf("unknown boundary type %q: no host signature or boundaryRoots entry reaches it", *typeName)
-	}
+	return command.Command{
+		Name:  "types",
+		Short: "Write the Buzz mirror of a boundary type",
+		Flags: []command.Flag{
+			{Name: "type", Kind: command.String, Doc: "value type to mirror (e.g. ExecResult)", Target: &typeName},
+			{Name: "out", Kind: command.String, Doc: "output .buzz file path", Target: &outPath},
+			{Name: "from", Kind: command.StringList, Doc: "a Go file whose types go:generate lines are all rendered, concurrently; repeatable", Target: &from},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if len(from) > 0 {
+				var g errgroup.Group
+				for _, goFile := range from {
+					g.Go(func() error { return renderListedMirrors(goFile) })
+				}
+				return g.Wait()
+			}
+			if outPath == "" {
+				return exit.Usagef("usage: magus-utils types -type <Name> -out <path.buzz>")
+			}
+			// Distinguished from the usage error above: a renamed or misspelled boundary type
+			// used to surface as "usage:", which reads as CLI misuse rather than as the registry
+			// gap it actually is.
+			entry, ok := boundaryTypeNamed(typeName)
+			if !ok {
+				return fmt.Errorf("unknown boundary type %q: no host signature or boundaryRoots entry reaches it", typeName)
+			}
 
-	out, err := renderBuzzMirror(entry.Name, entry.Type)
-	if err != nil {
-		return err
+			out, err := renderBuzzMirror(entry.Name, entry.Type)
+			if err != nil {
+				return err
+			}
+			if err := emit.File(outPath, out); err != nil {
+				return fmt.Errorf("write %s: %w", outPath, err)
+			}
+			return nil
+		},
 	}
-	if err := emit.File(*outPath, out); err != nil {
-		return fmt.Errorf("write %s: %w", *outPath, err)
-	}
-	return nil
 }
 
 // renderListedMirrors renders every mirror the `types` go:generate lines of

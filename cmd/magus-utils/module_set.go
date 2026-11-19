@@ -13,7 +13,7 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"go/format"
 	"os"
@@ -22,44 +22,51 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/std"
 )
 
-func runModuleSet(args []string) error {
-	fs := flag.NewFlagSet("moduleset", flag.ExitOnError)
-	outDir := fs.String("outdir", "", "directory to write modules.go and modules_wasm.go into")
-	pkg := fs.String("pkg", "", "package clause of the generated files")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *outDir == "" || *pkg == "" {
-		return fmt.Errorf("usage: magus-utils moduleset -outdir <dir> -pkg <package>")
-	}
+func moduleSetCommand() command.Command {
+	var outDir, pkg string
+	return command.Command{
+		Name:  "moduleset",
+		Short: "Generate the host module registry",
+		Flags: []command.Flag{
+			{Name: "outdir", Kind: command.String, Doc: "directory to write modules.go and modules_wasm.go into", Target: &outDir},
+			{Name: "pkg", Kind: command.String, Doc: "package clause of the generated files", Target: &pkg},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if outDir == "" || pkg == "" {
+				return exit.Usagef("usage: magus-utils moduleset -outdir <dir> -pkg <package>")
+			}
 
-	mods := hostmodules.All()
-	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
+			mods := hostmodules.All()
+			slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 
-	for _, f := range []struct {
-		name    string
-		tag     string
-		wasm    bool
-		purpose string
-	}{
-		{"modules.go", "//go:build !wasm", false,
-			"the full host-module registry: every bare import name a Buzz session resolves\n// beyond Buzz's own stdlib, mapped to its generated Register trampoline."},
-		{"modules_wasm.go", "//go:build wasm", true,
-			"the wasm build's view: only the modules std marks WASM, which the browser\n// playground can install. modules.go holds the full set but is //go:build !wasm\n// because it references the IO trampolines."},
-	} {
-		src, err := renderModuleSet(mods, *pkg, f.tag, f.wasm, f.purpose)
-		if err != nil {
-			return fmt.Errorf("%s: %w", f.name, err)
-		}
-		if err := os.WriteFile(filepath.Join(*outDir, f.name), src, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", f.name, err)
-		}
+			for _, f := range []struct {
+				name    string
+				tag     string
+				wasm    bool
+				purpose string
+			}{
+				{"modules.go", "//go:build !wasm", false,
+					"the full host-module registry: every bare import name a Buzz session resolves\n// beyond Buzz's own stdlib, mapped to its generated Register trampoline."},
+				{"modules_wasm.go", "//go:build wasm", true,
+					"the wasm build's view: only the modules std marks WASM, which the browser\n// playground can install. modules.go holds the full set but is //go:build !wasm\n// because it references the IO trampolines."},
+			} {
+				src, err := renderModuleSet(mods, pkg, f.tag, f.wasm, f.purpose)
+				if err != nil {
+					return fmt.Errorf("%s: %w", f.name, err)
+				}
+				if err := os.WriteFile(filepath.Join(outDir, f.name), src, 0o644); err != nil {
+					return fmt.Errorf("write %s: %w", f.name, err)
+				}
+			}
+			fmt.Printf("wrote modules.go and modules_wasm.go (%d modules) to %s\n", len(mods), outDir)
+			return nil
+		},
 	}
-	fmt.Printf("wrote modules.go and modules_wasm.go (%d modules) to %s\n", len(mods), *outDir)
-	return nil
 }
 
 func renderModuleSet(mods []std.Module, pkg, buildTag string, wasmOnly bool, purpose string) ([]byte, error) {

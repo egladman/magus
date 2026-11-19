@@ -82,5 +82,5 @@ func (s *DevShimsSuite) TestADirectoryEntryIsSkippedAndNamed() {
 }
 
 func (s *DevShimsSuite) TestRootTakesNoPositionalArgument() {
-	s.ErrorContains(runDevShims([]string{"extra"}), "takes no arguments")
+	s.ErrorContains(scribe("dev-shims")([]string{"extra"}), "takes no arguments")
 }

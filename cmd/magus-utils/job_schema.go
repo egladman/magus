@@ -16,8 +16,8 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -34,6 +34,7 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/generate/godecl"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -107,31 +108,36 @@ var narrowedSets = map[string]func() []string{
 	"Code": permissibleCodeNames,
 }
 
-func runJobSchema(args []string) error {
-	fs := flag.NewFlagSet("jobschema", flag.ExitOnError)
-	out := fs.String("out", "internal/job/gen", "directory the schema files are written into")
-	if err := fs.Parse(args); err != nil {
-		return err
+func jobSchemaCommand() command.Command {
+	var out string
+	return command.Command{
+		Name:  "jobschema",
+		Short: "Write the job record schemas",
+		Flags: []command.Flag{
+			{Name: "out", Kind: command.String, Default: "internal/job/gen", Doc: "directory the schema files are written into", Target: &out},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			decls, err := jobDecls(jobRecords)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(out, 0o755); err != nil {
+				return err
+			}
+			for _, rec := range jobRecords {
+				body, err := renderJobSchema(rec, decls)
+				if err != nil {
+					return err
+				}
+				path := filepath.Join(out, rec.File)
+				if err := emit.File(path, body); err != nil {
+					return fmt.Errorf("write %s: %w", path, err)
+				}
+				fmt.Printf("wrote %s\n", path)
+			}
+			return nil
+		},
 	}
-	decls, err := jobDecls(jobRecords)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(*out, 0o755); err != nil {
-		return err
-	}
-	for _, rec := range jobRecords {
-		body, err := renderJobSchema(rec, decls)
-		if err != nil {
-			return err
-		}
-		path := filepath.Join(*out, rec.File)
-		if err := emit.File(path, body); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
-		}
-		fmt.Printf("wrote %s\n", path)
-	}
-	return nil
 }
 
 // renderJobSchema renders one record. Every rule it applies is derived:

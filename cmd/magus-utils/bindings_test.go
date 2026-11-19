@@ -97,25 +97,25 @@ func TestGoLiteral(t *testing.T) {
 
 func TestRunBindings(t *testing.T) {
 	t.Run("missing flags", func(t *testing.T) {
-		err := runBindings(nil)
+		err := scribe("bindings")(nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "usage:")
 	})
 
 	t.Run("no -pkg", func(t *testing.T) {
-		err := runBindings([]string{"-module", "fs", "-out", filepath.Join(t.TempDir(), "x.go")})
+		err := scribe("bindings")([]string{"-module", "fs", "-out", filepath.Join(t.TempDir(), "x.go")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "-pkg <package>")
 	})
 
 	t.Run("unknown module", func(t *testing.T) {
-		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
+		err := scribe("bindings")([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown module")
 	})
 
 	t.Run("unknown lang", func(t *testing.T) {
-		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
+		err := scribe("bindings")([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go"), "-pkg", "bindgen"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown lang")
 	})
@@ -127,7 +127,7 @@ func TestRunBindings(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(want), "\npackage bindgen\n")
 
-		got := readGenerated(t, runBindings, func(out string) []string {
+		got := readGenerated(t, scribe("bindings"), func(out string) []string {
 			return []string{"-module", "fs", "-lang", "buzz", "-out", out, "-pkg", "bindgen"}
 		})
 		assert.Equal(t, string(want), got)

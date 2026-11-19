@@ -4,7 +4,7 @@ package main
 
 import (
 	"bytes"
-	"flag"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/types"
 )
@@ -35,46 +37,51 @@ type contractFunc struct {
 	Decoded reflect.Type
 }
 
-// runContract renders the spell contract's signature table into the decode package
+// contractCommand renders the spell contract's signature table into the decode package
 // (-out) and its reference page (-docs), from the Contract struct in internal/spell.
 //
 // It PARSES that file rather than importing internal/spell: internal/spell imports the
 // decode package this writes, so linking it here would let a stale decode file stop the
 // generator that repairs it from building.
-func runContract(args []string) error {
-	fs := flag.NewFlagSet("contract", flag.ExitOnError)
-	srcPath := fs.String("src", "", "path to internal/spell/contract.go")
-	outPath := fs.String("out", "", "output Go file path for the signature table")
-	docsPath := fs.String("docs", "", "output Markdown path for the reference page")
-	if err := fs.Parse(args); err != nil {
-		return err
+func contractCommand() command.Command {
+	var srcPath, outPath, docsPath string
+	return command.Command{
+		Name:  "contract",
+		Short: "Render the spell contract's signature table and reference page",
+		Flags: []command.Flag{
+			{Name: "src", Kind: command.String, Doc: "path to internal/spell/contract.go", Target: &srcPath},
+			{Name: "out", Kind: command.String, Doc: "output Go file path for the signature table", Target: &outPath},
+			{Name: "docs", Kind: command.String, Doc: "output Markdown path for the reference page", Target: &docsPath},
+		},
+		Run: func(context.Context, command.Invocation) error {
+			if srcPath == "" || outPath == "" && docsPath == "" {
+				return exit.Usagef("usage: magus-utils contract -src <contract.go> [-out <contract.go>] [-docs <page.md>]")
+			}
+			funcs, err := readContract(srcPath, "Contract")
+			if err != nil {
+				return err
+			}
+			if outPath != "" {
+				harness, err := readContract(srcPath, "harnessContract")
+				if err != nil {
+					return err
+				}
+				src, err := renderContractTable(funcs, harness)
+				if err != nil {
+					return err
+				}
+				if err := emit.File(outPath, src); err != nil {
+					return err
+				}
+			}
+			if docsPath != "" {
+				if err := emit.File(docsPath, renderContractDocs(funcs)); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
-	if *srcPath == "" || *outPath == "" && *docsPath == "" {
-		return fmt.Errorf("usage: magus-utils contract -src <contract.go> [-out <contract.go>] [-docs <page.md>]")
-	}
-	funcs, err := readContract(*srcPath, "Contract")
-	if err != nil {
-		return err
-	}
-	if *outPath != "" {
-		harness, err := readContract(*srcPath, "harnessContract")
-		if err != nil {
-			return err
-		}
-		src, err := renderContractTable(funcs, harness)
-		if err != nil {
-			return err
-		}
-		if err := emit.File(*outPath, src); err != nil {
-			return err
-		}
-	}
-	if *docsPath != "" {
-		if err := emit.File(*docsPath, renderContractDocs(funcs)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // readContract parses the struct named structName out of path and resolves each field's
