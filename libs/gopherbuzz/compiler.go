@@ -374,9 +374,10 @@ func checkCode(t styp) int32 {
 		return vmpackage.CheckStr
 	case sBool:
 		return vmpackage.CheckBool
-	default:
+	case sUnknown:
 		return 0
 	}
+	return 0
 }
 
 // setSlotType records slot's tracked primitive type (grows slotTypes as slots are

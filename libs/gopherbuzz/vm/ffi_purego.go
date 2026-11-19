@@ -254,6 +254,7 @@ func loadExternVar(sig CFuncSig, sym uintptr) (Value, error) {
 			return IntValue(*(*int64)(foreignPointer(sym))), nil
 		}
 		return Null, fmt.Errorf("unsupported scalar width %d for type %q", size, sig.VarTypeName)
+	case CVoid, CPoint2D, CRect4D, CUnsupported:
 	}
 	return Null, fmt.Errorf("unsupported extern kind for type %q", sig.VarTypeName)
 }
@@ -324,9 +325,10 @@ func cTypeToReflect(k CType) reflect.Type {
 		return rtPoint2D
 	case CRect4D:
 		return rtRect4D
-	default:
+	case CVoid, CAddr, CUnsupported:
 		return rtUintptr
 	}
+	return rtUintptr
 }
 
 func buzzToReflectArg(v Value, kind CType) (reflect.Value, error) {
@@ -399,6 +401,7 @@ func buzzToReflectArg(v Value, kind CType) (reflect.Value, error) {
 			return reflect.ValueOf(uintptr(v.AsInt())), nil
 		}
 		return reflect.Value{}, fmt.Errorf("buzz: ffi: cannot convert %s to void*", v.buzzKind())
+	case CVoid, CAddr, CPoint2D, CRect4D, CUnsupported:
 	}
 	return reflect.Value{}, fmt.Errorf("buzz: ffi: unknown CType %d", kind)
 }
@@ -450,6 +453,7 @@ func reflectRetToValue(r reflect.Value, kind CType) Value {
 		m.MapSet("w", FloatValue(rc.W))
 		m.MapSet("h", FloatValue(rc.H))
 		return m
+	case CVoid, CAddr, CUnsupported:
 	}
 	return Null
 }

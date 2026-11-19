@@ -39,9 +39,8 @@ func (k FaultKind) String() string {
 		return "jit-compile-fail"
 	case FaultJITBadExit:
 		return "jit-bad-exit"
-	default:
-		return "unknown"
 	}
+	return "unknown"
 }
 
 // StructuredError is an optional interface a host error may implement to reach a Buzz

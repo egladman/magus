@@ -2737,6 +2737,8 @@ func collectionSelfMethodMut(table map[string]mutability, recvMut bool, name str
 		return true, true
 	case alwaysImmutable:
 		return false, true
+	case sameMut:
+		return recvMut, true
 	}
 	return recvMut, true
 }
