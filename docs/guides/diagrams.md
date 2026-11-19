@@ -20,12 +20,12 @@ diagram it cannot draw, naming the call to change.
 A diagram makes one claim: the title states it, and the boxes and connectors are
 the evidence. It draws at one level, so it cannot grow too detailed:
 
-| Level | Its boxes |
-| --- | --- |
-| `diagram\Level.process` | steps, `diagram\step()` |
-| `diagram\Level.project` | projects, `box(dir)` |
-| `diagram\Level.package` | packages, `box(dir)` and `group(dirs)` |
-| `diagram\Level.symbol` | the symbols inside one package, `diagram\stage()` |
+| Level                   | Its boxes                                         |
+| ----------------------- | ------------------------------------------------- |
+| `diagram\Level.process` | steps, `diagram\step()`                           |
+| `diagram\Level.project` | projects, `box(dir)`                              |
+| `diagram\Level.package` | packages, `box(dir)` and `group(dirs)`            |
+| `diagram\Level.symbol`  | the symbols inside one package, `diagram\stage()` |
 
 `diagram\of(id, level:)` declares it; left out, the boxes decide it. A box of
 another level is refused with the diagram it belongs in, and a person or an

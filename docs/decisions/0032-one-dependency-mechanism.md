@@ -57,9 +57,9 @@ Read from the comments beside the keys, 2026-11-07:
 | project | entry                                                                     | what it stands for                                                           |
 | ------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | root    | `proto`                                                                   | "orders proto's generate first" and puts a `.proto` edit in the affected set |
-| root    | `libs/diagram`                                                             | go-build embeds `diagram.buzz`                                                |
+| root    | `libs/diagram`                                                            | go-build embeds `diagram.buzz`                                               |
 | root    | `libs/embed`                                                              | `go.mod` replaces it with the local module, so its Go builds into magus      |
-| docs    | `../proto`, `../libs/diagram`, `../libs/kustomize`                         | API docs, the render and the figures read their files                        |
+| docs    | `../proto`, `../libs/diagram`, `../libs/kustomize`                        | API docs, the render and the figures read their files                        |
 | docs    | `../libs/clikit`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
 
 None of these is "run that project first". Each is either a target the downstream
@@ -107,7 +107,7 @@ because the two kinds do different things.
 | ---------------------------------------------------- | ------------------------------------------------------ | ------------------------ | ----------------- | ---------------------------------------- |
 | needs a target's result                              | `ctx.needs([proofread\build])`                         | yes, once per invocation | that target first | the target's key                         |
 | reads another project's sources, in one target       | `ctx.readsFiles([proofread\sources()])`                | no                       | nothing           | the upstream source digest               |
-| reads some of another project's files, in one target | `ctx.readsFiles([diagram\file("diagram.buzz")])`         | no                       | nothing           | those files' bytes                       |
+| reads some of another project's files, in one target | `ctx.readsFiles([diagram\file("diagram.buzz")])`       | no                       | nothing           | those files' bytes                       |
 | reads another project's sources, in every target     | `"sources": [..., embed\sources()]` in `magus\project` | no                       | nothing           | the upstream source digest, in every key |
 
 The whole-project edge ("my key includes your sources") is not `needs`. A need runs

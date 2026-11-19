@@ -69,16 +69,16 @@ files.
    the edits of op go::go-fmt, or run the op from a target that declares them with
    ctx.writesFiles([...], editsExistingSource: true)`.
 
-| Item                                                                         | State   |
-| ---------------------------------------------------------------------------- | ------- |
-| `Command.Edits`, validated, in the Buzz mirror and `BuiltinsHash`            | done    |
-| The fold for a bare op, following the filter and the shadow                  | done    |
-| MGS4007 names the op's field for a bare-op step                              | done    |
-| `edits` on every shipped op that rewrites in place                           | done    |
-| `opEditsSuite` (`run_test.go`): check fails on drift, rw passes, composer    | done    |
-| The guard reads `edits` in place of "this op writes, set unknown"            | planned |
-| The doctor compares an op's `edits` with a composing target's `writesFiles`  | planned |
-| `order.go` orders readers after a bare op's edits                            | planned |
+| Item                                                                        | State   |
+| --------------------------------------------------------------------------- | ------- |
+| `Command.Edits`, validated, in the Buzz mirror and `BuiltinsHash`           | done    |
+| The fold for a bare op, following the filter and the shadow                 | done    |
+| MGS4007 names the op's field for a bare-op step                             | done    |
+| `edits` on every shipped op that rewrites in place                          | done    |
+| `opEditsSuite` (`run_test.go`): check fails on drift, rw passes, composer   | done    |
+| The guard reads `edits` in place of "this op writes, set unknown"           | planned |
+| The doctor compares an op's `edits` with a composing target's `writesFiles` | planned |
+| `order.go` orders readers after a bare op's edits                           | planned |
 
 ### What a run does now
 

@@ -29,13 +29,13 @@ Envelope fields and the event's own fields sit at one level:
 {"api_version":"safetyscissors.journal-stream/v1alpha1","type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
 ```
 
-| field       | meaning                                                           |
-| ----------- | ----------------------------------------------------------------- |
+| field         | meaning                                                           |
+| ------------- | ----------------------------------------------------------------- |
 | `api_version` | envelope version; see [Compatibility](#compatibility)             |
-| `type`      | what kind of fact this is                                         |
-| `ts`        | unix milliseconds                                                 |
-| `workspace` | absolute repository root, so a subscriber can watch more than one |
-| `inv`       | groups every event of one invocation; absent outside a run        |
+| `type`        | what kind of fact this is                                         |
+| `ts`          | unix milliseconds                                                 |
+| `workspace`   | absolute repository root, so a subscriber can watch more than one |
+| `inv`         | groups every event of one invocation; absent outside a run        |
 
 ## The types
 
