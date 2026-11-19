@@ -95,9 +95,15 @@ func checkSourceMutation(s *Step, before, after sourceFingerprint) error {
 	if len(changed) == 0 {
 		return nil
 	}
+	const writesFiles = "ctx.writesFiles([...], editsExistingSource: true)"
+	remedy := "declare them with " + writesFiles
+	// A bare op has no body to call ctx.writesFiles in.
+	if len(s.Ops) > 0 {
+		remedy = fmt.Sprintf("declare them in the edits of op %s, or run the op from a target that declares them with %s", joinComma(s.Ops), writesFiles)
+	}
 	return types.DiagnosticErrorf(types.UndeclaredSourceModified,
-		"%s:%s modified its declared sources %s; declare them with ctx.writesFiles([...], editsExistingSource: true)",
-		s.ProjectPath, s.Target, joinCapped(changed, 5)).
+		"%s:%s modified its declared sources %s; %s",
+		s.ProjectPath, s.Target, joinCapped(changed, 5), remedy).
 		WithWhy("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them.")
 }
 

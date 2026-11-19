@@ -3541,6 +3541,11 @@ func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 		itemsEnvKeys[indexEnvKeys] = vm.StringValue(v.EnvKeys[indexEnvKeys])
 	}
 	out.MapSet("envKeys", vm.ListValue(itemsEnvKeys))
+	itemsEdits := make([]vm.Value, len(v.Edits))
+	for indexEdits := range v.Edits {
+		itemsEdits[indexEdits] = vm.StringValue(v.Edits[indexEdits])
+	}
+	out.MapSet("edits", vm.ListValue(itemsEdits))
 	itemsHints := make([]vm.Value, len(v.Hints))
 	for indexHints := range v.Hints {
 		itemsHints[indexHints] = ObjectHint(v.Hints[indexHints])

@@ -112,7 +112,7 @@ fun cargoFmt(target: Target) > Command {
     // Two ops in one charm: concatenate the drop constructors' op lists. Order
     // matters — drop --check (the higher index) before -- so the patch applies
     // sequentially without an index shifting out from under it.
-    return Command{bin = "cargo", args = args, charms = {
+    return Command{bin = "cargo", args = args, edits = ["**/*.rs"], charms = {
         "rw": Charm{ ops = drop(args, anchor: "--check").ops + drop(args, anchor: "--").ops },
     }};
 }

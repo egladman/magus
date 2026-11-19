@@ -38,6 +38,20 @@ func TestRunReportsUndeclaredSourceMutation(t *testing.T) {
 	assert.ErrorContains(t, err, "test/pkg/main.go", "the diagnostic names the file that moved")
 }
 
+// A step that is a spell op has no body to call ctx.writesFiles, so the remedy names
+// the op's edits field.
+func TestRunNamesTheOpsEditsForABareOpStep(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main // recieve")
+	step := makeStep(root)
+	step.Ops = []string{"go::go-fmt"}
+
+	_, err := c.Run(t.Context(), step, rewriteMain(t, root, "package main // receive"))
+
+	require.ErrorIs(t, err, types.UndeclaredSourceModified)
+	assert.ErrorContains(t, err, "declare them in the edits of op go::go-fmt")
+}
+
 // The verdict stays short; the reason rides beside it as the failure record's why, where a
 // person's display prints it and an agent's leaves it in the run log.
 func TestRunReportsUndeclaredSourceMutationWithItsReason(t *testing.T) {

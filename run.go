@@ -297,7 +297,7 @@ func undeclaredScopeEvent(targets []types.Target) (journal.Scope, bool) {
 // The chain is preserved through Unwrap, so errors.Is/As keep working.
 func (m *Magus) redactError(err error) error {
 	if err == nil {
-		return err
+		return nil
 	}
 	msg, rerr := m.resolver.RedactString(err.Error())
 	if rerr != nil {
@@ -1336,6 +1336,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// not Sources: the constituent's own step keys the file, and the check just needs
 	// to know the edit was declared.
 	step.Updates = types.CompactGlobs(slices.Concat(step.Updates, updates, types.ChainUpdates(p, target, m.Get)))
+	foldOpEdits(&step, p, target, "")
 	outputs := targetOutputGlobs(p, target)
 	step.Outputs = types.CompactGlobs(slices.Concat(step.Outputs, outputs))
 	for i, ref := range p.TargetOutputs[target] {
@@ -2794,11 +2795,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
 			m.applyArgs(&step, p, st.target, opts.ExtraArgs)
-			// The spell::op filter selects which definition runs (an explicit op
-			// bypasses a shadowing magusfile export), so it keys the cache the
-			// same way; without it a compile-only go::go-build recorded a pass
-			// the real go-build target then replayed around a stale binary.
-			step.Spell = opts.Spell
+			filterStep(&step, p, st.target, opts.Spell)
 			if forcesNoCache(opts) {
 				step.NoCache = true
 			}

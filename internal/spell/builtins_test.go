@@ -221,6 +221,7 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 		Command: spells.Command{
 			Bin:    "go",
 			Args:   []string{"mod", "tidy", "--diff"},
+			Edits:  []string{"go.mod", "go.sum"},
 			Charms: map[string]spells.Charm{"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}}},
 		},
 		Doc: tidy.Doc,

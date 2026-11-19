@@ -637,6 +637,12 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				return out, err
 			}
 			out.EnvKeys = strsEnvKeys
+		case "edits":
+			strsEdits, err := decodeStringList(item, path+".edits")
+			if err != nil {
+				return out, err
+			}
+			out.Edits = strsEdits
 		case "hints":
 			listHints, err := decodeList(item, path+".hints", "[Hint]")
 			if err != nil {

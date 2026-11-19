@@ -271,13 +271,20 @@ export fun mgs_listScriptRunners() > [Command] {
             Command{bin = "bun", args = ["run"]}];
 }
 
+// The files each fixer or formatter may rewrite in place under rw, by the languages
+// the tool handles. The tool's own config may narrow them; it cannot widen them past
+// these without a magusfile target that declares the rest.
+final SCRIPT_EDITS = ["**/*.\{js,jsx,mjs,cjs,ts,tsx,mts,cts}", "!**/node_modules/**"];
+final BIOME_EDITS = ["**/*.\{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,graphql}", "!**/node_modules/**"];
+final PRETTIER_EDITS = ["**/*.\{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,json5,css,scss,less,html,vue,graphql,md,mdx,yaml,yml}", "!**/node_modules/**"];
+
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes
 // into lint, not this spell). --write and --reporter=github verified against
 // the current Biome CLI docs (biomejs.dev/reference/cli).
 fun biomeCheck(target: Target) > Command {
     final args = ["exec", "biome", "check", "."];
-    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, edits = BIOME_EDITS, charms = {
         "rw":  after(args, anchor: "check", vals: ["--write"]),
         "gha": after(args, anchor: "check", vals: ["--reporter=github"]),
     }};
@@ -288,7 +295,7 @@ fun biomeCheck(target: Target) > Command {
 // of removing one.
 fun biomeFormat(target: Target) > Command {
     final args = ["exec", "biome", "format", "."];
-    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, edits = BIOME_EDITS, charms = {
         "rw": after(args, anchor: "format", vals: ["--write"]),
     }};
 }
@@ -297,14 +304,14 @@ fun biomeFormat(target: Target) > Command {
 // one-line-per-problem shape for annotation/regex parsing.
 fun eslint(target: Target) > Command {
     final args = ["exec", "eslint", "."];
-    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, edits = SCRIPT_EDITS, charms = {
         "rw": after(args, anchor: "eslint", vals: ["--fix"]),
         "gha": after(args, anchor: "eslint", vals: ["--format=unix"]),
     }};
 }
 fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
-    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
+    return Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, edits = PRETTIER_EDITS, charms = {
         "rw": set(args, anchor: "--check", val: "--write"),
     }};
 }

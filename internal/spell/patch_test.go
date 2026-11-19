@@ -195,6 +195,8 @@ var (
 	goldenDevServerCommand = spells.Command{Bin: "pnpm", Args: []string{"exec"},
 		NeedsArgs: `dev-server runs the command you name; pass it as args: typescript["dev-server"](ctx, {"args": ["vite"]})`}
 
+	goldenBiomeEdits = []string{"**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,css,graphql}", "!**/node_modules/**"}
+
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
 		{Contains: "ERR_PNPM_NO_SCRIPT", Advise: "package.json declares no such script; check the name, or the target may be pointed at the wrong project"},
@@ -258,7 +260,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"buf-lint": {Command: spells.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
-			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
+			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Edits: []string{"**/*.proto"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
 			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Capture: true}},
@@ -385,18 +387,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build", "-trimpath"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
 			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean"}, TrailingArgs: []string{"./..."}}},
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
-			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
+			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Edits: []string{"go.mod"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}},
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
-			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
+			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Edits: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED", "GOROOT", "GOTOOLCHAIN"}, Charms: map[string]spells.Charm{
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED", "GOROOT", "GOTOOLCHAIN"}, Edits: []string{"**/*.go"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
@@ -411,7 +413,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
 			// changes — safe for CI gating); update applies the changes. update rather
 			// than rw because tidy re-resolves against the proxy.
-			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
+			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Edits: []string{"go.mod", "go.sum"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet": {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv,
@@ -445,7 +447,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"tectonic": {Command: spells.Command{Bin: "tectonic", Args: []string{"-X", "build"}}},
 			"chktex":   {Command: spells.Command{Bin: "chktex", Args: []string{"-q"}, Sources: []string{"**/*.tex"}}},
 			"latexindent": {Command: spells.Command{Bin: "latexindent", Args: []string{"-k", "-s", "-g=/dev/null", "-c=build/latexindent"},
-				Sources: []string{"**/*.tex", "**/*.sty", "**/*.cls"}, SourcesEach: true, Charms: map[string]spells.Charm{
+				Sources: []string{"**/*.tex", "**/*.sty", "**/*.cls"}, SourcesEach: true, Edits: []string{"**/*.tex", "**/*.sty", "**/*.cls"}, Charms: map[string]spells.Charm{
 					"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-wd"}}},
 				}}},
 		},
@@ -454,13 +456,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "markdown",
 		Needs: []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml", "dprint.json"},
 		Ops: map[string]spells.Op{
-			"dprint": {Command: spells.Command{Bin: "dprint", Args: []string{"check", "--config-discovery=ignore-descendants"}, Charms: map[string]spells.Charm{
+			"dprint": {Command: spells.Command{Bin: "dprint", Args: []string{"check", "--config-discovery=ignore-descendants"}, Edits: []string{"**/*.md", "**/*.MD", "**/*.markdown", "**/*.mdx"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "fmt"}}},
 			}}},
 			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
 			// "fix", not "rw": this op takes no paths, so under the workspace default
 			// charm every caller rewrote its whole tree. See the spell source.
-			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{
+			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Edits: []string{"**/*"}, Charms: map[string]spells.Charm{
 				"fix": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
 			}}},
 		},
@@ -529,12 +531,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"pytest": {Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 			}}},
-			"ruff-check": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "check", "."}, Charms: map[string]spells.Charm{
+			"ruff-check": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "check", "."}, Edits: []string{"**/*.py", "**/*.pyi"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
 				"gha":   {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
 			}}},
-			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
+			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Edits: []string{"**/*.py", "**/*.pyi"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
@@ -586,7 +588,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
 			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}, Hints: goldenRustupHints}},
-			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]spells.Charm{
+			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Edits: []string{"**/*.rs"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
@@ -636,18 +638,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Ops: map[string]spells.Op{
 			"pnpm-install": installOp("typescript", goldenPnpmInstallManifests, goldenPnpmInstall),
 			"npm-ci":       installOp("typescript", goldenNpmCiManifests, goldenNpmInstall),
-			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Hints: goldenPackageManagerHints, Edits: goldenBiomeEdits, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
 			}}},
-			"biome-format": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"biome-format": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Hints: goldenPackageManagerHints, Edits: goldenBiomeEdits, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 			}}},
-			"eslint": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"eslint": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Hints: goldenPackageManagerHints, Edits: []string{"**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}", "!**/node_modules/**"}, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 			}}},
-			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
+			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Hints: goldenPackageManagerHints, Edits: []string{"**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,jsonc,json5,css,scss,less,html,vue,graphql,md,mdx,yaml,yml}", "!**/node_modules/**"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
 			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}, Hints: goldenPackageManagerHints}},
