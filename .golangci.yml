@@ -131,6 +131,7 @@ linters:
     - blankerror
     - jsonlstate
     - stutter
+    - closedswitch
     - filenames
     - nameoutput
     - namewords
@@ -530,6 +531,18 @@ linters:
             internal/gcpolicy: raising GOGC before main is measured end to end by gctrace and hyperfine, as its comment records; a Go benchmark cannot run before init
             internal/handler/diagram: renderCache saves a whole render, which TestDiagramSecondRequestIsServedFromTheCache and the TestRenderCache tests pin; a benchmark would time the renderer
             internal/handler/diff: the optimization comment on Handler keeps the changed set the patch was read with, which is a correctness choice, not a measured speedup
+
+      # A switch over a named type with declared constants names every member and has no
+      # default arm. hack/lint/closed-switches-name-every-member.buzz explains the contract;
+      # the exhaustive-switch key of each project's analyzers.yaml holds today's violating
+      # switches per function, which may only shrink, and the exits a person accepted.
+      # A //nolint is no exit.
+      closedswitch:
+        type: module
+        description: reports a switch over a closed set that misses a member or keeps a default arm
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
 
       stutter:
         type: module

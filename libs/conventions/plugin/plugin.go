@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/asciistrings"
 	"github.com/egladman/magus/libs/conventions/benchbeside"
 	"github.com/egladman/magus/libs/conventions/blankerror"
+	"github.com/egladman/magus/libs/conventions/closedswitch"
 	"github.com/egladman/magus/libs/conventions/diagmsg"
 	"github.com/egladman/magus/libs/conventions/errmsg"
 	"github.com/egladman/magus/libs/conventions/fieldwise"
@@ -41,9 +42,10 @@ import (
 
 func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register API registers only from init
 	register.Plugin("accessorclone", plugin("accessorclone", accessorclone.New))
-	register.Plugin("asciistrings",plugin("asciistrings", asciistrings.New))
+	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
 	register.Plugin("benchbeside", plugin("benchbeside", benchbeside.New))
 	register.Plugin("blankerror", plugin("blankerror", blankerror.New))
+	register.Plugin("closedswitch", plugin("closedswitch", closedswitch.New))
 	register.Plugin("diagmsg", plugin("diagmsg", diagmsg.New))
 	register.Plugin("errmsg", plugin("errmsg", errmsg.New))
 	register.Plugin("fieldwise", plugin("fieldwise", fieldwise.New))

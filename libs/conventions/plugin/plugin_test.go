@@ -17,9 +17,10 @@ func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
 		"accessorclone": map[string]any{"module": "example.com/m"},
-		"asciistrings": map[string]any{"module": "", "files": []any{"types/*.go"}},
-		"benchbeside":  map[string]any{"module": "example.com/m"},
-		"blankerror":   map[string]any{"base": "origin/main"},
+		"asciistrings":  map[string]any{"module": "", "files": []any{"types/*.go"}},
+		"benchbeside":   map[string]any{"module": "example.com/m"},
+		"blankerror":    map[string]any{"base": "origin/main"},
+		"closedswitch":  map[string]any{"module": "example.com/m"},
 		"diagmsg": map[string]any{
 			"max-runes": 160, "prefixes": []any{"magus workspace:"},
 			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},

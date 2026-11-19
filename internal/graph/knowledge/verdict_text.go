@@ -28,6 +28,7 @@ import (
 // the caller has no better suggestion than the one it already made.
 func PrintVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 	switch ans.Verdict {
+	case types.VerdictFound:
 	case types.VerdictAbsent:
 		// Deliberately not phrased in terms of symbol indexes. This same line answers a
 		// `kind:author` query, where naming the symbol layer would attach a caveat to an

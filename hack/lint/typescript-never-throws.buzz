@@ -31,6 +31,11 @@ import "hack/lint/support" as support;
 // that way in the browser or the runtime, so a test of the code that handles it has to.
 export final PLATFORM_APIS = ["fetch", "Response.text", "navigator.clipboard.writeText", "Connect client", "Bun.spawn"];
 
+// UNREACHABLE is the one file whose throw is the sanctioned one: unreachable(x: never) ends a
+// branch the type system proves cannot run, and a switch over a closed set calls it
+// (hack/lint/closed-switches-name-every-member.buzz).
+final UNREACHABLE = "console/src/lib/unreachable.ts";
+
 final MARKER = "// platform double: ";
 
 // CONTRACTS are the host hooks that stop a call only by throwing: OpenCode's tool.execute.before
@@ -53,7 +58,7 @@ export fun reads() > [str] {
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
-        if (f.value.endsWith(".d.ts")) {
+        if (f.value.endsWith(".d.ts") or f.value == UNREACHABLE) {
             continue;
         }
         judge(f.value, src: support\read(f), found: found);
