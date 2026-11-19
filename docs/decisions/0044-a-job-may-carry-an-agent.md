@@ -25,7 +25,7 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
   run is a Job with no agent.
 - `jobs.jsonl` stores `types.Job` directly (`jobsFile.Jobs []types.Job`,
   `internal/job/store.go`). `job.Store` already owns a sibling file: `grants.jsonl`
-  through `file.JSONL[types.JobGrant]` (`libs/safetyscissors/job/store_grants.go`).
+  through `file.JSONL[types.JobGrant]` (`libs/safetyscissors/job/store.go`).
 - `types/` already has domain packages (`types/trail`, `types/daemon`, `types/diff`,
   `types/events`, `types/image`). `types/daemon` imports `types`.
 - PR #734 put flat `model` and `criteria` members on the job row, and Eli rejected it on
