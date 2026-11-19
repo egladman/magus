@@ -4,8 +4,8 @@
 // running. The Buzz standard library is available (import "std", "math", …);
 // no magus host bindings are installed.
 //
-// Only the Go standard library and the gopherbuzz packages are used — no
-// third-party CLI framework — so the binary builds anywhere gopherbuzz does.
+// Its command line is declared through libs/clikit, as every Go command in
+// the magus repository is, and no third-party CLI framework is used.
 //
 //	buzz script.buzz             # run a file
 //	buzz                         # run stdin
@@ -23,8 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -48,10 +48,9 @@ func init() { //nolint:gochecknoinits // runtime.LockOSThread pins the main goro
 }
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "buzz: "+err.Error())
-		os.Exit(1)
-	}
+	line := fmt.Sprintf("buzz %s (gopherbuzz %s, commit %s, built %s, upstream %s, bytecode v%d)",
+		buzz.LanguageVersion, version, commit, buildDate, buzz.UpstreamRef, vm.BytecodeVersion)
+	command.Main(buzzCommand(run), command.WithVersion(line))
 }
 
 // opts holds the parsed command line.
@@ -61,26 +60,46 @@ type opts struct {
 	embedded bool     // --embedded
 	test     bool     // -t / --test
 	dumpAST  bool     // --ast
-	showVer  bool     // -v / --version
-	showHelp bool     // -h / --help
 	libDirs  []string // -L / --library-path (repeatable)
 	args     []string // positional: [script, scriptArgs...]
 }
 
-func run(argv []string) error {
-	o, err := parseArgs(argv)
-	if err != nil {
-		return err
+// buzzCommand declares the upstream-style command line, handing it to run as
+// opts. Every option takes its short (-c) and long (--check) spelling, options
+// stop at the first non-option (so a script's own arguments are never mistaken
+// for buzz options), and "--" forces the end of options.
+func buzzCommand(run func(context.Context, opts) error) command.Command {
+	var o opts
+	return command.Command{
+		Name:  "buzz",
+		Short: "buzz - run Buzz scripts (gopherbuzz)",
+		Usage: "buzz [options] [script] [-- script-args...]\n" +
+			"       buzz [options] -          read the script from stdin\n" +
+			"       buzz [options] -e <code>  run an inline snippet",
+		Long: `The Buzz standard library is available (import "std", "math", "ffi", ...).`,
+		Flags: []command.Flag{
+			{Name: "eval", Kind: command.String, Doc: "run `code` instead of a file", Target: &o.eval},
+			{Name: "e", Kind: command.String, AliasOf: "eval", Doc: "run `code` instead of a file"},
+			{Name: "check", Kind: command.Bool, Default: false, Doc: "type-check the script without running it", Target: &o.check},
+			{Name: "c", Kind: command.Bool, AliasOf: "check", Doc: "type-check the script without running it"},
+			{Name: "embedded", Kind: command.Bool, Default: false, Doc: "relax upstream script rules (allow top-level control flow + unlabeled args) for embedding-style scripts", Target: &o.embedded},
+			{Name: "test", Kind: command.Bool, Default: false, Doc: `run the script's test "..." { } blocks`, Target: &o.test},
+			{Name: "t", Kind: command.Bool, AliasOf: "test", Doc: `run the script's test "..." { } blocks`},
+			{Name: "ast", Kind: command.Bool, Default: false, Doc: "dump the parsed AST as JSON and exit", Target: &o.dumpAST},
+			{Name: "library-path", Kind: command.StringList, Doc: "add an import search path (repeatable)", Target: &o.libDirs},
+			{Name: "L", Kind: command.StringList, AliasOf: "library-path", Doc: "add an import search path (repeatable)"},
+			{Name: "v", Kind: command.Bool, AliasOf: "version", Doc: "print the version and exit"},
+		},
+		Run: func(ctx context.Context, inv command.Invocation) error {
+			if len(inv.Args) > 0 {
+				o.args = inv.Args
+			}
+			return run(ctx, o)
+		},
 	}
-	if o.showHelp {
-		usage(os.Stdout)
-		return nil
-	}
-	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz %s, commit %s, built %s, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, version, commit, buildDate, buzz.UpstreamRef, vm.BytecodeVersion)
-		return nil
-	}
+}
 
+func run(ctx context.Context, o opts) error {
 	code, name, err := source(o)
 	if err != nil {
 		return err
@@ -105,7 +124,6 @@ func run(argv []string) error {
 		return nil
 	}
 
-	ctx := context.Background()
 	// Strict by default, matching upstream Buzz (which has no embedded mode); the
 	// embedding hosts opt into leniency, and so can this CLI via --embedded.
 	var sessOpts []buzz.Option
@@ -194,78 +212,6 @@ func skipReason(reason string) string {
 	return fmt.Sprintf(" (%s)", reason)
 }
 
-// parseArgs parses the upstream-style flag set by hand: every option accepts
-// both its short (-c) and long (--check) spelling, options stop at the first
-// non-option (so a script's own arguments are never mistaken for buzz options),
-// and "--" forces the end of options.
-func parseArgs(argv []string) (opts, error) {
-	var o opts
-	i := 0
-	for ; i < len(argv); i++ {
-		a := argv[i]
-		if a == "--" {
-			i++
-			break
-		}
-		if a == "-" || !strings.HasPrefix(a, "-") {
-			break // "-" (stdin) or a script path: positionals start here
-		}
-		switch a {
-		case "-h", "--help":
-			o.showHelp = true
-		case "-v", "--version":
-			o.showVer = true
-		case "-c", "--check":
-			o.check = true
-		case "--embedded":
-			o.embedded = true
-		case "-t", "--test":
-			o.test = true
-		case "--ast":
-			o.dumpAST = true
-		case "-e", "--eval":
-			val, err := optValue(argv, &i, a)
-			if err != nil {
-				return o, err
-			}
-			o.eval = val
-		case "-L", "--library-path":
-			val, err := optValue(argv, &i, a)
-			if err != nil {
-				return o, err
-			}
-			o.libDirs = append(o.libDirs, val)
-		default:
-			// Support --flag=value for -e and -L.
-			if k, v, ok := strings.Cut(a, "="); ok {
-				switch k {
-				case "-e", "--eval":
-					o.eval = v
-					continue
-				case "-L", "--library-path":
-					o.libDirs = append(o.libDirs, v)
-					continue
-				}
-			}
-			return o, fmt.Errorf("unknown option %q (try --help)", a)
-		}
-	}
-	if i < len(argv) {
-		o.args = argv[i:]
-	}
-	return o, nil
-}
-
-// optValue returns the argument following an option that takes a value,
-// advancing the index past it.
-func optValue(argv []string, i *int, flag string) (string, error) {
-	if *i+1 >= len(argv) {
-		return "", fmt.Errorf("option %s requires a value", flag)
-	}
-	*i++
-	return argv[*i], nil
-}
-
 // source resolves the program text and a name for diagnostics. Exactly one input
 // is allowed: -e, a single file path, or stdin (no args, or "-").
 func source(o opts) (code, name string, err error) {
@@ -320,27 +266,4 @@ func libDirs(o opts) []string {
 		dirs = append(dirs, filepath.SplitList(env)...)
 	}
 	return dirs
-}
-
-func usage(w io.Writer) {
-	fmt.Fprint(w, `buzz - run Buzz scripts (gopherbuzz)
-
-Usage:
-  buzz [options] [script] [-- script-args...]
-  buzz [options] -          read the script from stdin
-  buzz [options] -e <code>  run an inline snippet
-
-Options:
-  -e, --eval <code>          run <code> instead of a file
-  -c, --check                type-check the script without running it
-  --embedded                  relax upstream script rules (allow top-level control
-                             flow + unlabeled args) for embedding-style scripts
-  -t, --test                 run the script's test "..." { } blocks
-      --ast                  dump the parsed AST as JSON and exit
-  -L, --library-path <dir>   add an import search path (repeatable)
-  -v, --version              print the version and exit
-  -h, --help                 print this help and exit
-
-The Buzz standard library is available (import "std", "math", "ffi", ...).
-`)
 }

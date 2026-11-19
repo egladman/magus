@@ -13,6 +13,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/egladman/magus/libs/apiversion v0.1.0 // indirect
+	github.com/egladman/magus/libs/clikit v0.1.0 // indirect
 	github.com/egladman/magus/libs/diagnostics v0.2.0 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
@@ -28,3 +30,7 @@ require (
 replace github.com/egladman/magus/libs/diagnostics => ../diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ../gopherbuzz
+
+replace github.com/egladman/magus/libs/clikit => ../clikit
+
+replace github.com/egladman/magus/libs/apiversion => ../apiversion

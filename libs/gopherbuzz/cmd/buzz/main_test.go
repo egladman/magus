@@ -1,99 +1,116 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"flag"
+	"io"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestParseArgs(t *testing.T) {
-	t.Run("bare file", func(t *testing.T) {
-		got, err := parseArgs([]string{"x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{args: []string{"x.buzz"}}, got)
-	})
-	t.Run("file then script args", func(t *testing.T) {
-		got, err := parseArgs([]string{"x.buzz", "a", "b"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{args: []string{"x.buzz", "a", "b"}}, got)
-	})
-	t.Run("check long", func(t *testing.T) {
-		got, err := parseArgs([]string{"--check", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{check: true, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("check short", func(t *testing.T) {
-		got, err := parseArgs([]string{"-c", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{check: true, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("test short", func(t *testing.T) {
-		got, err := parseArgs([]string{"-t", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{test: true, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("test long", func(t *testing.T) {
-		got, err := parseArgs([]string{"--test", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{test: true, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("eval", func(t *testing.T) {
-		got, err := parseArgs([]string{"-e", "code"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{eval: "code"}, got)
-	})
-	t.Run("eval equals", func(t *testing.T) {
-		got, err := parseArgs([]string{"--eval=code"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{eval: "code"}, got)
-	})
-	t.Run("ast", func(t *testing.T) {
-		got, err := parseArgs([]string{"--ast", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{dumpAST: true, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("version", func(t *testing.T) {
-		got, err := parseArgs([]string{"-v"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{showVer: true}, got)
-	})
-	t.Run("help", func(t *testing.T) {
-		got, err := parseArgs([]string{"--help"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{showHelp: true}, got)
-	})
-	t.Run("repeatable -L", func(t *testing.T) {
-		got, err := parseArgs([]string{"-L", "a", "-L", "b", "x.buzz"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{libDirs: []string{"a", "b"}, args: []string{"x.buzz"}}, got)
-	})
-	t.Run("stdin dash", func(t *testing.T) {
-		got, err := parseArgs([]string{"-"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{args: []string{"-"}}, got)
-	})
-	t.Run("options stop at script", func(t *testing.T) {
-		got, err := parseArgs([]string{"x.buzz", "-c"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{args: []string{"x.buzz", "-c"}}, got)
-	})
-	t.Run("double dash ends options", func(t *testing.T) {
-		got, err := parseArgs([]string{"--", "-c"})
-		require.NoError(t, err)
-		assert.Equal(t, opts{args: []string{"-c"}}, got)
-	})
+type ParseSuite struct {
+	suite.Suite
+	stdout bytes.Buffer
 }
 
-func TestParseArgsErrors(t *testing.T) {
-	for _, argv := range [][]string{
-		{"--bogus"},
-		{"-e"},             // missing value
-		{"--library-path"}, // missing value
-	} {
-		_, err := parseArgs(argv)
-		assert.Errorf(t, err, "parseArgs(%v): want error, got nil", argv)
+func TestParseSuite(t *testing.T) { suite.Run(t, new(ParseSuite)) }
+
+func (s *ParseSuite) SetupTest() { s.stdout.Reset() }
+
+// parse runs argv through the declared command line and returns the opts its
+// Run would get.
+func (s *ParseSuite) parse(argv ...string) (opts, error) {
+	var got opts
+	capture := func(_ context.Context, o opts) error {
+		got = o
+		return nil
 	}
+	_, err := command.Invoke(context.Background(), buzzCommand(capture), argv,
+		command.Streams{Stdin: strings.NewReader(""), Stdout: &s.stdout, Stderr: io.Discard},
+		command.WithVersion("buzz test"))
+	return got, err
+}
+
+func (s *ParseSuite) requireOpts(want opts, argv ...string) {
+	got, err := s.parse(argv...)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+}
+
+func (s *ParseSuite) TestBareFile() { s.requireOpts(opts{args: []string{"x.buzz"}}, "x.buzz") }
+
+func (s *ParseSuite) TestFileThenScriptArgs() {
+	s.requireOpts(opts{args: []string{"x.buzz", "a", "b"}}, "x.buzz", "a", "b")
+}
+
+func (s *ParseSuite) TestCheckLong() {
+	s.requireOpts(opts{check: true, args: []string{"x.buzz"}}, "--check", "x.buzz")
+}
+
+func (s *ParseSuite) TestCheckShort() {
+	s.requireOpts(opts{check: true, args: []string{"x.buzz"}}, "-c", "x.buzz")
+}
+
+func (s *ParseSuite) TestTestShort() {
+	s.requireOpts(opts{test: true, args: []string{"x.buzz"}}, "-t", "x.buzz")
+}
+
+func (s *ParseSuite) TestTestLong() {
+	s.requireOpts(opts{test: true, args: []string{"x.buzz"}}, "--test", "x.buzz")
+}
+
+func (s *ParseSuite) TestEval() { s.requireOpts(opts{eval: "code"}, "-e", "code") }
+
+func (s *ParseSuite) TestEvalEquals() { s.requireOpts(opts{eval: "code"}, "--eval=code") }
+
+func (s *ParseSuite) TestAST() {
+	s.requireOpts(opts{dumpAST: true, args: []string{"x.buzz"}}, "--ast", "x.buzz")
+}
+
+func (s *ParseSuite) TestVersionPrintsAndRunsNothing() {
+	got, err := s.parse("-v")
+	s.Require().NoError(err)
+	s.Equal(opts{}, got)
+	s.Equal("buzz test\n", s.stdout.String())
+}
+
+func (s *ParseSuite) TestHelpPrintsAndRunsNothing() {
+	got, err := s.parse("--help")
+	s.Require().ErrorIs(err, flag.ErrHelp)
+	s.Equal(opts{}, got)
+	s.Contains(s.stdout.String(), "-e, --eval code")
+}
+
+func (s *ParseSuite) TestRepeatableLibraryPath() {
+	s.requireOpts(opts{libDirs: []string{"a", "b"}, args: []string{"x.buzz"}}, "-L", "a", "--library-path", "b", "x.buzz")
+}
+
+func (s *ParseSuite) TestStdinDash() { s.requireOpts(opts{args: []string{"-"}}, "-") }
+
+func (s *ParseSuite) TestOptionsStopAtTheScript() {
+	s.requireOpts(opts{args: []string{"x.buzz", "-c"}}, "x.buzz", "-c")
+}
+
+func (s *ParseSuite) TestDoubleDashEndsOptions() { s.requireOpts(opts{args: []string{"-c"}}, "--", "-c") }
+
+func (s *ParseSuite) TestUnknownOption() {
+	_, err := s.parse("--bogus")
+	s.Error(err)
+}
+
+func (s *ParseSuite) TestEvalWithNoValue() {
+	_, err := s.parse("-e")
+	s.Error(err)
+}
+
+func (s *ParseSuite) TestLibraryPathWithNoValue() {
+	_, err := s.parse("--library-path")
+	s.Error(err)
 }
 
 func TestSourceRejectsEvalWithFile(t *testing.T) {
