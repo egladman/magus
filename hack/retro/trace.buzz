@@ -11,6 +11,7 @@ import "flags";
 import "fs";
 import "magus";
 import "path";
+import "result";
 import "std";
 import "time";
 import "vcs";
@@ -100,59 +101,75 @@ fun field(doc: any, key: str) > str {
 }
 
 // parseRecord reads one trail line and, when blobs keeps it, its request blob.
-export fun parseRecord(text: str, line: int, blobs: str) > Record !> any {
-    final doc = json\parse(text);
-    final r = mut Record{
-        line = line, at = std\toInt(doc["ts"] ?? 0), kind = field(doc, key: "kind"), action = field(doc, key: "action"),
-        agent = field(doc, key: "agent"), lease = field(doc, key: "lease"), leaseFrom = field(doc, key: "lease_from"),
-        preview = field(doc, key: "preview"), decidedBy = field(doc, key: "decided_by"), request = field(doc, key: "request_ref"),
-        response = field(doc, key: "response_ref"), verdict = field(doc, key: "verdict_ref"),
-        session = field(doc, key: "session"),
-    };
-    final file = fs\join(blobs, name: r.request);
-    if (r.request == "" or !fs\exists(file)) {
-        return r;
+export fun parseRecord(text: str, line: int, blobs: str) > result\Result::<Record> {
+    try {
+        final doc = json\parse(text);
+        final r = mut Record{
+            line = line, at = std\toInt(doc["ts"] ?? 0), kind = field(doc, key: "kind"), action = field(doc, key: "action"),
+            agent = field(doc, key: "agent"), lease = field(doc, key: "lease"), leaseFrom = field(doc, key: "lease_from"),
+            preview = field(doc, key: "preview"), decidedBy = field(doc, key: "decided_by"), request = field(doc, key: "request_ref"),
+            response = field(doc, key: "response_ref"), verdict = field(doc, key: "verdict_ref"),
+            session = field(doc, key: "session"),
+        };
+        final file = fs\join(blobs, name: r.request);
+        if (r.request == "" or !fs\exists(file)) {
+            return result\ok::<Record>(r);
+        }
+        final blob = json\parse(fs\readFile(file)) catch null;
+        if (blob == null) {
+            return result\ok::<Record>(r);
+        }
+        r.blob = true;
+        r.command = field(blob, key: "command");
+        r.path = field(blob, key: "path");
+        r.target = field(blob, key: "target");
+        r.message = field(blob, key: "context");
+        return result\ok::<Record>(r);
+    } catch (err: any) {
+        return result\caught::<Record>(err, doing: "trace: reading trail line {line}");
     }
-    final blob = json\parse(fs\readFile(file)) catch null;
-    if (blob == null) {
-        return r;
-    }
-    r.blob = true;
-    r.command = field(blob, key: "command");
-    r.path = field(blob, key: "path");
-    r.target = field(blob, key: "target");
-    r.message = field(blob, key: "context");
-    return r;
 }
 
 // loadTrail reads the records stamped inside [start, end], unix ms.
-// A missing trail raises: an empty trace would read as nothing happening.
-export fun loadTrail(events: str, blobs: str, start: int, end: int) > [Record] !> any {
-    if (!fs\exists(events)) {
-        throw "trace: no guard trail at {events}; name the checkout that holds it with --trail";
-    }
-    final found = mut [<Record>];
-    var line = 0;
-    foreach (text in fs\readFile(events).split("\n")) {
-        line = line + 1;
-        if (!text.startsWith("\{\"ts\":")) {
-            continue;
+// A missing trail fails: an empty trace would read as nothing happening.
+export fun loadTrail(events: str, blobs: str, start: int, end: int) > result\Result::<[Record]> {
+    try {
+        if (!fs\exists(events)) {
+            return result\fail::<[Record]>("trace: no guard trail at {events}; name the checkout that holds it with --trail");
         }
-        // Read the time off the prefix; out-of-window lines stay undecoded.
-        final comma = text.indexOf(",") ?? 0;
-        final at = std\parseInt(text.sub(6, len: comma - 6)) ?? 0;
-        if (at < start or at > end) {
-            continue;
+        final found = mut [<Record>];
+        var line = 0;
+        foreach (text in fs\readFile(events).split("\n")) {
+            line = line + 1;
+            if (!text.startsWith("\{\"ts\":")) {
+                continue;
+            }
+            // Read the time off the prefix; out-of-window lines stay undecoded.
+            final comma = text.indexOf(",") ?? 0;
+            final at = std\parseInt(text.sub(6, len: comma - 6)) ?? 0;
+            if (at < start or at > end) {
+                continue;
+            }
+            final read = parseRecord(text, line: line, blobs: blobs);
+            if (read.error != null) {
+                return result\fail::<[Record]>(read.error!.message);
+            }
+            found.append(read.value!);
         }
-        found.append(parseRecord(text, line: line, blobs: blobs));
+        return result\ok::<[Record]>(found);
+    } catch (err: any) {
+        return result\caught::<[Record]>(err, doing: "trace: reading the guard trail at {events}");
     }
-    return found;
 }
 
 // trailFor reads one checkout's trail records stamped in [start, end], unix ms.
-export fun trailFor(checkout: str, start: int, end: int) > [Record] !> any {
-    final dir = fs\join(checkout, name: ".magus/activity");
-    return loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: start, end: end);
+export fun trailFor(checkout: str, start: int, end: int) > result\Result::<[Record]> {
+    try {
+        final dir = fs\join(checkout, name: ".magus/activity");
+        return loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: start, end: end);
+    } catch (err: any) {
+        return result\caught::<[Record]>(err, doing: "trace: locating the trail of {checkout}");
+    }
 }
 
 // denied keeps the records the guard denied.
@@ -318,21 +335,21 @@ object Ledger {
 
 // seedAnchor finds the agents and jobs the seed names and returns the
 // time the timeline ends.
-fun seedAnchor(seed: Seed, records: [Record], commit: CommitFacts?, byId: {str: JobFacts}, agents: mut [str], ids: mut [str], missing: mut [str]) > int !> str {
+fun seedAnchor(seed: Seed, records: [Record], commit: CommitFacts?, byId: {str: JobFacts}, agents: mut [str], ids: mut [str], missing: mut [str]) > result\Result::<int> {
     if (seed.kind == "job") {
         if (byId[seed.value] == null) {
-            throw "trace: the job store holds no row {seed.value}";
+            return result\fail::<int>("trace: the job store holds no row {seed.value}");
         }
         addUnique(ids, value: seed.value);
-        return seed.at;
+        return result\ok::<int>(seed.at);
     }
     final hits = seedRecords(seed, records: records, commit: commit);
     if (hits.len() == 0) {
         if (seed.kind != "commit") {
-            throw "trace: no trail record in the window matches {seed.kind} {seed.value}; widen --since or name another --trail";
+            return result\fail::<int>("trace: no trail record in the window matches {seed.kind} {seed.value}; widen --since or name another --trail");
         }
         missing.append("the agent that made commit {commit!.short}: no trail record in the window runs git commit with its subject");
-        return seed.at;
+        return result\ok::<int>(seed.at);
     }
     final last = hits[hits.len() - 1];
     addUnique(agents, value: last.agent);
@@ -340,7 +357,7 @@ fun seedAnchor(seed: Seed, records: [Record], commit: CommitFacts?, byId: {str: 
     if (last.agent == "") {
         missing.append("which agent made {cite(last)}: the record names none, so it is the root's or a person's");
     }
-    return if (seed.kind != "commit") last.at else seed.at;
+    return result\ok::<int>(if (seed.kind != "commit") last.at else seed.at);
 }
 
 // widenScope adds the leases the known agents ran under, then the agents
@@ -595,8 +612,8 @@ fun commitStep(c: CommitFacts, ids: [str], byId: {str: JobFacts}, steps: mut [St
 
 // trace walks records (oldest first) back from seed into one timeline.
 // jobs is every row the store holds; commit is set only for a commit seed.
-// It raises when the seed names nothing the records or rows hold.
-export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: CommitFacts?) > Trace !> str {
+// It fails when the seed names nothing the records or rows hold.
+export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: CommitFacts?) > result\Result::<Trace> {
     final byId = mut {<str: JobFacts>};
     foreach (j in jobs) {
         byId[j.id] = j;
@@ -604,7 +621,11 @@ export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: Commit
     final agents = mut [<str>];
     final ids = mut [<str>];
     final missing = mut [<str>];
-    final anchor = seedAnchor(seed, records: records, commit: commit, byId: byId, agents: agents, ids: ids, missing: missing);
+    final anchored = seedAnchor(seed, records: records, commit: commit, byId: byId, agents: agents, ids: ids, missing: missing);
+    if (anchored.error != null) {
+        return result\fail::<Trace>(anchored.error!.message);
+    }
+    final anchor = anchored.value!;
     final within = mut [<Record>];
     foreach (r in records) {
         if (r.at <= anchor) {
@@ -623,7 +644,7 @@ export fun trace(seed: Seed, records: [Record], jobs: [JobFacts], commit: Commit
     }
     missing.append("whether a hook record is the host's own call or an envelope replayed on stdin: both are recorded with entry_point hook");
     final ordered = led.steps.sort(fun (a: Step, b: Step) > bool => a.at < b.at);
-    return Trace{ anchor = anchor, agents = agents, jobs = ids, steps = ordered, missing = missing, chain = chain(agents, led: led) };
+    return result\ok::<Trace>(Trace{ anchor = anchor, agents = agents, jobs = ids, steps = ordered, missing = missing, chain = chain(agents, led: led) });
 }
 
 fun releaseLine(a: str, e: Record, led: Ledger) > str {
@@ -733,16 +754,20 @@ fun facts(j: magus\Job) > JobFacts {
     };
 }
 
-fun commitFacts(rev: str) > CommitFacts !> any {
-    final c = vcs\commit(rev);
-    final files = mut [<str>];
-    foreach (f in vcs\cmd(["show", "--name-only", "--format=", c.id], opts: vcs\CommandOptions{ quiet = true }).stdout.split("\n")) {
-        if (f.trim() != "") {
-            files.append(f.trim());
+fun commitFacts(rev: str) > result\Result::<CommitFacts> {
+    try {
+        final c = vcs\commit(rev);
+        final files = mut [<str>];
+        foreach (f in vcs\cmd(["show", "--name-only", "--format=", c.id], opts: vcs\CommandOptions{ quiet = true }).stdout.split("\n")) {
+            if (f.trim() != "") {
+                files.append(f.trim());
+            }
         }
+        final at = std\toInt(time\parse(RFC3339, value: c.date));
+        return result\ok::<CommitFacts>(CommitFacts{ sha = c.id, short = c.short, subject = c.subject, at = at, files = files });
+    } catch (err: any) {
+        return result\caught::<CommitFacts>(err, doing: "trace: reading commit {rev}");
     }
-    final at = std\toInt(time\parse(RFC3339, value: c.date));
-    return CommitFacts{ sha = c.id, short = c.short, subject = c.subject, at = at, files = files };
 }
 
 // Args is the command line once checked.
@@ -755,79 +780,122 @@ object Args {
     checkouts: [str],
 }
 
-fun parseArgs(args: [str]) > Args !> any {
-    final parsed = flags\parse(args, switches: ["--help"], valued: ["--job", "--commit", "--record", "--path", "--at", "--since"], repeated: ["--trail"]);
-    if (parsed.values["--help"] != null) {
-        return Args{ help = true, kind = "", value = "", atText = "", lookback = 0, checkouts = [<str>] };
-    }
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "trace: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
-    final given = mut [<str>];
-    foreach (k in ["--job", "--commit", "--record", "--path"]) {
-        if (parsed.values[k] != null) {
-            given.append(k);
+fun parseArgs(args: [str]) > result\Result::<Args> {
+    try {
+        final parsed = flags\parse(args, switches: ["--help"], valued: ["--job", "--commit", "--record", "--path", "--at", "--since"], repeated: ["--trail"]);
+        if (parsed.values["--help"] != null) {
+            return result\ok::<Args>(Args{ help = true, kind = "", value = "", atText = "", lookback = 0, checkouts = [<str>] });
         }
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<Args>("trace: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}");
+        }
+        final given = mut [<str>];
+        foreach (k in ["--job", "--commit", "--record", "--path"]) {
+            if (parsed.values[k] != null) {
+                given.append(k);
+            }
+        }
+        if (given.len() != 1) {
+            return result\fail::<Args>("trace: name exactly one event: --job, --commit, --record or --path\n{USAGE}");
+        }
+        final kind = given[0].sub(2);
+        if (kind == "path" and parsed.values["--at"] == null) {
+            return result\fail::<Args>("trace: --path needs --at, the RFC3339 time to trace back from\n{USAGE}");
+        }
+        final trails = parsed.lists["--trail"] ?? [<str>];
+        return result\ok::<Args>(Args{ help = false, kind = kind, value = parsed.values[given[0]]!, atText = parsed.values["--at"] ?? "",
+            lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h")), checkouts = if (trails.len() > 0) trails else [vcs\root()] });
+    } catch (err: any) {
+        return result\caught::<Args>(err, doing: "trace: reading the options");
     }
-    if (given.len() != 1) {
-        throw "trace: name exactly one event: --job, --commit, --record or --path\n{USAGE}";
-    }
-    final kind = given[0].sub(2);
-    if (kind == "path" and parsed.values["--at"] == null) {
-        throw "trace: --path needs --at, the RFC3339 time to trace back from\n{USAGE}";
-    }
-    final trails = parsed.lists["--trail"] ?? [<str>];
-    return Args{ help = false, kind = kind, value = parsed.values[given[0]]!, atText = parsed.values["--at"] ?? "",
-        lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h")), checkouts = if (trails.len() > 0) trails else [vcs\root()] };
 }
 
-fun readJobs() > [JobFacts] !> any {
-    final rows = mut [<JobFacts>];
-    foreach (j in magus\workspace().jobs().jobs) {
-        rows.append(facts(j));
+fun readJobs() > result\Result::<[JobFacts]> {
+    try {
+        final rows = mut [<JobFacts>];
+        foreach (j in magus\workspace().jobs().jobs) {
+            rows.append(facts(j));
+        }
+        return result\ok::<[JobFacts]>(rows);
+    } catch (err: any) {
+        return result\caught::<[JobFacts]>(err, doing: "trace: reading the job store");
     }
-    return rows;
 }
 
 // eventTime is the time the trace walks back from, unix ms.
-fun eventTime(a: Args, rows: [JobFacts], commit: CommitFacts?) > int !> any {
-    var at = std\toInt(time\parse(RFC3339, value: time\nowIso()));
-    if (a.kind == "job") {
-        foreach (r in rows) {
-            if (r.id == a.value) {
-                at = (r.updated + 1) * 1000;
+fun eventTime(a: Args, rows: [JobFacts], commit: CommitFacts?) > result\Result::<int> {
+    try {
+        var at = std\toInt(time\parse(RFC3339, value: time\nowIso()));
+        if (a.kind == "job") {
+            foreach (r in rows) {
+                if (r.id == a.value) {
+                    at = (r.updated + 1) * 1000;
+                }
             }
+        } else if (a.kind == "commit") {
+            at = commit!.at + 1000;
+        } else if (a.kind == "path") {
+            at = std\toInt(time\parse(RFC3339, value: a.atText));
         }
-    } else if (a.kind == "commit") {
-        at = commit!.at + 1000;
-    } else if (a.kind == "path") {
-        at = std\toInt(time\parse(RFC3339, value: a.atText));
+        return result\ok::<int>(at);
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "trace: reading the event time");
     }
-    return at;
 }
 
-export fun readTrails(checkouts: [str], start: int, end: int) > [Record] !> any {
+export fun readTrails(checkouts: [str], start: int, end: int) > result\Result::<[Record]> {
     final records = mut [<Record>];
     foreach (c in checkouts) {
-        foreach (r in trailFor(c, start: start, end: end)) {
+        final read = trailFor(c, start: start, end: end);
+        if (read.error != null) {
+            return result\fail::<[Record]>(read.error!.message);
+        }
+        foreach (r in read.value!) {
             records.append(r);
         }
     }
-    return records;
+    return result\ok::<[Record]>(records);
 }
 
 export fun main(args: [str]) > void !> any {
-    final a = parseArgs(args);
+    final parsed = parseArgs(args);
+    if (parsed.error != null) {
+        throw parsed.error!.message;
+    }
+    final a = parsed.value!;
     if (a.help) {
         std\print(HELP);
         return;
     }
-    final rows = readJobs();
-    final commit: CommitFacts? = if (a.kind == "commit") commitFacts(a.value) else null;
-    final at = eventTime(a, rows: rows, commit: commit);
-    final records = readTrails(a.checkouts, start: at - a.lookback, end: at);
+    final jobs = readJobs();
+    if (jobs.error != null) {
+        throw jobs.error!.message;
+    }
+    final rows = jobs.value!;
+    var commit: CommitFacts? = null;
+    if (a.kind == "commit") {
+        final facts = commitFacts(a.value);
+        if (facts.error != null) {
+            throw facts.error!.message;
+        }
+        commit = facts.value!;
+    }
+    final timed = eventTime(a, rows: rows, commit: commit);
+    if (timed.error != null) {
+        throw timed.error!.message;
+    }
+    final at = timed.value!;
+    final read = readTrails(a.checkouts, start: at - a.lookback, end: at);
+    if (read.error != null) {
+        throw read.error!.message;
+    }
+    final records = read.value!;
     final ordered = records.cloneMutable().sort(fun (x: Record, y: Record) > bool => x.at < y.at);
-    final t = trace(Seed{ kind = a.kind, value = a.value, at = at }, records: ordered, jobs: rows, commit: commit);
+    final traced = trace(Seed{ kind = a.kind, value = a.value, at = at }, records: ordered, jobs: rows, commit: commit);
+    if (traced.error != null) {
+        throw traced.error!.message;
+    }
+    final t = traced.value!;
     final header = "read-only: traced {a.kind} {a.value} through {records.len()} trail record(s) from {a.checkouts.join(", ")} and {rows.len()} job row(s)";
     foreach (line in render(t, header: header)) {
         std\print(line);

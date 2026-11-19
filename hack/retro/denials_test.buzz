@@ -35,8 +35,8 @@ final POLICY = [
     "}",
 ].join("\n");
 
-fun denied(start: int) > [trace\Record] !> any {
-    return trace\denied(trace\loadTrail(EVENTS, blobs: "hack/retro/testdata/denials/blobs", start: start, end: retro\FOREVER));
+fun denied(start: int) > [trace\Record] {
+    return trace\denied(trace\loadTrail(EVENTS, blobs: "hack/retro/testdata/denials/blobs", start: start, end: retro\FOREVER).value!);
 }
 
 fun verdicts() > {str: str} {

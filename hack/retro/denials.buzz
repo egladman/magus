@@ -10,6 +10,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "time";
 import "vcs";
@@ -487,50 +488,66 @@ export fun render(found: [Fault], work: [Denial], missing: [str], header: str, l
     return lines;
 }
 
-export fun record(d: Denial, found: [Fault]) > str !> any {
+export fun record(d: Denial, found: [Fault]) > result\Result::<str> {
     final kinds = mut [<str>];
     foreach (f in found) {
         if (f.site == d.site and f.rule == d.rule) {
             kinds.append(f.kind);
         }
     }
-    return json\stringify({
-        "rule": d.rule, "origin": d.origin, "source": d.site, "say": d.say, "why": d.why, "fix": d.fix, "count": d.count, "faults": kinds,
-    });
+    try {
+        return result\ok::<str>(json\stringify({
+            "rule": d.rule, "origin": d.origin, "source": d.site, "say": d.say, "why": d.why, "fix": d.fix, "count": d.count, "faults": kinds,
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "denials: encoding {d.rule}");
+    }
 }
 
 // guardSites maps each catalogued rule to where internal/guard denies it.
-fun guardSites(root: str) > {str: str} !> any {
-    final goFiles = mut {<str: str>};
-    foreach (p in fs\glob(fs\join(root, name: "internal/guard/*.go"))) {
-        if (!p.value.endsWith("_test.go")) {
-            goFiles["internal/guard/{fs\basename(p.value)}"] = fs\readFile(p.value);
+fun guardSites(root: str) > result\Result::<{str: str}> {
+    try {
+        final goFiles = mut {<str: str>};
+        foreach (p in fs\glob(fs\join(root, name: "internal/guard/*.go"))) {
+            if (!p.value.endsWith("_test.go")) {
+                goFiles["internal/guard/{fs\basename(p.value)}"] = fs\readFile(p.value);
+            }
         }
+        return result\ok::<{str: str}>(catalogSites(goFiles));
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "denials: reading internal/guard");
     }
-    return catalogSites(goFiles);
 }
 
-fun denyingRules() > [str] !> any {
-    final described = magus\cmd("describe", args: ["rules", "-o", "json"], opts: magus\CommandOptions{ quiet = true });
-    final catalog: [any] = json\parse(described.stdout);
-    final denying = mut [<str>];
-    foreach (row in catalog) {
-        if ("{row["decision"]}" == "deny" or "{row["workspace"] ?? ""}" == "deny") {
-            denying.append("{row["name"]}");
+fun denyingRules() > result\Result::<[str]> {
+    try {
+        final described = magus\cmd("describe", args: ["rules", "-o", "json"], opts: magus\CommandOptions{ quiet = true });
+        final catalog: [any] = json\parse(described.stdout);
+        final denying = mut [<str>];
+        foreach (row in catalog) {
+            if ("{row["decision"]}" == "deny" or "{row["workspace"] ?? ""}" == "deny") {
+                denying.append("{row["name"]}");
+            }
         }
+        return result\ok::<[str]>(denying);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "denials: describing the guard rules");
     }
-    return denying;
 }
 
-fun fromPolicies(root: str) > Collected !> any {
-    final denials = mut [<Denial>];
-    final missing = mut [<str>];
-    foreach (p in fs\glob(fs\join(root, name: "hack/policy/*.buzz"))) {
-        final got = policyDenials("hack/policy/{fs\basename(p.value)}", text: fs\readFile(p.value));
-        foreach (d in got.denials) { denials.append(d); }
-        foreach (m in got.missing) { missing.append(m); }
+fun fromPolicies(root: str) > result\Result::<Collected> {
+    try {
+        final denials = mut [<Denial>];
+        final missing = mut [<str>];
+        foreach (p in fs\glob(fs\join(root, name: "hack/policy/*.buzz"))) {
+            final got = policyDenials("hack/policy/{fs\basename(p.value)}", text: fs\readFile(p.value));
+            foreach (d in got.denials) { denials.append(d); }
+            foreach (m in got.missing) { missing.append(m); }
+        }
+        return result\ok::<Collected>(Collected{ denials = denials, missing = missing });
+    } catch (err: any) {
+        return result\caught::<Collected>(err, doing: "denials: reading hack/policy");
     }
-    return Collected{ denials = denials, missing = missing };
 }
 
 // TrailRead is the denials of every checkout's trail; firings counts each
@@ -540,36 +557,44 @@ object TrailRead {
     firings: int,
 }
 
-fun fromCheckouts(checkouts: [str], start: int, sites: {str: str}) > TrailRead !> any {
-    final denials = mut [<Denial>];
-    final missing = mut [<str>];
-    var firings = 0;
-    foreach (c in checkouts) {
-        final dir = fs\join(c, name: ".magus/activity");
-        final events = fs\join(dir, name: "events.jsonl");
-        if (!fs\exists(events)) {
-            missing.append("every firing in {c}: no guard trail at {events}; name the checkout that holds it with --trail");
-            continue;
-        }
-        final hits = trace\denied(trace\trailFor(c, start: start, end: FOREVER));
-        final verdicts = mut {<str: str>};
-        foreach (h in hits) {
-            final blob = fs\join(dir, name: "blobs/{h.verdict}");
-            if (h.verdict != "" and fs\exists(blob)) {
-                verdicts[h.verdict] = fs\readFile(blob);
+fun fromCheckouts(checkouts: [str], start: int, sites: {str: str}) > result\Result::<TrailRead> {
+    try {
+        final denials = mut [<Denial>];
+        final missing = mut [<str>];
+        var firings = 0;
+        foreach (c in checkouts) {
+            final dir = fs\join(c, name: ".magus/activity");
+            final events = fs\join(dir, name: "events.jsonl");
+            if (!fs\exists(events)) {
+                missing.append("every firing in {c}: no guard trail at {events}; name the checkout that holds it with --trail");
+                continue;
             }
+            final read = trace\trailFor(c, start: start, end: FOREVER);
+            if (read.error != null) {
+                return result\fail::<TrailRead>(read.error!.message);
+            }
+            final hits = trace\denied(read.value!);
+            final verdicts = mut {<str: str>};
+            foreach (h in hits) {
+                final blob = fs\join(dir, name: "blobs/{h.verdict}");
+                if (h.verdict != "" and fs\exists(blob)) {
+                    verdicts[h.verdict] = fs\readFile(blob);
+                }
+            }
+            final got = fromTrail(hits, verdicts: verdicts, file: events);
+            firings = firings + hits.len();
+            foreach (d in got.denials) {
+                final row = sites[d.rule];
+                denials.append(if (row != null) Denial{
+                    rule = d.rule, origin = d.origin, site = "{d.site} {row!}", say = d.say, why = d.why, fix = d.fix, count = d.count, at = d.at,
+                } else d);
+            }
+            foreach (m in got.missing) { missing.append(m); }
         }
-        final got = fromTrail(hits, verdicts: verdicts, file: events);
-        firings = firings + hits.len();
-        foreach (d in got.denials) {
-            final row = sites[d.rule];
-            denials.append(if (row != null) Denial{
-                rule = d.rule, origin = d.origin, site = "{d.site} {row!}", say = d.say, why = d.why, fix = d.fix, count = d.count, at = d.at,
-            } else d);
-        }
-        foreach (m in got.missing) { missing.append(m); }
+        return result\ok::<TrailRead>(TrailRead{ got = Collected{ denials = denials, missing = missing }, firings = firings });
+    } catch (err: any) {
+        return result\caught::<TrailRead>(err, doing: "denials: reading the checkouts' trails");
     }
-    return TrailRead{ got = Collected{ denials = denials, missing = missing }, firings = firings };
 }
 
 // gaps names the links no record read holds for all.
@@ -611,9 +636,25 @@ export fun main(args: [str]) > void !> any {
         start = now - std\toInt(time\parseDuration(since));
     }
 
-    final denying = denyingRules();
-    final policies = fromPolicies(root);
-    final trail = fromCheckouts(checkouts, start: start, sites: guardSites(root));
+    final ruled = denyingRules();
+    if (ruled.error != null) {
+        throw ruled.error!.message;
+    }
+    final denying = ruled.value!;
+    final polled = fromPolicies(root);
+    if (polled.error != null) {
+        throw polled.error!.message;
+    }
+    final policies = polled.value!;
+    final guarded = guardSites(root);
+    if (guarded.error != null) {
+        throw guarded.error!.message;
+    }
+    final trailed = fromCheckouts(checkouts, start: start, sites: guarded.value!);
+    if (trailed.error != null) {
+        throw trailed.error!.message;
+    }
+    final trail = trailed.value!;
     final all = mut [<Denial>];
     final missing = mut [<str>];
     foreach (got in [policies, trail.got]) {
@@ -628,7 +669,11 @@ export fun main(args: [str]) > void !> any {
     final found = faults(all);
     if (parsed.values["--jsonl"] != null) {
         foreach (d in all) {
-            std\print(record(d, found: found));
+            final line = record(d, found: found);
+            if (line.error != null) {
+                throw line.error!.message;
+            }
+            std\print(line.value!);
         }
         return;
     }

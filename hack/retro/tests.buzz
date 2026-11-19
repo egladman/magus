@@ -10,6 +10,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "time";
 import "vcs";
@@ -496,7 +497,7 @@ export fun report(scope: [Sym], nodes: {str: Sym}, calls: [Call], blocks: [Block
 
 // checkProfile refuses a profile with no block for a file in scope.
 // Read as is, it would call every symbol there untested.
-export fun checkProfile(blocks: [Block], files: [str], profile: str) > void !> str {
+export fun checkProfile(blocks: [Block], files: [str], profile: str) > result\Result::<[Block]> {
     foreach (file in files) {
         var held = false;
         foreach (b in blocks) {
@@ -506,10 +507,11 @@ export fun checkProfile(blocks: [Block], files: [str], profile: str) > void !> s
             }
         }
         if (!held) {
-            throw "tests: {profile} holds no block for {file}, so it is narrower than the scope: a narrowed run wrote it, or that file "
-                + "has no statements. An unnarrowed `./magus run test .` writes .magus/coverage.hand.out; name another with --profile";
+            return result\fail::<[Block]>("tests: {profile} holds no block for {file}, so it is narrower than the scope: a narrowed run wrote it, or that file "
+                + "has no statements. An unnarrowed `./magus run test .` writes .magus/coverage.hand.out; name another with --profile");
         }
     }
+    return result\ok::<[Block]>(blocks);
 }
 
 fun cmdExplain(id: str) > str {
@@ -615,29 +617,33 @@ fun missing(findings: [Finding], depth: int) > [str] {
     return found;
 }
 
-export fun jsonLines(findings: [Finding], profile: str, depth: int) > [str] !> any {
+export fun jsonLines(findings: [Finding], profile: str, depth: int) > result\Result::<[str]> {
     final lines = mut [<str>];
-    foreach (f in findings) {
-        final tests = mut [<any>];
-        foreach (r in f.reach) {
-            tests.append({"test": r.root.label, "id": r.root.id, "source": "{r.root.file}:{r.root.line}-{r.root.end}", "depth": r.depth,
-                "via": r.via, "packages": r.packages, "helpers": r.helpers, "signals": r.signals, "layer": r.layer, "asserts": r.asserts});
+    try {
+        foreach (f in findings) {
+            final tests = mut [<any>];
+            foreach (r in f.reach) {
+                tests.append({"test": r.root.label, "id": r.root.id, "source": "{r.root.file}:{r.root.line}-{r.root.end}", "depth": r.depth,
+                    "via": r.via, "packages": r.packages, "helpers": r.helpers, "signals": r.signals, "layer": r.layer, "asserts": r.asserts});
+            }
+            final never = mut [<any>];
+            foreach (b in f.uncovered) {
+                never.append({"span": "{b.file}:{b.span}", "stmts": b.stmts, "cite": "{profile}:{b.at}"});
+            }
+            final row: {str: any} = {
+                "kind": "symbol", "symbol": f.sym.label, "id": f.sym.id, "source": "{f.sym.file}:{f.sym.line}-{f.sym.end}",
+                "signature": f.sym.signature, "test_refs": f.sym.testRefs,
+                "coverage": {"covered": f.covered, "total": f.total, "blocks": f.blocks, "profile": profile, "never_ran": never},
+                "operands": f.operands, "tests": tests, "worklist": f.worklist,
+            };
+            lines.append(json\stringify(row));
         }
-        final never = mut [<any>];
-        foreach (b in f.uncovered) {
-            never.append({"span": "{b.file}:{b.span}", "stmts": b.stmts, "cite": "{profile}:{b.at}"});
-        }
-        final row: {str: any} = {
-            "kind": "symbol", "symbol": f.sym.label, "id": f.sym.id, "source": "{f.sym.file}:{f.sym.line}-{f.sym.end}",
-            "signature": f.sym.signature, "test_refs": f.sym.testRefs,
-            "coverage": {"covered": f.covered, "total": f.total, "blocks": f.blocks, "profile": profile, "never_ran": never},
-            "operands": f.operands, "tests": tests, "worklist": f.worklist,
-        };
-        lines.append(json\stringify(row));
+        final tail: {str: any} = {"kind": "not_recorded", "items": missing(findings, depth: depth)};
+        lines.append(json\stringify(tail));
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "tests: encoding the findings");
     }
-    final tail: {str: any} = {"kind": "not_recorded", "items": missing(findings, depth: depth)};
-    lines.append(json\stringify(tail));
-    return lines;
 }
 
 fun intAttr(n: magus\KnowledgeNode, key: str) > int {
@@ -657,38 +663,46 @@ fun isFunc(n: magus\KnowledgeNode) > bool {
     return (n.attrs["signature"] ?? "").startsWith("func ") and n.source.indexOf(":") != null;
 }
 
-fun definedIn(file: str) > [str] !> any {
-    final card = magus\graph().explain(file);
-    if (card.resolution != magus\KnowledgeResolution.path) {
-        throw "tests: {file} is not a file the graph holds (resolved {card.resolution.value} to {card.node.id})";
-    }
-    final ids = mut [<str>];
-    foreach (o in card.out) {
-        if (o.relation == magus\RelationID.defines and o.otherKind == "symbol") {
-            ids.append(o.other);
+fun definedIn(file: str) > result\Result::<[str]> {
+    try {
+        final card = magus\graph().explain(file);
+        if (card.resolution != magus\KnowledgeResolution.path) {
+            return result\fail::<[str]>("tests: {file} is not a file the graph holds (resolved {card.resolution.value} to {card.node.id})");
         }
+        final ids = mut [<str>];
+        foreach (o in card.out) {
+            if (o.relation == magus\RelationID.defines and o.otherKind == "symbol") {
+                ids.append(o.other);
+            }
+        }
+        return result\ok::<[str]>(ids);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "tests: asking the graph about {file}");
     }
-    return ids;
 }
 
-fun resolveSymbol(name: str) > str !> any {
+fun resolveSymbol(name: str) > result\Result::<str> {
     if (name.startsWith("symbol:")) {
-        return name;
+        return result\ok::<str>(name);
     }
-    final q = magus\graph().query("kind=symbol id=~[/#]{name}\\(\\)\\.$");
-    final ids = mut [<str>];
-    foreach (m in q.nodes) {
-        if (m.kind == "symbol" and !isTestFile(m.source) and (m.id.endsWith("/{name}().") or m.id.endsWith("#{name}()."))) {
-            addUnique(ids, value: m.id);
+    try {
+        final q = magus\graph().query("kind=symbol id=~[/#]{name}\\(\\)\\.$");
+        final ids = mut [<str>];
+        foreach (m in q.nodes) {
+            if (m.kind == "symbol" and !isTestFile(m.source) and (m.id.endsWith("/{name}().") or m.id.endsWith("#{name}()."))) {
+                addUnique(ids, value: m.id);
+            }
         }
+        if (ids.len() == 0) {
+            return result\fail::<str>("tests: no non-test function or method is named {name} (query verdict {q.answer.verdict.value}); pass its symbol id");
+        }
+        if (ids.len() > 1) {
+            return result\fail::<str>("tests: {name} names {ids.len()} symbols; pass one id:\n  {ids.join("\n  ")}");
+        }
+        return result\ok::<str>(ids[0]);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "tests: resolving {name}");
     }
-    if (ids.len() == 0) {
-        throw "tests: no non-test function or method is named {name} (query verdict {q.answer.verdict.value}); pass its symbol id";
-    }
-    if (ids.len() > 1) {
-        throw "tests: {name} names {ids.len()} symbols; pass one id:\n  {ids.join("\n  ")}";
-    }
-    return ids[0];
 }
 
 // Request is the command line once checked.
@@ -703,171 +717,248 @@ object Request {
     jsonl: bool,
 }
 
-fun parseRequest(args: [str]) > Request !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--jsonl"], valued: ["--file", "--package", "--profile", "--depth", "--limit"], repeated: ["--symbol"]);
-    if (parsed.values["--help"] != null) {
-        return Request{ help = true, symbols = [<str>], profile = "", depth = 0, limit = 0, jsonl = false };
-    }
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "tests: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
-    final symbols = parsed.lists["--symbol"] ?? [<str>];
-    var kinds = if (symbols.len() > 0) 1 else 0;
-    foreach (k in ["--file", "--package"]) {
-        if (parsed.values[k] != null) {
-            kinds = kinds + 1;
+fun parseRequest(args: [str]) > result\Result::<Request> {
+    try {
+        final parsed = flags\parse(args, switches: ["--help", "--jsonl"], valued: ["--file", "--package", "--profile", "--depth", "--limit"], repeated: ["--symbol"]);
+        if (parsed.values["--help"] != null) {
+            return result\ok::<Request>(Request{ help = true, symbols = [<str>], profile = "", depth = 0, limit = 0, jsonl = false });
         }
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<Request>("tests: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}");
+        }
+        final symbols = parsed.lists["--symbol"] ?? [<str>];
+        var kinds = if (symbols.len() > 0) 1 else 0;
+        foreach (k in ["--file", "--package"]) {
+            if (parsed.values[k] != null) {
+                kinds = kinds + 1;
+            }
+        }
+        if (kinds != 1) {
+            return result\fail::<Request>("tests: name exactly one scope: --symbol (repeatable), --file or --package\n{USAGE}");
+        }
+        final depth = std\parseInt(parsed.values["--depth"] ?? "4") ?? 0;
+        final limit = std\parseInt(parsed.values["--limit"] ?? "12") ?? 0;
+        if (depth < 1 or limit < 1) {
+            return result\fail::<Request>("tests: --depth and --limit take a positive integer\n{USAGE}");
+        }
+        return result\ok::<Request>(Request{ help = false, symbols = symbols, file = parsed.values["--file"], dir = parsed.values["--package"],
+            profile = parsed.values["--profile"] ?? ".magus/coverage.hand.out", depth = depth, limit = limit, jsonl = parsed.values["--jsonl"] != null });
+    } catch (err: any) {
+        return result\caught::<Request>(err, doing: "tests: reading the options");
     }
-    if (kinds != 1) {
-        throw "tests: name exactly one scope: --symbol (repeatable), --file or --package\n{USAGE}";
-    }
-    final depth = std\parseInt(parsed.values["--depth"] ?? "4") ?? 0;
-    final limit = std\parseInt(parsed.values["--limit"] ?? "12") ?? 0;
-    if (depth < 1 or limit < 1) {
-        throw "tests: --depth and --limit take a positive integer\n{USAGE}";
-    }
-    return Request{ help = false, symbols = symbols, file = parsed.values["--file"], dir = parsed.values["--package"],
-        profile = parsed.values["--profile"] ?? ".magus/coverage.hand.out", depth = depth, limit = limit, jsonl = parsed.values["--jsonl"] != null };
 }
 
-fun scopeIds(req: Request) > [str] !> any {
+fun scopeIds(req: Request) > result\Result::<[str]> {
     final ids = mut [<str>];
     if (req.symbols.len() > 0) {
         foreach (name in req.symbols) {
-            addUnique(ids, value: resolveSymbol(name));
+            final resolved = resolveSymbol(name);
+            if (resolved.error != null) {
+                return result\fail::<[str]>(resolved.error!.message);
+            }
+            addUnique(ids, value: resolved.value!);
         }
     } else if (req.file != null) {
-        foreach (id in definedIn(req.file!)) {
+        final defined = definedIn(req.file!);
+        if (defined.error != null) {
+            return result\fail::<[str]>(defined.error!.message);
+        }
+        foreach (id in defined.value!) {
             addUnique(ids, value: id);
         }
     } else {
-        foreach (file in magus\graph().dir(req.dir!).files) {
-            if (file.endsWith(".go") and !isTestFile(file)) {
-                foreach (id in definedIn(file)) {
-                    addUnique(ids, value: id);
+        try {
+            foreach (file in magus\graph().dir(req.dir!).files) {
+                if (file.endsWith(".go") and !isTestFile(file)) {
+                    final defined = definedIn(file);
+                    if (defined.error != null) {
+                        return result\fail::<[str]>(defined.error!.message);
+                    }
+                    foreach (id in defined.value!) {
+                        addUnique(ids, value: id);
+                    }
                 }
             }
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "tests: listing {req.dir!}");
         }
     }
-    return ids;
+    return result\ok::<[str]>(ids);
 }
 
 // gather reads the calls edges above each id into nodes and calls, and
 // the ids themselves into scope.
-fun gather(ids: [str], depth: int, nodes: mut {str: Sym}, calls: mut [Call], scope: mut [Sym]) > void !> any {
+fun gather(ids: [str], depth: int, nodes: mut {str: Sym}, calls: mut [Call], scope: mut [Sym]) > result\Result::<int> {
     final gaps = mut [<str>];
-    foreach (id in ids) {
-        final nb = magus\graph().neighborhood(id, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID.calls], direction = magus\EdgeDirection.inward });
-        foreach (g in nb.answer.gaps) {
-            if (g.language == "go") {
-                addUnique(gaps, value: "{g.project.path} ({g.state.value})");
+    try {
+        foreach (id in ids) {
+            final nb = magus\graph().neighborhood(id, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID.calls], direction = magus\EdgeDirection.inward });
+            foreach (g in nb.answer.gaps) {
+                if (g.language == "go") {
+                    addUnique(gaps, value: "{g.project.path} ({g.state.value})");
+                }
             }
-        }
-        foreach (n in nb.nodes) {
-            if (n.kind == "symbol" and isFunc(n)) {
-                nodes[n.id] = symOf(n);
-                if (n.id == nb.focus) {
-                    scope.append(symOf(n));
+            foreach (n in nb.nodes) {
+                if (n.kind == "symbol" and isFunc(n)) {
+                    nodes[n.id] = symOf(n);
+                    if (n.id == nb.focus) {
+                        scope.append(symOf(n));
+                    }
+                }
+            }
+            foreach (l in nb.links) {
+                if (l.relation == magus\RelationID.calls) {
+                    calls.append(Call{ caller = l.source, callee = l.target });
                 }
             }
         }
-        foreach (l in nb.links) {
-            if (l.relation == magus\RelationID.calls) {
-                calls.append(Call{ caller = l.source, callee = l.target });
-            }
-        }
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "tests: reading the calls edges");
     }
     if (gaps.len() > 0) {
-        throw "tests: no Go symbol index for {gaps.join(", ")}; reach would read as none. Run `./magus graph build`";
+        return result\fail::<int>("tests: no Go symbol index for {gaps.join(", ")}; reach would read as none. Run `./magus graph build`");
     }
+    return result\ok::<int>(calls.len());
 }
 
 // addTestCallees adds the calls edges out of each test, and the test
 // helpers they reach.
-fun addTestCallees(nodes: mut {str: Sym}, calls: mut [Call]) > void !> any {
-    final explained = mut {<str: bool>};
-    foreach (id, s in nodes.clone()) {
-        if (!isRoot(s)) {
-            continue;
-        }
-        foreach (o in magus\graph().explain(id).out) {
-            if (o.relation != magus\RelationID.calls) {
+fun addTestCallees(nodes: mut {str: Sym}, calls: mut [Call]) > result\Result::<int> {
+    try {
+        final explained = mut {<str: bool>};
+        foreach (id, s in nodes.clone()) {
+            if (!isRoot(s)) {
                 continue;
             }
-            calls.append(Call{ caller = id, callee = o.other });
-            if (nodes[o.other] == null and explained[o.other] == null) {
-                explained[o.other] = true;
-                final card = magus\graph().explain(o.other);
-                if (isFunc(card.node) and isTestFile(symOf(card.node).file)) {
-                    nodes[o.other] = symOf(card.node);
+            foreach (o in magus\graph().explain(id).out) {
+                if (o.relation != magus\RelationID.calls) {
+                    continue;
+                }
+                calls.append(Call{ caller = id, callee = o.other });
+                if (nodes[o.other] == null and explained[o.other] == null) {
+                    explained[o.other] = true;
+                    final card = magus\graph().explain(o.other);
+                    if (isFunc(card.node) and isTestFile(symOf(card.node).file)) {
+                        nodes[o.other] = symOf(card.node);
+                    }
                 }
             }
         }
+        return result\ok::<int>(calls.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "tests: reading the edges out of each test");
     }
 }
 
-fun profilePathOf(profile: str, root: str) > str !> str {
-    final path = if (profile.startsWith("/")) profile else fs\join(root, name: profile);
-    if (!fs\exists(path)) {
-        throw "tests: no coverage profile at {path}; an unnarrowed `./magus run test .` writes .magus/coverage.hand.out, or name one with --profile";
-    }
-    return path;
-}
-
-fun loadBlocks(path: str, module: str, scope: [Sym], profile: str) > [Block] !> any {
-    final blocks = parseProfile(fs\readFile(path), module: module);
-    final files = mut [<str>];
-    foreach (s in scope) {
-        addUnique(files, value: s.file);
-    }
-    checkProfile(blocks, files: files, profile: profile);
-    return blocks;
-}
-
-fun readSources(root: str, nodes: {str: Sym}) > {str: str} !> any {
-    final sources = mut {<str: str>};
-    foreach (id, s in nodes) {
-        if (sources[s.file] == null) {
-            final path = fs\join(root, name: s.file);
-            sources[s.file] = if (fs\exists(path)) fs\readFile(path) else "";
+fun profilePathOf(profile: str, root: str) > result\Result::<str> {
+    try {
+        final path = if (profile.startsWith("/")) profile else fs\join(root, name: profile);
+        if (!fs\exists(path)) {
+            return result\fail::<str>("tests: no coverage profile at {path}; an unnarrowed `./magus run test .` writes .magus/coverage.hand.out, or name one with --profile");
         }
+        return result\ok::<str>(path);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "tests: locating the coverage profile {profile}");
     }
-    return sources;
 }
 
-fun printReport(req: Request, findings: [Finding], symbols: int, calls: int, profilePath: str) > void !> any {
+fun loadBlocks(path: str, module: str, scope: [Sym], profile: str) > result\Result::<[Block]> {
+    try {
+        final blocks = parseProfile(fs\readFile(path), module: module);
+        final files = mut [<str>];
+        foreach (s in scope) {
+            addUnique(files, value: s.file);
+        }
+        return checkProfile(blocks, files: files, profile: profile);
+    } catch (err: any) {
+        return result\caught::<[Block]>(err, doing: "tests: reading the coverage profile {path}");
+    }
+}
+
+fun readSources(root: str, nodes: {str: Sym}) > result\Result::<{str: str}> {
+    try {
+        final sources = mut {<str: str>};
+        foreach (id, s in nodes) {
+            if (sources[s.file] == null) {
+                final path = fs\join(root, name: s.file);
+                sources[s.file] = if (fs\exists(path)) fs\readFile(path) else "";
+            }
+        }
+        return result\ok::<{str: str}>(sources);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "tests: reading the sources");
+    }
+}
+
+fun printReport(req: Request, findings: [Finding], symbols: int, calls: int, profilePath: str) > result\Result::<int> {
     if (req.jsonl) {
-        foreach (line in jsonLines(findings, profile: req.profile, depth: req.depth)) {
+        final encoded = jsonLines(findings, profile: req.profile, depth: req.depth);
+        if (encoded.error != null) {
+            return result\fail::<int>(encoded.error!.message);
+        }
+        foreach (line in encoded.value!) {
             std\print(line);
         }
-        return;
+        return result\ok::<int>(findings.len());
     }
-    final info = fs\stat(profilePath);
-    final written = time\format("2006-01-02 15:04:05", unixMillis: info.mtime) catch "{info.mtime}";
-    std\print("read-only: {symbols} symbol(s), {calls} calls edge(s) within depth {req.depth}, profile {req.profile} ({info.size} bytes, written {written} UTC)");
+    try {
+        final info = fs\stat(profilePath);
+        final written = time\format("2006-01-02 15:04:05", unixMillis: info.mtime) catch "{info.mtime}";
+        std\print("read-only: {symbols} symbol(s), {calls} calls edge(s) within depth {req.depth}, profile {req.profile} ({info.size} bytes, written {written} UTC)");
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "tests: reading {profilePath}");
+    }
     std\print("");
     foreach (line in render(findings, profile: req.profile, limit: req.limit, depth: req.depth)) {
         std\print(line);
     }
+    return result\ok::<int>(findings.len());
 }
 
 export fun main(args: [str]) > void !> any {
-    final req = parseRequest(args);
+    final asked = parseRequest(args);
+    if (asked.error != null) {
+        throw asked.error!.message;
+    }
+    final req = asked.value!;
     if (req.help) {
         std\print(HELP);
         return;
     }
     final root = vcs\root();
     final module = (fs\readFile(fs\join(root, name: "go.mod")).split("\n")[0]).replace("module ", with: "").trim();
-    final ids = scopeIds(req);
+    final scoped = scopeIds(req);
+    if (scoped.error != null) {
+        throw scoped.error!.message;
+    }
     final nodes = mut {<str: Sym>};
     final calls = mut [<Call>];
     final scope = mut [<Sym>];
-    gather(ids, depth: req.depth, nodes: nodes, calls: calls, scope: scope);
-    addTestCallees(nodes, calls: calls);
-    final profilePath = profilePathOf(req.profile, root: root);
-    final blocks = loadBlocks(profilePath, module: module, scope: scope, profile: req.profile);
-    final findings = report(scope, nodes: nodes, calls: calls, blocks: blocks, sources: readSources(root, nodes: nodes), module: module, depth: req.depth);
-    printReport(req, findings: findings, symbols: scope.len(), calls: calls.len(), profilePath: profilePath);
+    final gathered = gather(scoped.value!, depth: req.depth, nodes: nodes, calls: calls, scope: scope);
+    if (gathered.error != null) {
+        throw gathered.error!.message;
+    }
+    final callees = addTestCallees(nodes, calls: calls);
+    if (callees.error != null) {
+        throw callees.error!.message;
+    }
+    final located = profilePathOf(req.profile, root: root);
+    if (located.error != null) {
+        throw located.error!.message;
+    }
+    final profilePath = located.value!;
+    final loaded = loadBlocks(profilePath, module: module, scope: scope, profile: req.profile);
+    if (loaded.error != null) {
+        throw loaded.error!.message;
+    }
+    final read = readSources(root, nodes: nodes);
+    if (read.error != null) {
+        throw read.error!.message;
+    }
+    final findings = report(scope, nodes: nodes, calls: calls, blocks: loaded.value!, sources: read.value!, module: module, depth: req.depth);
+    final printed = printReport(req, findings: findings, symbols: scope.len(), calls: calls.len(), profilePath: profilePath);
+    if (printed.error != null) {
+        throw printed.error!.message;
+    }
 }
 

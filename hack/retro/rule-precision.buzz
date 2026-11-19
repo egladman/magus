@@ -124,27 +124,40 @@ export fun fingerprint(source: str, rule: str, path: str, text: str) > str {
 }
 
 // stateFile is the named file under $XDG_STATE_HOME/magus. Never commit it.
-export fun stateFile(name: str) > str !> any {
-    final base = env\getOr("XDG_STATE_HOME", def: "");
-    final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
-    return fs\join(root, name: "magus/{name}");
+export fun stateFile(name: str) > result\Result::<str> {
+    try {
+        final base = env\getOr("XDG_STATE_HOME", def: "");
+        final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
+        return result\ok::<str>(fs\join(root, name: "magus/{name}"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "rule-precision: locating the state file {name}");
+    }
 }
 
-export fun firingLine(f: Firing) > str !> any {
-    return json\stringify({
-        "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
-        "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
-    });
+export fun firingLine(f: Firing) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({
+            "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
+            "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "rule-precision: encoding a firing of {f.rule}");
+    }
 }
 
 // appendFirings adds lines to file and creates its directory. It rewrites
 // nothing, so a second writer cannot lose the first's lines.
-export fun appendFirings(file: str, lines: [str]) > void !> any {
+export fun appendFirings(file: str, lines: [str]) > result\Result::<int> {
     if (lines.len() == 0) {
-        return;
+        return result\ok::<int>(0);
     }
-    fs\mkdirAll(fs\dirname(file));
-    fs\appendFile(file, content: lines.join("\n") + "\n");
+    try {
+        fs\mkdirAll(fs\dirname(file));
+        fs\appendFile(file, content: lines.join("\n") + "\n");
+        return result\ok::<int>(lines.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "rule-precision: appending to {file}");
+    }
 }
 
 fun text(doc: any, key: str) > str {
@@ -356,7 +369,7 @@ fun isFinding(f: Firing) > bool {
 
 // lintSignals marks a finding suppressed where the file now says so. It is
 // reworded when the newest run of its rule no longer raises it.
-export fun lintSignals(firings: [Firing], lines: fun (path: str) > [str] !> any) > [Signal] !> any {
+export fun lintSignals(firings: [Firing], lines: fun (path: str) > [str]) > [Signal] {
     final found = mut [<Signal>];
     final newest = mut {<str: int>};
     foreach (f in firings) {
@@ -593,24 +606,41 @@ fun ruleRow(ev: Evidence, rule: str, source: str, firings: int, prints: [str], s
     };
 }
 
-fun round4(x: double?) > double? !> any {
+fun round4(x: double?) > result\Result::<double?> {
     if (x -> v) {
-        return math\round(v, places: 4);
+        try {
+            return result\ok::<double?>(math\round(v, places: 4));
+        } catch (err: any) {
+            return result\caught::<double?>(err, doing: "rule-precision: rounding {v}");
+        }
     }
-    return null;
+    return result\ok::<double?>(null);
 }
 
-export fun rowJson(r: Row) > str !> any {
+export fun rowJson(r: Row) > result\Result::<str> {
     final counts = mut {<str: int>};
     foreach (o in OUTCOMES) {
         counts[o] = r.outcomes[o] ?? 0;
     }
-    return json\stringify({
-        "kind": "rule", "rule": r.rule, "source": r.source, "firings": r.firings, "fingerprints": r.fingerprints,
-        "outcomes": counts, "tp": r.tp, "fp": r.fp, "unlabeled": r.unlabeled, "precision": round4(r.precision),
-        "wilson_lb": round4(r.wilson), "review_confirmed": r.confirmed, "escaped_in_class": r.escaped, "recall": round4(r.recall),
-        "denials": r.denials, "mean_retries": round4(r.meanRetries), "wall_seconds": r.wallSeconds, "unresolved": r.unresolved,
-    });
+    final precision = round4(r.precision);
+    final wilson = round4(r.wilson);
+    final recall = round4(r.recall);
+    final retries = round4(r.meanRetries);
+    foreach (got in [precision, wilson, recall, retries]) {
+        if (got.error != null) {
+            return result\fail::<str>(got.error!.message);
+        }
+    }
+    try {
+        return result\ok::<str>(json\stringify({
+            "kind": "rule", "rule": r.rule, "source": r.source, "firings": r.firings, "fingerprints": r.fingerprints,
+            "outcomes": counts, "tp": r.tp, "fp": r.fp, "unlabeled": r.unlabeled, "precision": precision.value,
+            "wilson_lb": wilson.value, "review_confirmed": r.confirmed, "escaped_in_class": r.escaped, "recall": recall.value,
+            "denials": r.denials, "mean_retries": retries.value, "wall_seconds": r.wallSeconds, "unresolved": r.unresolved,
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "rule-precision: encoding the row of {r.rule}");
+    }
 }
 
 // escapedClasses counts the confirmed defects no rule flagged, per class.
@@ -622,19 +652,35 @@ export fun escapedClasses(escaped: [Review]) > {str: int} {
     return by;
 }
 
-fun pct(x: double?) > str !> any {
+fun pct(x: double?) > result\Result::<str> {
     if (x -> v) {
-        return "{math\round(v * 100.0, places: 1)}%";
+        try {
+            return result\ok::<str>("{math\round(v * 100.0, places: 1)}%");
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "rule-precision: rounding {v}");
+        }
     }
-    return "-";
+    return result\ok::<str>("-");
 }
 
-export fun table(all: [Row]) > [str] !> any {
+export fun table(all: [Row]) > result\Result::<[str]> {
     final lines = mut ["rule  source  firings  tp  fp  unlabeled  precision  wilson-lb  recall  denials  retries"];
     foreach (r in all) {
-        lines.append("{r.rule}  {r.source}  {r.firings}  {r.tp}  {r.fp}  {r.unlabeled}  {pct(r.precision)}  {pct(r.wilson)}  {pct(r.recall)}  {r.denials}  {round4(r.meanRetries) ?? 0.0}");
+        final precision = pct(r.precision);
+        final wilson = pct(r.wilson);
+        final recall = pct(r.recall);
+        final retries = round4(r.meanRetries);
+        foreach (got in [precision, wilson, recall]) {
+            if (got.error != null) {
+                return result\fail::<[str]>(got.error!.message);
+            }
+        }
+        if (retries.error != null) {
+            return result\fail::<[str]>(retries.error!.message);
+        }
+        lines.append("{r.rule}  {r.source}  {r.firings}  {r.tp}  {r.fp}  {r.unlabeled}  {precision.value!}  {wilson.value!}  {recall.value!}  {r.denials}  {retries.value ?? 0.0}");
     }
-    return lines;
+    return result\ok::<[str]>(lines);
 }
 
 object LoadedFirings {
@@ -652,67 +698,83 @@ object LoadedReviews {
     refused: [str],
 }
 
-fun readFirings(file: str) > LoadedFirings !> any {
-    final items = mut [<Firing>];
-    final refused = mut [<str>];
-    foreach (n, row in fs\readLines(file)) {
-        if (row.trim() == "") {
-            continue;
+fun readFirings(file: str) > result\Result::<LoadedFirings> {
+    try {
+        final items = mut [<Firing>];
+        final refused = mut [<str>];
+        foreach (n, row in fs\readLines(file)) {
+            if (row.trim() == "") {
+                continue;
+            }
+            final got = parseFiring(row);
+            if (got.error -> err) {
+                refused.append("{file}:{n + 1}: {err.message}");
+            } else {
+                items.append(got.value!);
+            }
         }
-        final got = parseFiring(row);
-        if (got.error -> err) {
-            refused.append("{file}:{n + 1}: {err.message}");
-        } else {
-            items.append(got.value!);
-        }
+        return result\ok::<LoadedFirings>(LoadedFirings{ items = items, refused = refused });
+    } catch (err: any) {
+        return result\caught::<LoadedFirings>(err, doing: "rule-precision: reading {file}");
     }
-    return LoadedFirings{ items = items, refused = refused };
 }
 
 // readLabels keeps the last line per fingerprint.
-fun readLabels(file: str) > LoadedLabels !> any {
-    final items = mut {<str: Label>};
-    final refused = mut [<str>];
-    foreach (n, row in fs\readLines(file)) {
-        if (row.trim() == "") {
-            continue;
+fun readLabels(file: str) > result\Result::<LoadedLabels> {
+    try {
+        final items = mut {<str: Label>};
+        final refused = mut [<str>];
+        foreach (n, row in fs\readLines(file)) {
+            if (row.trim() == "") {
+                continue;
+            }
+            final got = parseLabel(row);
+            if (got.error -> err) {
+                refused.append("{file}:{n + 1}: {err.message}");
+            } else {
+                items[got.value!.fingerprint] = got.value!;
+            }
         }
-        final got = parseLabel(row);
-        if (got.error -> err) {
-            refused.append("{file}:{n + 1}: {err.message}");
-        } else {
-            items[got.value!.fingerprint] = got.value!;
-        }
+        return result\ok::<LoadedLabels>(LoadedLabels{ items = items, refused = refused });
+    } catch (err: any) {
+        return result\caught::<LoadedLabels>(err, doing: "rule-precision: reading {file}");
     }
-    return LoadedLabels{ items = items, refused = refused };
 }
 
-fun readReviews(file: str) > LoadedReviews !> any {
-    final items = mut [<Review>];
-    final refused = mut [<str>];
-    foreach (n, row in fs\readLines(file)) {
-        if (row.trim() == "") {
-            continue;
+fun readReviews(file: str) > result\Result::<LoadedReviews> {
+    try {
+        final items = mut [<Review>];
+        final refused = mut [<str>];
+        foreach (n, row in fs\readLines(file)) {
+            if (row.trim() == "") {
+                continue;
+            }
+            final got = parseReview(row);
+            if (got.error -> err) {
+                refused.append("{file}:{n + 1}: {err.message}");
+            } else {
+                items.append(got.value!);
+            }
         }
-        final got = parseReview(row);
-        if (got.error -> err) {
-            refused.append("{file}:{n + 1}: {err.message}");
-        } else {
-            items.append(got.value!);
-        }
+        return result\ok::<LoadedReviews>(LoadedReviews{ items = items, refused = refused });
+    } catch (err: any) {
+        return result\caught::<LoadedReviews>(err, doing: "rule-precision: reading {file}");
     }
-    return LoadedReviews{ items = items, refused = refused };
 }
 
-fun verdictsOf(checkout: str, records: [trace\Record]) > {str: str} !> any {
-    final found = mut {<str: str>};
-    foreach (r in trace\denied(records)) {
-        final blob = fs\join(checkout, name: ".magus/activity/blobs/{r.verdict}");
-        if (r.verdict != "" and fs\exists(blob)) {
-            found[r.verdict] = fs\readFile(blob);
+fun verdictsOf(checkout: str, records: [trace\Record]) > result\Result::<{str: str}> {
+    try {
+        final found = mut {<str: str>};
+        foreach (r in trace\denied(records)) {
+            final blob = fs\join(checkout, name: ".magus/activity/blobs/{r.verdict}");
+            if (r.verdict != "" and fs\exists(blob)) {
+                found[r.verdict] = fs\readFile(blob);
+            }
         }
+        return result\ok::<{str: str}>(found);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "rule-precision: reading the verdicts of {checkout}");
     }
-    return found;
 }
 
 fun commitsOf(firings: [Firing], missing: mut [str]) > {str: Authored} {
@@ -733,85 +795,126 @@ fun commitsOf(firings: [Firing], missing: mut [str]) > {str: Authored} {
     return found;
 }
 
-fun readTrails(checkouts: [str], start: int, records: mut [trace\Record], verdicts: mut {str: str}, missing: mut [str]) > void !> any {
-    foreach (c in checkouts) {
-        if (!fs\exists(fs\join(c, name: ".magus/activity/events.jsonl"))) {
-            missing.append("every guard firing in {c}: no guard trail there; name the checkout that holds it with --trail");
-            continue;
+fun readTrails(checkouts: [str], start: int, records: mut [trace\Record], verdicts: mut {str: str}, missing: mut [str]) > result\Result::<int> {
+    try {
+        foreach (c in checkouts) {
+            if (!fs\exists(fs\join(c, name: ".magus/activity/events.jsonl"))) {
+                missing.append("every guard firing in {c}: no guard trail there; name the checkout that holds it with --trail");
+                continue;
+            }
+            final read = trace\trailFor(c, start: start, end: denials\FOREVER);
+            if (read.error != null) {
+                return result\fail::<int>(read.error!.message);
+            }
+            final got = read.value!;
+            foreach (r in got) {
+                records.append(r);
+            }
+            final found = verdictsOf(c, records: got);
+            if (found.error != null) {
+                return result\fail::<int>(found.error!.message);
+            }
+            foreach (k, v in found.value!) {
+                verdicts[k] = v;
+            }
         }
-        final got = trace\trailFor(c, start: start, end: denials\FOREVER);
-        foreach (r in got) {
-            records.append(r);
-        }
-        foreach (k, v in verdictsOf(c, records: got)) {
-            verdicts[k] = v;
-        }
+        return result\ok::<int>(records.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "rule-precision: reading the trails");
     }
 }
 
-fun labelsFrom(file: str, missing: mut [str]) > {str: Label} !> any {
-    if (!fs\exists(file)) {
-        missing.append("person labels: no {file}");
-        return {<str: Label>};
+fun labelsFrom(file: str, missing: mut [str]) > result\Result::<{str: Label}> {
+    try {
+        if (!fs\exists(file)) {
+            missing.append("person labels: no {file}");
+            return result\ok::<{str: Label}>({<str: Label>});
+        }
+    } catch (err: any) {
+        return result\caught::<{str: Label}>(err, doing: "rule-precision: looking for {file}");
     }
     final loaded = readLabels(file);
-    foreach (m in loaded.refused) {
+    if (loaded.error != null) {
+        return result\fail::<{str: Label}>(loaded.error!.message);
+    }
+    foreach (m in loaded.value!.refused) {
         missing.append("a label line refused: {m}");
     }
-    return loaded.items;
+    return result\ok::<{str: Label}>(loaded.value!.items);
 }
 
-fun printJsonl(all: [Row], escaped: [Review], missing: [str]) > void !> any {
-    foreach (r in all) {
-        std\print(rowJson(r));
-    }
-    foreach (cls, n in escapedClasses(escaped)) {
-        std\print(json\stringify({"kind": "class", "class": cls, "escaped": n}));
-    }
-    foreach (m in missing) {
-        std\print(json\stringify({"kind": "missing", "what": m}));
+fun printJsonl(all: [Row], escaped: [Review], missing: [str]) > result\Result::<int> {
+    try {
+        foreach (r in all) {
+            final row = rowJson(r);
+            if (row.error != null) {
+                return result\fail::<int>(row.error!.message);
+            }
+            std\print(row.value!);
+        }
+        foreach (cls, n in escapedClasses(escaped)) {
+            std\print(json\stringify({"kind": "class", "class": cls, "escaped": n}));
+        }
+        foreach (m in missing) {
+            std\print(json\stringify({"kind": "missing", "what": m}));
+        }
+        return result\ok::<int>(all.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "rule-precision: printing the rows");
     }
 }
 
-fun firingsFrom(records: [trace\Record], verdicts: {str: str}, file: str, missing: mut [str]) > [Firing] !> any {
+fun firingsFrom(records: [trace\Record], verdicts: {str: str}, file: str, missing: mut [str]) > result\Result::<[Firing]> {
     final firings = mut [<Firing>];
     foreach (r in trace\denied(records)) {
         firings.append(guardFiring(r, rule: ruleOf(r, verdicts: verdicts)));
     }
-    if (!fs\exists(file)) {
-        missing.append("every lint firing: no {file}; run hack/lint/run.buzz with --record");
-        return firings;
+    try {
+        if (!fs\exists(file)) {
+            missing.append("every lint firing: no {file}; run hack/lint/run.buzz with --record");
+            return result\ok::<[Firing]>(firings);
+        }
+    } catch (err: any) {
+        return result\caught::<[Firing]>(err, doing: "rule-precision: looking for {file}");
     }
-    final loaded = readFirings(file);
+    final read = readFirings(file);
+    if (read.error != null) {
+        return result\fail::<[Firing]>(read.error!.message);
+    }
+    final loaded = read.value!;
     foreach (f in loaded.items) {
         firings.append(f);
     }
     foreach (m in loaded.refused) {
         missing.append("a firing line refused: {m}");
     }
-    return firings;
+    return result\ok::<[Firing]>(firings);
 }
 
-fun reviewFrom(firings: [Firing], file: str?, missing: mut [str]) > ReviewJoin !> any {
+fun reviewFrom(firings: [Firing], file: str?, missing: mut [str]) > result\Result::<ReviewJoin> {
     if (file == null) {
         missing.append("review-confirmed, escaped and recall: no --findings file of reviewed defects");
-        return ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] };
+        return result\ok::<ReviewJoin>(ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] });
     }
-    final loaded = readReviews(file!);
+    final read = readReviews(file!);
+    if (read.error != null) {
+        return result\fail::<ReviewJoin>(read.error!.message);
+    }
+    final loaded = read.value!;
     foreach (m in loaded.refused) {
         missing.append("a finding line refused: {m}");
     }
-    return joinReviews(firings, reviews: loaded.items);
+    return result\ok::<ReviewJoin>(joinReviews(firings, reviews: loaded.items));
 }
 
 // signalsFrom gathers the guard, lint and oracle signals. With no author the
 // oracle is skipped, and missing says so.
-fun signalsFrom(records: [trace\Record], verdicts: {str: str}, firings: [Firing], root: str, author: str?, missing: mut [str]) > mut [Signal] !> any {
+fun signalsFrom(records: [trace\Record], verdicts: {str: str}, firings: [Firing], root: str, author: str?, missing: mut [str]) > mut [Signal] {
     final signals = mut [<Signal>];
     foreach (s in guardSignals(records, verdicts: verdicts)) {
         signals.append(s);
     }
-    foreach (s in lintSignals(firings, lines: fun (path: str) > [str] !> any => fs\readLines(fs\join(root, name: path)) catch [<str>])) {
+    foreach (s in lintSignals(firings, lines: fun (path: str) > [str] => fs\readLines(fs\join(root, name: path)) catch [<str>])) {
         signals.append(s);
     }
     if (author -> name) {
@@ -848,26 +951,56 @@ export fun main(args: [str]) > void !> any {
 
     final records = mut [<trace\Record>];
     final verdicts = mut {<str: str>};
-    readTrails(checkouts, start: start, records: records, verdicts: verdicts, missing: missing);
+    final trailed = readTrails(checkouts, start: start, records: records, verdicts: verdicts, missing: missing);
+    if (trailed.error != null) {
+        throw trailed.error!.message;
+    }
 
-    final firings = firingsFrom(records, verdicts: verdicts, file: parsed.values["--firings"] ?? stateFile("firings.jsonl"), missing: missing);
+    final firingsFile = parsed.values["--firings"] ?? stateFile("firings.jsonl").value;
+    if (firingsFile == null) {
+        throw stateFile("firings.jsonl").error!.message;
+    }
+    final lit = firingsFrom(records, verdicts: verdicts, file: firingsFile, missing: missing);
+    if (lit.error != null) {
+        throw lit.error!.message;
+    }
+    final firings = lit.value!;
 
     final signals = signalsFrom(records, verdicts: verdicts, firings: firings, root: root, author: parsed.values["--author"], missing: missing);
 
-    final review = reviewFrom(firings, file: parsed.values["--findings"], missing: missing);
+    final reviewed = reviewFrom(firings, file: parsed.values["--findings"], missing: missing);
+    if (reviewed.error != null) {
+        throw reviewed.error!.message;
+    }
+    final review = reviewed.value!;
     foreach (s in review.signals) {
         signals.append(s);
     }
 
-    final labels = labelsFrom(parsed.values["--labels"] ?? stateFile("labels.jsonl"), missing: missing);
+    final labelsFile = parsed.values["--labels"] ?? stateFile("labels.jsonl").value;
+    if (labelsFile == null) {
+        throw stateFile("labels.jsonl").error!.message;
+    }
+    final labeled = labelsFrom(labelsFile, missing: missing);
+    if (labeled.error != null) {
+        throw labeled.error!.message;
+    }
+    final labels = labeled.value!;
 
     final all = rows(Evidence{ firings = firings, signals = signals, labels = labels, review = review, costs = guardCosts(records, verdicts: verdicts) });
     if (format == "jsonl") {
-        printJsonl(all, escaped: review.escaped, missing: missing);
+        final printed = printJsonl(all, escaped: review.escaped, missing: missing);
+        if (printed.error != null) {
+            throw printed.error!.message;
+        }
         return;
     }
     std\print("read-only: {all.len()} rule(s) from {firings.len()} firing(s) and {records.len()} trail record(s)");
-    foreach (line in table(all)) {
+    final shown = table(all);
+    if (shown.error != null) {
+        throw shown.error!.message;
+    }
+    foreach (line in shown.value!) {
         std\print(line);
     }
     foreach (m in missing) {
@@ -886,8 +1019,8 @@ fun verdicts() > {str: str} {
     return {"grdgrep": GREP, "grdpipe": PIPE, "grdstage": STAGE};
 }
 
-fun trail() > [trace\Record] !> any {
-    return trace\loadTrail(EVENTS, blobs: BLOBS, start: 0, end: denials\FOREVER);
+fun trail() > [trace\Record] {
+    return trace\loadTrail(EVENTS, blobs: BLOBS, start: 0, end: denials\FOREVER).value!;
 }
 
 fun call(at: int, action: str, preview: str, command: str) > trace\Record {
@@ -1007,7 +1140,7 @@ test "a lint finding is suppressed when its line says so and reworded when it st
     final gone = lintFiring("banned-words", path: "b.md", line: 1, ts: 100, commit: "");
     final stays = lintFiring("banned-words", path: "a.md", line: 2, ts: 200, commit: "");
     final ran = Firing{ rule = "banned-words", source = "lint", path = "", line = 0, fingerprint = "", decision = "ran", ts = 300, session = "", commit = "" };
-    final read = fun (path: str) > [str] !> any => if (path == "a.md") ["x", "<!-- proofread off banned-words: quoted -->"] else [<str>];
+    final read = fun (path: str) > [str] => if (path == "a.md") ["x", "<!-- proofread off banned-words: quoted -->"] else [<str>];
     final got = lintSignals([kept, gone, stays, ran], lines: read);
     final names = got.map(fun (index: int, s: Signal) > str => s.outcome);
     assert\isTrue(names.indexOf("suppressed") != null, message: "suppressed");
@@ -1050,7 +1183,7 @@ test "a confirmed defect a rule flagged is recall and one it missed escaped" {
 
 test "a firing round-trips through its line and a malformed line is refused" {
     final f = lintFiring("r", path: "a.md", line: 4, ts: 9, commit: "abc");
-    final back = parseFiring(firingLine(f));
+    final back = parseFiring(firingLine(f).value!);
     assert\equal(back.value!.fingerprint, want: f.fingerprint, message: "fingerprint");
     assert\equal(back.value!.commit, want: "abc", message: "commit");
     assert\isTrue(parseFiring("not json").error != null, message: "bad json");
@@ -1060,9 +1193,9 @@ test "a firing round-trips through its line and a malformed line is refused" {
 test "appending keeps earlier lines" {
     final dir = fs\tempDir("rule-precision");
     final file = fs\join(dir, name: "magus/firings.jsonl");
-    appendFirings(file, lines: ["a"]);
-    appendFirings(file, lines: ["b"]);
-    appendFirings(file, lines: [<str>]);
+    assert\equal(appendFirings(file, lines: ["a"]).value!, want: 1, message: "appended");
+    assert\equal(appendFirings(file, lines: ["b"]).value!, want: 1, message: "appended");
+    assert\equal(appendFirings(file, lines: [<str>]).value!, want: 0, message: "nothing appended");
     assert\equal(fs\readLines(file), want: ["a", "b"], message: "both lines, in order");
     fs\removeAll(dir);
 }

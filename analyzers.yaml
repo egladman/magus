@@ -391,13 +391,6 @@ no-throw:
       hack/policy/proofread.buzz: 1
       hack/policy/stale.buzz: 7
       hack/policy/version-bumps.buzz: 2
-      hack/retro/denials.buzz: 4
-      hack/retro/denials_test.buzz: 1
-      hack/retro/rule-precision.buzz: 17
-      hack/retro/tests.buzz: 11
-      hack/retro/tests_test.buzz: 1
-      hack/retro/trace.buzz: 10
-      hack/retro/trace_test.buzz: 1
       internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
       spells/aws/s3-cache/spell.buzz: 4
