@@ -17,7 +17,7 @@ const SHAPE_BY_KIND: Readonly<Record<string, NodeShape>> = {
   module: "square",
   dir: "square",
   file: "square",
-  figure: "square",
+  diagram: "square",
   target: "triangle",
   spell: "triangle",
   op: "triangle",

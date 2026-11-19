@@ -1,13 +1,13 @@
-// The graph a shared link carries in its fragment: #figure=<unpadded base64url of UTF-8 JSON>.
-// .github/actions/advice/figure-link.buzz writes it, so a change to the shape is a change there.
+// The graph a shared link carries in its fragment: #diagram-link=<unpadded base64url of UTF-8 JSON>.
+// .github/actions/advice/diagram-link.buzz writes it, so a change to the shape is a change there.
 // A fragment never reaches a server, which is why the hosted console can draw it with no backend.
 
 import { MagusError, attempt, fail, ok, parseJSON, type Result } from "../../../gen/magus/types";
 import type { Stroke } from "./wasm";
 
-export const FIGURE_LINK_VERSION = 2;
+export const DIAGRAM_LINK_VERSION = 2;
 
-// magus/figure's Stroke cases: a link names each edge's treatment by one.
+// magus/diagram's Stroke cases: a link names each edge's treatment by one.
 const STROKES: readonly Stroke[] = ["plain", "focal", "external", "optional"];
 
 export interface LinkedNode {
@@ -17,7 +17,7 @@ export interface LinkedNode {
   readonly seed: boolean;
 }
 
-// LinkedEdge runs between two nodes of its figure. On the wire it is [from, to, stroke?, label?];
+// LinkedEdge runs between two nodes of its diagram. On the wire it is [from, to, stroke?, label?];
 // an omitted stroke is "plain" and an omitted label "".
 export interface LinkedEdge {
   readonly from: string;
@@ -26,7 +26,7 @@ export interface LinkedEdge {
   readonly label: string;
 }
 
-export interface LinkedFigure {
+export interface LinkedDiagram {
   readonly title: string;
   readonly nodes: readonly LinkedNode[];
   readonly edges: readonly LinkedEdge[];
@@ -46,7 +46,7 @@ function record(v: unknown): Record<string, unknown> | null {
 // whitespace and accepts what a link never carries.
 function decodeBase64url(raw: string): Uint8Array | string {
   const payload = raw.replace(/=+$/, "");
-  if (payload === "") return "the link carries no figure";
+  if (payload === "") return "the link carries no diagram";
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) return "the link is not base64url";
   if (payload.length % 4 === 1) return "the link is truncated";
   const std = payload.replace(/-/g, "+").replace(/_/g, "/");
@@ -54,9 +54,9 @@ function decodeBase64url(raw: string): Uint8Array | string {
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
-// decodeFigureLink reads the payload after "#figure=". Every failure names what was wrong
+// decodeDiagramLink reads the payload after "#diagram-link=". Every failure names what was wrong
 // with the link; none throws.
-export function decodeFigureLink(payload: string): Result<LinkedFigure> {
+export function decodeDiagramLink(payload: string): Result<LinkedDiagram> {
   const bytes = decodeBase64url(payload);
   if (typeof bytes === "string") return refuse(bytes);
   const text = attempt(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -65,16 +65,16 @@ export function decodeFigureLink(payload: string): Result<LinkedFigure> {
   if (doc.error) return refuse("the link is not JSON: " + doc.error.message);
   const top = record(doc.value);
   if (!top) return refuse("the link holds no object");
-  if (top.v !== FIGURE_LINK_VERSION)
+  if (top.v !== DIAGRAM_LINK_VERSION)
     return refuse(
       "the link is version " +
         JSON.stringify(top.v) +
         " and this console reads version " +
-        FIGURE_LINK_VERSION,
+        DIAGRAM_LINK_VERSION,
     );
   if (top.kind !== "deps")
     return refuse(
-      'the link draws a "' + String(top.kind) + '" figure and this console draws "deps"',
+      'the link draws a "' + String(top.kind) + '" diagram and this console draws "deps"',
     );
   if (typeof top.title !== "string") return refuse("the link has no title");
   if (!Array.isArray(top.nodes)) return refuse("the link has no nodes");

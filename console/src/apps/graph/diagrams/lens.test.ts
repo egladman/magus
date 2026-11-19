@@ -15,7 +15,7 @@ import {
   type Declaration,
 } from "./lens";
 
-test("an empty lens is the bare figure URL", () => {
+test("an empty lens is the bare diagram URL", () => {
   assert.equal(lensQuery(EMPTY_LENS), "");
 });
 
@@ -68,7 +68,7 @@ test("the fragment carries the view and keeps every other key", () => {
   assert.equal(params.port, "7391");
 });
 
-test("no figure clears the view keys and leaves an empty fragment empty", () => {
+test("no diagram clears the view keys and leaves an empty fragment empty", () => {
   assert.equal(
     fragmentForView({ diagram: "projects", scope: "a" }, { id: null, lens: EMPTY_LENS }),
     "",

@@ -1,5 +1,5 @@
 // Typed client for GET /api/v1/diagrams and /api/v1/diagrams/{id}. Every answer that is not a
-// figure is reported here (a toast at minimum) and also returned as a read the view shows inline.
+// diagram is reported here (a toast at minimum) and also returned as a read the view shows inline.
 
 import { reportFailure } from "../../../lib/notifications";
 import {
@@ -17,12 +17,12 @@ export interface DiagramEntry {
   readonly kind: string;
   readonly title: string;
   readonly project?: string;
-  // Set only on the import figure: false means the server has no symbol index for it.
+  // Set only on the import diagram: false means the server has no symbol index for it.
   readonly indexed?: boolean;
 }
 
 export interface DiagramNode {
-  // The server's row id; main.ts re-keys it to the figure's data-node id (wasm.ts drawnNodes).
+  // The server's row id; main.ts re-keys it to the diagram's data-node id (wasm.ts drawnNodes).
   readonly id: string;
   // The workspace-relative path the box depicts; "" for a node that depicts none.
   readonly anchor: string;
@@ -39,7 +39,7 @@ export interface RenderedDiagram {
 }
 
 // DiagramRead keeps the server's answers apart because each names a different fix: a refused
-// figure (422) the lens change, an unindexed one (409) the index command, a bad lens (400) the field.
+// diagram (422) the lens change, an unindexed one (409) the index command, a bad lens (400) the field.
 export type DiagramRead<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "refused"; readonly detail: string }
@@ -50,7 +50,7 @@ export type DiagramRead<T> =
   // A superseded request or a closed pane. Not a failure; never shown.
   | { readonly kind: "aborted" };
 
-// DiagramFailure is every read a reader is shown: not a figure, not an abort.
+// DiagramFailure is every read a reader is shown: not a diagram, not an abort.
 export type DiagramFailure = Exclude<DiagramRead<never>, { kind: "ok" } | { kind: "aborted" }>;
 
 export interface DiagramClientOptions {
@@ -61,7 +61,7 @@ export interface DiagramClientOptions {
   readonly fetch?: typeof fetch;
 }
 
-const SOURCE = "Figures";
+const SOURCE = "Diagrams";
 
 export function diagramsUrl(host: string): string {
   return "http://" + host + "/api/v1/diagrams";
@@ -72,7 +72,7 @@ export function diagramUrl(host: string, id: string, lens: Lens): string {
 }
 
 export function listDiagrams(opts: DiagramClientOptions): Promise<DiagramRead<DiagramEntry[]>> {
-  return read(opts, diagramsUrl(opts.host), "the figure list", parseListing);
+  return read(opts, diagramsUrl(opts.host), "the diagram list", parseListing);
 }
 
 export function renderDiagram(
@@ -80,7 +80,7 @@ export function renderDiagram(
   id: string,
   lens: Lens,
 ): Promise<DiagramRead<RenderedDiagram>> {
-  return read(opts, diagramUrl(opts.host, id, lens), "figure " + id, parseRendered);
+  return read(opts, diagramUrl(opts.host, id, lens), "diagram " + id, parseRendered);
 }
 
 // readFailure maps a non-2xx status to a failure. body is the server's message (see readRefusal),
@@ -193,14 +193,14 @@ export function parseListing(body: unknown): Result<DiagramEntry[]> {
 }
 
 export function parseRendered(body: unknown): Result<RenderedDiagram> {
-  const top = record(body, "the figure");
+  const top = record(body, "the diagram");
   if (top.error) return top;
   const r = top.value;
-  const id = str(r.id, "the figure id");
+  const id = str(r.id, "the diagram id");
   if (id.error) return id;
-  const title = str(r.title, "the figure title");
+  const title = str(r.title, "the diagram title");
   if (title.error) return title;
-  const svg = str(r.svg, "the figure svg");
+  const svg = str(r.svg, "the diagram svg");
   if (svg.error) return svg;
   const nodes: DiagramNode[] = [];
   for (const [i, raw] of (Array.isArray(r.nodes) ? r.nodes : []).entries()) {

@@ -3,12 +3,12 @@
 //
 //   - THE STATIC RENDER IS THE PAGE. The server's SVG is inline, linked and listed as soon as it
 //     arrives, with no runtime loaded.
-//   - A REFUSAL IS WORDS, NOT AN EMPTY FIGURE. 422 and 409 bodies become the inline notice.
-//   - THE LENS IS ADDRESSABLE. Applying one re-requests the figure and writes the fragment.
+//   - A REFUSAL IS WORDS, NOT AN EMPTY DIAGRAM. 422 and 409 bodies become the inline notice.
+//   - THE LENS IS ADDRESSABLE. Applying one re-requests the diagram and writes the fragment.
 //   - THE RUNTIME IS EXPLICIT. Nothing loads it but its control; once loaded, a lens change lays
 //     out in the page from the declaration the server served, with no second render request.
-//   - THE RECORD IS THE HANDLER'S. The page hands figure\draw the Figure record
-//     internal/handler/diagram's buildFigure builds: Dir boxes for the import figure, actors for
+//   - THE RECORD IS THE HANDLER'S. The page hands diagram\draw the Diagram record
+//     internal/handler/diagram's buildDiagram builds: Dir boxes for the import diagram, actors for
 //     the rest. No Buzz source is written.
 
 import assert from "node:assert/strict";
@@ -18,21 +18,21 @@ import { activate } from "./main";
 import {
   anchorTemplate,
   drawnNodes,
-  buildFigure,
-  figureId,
+  buildDiagram,
+  diagramId,
   linkTo,
   toRelayout,
   runtimeFrom,
   IMPORTS,
   type DrawResult,
-  type Figure,
+  type Diagram,
 } from "./wasm";
 
 const HOST = "127.0.0.1:7391";
 const BLOB = "https://github.com/acme/widgets/blob/abc/";
 const realFetch = globalThis.fetch;
 
-// magus/figure draws a served projects figure as actors, keyed external:<name> and linked by
+// magus/diagram draws a served projects diagram as actors, keyed external:<name> and linked by
 // the handler's anchorHref.
 function actor(name: string, path: string, x: number, y: number): string {
   return (
@@ -64,7 +64,7 @@ const RELAID =
   actor("lib", "libs/lib", 32, 120) +
   "</svg>";
 
-// An import figure boxes directories, keyed by path.
+// An import diagram boxes directories, keyed by path.
 const IMPORTS_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200">' +
   '<path data-edge="internal/a->internal/b" d="M 0 0 L 1 1"/>' +
@@ -73,19 +73,19 @@ const IMPORTS_SVG =
   '<g data-node="internal/c" data-anchor="internal/c"><rect x="32" y="120" width="160" height="56"/></g>' +
   "</svg>";
 
-// fakeRuntime stands in for buzz.wasm's globalThis.buzz: it records each figure record the page
-// hands drawFigure, decoded from the JSON that crosses into Go, and answers with result.
-function fakeRuntime(result: DrawResult): { figures: Figure[]; hrefs: string[] } {
-  const figures: Figure[] = [];
+// fakeRuntime stands in for buzz.wasm's globalThis.buzz: it records each diagram record the page
+// hands drawDiagram, decoded from the JSON that crosses into Go, and answers with result.
+function fakeRuntime(result: DrawResult): { diagrams: Diagram[]; hrefs: string[] } {
+  const diagrams: Diagram[] = [];
   const hrefs: string[] = [];
   (globalThis as { buzz?: unknown }).buzz = {
-    drawFigure: (json: string, anchorHref: string) => {
-      figures.push(JSON.parse(json) as Figure);
+    drawDiagram: (json: string, anchorHref: string) => {
+      diagrams.push(JSON.parse(json) as Diagram);
       hrefs.push(anchorHref);
       return result;
     },
   };
-  return { figures, hrefs };
+  return { diagrams, hrefs };
 }
 
 const drew = (svg: string): DrawResult => ({ ok: true, svg, findings: "", diag: null });
@@ -196,7 +196,7 @@ describe("the Diagrams app", () => {
     runtime.click();
   }
 
-  test("the server's figure is inline, linked and listed, with no runtime loaded", async () => {
+  test("the server's diagram is inline, linked and listed, with no runtime loaded", async () => {
     const { host, instance, q } = mountApp();
     await settle();
     assert.deepEqual(requests, ["/api/v1/diagrams", "/api/v1/diagrams/projects"]);
@@ -215,16 +215,16 @@ describe("the Diagrams app", () => {
         (li) => li.dataset.nodeId,
       ),
       ["external:app", "external:lib", "external:tools"],
-      "the list is keyed by the ids the figure draws",
+      "the list is keyed by the ids the diagram draws",
     );
     assert.equal(q(".console-diagrams__caption").textContent, "Workspace projects");
     assert.equal((globalThis as { buzz?: unknown }).buzz, undefined, "nothing loaded the runtime");
-    // The controls are a row of their own, never inside the figure.
+    // The controls are a row of their own, never inside the diagram.
     assert.equal(q(".console-diagrams__frame").querySelector("button"), null);
     instance.deactivate();
   });
 
-  test("a 422 is the server's finding in an inline notice and no stale figure", async () => {
+  test("a 422 is the server's finding in an inline notice and no stale diagram", async () => {
     const { q, instance } = mountApp();
     await settle();
     const picker = q<HTMLSelectElement>("select");
@@ -249,7 +249,7 @@ describe("the Diagrams app", () => {
     instance.deactivate();
   });
 
-  test("the lens form re-requests the figure and the fragment carries the view", async () => {
+  test("the lens form re-requests the diagram and the fragment carries the view", async () => {
     const { q, instance } = mountApp();
     await settle();
     q<HTMLInputElement>('input[name="focus"]').value = "app";
@@ -280,7 +280,7 @@ describe("the Diagrams app", () => {
     const loaded = requests.length;
     loadRuntime(host);
     await settle();
-    assert.equal(requests.length, loaded, "the runtime embeds magus/figure; nothing is fetched");
+    assert.equal(requests.length, loaded, "the runtime embeds magus/diagram; nothing is fetched");
     assert.match(q(".console-diagrams__runtime-status").textContent ?? "", /Runtime loaded/);
 
     const before = requests.length;
@@ -288,11 +288,11 @@ describe("the Diagrams app", () => {
     q<HTMLFormElement>("form").dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
     assert.equal(requests.length, before, "no round trip");
-    assert.equal(rt.figures.length, 1);
+    assert.equal(rt.diagrams.length, 1);
     const app = { name: "app", sub: "", tag: "", link: BLOB + "app", look: "plain" };
     const lib = { name: "lib", sub: "", tag: "", link: BLOB + "libs/lib", look: "plain" };
     const box = { dir: null, group: null, label: "", sub: "", tag: "", focal: false, look: null };
-    assert.deepEqual(rt.figures[0], {
+    assert.deepEqual(rt.diagrams[0], {
       id: "projects",
       title: "Workspace projects",
       eyebrow: "",
@@ -332,7 +332,7 @@ describe("the Diagrams app", () => {
     instance.deactivate();
   });
 
-  test("an import figure lays out in the page from Dir records", async () => {
+  test("an import diagram lays out in the page from Dir records", async () => {
     importsIndexed = true;
     location.hash = "#diagram=imports";
     const rt = fakeRuntime(drew(IMPORTS_SVG));
@@ -343,8 +343,8 @@ describe("the Diagrams app", () => {
     q<HTMLInputElement>('input[name="scope"]').value = "internal/a, internal/b";
     q<HTMLFormElement>("form").dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
-    assert.equal(rt.figures.length, 1);
-    const f = rt.figures[0];
+    assert.equal(rt.diagrams.length, 1);
+    const f = rt.diagrams[0];
     assert.equal(f?.graph_edges, true);
     assert.equal(f?.unscoped_why, "");
     assert.deepEqual(
@@ -372,9 +372,9 @@ describe("the Diagrams app", () => {
     instance.deactivate();
   });
 
-  describe("a #figure= link", () => {
+  describe("a #diagram-link= link", () => {
     const linkHash = (doc: unknown): string =>
-      "#figure=" + Buffer.from(JSON.stringify(doc), "utf8").toString("base64url");
+      "#diagram-link=" + Buffer.from(JSON.stringify(doc), "utf8").toString("base64url");
     const DEPS = {
       v: 2,
       kind: "deps",
@@ -386,22 +386,22 @@ describe("the Diagrams app", () => {
       edges: [["libs/lib", "app"]],
     };
 
-    test("is drawn from the fragment alone: no request, the runtime's figure, the seed marked", async () => {
+    test("is drawn from the fragment alone: no request, the runtime's diagram, the seed marked", async () => {
       location.hash = linkHash(DEPS);
       const rt = fakeRuntime(drew(RELAID));
       const { host, q, instance } = mountApp();
       await settle();
       assert.deepEqual(requests, [], "a link needs no server");
-      assert.equal(rt.figures.length, 1);
+      assert.equal(rt.diagrams.length, 1);
       assert.deepEqual(
-        rt.figures[0]?.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
+        rt.diagrams[0]?.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
         [
           ["lib", "edited", "focal"],
           ["app", "", "plain"],
         ],
       );
       assert.deepEqual(
-        rt.figures[0]?.flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
+        rt.diagrams[0]?.flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
         [["lib", "app"]],
         "an edge runs dependency to dependent",
       );
@@ -429,13 +429,13 @@ describe("the Diagrams app", () => {
       const note = q(".console-diagrams__notice");
       assert.match(note.textContent ?? "", /could not be read/);
       assert.match(note.textContent ?? "", /version 1 and this console reads version 2/);
-      assert.equal(rt.figures.length, 0);
+      assert.equal(rt.diagrams.length, 0);
       assert.equal(host.querySelector(".console-diagrams__frame svg"), null);
       instance.deactivate();
     });
 
     test("that is not base64url is an inline notice", async () => {
-      location.hash = "#figure=!!not-a-link!!";
+      location.hash = "#diagram-link=!!not-a-link!!";
       const { q, instance } = mountApp();
       await settle();
       assert.match(q(".console-diagrams__notice").textContent ?? "", /not base64url/);
@@ -444,7 +444,7 @@ describe("the Diagrams app", () => {
 
     test("the runtime declines to draw is an inline notice with its finding", async () => {
       location.hash = linkHash(DEPS);
-      fakeRuntime({ ok: false, svg: "", findings: "figure: over budget", diag: null });
+      fakeRuntime({ ok: false, svg: "", findings: "diagram: over budget", diag: null });
       const { host, q, instance } = mountApp();
       await settle();
       assert.match(q(".console-diagrams__notice").textContent ?? "", /over budget/);
@@ -460,17 +460,17 @@ describe("the Diagrams app", () => {
       location.hash = linkHash({ ...DEPS, title: "Another" });
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       await settle();
-      assert.equal(rt.figures.length, 2);
+      assert.equal(rt.diagrams.length, 2);
       assert.equal(q(".console-diagrams__caption").textContent, "Another");
       instance.deactivate();
     });
   });
 });
 
-// What a reader without the pointer and without the colours gets from the Figures page: controls that
+// What a reader without the pointer and without the colours gets from the Diagrams page: controls that
 // only enable when they have something to act on, a name and a description for the frame, a stand-in
 // for a frame with nothing in it, and notices that are announced once.
-describe("the Figures page, for a reader who cannot see it", () => {
+describe("the Diagrams page, for a reader who cannot see it", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -533,7 +533,7 @@ describe("the Figures page, for a reader who cannot see it", () => {
     instance.deactivate();
   });
 
-  test("a figure enables its controls and takes the stand-in away", async () => {
+  test("a diagram enables its controls and takes the stand-in away", async () => {
     setDefaultHost(HOST);
     const { host, q, instance } = mountApp();
     await settle();
@@ -546,13 +546,13 @@ describe("the Figures page, for a reader who cannot see it", () => {
     instance.deactivate();
   });
 
-  test("the figure controls are a group, and the frame is named Figure with its keys described", async () => {
+  test("the diagram controls are a group, and the frame is named Diagram with its keys described", async () => {
     setDefaultHost(HOST);
     const { q, instance } = mountApp();
     await settle();
     assert.equal(q(".console-diagrams__controls").getAttribute("role"), "group");
     const frame = q<HTMLElement>(".console-diagrams__frame");
-    assert.equal(frame.getAttribute("aria-label"), "Figure");
+    assert.equal(frame.getAttribute("aria-label"), "Diagram");
     assert.match(frame.getAttribute("aria-keyshortcuts") ?? "", /\bf\b/);
     const described = document.getElementById(frame.getAttribute("aria-describedby") ?? "");
     assert.ok(described, "the keys live in a described-by element");
@@ -567,7 +567,7 @@ describe("the Figures page, for a reader who cannot see it", () => {
     const labels = [...host.querySelectorAll(".console-diagrams__field-label")].map(
       (l) => l.textContent,
     );
-    assert.deepEqual(labels, ["Figure", "Scope", "Center on", "Depth"]);
+    assert.deepEqual(labels, ["Diagram", "Scope", "Center on", "Depth"]);
     instance.deactivate();
   });
 
@@ -587,7 +587,7 @@ describe("the Figures page, for a reader who cannot see it", () => {
     instance.deactivate();
   });
 
-  test("while the first figure draws the frame holds a spinner, not a blank", async () => {
+  test("while the first diagram draws the frame holds a spinner, not a blank", async () => {
     setDefaultHost(HOST);
     let release: (r: Response) => void = () => {};
     const inner = globalThis.fetch;
@@ -612,9 +612,9 @@ describe("the Figures page, for a reader who cannot see it", () => {
 
 // ---- the runtime's record -------------------------------------------------------------------
 
-test("figure ids are the handler's sanitized ids", () => {
-  assert.equal(figureId("targets:libs/lib"), "targets-libs-lib");
-  assert.equal(figureId("..."), "root");
+test("diagram ids are the handler's sanitized ids", () => {
+  assert.equal(diagramId("targets:libs/lib"), "targets-libs-lib");
+  assert.equal(diagramId("..."), "root");
 });
 
 test("anchor links are the handler's: no line fragment, {path} filled once", () => {
@@ -625,7 +625,7 @@ test("anchor links are the handler's: no line fragment, {path} filled once", () 
   assert.equal(linkTo("", "libs/lib"), "");
 });
 
-test("server rows take the ids the figure draws", () => {
+test("server rows take the ids the diagram draws", () => {
   const rows = [
     { id: "libs-core", anchor: "libs/core", label: "core" },
     { id: "app-core", anchor: "app/core", label: "core" },
@@ -642,7 +642,7 @@ test("server rows take the ids the figure draws", () => {
 });
 
 test("the actor record carries every value as data, however it is spelled", () => {
-  const built = buildFigure(
+  const built = buildDiagram(
     {
       nodes: [
         { id: "external:a", anchor: "x/y", label: 'say "{hi}"' },
@@ -663,7 +663,7 @@ test("the actor record carries every value as data, however it is spelled", () =
     f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
     [['say "{hi}"', "b"]],
   );
-  const dangling = buildFigure(
+  const dangling = buildDiagram(
     { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
     { id: "projects", title: "P", claim: "flow", anchorHref: "" },
     "",
@@ -672,7 +672,7 @@ test("the actor record carries every value as data, however it is spelled", () =
   assert.match(dangling.error.message, /edge external:a->gone to no node/);
 });
 
-test("a draw result is a figure, a refusal or a failure", () => {
+test("a draw result is a diagram, a refusal or a failure", () => {
   assert.deepEqual(toRelayout(drew("<svg/>")), { kind: "ok", svg: "<svg/>" });
   assert.deepEqual(toRelayout({ ok: false, svg: "", findings: "over", diag: null }), {
     kind: "refused",
@@ -688,12 +688,12 @@ test("a draw result is a figure, a refusal or a failure", () => {
   });
 });
 
-test("the runtime is globalThis.buzz with drawFigure, and the record crosses as JSON", () => {
+test("the runtime is globalThis.buzz with drawDiagram, and the record crosses as JSON", () => {
   assert.equal(runtimeFrom({ buzz: { evalBuzz: () => null } }), null, "an older wasm");
   let sent = "";
   const rt = runtimeFrom({
     buzz: {
-      drawFigure: (json: string) => {
+      drawDiagram: (json: string) => {
         sent = json;
         return { ok: true, svg: "<svg/>", findings: "", diag: null };
       },
@@ -701,11 +701,11 @@ test("the runtime is globalThis.buzz with drawFigure, and the record crosses as 
   });
   assert.ok(rt);
   const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
-  const built = buildFigure({ nodes: [], edges: [] }, meta, "");
+  const built = buildDiagram({ nodes: [], edges: [] }, meta, "");
   assert.ok(!built.error);
   const f = built.value;
-  assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
+  assert.deepEqual(rt.drawDiagram(f, ""), drew("<svg/>"));
   assert.deepEqual(JSON.parse(sent), f);
-  const odd = runtimeFrom({ buzz: { drawFigure: () => 7 } });
-  assert.equal(odd?.drawFigure(f, "").diag?.msg, "the runtime returned nothing");
+  const odd = runtimeFrom({ buzz: { drawDiagram: () => 7 } });
+  assert.equal(odd?.drawDiagram(f, "").diag?.msg, "the runtime returned nothing");
 });

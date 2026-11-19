@@ -18,7 +18,7 @@ function mountSvg(): SVGSVGElement {
   return host.querySelector("svg") as SVGSVGElement;
 }
 
-describe("figure edge flow", () => {
+describe("diagram edge flow", () => {
   let flow: Flow | null = null;
   afterEach(() => {
     flow?.stop();
@@ -60,7 +60,7 @@ describe("figure edge flow", () => {
     flow.stop();
   });
 
-  test("the timer stays up until the last figure stops", () => {
+  test("the timer stays up until the last diagram stops", () => {
     const one = attachFlow(mountSvg(), { reducedMotion: () => false });
     const two = attachFlow(mountSvg(), { reducedMotion: () => false });
     one.stop();

@@ -1,5 +1,5 @@
-/* The Graph's Figures mode: a bar (figure and lens) over the figure's own control row, then the figure
-   beside its node list. The bars run full bleed and the figure meets the pane edge. The figure's colours
+/* The Graph's Diagrams mode: a bar (diagram and lens) over the diagram's own control row, then the diagram
+   beside its node list. The bars run full bleed and the diagram meets the pane edge. The diagram's colours
    are the --magus-diagram-* tokens in base/tokens.css. */
 
 .console-diagrams {
@@ -26,7 +26,7 @@
 .console-diagrams__field-label { font-size: var(--pf-t--global--font--size--body--default); color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
 .console-diagrams__body { flex: 1 1 auto; display: flex; min-block-size: 0; }
 .console-diagrams__main { flex: 1 1 auto; display: flex; flex-direction: column; min-inline-size: 0; }
-/* The controls sit in a row above the figure, so nothing covers the drawing. */
+/* The controls sit in a row above the diagram, so nothing covers the drawing. */
 .console-diagrams__controls {
   flex: 0 0 auto;
   display: flex;
@@ -46,7 +46,7 @@
   margin: 0;
   background: var(--magus-diagram-paper);
 }
-/* Stands in for the frame while there is no figure: a spinner or a PF empty state. */
+/* Stands in for the frame while there is no diagram: a spinner or a PF empty state. */
 .console-diagrams__state {
   flex: 1 1 auto;
   min-block-size: 18rem;
@@ -130,7 +130,7 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
 .console-diagrams__notice .pf-v6-c-alert__title { overflow-wrap: anywhere; }
 .console-diagrams__notice .pf-v6-c-alert__description { white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Focus, dim and hover: only what the figure declares (interact.ts). */
+/* Focus, dim and hover: only what the diagram declares (interact.ts). */
 .console-diagrams__frame [data-node],
 .console-diagrams__frame [data-edge] {
   transition: opacity var(--console-motion-fast) var(--console-ease);
@@ -176,7 +176,7 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
 :root[data-motion="reduced"] .console-diagrams__frame [data-edge] { transition: none; }
 :root[data-motion="reduced"] .console-diagrams__frame .console-diagrams__flow { display: none; }
 
-/* A narrow pane stacks the node list under the figure, asking the Graph's pane root (graph.css). */
+/* A narrow pane stacks the node list under the diagram, asking the Graph's pane root (graph.css). */
 @container graph (max-width: 47.99rem) {
   .console-diagrams__body { flex-direction: column; }
   .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }

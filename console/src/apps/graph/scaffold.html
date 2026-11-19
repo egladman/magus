@@ -158,11 +158,11 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
           </div>
           </div>
-          <!-- Figures is a different view, not a third graph, so it is a button that opens it and
+          <!-- Diagrams is a different view, not a third graph, so it is a button that opens it and
                not a segment of the single-select group above. -->
           <div class="console-graph-sidebar__viewcell">
-            <button id="graph-figures-open" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small pf-m-block" data-graph-mode="figures"><span class="pf-v6-c-button__text">Open Figures</span></button>
-            <p class="console-graph-display__controlhint">Figures are diagrams a running server draws from this graph, in place of the explorer.</p>
+            <button id="graph-diagrams-open" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small pf-m-block" data-graph-mode="diagrams"><span class="pf-v6-c-button__text">Open Diagrams</span></button>
+            <p class="console-graph-display__controlhint">Diagrams are diagrams a running server draws from this graph, in place of the explorer.</p>
           </div>
           <div class="console-graph-sidebar__viewcell">
           <div class="console-graph-display__sublabelrow">
@@ -322,12 +322,12 @@
       </div>
     </section>
 
-    <!-- Figures mode (setGraphMode in main.ts) replaces the explorer above with the diagrams view,
+    <!-- Diagrams mode (setGraphMode in main.ts) replaces the explorer above with the diagrams view,
          the Dashboard Jobs shape: a way back, then the host the view builds into. -->
-    <div id="graph-figures-controls" class="console-graph-figures-controls" hidden>
-      <button type="button" id="graph-figures-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></span><span class="pf-v6-c-button__text">Back to graph</span></button>
+    <div id="graph-diagrams-controls" class="console-graph-diagrams-controls" hidden>
+      <button type="button" id="graph-diagrams-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></span><span class="pf-v6-c-button__text">Back to graph</span></button>
     </div>
-    <section id="graph-figures-host" aria-label="Figures" hidden></section>
+    <section id="graph-diagrams-host" aria-label="Diagrams" hidden></section>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 

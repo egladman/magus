@@ -1,13 +1,13 @@
-// The Buzz runtime a figure upgrades to on request: the docs playground's wasm, which embeds
-// magus/figure. The page builds a figure\Figure record from the server's rows and hands it to
-// buzz.drawFigure, which calls figure\draw as internal/handler/diagram does.
+// The Buzz runtime a diagram upgrades to on request: the docs playground's wasm, which embeds
+// magus/diagram. The page builds a diagram\Diagram record from the server's rows and hands it to
+// buzz.drawDiagram, which calls diagram\draw as internal/handler/diagram does.
 //
 // Never loaded automatically: it is a multi-megabyte Go runtime, and the static render is
-// already the figure.
+// already the diagram.
 
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
-import type { LinkedFigure } from "./figure-link";
+import type { LinkedDiagram } from "./diagram-link";
 import { MagusError, attempt, fail, fromPromise, ok, type Result } from "../../../gen/magus/types";
 
 export interface BuzzDiag {
@@ -16,7 +16,7 @@ export interface BuzzDiag {
   readonly col: number;
 }
 
-// DrawResult is buzz.drawFigure's answer: the SVG when ok, else figure's findings, or a diag
+// DrawResult is buzz.drawDiagram's answer: the SVG when ok, else diagram's findings, or a diag
 // when the record or the runtime failed.
 export interface DrawResult {
   readonly ok: boolean;
@@ -26,24 +26,24 @@ export interface DrawResult {
 }
 
 export interface BuzzRuntime {
-  drawFigure(figure: Figure, anchorHref: string): DrawResult;
+  drawDiagram(diagram: Diagram, anchorHref: string): DrawResult;
 }
 
-// The figure\Figure record and its parts, field for field as magus/figure declares them (mirrored
-// in libs/figure/embed.go). An enum crosses as its case's name; the runtime refuses an undeclared
+// The diagram\Diagram record and its parts, field for field as magus/diagram declares them (mirrored
+// in libs/diagram/embed.go). An enum crosses as its case's name; the runtime refuses an undeclared
 // member and an unknown case name.
 export type Look = "plain" | "focal" | "store" | "external" | "input" | "optional" | "decision";
 export type Stroke = "plain" | "focal" | "external" | "optional";
 export type Direction = "across" | "down";
 export type Axis = "rank" | "row";
 
-export interface Figure {
+export interface Diagram {
   readonly id: string;
   readonly title: string;
   readonly eyebrow: string;
   readonly desc: string;
   readonly direction: Direction;
-  // Why the figure draws no directory; "" for one that draws some.
+  // Why the diagram draws no directory; "" for one that draws some.
   readonly unscoped_why: string;
   readonly graph_edges: boolean;
   readonly boxes: readonly Box[];
@@ -174,15 +174,15 @@ function parseDiag(v: unknown): BuzzDiag | null {
 }
 
 // runtimeFrom narrows globalThis.buzz, which the wasm's Go main() installs. A wasm without
-// drawFigure is not a runtime here.
+// drawDiagram is not a runtime here.
 export function runtimeFrom(g: unknown): BuzzRuntime | null {
   if (typeof g !== "object" || g === null) return null;
   const buzz = (g as { buzz?: unknown }).buzz;
-  if (!hasFunction(buzz, "drawFigure")) return null;
-  const draw = buzz.drawFigure as (figure: string, anchorHref: string) => unknown;
+  if (!hasFunction(buzz, "drawDiagram")) return null;
+  const draw = buzz.drawDiagram as (diagram: string, anchorHref: string) => unknown;
   return {
-    drawFigure: (figure: Figure, anchorHref: string): DrawResult => {
-      const raw: unknown = draw(JSON.stringify(figure), anchorHref);
+    drawDiagram: (diagram: Diagram, anchorHref: string): DrawResult => {
+      const raw: unknown = draw(JSON.stringify(diagram), anchorHref);
       if (typeof raw !== "object" || raw === null)
         return {
           ok: false,
@@ -298,15 +298,15 @@ export async function startGo(
       return fail(
         new MagusError({
           code: "",
-          message: "the Buzz runtime started but never exposed drawFigure",
+          message: "the Buzz runtime started but never exposed drawDiagram",
         }),
       );
     await new Promise((r) => setTimeout(r, 30));
   }
 }
 
-// figureId is the handler's ids{}.of for the figure id: letters, digits, '-' and '_' survive.
-export function figureId(id: string): string {
+// diagramId is the handler's ids{}.of for the diagram id: letters, digits, '-' and '_' survive.
+export function diagramId(id: string): string {
   const base = id.replace(/[^A-Za-z0-9_-]/g, "-").replace(/^-+|-+$/g, "");
   return base || "root";
 }
@@ -323,7 +323,7 @@ export function linkTo(anchorHref: string, anchor: string): string {
   return anchorHref.replace(/\{path\}|\{line\}/g, (m) => (m === "{path}" ? anchor : ""));
 }
 
-// nameActors is the handler's actorNames: figure keys an actor by name, so a label two nodes
+// nameActors is the handler's actorNames: diagram keys an actor by name, so a label two nodes
 // share takes the node's anchor. Each node comes back with its name.
 export function nameActors<T extends DeclaredNode>(
   nodes: readonly T[],
@@ -336,26 +336,26 @@ export function nameActors<T extends DeclaredNode>(
   }));
 }
 
-// IMPORTS is the claim of the handler's import figure, the one kind drawn from Dir records.
+// IMPORTS is the claim of the handler's import diagram, the one kind drawn from Dir records.
 export const IMPORTS = "imports";
 
-// drawnNodes re-keys the server's node rows by the data-node id magus/figure draws (a box by its
+// drawnNodes re-keys the server's node rows by the data-node id magus/diagram draws (a box by its
 // directory, an actor as external:<name>), which the SVG's data-edge pairs also use.
 export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): DeclaredNode[] {
   if (claim === IMPORTS) return nodes.map((n) => ({ ...n, id: n.anchor }));
   return nameActors(nodes).map(({ node, name }) => ({ ...node, id: "external:" + name }));
 }
 
-export interface FigureMeta {
+export interface DiagramMeta {
   readonly id: string;
   readonly title: string;
-  // IMPORTS for the import figure; any other claim draws actors, as the handler's buildFigure does.
+  // IMPORTS for the import diagram; any other claim draws actors, as the handler's buildDiagram does.
   readonly claim: string;
   // The node link template, {path} filled per node, or "" for no links.
   readonly anchorHref: string;
 }
 
-const EMPTY_FIGURE: Figure = {
+const EMPTY_DIAGRAM: Diagram = {
   id: "",
   title: "",
   eyebrow: "",
@@ -385,12 +385,12 @@ const EMPTY_BOX: Box = {
   look: null,
 };
 
-// buildFigure is the handler's buildFigure over decl, whose node ids are drawnNodes ids: the same
-// Figure record, built from the same rows.
-export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): Result<Figure> {
-  const base: Figure = {
-    ...EMPTY_FIGURE,
-    id: figureId(meta.id),
+// buildDiagram is the handler's buildDiagram over decl, whose node ids are drawnNodes ids: the same
+// Diagram record, built from the same rows.
+export function buildDiagram(decl: Declaration, meta: DiagramMeta, desc: string): Result<Diagram> {
+  const base: Diagram = {
+    ...EMPTY_DIAGRAM,
+    id: diagramId(meta.id),
     title: meta.title,
     desc,
   };
@@ -456,21 +456,21 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
   });
 }
 
-// libs/figure's MaxAccent: a third accent is a finding.
+// libs/diagram's MaxAccent: a third accent is a finding.
 const MAX_ACCENT = 2;
 
-// linkedRows is the node list of a linked figure, keyed by the ids its drawing carries.
-export function linkedRows(linked: LinkedFigure): DeclaredNode[] {
+// linkedRows is the node list of a linked diagram, keyed by the ids its drawing carries.
+export function linkedRows(linked: LinkedDiagram): DeclaredNode[] {
   return drawnNodes(
     linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label })),
     "flow",
   );
 }
 
-// figureForLink builds the Figure record for a shared graph: one actor per node, one flow per
+// diagramForLink builds the Diagram record for a shared graph: one actor per node, one flow per
 // edge carrying the edge's stroke and label. A seed is tagged "edited" and takes the accent only
-// while the figure has room for it, so a change that edits many projects is still drawn.
-export function figureForLink(linked: LinkedFigure): Result<Figure> {
+// while the diagram has room for it, so a change that edits many projects is still drawn.
+export function diagramForLink(linked: LinkedDiagram): Result<Diagram> {
   const accent = linked.nodes.filter((n) => n.seed).length <= MAX_ACCENT;
   const actors = new Map<string, Actor>(
     nameActors(linked.nodes.map((n) => ({ ...n, anchor: n.id }))).map(({ node: n, name }) => [
@@ -503,8 +503,8 @@ export function figureForLink(linked: LinkedFigure): Result<Figure> {
     });
   }
   return ok({
-    ...EMPTY_FIGURE,
-    id: figureId("link"),
+    ...EMPTY_DIAGRAM,
+    id: diagramId("link"),
     title: linked.title,
     unscoped_why: "drawn from a shared link, which carries the graph and no directories",
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
@@ -530,17 +530,17 @@ export function toRelayout(r: DrawResult): Relayout {
 
 export interface RelayoutInput {
   readonly runtime: BuzzRuntime;
-  // The whole figure as the server declared it, before any lens, keyed by drawnNodes ids.
+  // The whole diagram as the server declared it, before any lens, keyed by drawnNodes ids.
   readonly decl: Declaration;
-  readonly meta: FigureMeta;
+  readonly meta: DiagramMeta;
   readonly lens: Lens;
 }
 
-// relayout cuts the declaration through the lens and draws it with figure\draw, in the page.
+// relayout cuts the declaration through the lens and draws it with diagram\draw, in the page.
 export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (cut.error) return { kind: "bad-lens", detail: cut.error.message };
-  const figure = buildFigure(cut.value, input.meta, describeLens(input.lens));
-  if (figure.error) return { kind: "failed", detail: figure.error.message };
-  return toRelayout(input.runtime.drawFigure(figure.value, input.meta.anchorHref));
+  const diagram = buildDiagram(cut.value, input.meta, describeLens(input.lens));
+  if (diagram.error) return { kind: "failed", detail: diagram.error.message };
+  return toRelayout(input.runtime.drawDiagram(diagram.value, input.meta.anchorHref));
 }

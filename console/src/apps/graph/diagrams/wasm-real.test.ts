@@ -1,4 +1,4 @@
-// wasm-real.test.ts - a figure relaid out through the real buzz.wasm, loaded with Go's
+// wasm-real.test.ts - a diagram relaid out through the real buzz.wasm, loaded with Go's
 // wasm_exec.js in node: the path the Diagrams runtime control takes, with no fake runtime. It
 // SKIPS when the playground wasm is not built; build it with `magus run build_playground docs`.
 
@@ -9,11 +9,11 @@ import { test } from "node:test";
 import { runInThisContext } from "node:vm";
 import { ok } from "../../../gen/magus/types";
 import {
-  buildFigure,
-  figureForLink,
+  buildDiagram,
+  diagramForLink,
   toRelayout,
   startGo,
-  type Figure,
+  type Diagram,
   type GoConstructor,
   type Legend,
 } from "./wasm";
@@ -45,14 +45,14 @@ async function relay(): Promise<void> {
     assert.ok(!started.error, !started.error ? "" : started.error.message);
     const rt = started.value;
 
-    // The runtime resolves magus/figure as a module, not as source handed to it.
+    // The runtime resolves magus/diagram as a module, not as source handed to it.
     const evalBuzz = (g.buzz as { evalBuzz: (src: string) => { ok: boolean; result: string } })
       .evalBuzz;
-    const imported = evalBuzz('import "magus/figure";\nreturn figure\\of("served").id;');
+    const imported = evalBuzz('import "magus/diagram";\nreturn diagram\\of("served").id;');
     assert.deepEqual([imported.ok, imported.result], [true, "served"], JSON.stringify(imported));
 
     const meta = { id: "projects", title: "Projects", claim: "flow", anchorHref: "/code/{path}" };
-    const built = buildFigure(
+    const built = buildDiagram(
       {
         nodes: [
           { id: "external:app", anchor: "app", label: "app" },
@@ -65,7 +65,7 @@ async function relay(): Promise<void> {
     );
     assert.ok(!built.error, !built.error ? "" : built.error.message);
     const actors = built.value;
-    const drawn = toRelayout(rt.drawFigure(actors, meta.anchorHref));
+    const drawn = toRelayout(rt.drawDiagram(actors, meta.anchorHref));
     assert.equal(drawn.kind, "ok", JSON.stringify(drawn));
     const svg = drawn.kind === "ok" ? drawn.svg : "";
     assert.ok(svg.startsWith("<svg"), svg.slice(0, 200));
@@ -76,7 +76,7 @@ async function relay(): Promise<void> {
 
     // A shared link's graph: actors only, the edited node accented and tagged, an optional edge
     // dashed and labelled while a plain one stays solid.
-    const linkFigure = figureForLink({
+    const linkDiagram = diagramForLink({
       title: "How far this change reaches",
       nodes: [
         { id: "libs/lib", label: "lib", seed: true },
@@ -88,8 +88,8 @@ async function relay(): Promise<void> {
         { from: "app", to: "tool", stroke: "optional", label: "after" },
       ],
     });
-    assert.ok(!linkFigure.error, !linkFigure.error ? "" : linkFigure.error.message);
-    const linkDrawn = toRelayout(rt.drawFigure(linkFigure.value, ""));
+    assert.ok(!linkDiagram.error, !linkDiagram.error ? "" : linkDiagram.error.message);
+    const linkDrawn = toRelayout(rt.drawDiagram(linkDiagram.value, ""));
     assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
     const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
     assert.match(linkSvg, />EDITED</);
@@ -100,7 +100,7 @@ async function relay(): Promise<void> {
     assert.match(linkSvg, />AFTER</);
 
     const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
-    const imports = buildFigure(
+    const imports = buildDiagram(
       {
         nodes: [
           { id: "internal/a", anchor: "internal/a", label: "a" },
@@ -112,32 +112,32 @@ async function relay(): Promise<void> {
       "",
     );
     assert.ok(!imports.error, !imports.error ? "" : imports.error.message);
-    const graphed = toRelayout(rt.drawFigure(imports.value, ""));
+    const graphed = toRelayout(rt.drawDiagram(imports.value, ""));
     assert.equal(graphed.kind, "ok", JSON.stringify(graphed));
     assert.match(graphed.kind === "ok" ? graphed.svg : "", /data-edge="internal\/a->internal\/b"/);
 
-    const refused = toRelayout(rt.drawFigure({ ...actors, unscoped_why: "" }, ""));
+    const refused = toRelayout(rt.drawDiagram({ ...actors, unscoped_why: "" }, ""));
     assert.deepEqual(refused, {
       kind: "refused",
       detail:
-        'figure "projects": draws no directory; draw a box() or group(), or say why in unscoped(why:)',
+        'diagram "projects": draws no directory; draw a box() or group(), or say why in unscoped(why:)',
     });
 
     // Enums cross as case names: a real one is decoded into its case, an unknown one refused.
-    const down = toRelayout(rt.drawFigure({ ...actors, direction: "down" }, ""));
+    const down = toRelayout(rt.drawDiagram({ ...actors, direction: "down" }, ""));
     assert.equal(down.kind, "ok", JSON.stringify(down));
     const legend = { look: "shiny", label: "x" } as unknown as Legend;
-    const shiny = toRelayout(rt.drawFigure({ ...actors, legends: [legend] }, ""));
+    const shiny = toRelayout(rt.drawDiagram({ ...actors, legends: [legend] }, ""));
     assert.deepEqual(shiny, {
       kind: "refused",
-      detail: 'figure "projects": legends[0].look is "shiny", which names no Look case',
+      detail: 'diagram "projects": legends[0].look is "shiny", which names no Look case',
     });
 
     // A member the record does not declare is refused before any Buzz runs.
-    const drifted = { ...actors, titleText: "old" } as Figure;
-    const strict = toRelayout(rt.drawFigure(drifted, ""));
+    const drifted = { ...actors, titleText: "old" } as Diagram;
+    const strict = toRelayout(rt.drawDiagram(drifted, ""));
     assert.equal(strict.kind, "failed");
-    assert.match(strict.kind === "failed" ? strict.detail : "", /^figure record: .*titleText/);
+    assert.match(strict.kind === "failed" ? strict.detail : "", /^diagram record: .*titleText/);
   } finally {
     delete g.buzz;
     delete g.Go;
@@ -145,4 +145,4 @@ async function relay(): Promise<void> {
   }
 }
 
-test("a figure relays out through the real buzz.wasm", { skip: SKIP, timeout: 120_000 }, relay);
+test("a diagram relays out through the real buzz.wasm", { skip: SKIP, timeout: 120_000 }, relay);

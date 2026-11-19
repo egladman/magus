@@ -1,4 +1,4 @@
-// interact.test.ts - the figure's camera and focus arithmetic, without a DOM.
+// interact.test.ts - the diagram's camera and focus arithmetic, without a DOM.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -6,8 +6,8 @@ import {
   FIT_PAD,
   MAX_SCALE,
   MIN_SCALE,
-  clientToFigure,
-  figureKey,
+  clientToDiagram,
+  diagramKey,
   fitBox,
   formatViewBox,
   glideMs,
@@ -60,7 +60,7 @@ test("zoom clamps to the scale range in both directions", () => {
   assert.ok(Math.abs(zoomScale(NATURAL, v) - MIN_SCALE) < 1e-9);
 });
 
-test("fit frames the whole figure with the pad around it", () => {
+test("fit frames the whole diagram with the pad around it", () => {
   assert.deepEqual(fitBox(NATURAL), {
     x: -FIT_PAD,
     y: -FIT_PAD,
@@ -69,14 +69,14 @@ test("fit frames the whole figure with the pad around it", () => {
   });
 });
 
-test("a pointer maps to figure units through the letterbox", () => {
-  // A 400x200 figure in an 800x800 frame: meet scales by 2 and leaves 200px bands above and below.
+test("a pointer maps to diagram units through the letterbox", () => {
+  // A 400x200 diagram in an 800x800 frame: meet scales by 2 and leaves 200px bands above and below.
   const rect = { left: 10, top: 20, width: 800, height: 800 };
-  assert.deepEqual(clientToFigure(NATURAL, rect, 10, 220), { x: 0, y: 0 });
-  assert.deepEqual(clientToFigure(NATURAL, rect, 810, 620), { x: 400, y: 200 });
+  assert.deepEqual(clientToDiagram(NATURAL, rect, 10, 220), { x: 0, y: 0 });
+  assert.deepEqual(clientToDiagram(NATURAL, rect, 810, 620), { x: 400, y: 200 });
 });
 
-test("a drag pans by the pixels moved, in figure units", () => {
+test("a drag pans by the pixels moved, in diagram units", () => {
   const rect = { left: 0, top: 0, width: 200, height: 100 };
   assert.deepEqual(panBy(NATURAL, rect, 10, -5), { x: -20, y: 10, w: 400, h: 200 });
 });
@@ -118,18 +118,18 @@ test("reading order is rows top to bottom, then left to right", () => {
   assert.deepEqual(order, ["d", "a", "b", "c"], "a and b sit within a row's slack of each other");
 });
 
-test("figure keys: f, + - 0 and Esc, and never a modified key", () => {
-  assert.equal(figureKey(key("f")), "fit");
-  assert.equal(figureKey(key("+")), "zoom-in");
-  assert.equal(figureKey(key("=")), "zoom-in");
-  assert.equal(figureKey(key("-")), "zoom-out");
-  assert.equal(figureKey(key("0")), "actual");
-  assert.equal(figureKey(key("Escape")), "clear");
-  assert.equal(figureKey(key("l")), null, "l is the graph explorer's, not ours");
+test("diagram keys: f, + - 0 and Esc, and never a modified key", () => {
+  assert.equal(diagramKey(key("f")), "fit");
+  assert.equal(diagramKey(key("+")), "zoom-in");
+  assert.equal(diagramKey(key("=")), "zoom-in");
+  assert.equal(diagramKey(key("-")), "zoom-out");
+  assert.equal(diagramKey(key("0")), "actual");
+  assert.equal(diagramKey(key("Escape")), "clear");
+  assert.equal(diagramKey(key("l")), null, "l is the graph explorer's, not ours");
   // ctrl/cmd with + - 0 is the browser's page zoom and must pass through.
-  assert.equal(figureKey(key("+", { ctrlKey: true })), null);
-  assert.equal(figureKey(key("0", { metaKey: true })), null);
-  assert.equal(figureKey(key("f", { altKey: true })), null);
+  assert.equal(diagramKey(key("+", { ctrlKey: true })), null);
+  assert.equal(diagramKey(key("0", { metaKey: true })), null);
+  assert.equal(diagramKey(key("f", { altKey: true })), null);
 });
 
 test("reduced motion snaps: a glide takes no time", () => {

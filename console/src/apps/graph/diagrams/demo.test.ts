@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { demoDiagramList, renderDemoDiagram } from "./demo";
 
-test("each listed demo figure renders nodes that its edges name", () => {
+test("each listed demo diagram renders nodes that its edges name", () => {
   const entries = demoDiagramList();
   assert.ok(entries.length >= 2);
   for (const entry of entries) {
@@ -34,6 +34,6 @@ test("the demo draws without touching the network", () => {
   }
 });
 
-test("an unknown figure is a failure, not an empty drawing", () => {
+test("an unknown diagram is a failure, not an empty drawing", () => {
   assert.ok(renderDemoDiagram("nope").error);
 });

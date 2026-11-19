@@ -1,4 +1,4 @@
-// The lens a figure is drawn through (scope, focus, depth): its query string for the server and
+// The lens a diagram is drawn through (scope, focus, depth): its query string for the server and
 // its round trip through the console's #fragment.
 
 import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
@@ -14,7 +14,7 @@ export interface Lens {
 export const EMPTY_LENS: Lens = { scope: [], focus: "", depth: null };
 
 // lensQuery mirrors the handler's parseLens: scope repeats, depth is sent only when set, and an
-// empty lens is the bare figure URL.
+// empty lens is the bare diagram URL.
 export function lensQuery(lens: Lens): string {
   const q = new URLSearchParams();
   for (const s of lens.scope) q.append("scope", s);
@@ -58,7 +58,7 @@ export interface DeclaredNode {
   readonly label: string;
 }
 
-// Declaration is a figure's input before a lens cuts it: what the server declared to flow.
+// Declaration is a diagram's input before a lens cuts it: what the server declared to flow.
 export interface Declaration {
   readonly nodes: readonly DeclaredNode[];
   readonly edges: readonly (readonly [string, string])[];
@@ -87,7 +87,7 @@ export function cutDeclaration(decl: Declaration, lens: Lens): Result<Declaratio
     const f = decl.nodes.find(
       (n) => keep.has(n.id) && (n.id === lens.focus || n.anchor === lens.focus),
     );
-    if (!f) return lensError('focus "' + lens.focus + '" is not in the figure');
+    if (!f) return lensError('focus "' + lens.focus + '" is not in the diagram');
     const adj = new Map<string, string[]>();
     for (const [a, b] of decl.edges) {
       if (!keep.has(a) || !keep.has(b)) continue;
@@ -140,7 +140,7 @@ export interface DiagramView {
 }
 
 // viewFromHash reads what fragmentForView writes. A malformed depth is dropped rather than
-// refused, so a hand-edited link still opens its figure.
+// refused, so a hand-edited link still opens its diagram.
 export function viewFromHash(params: Readonly<Record<string, string>>): DiagramView {
   const id = params.diagram ? params.diagram : null;
   const scope = (params.scope ?? "").split(",").filter(Boolean);

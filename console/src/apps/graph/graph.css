@@ -12,7 +12,7 @@
 :root {
   --gk-project: var(--console-node-project); --gk-module: var(--console-node-module);
   --gk-file: var(--console-node-file); --gk-dir: var(--console-node-dir);
-  --gk-figure: var(--console-node-figure);
+  --gk-diagram: var(--console-node-diagram);
   --gk-target: var(--console-node-target); --gk-spell: var(--console-node-spell);
   --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
   --gk-marker: var(--console-node-marker);
@@ -251,7 +251,7 @@
 .console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
 .console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
 .console-graph-kinddot[data-kind="dir"] { background: var(--gk-dir); }
-.console-graph-kinddot[data-kind="figure"] { background: var(--gk-figure); }
+.console-graph-kinddot[data-kind="diagram"] { background: var(--gk-diagram); }
 .console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
 .console-graph-kinddot[data-kind="spell"] { background: var(--gk-spell); }
 .console-graph-kinddot[data-kind="op"] { background: var(--gk-op); }
@@ -280,7 +280,7 @@
   .console-graph-kinddot[data-kind="project"],
   .console-graph-kinddot[data-kind="module"],
   .console-graph-kinddot[data-kind="dir"],
-  .console-graph-kinddot[data-kind="figure"],
+  .console-graph-kinddot[data-kind="diagram"],
   .console-graph-kinddot[data-kind="file"] { border-radius: var(--console-radius-micro); }
 
   /* Declarations: triangle */
@@ -615,22 +615,22 @@
 .console-graph-qb__examples { margin-top: var(--pf-t--global--spacer--sm); }
 .console-graph-qb__caps { margin: 0 0 var(--pf-t--global--spacer--md); padding-bottom: var(--pf-t--global--spacer--sm); border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 
-/* Figures mode (setGraphMode in main.ts): the diagrams view fills the pane in the explorer's place,
+/* Diagrams mode (setGraphMode in main.ts): the diagrams view fills the pane in the explorer's place,
    under a bar carrying the way back. */
-#graph-figures-host:not([hidden]) {
+#graph-diagrams-host:not([hidden]) {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-block-size: 0;
 }
-.console-graph-figures-controls {
+.console-graph-diagrams-controls {
   display: flex;
   align-items: center;
   min-block-size: var(--console-app-bar-h);
   padding-inline: var(--console-pad);
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
-.console-graph-figures-controls .console-render-btn__icon { width: 1em; height: 1em; flex: 0 0 auto; }
+.console-graph-diagrams-controls .console-render-btn__icon { width: 1em; height: 1em; flex: 0 0 auto; }
 
 /* Hidden state: each display above would otherwise outspecify the attribute's UA display:none. */
 #graph-status[hidden],
@@ -643,7 +643,7 @@
 .console-graph-qb__foot[hidden],
 .console-graph-qb__cli[hidden],
 .console-graph-loading[hidden],
-.console-graph-figures-controls[hidden] { display: none; }
+.console-graph-diagrams-controls[hidden] { display: none; }
 .console-graph-qb__detach[data-detach-failed] { opacity: 0.45; }
 
 /* Cold state, nothing loaded: the app collapses to the empty-state prompt at its natural height.
