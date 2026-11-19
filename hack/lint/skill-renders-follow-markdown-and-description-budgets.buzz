@@ -237,7 +237,11 @@ fun judge(dir: str, pairs: [Pair]) > result\Result::<[any]> {
     try {
         final listing = "{dir}/skills.md";
         fs\writeFile(listing, content: setText(pairs));
-        final table = decisions\writeDecisions([<str>]);
+        final written = decisions\writeDecisions([<str>]);
+        if (written.error != null) {
+            return result\Result::<[any]>{ error = written.error };
+        }
+        final table = written.value!;
         final run = proc\exec(path\abs("{proofread\home}/{proofread\binary}"),
             args: ["skill-template", "--decisions", table, "--only", RULES, listing],
             opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;

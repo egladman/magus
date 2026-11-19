@@ -796,26 +796,34 @@ export fun trimLine(t: CacheTrim, fence: double) > str? {
 
 /// trimDeclared trims every cache a spell gives a budget and returns each
 /// result. A cache that fails names itself, and the others still run.
-export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any {
-    final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
-    final done = mut [<CacheTrim>];
-    foreach (c in plan.caches) {
-        done.append(trimCache("the {c.spell} spell's {c.env}", dir: c.dir, trimMb: c.trimMb, fence: fence, deadline: deadline));
+export fun trimDeclared(fence: double, deadline: double) > result\Result::<[CacheTrim]> {
+    try {
+        final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
+        final done = mut [<CacheTrim>];
+        foreach (c in plan.caches) {
+            done.append(trimCache("the {c.spell} spell's {c.env}", dir: c.dir, trimMb: c.trimMb, fence: fence, deadline: deadline));
+        }
+        return result\ok::<[CacheTrim]>(done);
+    } catch (err: any) {
+        return result\caught::<[CacheTrim]>(err, doing: "reclaimdisk: trim the declared caches");
     }
-    return done;
 }
 
 /// chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 /// worktrees untouched longest and the agent branches they and none hold.
-/// It returns the whole plan with each row's result, and raises past deadline.
-export fun chunk(deadline: double) > [Item] !> any {
-    final surveyed = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
-    if (surveyed.error != null) { throw surveyed.error!.message; }
-    final s = surveyed.value!;
-    final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
-    final byName = mut {<str: Item>};
-    foreach (it in done) { byName[it.name] = it; }
-    return s.items.map(fun (i: int, it: Item) > Item => byName[it.name] ?? it);
+/// It returns the whole plan with each row's result, and errors past deadline.
+export fun chunk(deadline: double) > result\Result::<[Item]> {
+    try {
+        final surveyed = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
+        if (surveyed.error -> err) { return result\Result::<[Item]>{ error = err }; }
+        final s = surveyed.value!;
+        final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
+        final byName = mut {<str: Item>};
+        foreach (it in done) { byName[it.name] = it; }
+        return result\ok::<[Item]>(s.items.map(fun (i: int, it: Item) > Item => byName[it.name] ?? it));
+    } catch (err: any) {
+        return result\caught::<[Item]>(err, doing: "reclaimdisk: reclaim a chunk of worktrees");
+    }
 }
 
 /// keptLine counts what a reclaim leaves for a person, "" when it leaves none.
@@ -870,13 +878,11 @@ fun waitingLine(listCommand: str) > str {
 fun trimInto(did: mut [str], fence: double, now: double, deadline: double) > result\Result::<bool> {
     var freed = false;
     final cacheDeadline = if (deadline - now > TRIM_MS * 1.25) now + TRIM_MS else now + (deadline - now) * 0.8;
-    try {
-        foreach (trim in trimDeclared(fence, deadline: cacheDeadline)) {
-            if (trim.removedBytes > 0) { freed = true; }
-            if (trimLine(trim, fence: fence) -> text) { did.append(text); }
-        }
-    } catch (err: any) {
-        return result\caught::<bool>(err);
+    final trims = trimDeclared(fence, deadline: cacheDeadline);
+    if (trims.error -> err) { return result\Result::<bool>{ error = err }; }
+    foreach (trim in trims.value!) {
+        if (trim.removedBytes > 0) { freed = true; }
+        if (trimLine(trim, fence: fence) -> text) { did.append(text); }
     }
     return result\ok::<bool>(freed);
 }
@@ -920,16 +926,17 @@ fun runTick(cwd: str, deadline: double, force: bool) > result\Result::<TickRepor
             if (trimmed.value!) { freed = true; }
         }
         var kept = "";
-        try {
-            final items = chunk(deadline);
+        final chunked = chunk(deadline);
+        if (chunked.error -> e) {
+            did.append("stopped before the worktrees: {e.message}");
+        } else {
+            final items = chunked.value!;
             kept = keptLine(items);
             final removed = items.filter(fun (i: int, it: Item) > bool => it.kind == "worktree" and it.result == "removed").len();
             if (removed > 0) {
                 freed = true;
                 did.append("removed {strings\pluralCount(removed, one: "worktree", many: "worktrees")}");
             }
-        } catch (e) {
-            did.append("stopped before the worktrees: {e}");
         }
         final after = fs\diskUsage(cwd);
         final plan: magus\DiskReclaim = magus\workspace().diskReclaim();

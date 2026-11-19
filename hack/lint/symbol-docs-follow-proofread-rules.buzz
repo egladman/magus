@@ -48,7 +48,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     final symbols = ofLanguages(data.symbols);
     final indexes = data.indexes.map(fun (i: int, idx: magus\SymbolIndexStatus) > any => indexRow(idx));
     final bin = "{proofread\home}/{proofread\binary}";
-    final table = decisions\writeDecisions([<str>]);
+    final written = decisions\writeDecisions([<str>]);
+    if (written.error != null) {
+        throw written.error!.message;
+    }
+    final table = written.value!;
     final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
         opts: proc\ExecOptions{ stdin = json\stringify(symbols), quiet = true, allowFailure = true });
     fs\remove(table) catch void;

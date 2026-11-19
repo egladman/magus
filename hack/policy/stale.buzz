@@ -77,7 +77,11 @@ export fun buildStamp(root: str) > str !> any {
     if (entries.error != null) {
         throw entries.error!.message;
     }
-    return "{entries.value!},{inputsKey}={goInputsDigest(root)}";
+    final digest = goInputsDigest(root);
+    if (digest.error != null) {
+        throw digest.error!.message;
+    }
+    return "{entries.value!},{inputsKey}={digest.value!}";
 }
 
 // stampEntries are `<path>=<digest>` for every stamped file under root, then
@@ -170,24 +174,28 @@ final scopesProbe = `import "std"; import "proc"; import "spells/golang/spell" a
 
 // goInputsDigest hashes every file under root the go spell's mgs_getScopes
 // names for ./cmd/magus. Two trees with one digest build one binary.
-export fun goInputsDigest(root: str) > str !> any {
-    final base = path\abs(root);
-    final listed = proc\exec(os\executable(), args: ["buzz", "-C", base, "-e", scopesProbe],
-        dir: base, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (listed.code != 0) {
-        throw "the go spell's mgs_getScopes for ./cmd/magus in {base} exited {listed.code}:\n{listed.stderr.trim()}";
+export fun goInputsDigest(root: str) > result\Result::<str> {
+    try {
+        final base = path\abs(root);
+        final listed = proc\exec(os\executable(), args: ["buzz", "-C", base, "-e", scopesProbe],
+            dir: base, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (listed.code != 0) {
+            return result\fail::<str>("the go spell's mgs_getScopes for ./cmd/magus in {base} exited {listed.code}:\n{listed.stderr.trim()}");
+        }
+        final inputs = goInputs(listed.stdout, root: base);
+        if (inputs.error != null) {
+            return result\Result::<str>{ error = inputs.error };
+        }
+        final files = inputs.value!.cloneMutable();
+        _ = files.sort(fun (left: str, right: str) > bool => left < right);
+        final lines = mut [<str>];
+        foreach (rel in files) {
+            lines.append("{rel} {crypto\sha256File("{base}/{rel}")}");
+        }
+        return result\ok::<str>(crypto\sha256Hex(lines.join("\n")).sub(0, len: 16));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "stale: digest the Go build inputs of {root}");
     }
-    final inputs = goInputs(listed.stdout, root: base);
-    if (inputs.error != null) {
-        throw inputs.error!.message;
-    }
-    final files = inputs.value!.cloneMutable();
-    _ = files.sort(fun (left: str, right: str) > bool => left < right);
-    final lines = mut [<str>];
-    foreach (rel in files) {
-        lines.append("{rel} {crypto\sha256File("{base}/{rel}")}");
-    }
-    return crypto\sha256Hex(lines.join("\n")).sub(0, len: 16);
 }
 
 // stampedCommit is the commit a stamp records, "" for a stamp from before commits were.
@@ -614,9 +622,9 @@ test "the Go inputs are the files under the root the scopes name, less the exclu
 
 test "the Go input digest of one tree is stable" {
     final root = vcs\root() catch "";
-    final digest = goInputsDigest(root) catch "";
+    final digest = goInputsDigest(root).value ?? "";
     std\assert(digest.len() == 16, message: "a digest: {digest}");
-    std\assert((goInputsDigest(root) catch "") == digest, message: "stable across calls");
+    std\assert((goInputsDigest(root).value ?? "") == digest, message: "stable across calls");
 }
 
 test "the stamp names its commit, which movedSince never reads as a source" {

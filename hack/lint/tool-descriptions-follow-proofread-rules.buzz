@@ -101,7 +101,11 @@ export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     final fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} tool-description, and read why it stopped.";
     final bin = path\abs("{proofread\home}/{proofread\binary}");
-    final table = decisions\writeDecisions([<str>]);
+    final written = decisions\writeDecisions([<str>]);
+    if (written.error != null) {
+        throw written.error!.message;
+    }
+    final table = written.value!;
     try {
         foreach (name in [TOOLS, SKILLS]) {
             final source = support\named(files, p: name);

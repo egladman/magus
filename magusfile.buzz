@@ -1101,7 +1101,14 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["**/gen/*test/*.go", "**/mocks_test.go"]);
     _ = proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
-    mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));
+    final assertions = mockassert\files(fs\readFile(".mockery.yaml"));
+    if (assertions.error != null) {
+        throw assertions.error!.message;
+    }
+    final written = mockassert\write(assertions.value!);
+    if (written.error != null) {
+        throw written.error!.message;
+    }
 }
 
 // Reinstalls the agent skills from their embedded sources in internal/agent/skills.
@@ -2595,8 +2602,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // `args`.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
-    cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
+    final settled = cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
         every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
+    if (settled.error != null) {
+        throw settled.error!.message;
+    }
     // No percentage floor: removing well-covered code would trip one. The
     // touched-functions-keep-change-risk-under-10 lint rule holds each changed
     // file's covered lines against its base instead.
@@ -2639,8 +2649,11 @@ final COVERAGE_PROFILE = ".magus/coverage.out";
 final COVERAGE_HAND_PROFILE = ".magus/coverage.hand.out";
 
 fun raced_packages() > [str] !> any {
-    final module = cov\modulePath(fs\readFile("go.mod"));
-    final skip = module + CMD_MAGUS_PKG.sub(1);
+    final located = cov\modulePath(fs\readFile("go.mod"));
+    if (located.error != null) {
+        throw located.error!.message;
+    }
+    final skip = located.value! + CMD_MAGUS_PKG.sub(1);
     var raced = mut [<str>];
     foreach (line in proc\exec("go", ["list", "./..."], ".", proc\ExecOptions{quiet = true}).stdout.split("\n")) {
         final pkg = line.trim();
@@ -2712,15 +2725,31 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     if (ran.error != null) {
         throw ran.error!.message;
     }
-    final go_totals = cov\treeTotals(tables.value!, blocks: ran.value!);
-    final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
+    final totals = cov\treeTotals(tables.value!, blocks: ran.value!);
+    if (totals.error != null) {
+        throw totals.error!.message;
+    }
+    final go_totals = totals.value!;
+    final percent = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
+    if (percent.error != null) {
+        throw percent.error!.message;
+    }
+    final go_pct = percent.value!;
     final buzz_pct = fs\readFile(buzz).trim();
     final typescript_pct = fs\readFile(typescript).trim();
 
     fs\mkdirAll("gen/site/assets");
-    fs\writeFile("gen/site/assets/go-coverage.svg", content: badges\coverage("go coverage", percent: go_pct, radius: 3));
-    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: badges\coverage("buzz coverage", percent: buzz_pct, radius: 3));
-    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: badges\coverage("typescript coverage", percent: typescript_pct, radius: 3));
+    final go_badge = badges\coverage("go coverage", percent: go_pct, radius: 3);
+    final buzz_badge = badges\coverage("buzz coverage", percent: buzz_pct, radius: 3);
+    final typescript_badge = badges\coverage("typescript coverage", percent: typescript_pct, radius: 3);
+    foreach (badge in [go_badge, buzz_badge, typescript_badge]) {
+        if (badge.error != null) {
+            throw badge.error!.message;
+        }
+    }
+    fs\writeFile("gen/site/assets/go-coverage.svg", content: go_badge.value!);
+    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: buzz_badge.value!);
+    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: typescript_badge.value!);
     magus\log.info("coverage: go " + go_pct + "% ({go_totals["covered"]}/{go_totals["statements"]} statements), buzz "
         + buzz_pct + "%, typescript " + typescript_pct + "%");
 }

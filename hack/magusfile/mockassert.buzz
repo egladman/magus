@@ -102,48 +102,57 @@ export fun render(pkgPath: str, pkg: str, interfaces: [str]) > str {
 // compiles and fails only at a use site, and a published mock has none here: the first
 // build to break would be a consumer's. A file beside mockery's output rather than a
 // forked template, which a mockery upgrade would silently keep rendering stale.
-export fun files(config: str) > [AssertFile] !> any {
-    final root = serialize\Boxed.init(yaml\parse(config));
-    final packages = root.q(["packages"]).mapValue();
-    if (packages.size() == 0) {
-        throw "the mockery config declares no packages";
+export fun files(config: str) > result\Result::<[AssertFile]> {
+    try {
+        final root = serialize\Boxed.init(yaml\parse(config));
+        final packages = root.q(["packages"]).mapValue();
+        if (packages.size() == 0) {
+            return result\fail::<[AssertFile]>("the mockery config declares no packages");
+        }
+        final dirTemplate = root.q(["dir"]).stringValue();
+        final pkgTemplate = root.q(["pkgname"]).stringValue();
+        final assertions = mut [<AssertFile>];
+        foreach (pkgPath in sort\strings(packages.keys())) {
+            final pkg = packages[pkgPath]!;
+            final names = sort\strings(pkg.q(["interfaces"]).mapValue().keys());
+            if (names.len() == 0) { continue; }
+            final dir = expand(pkg.q(["config", "dir"]).string() ?? dirTemplate, pkgPath: pkgPath);
+            if (dir.error != null) {
+                return result\Result::<[AssertFile]>{ error = dir.error };
+            }
+            final rel = relDir(pkgPath);
+            if (rel.error != null) {
+                return result\Result::<[AssertFile]>{ error = rel.error };
+            }
+            if (isInternal(rel.value!) or isInternal(dir.value!)) { continue; }
+            final pkgName = expand(pkg.q(["config", "pkgname"]).string() ?? pkgTemplate, pkgPath: pkgPath);
+            if (pkgName.error != null) {
+                return result\Result::<[AssertFile]>{ error = pkgName.error };
+            }
+            assertions.append(AssertFile{
+                // A test file, so importing the doubles never imports the mocked package: the
+                // package's own tests can use them, and the check still compiles in go vet.
+                path = dir.value! + "/assert_test.go",
+                body = render(pkgPath, pkg: pkgName.value!, interfaces: names),
+            });
+        }
+        return result\ok::<[AssertFile]>(assertions);
+    } catch (err: any) {
+        return result\caught::<[AssertFile]>(err, doing: "mockassert: read the mockery config");
     }
-    final dirTemplate = root.q(["dir"]).stringValue();
-    final pkgTemplate = root.q(["pkgname"]).stringValue();
-    final assertions = mut [<AssertFile>];
-    foreach (pkgPath in sort\strings(packages.keys())) {
-        final pkg = packages[pkgPath]!;
-        final names = sort\strings(pkg.q(["interfaces"]).mapValue().keys());
-        if (names.len() == 0) { continue; }
-        final dir = expand(pkg.q(["config", "dir"]).string() ?? dirTemplate, pkgPath: pkgPath);
-        if (dir.error != null) {
-            throw dir.error!.message;
-        }
-        final rel = relDir(pkgPath);
-        if (rel.error != null) {
-            throw rel.error!.message;
-        }
-        if (isInternal(rel.value!) or isInternal(dir.value!)) { continue; }
-        final pkgName = expand(pkg.q(["config", "pkgname"]).string() ?? pkgTemplate, pkgPath: pkgPath);
-        if (pkgName.error != null) {
-            throw pkgName.error!.message;
-        }
-        assertions.append(AssertFile{
-            // A test file, so importing the doubles never imports the mocked package: the
-            // package's own tests can use them, and the check still compiles in go vet.
-            path = dir.value! + "/assert_test.go",
-            body = render(pkgPath, pkg: pkgName.value!, interfaces: names),
-        });
-    }
-    return assertions;
 }
 
 // write writes each file beside the mocks mockery produced, leaving an unchanged file
 // untouched so its mtime does not dirty every downstream target.
-export fun write(files: [AssertFile]) > void !> any {
-    foreach (f in files) {
-        if (fs\exists(f.path) and fs\readFile(f.path) == f.body) { continue; }
-        fs\writeFile(f.path, content: f.body);
+export fun write(files: [AssertFile]) > result\Result::<bool> {
+    try {
+        foreach (f in files) {
+            if (fs\exists(f.path) and fs\readFile(f.path) == f.body) { continue; }
+            fs\writeFile(f.path, content: f.body);
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "mockassert: write the assertion files");
     }
 }
 
@@ -196,7 +205,7 @@ packages:
       Driver:
   github.com/egladman/magus/empty:
     interfaces:
-`);
+`).value!;
     std\assert(got.len() == 4, message: "the root, internalize, impact and spells; internal doubles and empty skipped");
     std\assert(got[0].path == "gen/magustest/assert_test.go", message: "the module root writes under gen/magustest");
     std\assert(got[0].body.indexOf("package magustest\n") != null, message: "root clause");
@@ -209,12 +218,7 @@ packages:
 }
 
 fun refusal(config: str) > str {
-    try {
-        _ = files(config);
-    } catch (e) {
-        return "{e}";
-    }
-    return "";
+    return files(config).error?.message ?? "";
 }
 
 test "a broken config is refused" {

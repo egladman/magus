@@ -71,18 +71,14 @@ fun severity_gradient(figure: str) > result\Result::<[str]> {
 
 // coverage is the only public entry: a label, a percentage figure ("56.8", trailing "%"
 // optional), and a corner radius (3 = rounded, 0 = square). The color is derived from the
-// figure, never passed. Throws on a non-numeric figure.
-export fun coverage(label: str, percent: str, radius: int) > str !> any {
+// figure, never passed. A non-numeric figure is an error.
+export fun coverage(label: str, percent: str, radius: int) > result\Result::<str> {
     final figure = normalize_percent(percent);
     final gradient = severity_gradient(figure);
     if (gradient.error != null) {
-        throw gradient.error!.message;
+        return result\Result::<str>{ error = gradient.error };
     }
-    final badge = flat_badge(label, value: "{figure}%", gradient: gradient.value!, radius: radius);
-    if (badge.error != null) {
-        throw badge.error!.message;
-    }
-    return badge.value!;
+    return flat_badge(label, value: "{figure}%", gradient: gradient.value!, radius: radius);
 }
 
 // gradient is one vertical two-stop gradient, the shape the Actions badge draws both of
@@ -145,7 +141,7 @@ test "text_width estimates width from length" {
 }
 
 test "coverage derives the band and value, accepting a trailing percent" {
-    final b = coverage("go coverage", percent: "56.8%", radius: 3);   // 56 -> yellow, % dropped
+    final b = coverage("go coverage", percent: "56.8%", radius: 3).value!;   // 56 -> yellow, % dropped
     assert\contains(b, item: `stop-color="#d4a72c"`, message: "yellow band from 56.8");
     assert\contains(b, item: `stop-color="#444D56"`, message: "the Actions label gradient");
     assert\contains(b, item: `>56.8%<`, message: "single percent shown");
@@ -154,7 +150,7 @@ test "coverage derives the band and value, accepting a trailing percent" {
 }
 
 test "coverage rejects a non-numeric figure" {
-    assert\throws(fun () > void !> str { final _ = coverage("go coverage", percent: "n/a", radius: 3); }, message: "non-numeric figure errors");
+    assert\isTrue(coverage("go coverage", percent: "n/a", radius: 3).error != null, message: "non-numeric figure errors");
 }
 
 test "halve renders whole and half coordinates" {
@@ -163,7 +159,7 @@ test "halve renders whole and half coordinates" {
 }
 
 test "radius 0 is square" {
-    assert\contains(coverage("go coverage", percent: "56.8", radius: 0), item: `rx="0"`, message: "square");
+    assert\contains(coverage("go coverage", percent: "56.8", radius: 0).value!, item: `rx="0"`, message: "square");
 }
 
 test "severity_gradient maps the three Actions bands" {

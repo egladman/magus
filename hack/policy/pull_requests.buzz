@@ -882,7 +882,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
             return [Judged{ rule = "judge", line = 0,
                 message = "proofread cannot run: {notRunnable}; run `{proofread\build}`, then retry" }];
         }
-        final table = decisions\writeDecisions([<str>]) catch "";
+        final table = decisions\writeDecisions([<str>]).value ?? "";
         if (table == "") {
             return [Judged{ rule = "judge", line = 0,
                 message = "proofread cannot run: its decisions file could not be written to a temp dir" }];

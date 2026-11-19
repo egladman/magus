@@ -136,24 +136,19 @@ no-throw:
       evals/buzz/solutions/ports.buzz: 1
       hack/dev/bootstrap-checkout.buzz: 2
       hack/magusfile/advisories.buzz: 3
-      hack/magusfile/badges.buzz: 1
       hack/magusfile/bootstrap-timing.buzz: 2
       hack/magusfile/buzz-coverage.buzz: 3
       hack/magusfile/changelog.buzz: 3
-      hack/magusfile/coverage.buzz: 4
       hack/magusfile/drift.buzz: 5
       hack/magusfile/index.buzz: 1
-      hack/magusfile/mockassert.buzz: 2
       hack/magusfile/releases.buzz: 10
       hack/magusfile/ruledocs.buzz: 2
       hack/magusfile/run-golangci.buzz: 5
       hack/policy/guard.buzz: 2
-      hack/policy/proofread.buzz: 1
-      hack/policy/stale.buzz: 2
+      hack/policy/stale.buzz: 1
       internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
       spells/golang/golangci.buzz: 2
-      std/lib/reclaimdisk.buzz: 2
 
 # An engineered zone: a path in this project whose complexity a measurement
 # licenses. reason is spec, performance or security; evidence names the files
