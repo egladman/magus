@@ -558,12 +558,6 @@ func (s *baseFenceSuite) TestABinaryWithNoStampAtAllIsRefusedNamingTheBuild() {
 	s.NotContains(off.Error(), "modified tree")
 }
 
-func (s *baseFenceSuite) TestACommitTheRepositoryLacksIsRefused() {
-	st, path, _ := behindStore(s.T(), s.repo.Root())
-
-	s.refused(s.built("v0.4.3", strings.Repeat("e", 40)), st, path, "cannot say whether origin/main")
-}
-
 func (s *baseFenceSuite) TestABaseThatDoesNotResolveIsRefused() {
 	s.repo.Git("update-ref", "-d", "refs/remotes/origin/main")
 	st, path, _ := behindStore(s.T(), s.repo.Root())
@@ -581,6 +575,89 @@ func (s *baseFenceSuite) TestALinkedCheckoutOnTheBaseMigrates() {
 
 	s.Require().NoError(err)
 	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
+}
+
+// consumerFenceSuite pins who may migrate the job store of a workspace that is not
+// magus's source: its history holds no commit that built magus, so only the binary's
+// stamp judges it.
+type consumerFenceSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	// magus is the commit that built the binary, which the workspace never held.
+	magus string
+}
+
+func TestConsumerFenceSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(consumerFenceSuite))
+}
+
+func (s *consumerFenceSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"app.txt": "app\n"})
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.repo.Head())
+	s.magus = strings.Repeat("e", 40)
+}
+
+// refused asserts a read of the store at path under b is refused for why, naming the
+// consumer remedy, and that nothing was written.
+func (s *consumerFenceSuite) refused(b types.MagusBuild, why string) {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+
+	_, err = st.Read(types.WithMagusBuild(s.T().Context(), b))
+
+	off, ok := errors.AsType[*offBaseMigrationError](err)
+	s.Require().True(ok, "%v", err)
+	s.True(off.Foreign)
+	s.Contains(err.Error(), fmt.Sprintf("%s holds no commit %.12s, so it is not magus's source", s.repo.Root(), s.magus))
+	s.Contains(err.Error(), why)
+	s.Contains(err.Error(), "install a magus release, build magus with `./magus run go-build .` in a clean magus checkout, or run this binary under its own XDG_STATE_HOME")
+	s.NotContains(err.Error(), "rebuild magus from origin/main")
+	after, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(string(raw), string(after), "nothing was written")
+}
+
+func (s *consumerFenceSuite) TestAReleaseMigratesAndSaysNoBaseJudgedIt() {
+	st, path, notices := behindStore(s.T(), s.repo.Root())
+
+	f, err := st.Read(types.WithMagusBuild(s.T().Context(), types.StampedBuild("v0.4.3", s.magus, "")))
+
+	s.Require().NoError(err)
+	s.Equal("ship it", f.Jobs[0].Parent)
+	header := storedLines(s.T(), path)[0]
+	s.Equal(string(storeVersion(1)), header["api_version"])
+	s.Equal(map[string]any{"version": "v0.4.3", "commit": s.magus}, header["writer"])
+	s.Contains(notices.String(), fmt.Sprintf("job: %s holds no commit %.12s, so no base judged this magus; its clean stamp v0.4.3 let it migrate job store %s\n", s.repo.Root(), s.magus, path))
+}
+
+func (s *consumerFenceSuite) TestACleanStampedDevBuildMigrates() {
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	_, err := st.Read(types.WithMagusBuild(s.T().Context(), types.StampedBuild("v0.5.0-rc.3-219-geeeeeeeee", s.magus, "")))
+
+	s.Require().NoError(err)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
+}
+
+func (s *consumerFenceSuite) TestAWorkspaceWithNoBaseMigratesAStampedBuild() {
+	s.repo.Git("update-ref", "-d", "refs/remotes/origin/main")
+	st, path, _ := behindStore(s.T(), s.repo.Root())
+
+	_, err := st.Read(types.WithMagusBuild(s.T().Context(), types.StampedBuild("v0.4.3", s.magus, "")))
+
+	s.Require().NoError(err)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
+}
+
+func (s *consumerFenceSuite) TestADirtyStampedBuildIsRefused() {
+	s.refused(types.StampedBuild("v0.4.3-dirty", s.magus, ""), "and it was built from a modified tree")
+}
+
+func (s *consumerFenceSuite) TestABuildWithOnlyGoVCSStampIsRefused() {
+	s.refused(types.MagusBuild{Version: "unknown", Commit: s.magus, Source: types.BuildSourceVCS},
+		"and it carries no magus version stamp: Go's VCS stamp can name another revision")
 }
 
 func (s *jobSuite) TestARootNoVersionControlHoldsMigratesAndSaysNothingJudgedIt() {

@@ -773,6 +773,9 @@ type offBaseMigrationError struct {
 	Why string
 	// Last is the store's last writer.
 	Last storeWriter
+	// Foreign means the workspace's history holds no commit that built this binary, so
+	// the workspace is not magus's source and the binary's stamp alone judged it.
+	Foreign bool
 }
 
 func (e *offBaseMigrationError) Error() string {
@@ -780,6 +783,12 @@ func (e *offBaseMigrationError) Error() string {
 	self := storeWriter{Version: e.Build.Version, Commit: e.Build.Commit}.String()
 	if e.Build.Source == types.BuildSourceVCS {
 		self += ", read from Go's VCS stamp because it carries no magus version stamp"
+	}
+	if e.Foreign {
+		return fmt.Sprintf("job: job store %s is at %s, and this magus (%s) writes %s, but %s:"+
+			" a binary this workspace's history did not build migrates only on a clean magus version stamp, so nothing was read or written%s:"+
+			" install a magus release, build magus with `./magus run go-build .` in a clean magus checkout, or run this binary under its own XDG_STATE_HOME",
+			e.Path, e.Found, self, e.Known, e.Why, e.Last.named())
 	}
 	return fmt.Sprintf("job: job store %s is at %s, and this magus (%s) writes %s, but %s:"+
 		" every checkout and branch shares the store, and once migrated every magus built on %s refuses it as newer, so nothing was read or written%s:"+
@@ -802,7 +811,9 @@ func storeAt(st migrate.Store, header migrate.Entry, found int) string {
 
 // refuseOffBase refuses rewriting the file at path, at found as [storeAt] names it, when
 // a migration is due, unless this binary was built on a commit the base of s's
-// repository contains. A root no version control claims has no base: it migrates, and a
+// repository contains. A repository that holds no such commit is not magus's source, so
+// no base there can judge the binary: it migrates only on a clean magus version stamp,
+// and a notice says so. A root no version control claims has no base: it migrates, and a
 // notice says nothing judged it.
 func (s *Store) refuseOffBase(ctx context.Context, path, found string, due bool, last storeWriter) error {
 	if !due {
@@ -828,6 +839,13 @@ func (s *Store) refuseOffBase(ctx context.Context, path, found string, due bool,
 	}
 	if res.VCS == nil || (res.Source == types.VCSSourceDefault && !underVersionControl(ctx, res.VCS, root)) {
 		fmt.Fprintf(s.noticeWriter(), "job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", root, path)
+		return nil
+	}
+	if foreign(ctx, res.VCS, root, build) {
+		if why, refuse := stampRefusal(root, build); refuse {
+			return &offBaseMigrationError{Path: path, Found: found, Known: known, Build: build, Why: why, Last: last, Foreign: true}
+		}
+		fmt.Fprintf(s.noticeWriter(), "job: %s holds no commit %.12s, so no base judged this magus; its clean stamp %s let it migrate job store %s\n", root, build.Commit, build.Version, path)
 		return nil
 	}
 	switch {
@@ -857,6 +875,31 @@ func (s *Store) refuseOffBase(ctx context.Context, path, found string, due bool,
 		fmt.Fprintf(s.noticeWriter(), "job: this magus carries no magus version stamp, so its build commit %.12s was read from Go's VCS stamp before it migrated job store %s\n", build.Commit, path)
 	}
 	return nil
+}
+
+// foreign reports whether driver finds root's current commit but not the one build
+// names: the workspace answers, and its history did not build this binary. A build with
+// no commit to look up is never foreign; the base judges it, and refuses it.
+func foreign(ctx context.Context, driver types.VCSDriver, root string, build types.MagusBuild) bool {
+	if build.Source == types.BuildSourceNone || build.Commit == buildinfo.UnknownVersion || !underVersionControl(ctx, driver, root) {
+		return false
+	}
+	_, err := driver.FindCommit(ctx, root, build.Commit)
+	return err != nil
+}
+
+// stampRefusal says why build may not migrate the job store of a workspace at root that
+// holds none of its history, and false when go-build stamped it from a clean tree, as a
+// release is.
+func stampRefusal(root string, build types.MagusBuild) (string, bool) {
+	held := fmt.Sprintf("%s holds no commit %.12s, so it is not magus's source and no base there can judge this binary", root, build.Commit)
+	switch {
+	case build.Dirty:
+		return held + ", and it was built from a modified tree", true
+	case build.Source != types.BuildSourceStamp:
+		return held + ", and it carries no magus version stamp: Go's VCS stamp can name another revision", true
+	}
+	return "", false
 }
 
 // underVersionControl reports whether driver finds a commit at root, for a root no
