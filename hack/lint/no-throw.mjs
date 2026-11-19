@@ -1,5 +1,6 @@
-// Prints every throw statement in the TypeScript and JavaScript files named on stdin, one JSON
-// object per line, for hack/lint/no-throw.buzz to judge. It parses with the TypeScript compiler
+// Prints every throw statement, and every exported async function whose declared return type is
+// no Result, in the TypeScript and JavaScript files named on stdin, one JSON object per line,
+// for hack/lint/no-throw.buzz to judge. It parses with the TypeScript compiler
 // API, so a throw inside a string, a comment or a template is never counted. Each site carries
 // the chain of classes and functions enclosing it; the rule, not this script, decides which are
 // exempt.
@@ -101,8 +102,56 @@ const neverOnly = (ts, fn) =>
   fn.parameters[0].type !== undefined &&
   fn.parameters[0].type.kind === ts.SyntaxKind.NeverKeyword;
 
-const sitesIn = (ts, path, sf) => {
+const hasModifier = (node, kind) => (node.modifiers ?? []).some((m) => m.kind === kind);
+
+// resultAliases are the type aliases a file declares as a Result, so a `Promise<JobsRead>`
+// over `type JobsRead = Result<...>` reads as a Result return.
+const resultAliases = (ts, sf) => {
+  const names = new Set();
+  sf.forEachChild((node) => {
+    if (ts.isTypeAliasDeclaration(node) && /\bResult\b/.test(node.type.getText(sf))) names.add(node.name.getText(sf));
+  });
+  return names;
+};
+
+// returnsResult reports whether fn declares its return as a Promise of a Result, directly or by
+// an alias this file declares. A function with no return annotation does not.
+const returnsResult = (sf, fn, aliases) => {
+  if (fn.type === undefined) return false;
+  const text = fn.type.getText(sf);
+  if (/\bResult\b/.test(text)) return true;
+  const inner = /^Promise<\s*([\w$]+)/.exec(text);
+  return inner !== null && aliases.has(inner[1]);
+};
+
+// exportedAsync yields the async functions an export statement declares: `export async function f`
+// or `export const f = async () => {}`.
+const exportedAsync = (ts, node) => {
+  if (!hasModifier(node, ts.SyntaxKind.ExportKeyword)) return [];
+  if (ts.isFunctionDeclaration(node)) return hasModifier(node, ts.SyntaxKind.AsyncKeyword) ? [node] : [];
+  if (!ts.isVariableStatement(node)) return [];
+  return node.declarationList.declarations
+    .map((d) => d.initializer)
+    .filter((init) => init !== undefined && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) &&
+      hasModifier(init, ts.SyntaxKind.AsyncKeyword));
+};
+
+const asyncSitesIn = (ts, path, sf) => {
+  if (/\.test\.tsx?$/.test(path)) return [];
+  const aliases = resultAliases(ts, sf);
   const sites = [];
+  sf.forEachChild((node) => {
+    for (const fn of exportedAsync(ts, node)) {
+      if (returnsResult(sf, fn, aliases)) continue;
+      const at = sf.getLineAndCharacterOfPosition(fn.getStart(sf));
+      sites.push({ path, line: at.line + 1, col: at.character + 1, construct: "async-no-result", scope: nameOf(ts, sf, fn) });
+    }
+  });
+  return sites;
+};
+
+const sitesIn = (ts, path, sf) => {
+  const sites = asyncSitesIn(ts, path, sf);
   const visit = (node) => {
     if (ts.isThrowStatement(node)) {
       const chain = [];
