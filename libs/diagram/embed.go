@@ -1,4 +1,4 @@
-package figure
+package diagram
 
 import (
 	"context"
@@ -13,21 +13,21 @@ import (
 	"github.com/egladman/magus/libs/result"
 )
 
-// Source is the figure module's Buzz source, served as `import "magus/figure"` by a host
+// Source is the diagram module's Buzz source, served as `import "magus/diagram"` by a host
 // with no checkout on disk.
 //
-//go:embed figure.buzz
+//go:embed diagram.buzz
 var Source string
 
-// DeclareModules makes sess resolve "magus/figure" and the source modules it
+// DeclareModules makes sess resolve "magus/diagram" and the source modules it
 // imports. The host still provides "magus" and the stdlib.
 func DeclareModules(sess *buzz.Session) {
-	sess.SetModuleDecls("magus/figure", Source)
+	sess.SetModuleDecls("magus/diagram", Source)
 	sess.SetModuleDecls(result.ModulePath, result.Source)
 }
 
-// SourceSHA256 is the hex SHA-256 of Source: the identity of the figure engine this binary
-// renders with, which moves only when figure.buzz does.
+// SourceSHA256 is the hex SHA-256 of Source: the identity of the diagram engine this binary
+// renders with, which moves only when diagram.buzz does.
 func SourceSHA256() string {
 	sum := sha256.Sum256([]byte(Source))
 	return hex.EncodeToString(sum[:])
@@ -47,9 +47,9 @@ type (
 	ActorKind string
 )
 
-// Figure mirrors figure's Figure. An empty Direction is Direction("across"); a nil Level
+// Diagram mirrors diagram's Diagram. An empty Direction is Direction("across"); a nil Level
 // lets the boxes decide it.
-type Figure struct {
+type Diagram struct {
 	ID          string        `json:"id"`
 	Title       string        `json:"title"`
 	Eyebrow     string        `json:"eyebrow"`
@@ -69,7 +69,7 @@ type Figure struct {
 	Legends     []Legend      `json:"legends"`
 }
 
-// Box mirrors figure's Box: exactly one of Dir, Group and Actor is set. A host has no
+// Box mirrors diagram's Box: exactly one of Dir, Group and Actor is set. A host has no
 // magus\refs result to anchor a symbol with, so Box carries no symbol.
 type Box struct {
 	Dir   *Dir   `json:"dir"`
@@ -82,8 +82,8 @@ type Box struct {
 	Look  *Look  `json:"look"`
 }
 
-// Actor mirrors figure's Actor. A nil Kind is ActorKind("step"): a host draws its own
-// units, a project, a target or a job, as the steps of a Level.process figure. A nil Look
+// Actor mirrors diagram's Actor. A nil Kind is ActorKind("step"): a host draws its own
+// units, a project, a target or a job, as the steps of a Level.process diagram. A nil Look
 // follows the kind. A host holds no magus\refs result, so it builds no stage.
 type Actor struct {
 	Name string     `json:"name"`
@@ -95,20 +95,20 @@ type Actor struct {
 	Dir  *Dir       `json:"dir"`
 }
 
-// Exclusion mirrors figure's Exclusion.
+// Exclusion mirrors diagram's Exclusion.
 type Exclusion struct {
 	Dirs []Dir  `json:"dirs"`
 	Why  string `json:"why"`
 }
 
-// HiddenEdges mirrors figure's HiddenEdges.
+// HiddenEdges mirrors diagram's HiddenEdges.
 type HiddenEdges struct {
 	Src []Dir  `json:"src"`
 	Dst []Dir  `json:"dst"`
 	Why string `json:"why"`
 }
 
-// EdgeMark mirrors figure's EdgeMark.
+// EdgeMark mirrors diagram's EdgeMark.
 type EdgeMark struct {
 	Src    Dir     `json:"src"`
 	Dst    Dir     `json:"dst"`
@@ -116,13 +116,13 @@ type EdgeMark struct {
 	Stroke *Stroke `json:"stroke"`
 }
 
-// End mirrors figure's End: exactly one of Dir and Actor is set.
+// End mirrors diagram's End: exactly one of Dir and Actor is set.
 type End struct {
 	Dir   *Dir   `json:"dir"`
 	Actor *Actor `json:"actor"`
 }
 
-// Flow mirrors figure's Flow.
+// Flow mirrors diagram's Flow.
 type Flow struct {
 	Src    End     `json:"src"`
 	Dst    End     `json:"dst"`
@@ -130,7 +130,7 @@ type Flow struct {
 	Stroke *Stroke `json:"stroke"`
 }
 
-// Zone mirrors figure's Zone.
+// Zone mirrors diagram's Zone.
 type Zone struct {
 	Label    string  `json:"label"`
 	Dirs     []Dir   `json:"dirs"`
@@ -138,20 +138,20 @@ type Zone struct {
 	Boundary bool    `json:"boundary"`
 }
 
-// Alignment mirrors figure's Alignment.
+// Alignment mirrors diagram's Alignment.
 type Alignment struct {
 	Axis   Axis    `json:"axis"`
 	Dirs   []Dir   `json:"dirs"`
 	Actors []Actor `json:"actors"`
 }
 
-// Legend mirrors figure's Legend.
+// Legend mirrors diagram's Legend.
 type Legend struct {
 	Look  Look   `json:"look"`
 	Label string `json:"label"`
 }
 
-// Dir mirrors the magus\Dir record figure reads, under its Buzz field names; types.Dir is
+// Dir mirrors the magus\Dir record diagram reads, under its Buzz field names; types.Dir is
 // the same record under its JSON ones.
 type Dir struct {
 	Path           string    `json:"path"`
@@ -175,22 +175,22 @@ type DirCall struct {
 	Source    string `json:"source"`
 }
 
-// Findings is the module refusing a figure: every finding, one per line, each naming the
+// Findings is the module refusing a diagram: every finding, one per line, each naming the
 // call to change. A case name no enum holds is refused the same way.
 type Findings struct {
 	Text string
 }
 
-func (f *Findings) Error() string { return "figure: " + f.Text }
+func (f *Findings) Error() string { return "diagram: " + f.Text }
 
 // drawEntry is constant: data reaches it as call arguments, never as source. A host
 // cannot build a Buzz enum case, so it sends case names and decoded walks each enum's
 // cases to rebuild them. draw catches findings so a host tells a refusal from a fault.
-const drawEntry = `import "magus/figure";
+const drawEntry = `import "magus/diagram";
 
-export fun draw(f: figure\Figure, anchorHref: str) > [str] {
+export fun draw(f: diagram\Diagram, anchorHref: str) > [str] {
     try {
-        return [figure\draw(decoded(f), theme: figure\Theme.page, anchorHref: anchorHref), ""];
+        return [diagram\draw(decoded(f), theme: diagram\Theme.page, anchorHref: anchorHref), ""];
     } catch (findings: str) {
         return ["", findings];
     }
@@ -207,69 +207,69 @@ fun refused(at: str, name: str, kind: str) > str {
     return "{at} is \"{name}\", which names no {kind} case";
 }
 
-fun look(v: any, at: str) > figure\Look? !> str {
+fun look(v: any, at: str) > diagram\Look? !> str {
     final s = caseName(v);
     if (s == null) { return null; }
-    foreach (c in figure\Look) {
+    foreach (c in diagram\Look) {
         if (c.value == s!) { return c; }
     }
     throw refused(at, name: s!, kind: "Look");
 }
 
-fun stroke(v: any, at: str) > figure\Stroke? !> str {
+fun stroke(v: any, at: str) > diagram\Stroke? !> str {
     final s = caseName(v);
     if (s == null) { return null; }
-    foreach (c in figure\Stroke) {
+    foreach (c in diagram\Stroke) {
         if (c.value == s!) { return c; }
     }
     throw refused(at, name: s!, kind: "Stroke");
 }
 
-fun direction(v: any, at: str) > figure\Direction !> str {
+fun direction(v: any, at: str) > diagram\Direction !> str {
     var s = caseName(v) ?? "";
     if (s == "") { s = "across"; }
-    foreach (c in figure\Direction) {
+    foreach (c in diagram\Direction) {
         if (c.value == s) { return c; }
     }
     throw refused(at, name: s, kind: "Direction");
 }
 
-fun level(v: any, at: str) > figure\Level? !> str {
+fun level(v: any, at: str) > diagram\Level? !> str {
     final s = caseName(v);
     if (s == null) { return null; }
-    foreach (c in figure\Level) {
+    foreach (c in diagram\Level) {
         if (c.value == s!) { return c; }
     }
     throw refused(at, name: s!, kind: "Level");
 }
 
-fun actorKind(v: any, at: str) > figure\ActorKind !> str {
+fun actorKind(v: any, at: str) > diagram\ActorKind !> str {
     final s = caseName(v) ?? "step";
-    foreach (c in figure\ActorKind) {
+    foreach (c in diagram\ActorKind) {
         if (c.value == s) { return c; }
     }
     throw refused(at, name: s, kind: "ActorKind");
 }
 
-fun axis(v: any, at: str) > figure\Axis !> str {
+fun axis(v: any, at: str) > diagram\Axis !> str {
     final s = caseName(v) ?? "";
-    foreach (c in figure\Axis) {
+    foreach (c in diagram\Axis) {
         if (c.value == s) { return c; }
     }
     throw refused(at, name: s, kind: "Axis");
 }
 
-fun actor(a: figure\Actor?, at: str) > figure\Actor? !> str {
+fun actor(a: diagram\Actor?, at: str) > diagram\Actor? !> str {
     if (a == null) { return null; }
     final x = a!;
-    return figure\Actor{
+    return diagram\Actor{
         name = x.name, sub = x.sub, tag = x.tag, link = x.link, look = look(x.look, at: at + ".look"),
         kind = actorKind(x.kind, at: at + ".kind"), dir = x.dir,
     };
 }
 
-fun actors(list: [figure\Actor], at: str) > [figure\Actor] !> str {
-    final kept: mut [figure\Actor] = mut [<figure\Actor>];
+fun actors(list: [diagram\Actor], at: str) > [diagram\Actor] !> str {
+    final kept: mut [diagram\Actor] = mut [<diagram\Actor>];
     var i = 0;
     while (i < list.len()) {
         kept.append(actor(list[i], at: "{at}[{i}]")!);
@@ -278,64 +278,64 @@ fun actors(list: [figure\Actor], at: str) > [figure\Actor] !> str {
     return kept;
 }
 
-fun decoded(f: figure\Figure) > figure\Figure !> str {
-    final at = "figure \"{f.id}\": ";
-    final boxes: mut [figure\Box] = mut [<figure\Box>];
+fun decoded(f: diagram\Diagram) > diagram\Diagram !> str {
+    final at = "diagram \"{f.id}\": ";
+    final boxes: mut [diagram\Box] = mut [<diagram\Box>];
     var i = 0;
     while (i < f.boxes.len()) {
         final b = f.boxes[i];
-        boxes.append(figure\Box{
+        boxes.append(diagram\Box{
             dir = b.dir, group = b.group, actor = actor(b.actor, at: "{at}boxes[{i}].actor"),
             label = b.label, sub = b.sub, tag = b.tag, focal = b.focal,
             look = look(b.look, at: "{at}boxes[{i}].look"), symbol = b.symbol,
         });
         i = i + 1;
     }
-    final marks: mut [figure\EdgeMark] = mut [<figure\EdgeMark>];
+    final marks: mut [diagram\EdgeMark] = mut [<diagram\EdgeMark>];
     i = 0;
     while (i < f.edgeMarks.len()) {
         final m = f.edgeMarks[i];
-        marks.append(figure\EdgeMark{ src = m.src, dst = m.dst, label = m.label, stroke = stroke(m.stroke, at: "{at}edge_marks[{i}].stroke") });
+        marks.append(diagram\EdgeMark{ src = m.src, dst = m.dst, label = m.label, stroke = stroke(m.stroke, at: "{at}edge_marks[{i}].stroke") });
         i = i + 1;
     }
-    final flows: mut [figure\Flow] = mut [<figure\Flow>];
+    final flows: mut [diagram\Flow] = mut [<diagram\Flow>];
     i = 0;
     while (i < f.flows.len()) {
         final fl = f.flows[i];
-        flows.append(figure\Flow{
-            src = figure\End{ dir = fl.src.dir, actor = actor(fl.src.actor, at: "{at}flows[{i}].src.actor") },
-            dst = figure\End{ dir = fl.dst.dir, actor = actor(fl.dst.actor, at: "{at}flows[{i}].dst.actor") },
+        flows.append(diagram\Flow{
+            src = diagram\End{ dir = fl.src.dir, actor = actor(fl.src.actor, at: "{at}flows[{i}].src.actor") },
+            dst = diagram\End{ dir = fl.dst.dir, actor = actor(fl.dst.actor, at: "{at}flows[{i}].dst.actor") },
             label = fl.label, stroke = stroke(fl.stroke, at: "{at}flows[{i}].stroke"),
         });
         i = i + 1;
     }
-    final zones: mut [figure\Zone] = mut [<figure\Zone>];
+    final zones: mut [diagram\Zone] = mut [<diagram\Zone>];
     i = 0;
     while (i < f.zones.len()) {
         final z = f.zones[i];
-        zones.append(figure\Zone{ label = z.label, dirs = z.dirs, actors = actors(z.actors, at: "{at}zones[{i}].actors"), boundary = z.boundary });
+        zones.append(diagram\Zone{ label = z.label, dirs = z.dirs, actors = actors(z.actors, at: "{at}zones[{i}].actors"), boundary = z.boundary });
         i = i + 1;
     }
-    final alignments: mut [figure\Alignment] = mut [<figure\Alignment>];
+    final alignments: mut [diagram\Alignment] = mut [<diagram\Alignment>];
     i = 0;
     while (i < f.alignments.len()) {
         final a = f.alignments[i];
-        alignments.append(figure\Alignment{
+        alignments.append(diagram\Alignment{
             axis = axis(a.axis, at: "{at}alignments[{i}].axis"), dirs = a.dirs,
             actors = actors(a.actors, at: "{at}alignments[{i}].actors"),
         });
         i = i + 1;
     }
-    final legends: mut [figure\Legend] = mut [<figure\Legend>];
+    final legends: mut [diagram\Legend] = mut [<diagram\Legend>];
     i = 0;
     while (i < f.legends.len()) {
         final l = f.legends[i];
         final named = look(l.look, at: "{at}legends[{i}].look");
         if (named == null) { throw "{at}legends[{i}].look is missing; name a Look case"; }
-        legends.append(figure\Legend{ look = named!, label = l.label });
+        legends.append(diagram\Legend{ look = named!, label = l.label });
         i = i + 1;
     }
-    return figure\Figure{
+    return diagram\Diagram{
         id = f.id, title = f.title, eyebrow = f.eyebrow, desc = f.desc,
         direction = direction(f.direction, at: "{at}direction"), level = level(f.level, at: "{at}level"),
         unscopedWhy = f.unscopedWhy, graphEdges = f.graphEdges,
@@ -345,26 +345,26 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
 }
 `
 
-// Draw lays fig out with figure\draw and paints it with Theme.page, the palette that
-// follows a page's CSS variables. anchorHref is figure's link template, with {path}.
+// Draw lays fig out with diagram\draw and paints it with Theme.page, the palette that
+// follows a page's CSS variables. anchorHref is diagram's link template, with {path}.
 //
 // sess must hold DeclareModules' modules and "magus", for its record types.
 // Draw executes its entry program in sess, so a caller gives it a session of its own. A
-// figure the module refuses, or a case name no enum holds, is a *Findings.
-func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string) (string, error) {
+// diagram the module refuses, or a case name no enum holds, is a *Findings.
+func Draw(ctx context.Context, sess *buzz.Session, fig Diagram, anchorHref string) (string, error) {
 	if err := sess.Exec(ctx, drawEntry); err != nil {
-		return "", fmt.Errorf("figure: load the draw entry: %w", err)
+		return "", fmt.Errorf("diagram: load the draw entry: %w", err)
 	}
 	fn, ok := sess.Exports()["draw"]
 	if !ok {
-		return "", errors.New("figure: the draw entry exported no draw")
+		return "", errors.New("diagram: the draw entry exported no draw")
 	}
 	v, err := sess.CallValue(ctx, fn, []vm.Value{fig.value(), vm.StringValue(anchorHref)})
 	if err != nil {
-		return "", fmt.Errorf("figure: draw %s: %w", fig.ID, err)
+		return "", fmt.Errorf("diagram: draw %s: %w", fig.ID, err)
 	}
 	if !v.IsList() || len(v.ListItems()) != 2 {
-		return "", fmt.Errorf("figure: draw %s returned %s", fig.ID, v.Kind())
+		return "", fmt.Errorf("diagram: draw %s returned %s", fig.ID, v.Kind())
 	}
 	items := v.ListItems()
 	if findings := items[1].AsString(); findings != "" {
@@ -373,7 +373,7 @@ func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string
 	return items[0].AsString(), nil
 }
 
-// xmlDeclaration is XmlDeclaration in figure.buzz.
+// xmlDeclaration is XmlDeclaration in diagram.buzz.
 const xmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
 
 // Standalone is svg as a file of its own. Draw returns the inline form.
@@ -396,7 +396,7 @@ func record(fields []field) vm.Value {
 	return m
 }
 
-func (f Figure) value() vm.Value {
+func (f Diagram) value() vm.Value {
 	return record([]field{
 		{"id", vm.StringValue(f.ID)},
 		{"title", vm.StringValue(f.Title)},
@@ -526,7 +526,7 @@ func (c DirCall) value() vm.Value {
 // caseValue is an enum case's name as the str the entry decodes.
 func caseValue[T ~string](c T) vm.Value { return vm.StringValue(string(c)) }
 
-// list is never null: figure iterates every list field a host hands it.
+// list is never null: diagram iterates every list field a host hands it.
 func list[T any](items []T, value func(T) vm.Value) vm.Value {
 	out := make([]vm.Value, len(items))
 	for i, it := range items {

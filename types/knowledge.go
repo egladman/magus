@@ -132,10 +132,10 @@ const (
 	// ConfidenceDeclared. A begin/end pair folds into one node with a line range.
 	KindMarker = "marker"
 
-	// KindFigure is a diagram a Buzz figure\of call builds, keyed "figure:<id>" by its
+	// KindDiagram is a diagram a Buzz diagram\of call builds, keyed "diagram:<id>" by its
 	// literal id. It is read from source, never rendered, so the graph build stays
-	// independent of the figure engine.
-	KindFigure = "figure"
+	// independent of the diagram engine.
+	KindDiagram = "diagram"
 )
 
 // RelationID is a stable directed predicate in the knowledge graph. It is string-backed
@@ -168,7 +168,7 @@ const (
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
 
-// RelationDepicts links a figure to each directory or project it draws.
+// RelationDepicts links a diagram to each directory or project it draws.
 // It reads the literal magus\graph().dir calls in the function that builds it.
 const RelationDepicts RelationID = "depicts"
 
@@ -251,7 +251,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		endpointShapes(KindProject, KindTarget, KindDir, KindFile, KindDoc),
 		endpointShapes(KindDir, KindDir, KindFile, KindDoc),
 		endpointShapes(KindSpell, KindOp), endpointShapes(KindModule, KindMethod),
-		endpointShapes(KindFile, KindFunction, KindMarker, KindFigure), endpointShapes(KindDoc, KindDocSection, KindMarker),
+		endpointShapes(KindFile, KindFunction, KindMarker, KindDiagram), endpointShapes(KindDoc, KindDocSection, KindMarker),
 		endpointShapes(KindDocSection, KindDocSection))},
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
@@ -262,7 +262,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		// the tree (file, dir). Code references what it cites; it never documents it.
 		endpointShapes(KindFile, KindLink, KindDoc, KindDocSection, KindFile, KindDir),
 		endpointShapes(KindDoc, KindDoc, KindLink, KindDocSection),
-		// A marker's first argument resolved: a figure page or section for diagram, the
+		// A marker's first argument resolved: a diagram page or section for diagram, the
 		// destination package's directory for calls.
 		endpointShapes(KindMarker, KindDir, KindDoc, KindDocSection))},
 	// A page that cites a source path is claiming to describe it, which is what
@@ -295,14 +295,14 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationProduces, Description: "declares a generated file or document output", ForwardLabel: "produces", ReverseLabel: "produced by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationConsumes, Description: "declares a file or document input", ForwardLabel: "consumes", ReverseLabel: "consumed by", Shapes: endpointShapes(KindTarget, KindFile, KindDoc)},
 	{ID: RelationAuthored, Description: "attributes a file to a git contributor", ForwardLabel: "authored", ReverseLabel: "authored by", Shapes: endpointShapes(KindAuthor, KindFile)},
-	{ID: RelationDepicts, Description: "draws a directory or project in a diagram", ForwardLabel: "depicts", ReverseLabel: "depicted by", Shapes: endpointShapes(KindFigure, KindDir, KindProject)},
+	{ID: RelationDepicts, Description: "draws a directory or project in a diagram", ForwardLabel: "depicts", ReverseLabel: "depicted by", Shapes: endpointShapes(KindDiagram, KindDir, KindProject)},
 	{ID: RelationCoChanges, Description: "changed in the same commits, from git history", ForwardLabel: "changes with", ReverseLabel: "changes with", Symmetric: true, Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationSplits, Description: "was split out of a root file it shares a name stem with", ForwardLabel: "splits", ReverseLabel: "split into", Shapes: endpointShapes(KindFile, KindFile)},
 	{ID: RelationAnnotates, Description: "attaches a human-authored note to an existing entity", ForwardLabel: "is about", ReverseLabel: "NOTE", Shapes: endpointShapes(KindNote,
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
 		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
-		KindNote, KindPackage, KindLink, KindMarker, KindFigure)},
+		KindNote, KindPackage, KindLink, KindMarker, KindDiagram)},
 }
 
 // KnowledgeRelationDefinitions returns a deep copy of the canonical relation
@@ -392,7 +392,7 @@ const (
 type MarkerFamily string
 
 const (
-	MarkerDiagram  MarkerFamily = "diagram"  // a backref to a figure id
+	MarkerDiagram  MarkerFamily = "diagram"  // a backref to a diagram id
 	MarkerCalls    MarkerFamily = "calls"    // a declared network call: <dst dir> <transport>
 	MarkerSkills   MarkerFamily = "skills"   // the AGENTS.md skills block; stamp pairs only
 	MarkerObserved MarkerFamily = "observed" // a generated diagram block; stamp pairs only
@@ -1658,7 +1658,7 @@ type KnowledgePathOptions struct {
 // KnowledgeNeighborhoodDefinition describes magus\graph().neighborhood.
 const KnowledgeNeighborhoodDefinition = "neighborhood walks outward from one focus node " +
 	"up to a depth, along the chosen relations only, and optionally folds every node under " +
-	"a path prefix into that prefix's directory, so a figure or a reader sees a subsystem at " +
+	"a path prefix into that prefix's directory, so a diagram or a reader sees a subsystem at " +
 	"the grain they asked for."
 
 // KnowledgeNeighborhoodOptions bounds magus\graph().neighborhood.
@@ -1706,7 +1706,7 @@ type KnowledgeFold struct {
 
 // Dir is one workspace directory as the graph holds it.
 // magus\graph()'s dir, dirs and layer return it.
-// It carries every fact a figure needs for a box and its edges.
+// It carries every fact a diagram needs for a box and its edges.
 //
 // Every path in it is workspace-relative with forward slashes, "." for the root. Lists
 // are sorted and never nil.
@@ -1732,7 +1732,7 @@ type Dir struct {
 	CalledBy []DirCall `json:"called_by" yaml:"called_by"`
 	// Children are the immediate child directories the graph holds.
 	Children []string `json:"children" yaml:"children"`
-	// Files counts the file nodes this directory contains directly, the ones a figure
+	// Files counts the file nodes this directory contains directly, the ones a diagram
 	// can anchor to here.
 	Files int `json:"files" yaml:"files"`
 }
@@ -1885,7 +1885,7 @@ type KnowledgeRoutingKind struct {
 	// count that tracks the binary makes every index disagree with every other one
 	// generated by a different magus, and leaves a regenerating contributor holding a
 	// diff MGS4005 tells them not to commit. Renderers of a committed file drop the
-	// figure; a live query is welcome to it.
+	// diagram; a live query is welcome to it.
 	FromBinary bool `json:"from_binary,omitempty" yaml:"from_binary,omitempty"`
 }
 

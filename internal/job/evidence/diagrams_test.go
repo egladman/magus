@@ -22,9 +22,9 @@ func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
 	holder := func(jobtypes.Job) string { return "" }
 	first, second := t.TempDir(), t.TempDir()
 
-	paths, err := WritePlanSVGs(t.Context(), p, p.Figures(), first, holder)
+	paths, err := WritePlanSVGs(t.Context(), p, p.Diagrams(), first, holder)
 	require.NoError(t, err)
-	again, err := WritePlanSVGs(t.Context(), p, p.Figures(), second, holder)
+	again, err := WritePlanSVGs(t.Context(), p, p.Diagrams(), second, holder)
 	require.NoError(t, err)
 
 	require.Len(t, again, len(paths))

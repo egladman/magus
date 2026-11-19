@@ -177,7 +177,7 @@ func (s *rankevalSuite) TestSummarizeReportRoundTripsJSON() {
 	t := s.T()
 	rep := Report{Sets: []SetReport{
 		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
-		{Set: SetFigures, Config: ConfigEmbedOff, Absent: "not built"},
+		{Set: SetDiagrams, Config: ConfigEmbedOff, Absent: "not built"},
 	}}
 	b, err := marshalJSON(rep)
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func (s *rankevalSuite) TestBaselineKeepsTheLastLinePerSetAndConfig() {
 	rep := Report{Sets: []SetReport{
 		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
 		configured(ConfigEmbedOff, Summarize(SetJudgedDev, sampleRuns()[:2])),
-		{Set: SetFigures, Config: ConfigEmbedOn, Absent: "not built"},
+		{Set: SetDiagrams, Config: ConfigEmbedOn, Absent: "not built"},
 	}}
 	require.NoError(t, WriteBaseline(path, rep))
 
@@ -266,7 +266,7 @@ func (s *rankevalSuite) TestSummarizeCompare() {
 		{Set: SetJudgedDev, Scores: scores(none, 0.5, 0.6, 0.3, 0.9, 0.6, 0.4, 0.9, 0.4)},
 		{Set: SetDefinitionLookup, Scores: scores(none, 0)},
 		{Set: SetJudgedHoldout, Absent: "sealed"},
-		{Set: SetFigures, Scores: scores(none, 1, 1)},
+		{Set: SetDiagrams, Scores: scores(none, 1, 1)},
 	}}
 	cs := Compare(base, now)
 	require.Len(t, cs, 4, "two metrics for each set both reports scored")

@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFigureRegistersAtItsImportPath(t *testing.T) {
-	got, ok := GetSource("figure")
-	require.True(t, ok, "figure is in std/lib.go's sourceBuiltin")
-	assert.Equal(t, "magus/figure", got.ImportPath())
+func TestDiagramRegistersAtItsImportPath(t *testing.T) {
+	got, ok := GetSource("diagram")
+	require.True(t, ok, "diagram is in std/lib.go's sourceBuiltin")
+	assert.Equal(t, "magus/diagram", got.ImportPath())
 
 	methods, err := describeSource(got)
 	require.NoError(t, err)
@@ -18,8 +18,8 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 	for _, m := range methods {
 		names = append(names, m.Name)
 	}
-	assert.Equal(t, []string{"without", "external", "of", "draw", "drawDiagram", "nodeFact"}, names,
-		"only the authoring API, draw, drawDiagram and the stamp's node line are exported: Figure.diagram() hands a caller the exported Diagram, and drawDiagram paints it in each theme without a second layout; the layout functions and the renderer stay private")
+	assert.Equal(t, []string{"without", "external", "of", "draw", "drawLayout", "nodeFact"}, names,
+		"only the authoring API, draw, drawLayout and the stamp's node line are exported: Diagram.layout() hands a caller the exported Layout, and drawLayout paints it in each theme without a second layout; the layout functions and the renderer stay private")
 }
 
 func TestDiskModulesRegisterWhereTheHookCanImportThem(t *testing.T) {

@@ -503,13 +503,13 @@ func exposeDataAPI() {
 		}
 		return map[string]any{"ok": r.OK, "output": r.Output, "trace": trace, "diag": diagJS(r.Diag)}
 	}))
-	// drawFigure(figureJSON, anchorHref) draws a figure\Figure record passed as JSON, with
+	// drawDiagram(diagramJSON, anchorHref) draws a diagram\Diagram record passed as JSON, with
 	// no Buzz source.
-	api.Set("drawFigure", js.FuncOf(func(_ js.Value, args []js.Value) any {
+	api.Set("drawDiagram", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 2 || args[0].Type() != js.TypeString || args[1].Type() != js.TypeString {
-			return map[string]any{"ok": false, "svg": "", "findings": "", "diag": diagJS(&dry.Diag{Msg: "drawFigure takes (figureJSON, anchorHref), both strings"})}
+			return map[string]any{"ok": false, "svg": "", "findings": "", "diag": diagJS(&dry.Diag{Msg: "drawDiagram takes (diagramJSON, anchorHref), both strings"})}
 		}
-		r := dry.DrawFigure(context.Background(), args[0].String(), args[1].String())
+		r := dry.DrawDiagram(context.Background(), args[0].String(), args[1].String())
 		return map[string]any{"ok": r.OK, "svg": r.SVG, "findings": r.Findings, "diag": diagJS(r.Diag)}
 	}))
 	api.Set("loadMagusfile", js.FuncOf(func(_ js.Value, args []js.Value) any {

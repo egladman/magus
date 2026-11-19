@@ -273,7 +273,7 @@ func (s *symbolIndexFreshenSuite) TestADigestAfterAGraphReadDigestsTheStoreItsFr
 	s.Equal([]string{"pkg/a", "pkg/b"}, got.Projects)
 }
 
-// graphHandleReads is a figure's shape: it opens magus\graph(), then
+// graphHandleReads is a diagram's shape: it opens magus\graph(), then
 // holds the handle to its index on every member call.
 func graphHandleReads(ctx context.Context, b *testing.B) {
 	b.Helper()

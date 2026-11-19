@@ -466,40 +466,40 @@ func TestSpellExamplesParseAndRecord(t *testing.T) {
 	t.Logf("checked %d spell example file(s)", count)
 }
 
-func TestEvalImportsFigureWithMagusRecords(t *testing.T) {
+func TestEvalImportsDiagramWithMagusRecords(t *testing.T) {
 	r := Eval(context.Background(), `import "magus";
-import "magus/figure";
+import "magus/diagram";
 fun dir(path: str) > magus\Dir {
     final fields: {str: any} = { "path": path, "imports": [<str>], "importsIndexed": true, "calls": [<magus\DirCall>] };
     final record: any = fields;
     return record;
 }
-return figure\draw(figure\of("t").box(dir("a")).unscoped(why: "x"), theme: figure\Theme.light) catch "refused";`)
+return diagram\draw(diagram\of("t").box(dir("a")).unscoped(why: "x"), theme: diagram\Theme.light) catch "refused";`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
-	assert.Equal(t, "refused", r.Result, "figure type-checks against magus\\Dir and raises its finding")
+	assert.Equal(t, "refused", r.Result, "diagram type-checks against magus\\Dir and raises its finding")
 }
 
-// TestEvalFigureKeepsItsPrivateNode draws from a script that declares its own
-// Node. figure's private Node must stay figure's: resolved to the script's, every
-// box carries both anchor and link and the figure refuses to draw.
-func TestEvalFigureKeepsItsPrivateNode(t *testing.T) {
-	r := Eval(context.Background(), `import "magus/figure";
+// TestEvalDiagramKeepsItsPrivateNode draws from a script that declares its own
+// Node. diagram's private Node must stay diagram's: resolved to the script's, every
+// box carries both anchor and link and the diagram refuses to draw.
+func TestEvalDiagramKeepsItsPrivateNode(t *testing.T) {
+	r := Eval(context.Background(), `import "magus/diagram";
 object Node {
     anchor: str = "a",
     link: str = "b",
 }
-final a = figure\external("a", link: "https://a.example");
-final b = figure\external("b");
-return figure\draw(figure\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: figure\Theme.light) catch "refused";`)
+final a = diagram\external("a", link: "https://a.example");
+final b = diagram\external("b");
+return diagram\draw(diagram\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: diagram\Theme.light) catch "refused";`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	assert.True(t, strings.HasPrefix(r.Result, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), r.Result)
 }
 
 func TestPlaygroundSourceModules(t *testing.T) {
-	assert.Equal(t, []string{"figure", "result"}, PlaygroundSourceModules())
+	assert.Equal(t, []string{"diagram", "result"}, PlaygroundSourceModules())
 }
 
-const actorFigureJSON = `{
+const actorDiagramJSON = `{
   "id": "t", "title": "T", "eyebrow": "", "desc": "", "direction": "down",
   "unscoped_why": "a process", "graph_edges": false,
   "boxes": [
@@ -511,23 +511,23 @@ const actorFigureJSON = `{
   "zones": [], "alignments": [], "legends": [{"look": "focal", "label": "hot"}]
 }`
 
-func TestDrawFigure(t *testing.T) {
+func TestDrawDiagram(t *testing.T) {
 	ctx := context.Background()
 
-	r := DrawFigure(ctx, actorFigureJSON, "/code/{path}")
+	r := DrawDiagram(ctx, actorDiagramJSON, "/code/{path}")
 	require.True(t, r.OK, "draw failed: %+v %q", r.Diag, r.Findings)
 	assert.True(t, strings.HasPrefix(r.SVG, "<svg"), r.SVG)
 	assert.Contains(t, r.SVG, `data-node="external:a"`)
 	assert.Contains(t, r.SVG, `data-edge="external:a->external:b"`)
 
-	refused := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"unscoped_why": "a process"`, `"unscoped_why": ""`, 1), "")
-	assert.Equal(t, DrawResult{Findings: `figure "t": draws no directory; draw a box() or group(), or say why in unscoped(why:)`}, refused)
+	refused := DrawDiagram(ctx, strings.Replace(actorDiagramJSON, `"unscoped_why": "a process"`, `"unscoped_why": ""`, 1), "")
+	assert.Equal(t, DrawResult{Findings: `diagram "t": draws no directory; draw a box() or group(), or say why in unscoped(why:)`}, refused)
 
-	unknownCase := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"look": "focal"`, `"look": "shiny"`, 1), "")
-	assert.Equal(t, DrawResult{Findings: `figure "t": legends[0].look is "shiny", which names no Look case`}, unknownCase)
+	unknownCase := DrawDiagram(ctx, strings.Replace(actorDiagramJSON, `"look": "focal"`, `"look": "shiny"`, 1), "")
+	assert.Equal(t, DrawResult{Findings: `diagram "t": legends[0].look is "shiny", which names no Look case`}, unknownCase)
 
-	drifted := DrawFigure(ctx, strings.Replace(actorFigureJSON, `"title"`, `"titleText"`, 1), "")
+	drifted := DrawDiagram(ctx, strings.Replace(actorDiagramJSON, `"title"`, `"titleText"`, 1), "")
 	assert.False(t, drifted.OK)
 	require.NotNil(t, drifted.Diag)
-	assert.Contains(t, drifted.Diag.Msg, "figure record: ")
+	assert.Contains(t, drifted.Diag.Msg, "diagram record: ")
 }

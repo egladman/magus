@@ -17,10 +17,10 @@ import (
 	"github.com/egladman/magus/types/vcs"
 )
 
-// Path is the listing route; a figure is served at Path + "/" + its id.
+// Path is the listing route; a diagram is served at Path + "/" + its id.
 const Path = "/api/v1/diagrams"
 
-// workspace is what the figures read. *magus.Magus supplies all but ImportGraph and
+// workspace is what the diagrams read. *magus.Magus supplies all but ImportGraph and
 // SymbolIndex.
 type workspace interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
@@ -31,20 +31,20 @@ type workspace interface {
 	RevisionCheckpoint(ctx context.Context, rev string) (vcs.Checkpoint, error)
 }
 
-// Handler serves the figures the workspace can draw, rendered server-side by the embedded
-// magus/figure module. GET /api/v1/diagrams lists them: projects, targets:<project> per
+// Handler serves the diagrams the workspace can draw, rendered server-side by the embedded
+// magus/diagram module. GET /api/v1/diagrams lists them: projects, targets:<project> per
 // project, and imports. GET /api/v1/diagrams/{id}?scope=&focus=&depth= renders one through
-// its lens; scope repeats, and depth defaults to 1 when focus is set. A rendered figure is
+// its lens; scope repeats, and depth defaults to 1 when focus is set. A rendered diagram is
 // cached by the graph's content and the lens, so an unchanged graph is drawn once.
 //
-// A figure the module refuses to draw, most often one over its node or edge budget, is a
-// 422 whose body is its finding. An import figure without a symbol index is a 409.
+// A diagram the module refuses to draw, most often one over its node or edge budget, is a
+// 422 whose body is its finding. An import diagram without a symbol index is a 409.
 type Handler struct {
 	handler.Base
 	ws workspace
-	// cache holds rendered figures across requests; compile is what fills it.
+	// cache holds rendered diagrams across requests; compile is what fills it.
 	cache   *renderCache
-	compile func(ctx context.Context, g graph, desc, anchorHref string) (Figure, error)
+	compile func(ctx context.Context, g graph, desc, anchorHref string) (Diagram, error)
 }
 
 // NewHandler returns the diagrams handler reading from ws.
@@ -54,7 +54,7 @@ func NewHandler(ws workspace, log *slog.Logger) *Handler {
 	return h
 }
 
-// Entry is one figure in the listing. Indexed is set only on the import figure.
+// Entry is one diagram in the listing. Indexed is set only on the import diagram.
 type Entry struct {
 	ID      string `json:"id"`
 	Kind    string `json:"kind"`
@@ -63,7 +63,7 @@ type Entry struct {
 	Indexed *bool  `json:"indexed,omitempty"`
 }
 
-// Rendered is one figure as GET /api/v1/diagrams/{id} answers it. SourceURL is a template
+// Rendered is one diagram as GET /api/v1/diagrams/{id} answers it. SourceURL is a template
 // with {path} and {line} to fill from a node's anchor, or "" when the remote is not one
 // magus can link.
 type Rendered struct {
@@ -121,11 +121,11 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	case errors.Is(err, ErrNotIndexed):
 		handler.Refuse(w, r, rpcerr.Conflict(err.Error()))
 		return
-	case errors.Is(err, errUnknownFigure):
-		handler.Refuse(w, r, rpcerr.NotFound("no figure named "+id))
+	case errors.Is(err, errUnknownDiagram):
+		handler.Refuse(w, r, rpcerr.NotFound("no diagram named "+id))
 		return
 	case err != nil:
-		h.Fail(w, r, "figure source", err)
+		h.Fail(w, r, "diagram source", err)
 		return
 	}
 	g, err = g.cut(lens)
@@ -135,7 +135,7 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	sourceURL := h.sourceURL(r.Context())
 	desc, href := lens.describe(), anchorTemplate(sourceURL)
-	fig, err := h.cache.get(r.Context(), renderKey(g, desc, href), func(ctx context.Context) (Figure, error) {
+	fig, err := h.cache.get(r.Context(), renderKey(g, desc, href), func(ctx context.Context) (Diagram, error) {
 		return h.compile(ctx, g, desc, href)
 	})
 	var findings *FindingsError
@@ -168,7 +168,7 @@ func anchorTemplate(sourceURL string) string {
 	return strings.TrimSuffix(sourceURL, "#L{line}")
 }
 
-var errUnknownFigure = errors.New("diagram: unknown figure")
+var errUnknownDiagram = errors.New("diagram: unknown diagram")
 
 func (h *Handler) graph(ctx context.Context, l Lens) (graph, error) {
 	switch l.Kind {
@@ -182,7 +182,7 @@ func (h *Handler) graph(ctx context.Context, l Lens) (graph, error) {
 		}
 		g, ok := targetGraph(tg, l.Project)
 		if !ok {
-			return graph{}, errUnknownFigure
+			return graph{}, errUnknownDiagram
 		}
 		return g, nil
 	case KindImports:
@@ -195,10 +195,10 @@ func (h *Handler) graph(ctx context.Context, l Lens) (graph, error) {
 		}
 		return importGraph(ig), nil
 	}
-	return graph{}, errUnknownFigure
+	return graph{}, errUnknownDiagram
 }
 
-// parseLens reads a figure id and its query into a Lens. An id it does not recognize keeps
+// parseLens reads a diagram id and its query into a Lens. An id it does not recognize keeps
 // its kind so graph answers it not found.
 func parseLens(id string, q url.Values) (Lens, error) {
 	l := Lens{Kind: id, Scope: q["scope"], Focus: q.Get("focus")}

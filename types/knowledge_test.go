@@ -132,7 +132,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	kinds := []string{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir, KindFunction, KindImport,
-		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker, KindFigure,
+		KindRationale, KindOwner, KindSymbol, KindAuthor, KindNote, KindPackage, KindLink, KindMarker, KindDiagram,
 	}
 
 	// go test's cwd is this package dir, regardless of -trimpath.
@@ -494,7 +494,7 @@ func TestKnowledgeEdgeAttrsJSONKeys(t *testing.T) {
 	assert.JSONEq(t, `{"source":"dir:a","target":"dir:b","relation":"calls","confidence":"declared","score":1,"attrs":{"transport":"http"}}`, string(b))
 }
 
-// Dir is what figures build boxes and edges from, so its wire keys are pinned, and an
+// Dir is what diagrams build boxes and edges from, so its wire keys are pinned, and an
 // empty list stays a list: absence is ImportsIndexed's to say.
 func TestKnowledgeDirJSONKeys(t *testing.T) {
 	d := Dir{

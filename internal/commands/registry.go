@@ -2558,10 +2558,10 @@ shows what it is doing.`,
 		{
 			Name:   "graph",
 			Effect: command.EffectRead,
-			Short:  "Draw the live plan, one figure per group of jobs",
+			Short:  "Draw the live plan, one diagram per group of jobs",
 			Description: "Draw the live jobs: a box per job tagged with its state and holder, an edge per fork, merge " +
-				"and declared dependency. A plan larger than one figure holds splits into an overview, one box per " +
-				"group of jobs, and a figure per group, each inside magus/figure's budgets. -o svg writes each figure " +
+				"and declared dependency. A plan larger than one diagram holds splits into an overview, one box per " +
+				"group of jobs, and a diagram per group, each inside magus/diagram's budgets. -o svg writes each diagram " +
 				"to <id>.svg in --dir and prints one path per line, overview first; the same plan writes the same bytes.",
 			Flags: []command.Flag{
 				{Name: "dir", Kind: command.String, Doc: "Directory for the SVG files (default: job-graph/ in the workspace cache dir)"},

@@ -30,7 +30,7 @@ import (
 // object-src, frame-ancestors, base-uri, nor form-action inherits from default-src, so each is set
 // explicitly. style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles
 // inline; img-src allows data: for the inline SVG/data-URI icons the bundle embeds.
-// 'wasm-unsafe-eval' lets the Graph's Figures mode compile the playground's Buzz runtime; it
+// 'wasm-unsafe-eval' lets the Graph's Diagrams mode compile the playground's Buzz runtime; it
 // admits WebAssembly compilation only, not eval or inline script.
 const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
@@ -135,7 +135,7 @@ var shellExtensions = map[string]bool{
 	".html": true, ".js": true, ".css": true, ".webmanifest": true,
 	".svg": true, ".png": true, ".ico": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
-	// The Figures mode's Buzz runtime (gen/wasm/buzz.wasm); FileServer types it application/wasm.
+	// The Diagrams mode's Buzz runtime (gen/wasm/buzz.wasm); FileServer types it application/wasm.
 	".wasm": true,
 }
 

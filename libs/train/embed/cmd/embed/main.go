@@ -113,7 +113,7 @@ func excludedReason(r sourceRecord) string {
 
 // runTexts turns the source manifest into the texts file vocab, teacher and train read.
 // Every train-split file excludedReason lets in is cut into line-bounded chunks, each
-// figure outside eval fold 0 becomes its title and description, and CoRNStack rows add
+// diagram outside eval fold 0 becomes its title and description, and CoRNStack rows add
 // a query and the head of its document, one row per in-repo text at -cornstack 1. Files
 // are read at the commit that last wrote the manifest, and each must hash to its pinned
 // digest, so the texts do not move when the tree does.
@@ -216,8 +216,8 @@ func writeTextsArtifacts(mix *textMix, records []sourceRecord, files map[string]
 	if err := writeAtomic(filepath.Join(out, "texts-run.json"), append(b, '\n')); err != nil {
 		return err
 	}
-	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d figures, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
-		rev, len(mix.texts), repo-mix.figures, mix.files, mix.figures, mix.docs, mix.queries, digest, len(mix.forced))
+	fmt.Printf("files at %s; %d texts: %d chunks of %d files, %d diagrams, %d CoRNStack documents and %d queries; texts %s; %d forced tokens\n",
+		rev, len(mix.texts), repo-mix.diagrams, mix.files, mix.diagrams, mix.docs, mix.queries, digest, len(mix.forced))
 	fmt.Printf("train files left out of the texts: %v; dropped as eval repeats: %v, by kind/reason/set %v; %d of %d eval grams are boilerplate\n",
 		mix.excluded, d.report.Dropped, d.report.DroppedBy, d.report.CommonGrams, d.report.Grams)
 	fmt.Printf("forced tokens: %d, %d in the training texts, %d only in holdout files, %d in neither\n",
@@ -295,7 +295,7 @@ func commaSet(s string) map[string]bool {
 }
 
 // evalTexts gathers every text the training texts must not repeat: the external sets
-// under dir, each holdout file at rev, the eval fold's figure titles and descriptions,
+// under dir, each holdout file at rev, the eval fold's diagram titles and descriptions,
 // every commit subject up to rev, and the judged and harvested queries under
 // testdata/retrieval. A set leftOut names is skipped; any other that is missing is an
 // error.
@@ -311,8 +311,8 @@ func evalTexts(records []sourceRecord, files map[string][]byte, root, rev, dir s
 				return nil, fmt.Errorf("%s at %s does not hash to the manifest's %s", r.Path, rev, r.SHA256)
 			}
 			e.add("repo-holdout", string(files[r.Path]))
-		case r.Kind == "figure" && r.Fold == 0 && !leftOut["figure-queries"]:
-			e.add("figure-queries", r.Title, r.Desc)
+		case r.Kind == "diagram" && r.Fold == 0 && !leftOut["diagram-queries"]:
+			e.add("diagram-queries", r.Title, r.Desc)
 		}
 	}
 	if !leftOut["commit-subjects"] {
@@ -371,18 +371,18 @@ func writeDropped(path string, dropped []droppedText) error {
 // textMix is the training texts as texts assembles them, the forced tokens, and the
 // counts it reports. excluded counts the train files left out, by excludedReason.
 type textMix struct {
-	texts          []teacher.Text
-	forced         map[string]bool
-	inputs         []sourceRecord
-	excluded       map[string]int
-	decontam       *decontaminator
-	files, figures int
-	docs, queries  int
+	texts           []teacher.Text
+	forced          map[string]bool
+	inputs          []sourceRecord
+	excluded        map[string]int
+	decontam        *decontaminator
+	files, diagrams int
+	docs, queries   int
 }
 
 // addRepository adds the in-repo texts the manifest records: each train-split file that
 // excludedReason lets in, which must hash to its pinned digest at rev, cut into chunks
-// of at most maxBytes, and each figure outside eval fold 0. It collects the forced
+// of at most maxBytes, and each diagram outside eval fold 0. It collects the forced
 // tokens and the input records for addCornstack.
 func (m *textMix) addRepository(records []sourceRecord, files map[string][]byte, rev, sourcesPath string, maxBytes int) error {
 	for _, r := range records {
@@ -405,10 +405,10 @@ func (m *textMix) addRepository(records []sourceRecord, files map[string][]byte,
 					m.texts = append(m.texts, teacher.Text{ID: id, Text: c.text})
 				}
 			}
-		case "figure":
-			id := "figure:" + r.ID
-			if r.Fold != 0 && m.decontam.admit("figure", id, r.Title+"\n"+r.Desc) {
-				m.figures++
+		case "diagram":
+			id := "diagram:" + r.ID
+			if r.Fold != 0 && m.decontam.admit("diagram", id, r.Title+"\n"+r.Desc) {
+				m.diagrams++
 				m.texts = append(m.texts, teacher.Text{ID: id, Text: r.Title + "\n" + r.Desc})
 			}
 		case "forced":

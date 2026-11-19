@@ -8,7 +8,7 @@
 // point), so the TOKEN is the sole gate, and listener and token are created and
 // destroyed together so neither outlives the other.
 //
-// This package is the subject of two figures on the docs site; edit them alongside it.
+// This package is the subject of two diagrams on the docs site; edit them alongside it.
 // magus:diagram server-share (the boxes "/api/v1/share" and "LAN listener").
 // magus:diagram server-http (the box "/api/v1/share").
 //

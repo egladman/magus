@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -283,16 +283,16 @@ func plainSession(ctx context.Context, out io.Writer) (*buzz.Session, error) {
 }
 
 // playgroundSourceModules are the Buzz-implemented std modules the playground resolves,
-// each vetted by hand: figure imports magus only for its record types and calls no host function.
-// result imports nothing, and figure imports it.
-var playgroundSourceModules = []string{"figure", "result"}
+// each vetted by hand: diagram imports magus only for its record types and calls no host function.
+// result imports nothing, and diagram imports it.
+var playgroundSourceModules = []string{"diagram", "result"}
 
 // PlaygroundSourceModules names the Buzz-implemented modules the playground resolves, beside
 // the host modules PlaygroundHostModules names.
 func PlaygroundSourceModules() []string { return slices.Clone(playgroundSourceModules) }
 
-// DrawResult is one figure the playground drew: SVG when OK, else the Findings
-// magus/figure raised, or a Diag when the record or the runtime failed.
+// DrawResult is one diagram the playground drew: SVG when OK, else the Findings
+// magus/diagram raised, or a Diag when the record or the runtime failed.
 type DrawResult struct {
 	OK       bool   `json:"ok"`
 	SVG      string `json:"svg"`
@@ -300,13 +300,13 @@ type DrawResult struct {
 	Diag     *Diag  `json:"diag"`
 }
 
-// DrawFigure draws figJSON, a figure\Figure record as JSON, with figure\draw in a plain
+// DrawDiagram draws figJSON, a diagram\Diagram record as JSON, with diagram\draw in a plain
 // session. A member the record does not declare is refused, so a caller's record cannot
 // drift from the module's unnoticed.
-func DrawFigure(ctx context.Context, figJSON, anchorHref string) DrawResult {
-	var fig figure.Figure
+func DrawDiagram(ctx context.Context, figJSON, anchorHref string) DrawResult {
+	var fig diagram.Diagram
 	if err := codec.UnmarshalStrict([]byte(figJSON), &fig); err != nil {
-		return DrawResult{Diag: &Diag{Msg: "figure record: " + err.Error()}}
+		return DrawResult{Diag: &Diag{Msg: "diagram record: " + err.Error()}}
 	}
 	var out bytes.Buffer
 	sess, err := plainSession(ctx, &out)
@@ -314,8 +314,8 @@ func DrawFigure(ctx context.Context, figJSON, anchorHref string) DrawResult {
 		return DrawResult{Diag: toDiag(err)}
 	}
 	defer sess.Close()
-	svg, err := figure.Draw(ctx, sess, fig, anchorHref)
-	var refused *figure.Findings
+	svg, err := diagram.Draw(ctx, sess, fig, anchorHref)
+	var refused *diagram.Findings
 	switch {
 	case errors.As(err, &refused):
 		return DrawResult{Findings: refused.Text}

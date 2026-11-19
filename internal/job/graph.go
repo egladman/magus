@@ -7,12 +7,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/text/plural"
 )
 
-// The budgets magus/figure holds one figure to.
+// The budgets magus/diagram holds one diagram to.
 const (
 	planMaxNodes = 9
 	planMaxEdges = 12
@@ -37,16 +37,16 @@ type planEdge struct {
 	Kind planEdgeKind `json:"kind"`
 }
 
-// planNode is one box: a job, or a group a figure of its own draws.
+// planNode is one box: a job, or a group a diagram of its own draws.
 type planNode struct {
-	Name  string      `json:"name"`
-	Job   string      `json:"job,omitempty"`
-	Group *PlanFigure `json:"-"`
-	Draws string      `json:"figure,omitempty"`
+	Name  string       `json:"name"`
+	Job   string       `json:"job,omitempty"`
+	Group *PlanDiagram `json:"-"`
+	Draws string       `json:"diagram,omitempty"`
 }
 
-// PlanFigure is one figure of the plan. Jobs counts its groups' jobs.
-type PlanFigure struct {
+// PlanDiagram is one diagram of the plan. Jobs counts its groups' jobs.
+type PlanDiagram struct {
 	ID    string     `json:"id"`
 	Title string     `json:"title"`
 	Jobs  []string   `json:"jobs"`
@@ -146,11 +146,11 @@ func (p *Plan) subtree(id string) []string {
 	return out
 }
 
-// Figures is the plan split to fit the budgets, the overview first.
-// A group's figure follows the figure that draws it as a box.
-func (p *Plan) Figures() []*PlanFigure {
+// Diagrams is the plan split to fit the budgets, the overview first.
+// A group's diagram follows the diagram that draws it as a box.
+func (p *Plan) Diagrams() []*PlanDiagram {
 	title := fmt.Sprintf("Job plan: %d %s", len(p.order), plural.Word(len(p.order), "job", "jobs"))
-	out := numberFigures(p.group(title, p.roots), "plan", map[string]int{})
+	out := numberDiagrams(p.group(title, p.roots), "plan", map[string]int{})
 	for _, f := range out {
 		for i, n := range f.Nodes {
 			if n.Group != nil {
@@ -161,18 +161,18 @@ func (p *Plan) Figures() []*PlanFigure {
 	return out
 }
 
-// numberFigures gives f and the group figures under it their ids, depth
+// numberDiagrams gives f and the group diagrams under it their ids, depth
 // first. An id taken before gets -2, -3. taken counts them across the walk.
-func numberFigures(f *PlanFigure, id string, taken map[string]int) []*PlanFigure {
+func numberDiagrams(f *PlanDiagram, id string, taken map[string]int) []*PlanDiagram {
 	taken[id]++
 	if n := taken[id]; n > 1 {
 		id = fmt.Sprintf("%s-%d", id, n)
 	}
 	f.ID = id
-	out := []*PlanFigure{f}
+	out := []*PlanDiagram{f}
 	for _, n := range f.Nodes {
 		if n.Group != nil {
-			out = append(out, numberFigures(n.Group, "plan-"+planSlug(n.Name), taken)...)
+			out = append(out, numberDiagrams(n.Group, "plan-"+planSlug(n.Name), taken)...)
 		}
 	}
 	return out
@@ -180,13 +180,13 @@ func numberFigures(f *PlanFigure, id string, taken map[string]int) []*PlanFigure
 
 // group draws the subtrees under tops: every job when they fit, else
 // the top job and a box per child subtree, bundled by fit.
-func (p *Plan) group(title string, tops []string) *PlanFigure {
+func (p *Plan) group(title string, tops []string) *PlanDiagram {
 	subtrees := make([][]string, len(tops))
 	for i, t := range tops {
 		subtrees[i] = p.subtree(t)
 	}
 	jobs := slices.Concat(subtrees...)
-	f := &PlanFigure{Title: title, Jobs: jobs}
+	f := &PlanDiagram{Title: title, Jobs: jobs}
 	flat := make([]planNode, len(jobs))
 	for i, id := range jobs {
 		flat[i] = planNode{Name: id, Job: id}
@@ -224,7 +224,7 @@ func (p *Plan) box(id string) planNode {
 
 // fit is head then parts, folding the tail of parts into bundles when
 // they overflow. It takes the fewest bundles that each fit whole, and
-// more while the edges overflow. A bundle's figure fits it the same way.
+// more while the edges overflow. A bundle's diagram fits it the same way.
 func (p *Plan) fit(head, parts []planNode) []planNode {
 	nodes := append(slices.Clone(head), parts...)
 	if len(nodes) <= planMaxNodes && len(p.between(nodes)) <= planMaxEdges {
@@ -269,7 +269,7 @@ func (p *Plan) bundled(parts []planNode) planNode {
 		return parts[0]
 	}
 	name := fmt.Sprintf("%s +%d", parts[0].Name, len(parts)-1)
-	f := &PlanFigure{Title: name, Nodes: p.fit(nil, parts)}
+	f := &PlanDiagram{Title: name, Nodes: p.fit(nil, parts)}
 	f.Edges = p.between(f.Nodes)
 	for _, n := range parts {
 		f.Jobs = append(f.Jobs, n.jobs()...)
@@ -285,7 +285,7 @@ func (n planNode) jobs() []string {
 }
 
 // between is the plan's edges among nodes, one per ordered pair. An
-// edge with an end in no box belongs to a figure further up.
+// edge with an end in no box belongs to a diagram further up.
 func (p *Plan) between(nodes []planNode) []planEdge {
 	at := map[string]string{}
 	for _, n := range nodes {
@@ -343,38 +343,38 @@ func planDash(s string) string {
 	return s
 }
 
-// FigureRecord is f as a magus/figure record. A group's box links to
-// the file its figure is written to.
-func (p *Plan) FigureRecord(f *PlanFigure, holder func(job.Job) string) figure.Figure {
-	plain, optional := figure.Look("plain"), figure.Look("optional")
-	rec := figure.Figure{
+// DiagramRecord is f as a magus/diagram record. A group's box links to
+// the file its diagram is written to.
+func (p *Plan) DiagramRecord(f *PlanDiagram, holder func(job.Job) string) diagram.Diagram {
+	plain, optional := diagram.Look("plain"), diagram.Look("optional")
+	rec := diagram.Diagram{
 		ID:          f.ID,
 		Title:       f.Title,
 		Eyebrow:     "job plan",
-		Desc:        "A box is a job with its state and holder, or a group another figure draws. A solid edge is a fork or a merge, a dashed one a dependency.",
-		Direction:   figure.Direction("down"),
+		Desc:        "A box is a job with its state and holder, or a group another diagram draws. A solid edge is a fork or a merge, a dashed one a dependency.",
+		Direction:   diagram.Direction("down"),
 		UnscopedWhy: "a plan's jobs are units of work, not directories",
 	}
-	actors := map[string]figure.Actor{}
+	actors := map[string]diagram.Actor{}
 	anyOpen := false
 	for _, n := range f.Nodes {
 		a, open := p.actor(n, holder, plain, optional)
 		anyOpen = anyOpen || open
 		actors[n.Name] = a
-		rec.Boxes = append(rec.Boxes, figure.Box{Actor: &a})
+		rec.Boxes = append(rec.Boxes, diagram.Box{Actor: &a})
 	}
 	for _, e := range f.Edges {
 		rec.Flows = append(rec.Flows, planFlow(e, actors))
 	}
 	if anyOpen {
-		rec.Legends = append(rec.Legends, figure.Legend{Look: optional, Label: "not finished"})
+		rec.Legends = append(rec.Legends, diagram.Legend{Look: optional, Label: "not finished"})
 	}
 	return rec
 }
 
 // actor is n as a box, and whether a job it draws is unfinished.
-func (p *Plan) actor(n planNode, holder func(job.Job) string, plain, optional figure.Look) (figure.Actor, bool) {
-	a := figure.Actor{Name: n.Name, Look: &plain}
+func (p *Plan) actor(n planNode, holder func(job.Job) string, plain, optional diagram.Look) (diagram.Actor, bool) {
+	a := diagram.Actor{Name: n.Name, Look: &plain}
 	open := 0
 	for _, id := range n.jobs() {
 		if planUnfinished(p.byID[id].State) {
@@ -396,10 +396,10 @@ func (p *Plan) actor(n planNode, holder func(job.Job) string, plain, optional fi
 }
 
 // planFlow is solid for a fork, labeled for a merge, dashed for a dependency.
-func planFlow(e planEdge, actors map[string]figure.Actor) figure.Flow {
-	solid, dashed := figure.Stroke("plain"), figure.Stroke("optional")
+func planFlow(e planEdge, actors map[string]diagram.Actor) diagram.Flow {
+	solid, dashed := diagram.Stroke("plain"), diagram.Stroke("optional")
 	src, dst := actors[e.Src], actors[e.Dst]
-	fl := figure.Flow{Src: figure.End{Actor: &src}, Dst: figure.End{Actor: &dst}, Stroke: &solid}
+	fl := diagram.Flow{Src: diagram.End{Actor: &src}, Dst: diagram.End{Actor: &dst}, Stroke: &solid}
 	switch e.Kind {
 	case planMerges:
 		fl.Label = "merges"
@@ -409,8 +409,8 @@ func planFlow(e planEdge, actors map[string]figure.Actor) figure.Flow {
 	return fl
 }
 
-// Print writes each figure's boxes and edges as text.
-func (p *Plan) Print(out io.Writer, figs []*PlanFigure, holder func(job.Job) string) {
+// Print writes each diagram's boxes and edges as text.
+func (p *Plan) Print(out io.Writer, figs []*PlanDiagram, holder func(job.Job) string) {
 	for i, f := range figs {
 		if i > 0 {
 			fmt.Fprintln(out)

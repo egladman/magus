@@ -78,8 +78,8 @@ func jobObserver(root string, graphIn func(tree string) *evidence.Graph) job.Obs
 	return evidence.Observer(root, graphIn, jobEvidenceEnv())
 }
 
-// jobGraphCommand is `magus job graph`: the live plan as figures that fit
-// magus/figure's budgets. -o svg writes them and prints each path.
+// jobGraphCommand is `magus job graph`: the live plan as diagrams that fit
+// magus/diagram's budgets. -o svg writes them and prints each path.
 func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	var gf *flaggen.JobGraphFlags
 	pos, err := commandParse("job graph", args, func(fs *flag.FlagSet) {
@@ -110,7 +110,7 @@ func jobGraphCommand(ctx context.Context, root string, args []string) error {
 	}
 	list, _ = job.WithoutEnded(list)
 	plan := job.NewPlan(list.Jobs)
-	figs := plan.Figures()
+	figs := plan.Diagrams()
 	switch opts.Format {
 	case outputSVG:
 		dir, err := evidence.PlanSVGDir(root, gf.Dir, globalCfg)

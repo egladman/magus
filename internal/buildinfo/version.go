@@ -3,7 +3,7 @@ package buildinfo
 import (
 	"fmt"
 
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	"github.com/egladman/magus/types"
 )
 
@@ -47,9 +47,9 @@ type VersionOutput struct {
 
 // VersionEmbedded digests the embedded sources a generated output can depend on.
 type VersionEmbedded struct {
-	// FigureSHA256 is the hex SHA-256 of the magus/figure source; diagrams-generate in
-	// docs keys on it, since the figures render from this copy and not the checkout's.
-	FigureSHA256 string `json:"figure_sha256" yaml:"figure_sha256"`
+	// DiagramSHA256 is the hex SHA-256 of the magus/diagram source; diagrams-generate in
+	// docs keys on it, since the diagrams render from this copy and not the checkout's.
+	DiagramSHA256 string `json:"diagram_sha256" yaml:"diagram_sha256"`
 	// ContractSHA256 is the digest of the contract it was built with, which
 	// a checkout of magus it judges must carry. See internal/contract. The caller fills
 	// it: contract imports this package, so computing it here would close a cycle.
@@ -62,7 +62,7 @@ func NewVersionOutput(b types.MagusBuild, builtBy string) VersionOutput {
 	return VersionOutput{
 		Version: b.Version, Commit: b.Commit, Dirty: b.Dirty, Repository: sourceRepository,
 		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
-		Embedded: VersionEmbedded{FigureSHA256: figure.SourceSHA256()},
+		Embedded: VersionEmbedded{DiagramSHA256: diagram.SourceSHA256()},
 	}
 }
 

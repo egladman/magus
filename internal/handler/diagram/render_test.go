@@ -69,9 +69,9 @@ func TestDiagramFingerprintMovesWithTheGraph(t *testing.T) {
 func TestRenderCacheComputesOncePerKey(t *testing.T) {
 	c := newRenderCache()
 	var calls int
-	compute := func(context.Context) (Figure, error) {
+	compute := func(context.Context) (Diagram, error) {
 		calls++
-		return Figure{Title: "t", SVG: "<svg/>", Nodes: []Node{{ID: "a"}}}, nil
+		return Diagram{Title: "t", SVG: "<svg/>", Nodes: []Node{{ID: "a"}}}, nil
 	}
 	first, err := c.get(t.Context(), "k", compute)
 	require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestRenderCacheComputesOncePerKey(t *testing.T) {
 
 	second, err := c.get(t.Context(), "k", compute)
 	require.NoError(t, err)
-	assert.Equal(t, Figure{Title: "t", SVG: "<svg/>", Nodes: []Node{{ID: "a"}}}, second, "a caller's edit does not reach the cache")
+	assert.Equal(t, Diagram{Title: "t", SVG: "<svg/>", Nodes: []Node{{ID: "a"}}}, second, "a caller's edit does not reach the cache")
 	assert.Equal(t, 1, calls)
 }
 
@@ -87,13 +87,13 @@ func TestRenderCacheSharesOneRenderAcrossConcurrentCallers(t *testing.T) {
 	c := newRenderCache()
 	var calls atomic.Int32
 	release := make(chan struct{})
-	compute := func(context.Context) (Figure, error) {
+	compute := func(context.Context) (Diagram, error) {
 		calls.Add(1)
 		<-release
-		return Figure{SVG: "<svg/>"}, nil
+		return Diagram{SVG: "<svg/>"}, nil
 	}
 	var wg sync.WaitGroup
-	got := make([]Figure, 6)
+	got := make([]Diagram, 6)
 	for i := range got {
 		wg.Add(1)
 		go func() {
@@ -109,7 +109,7 @@ func TestRenderCacheSharesOneRenderAcrossConcurrentCallers(t *testing.T) {
 
 	assert.Equal(t, int32(1), calls.Load())
 	for _, f := range got {
-		assert.Equal(t, Figure{SVG: "<svg/>"}, f)
+		assert.Equal(t, Diagram{SVG: "<svg/>"}, f)
 	}
 }
 
@@ -117,9 +117,9 @@ func TestRenderCacheNeverStoresAnError(t *testing.T) {
 	c := newRenderCache()
 	refusal := &FindingsError{Findings: "too big"}
 	var calls int
-	_, err := c.get(t.Context(), "k", func(context.Context) (Figure, error) { calls++; return Figure{}, refusal })
+	_, err := c.get(t.Context(), "k", func(context.Context) (Diagram, error) { calls++; return Diagram{}, refusal })
 	assert.Same(t, refusal, err)
-	_, err = c.get(t.Context(), "k", func(context.Context) (Figure, error) { calls++; return Figure{SVG: "ok"}, nil })
+	_, err = c.get(t.Context(), "k", func(context.Context) (Diagram, error) { calls++; return Diagram{SVG: "ok"}, nil })
 	require.NoError(t, err)
 	assert.Equal(t, 2, calls)
 	assert.Empty(t, c.inflight)
@@ -128,15 +128,15 @@ func TestRenderCacheNeverStoresAnError(t *testing.T) {
 func TestRenderCacheNeverStoresACancelledRender(t *testing.T) {
 	c := newRenderCache()
 	ctx, cancel := context.WithCancel(t.Context())
-	_, err := c.get(ctx, "k", func(ctx context.Context) (Figure, error) {
+	_, err := c.get(ctx, "k", func(ctx context.Context) (Diagram, error) {
 		cancel()
-		return Figure{SVG: "torn"}, ctx.Err()
+		return Diagram{SVG: "torn"}, ctx.Err()
 	})
 	require.ErrorIs(t, err, context.Canceled)
 
-	fig, err := c.get(t.Context(), "k", func(context.Context) (Figure, error) { return Figure{SVG: "whole"}, nil })
+	fig, err := c.get(t.Context(), "k", func(context.Context) (Diagram, error) { return Diagram{SVG: "whole"}, nil })
 	require.NoError(t, err)
-	assert.Equal(t, Figure{SVG: "whole"}, fig)
+	assert.Equal(t, Diagram{SVG: "whole"}, fig)
 }
 
 func TestRenderCacheWaiterSurvivesTheLeadersCancellation(t *testing.T) {
@@ -145,29 +145,29 @@ func TestRenderCacheWaiterSurvivesTheLeadersCancellation(t *testing.T) {
 	entered, proceed := make(chan struct{}), make(chan struct{})
 	leaderDone := make(chan error, 1)
 	go func() {
-		_, err := c.get(leaderCtx, "k", func(ctx context.Context) (Figure, error) {
+		_, err := c.get(leaderCtx, "k", func(ctx context.Context) (Diagram, error) {
 			close(entered)
 			<-proceed
-			return Figure{}, ctx.Err()
+			return Diagram{}, ctx.Err()
 		})
 		leaderDone <- err
 	}()
 	<-entered
 
-	waiter := make(chan Figure, 1)
+	waiter := make(chan Diagram, 1)
 	go func() {
-		fig, _ := c.get(t.Context(), "k", func(context.Context) (Figure, error) { return Figure{SVG: "mine"}, nil })
+		fig, _ := c.get(t.Context(), "k", func(context.Context) (Diagram, error) { return Diagram{SVG: "mine"}, nil })
 		waiter <- fig
 	}()
 	cancel()
 	close(proceed)
 	require.ErrorIs(t, <-leaderDone, context.Canceled)
-	assert.Equal(t, Figure{SVG: "mine"}, <-waiter)
+	assert.Equal(t, Diagram{SVG: "mine"}, <-waiter)
 }
 
 func TestRenderCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	c := newRenderCache()
-	compute := func(context.Context) (Figure, error) { return Figure{SVG: "s"}, nil }
+	compute := func(context.Context) (Diagram, error) { return Diagram{SVG: "s"}, nil }
 	for i := range renderCacheEntries {
 		_, err := c.get(t.Context(), strconv.Itoa(i), compute)
 		require.NoError(t, err)
@@ -183,12 +183,12 @@ func TestRenderCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	assert.Equal(t, renderCacheEntries, c.bytes)
 }
 
-func TestRenderCacheSkipsAFigureOverTheByteBound(t *testing.T) {
+func TestRenderCacheSkipsADiagramOverTheByteBound(t *testing.T) {
 	c := newRenderCache()
 	var calls int
-	huge := func(context.Context) (Figure, error) {
+	huge := func(context.Context) (Diagram, error) {
 		calls++
-		return Figure{SVG: strings.Repeat("x", renderCacheBytes+1)}, nil
+		return Diagram{SVG: strings.Repeat("x", renderCacheBytes+1)}, nil
 	}
 	for range 2 {
 		_, err := c.get(t.Context(), "k", huge)

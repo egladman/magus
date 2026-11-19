@@ -7,13 +7,13 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
-type PlanFigureSuite struct{ suite.Suite }
+type PlanDiagramSuite struct{ suite.Suite }
 
-func TestPlanFigureSuite(t *testing.T) { suite.Run(t, new(PlanFigureSuite)) }
+func TestPlanDiagramSuite(t *testing.T) { suite.Run(t, new(PlanDiagramSuite)) }
 
 func planRow(id string, created int64, state job.State) job.Job {
 	return job.Job{ID: id, Created: created, State: state}
@@ -42,8 +42,8 @@ func planOfSixteen() []job.Job {
 	return rows
 }
 
-// drawnJobs is every job the figures draw as a job box, with how often.
-func drawnJobs(figs []*PlanFigure) map[string]int {
+// drawnJobs is every job the diagrams draw as a job box, with how often.
+func drawnJobs(figs []*PlanDiagram) map[string]int {
 	seen := map[string]int{}
 	for _, f := range figs {
 		for _, n := range f.Nodes {
@@ -55,7 +55,7 @@ func drawnJobs(figs []*PlanFigure) map[string]int {
 	return seen
 }
 
-func (s *PlanFigureSuite) TestASmallPlanIsOneFigureWithEveryEdgeKind() {
+func (s *PlanDiagramSuite) TestASmallPlanIsOneDiagramWithEveryEdgeKind() {
 	lead := planRow("lead", 1, job.StateRunning)
 	child := planRow("child", 2, job.StateDeclared)
 	child.Parent = "lead"
@@ -63,10 +63,10 @@ func (s *PlanFigureSuite) TestASmallPlanIsOneFigureWithEveryEdgeKind() {
 	merge.Integrates = []string{"child"}
 	merge.DependsOn = []string{"lead"}
 
-	figs := NewPlan([]job.Job{merge, child, lead}).Figures()
+	figs := NewPlan([]job.Job{merge, child, lead}).Diagrams()
 
 	s.Require().Len(figs, 1)
-	s.Equal(&PlanFigure{
+	s.Equal(&PlanDiagram{
 		ID:    "plan",
 		Title: "Job plan: 3 jobs",
 		Jobs:  []string{"lead", "child", "merge"},
@@ -79,8 +79,8 @@ func (s *PlanFigureSuite) TestASmallPlanIsOneFigureWithEveryEdgeKind() {
 	}, figs[0])
 }
 
-func (s *PlanFigureSuite) TestAnIntegratorGroupsTheJobsItMerges() {
-	figs := NewPlan(planOfSixteen()).Figures()
+func (s *PlanDiagramSuite) TestAnIntegratorGroupsTheJobsItMerges() {
+	figs := NewPlan(planOfSixteen()).Diagrams()
 
 	var names []string
 	for _, n := range figs[0].Nodes {
@@ -92,13 +92,13 @@ func (s *PlanFigureSuite) TestAnIntegratorGroupsTheJobsItMerges() {
 	s.Equal([]planEdge{{Src: "lead", Dst: "after-lead", Kind: planAfter}}, figs[0].Edges)
 }
 
-func (s *PlanFigureSuite) TestEveryFigureFitsTheBudgetsAndDrawsEachJobOnce() {
+func (s *PlanDiagramSuite) TestEveryDiagramFitsTheBudgetsAndDrawsEachJobOnce() {
 	rows := planOfSixteen()
 	for i := range 70 {
 		rows = append(rows, planRow(fmt.Sprintf("solo-%02d", i), int64(200+i), job.StatePass))
 	}
 
-	figs := NewPlan(rows).Figures()
+	figs := NewPlan(rows).Diagrams()
 
 	for _, f := range figs {
 		s.LessOrEqual(len(f.Nodes), planMaxNodes, f.ID)
@@ -111,10 +111,10 @@ func (s *PlanFigureSuite) TestEveryFigureFitsTheBudgetsAndDrawsEachJobOnce() {
 	}
 }
 
-func (s *PlanFigureSuite) TestAGroupPastTheBudgetDrawsItsTopAndBundles() {
-	figs := NewPlan(planOfSixteen()).Figures()
+func (s *PlanDiagramSuite) TestAGroupPastTheBudgetDrawsItsTopAndBundles() {
+	figs := NewPlan(planOfSixteen()).Diagrams()
 
-	var wave *PlanFigure
+	var wave *PlanDiagram
 	for _, f := range figs {
 		if f.ID == "plan-integrate-wave" {
 			wave = f
@@ -129,15 +129,15 @@ func (s *PlanFigureSuite) TestAGroupPastTheBudgetDrawsItsTopAndBundles() {
 	}
 }
 
-func (s *PlanFigureSuite) TestTheSplitIgnoresRowOrder() {
+func (s *PlanDiagramSuite) TestTheSplitIgnoresRowOrder() {
 	rows := planOfSixteen()
 	reversed := slices.Clone(rows)
 	slices.Reverse(reversed)
 
-	s.Equal(NewPlan(rows).Figures(), NewPlan(reversed).Figures())
+	s.Equal(NewPlan(rows).Diagrams(), NewPlan(reversed).Diagrams())
 }
 
-func (s *PlanFigureSuite) TestAMergeCycleStillEndsInATree() {
+func (s *PlanDiagramSuite) TestAMergeCycleStillEndsInATree() {
 	a := planRow("a", 1, job.StateRunning)
 	a.Integrates = []string{"b"}
 	b := planRow("b", 2, job.StateRunning)
@@ -149,16 +149,16 @@ func (s *PlanFigureSuite) TestAMergeCycleStillEndsInATree() {
 	s.Equal([]planEdge{{Src: "a", Dst: "b", Kind: planMerges}, {Src: "b", Dst: "a", Kind: planMerges}}, p.edges)
 }
 
-func (s *PlanFigureSuite) TestTheRecordLinksAGroupAndDashesAnEdgeOfAfter() {
-	figs := NewPlan(planOfSixteen()).Figures()
+func (s *PlanDiagramSuite) TestTheRecordLinksAGroupAndDashesAnEdgeOfAfter() {
+	figs := NewPlan(planOfSixteen()).Diagrams()
 	holder := func(job.Job) string { return "me" }
 
-	rec := NewPlan(planOfSixteen()).FigureRecord(figs[0], holder)
+	rec := NewPlan(planOfSixteen()).DiagramRecord(figs[0], holder)
 
 	s.Equal("plan", rec.ID)
 	s.Require().Len(rec.Boxes, len(figs[0].Nodes))
-	open := figure.Look("optional")
-	s.Equal(&figure.Actor{Name: "lead", Sub: "2 jobs, 1 unfinished", Tag: "group", Link: "plan-lead.svg", Look: &open}, rec.Boxes[0].Actor)
+	open := diagram.Look("optional")
+	s.Equal(&diagram.Actor{Name: "lead", Sub: "2 jobs, 1 unfinished", Tag: "group", Link: "plan-lead.svg", Look: &open}, rec.Boxes[0].Actor)
 	s.Len(rec.Legends, 1)
 	s.Require().Len(rec.Flows, 1)
 	s.Equal("after", rec.Flows[0].Label)

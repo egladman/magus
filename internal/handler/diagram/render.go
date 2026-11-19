@@ -16,23 +16,23 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/types"
 )
 
-// The kinds of graph a figure draws.
+// The kinds of graph a diagram draws.
 const (
 	KindProjects = "projects"
 	KindTargets  = "targets"
 	KindImports  = "imports"
 )
 
-// Lens names exactly what a figure shows. Scope keeps the nodes whose anchor is one of its
+// Lens names exactly what a diagram shows. Scope keeps the nodes whose anchor is one of its
 // directories or sits under one; empty keeps every node. Focus, a node id or anchor, cuts
-// the figure to the nodes within Depth edges of it in either direction; Depth 0 is the
-// focus alone. Project names the project a KindTargets figure draws.
+// the diagram to the nodes within Depth edges of it in either direction; Depth 0 is the
+// focus alone. Project names the project a KindTargets diagram draws.
 type Lens struct {
 	Kind    string
 	Project string
@@ -41,21 +41,21 @@ type Lens struct {
 	Depth   int
 }
 
-// Node is one box of a rendered figure. Anchor is the workspace-relative path it depicts.
+// Node is one box of a rendered diagram. Anchor is the workspace-relative path it depicts.
 type Node struct {
 	ID     string `json:"id"`
 	Anchor string `json:"anchor"`
 	Label  string `json:"label"`
 }
 
-// Figure is a rendered figure: the SVG magus/figure drew and the boxes in it.
-type Figure struct {
+// Diagram is a rendered diagram: the SVG magus/diagram drew and the boxes in it.
+type Diagram struct {
 	Title string
 	SVG   string
 	Nodes []Node
 }
 
-// FindingsError is magus/figure refusing to draw the figure, most often because it exceeds
+// FindingsError is magus/diagram refusing to draw the diagram, most often because it exceeds
 // the node or edge budget. Findings is the module's own text, which names the fix.
 type FindingsError struct {
 	Findings string
@@ -63,22 +63,22 @@ type FindingsError struct {
 
 func (e *FindingsError) Error() string { return "diagram: " + e.Findings }
 
-// LensError is a lens naming something the figure does not have.
+// LensError is a lens naming something the diagram does not have.
 type LensError struct {
 	msg string
 }
 
 func (e *LensError) Error() string { return "diagram: " + e.msg }
 
-// ErrNotIndexed is an import figure asked of a workspace with no symbol index: an empty
-// figure would read as "nothing imports anything".
+// ErrNotIndexed is an import diagram asked of a workspace with no symbol index: an empty
+// diagram would read as "nothing imports anything".
 var ErrNotIndexed = errors.New("diagram: the import graph is not indexed, run magus graph build")
 
 type edge struct {
 	src, dst string
 }
 
-// graph is a figure's input before its lens cuts it. Edges name node ids.
+// graph is a diagram's input before its lens cuts it. Edges name node ids.
 type graph struct {
 	id    string
 	title string
@@ -177,14 +177,14 @@ func (g graph) fingerprint() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Bounds on renderCache. A lens is client-chosen, so keys are unbounded; a figure's node
+// Bounds on renderCache. A lens is client-chosen, so keys are unbounded; a diagram's node
 // and edge budgets bound each entry, and these bound the sum.
 const (
 	renderCacheEntries = 64
 	renderCacheBytes   = 32 << 20
 )
 
-// renderCache holds rendered figures for a long-running server, keyed on the graph's
+// renderCache holds rendered diagrams for a long-running server, keyed on the graph's
 // fingerprint, the lens and the anchor template. It is safe for concurrent use. Only a
 // success is stored: a findings refusal is recomputed, and so is anything computed under a
 // context that ended, since that result reflects one client leaving, not the graph.
@@ -196,11 +196,11 @@ type renderCache struct {
 	inflight map[string]*renderFlight
 }
 
-// renderEntry is a cached figure. used is the cache clock at its last hit, so the entry
+// renderEntry is a cached diagram. used is the cache clock at its last hit, so the entry
 // with the smallest used is the least recently used. Eviction scans for it: the entry
 // bound keeps that scan short, and a typed map needs no list of untyped elements.
 type renderEntry struct {
-	fig  Figure
+	fig  Diagram
 	used uint64
 }
 
@@ -208,7 +208,7 @@ type renderEntry struct {
 // abandoned stays true unless the leader finished under a live context.
 type renderFlight struct {
 	done      chan struct{}
-	fig       Figure
+	fig       Diagram
 	err       error
 	abandoned bool
 }
@@ -224,11 +224,11 @@ func renderKey(g graph, desc, anchorHref string) string {
 	return fmt.Sprintf("%s\x00%s\x00%s", g.fingerprint(), desc, anchorHref)
 }
 
-// get returns the figure for key, calling compute at most once across concurrent callers of
+// get returns the diagram for key, calling compute at most once across concurrent callers of
 // the same key. A caller waiting on another's render returns when its own ctx ends. If the
 // computing caller's ctx ended, waiters compute for themselves rather than inherit its
 // cancellation.
-func (c *renderCache) get(ctx context.Context, key string, compute func(context.Context) (Figure, error)) (Figure, error) {
+func (c *renderCache) get(ctx context.Context, key string, compute func(context.Context) (Diagram, error)) (Diagram, error) {
 	for {
 		c.mu.Lock()
 		if e, ok := c.entries[key]; ok {
@@ -236,19 +236,19 @@ func (c *renderCache) get(ctx context.Context, key string, compute func(context.
 			e.used = c.clock
 			fig := e.fig
 			c.mu.Unlock()
-			return cloneFigure(fig), nil
+			return cloneDiagram(fig), nil
 		}
 		if fl, ok := c.inflight[key]; ok {
 			c.mu.Unlock()
 			select {
 			case <-fl.done:
 			case <-ctx.Done():
-				return Figure{}, ctx.Err()
+				return Diagram{}, ctx.Err()
 			}
 			if fl.abandoned {
 				continue
 			}
-			return cloneFigure(fl.fig), fl.err
+			return cloneDiagram(fl.fig), fl.err
 		}
 		fl := &renderFlight{done: make(chan struct{}), abandoned: true}
 		c.inflight[key] = fl
@@ -260,7 +260,7 @@ func (c *renderCache) get(ctx context.Context, key string, compute func(context.
 
 // lead runs compute for fl and publishes the outcome. The deferred release also runs on a
 // panic, so waiters are never left blocked on a flight that will not finish.
-func (c *renderCache) lead(ctx context.Context, key string, fl *renderFlight, compute func(context.Context) (Figure, error)) (Figure, error) {
+func (c *renderCache) lead(ctx context.Context, key string, fl *renderFlight, compute func(context.Context) (Diagram, error)) (Diagram, error) {
 	defer func() {
 		c.mu.Lock()
 		delete(c.inflight, key)
@@ -269,16 +269,16 @@ func (c *renderCache) lead(ctx context.Context, key string, fl *renderFlight, co
 	}()
 	fig, err := compute(ctx)
 	if err != nil && ctx.Err() != nil {
-		return Figure{}, err
+		return Diagram{}, err
 	}
 	fl.fig, fl.err, fl.abandoned = fig, err, false
 	if err == nil {
 		c.store(key, fig)
 	}
-	return cloneFigure(fig), err
+	return cloneDiagram(fig), err
 }
 
-func (c *renderCache) store(key string, fig Figure) {
+func (c *renderCache) store(key string, fig Diagram) {
 	size := len(fig.SVG)
 	if size > renderCacheBytes {
 		return
@@ -289,7 +289,7 @@ func (c *renderCache) store(key string, fig Figure) {
 		c.bytes -= len(e.fig.SVG)
 	}
 	c.clock++
-	c.entries[key] = &renderEntry{fig: cloneFigure(fig), used: c.clock}
+	c.entries[key] = &renderEntry{fig: cloneDiagram(fig), used: c.clock}
 	c.bytes += size
 	for len(c.entries) > renderCacheEntries || c.bytes > renderCacheBytes {
 		c.evictOldest()
@@ -309,13 +309,13 @@ func (c *renderCache) evictOldest() {
 	delete(c.entries, oldest)
 }
 
-// cloneFigure copies the slice a caller could otherwise share with the cache.
-func cloneFigure(f Figure) Figure {
+// cloneDiagram copies the slice a caller could otherwise share with the cache.
+func cloneDiagram(f Diagram) Diagram {
 	f.Nodes = slices.Clone(f.Nodes)
 	return f
 }
 
-// ids turns paths and names into figure ids that stay unique after sanitizing.
+// ids turns paths and names into diagram ids that stay unique after sanitizing.
 type ids map[string]bool
 
 func (s ids) unique(name string) string {
@@ -360,7 +360,7 @@ func (g graph) cut(l Lens) (graph, error) {
 			return keep[n.ID] && (n.ID == l.Focus || n.Anchor == l.Focus)
 		})
 		if i < 0 {
-			return graph{}, &LensError{msg: fmt.Sprintf("focus %q is not in the figure", l.Focus)}
+			return graph{}, &LensError{msg: fmt.Sprintf("focus %q is not in the diagram", l.Focus)}
 		}
 		keep = g.neighbourhood(g.nodes[i].ID, l.Depth, keep)
 	}
@@ -418,7 +418,7 @@ func inScope(anchor string, scope []string) bool {
 	return false
 }
 
-// describe is the lens in words, shown under the figure's title.
+// describe is the lens in words, shown under the diagram's title.
 func (l Lens) describe() string {
 	var parts []string
 	if len(l.Scope) > 0 {
@@ -430,27 +430,27 @@ func (l Lens) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-// render lays g out with magus/figure. The figure budgets always apply: an oversized
-// figure is a FindingsError telling the reader to narrow the lens. Every call compiles
-// figure anew; the server reaches it through renderCache.
-func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, error) {
+// render lays g out with magus/diagram. The diagram budgets always apply: an oversized
+// diagram is a FindingsError telling the reader to narrow the lens. Every call compiles
+// diagram anew; the server reaches it through renderCache.
+func render(ctx context.Context, g graph, desc, anchorHref string) (Diagram, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, io.Discard)
 	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
-		return Figure{}, err
+		return Diagram{}, err
 	}
-	figure.DeclareModules(sess)
+	diagram.DeclareModules(sess)
 
-	svg, err := figure.Draw(ctx, sess, buildFigure(g, desc, anchorHref), anchorHref)
-	var refused *figure.Findings
+	svg, err := diagram.Draw(ctx, sess, buildDiagram(g, desc, anchorHref), anchorHref)
+	var refused *diagram.Findings
 	if errors.As(err, &refused) {
-		return Figure{}, &FindingsError{Findings: refused.Text}
+		return Diagram{}, &FindingsError{Findings: refused.Text}
 	}
 	if err != nil {
-		return Figure{}, fmt.Errorf("diagram: evaluate %s: %w", g.id, err)
+		return Diagram{}, fmt.Errorf("diagram: evaluate %s: %w", g.id, err)
 	}
-	// A node's ID is the one figure draws as data-node, so a client matches rows to the SVG:
+	// A node's ID is the one diagram draws as data-node, so a client matches rows to the SVG:
 	// a box is its directory path, an actor is external:<name>.
 	nodes := make([]Node, len(g.nodes))
 	names := actorNames(g.nodes)
@@ -461,16 +461,16 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 		}
 		nodes[i] = n
 	}
-	return Figure{Title: g.title, SVG: svg, Nodes: nodes}, nil
+	return Diagram{Title: g.title, SVG: svg, Nodes: nodes}, nil
 }
 
-// buildFigure is g as a figure\Figure record.
+// buildDiagram is g as a diagram\Diagram record.
 //
-// An imports figure draws each package as a Dir box and derives edges from its imports.
+// An imports diagram draws each package as a Dir box and derives edges from its imports.
 // Projects and targets are not directories, so they are actors joined by explicit flows
-// in an unscoped figure. A non-empty anchorHref links every actor to its anchor.
-func buildFigure(g graph, desc, anchorHref string) figure.Figure {
-	f := figure.Figure{ID: ids{}.unique(g.id), Title: g.title, Desc: desc}
+// in an unscoped diagram. A non-empty anchorHref links every actor to its anchor.
+func buildDiagram(g graph, desc, anchorHref string) diagram.Diagram {
+	f := diagram.Diagram{ID: ids{}.unique(g.id), Title: g.title, Desc: desc}
 	if g.claim == KindImports {
 		anchor := make(map[string]string, len(g.nodes))
 		for _, n := range g.nodes {
@@ -481,7 +481,7 @@ func buildFigure(g graph, desc, anchorHref string) figure.Figure {
 			imports[e.src] = append(imports[e.src], anchor[e.dst])
 		}
 		for _, n := range g.nodes {
-			f.Boxes = append(f.Boxes, figure.Box{Label: n.Label, Dir: &figure.Dir{
+			f.Boxes = append(f.Boxes, diagram.Box{Label: n.Label, Dir: &diagram.Dir{
 				Path: n.Anchor, ID: "dir:" + n.Anchor, Language: "go",
 				Imports: imports[n.ID], ImportsIndexed: true, Files: 1,
 			}})
@@ -489,27 +489,27 @@ func buildFigure(g graph, desc, anchorHref string) figure.Figure {
 		f.GraphEdges = true
 		return f
 	}
-	// A served figure is a lens over the graph the server already holds, so nothing in the
+	// A served diagram is a lens over the graph the server already holds, so nothing in the
 	// tree is left for a scope to check.
 	f.UnscopedWhy = "served from the workspace graph: " + desc
-	plain := figure.Look("plain")
+	plain := diagram.Look("plain")
 	names := actorNames(g.nodes)
-	actors := make(map[string]*figure.Actor, len(g.nodes))
+	actors := make(map[string]*diagram.Actor, len(g.nodes))
 	for _, n := range g.nodes {
-		a := &figure.Actor{Name: names[n.ID], Link: anchorLink(anchorHref, n.Anchor), Look: &plain}
+		a := &diagram.Actor{Name: names[n.ID], Link: anchorLink(anchorHref, n.Anchor), Look: &plain}
 		actors[n.ID] = a
-		f.Boxes = append(f.Boxes, figure.Box{Actor: a})
+		f.Boxes = append(f.Boxes, diagram.Box{Actor: a})
 	}
 	for _, e := range g.edges {
-		f.Flows = append(f.Flows, figure.Flow{
-			Src: figure.End{Actor: actors[e.src]},
-			Dst: figure.End{Actor: actors[e.dst]},
+		f.Flows = append(f.Flows, diagram.Flow{
+			Src: diagram.End{Actor: actors[e.src]},
+			Dst: diagram.End{Actor: actors[e.dst]},
 		})
 	}
 	return f
 }
 
-// actorNames names each node's actor. figure keys an actor by its name, so a label two
+// actorNames names each node's actor. diagram keys an actor by its name, so a label two
 // nodes share takes the node's anchor to stay apart.
 func actorNames(nodes []Node) map[string]string {
 	count := map[string]int{}
@@ -526,7 +526,7 @@ func actorNames(nodes []Node) map[string]string {
 	return out
 }
 
-// anchorLink fills anchorHref for an actor, which figure paints as a plain link.
+// anchorLink fills anchorHref for an actor, which diagram paints as a plain link.
 func anchorLink(anchorHref, anchor string) string {
 	if anchorHref == "" {
 		return ""

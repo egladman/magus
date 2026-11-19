@@ -1,4 +1,4 @@
-package figure
+package diagram
 
 import (
 	"context"
@@ -25,10 +25,10 @@ func TestDeclareModulesResolvesTheResultImport(t *testing.T) {
 	require.NoError(t, sess.Exec(ctx, "import \"result\";\nexport final declared = result\\ok(1);\n"))
 }
 
-func TestSourceIsTheFigureModule(t *testing.T) {
-	assert.True(t, strings.Contains(Source, "\nnamespace figure;\n"), "figure.buzz declares the figure namespace")
+func TestSourceIsTheDiagramModule(t *testing.T) {
+	assert.True(t, strings.Contains(Source, "\nnamespace diagram;\n"), "diagram.buzz declares the diagram namespace")
 	assert.True(t, strings.Contains(Source, "\nexport fun of(id: str,"), "of() is the module's entry point")
-	assert.True(t, strings.Contains(Source, "\nexport fun draw(f: Figure, theme: Theme,"), "draw() paints a Figure")
+	assert.True(t, strings.Contains(Source, "\nexport fun draw(f: Diagram, theme: Theme,"), "draw() paints a Diagram")
 }
 
 func TestStandaloneMatchesTheModule(t *testing.T) {
@@ -38,7 +38,7 @@ func TestStandaloneMatchesTheModule(t *testing.T) {
 }
 
 func TestSourceSHA256IsTheFileOnDisk(t *testing.T) {
-	disk, err := os.ReadFile("figure.buzz")
+	disk, err := os.ReadFile("diagram.buzz")
 	require.NoError(t, err)
 	sum := sha256.Sum256(disk)
 	assert.Equal(t, hex.EncodeToString(sum[:]), SourceSHA256())
@@ -51,16 +51,16 @@ var hostless = map[string]string{
 	"Actor.refs": "a magus\\refs result, which no host holds",
 }
 
-// TestMirrorMatchesTheModule walks every record Figure reaches in the module's own
+// TestMirrorMatchesTheModule walks every record Diagram reaches in the module's own
 // declarations, and magus\Dir's in the generated magus declarations, and holds the Go
 // mirror to each field's name and type.
 func TestMirrorMatchesTheModule(t *testing.T) {
 	magusDecls, err := os.ReadFile("../../internal/spell/gen/decls/magus.buzz")
 	require.NoError(t, err)
-	m := mirror{t: t, figure: declared(t, Source), magus: declared(t, string(magusDecls)), seen: map[string]bool{}}
-	m.record(m.figure.objects["Figure"], reflect.TypeFor[Figure](), "Figure", m.figure)
+	m := mirror{t: t, diagram: declared(t, Source), magus: declared(t, string(magusDecls)), seen: map[string]bool{}}
+	m.record(m.diagram.objects["Diagram"], reflect.TypeFor[Diagram](), "Diagram", m.diagram)
 	assert.Contains(t, m.seen, "Dir", "the walk reaches magus\\Dir")
-	assert.Contains(t, m.seen, "Legend", "the walk reaches every record Figure holds")
+	assert.Contains(t, m.seen, "Legend", "the walk reaches every record Diagram holds")
 }
 
 type declarations struct {
@@ -89,10 +89,10 @@ func declared(t *testing.T, src string) declarations {
 }
 
 type mirror struct {
-	t      *testing.T
-	figure declarations
-	magus  declarations
-	seen   map[string]bool
+	t       *testing.T
+	diagram declarations
+	magus   declarations
+	seen    map[string]bool
 }
 
 // record holds got to obj, whose field types resolve among in's declarations.

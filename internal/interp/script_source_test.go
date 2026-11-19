@@ -30,20 +30,20 @@ func TestScriptReachesMagus(t *testing.T) {
 	sess.SetIncludeDirs([]string{dir})
 
 	for code, want := range map[string]bool{
-		`import "std"; import "fs";`:                  false,
-		`import "plain" as p;`:                        false,
-		`import "missing";`:                           false,
-		`import "cycle";`:                             false,
-		`import "magus" as m;`:                        true,
-		`import print from "buzz:magus";`:             true,
-		`import "std"; import "direct";`:              true,
-		`import "lib/mid" as mid;`:                    true,
-		`import "spells/hello";`:                      true,
-		"import \"std\";\nimport \"magus/figure\";\n": true,
-		"// import \"magus\";\nimport \"std\";":       false,
-		"import \"std\"; // import \"magus\";":        false,
-		"final s = \"import \\\"magus\\\";\";":        false,
-		`import "commented";`:                         false,
+		`import "std"; import "fs";`:                   false,
+		`import "plain" as p;`:                         false,
+		`import "missing";`:                            false,
+		`import "cycle";`:                              false,
+		`import "magus" as m;`:                         true,
+		`import print from "buzz:magus";`:              true,
+		`import "std"; import "direct";`:               true,
+		`import "lib/mid" as mid;`:                     true,
+		`import "spells/hello";`:                       true,
+		"import \"std\";\nimport \"magus/diagram\";\n": true,
+		"// import \"magus\";\nimport \"std\";":        false,
+		"import \"std\"; // import \"magus\";":         false,
+		"final s = \"import \\\"magus\\\";\";":         false,
+		`import "commented";`:                          false,
 	} {
 		assert.Equal(t, want, scriptReachesMagus(sess, code), code)
 	}

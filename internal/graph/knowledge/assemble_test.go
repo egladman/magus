@@ -620,17 +620,17 @@ fun helper() > void {
 	// owns: CODEOWNERS is read from the root and matched against the path-bearing nodes.
 	write("CODEOWNERS", "pkg/a @platform\n")
 	// contains file->marker, references marker->docsection and marker->dir, and calls
-	// dir->dir: a diagram marker naming a figure a page embeds, and a calls marker.
-	write("docs/figures.md", "# Figures\n\n## Share\n\n<!--diagram:share-->\n")
+	// dir->dir: a diagram marker naming a diagram a page embeds, and a calls marker.
+	write("docs/diagrams.md", "# Diagrams\n\n## Share\n\n<!--diagram:share-->\n")
 	write("pkg/b/b.go", "package b\n")
 	write("pkg/a/client.go", "package a\n\n// magus:diagram share\n// magus:calls pkg/b http\n")
-	// contains file->figure, and depicts in both shapes: pkg/a is a dir and, holding a
+	// contains file->diagram, and depicts in both shapes: pkg/a is a dir and, holding a
 	// magusfile, a project.
-	write("pkg/a/figure.buzz", `import "magus";
-import "magus/figure";
+	write("pkg/a/diagram.buzz", `import "magus";
+import "magus/diagram";
 
-fun aFigure() > figure\Figure !> any {
-    return figure\of("a", title: "A").box(magus\graph().dir("pkg/a"), label: "a");
+fun aDiagram() > diagram\Diagram !> any {
+    return diagram\of("a", title: "A").box(magus\graph().dir("pkg/a"), label: "a");
 }
 `)
 

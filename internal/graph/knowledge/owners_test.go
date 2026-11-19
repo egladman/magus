@@ -89,7 +89,7 @@ func TestAssembleOwnersEdgesAndNodes(t *testing.T) {
 }
 
 // A package directory takes its owner from the last rule matching its own path, so a
-// figure can zone a box by owner.
+// diagram can zone a box by owner.
 func TestAssembleOwnersReachesPackageDirs(t *testing.T) {
 	ws := testkit.NewWorkspace(t)
 	root := ws.Root()
