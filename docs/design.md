@@ -91,6 +91,7 @@ automates a decision and when it hands the decision to you.
 - [Compute once, reuse everywhere](design/principles/compute-once.md): A result is computed once, by the stage that owns it; every later stage reads that result, and recomputes only on a real cache miss.
 - [A selector does one thing, spelled one way](design/principles/a-selector-does-one-thing.md): Each verb picks its projects one way; a meaning has one spelling, an operand is a word that survives shell completion, and a concept that is not a path is a flag.
 - [Fit the work, never the benchmark](design/principles/fit-the-work-never-the-benchmark.md): Between an artificial result and real work there is a gap that is never zero and is unknown until it is measured; a change tuned to a benchmark fits the benchmark, so a gain counts where real use shows it, at the size it was run.
+- [A file a person edits is YAML](design/principles/a-file-a-person-edits-is-yaml.md): A file a person adds to or edits is YAML, grouped and commented; JSON Lines is append-only state a machine writes. Analyzer policy is the repository's, on top of magus.
 
 ### Judgment
 

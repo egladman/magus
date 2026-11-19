@@ -46,19 +46,20 @@ line.
 - **The last line for a key wins.** A change appends a line for the entry's
   key and a reader keeps the last one it finds. Compaction rewrites the file
   to one line per key through a rename and never edits a line in place, once
-  the file holds more than twice as many lines as keys, plus 64. A
-  store a person edits by hand, which nothing compacts, refuses a repeated key
-  instead.
+  the file holds more than twice as many lines as keys, plus 64. A file a
+  person edits by hand is not a store and not JSON Lines: it is YAML
+  ([A file a person edits is YAML](a-file-a-person-edits-is-yaml.md)).
 - **Atomic write via rename.** A rewrite goes to a temporary file in the same
   directory and is renamed over the old one (`file.WriteFileAtomic`, which
   also syncs). A reader sees the old file or the new one, never half of
   either. An append is one write of one complete line.
 - **Encoding lives on the type.** An entry type owns its encoding in
   `MarshalJSON` and `UnmarshalJSON`. A reader hands each line to the type and
-  never splits, scans or pattern-matches a line itself. A store a person
-  edits decodes strictly ([`libs/codec`](https://github.com/egladman/magus/tree/main/libs/codec)'s `StrictDecoder`): an unknown
-  field, a duplicate key, a wrong kind or a bad value is an error naming
-  `path:line`. A store only magus writes may skip a field a newer magus added.
+  never splits, scans or pattern-matches a line itself. A store whose lines
+  must all be understood decodes strictly ([`libs/codec`](https://github.com/egladman/magus/tree/main/libs/codec)'s `StrictDecoder`): an
+  unknown field, a duplicate key, a wrong kind or a bad value is an error
+  naming `path:line`. A store only magus writes may skip a field a newer magus
+  added.
 - **An old format is named, never read.** When a store changes shape, the old
   file is not read as a second format and not skipped in silence: the error
   names it and says how to move it aside.

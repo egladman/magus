@@ -20,55 +20,80 @@ func TestAccessorClone(t *testing.T) {
 	suite.Run(t, new(AnalyzerSuite))
 }
 
-func (s *AnalyzerSuite) baseline(body string) string {
-	path := filepath.Join(s.T().TempDir(), "baseline.jsonl")
+func (s *AnalyzerSuite) policy(body string) string {
+	path := filepath.Join(s.T().TempDir(), "analyzers.yaml")
 	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
 	return path
 }
 
-const baselineBody = `{"path":"api/api.go","symbol":"Store.Listed"}
-{"path":"stale/stale.go","symbol":"Box.Gone"}
-{"path":"nolint/nolint.go","symbol":"Box.Held"}
+const policyBody = `other:
+  baseline: {unread: true}
+accessorclone:
+  baseline:
+    api/api.go: [Store.Listed]
+    stale/stale.go: [Box.Gone]
+  exits:
+    - path: nolint/nolint.go
+      symbol: Box.Held
+      reason: the fixture pins that a nolint directive excuses nothing
 `
 
-// TestReportsAccessorsOutsideTheBaseline covers api (reported, resliced,
+// TestReportsAccessorsOutsideThePolicy covers api (reported, resliced,
 // multi-value, package variable, excused, cloned, closure, unexported),
-// quiet (nothing to report), stale (a baseline line to delete) and nolint
+// quiet (nothing to report), stale (a baseline entry to delete) and nolint
 // (a directive that excuses nothing).
-func (s *AnalyzerSuite) TestReportsAccessorsOutsideTheBaseline() {
-	analyzer, err := New(Options{Baseline: s.baseline(baselineBody)})
+func (s *AnalyzerSuite) TestReportsAccessorsOutsideThePolicy() {
+	analyzer, err := New(Options{Policy: s.policy(policyBody)})
 	s.Require().NoError(err)
 	analysistest.Run(s.T(), analysistest.TestData(), analyzer, "api", "quiet", "stale", "nolint")
 }
 
-func (s *AnalyzerSuite) TestNewRequiresABaseline() {
+func (s *AnalyzerSuite) TestNewRequiresAPolicy() {
 	_, err := New(Options{})
-	s.Require().ErrorContains(err, "no baseline file")
+	s.Require().ErrorContains(err, "no policy file")
 }
 
-func (s *AnalyzerSuite) TestNewRejectsABadLine() {
-	cases := map[string]string{
-		"{\"path\":\"a.go\"}\n":                                                        "names a path and a symbol",
-		"{\"path\":\"a.go\",\"symbol\":\"A\",\"x\":1}\n":                               "unknown field",
-		"{\"path\":\"a.go\",\"symbol\":\"A\"}\n{\"path\":\"a.go\",\"symbol\":\"A\"}\n": "twice",
-	}
-	for body, want := range cases {
-		_, err := New(Options{Baseline: s.baseline(body)})
-		s.Require().ErrorContains(err, want)
-	}
+func (s *AnalyzerSuite) rejects(body, want string) {
+	_, err := New(Options{Policy: s.policy(body)})
+	s.Require().ErrorContains(err, want)
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAPolicyWithNoKey() {
+	s.rejects("other: {}\n", "holds no accessorclone key")
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAnEmptySymbol() {
+	s.rejects("accessorclone:\n  baseline:\n    a.go: [\"\"]\n", "names a path and a symbol")
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAnUnknownField() {
+	s.rejects("accessorclone:\n  baselines: {}\n", "not found")
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAnAccessorListedTwice() {
+	s.rejects("accessorclone:\n  baseline:\n    a.go: [A, A]\n", "twice")
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAnExitWithNoReason() {
+	s.rejects("accessorclone:\n  exits:\n    - {path: a.go, symbol: A}\n", "with no reason")
+}
+
+func (s *AnalyzerSuite) TestNewRejectsAnExitThatRepeatsTheBaseline() {
+	s.rejects("accessorclone:\n  baseline:\n    a.go: [A]\n  exits:\n    - {path: a.go, symbol: A, reason: r}\n",
+		"in accessorclone.baseline and accessorclone.exits")
 }
 
 func (s *AnalyzerSuite) TestNewRejectsAMovedFile() {
 	sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
-	path := s.baseline("{\"path\":\"pkg/moved.go\",\"symbol\":\"A\"}\n")
-	_, err := New(Options{Module: "example.com/m", Baseline: path})
+	path := s.policy("accessorclone:\n  baseline:\n    pkg/moved.go: [A]\n")
+	_, err := New(Options{Module: "example.com/m", Policy: path})
 	s.Require().Error(err)
 	s.True(strings.Contains(err.Error(), "pkg/moved.go"), err.Error())
 }
 
 func (s *AnalyzerSuite) TestNewAcceptsAFileThatExists() {
 	sourcetest.Module(s.T(), "example.com/m", "pkg/pkg.go")
-	path := s.baseline("{\"path\":\"pkg/pkg.go\",\"symbol\":\"A\"}\n")
-	_, err := New(Options{Module: "example.com/m", Baseline: path})
+	path := s.policy("accessorclone:\n  baseline:\n    pkg/pkg.go: [A]\n")
+	_, err := New(Options{Module: "example.com/m", Policy: path})
 	s.Require().NoError(err)
 }
