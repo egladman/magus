@@ -2602,8 +2602,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // `args`.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
-    cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
+    final settled = cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
         every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
+    if (settled.error != null) {
+        throw settled.error!.message;
+    }
     // No percentage floor: removing well-covered code would trip one. The
     // touched-functions-keep-change-risk-under-10 lint rule holds each changed
     // file's covered lines against its base instead.
@@ -2646,8 +2649,11 @@ final COVERAGE_PROFILE = ".magus/coverage.out";
 final COVERAGE_HAND_PROFILE = ".magus/coverage.hand.out";
 
 fun raced_packages() > [str] !> any {
-    final module = cov\modulePath(fs\readFile("go.mod"));
-    final skip = module + CMD_MAGUS_PKG.sub(1);
+    final located = cov\modulePath(fs\readFile("go.mod"));
+    if (located.error != null) {
+        throw located.error!.message;
+    }
+    final skip = located.value! + CMD_MAGUS_PKG.sub(1);
     var raced = mut [<str>];
     foreach (line in proc\exec("go", ["list", "./..."], ".", proc\ExecOptions{quiet = true}).stdout.split("\n")) {
         final pkg = line.trim();
@@ -2719,8 +2725,16 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     if (ran.error != null) {
         throw ran.error!.message;
     }
-    final go_totals = cov\treeTotals(tables.value!, blocks: ran.value!);
-    final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
+    final totals = cov\treeTotals(tables.value!, blocks: ran.value!);
+    if (totals.error != null) {
+        throw totals.error!.message;
+    }
+    final go_totals = totals.value!;
+    final percent = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
+    if (percent.error != null) {
+        throw percent.error!.message;
+    }
+    final go_pct = percent.value!;
     final buzz_pct = fs\readFile(buzz).trim();
     final typescript_pct = fs\readFile(typescript).trim();
 

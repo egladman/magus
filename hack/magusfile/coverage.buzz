@@ -42,17 +42,17 @@ final GENERATED_SUFFIX = "DO NOT EDIT.";
 // modulePath reads the module path from a go.mod body. A coverage profile names
 // files by import path, so this is what maps them back onto disk - derived rather
 // than hardcoded so a module rename cannot silently disable the filter.
-export fun modulePath(gomod: str) > str !> str {
+export fun modulePath(gomod: str) > result\Result::<str> {
     foreach (line in gomod.split("\n")) {
         if (line.startsWith("module ")) {
             // sub+trim, not split(" ")[1]: go.mod permits any run of whitespace after
             // the keyword, and on `module  path` split yields an EMPTY element at [1],
             // so this returned "" while still reporting success. releases.buzz parses
             // the same line and must agree; it uses this identical form.
-            return line.sub("module ".len()).trim();
+            return result\ok::<str>(line.sub("module ".len()).trim());
         }
     }
-    throw "coverage: go.mod has no module line";
+    return result\fail::<str>("coverage: go.mod has no module line");
 }
 
 // profilePath is where a test run writes its profile. A full run owns base; a
@@ -244,7 +244,13 @@ export fun goModules(dir: str) > result\Result::<{str: str}> {
                 }
                 continue;
             }
-            if (name == "go.mod") { found[dir] = modulePath(fs\readFile(path)); }
+            if (name == "go.mod") {
+                final module = modulePath(fs\readFile(path));
+                if (module.error -> err) {
+                    return result\Result::<{str: str}>{ error = err };
+                }
+                found[dir] = module.value!;
+            }
         }
         return result\ok::<{str: str}>(found);
     } catch (err: any) {
@@ -416,26 +422,26 @@ export fun coveredBlocks(profile: str) > result\Result::<{str: bool}> {
 // denominator lists counts toward statements, including files this platform never
 // compiled, and a block counts as covered only when blocks says it ran. A block the
 // profiles name that the denominator does not list (a generated file) is ignored.
-export fun treeTotals(tables: {str: [str]}, blocks: {str: bool}) > any !> any {
+export fun treeTotals(tables: {str: [str]}, blocks: {str: bool}) > result\Result::<{str: int}> {
     var statements = 0;
     var covered = 0;
     foreach (file, rows in tables) {
         foreach (row in rows) {
             final fields = row.split(" ");
             final n = std\parseInt(fields[1]);
-            if (n == null) { throw "coverage: block row \"" + row + "\" has no statement count"; }
+            if (n == null) { return result\fail::<{str: int}>("coverage: block row \"" + row + "\" has no statement count"); }
             statements = statements + n!;
             if (blocks[file + ":" + fields[0]] == true) { covered = covered + n!; }
         }
     }
-    return {"covered": covered, "statements": statements};
+    return result\ok::<{str: int}>({"covered": covered, "statements": statements});
 }
 
 // formatPercent renders the badge figure, truncated to a whole percent so it matches what
 // `go tool cover -func` plus split(".")[0] produced before.
-export fun formatPercent(covered: int, statements: int) > str !> str {
-    if (statements <= 0) { throw "coverage: nothing to measure; the denominator is empty"; }
-    return "{covered * 100 / statements}";
+export fun formatPercent(covered: int, statements: int) > result\Result::<str> {
+    if (statements <= 0) { return result\fail::<str>("coverage: nothing to measure; the denominator is empty"); }
+    return result\ok::<str>("{covered * 100 / statements}");
 }
 
 // mergeProfiles appends second's body under first's header, since `go tool
@@ -469,24 +475,33 @@ export object Profiles {
 // settle finishes a full test run: it merges cmd/magus into whole, derives
 // hand from it, and removes the slices narrowed runs left. A narrowed run, one
 // given args, settles nothing: its profiles cover a slice under their own key.
-export fun settle(p: Profiles, args: [str], gomod: str) > void !> any {
-    if (args.len() > 0) { return; }
-    final merged = mergeProfiles(fs\readFile(p.whole), second: fs\readFile(p.cmd));
-    if (merged.error != null) {
-        throw merged.error!.message;
-    }
-    fs\writeFile(p.whole, content: merged.value!);
-    // Hand-written code only, by Go's generated marker rather than by path.
-    final stripped = stripGenerated(fs\readFile(p.whole), prefix: modulePath(gomod) + "/");
-    if (stripped.error != null) {
-        throw stripped.error!.message;
-    }
-    fs\writeFile(p.hand, content: stripped.value!);
-    // A full run supersedes every slice; the glob would snapshot them. Names
-    // are compared: the glob may spell the dir through a resolved symlink.
-    final kept = [fs\basename(p.whole), fs\basename(p.hand), fs\basename(p.cmd)];
-    foreach (profile in fs\glob(p.every)) {
-        if (kept.indexOf(fs\basename(profile.value)) == null) { fs\remove(profile.value); }
+export fun settle(p: Profiles, args: [str], gomod: str) > result\Result::<bool> {
+    if (args.len() > 0) { return result\ok::<bool>(true); }
+    try {
+        final merged = mergeProfiles(fs\readFile(p.whole), second: fs\readFile(p.cmd));
+        if (merged.error != null) {
+            return result\Result::<bool>{ error = merged.error };
+        }
+        fs\writeFile(p.whole, content: merged.value!);
+        // Hand-written code only, by Go's generated marker rather than by path.
+        final module = modulePath(gomod);
+        if (module.error != null) {
+            return result\Result::<bool>{ error = module.error };
+        }
+        final stripped = stripGenerated(fs\readFile(p.whole), prefix: module.value! + "/");
+        if (stripped.error != null) {
+            return result\Result::<bool>{ error = stripped.error };
+        }
+        fs\writeFile(p.hand, content: stripped.value!);
+        // A full run supersedes every slice; the glob would snapshot them. Names
+        // are compared: the glob may spell the dir through a resolved symlink.
+        final kept = [fs\basename(p.whole), fs\basename(p.hand), fs\basename(p.cmd)];
+        foreach (profile in fs\glob(p.every)) {
+            if (kept.indexOf(fs\basename(profile.value)) == null) { fs\remove(profile.value); }
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "coverage: settle the Go profiles");
     }
 }
 
@@ -511,7 +526,7 @@ test "settle merges a full run, derives the hand profile and drops the slices" {
     fs\writeFile(p.whole, content: "mode: atomic\nexample.com/m/a.go:1.1,2.2 1 1\n");
     fs\writeFile(p.cmd, content: "mode: atomic\nexample.com/m/b.go:1.1,2.2 1 0\n");
     fs\writeFile("{dir}/coverage.-run_TestX.out", content: "mode: atomic\n");
-    settle(p, args: [], gomod: "module example.com/m\n");
+    _ = settle(p, args: [], gomod: "module example.com/m\n").value!;
     assert\equal(fs\readFile(p.whole), want: "mode: atomic\nexample.com/m/a.go:1.1,2.2 1 1\nexample.com/m/b.go:1.1,2.2 1 0\n",
         message: "merged");
     assert\equal(fs\readFile(p.hand), want: fs\readFile(p.whole), message: "no generated file to strip");
@@ -523,17 +538,17 @@ test "settle leaves a narrowed run's profiles as they are" {
     final dir = fs\tempDir("settle");
     final p = settledIn(dir);
     fs\writeFile(p.whole, content: "mode: atomic\n");
-    settle(p, args: ["-run", "TestX"], gomod: "module example.com/m\n");
+    _ = settle(p, args: ["-run", "TestX"], gomod: "module example.com/m\n").value!;
     assert\equal(fs\exists(p.hand), want: false, message: "nothing derived");
     fs\removeAll(dir);
 }
 
 test "modulePath reads the module line" {
-    assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n"), want: "github.com/egladman/magus", message: "module path");
+    assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n").value!, want: "github.com/egladman/magus", message: "module path");
     // go.mod permits any run of whitespace after the keyword. split(" ")[1] took the
     // EMPTY element here and reported success, so this parsed to "" while releases.buzz
     // parsing the same line kept a leading space. Both now agree.
-    assert\equal(modulePath("module  github.com/egladman/magus\n"), want: "github.com/egladman/magus", message: "two spaces after the keyword");
+    assert\equal(modulePath("module  github.com/egladman/magus\n").value!, want: "github.com/egladman/magus", message: "two spaces after the keyword");
 }
 
 test "isGeneratedSource accepts the canonical marker whatever the tool" {
@@ -658,14 +673,14 @@ test "coveredBlocks ORs a block reported by several test binaries" {
 test "treeTotals counts a file this platform never compiled at zero" {
     final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/win.go": ["5.5,6.6 4"]};
     final totals = treeTotals(tables, blocks: {"m/a.go:1.1,2.2": true, "m/a.go:3.3,4.4": false,
-        "m/gen.go:1.1,2.2": true});
+        "m/gen.go:1.1,2.2": true}).value!;
     assert\equal(totals, want: {"covered": 3, "statements": 9}, message: "win.go counts against; gen.go is not in the denominator");
 }
 
 test "formatPercent truncates to a whole percent" {
-    assert\equal(formatPercent(5, statements: 9), want: "55", message: "truncated");
+    assert\equal(formatPercent(5, statements: 9).value!, want: "55", message: "truncated");
 }
 
 test "formatPercent refuses an empty denominator" {
-    assert\throws(fun () > void !> str { final _ = formatPercent(0, statements: 0); }, message: "no statements");
+    assert\isTrue(formatPercent(0, statements: 0).error != null, message: "no statements");
 }
