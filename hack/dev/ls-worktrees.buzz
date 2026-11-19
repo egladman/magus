@@ -163,21 +163,26 @@ fun ledgerLines(repo: str) > result\Result::<[str]> {
     return result\ok::<[str]>(lines);
 }
 
-fun printUnaccounted() > void !> any {
-    final root = vcs\root();
-    final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
-    final repo = if (trees.len() > 0) trees[0].path else root;
-    final lines = ledgerLines(repo);
-    if (lines.error != null) {
-        throw lines.error!.message;
-    }
-    final items = unaccounted(lines.value!, repo: repo);
-    if (items.error != null) {
-        throw items.error!.message;
-    }
-    std\print("read-only");
-    foreach (line in renderUnaccounted(items.value!)) {
-        std\print(line);
+fun printUnaccounted() > result\Result::<bool> {
+    try {
+        final root = vcs\root();
+        final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+        final repo = if (trees.len() > 0) trees[0].path else root;
+        final lines = ledgerLines(repo);
+        if (lines.error != null) {
+            return result\Result::<bool>{ error = lines.error };
+        }
+        final items = unaccounted(lines.value!, repo: repo);
+        if (items.error != null) {
+            return result\Result::<bool>{ error = items.error };
+        }
+        std\print("read-only");
+        foreach (line in renderUnaccounted(items.value!)) {
+            std\print(line);
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "ls-worktrees: list unaccounted items");
     }
 }
 
@@ -211,7 +216,10 @@ export fun main(args: [str]) > void !> any {
         if (parsed.values["--dirty"] != null) {
             throw "ls-worktrees: --dirty and --unaccounted list different things; pass one\n{USAGE}";
         }
-        printUnaccounted();
+        final printed = printUnaccounted();
+        if (printed.error != null) {
+            throw printed.error!.message;
+        }
         return;
     }
     final rows = worktrees(parsed.values["--dirty"] != null);

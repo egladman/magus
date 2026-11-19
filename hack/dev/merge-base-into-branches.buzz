@@ -369,7 +369,7 @@ fun liveShell() > Shell {
         },
         atHead = fun (dir: str) > result\Result::<bool> {
             try {
-                return result\ok::<bool>(bootstrap\binaryAtHead(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir));
+                return bootstrap\binaryAtHead(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir);
             } catch (err: any) {
                 return result\caught::<bool>(err, doing: "merge-base-into-branches: check ./magus is at HEAD");
             }

@@ -368,51 +368,73 @@ fun writeEdit(edit: Edit, report: mut Report) > void {
     report.sites = report.sites + countSites(edit.before, after: code);
 }
 
-fun planEdit(path: str, changed: [str]) > Edit? !> any {
-    final before = fs\readFile(path);
-    if (before.indexOf("magus\\") == null) {
-        return null;
+fun planEdit(path: str, changed: [str]) > result\Result::<Edit?> {
+    try {
+        final before = fs\readFile(path);
+        if (before.indexOf("magus\\") == null) {
+            return result\ok::<Edit?>(null);
+        }
+        final table = if (changed.indexOf(path) != null) settledRules() else rules();
+        final after = rewriteText(before, table: table);
+        if (after == before) {
+            return result\ok::<Edit?>(null);
+        }
+        return result\ok::<Edit?>(Edit{ path = path, before = before, after = after, table = table });
+    } catch (err: any) {
+        return result\caught::<Edit?>(err, doing: "update-magus-module-calls: plan the edit of {path}");
     }
-    final table = if (changed.indexOf(path) != null) settledRules() else rules();
-    final after = rewriteText(before, table: table);
-    if (after == before) {
-        return null;
-    }
-    return Edit{ path = path, before = before, after = after, table = table };
 }
 
-fun listed(args: [str]) > [str] !> any {
-    final ran = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true });
-    return ran.stdout.split("\n").filter(fun (i: int, p: str) > bool => p != "");
+fun listed(args: [str]) > result\Result::<[str]> {
+    try {
+        final ran = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true });
+        return result\ok::<[str]>(ran.stdout.split("\n").filter(fun (i: int, p: str) > bool => p != ""));
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "update-magus-module-calls: list files with {args.join(" ")}");
+    }
 }
 
-fun planEdits(paths: [str]) > [Edit] !> any {
+fun planEdits(paths: [str]) > result\Result::<[Edit]> {
     final changed = listed(["diff", "--name-only", "HEAD"]);
+    if (changed.error != null) {
+        return result\Result::<[Edit]>{ error = changed.error };
+    }
+    final files = listed(["ls-files", "--"] + paths);
+    if (files.error != null) {
+        return result\Result::<[Edit]>{ error = files.error };
+    }
     final edits = mut [<Edit>];
-    foreach (path in listed(["ls-files", "--"] + paths)) {
+    foreach (path in files.value!) {
         if (candidate(path)) {
-            final edit = planEdit(path, changed: changed);
-            if (edit -> e) {
+            final edit = planEdit(path, changed: changed.value!);
+            if (edit.error != null) {
+                return result\Result::<[Edit]>{ error = edit.error };
+            }
+            if (edit.value -> e) {
                 edits.append(e);
             }
         }
     }
-    return edits;
+    return result\ok::<[Edit]>(edits);
 }
 
 // outputPaths are the edits' paths a project declares as generated.
-fun outputPaths(edits: [Edit]) > [str] !> any {
+fun outputPaths(edits: [Edit]) > result\Result::<[str]> {
     if (edits.len() == 0) {
-        return [<str>];
+        return result\ok::<[str]>([<str>]);
     }
-    final described = magus\describe.file(edits.map(fun (i: int, e: Edit) > str => e.path));
-    final found = mut [<str>];
-    foreach (f in described.files) {
-        if (f.role == "output") {
-            found.append(f.path);
+    try {
+        final described = magus\describe.file(edits.map(fun (i: int, e: Edit) > str => e.path));
+        final found = mut [<str>];
+        foreach (f in described.files) {
+            if (f.role == "output") {
+                found.append(f.path);
+            }
         }
+        return result\ok::<[str]>(found);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "update-magus-module-calls: describe the edited files");
     }
-    return found;
 }
 
 fun applyEdit(edit: Edit, outputs: [str], dryRun: bool, report: mut Report) > void {
@@ -432,9 +454,15 @@ export fun rewriteTree(dryRun: bool, paths: [str]) > result\Result::<Report> {
     final report = newReport();
     try {
         final edits = planEdits(paths);
-        final outputs = outputPaths(edits);
-        foreach (edit in edits) {
-            applyEdit(edit, outputs: outputs, dryRun: dryRun, report: report);
+        if (edits.error != null) {
+            return result\Result::<Report>{ error = edits.error };
+        }
+        final outputs = outputPaths(edits.value!);
+        if (outputs.error != null) {
+            return result\Result::<Report>{ error = outputs.error };
+        }
+        foreach (edit in edits.value!) {
+            applyEdit(edit, outputs: outputs.value!, dryRun: dryRun, report: report);
         }
     } catch (err: any) {
         return result\caught::<Report>(err, doing: "update-magus-module-calls: rewrite the tree");

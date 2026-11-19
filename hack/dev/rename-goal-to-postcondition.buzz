@@ -187,33 +187,37 @@ object Tally {
     refused: mut [str],
 }
 
-fun renameAll(root: str, paths: [str], apply: bool) > Tally !> any {
-    final t = mut Tally{ refused = mut [<str>] };
-    foreach (f in magus\describe.file(paths).files) {
-        if (f.role == "output") {
-            t.generated = t.generated + 1;
-            continue;
-        }
-        final abs = "{root}/{f.path}";
-        final before = fs\readFile(abs);
-        final after = rewrite(before);
-        if (after == before) {
-            continue;
-        }
-        t.changed = t.changed + 1;
-        if (apply) {
-            // The comment guard refuses a write whose longer word breaks a
-            // comment's limits; the file is named for a hand rewording.
-            try {
-                fs\writeFile(abs, content: after);
-            } catch (err: any) {
-                t.refused.append("{f.path}: {firstFinding("{err}")}");
+fun renameAll(root: str, paths: [str], apply: bool) > result\Result::<Tally> {
+    try {
+        final t = mut Tally{ refused = mut [<str>] };
+        foreach (f in magus\describe.file(paths).files) {
+            if (f.role == "output") {
+                t.generated = t.generated + 1;
+                continue;
             }
-        } else {
-            std\print("  {f.path}");
+            final abs = "{root}/{f.path}";
+            final before = fs\readFile(abs);
+            final after = rewrite(before);
+            if (after == before) {
+                continue;
+            }
+            t.changed = t.changed + 1;
+            if (apply) {
+                // The comment guard refuses a write whose longer word breaks a
+                // comment's limits; the file is named for a hand rewording.
+                try {
+                    fs\writeFile(abs, content: after);
+                } catch (err: any) {
+                    t.refused.append("{f.path}: {firstFinding("{err}")}");
+                }
+            } else {
+                std\print("  {f.path}");
+            }
         }
+        return result\ok::<Tally>(t);
+    } catch (err: any) {
+        return result\caught::<Tally>(err, doing: "rename-goal-to-postcondition: rename the files");
     }
-    return t;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -236,7 +240,11 @@ export fun main(args: [str]) > void !> any {
         std\print("nothing to rename");
         return;
     }
-    final t = renameAll(root, paths: paths, apply: apply);
+    final tallied = renameAll(root, paths: paths, apply: apply);
+    if (tallied.error != null) {
+        throw tallied.error!.message;
+    }
+    final t = tallied.value!;
     final verb = if (apply) "renamed" else "dry run, would rename";
     std\print("{verb}: {t.changed} files; {t.generated} generated left to their generators");
     if (!apply) {
