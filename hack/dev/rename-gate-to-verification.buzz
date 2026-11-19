@@ -201,33 +201,37 @@ object Tally {
     refused: mut [str],
 }
 
-fun renameAll(root: str, paths: [str], apply: bool) > Tally !> any {
-    final t = mut Tally{ refused = mut [<str>] };
-    foreach (f in magus\describe.file(paths).files) {
-        if (f.role == "output") {
-            t.generated = t.generated + 1;
-            continue;
-        }
-        final abs = "{root}/{f.path}";
-        final before = fs\readFile(abs);
-        final after = renamed(before);
-        if (after == before) {
-            continue;
-        }
-        t.changed = t.changed + 1;
-        if (apply) {
-            // A longer name can push a comment past the house width, and the
-            // guard refuses that write; the file is named for a hand rewrap.
-            try {
-                fs\writeFile(abs, content: after);
-            } catch (err: any) {
-                t.refused.append("{f.path}: {firstFinding("{err}")}");
+fun renameAll(root: str, paths: [str], apply: bool) > result\Result::<Tally> {
+    try {
+        final t = mut Tally{ refused = mut [<str>] };
+        foreach (f in magus\describe.file(paths).files) {
+            if (f.role == "output") {
+                t.generated = t.generated + 1;
+                continue;
             }
-        } else {
-            std\print("  {f.path}");
+            final abs = "{root}/{f.path}";
+            final before = fs\readFile(abs);
+            final after = renamed(before);
+            if (after == before) {
+                continue;
+            }
+            t.changed = t.changed + 1;
+            if (apply) {
+                // A longer name can push a comment past the house width, and the
+                // guard refuses that write; the file is named for a hand rewrap.
+                try {
+                    fs\writeFile(abs, content: after);
+                } catch (err: any) {
+                    t.refused.append("{f.path}: {firstFinding("{err}")}");
+                }
+            } else {
+                std\print("  {f.path}");
+            }
         }
+        return result\ok::<Tally>(t);
+    } catch (err: any) {
+        return result\caught::<Tally>(err, doing: "rename-gate-to-verification: rename the files");
     }
-    return t;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -250,7 +254,11 @@ export fun main(args: [str]) > void !> any {
         std\print("nothing to rename");
         return;
     }
-    final t = renameAll(root, paths: paths, apply: apply);
+    final tallied = renameAll(root, paths: paths, apply: apply);
+    if (tallied.error != null) {
+        throw tallied.error!.message;
+    }
+    final t = tallied.value!;
     final changed = t.changed;
     final generated = t.generated;
     final refused = t.refused;

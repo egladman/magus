@@ -111,17 +111,21 @@ export fun dirtyRefusal(dir: str, porcelain: str, recovery: bool = false) > str 
 
 // versionMismatch is why the built binary is not the checkout's, "" when its commit is head
 // and nothing uncommitted went into it.
-export fun versionMismatch(versionJSON: str, head: str, recovery: bool = false) > str !> any {
-    final j = json\parse(versionJSON);
-    final commit: str = j["commit"] ?? "";
-    final version: str = j["version"] ?? "";
-    if (commit == "" or !(commit.startsWith(head) or head.startsWith(commit))) {
-        return "bootstrap-checkout: the built ./magus names commit {commit}, not the checkout's HEAD {head}";
+export fun versionMismatch(versionJSON: str, head: str, recovery: bool = false) > result\Result::<str> {
+    try {
+        final j = json\parse(versionJSON);
+        final commit: str = j["commit"] ?? "";
+        final version: str = j["version"] ?? "";
+        if (commit == "" or !(commit.startsWith(head) or head.startsWith(commit))) {
+            return result\ok::<str>("bootstrap-checkout: the built ./magus names commit {commit}, not the checkout's HEAD {head}");
+        }
+        if (version.endsWith("-dirty") and !recovery) {
+            return result\ok::<str>("bootstrap-checkout: the built ./magus is {version}, built from uncommitted changes");
+        }
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "bootstrap-checkout: read `magus version -o json`");
     }
-    if (version.endsWith("-dirty") and !recovery) {
-        return "bootstrap-checkout: the built ./magus is {version}, built from uncommitted changes";
-    }
-    return "";
 }
 
 // regeneratedRefusal is why a build from a clean checkout came out -dirty: the bootstrap's
@@ -149,9 +153,13 @@ fun regeneratedPaths(porcelain: str) > [str] {
 
 // builtAt reports whether `magus version -o json` names head as the binary's commit. A -dirty
 // build at head counts: the gate's own go-build makes one from the tree it gates.
-export fun builtAt(versionJSON: str, head: str) > bool !> any {
-    final commit: str = json\parse(versionJSON)["commit"] ?? "";
-    return commit != "" and (commit.startsWith(head) or head.startsWith(commit));
+export fun builtAt(versionJSON: str, head: str) > result\Result::<bool> {
+    try {
+        final commit: str = json\parse(versionJSON)["commit"] ?? "";
+        return result\ok::<bool>(commit != "" and (commit.startsWith(head) or head.startsWith(commit)));
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "bootstrap-checkout: read `magus version -o json`");
+    }
 }
 
 // skillInstalls are the skill directories an untracked SKILL.md under SKILL_DIRS names, from
@@ -217,11 +225,15 @@ fun lines(text: str) > [str] {
     return acc;
 }
 
-fun must(r: Ran, what: str) > str !> any {
-    if (r.code != 0) {
-        throw "verify-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
+fun must(ran: result\Result::<Ran>, what: str) > result\Result::<str> {
+    if (ran.error -> err) {
+        return result\Result::<str>{ error = err };
     }
-    return r.stdout;
+    final r = ran.value!;
+    if (r.code != 0) {
+        return result\fail::<str>("verify-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}");
+    }
+    return result\ok::<str>(r.stdout);
 }
 
 // note says a step as it happens, so a long bootstrap never looks hung.
@@ -231,42 +243,67 @@ fun note(h: Host, did: mut [str], line: str) > void {
 }
 
 // stopDaemon stops the checkout's daemon when one runs, so a project lock it holds cannot fail
-// the build with exit 75. It raises when a running daemon will not stop.
-fun stopDaemon(h: Host, dir: str) > str !> any {
-    if (h.magus(dir, args: ["server", "status"]).code != 0) {
-        return "no daemon was running";
+// the build with exit 75. It fails when a running daemon will not stop.
+fun stopDaemon(h: Host, dir: str) > result\Result::<str> {
+    final status = magusRan(h, dir: dir, args: ["server", "status"]);
+    if (status.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (status.value!.code != 0) {
+        return result\ok::<str>("no daemon was running");
     }
     // status exits 0 while only the broker is up, so stop can still find
     // no server to stop.
-    final stopped = h.magus(dir, args: ["server", "stop"]);
-    if (stopped.code != 0 and stopped.stderr.indexOf("no server is running") != null) {
-        return "no daemon was running";
+    final stopped = magusRan(h, dir: dir, args: ["server", "stop"]);
+    if (stopped.error -> err) {
+        return result\Result::<str>{ error = err };
     }
-    _ = must(stopped, what: "magus server stop");
-    return "stopped the daemon";
+    if (stopped.value!.code != 0 and stopped.value!.stderr.indexOf("no server is running") != null) {
+        return result\ok::<str>("no daemon was running");
+    }
+    final said = must(stopped, what: "magus server stop");
+    if (said.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>("stopped the daemon");
 }
 
-fun startDaemon(h: Host, dir: str) > str !> any {
-    _ = must(h.magus(dir, args: ["server", "start"]), what: "magus server start");
-    return "started the daemon";
+fun startDaemon(h: Host, dir: str) > result\Result::<str> {
+    final started = must(magusRan(h, dir: dir, args: ["server", "start"]), what: "magus server start");
+    if (started.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>("started the daemon");
 }
 
 // installDependencies runs every project's install with the checkout's ./magus: a fresh checkout
-// has no node_modules, and the TypeScript symbol index needs tsc. It raises naming the command.
-fun installDependencies(h: Host, dir: str) > str !> any {
-    final r = h.magus(dir, args: ["run", "install", "--all"]);
-    if (r.code != 0) {
-        throw "bootstrap-checkout: {dir}/magus run install --all: exit {r.code}: {r.stderr}{r.stdout}";
+// has no node_modules, and the TypeScript symbol index needs tsc. It fails naming the command.
+fun installDependencies(h: Host, dir: str) > result\Result::<str> {
+    final r = magusRan(h, dir: dir, args: ["run", "install", "--all"]);
+    if (r.error -> err) {
+        return result\Result::<str>{ error = err };
     }
-    return "installed every project's dependencies";
+    if (r.value!.code != 0) {
+        return result\fail::<str>("bootstrap-checkout: {dir}/magus run install --all: exit {r.value!.code}: {r.value!.stderr}{r.value!.stdout}");
+    }
+    return result\ok::<str>("installed every project's dependencies");
 }
 
-// storeOpens raises with the store's refusal when dir's ./magus would migrate
+// storeOpens fails with the store's refusal when dir's ./magus would migrate
 // the job store every checkout shares from a live job's checkout.
-fun storeOpens(h: Host, dir: str) > void !> any {
-    timing\watched(h.say, clock: h.clock, step: timing\STORE, run: fun () > void !> any {
-        _ = must(h.magus(dir, args: ["ls", "jobs", "-o", "name"]), what: "{dir}/magus cannot open the job store, so no step that writes it runs");
-    });
+fun storeOpens(h: Host, dir: str) > result\Result::<bool> {
+    final refusal = mut [result\ok::<bool>(true)];
+    try {
+        timing\watched(h.say, clock: h.clock, step: timing\STORE, run: fun () > void !> any {
+            final opened = must(magusRan(h, dir: dir, args: ["ls", "jobs", "-o", "name"]), what: "{dir}/magus cannot open the job store, so no step that writes it runs");
+            if (opened.error -> err) {
+                refusal[0] = result\Result::<bool>{ error = err };
+            }
+        });
+        return refusal[0];
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "bootstrap-checkout: open the job store");
+    }
 }
 
 // mainWorktree is the first stanza of `git worktree list --porcelain`,
@@ -332,32 +369,49 @@ export fun seedLine(candidates: [str], dir: str) > str {
 }
 
 // installProjects installs the projects install names, comma-joined, or none.
-// It raises naming the command.
-fun installProjects(h: Host, dir: str, install: str) > str !> any {
+// It fails naming the command.
+fun installProjects(h: Host, dir: str, install: str) > result\Result::<str> {
     if (install == "none") {
-        return "installed no dependencies: the job touches no project that has an install target";
+        return result\ok::<str>("installed no dependencies: the job touches no project that has an install target");
     }
     foreach (project in install.split(",")) {
-        final r = h.magus(dir, args: ["run", "install", project]);
-        if (r.code != 0) {
-            throw "bootstrap-checkout: {dir}/magus run install {project}: exit {r.code}: {r.stderr}{r.stdout}";
+        final r = magusRan(h, dir: dir, args: ["run", "install", project]);
+        if (r.error -> err) {
+            return result\Result::<str>{ error = err };
+        }
+        if (r.value!.code != 0) {
+            return result\fail::<str>("bootstrap-checkout: {dir}/magus run install {project}: exit {r.value!.code}: {r.value!.stderr}{r.value!.stdout}");
         }
     }
-    return "installed the dependencies of {install}";
+    return result\ok::<str>("installed the dependencies of {install}");
 }
 
 // Installing integrations is part of preparing a checkout, including when it
 // already has a current binary or no language dependencies need installation.
-fun installHarnesses(h: Host, dir: str) > str !> any {
-    _ = must(h.magus(dir, args: ["buzz", "hack/dev/bootstrap-harnesses.buzz"]), what: "magus buzz hack/dev/bootstrap-harnesses.buzz");
-    return "installed every declared harness";
+fun installHarnesses(h: Host, dir: str) > result\Result::<str> {
+    final installed = must(magusRan(h, dir: dir, args: ["buzz", "hack/dev/bootstrap-harnesses.buzz"]), what: "magus buzz hack/dev/bootstrap-harnesses.buzz");
+    if (installed.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>("installed every declared harness");
 }
 
 // binaryAtHead reports whether dir's ./magus is a clean build of its HEAD.
-export fun binaryAtHead(h: Host, dir: str) > bool !> any {
-    final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
-    final version = h.magus(dir, args: ["version", "-o", "json"]);
-    return version.code == 0 and head != "" and (versionMismatch(version.stdout, head: head) catch "unreadable") == "";
+export fun binaryAtHead(h: Host, dir: str) > result\Result::<bool> {
+    final head = must(gitRan(h, dir: dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD");
+    if (head.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final version = magusRan(h, dir: dir, args: ["version", "-o", "json"]);
+    if (version.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final at = head.value!.trim();
+    if (version.value!.code != 0 or at == "") {
+        return result\ok::<bool>(false);
+    }
+    final mismatch = versionMismatch(version.value!.stdout, head: at);
+    return result\ok::<bool>((mismatch.value ?? "unreadable") == "");
 }
 
 // placeBinary builds ./magus in dir at its HEAD unless one stands there, seeds
@@ -366,28 +420,71 @@ export fun binaryAtHead(h: Host, dir: str) > bool !> any {
 // must then name HEAD. install "" installs every project's.
 export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = "") > [str] !> any {
     final did = mut [<str>];
-    if (binaryAtHead(h, dir: dir)) {
+    final atHead = binaryAtHead(h, dir: dir);
+    if (atHead.error -> err) {
+        throw err.message;
+    }
+    if (atHead.value!) {
         note(h, did: did, line: "kept {dir}/magus, already built at HEAD");
     } else {
         timing\watched(h.say, clock: h.clock, step: timing\STOP, run: fun () > void !> any {
-            note(h, did: did, line: stopDaemon(h, dir: dir));
+            final stopped = stopDaemon(h, dir: dir);
+            if (stopped.error -> err) {
+                throw err.message;
+            }
+            note(h, did: did, line: stopped.value!);
         });
         did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
-    storeOpens(h, dir: dir);
+    final opens = storeOpens(h, dir: dir);
+    if (opens.error -> err) {
+        throw err.message;
+    }
     did.append(timing\timed(h.say, clock: h.clock, start: "seeding the symbol index of {dir}", step: timing\SEED, run: fun () > str !> any => h.seed(dir)));
     if (install == "") {
-        did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installDependencies(h, dir: dir)));
+        did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any {
+            final installed = installDependencies(h, dir: dir);
+            if (installed.error -> err) {
+                throw err.message;
+            }
+            return installed.value!;
+        }));
     } else {
-        did.append(timing\timed(h.say, clock: h.clock, start: "installing the dependencies of {install} with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installProjects(h, dir: dir, install: install)));
+        did.append(timing\timed(h.say, clock: h.clock, start: "installing the dependencies of {install} with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any {
+            final installed = installProjects(h, dir: dir, install: install);
+            if (installed.error -> err) {
+                throw err.message;
+            }
+            return installed.value!;
+        }));
     }
-    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any => installHarnesses(h, dir: dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
+        final installed = installHarnesses(h, dir: dir);
+        if (installed.error -> err) {
+            throw err.message;
+        }
+        return installed.value!;
+    }));
     if (restart) {
-        note(h, did: did, line: startDaemon(h, dir: dir));
-        final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
-        final stale = versionMismatch(h.magus(dir, args: ["version", "-o", "json"]).stdout, head: head);
-        if (stale != "") {
-            throw stale;
+        final started = startDaemon(h, dir: dir);
+        if (started.error -> err) {
+            throw err.message;
+        }
+        note(h, did: did, line: started.value!);
+        final head = must(gitRan(h, dir: dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD");
+        if (head.error -> err) {
+            throw err.message;
+        }
+        final version = magusRan(h, dir: dir, args: ["version", "-o", "json"]);
+        if (version.error -> err) {
+            throw err.message;
+        }
+        final stale = versionMismatch(version.value!.stdout, head: head.value!.trim());
+        if (stale.error -> err) {
+            throw err.message;
+        }
+        if (stale.value! != "") {
+            throw stale.value!;
         }
     }
     return did;
@@ -401,12 +498,23 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
 // daemon stops before a build, and with restart it is running again at the end.
 export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     final did = mut [<str>];
-    final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
-    final version = h.magus(dir, args: ["version", "-o", "json"]);
-    final built = version.code == 0 and (builtAt(version.stdout, head: head) catch false);
+    final headRead = must(gitRan(h, dir: dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD");
+    if (headRead.error -> err) {
+        throw err.message;
+    }
+    final head = headRead.value!.trim();
+    final version = magusRan(h, dir: dir, args: ["version", "-o", "json"]);
+    if (version.error -> err) {
+        throw err.message;
+    }
+    final built = version.value!.code == 0 and (builtAt(version.value!.stdout, head: head).value ?? false);
     if (restart or !built) {
         timing\watched(h.say, clock: h.clock, step: timing\STOP, run: fun () > void !> any {
-            note(h, did: did, line: stopDaemon(h, dir: dir));
+            final stopped = stopDaemon(h, dir: dir);
+            if (stopped.error -> err) {
+                throw err.message;
+            }
+            note(h, did: did, line: stopped.value!);
         });
     }
     if (built) {
@@ -414,16 +522,30 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
     } else {
         did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
-    storeOpens(h, dir: dir);
+    final opens = storeOpens(h, dir: dir);
+    if (opens.error -> err) {
+        throw err.message;
+    }
     timing\watched(h.say, clock: h.clock, step: timing\STOP_POOLS, run: fun () > void !> any {
-        _ = must(h.magus(dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
+        final stopped = must(magusRan(h, dir: dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
+        if (stopped.error -> err) {
+            throw err.message;
+        }
     });
     note(h, did: did, line: "stopped the pool parents of other builds");
     final skillsBegan = h.clock();
-    final others = lines(must(h.git(dir, args: ["ls-files", "--others", "--"] + SKILL_DIRS), what: "git ls-files --others"));
+    final othersRead = must(gitRan(h, dir: dir, args: ["ls-files", "--others", "--"] + SKILL_DIRS), what: "git ls-files --others");
+    if (othersRead.error -> err) {
+        throw err.message;
+    }
+    final others = lines(othersRead.value!);
     var fresh = "";
     foreach (skill in skillInstalls(others)) {
-        final tracked = lines(must(h.git(dir, args: ["ls-files", "--", skill]), what: "git ls-files {skill}"));
+        final trackedRead = must(gitRan(h, dir: dir, args: ["ls-files", "--", skill]), what: "git ls-files {skill}");
+        if (trackedRead.error -> err) {
+            throw err.message;
+        }
+        final tracked = lines(trackedRead.value!);
         final stamp = h.stampOf(fs\join(dir, name: "{skill}/SKILL.md"));
         if (tracked.len() > 0 or stamp == "") {
             continue;
@@ -437,22 +559,47 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
         }
     }
     timing\report(h.say, step: timing\SKILLS, ms: std\toInt(h.clock() - skillsBegan));
-    did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any => installDependencies(h, dir: dir)));
-    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any => installHarnesses(h, dir: dir)));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any {
+        final installed = installDependencies(h, dir: dir);
+        if (installed.error -> err) {
+            throw err.message;
+        }
+        return installed.value!;
+    }));
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
+        final installed = installHarnesses(h, dir: dir);
+        if (installed.error -> err) {
+            throw err.message;
+        }
+        return installed.value!;
+    }));
     did.append(timing\timed(h.say, clock: h.clock, start: "building the graph", step: timing\GRAPH, run: fun () > str !> any {
-        _ = must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
+        final graph = must(magusRan(h, dir: dir, args: ["graph", "build"]), what: "magus graph build");
+        if (graph.error -> err) {
+            throw err.message;
+        }
         return "built the graph";
     }));
     did.append(timing\timed(h.say, clock: h.clock, start: "generating the symbol digest", step: timing\DIGEST, run: fun () > str !> any {
-        _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
+        final digest = must(magusRan(h, dir: dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
+        if (digest.error -> err) {
+            throw err.message;
+        }
         return "generated the symbol digest";
     }));
     did.append(timing\timed(h.say, clock: h.clock, start: "building the proofread binary", step: timing\PROOFREAD, run: fun () > str !> any {
-        _ = must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+        final proofread = must(magusRan(h, dir: dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+        if (proofread.error -> err) {
+            throw err.message;
+        }
         return "built the proofread binary";
     }));
     if (restart) {
-        note(h, did: did, line: startDaemon(h, dir: dir));
+        final started = startDaemon(h, dir: dir);
+        if (started.error -> err) {
+            throw err.message;
+        }
+        note(h, did: did, line: started.value!);
     }
     return did;
 }
@@ -721,7 +868,11 @@ export fun liveHost() > Host {
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         build = fun (dir: str) > str !> any {
-            return build(dir);
+            final built = build(dir);
+            if (built.error -> err) {
+                throw err.message;
+            }
+            return built.value!;
         },
         // The forking checkout first: the fork runs this script from it.
         seed = fun (dir: str) > str !> any {
@@ -768,36 +919,40 @@ export fun liveHost() > Host {
 // Then it builds once more.
 // It never commits what they rewrote, and a failure after it raises with the compiler output
 // and the regenerated paths.
-export fun compile(h: Host, dir: str) > str !> any {
-    final first = h.exec(dir, argv: bootstrapArgv());
-    if (first.code == 0) {
-        return "";
-    }
-    var ran = 0;
-    foreach (source in GENERATE_SOURCES) {
-        final sourceDir = fs\dirname(source);
-        foreach (argv in generateArgv(h.readFile(fs\join(dir, name: source)))) {
-            ran = ran + 1;
-            final r = h.exec(fs\join(dir, name: sourceDir), argv: argv);
-            if (r.code != 0) {
-                throw "bootstrap-checkout: the build failed, and `{argv.join(" ")}` in {sourceDir} failed too: exit {r.code}: {r.stderr}{r.stdout}\nthe build said:\n{first.stderr}{first.stdout}";
+export fun compile(h: Host, dir: str) > result\Result::<str> {
+    try {
+        final first = h.exec(dir, argv: bootstrapArgv());
+        if (first.code == 0) {
+            return result\ok::<str>("");
+        }
+        var ran = 0;
+        foreach (source in GENERATE_SOURCES) {
+            final sourceDir = fs\dirname(source);
+            foreach (argv in generateArgv(h.readFile(fs\join(dir, name: source)))) {
+                ran = ran + 1;
+                final r = h.exec(fs\join(dir, name: sourceDir), argv: argv);
+                if (r.code != 0) {
+                    return result\fail::<str>("bootstrap-checkout: the build failed, and `{argv.join(" ")}` in {sourceDir} failed too: exit {r.code}: {r.stderr}{r.stdout}\nthe build said:\n{first.stderr}{first.stdout}");
+                }
             }
         }
+        if (ran == 0) {
+            return result\fail::<str>("bootstrap-checkout: the build failed and {GENERATE_SOURCES.join(", ")} name no //go:generate line to refresh: exit {first.code}:\n{first.stderr}{first.stdout}");
+        }
+        final status = h.git(dir, args: ["status", "--porcelain"]);
+        if (status.code != 0) {
+            return result\fail::<str>("bootstrap-checkout: git status --porcelain after regenerating: exit {status.code}: {status.stderr}");
+        }
+        final paths = regeneratedPaths(status.stdout);
+        final second = h.exec(dir, argv: bootstrapArgv());
+        if (second.code != 0) {
+            final rewrote = if (paths.len() > 0) paths.join(", ") else "nothing";
+            return result\fail::<str>("bootstrap-checkout: the build failed, the bootstrap generators rewrote {rewrote}, and the build failed again: exit {second.code}:\n{second.stderr}{second.stdout}");
+        }
+        return result\ok::<str>(status.stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "bootstrap-checkout: build the checkout");
     }
-    if (ran == 0) {
-        throw "bootstrap-checkout: the build failed and {GENERATE_SOURCES.join(", ")} name no //go:generate line to refresh: exit {first.code}:\n{first.stderr}{first.stdout}";
-    }
-    final status = h.git(dir, args: ["status", "--porcelain"]);
-    if (status.code != 0) {
-        throw "bootstrap-checkout: git status --porcelain after regenerating: exit {status.code}: {status.stderr}";
-    }
-    final paths = regeneratedPaths(status.stdout);
-    final second = h.exec(dir, argv: bootstrapArgv());
-    if (second.code != 0) {
-        final rewrote = if (paths.len() > 0) paths.join(", ") else "nothing";
-        throw "bootstrap-checkout: the build failed, the bootstrap generators rewrote {rewrote}, and the build failed again: exit {second.code}:\n{second.stderr}{second.stdout}";
-    }
-    return status.stdout;
 }
 
 fun hasMise() > bool {
@@ -809,39 +964,50 @@ fun hasMise() > bool {
     }
 }
 
-fun build(dir: str, recovery: bool = false) > str !> any {
-    if (!fs\isDir(dir)) {
-        throw "bootstrap-checkout: {dir} is not a directory\n{USAGE}";
-    }
-    if (vcs\name() != "git") {
-        throw "bootstrap-checkout: builds in git checkouts, and this one is {vcs\name()}";
-    }
-    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout, recovery: recovery);
-    if (refused != "") {
-        throw refused;
-    }
-    final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout.trim();
-    final trust = miseTrustArgv(dir, hasMise: hasMise(), hasConfig: fs\isFile(fs\join(dir, name: "mise.toml")));
-    if (trust.len() > 0) {
-        _ = proc\exec("mise", args: trust, dir: dir);
-    }
-    final rewrote = compile(liveHost(), dir: dir);
-    final bin = fs\join(dir, name: "magus");
-    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: proc\ExecOptions{quiet = true}).stdout, head: head, recovery: recovery);
-    if (mismatch != "") {
-        final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
-        if (regenerated != "" and mismatch.endsWith("uncommitted changes")) {
-            if (rewrote != "") {
-                return "placed {bin} after its build failed and the bootstrap generators ran\n{regenerated}";
-            }
-            throw regenerated;
+fun build(dir: str, recovery: bool = false) > result\Result::<str> {
+    try {
+        if (!fs\isDir(dir)) {
+            return result\fail::<str>("bootstrap-checkout: {dir} is not a directory\n{USAGE}");
         }
-        throw mismatch;
+        if (vcs\name() != "git") {
+            return result\fail::<str>("bootstrap-checkout: builds in git checkouts, and this one is {vcs\name()}");
+        }
+        final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout, recovery: recovery);
+        if (refused != "") {
+            return result\fail::<str>(refused);
+        }
+        final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout.trim();
+        final trust = miseTrustArgv(dir, hasMise: hasMise(), hasConfig: fs\isFile(fs\join(dir, name: "mise.toml")));
+        if (trust.len() > 0) {
+            _ = proc\exec("mise", args: trust, dir: dir);
+        }
+        final rewrote = compile(liveHost(), dir: dir);
+        if (rewrote.error -> err) {
+            return result\Result::<str>{ error = err };
+        }
+        final bin = fs\join(dir, name: "magus");
+        final checked = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: proc\ExecOptions{quiet = true}).stdout, head: head, recovery: recovery);
+        if (checked.error -> err) {
+            return result\Result::<str>{ error = err };
+        }
+        final mismatch = checked.value!;
+        if (mismatch != "") {
+            final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
+            if (regenerated != "" and mismatch.endsWith("uncommitted changes")) {
+                if (rewrote.value! != "") {
+                    return result\ok::<str>("placed {bin} after its build failed and the bootstrap generators ran\n{regenerated}");
+                }
+                return result\fail::<str>(regenerated);
+            }
+            return result\fail::<str>(mismatch);
+        }
+        if (recovery) {
+            return result\ok::<str>("placed {bin} for recovery from the working tree at {head}; commit and validate before using it as a clean build");
+        }
+        return result\ok::<str>("placed {bin}, built at {head}");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "bootstrap-checkout: build {dir}");
     }
-    if (recovery) {
-        return "placed {bin} for recovery from the working tree at {head}; commit and validate before using it as a clean build";
-    }
-    return "placed {bin}, built at {head}";
 }
 
 export fun main(args: [str]) > void !> any {
@@ -878,8 +1044,18 @@ export fun main(args: [str]) > void !> any {
         if (restart or parsed.values["--verify-ready"] != null or parsed.values["--install"] != null) {
             throw "bootstrap-checkout: --recover cannot combine with --restart, --verify-ready or --install";
         }
-        h.say(stopDaemon(h, dir: dir));
-        _ = timing\timed(h.say, clock: h.clock, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => build(dir, recovery: true));
+        final stopped = stopDaemon(h, dir: dir);
+        if (stopped.error -> err) {
+            throw err.message;
+        }
+        h.say(stopped.value!);
+        _ = timing\timed(h.say, clock: h.clock, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any {
+            final built = build(dir, recovery: true);
+            if (built.error -> err) {
+                throw err.message;
+            }
+            return built.value!;
+        });
         return;
     }
     if (parsed.values["--verify-ready"] != null) {
@@ -960,7 +1136,7 @@ test "the generators are the source's //go:generate lines, with the json experim
 test "a build that compiles never regenerates" {
     final calls = mut [<str>];
     final h = stubHost({}, stamps: {"/c/cmd/magus-utils/boundary_types.go": DIRECTIVES}, calls: calls);
-    assert\equal(compile(h, dir: "/c"), want: "", message: "nothing rewritten");
+    assert\equal(compile(h, dir: "/c").value, want: "", message: "nothing rewritten");
     assert\equal(calls, want: [BUILD_LINE], message: "one build");
 }
 
@@ -970,7 +1146,7 @@ test "a failed build runs the generators, then builds again, and names what they
         "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: ObjectJobClaim" },
         "git status --porcelain": Ran{ stdout = " M internal/interp/bindings/gen/boundary_objects.go\n" },
     }, stamps: {"/c/cmd/magus-utils/boundary_types.go": DIRECTIVES}, calls: calls);
-    final rewrote = compile(h, dir: "/c");
+    final rewrote = compile(h, dir: "/c").value!;
     assert\equal(calls, want: [
         BUILD_LINE,
         "exec /c/cmd/magus-utils: GOEXPERIMENT=jsonv2 go run . boundarylist -out a.go -pkg bindgen",
@@ -1006,12 +1182,7 @@ test "a failed generator names the directory it ran in" {
         "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: FlagThing" },
         "exec /c/cmd/magus: GOEXPERIMENT=jsonv2 go run ../magus-utils cliflags": Ran{ code = 3, stderr = "no" },
     }, stamps: {"/c/cmd/magus/main.go": "//go:generate go run ../magus-utils cliflags\n"}, calls: mut [<str>]);
-    var why = "";
-    try {
-        _ = compile(h, dir: "/c");
-    } catch (e: str) {
-        why = e;
-    }
+    final why = compile(h, dir: "/c").error!.message;
     assert\equal(why.startsWith("bootstrap-checkout: the build failed, and `GOEXPERIMENT=jsonv2 go run ../magus-utils cliflags` in cmd/magus failed too: exit 3: no"), want: true, message: why);
 }
 
@@ -1021,20 +1192,15 @@ test "a build that fails again after the generators reports the compiler and the
         "{BUILD_LINE} #2": Ran{ code = 2, stderr = "undefined: Other" },
         "git status --porcelain": Ran{ stdout = " M internal/interp/bindings/gen/boundary_list.go\n" },
     }, stamps: {"/c/cmd/magus-utils/boundary_types.go": DIRECTIVES}, calls: mut [<str>]);
-    var why = "";
-    try {
-        _ = compile(h, dir: "/c");
-    } catch (e: str) {
-        why = e;
-    }
+    final why = compile(h, dir: "/c").error!.message;
     assert\equal(why, want: "bootstrap-checkout: the build failed, the bootstrap generators rewrote internal/interp/bindings/gen/boundary_list.go, and the build failed again: exit 2:\nundefined: Other", message: why);
 }
 
 test "a binary at HEAD is kept, a binary elsewhere or missing is rebuilt" {
-    assert\equal(builtAt(`{"commit": "abc123def"}`, head: "abc123def") catch false, want: true, message: "match");
-    assert\equal(builtAt(`{"commit": "abc123", "version": "v0.5.0-dirty"}`, head: "abc123def") catch false, want: true, message: "dirty at head");
-    assert\equal(builtAt(`{"commit": "def456"}`, head: "abc123") catch false, want: false, message: "other commit");
-    assert\equal(builtAt("not json", head: "abc123") catch false, want: false, message: "unreadable");
+    assert\equal(builtAt(`{"commit": "abc123def"}`, head: "abc123def").value ?? false, want: true, message: "match");
+    assert\equal(builtAt(`{"commit": "abc123", "version": "v0.5.0-dirty"}`, head: "abc123def").value ?? false, want: true, message: "dirty at head");
+    assert\equal(builtAt(`{"commit": "def456"}`, head: "abc123").value ?? false, want: false, message: "other commit");
+    assert\equal(builtAt("not json", head: "abc123").value ?? false, want: false, message: "unreadable");
 }
 
 test "skill installs are the directories of an untracked SKILL.md one level under a skill root" {
@@ -1319,10 +1485,10 @@ test "a porcelain path keeps its first character whatever the status column hold
 }
 
 test "the built binary must name the checkout's HEAD" {
-    assert\equal(versionMismatch(`{"commit": "abc123", "version": "v0.5.0-1-gabc123"}`, head: "abc123") catch "x", want: "", message: "match");
-    final other = versionMismatch(`{"commit": "def456", "version": "v0.5.0"}`, head: "abc123") catch "x";
+    assert\equal(versionMismatch(`{"commit": "abc123", "version": "v0.5.0-1-gabc123"}`, head: "abc123").value ?? "x", want: "", message: "match");
+    final other = versionMismatch(`{"commit": "def456", "version": "v0.5.0"}`, head: "abc123").value ?? "x";
     assert\equal(other.indexOf("names commit def456") != null, want: true, message: other);
-    final dirty = versionMismatch(`{"commit": "abc123", "version": "v0.5.0-dirty"}`, head: "abc123") catch "x";
+    final dirty = versionMismatch(`{"commit": "abc123", "version": "v0.5.0-dirty"}`, head: "abc123").value ?? "x";
     assert\equal(dirty.indexOf("uncommitted") != null, want: true, message: dirty);
 }
 
@@ -1341,8 +1507,8 @@ test "exactly one of --checkout and --here names the target" {
 
 test "explicit recovery permits a dirty tree without accepting another revision" {
     assert\equal(dirtyRefusal("/c", porcelain: " M a.go", recovery: true), want: "", message: "recovery builds the working tree");
-    assert\equal(versionMismatch(`{"commit":"abc123","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true), want: "", message: "dirty recovery is explicit");
-    final why = versionMismatch(`{"commit":"other","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true);
+    assert\equal(versionMismatch(`{"commit":"abc123","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true).value, want: "", message: "dirty recovery is explicit");
+    final why = versionMismatch(`{"commit":"other","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true).value!;
     assert\equal(why.indexOf("not the checkout") != null, want: true, message: why);
 }
 

@@ -349,13 +349,7 @@ no-throw:
       hack/ci/merge-queue.buzz: 20
       hack/ci/pull-requests.buzz: 29
       hack/ci/show-failures.buzz: 5
-      hack/dev/bootstrap-checkout.buzz: 14
-      hack/dev/bootstrap-harnesses.buzz: 1
-      hack/dev/ls-worktrees.buzz: 1
-      hack/dev/rebase-branches-onto-base.buzz: 2
-      hack/dev/rename-gate-to-verification.buzz: 1
-      hack/dev/rename-goal-to-postcondition.buzz: 1
-      hack/dev/update-magus-module-calls.buzz: 4
+      hack/dev/bootstrap-checkout.buzz: 2
       hack/lint/banned-words.buzz: 5
       hack/lint/buzz-glue-is-wired-as-plain-argv.buzz: 1
       hack/lint/cd-runs-agree-across-workflows.buzz: 1

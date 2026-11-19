@@ -176,8 +176,12 @@ fun linkArgs() > [str] {
     return ["harness", "link", "--stdin", "-o", "json"];
 }
 
-fun linkRequest(links: {str: str}) > str !> any {
-    return json\stringify({"links": links});
+fun linkRequest(links: {str: str}) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({"links": links}));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "harness-sync: encode the link request");
+    }
 }
 
 export fun linkedFiles(text: str) > result\Result::<[str]> {
@@ -214,8 +218,10 @@ export fun main(args: [str]) > void !> any {
     if (installed.error -> err) { throw err.message; }
     final plan = authoredLinks(installed.value!, root: vcs\root());
     if (plan.error -> err) { throw err.message; }
+    final request = linkRequest(plan.value!);
+    if (request.error -> err) { throw err.message; }
     final linked = magus\cmd("agent", args: linkArgs(), opts: magus\CommandOptions{
-        quiet = true, stdin = linkRequest(plan.value!)});
+        quiet = true, stdin = request.value!});
     final files = linkedFiles(linked.stdout);
     if (files.error -> err) { throw err.message; }
     foreach (file in files.value!) { std\print("linked {file}"); }
@@ -307,7 +313,7 @@ test "a selected Claude mod with no canonical loop source fails planning" {
 
 test "native linker arguments and request keep the command contract" {
     assert\equal(linkArgs(), want: ["harness", "link", "--stdin", "-o", "json"], message: "single native link command");
-    assert\equal(linkRequest({".host/skills/local": ".agents/skills/local"}),
+    assert\equal(linkRequest({".host/skills/local": ".agents/skills/local"}).value!,
         want: `{"links":{".host/skills/local":".agents/skills/local"}}`, message: "stdin schema");
 }
 

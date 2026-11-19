@@ -97,14 +97,18 @@ export fun squashedBase(exclusive: [str], merged: [Squashed]) > Squashed? {
 }
 
 // parseMerged reads `gh pr list --json number,headRefOid`.
-export fun parseMerged(body: str) > [Squashed] !> any {
-    final rows: [any] = json\parse(body);
-    final acc = mut [<Squashed>];
-    foreach (row in rows) {
-        final head: str = row["headRefOid"];
-        acc.append(Squashed{ pr = std\toInt(row["number"]), head = head });
+export fun parseMerged(body: str) > result\Result::<[Squashed]> {
+    try {
+        final rows: [any] = json\parse(body);
+        final acc = mut [<Squashed>];
+        foreach (row in rows) {
+            final head: str = row["headRefOid"];
+            acc.append(Squashed{ pr = std\toInt(row["number"]), head = head });
+        }
+        return result\ok::<[Squashed]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Squashed]>(err, doing: "rebase-branches-onto-base: read the merged pull requests");
     }
-    return acc;
 }
 
 export fun steps(branches: [str], heads: {str: str}, remotes: {str: bool}, squashed: Squashed, base: str) > [Step] {
@@ -230,12 +234,11 @@ export fun gather(sh: Shell, branches: [str], base: str) > result\Result::<[Step
     if (listedMerged.error -> err) {
         return result\Result::<[Step]>{ error = err };
     }
-    var merged = [<Squashed>];
-    try {
-        merged = parseMerged(listedMerged.value!);
-    } catch (err: any) {
-        return result\caught::<[Step]>(err, doing: "rebase-branches-onto-base: read the merged pull requests");
+    final parsedMerged = parseMerged(listedMerged.value!);
+    if (parsedMerged.error -> err) {
+        return result\Result::<[Step]>{ error = err };
     }
+    final merged = parsedMerged.value!;
     final first = branches[0];
     final revs = must(sh.git("", args: ["rev-list", "{base}..{heads[first]!}"]), what: "git rev-list {base}..{first}");
     if (revs.error -> err) {
@@ -413,19 +416,23 @@ export fun execute(sh: Shell, stack: [Step], base: str, checkout: str, push: boo
 }
 
 // findGenerated keeps the paths this workspace declares as outputs or that magus maintains.
-export fun findGenerated(paths: [str]) > [str] !> any {
+export fun findGenerated(paths: [str]) > result\Result::<[str]> {
     final acc = mut [<str>];
     if (paths.len() == 0) {
-        return acc;
+        return result\ok::<[str]>(acc);
     }
-    final report = serialize\Boxed.init(magus\describe.file(paths));
-    foreach (f in report.q("files").listValue()) {
-        final role = f.q("role").stringValue();
-        if (role == "output" or role == "maintained") {
-            acc.append(f.q("path").stringValue());
+    try {
+        final report = serialize\Boxed.init(magus\describe.file(paths));
+        foreach (f in report.q("files").listValue()) {
+            final role = f.q("role").stringValue();
+            if (role == "output" or role == "maintained") {
+                acc.append(f.q("path").stringValue());
+            }
         }
+        return result\ok::<[str]>(acc);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "rebase-branches-onto-base: classify the conflicted paths");
     }
-    return acc;
 }
 
 fun liveShell() > Shell {
@@ -458,11 +465,7 @@ fun liveShell() > Shell {
             }
         },
         generated = fun (paths: [str]) > result\Result::<[str]> {
-            try {
-                return result\ok::<[str]>(findGenerated(paths));
-            } catch (err: any) {
-                return result\caught::<[str]>(err, doing: "rebase-branches-onto-base: classify the conflicted paths");
-            }
+            return findGenerated(paths);
         },
         ready = fun (dir: str) > result\Result::<[str]> {
             try {
@@ -577,7 +580,7 @@ test "the squashed base is the newest merged head a branch carries" {
 }
 
 test "gh's merged list reads into squashed heads" {
-    final got = parseMerged(MERGED);
+    final got = parseMerged(MERGED).value!;
     assert\equal(got.map(fun (index: int, m: Squashed) > str => "{m.pr}={m.head}"), want: ["606=a606", "600=a600"], message: "rows");
 }
 
