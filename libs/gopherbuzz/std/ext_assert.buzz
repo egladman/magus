@@ -11,6 +11,7 @@ namespace assert;
 /// read.
 ///
 /// This is a magus extension to Buzz, not part of upstream Buzz's standard library.
+import "std";
 import "assertcore";
 
 /// Renders the message as " (message)", or "" when it is empty.
@@ -26,8 +27,8 @@ fun tail(message: str) > str {
 
 /// Fails the current test unconditionally.
 /// @param message Why the test failed
-export fun fail(message: str) > void !> str {
-    throw "assert\\fail: {message}";
+export fun fail(message: str) > void {
+    std\assert(false, message: "assert\\fail: {message}");
 }
 
 /// Skips the current test: stops the block and marks it skipped (not failed), the
@@ -45,9 +46,9 @@ export fun skip(message: str) > void {
 /// @param got The value under test
 /// @param want The expected value
 /// @param message The assertion message
-export fun equal(got: any, want: any, message: str) > void !> str {
+export fun equal(got: any, want: any, message: str) > void {
     if (!assertcore\deepEqual(got, want)) {
-        throw "assert\\equal failed{tail(message)}: got `{got}` want `{want}`";
+        std\assert(false, message: "assert\\equal failed{tail(message)}: got `{got}` want `{want}`");
     }
 }
 
@@ -55,45 +56,45 @@ export fun equal(got: any, want: any, message: str) > void !> str {
 /// @param got The value under test
 /// @param want The value it should differ from
 /// @param message The assertion message
-export fun notEqual(got: any, want: any, message: str) > void !> str {
+export fun notEqual(got: any, want: any, message: str) > void {
     if (assertcore\deepEqual(got, want)) {
-        throw "assert\\notEqual failed{tail(message)}: both values are `{got}`";
+        std\assert(false, message: "assert\\notEqual failed{tail(message)}: both values are `{got}`");
     }
 }
 
 /// Asserts that `got` is true.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isTrue(got: bool, message: str) > void !> str {
+export fun isTrue(got: bool, message: str) > void {
     if (!got) {
-        throw "assert\\isTrue failed{tail(message)}";
+        std\assert(false, message: "assert\\isTrue failed{tail(message)}");
     }
 }
 
 /// Asserts that `got` is false.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isFalse(got: bool, message: str) > void !> str {
+export fun isFalse(got: bool, message: str) > void {
     if (got) {
-        throw "assert\\isFalse failed{tail(message)}";
+        std\assert(false, message: "assert\\isFalse failed{tail(message)}");
     }
 }
 
 /// Asserts that `got` is null.
 /// @param got The value under test
 /// @param message The assertion message
-export fun isNull(got: any, message: str) > void !> str {
+export fun isNull(got: any, message: str) > void {
     if (got != null) {
-        throw "assert\\isNull failed{tail(message)}: got `{got}`";
+        std\assert(false, message: "assert\\isNull failed{tail(message)}: got `{got}`");
     }
 }
 
 /// Asserts that `got` is not null.
 /// @param got The value under test
 /// @param message The assertion message
-export fun notNull(got: any, message: str) > void !> str {
+export fun notNull(got: any, message: str) > void {
     if (got == null) {
-        throw "assert\\notNull failed{tail(message)}";
+        std\assert(false, message: "assert\\notNull failed{tail(message)}");
     }
 }
 
@@ -102,9 +103,9 @@ export fun notNull(got: any, message: str) > void !> str {
 /// @param container The str, list, or map to search
 /// @param item The substring, element, or key to find
 /// @param message The assertion message
-export fun contains(container: any, item: any, message: str) > void !> str {
+export fun contains(container: any, item: any, message: str) > void {
     if (!assertcore\contains(container, item)) {
-        throw "assert\\contains failed{tail(message)}: `{container}` does not contain `{item}`";
+        std\assert(false, message: "assert\\contains failed{tail(message)}: `{container}` does not contain `{item}`");
     }
 }
 
@@ -113,26 +114,26 @@ export fun contains(container: any, item: any, message: str) > void !> str {
 /// @param container The str, list, or map to measure
 /// @param want The expected length
 /// @param message The assertion message
-export fun len(container: any, want: int, message: str) > void !> str {
+export fun len(container: any, want: int, message: str) > void {
     final got = assertcore\length(container);
     if (got == null) {
-        throw "assert\\len failed{tail(message)}: `{container}` has no length";
+        std\assert(false, message: "assert\\len failed{tail(message)}: `{container}` has no length");
     }
     if (got != want) {
-        throw "assert\\len failed{tail(message)}: got length {got} want {want}";
+        std\assert(false, message: "assert\\len failed{tail(message)}: got length {got} want {want}");
     }
 }
 
 /// Asserts that `container` is empty (zero-length str, list, or map).
 /// @param container The str, list, or map to measure
 /// @param message The assertion message
-export fun isEmpty(container: any, message: str) > void !> str {
+export fun isEmpty(container: any, message: str) > void {
     final got = assertcore\length(container);
     if (got == null) {
-        throw "assert\\isEmpty failed{tail(message)}: `{container}` has no length";
+        std\assert(false, message: "assert\\isEmpty failed{tail(message)}: `{container}` has no length");
     }
     if (got != 0) {
-        throw "assert\\isEmpty failed{tail(message)}: length is {got}";
+        std\assert(false, message: "assert\\isEmpty failed{tail(message)}: length is {got}");
     }
 }
 
@@ -140,13 +141,13 @@ export fun isEmpty(container: any, message: str) > void !> str {
 /// @param a The value expected to be larger
 /// @param b The value expected to be smaller
 /// @param message The assertion message
-export fun greater(a: any, b: any, message: str) > void !> str {
+export fun greater(a: any, b: any, message: str) > void {
     final order = assertcore\compare(a, b);
     if (order == null) {
-        throw "assert\\greater failed{tail(message)}: `{a}` and `{b}` are not comparable";
+        std\assert(false, message: "assert\\greater failed{tail(message)}: `{a}` and `{b}` are not comparable");
     }
     if (order != 1) {
-        throw "assert\\greater failed{tail(message)}: `{a}` is not greater than `{b}`";
+        std\assert(false, message: "assert\\greater failed{tail(message)}: `{a}` is not greater than `{b}`");
     }
 }
 
@@ -154,13 +155,13 @@ export fun greater(a: any, b: any, message: str) > void !> str {
 /// @param a The value expected to be smaller
 /// @param b The value expected to be larger
 /// @param message The assertion message
-export fun less(a: any, b: any, message: str) > void !> str {
+export fun less(a: any, b: any, message: str) > void {
     final order = assertcore\compare(a, b);
     if (order == null) {
-        throw "assert\\less failed{tail(message)}: `{a}` and `{b}` are not comparable";
+        std\assert(false, message: "assert\\less failed{tail(message)}: `{a}` and `{b}` are not comparable");
     }
     if (order != -1) {
-        throw "assert\\less failed{tail(message)}: `{a}` is not less than `{b}`";
+        std\assert(false, message: "assert\\less failed{tail(message)}: `{a}` is not less than `{b}`");
     }
 }
 
@@ -168,18 +169,18 @@ export fun less(a: any, b: any, message: str) > void !> str {
 /// function rejects bad input.
 /// @param fn The zero-argument function expected to throw
 /// @param message The assertion message
-export fun throws(fn: fun () > void, message: str) > void !> str {
+export fun throws(fn: fun () > void, message: str) > void {
     if (!didThrow(fn)) {
-        throw "assert\\throws failed{tail(message)}: function did not throw";
+        std\assert(false, message: "assert\\throws failed{tail(message)}: function did not throw");
     }
 }
 
 /// Asserts that calling `fn` does NOT raise.
 /// @param fn The zero-argument function expected to complete
 /// @param message The assertion message
-export fun doesNotThrow(fn: fun () > void, message: str) > void !> str {
+export fun doesNotThrow(fn: fun () > void, message: str) > void {
     if (didThrow(fn)) {
-        throw "assert\\doesNotThrow failed{tail(message)}: function threw";
+        std\assert(false, message: "assert\\doesNotThrow failed{tail(message)}: function threw");
     }
 }
 

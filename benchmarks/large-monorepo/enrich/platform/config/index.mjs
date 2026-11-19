@@ -27,16 +27,17 @@ export function mergeConfig(base, override) {
   return merged;
 }
 
-// Applies source over defaults and throws ConfigError, carrying the offending key,
-// when a key required by defaults resolves to null or undefined.
+// Applies source over defaults and returns { value: config }. Returns
+// { error: ConfigError }, carrying the offending key, when a required key
+// resolves to null or undefined.
 export function loadConfig(defaults, source, required = []) {
   const log = createLogger('config');
   const resolved = mergeConfig(defaults, source);
   for (const key of required) {
     if (resolved[key] === undefined || resolved[key] === null) {
-      throw new ConfigError(`missing required config key: ${key}`, key);
+      return { error: new ConfigError(`missing required config key: ${key}`, key) };
     }
   }
   log.log('info', 'config loaded', { keys: Object.keys(resolved).sort().join(',') });
-  return resolved;
+  return { value: resolved };
 }

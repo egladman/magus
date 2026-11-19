@@ -99,11 +99,6 @@ clikitmain:
     # moduledecls still parses its own -outdir: the file belongs to another
     # change in flight, so magus-utils hands the flag back to it.
     cmd/magus-utils/module_decls.go: 2
-    # The benchmark harness tools sit outside the clikit migration's files.
-    benchmarks/agent/cmd/benchreport/main.go: 13
-    benchmarks/agent/cmd/benchtasks/main.go: 11
-    benchmarks/agent/cmd/swegrade/main.go: 2
-    benchmarks/aggregate/main.go: 2
   # - {path, reason}
   exits: []
 
@@ -114,15 +109,8 @@ no-throw:
       reason: a throw from the plugin entry is OpenCode's only way to refuse to load the guard
   # construct: {file: count}
   baseline:
-    throw:
-      benchmarks/large-monorepo/enrich/platform/config/index.mjs: 1
-      benchmarks/large-monorepo/enrich/platform/http/index.mjs: 1
-      hack/docs/screenshot.mjs: 1
+    throw: {}
     buzz-error-signature:
-      benchmarks/install/bench.buzz: 8
-      benchmarks/large-monorepo/queue-local.buzz: 2
-      evals/buzz/grade.buzz: 1
-      evals/buzz/solutions/ports.buzz: 1
       hack/dev/bootstrap-checkout.buzz: 2
       hack/magusfile/advisories.buzz: 3
       hack/magusfile/bootstrap-timing.buzz: 2

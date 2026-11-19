@@ -74,7 +74,6 @@ no-throw:
     buzz-error-signature:
       benchmarks/upstream/programs/trycatch.buzz: 1
       magusfile.buzz: 2
-      std/ext_assert.buzz: 14
 
 # An engineered zone: see the root analyzers.yaml for the shape.
 zones:

@@ -15,14 +15,16 @@
 package main
 
 import (
+	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/codec"
 )
 
@@ -80,37 +82,56 @@ type verdict struct {
 	Error string `json:"error,omitempty"`
 }
 
-func main() {
-	resolved, err := run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "swegrade: %v\n", err)
-		os.Exit(exitInputBroken)
-	}
-	if !resolved {
-		os.Exit(exitUnresolved)
+func main() { command.Main(root()) }
+
+// root builds a fresh flag target on each call, so tests can invoke it again.
+func root() command.Command {
+	var rowPath string
+	return command.Command{
+		Name:  "swegrade",
+		Short: "Turn a SWE-bench eval log on stdin into a verdict.",
+		Long: "The row is one line of the dataset (verified.jsonl or pilot.jsonl). stdout is a JSON " +
+			"object with resolved, fail_to_pass and pass_to_pass, the last two mapping every expected " +
+			"test to the status the log gave it, or MISSING.",
+		Usage: "swegrade --instance <row.json> < eval.log",
+		Flags: []command.Flag{
+			{Name: "instance", Kind: command.String, Doc: "path to the instance row (one line of verified.jsonl)", Target: &rowPath},
+		},
+		ExitStatus: []command.ExitCode{
+			{Code: exitUnresolved, Meaning: "the log does not resolve the instance"},
+			{Code: exitInputBroken, Meaning: "the input is unusable and no verdict was printed"},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			resolved, err := grading(rowPath, inv.Stdin, inv.Stdout)
+			if err != nil {
+				return exit.Usagef("%w", err)
+			}
+			if !resolved {
+				return exit.Reported(exitUnresolved)
+			}
+			return nil
+		},
 	}
 }
 
-// run grades stdin against the --instance row and prints the verdict; an error
-// means the input was unusable and no verdict was printed.
-func run() (resolved bool, err error) {
-	rowPath := flag.String("instance", "", "path to the instance row (one line of verified.jsonl)")
-	flag.Parse()
-	if *rowPath == "" {
+// grading grades stdin against the row at rowPath and prints the verdict. An
+// error means the input was unusable and no verdict was printed.
+func grading(rowPath string, stdin io.Reader, stdout io.Writer) (resolved bool, err error) {
+	if rowPath == "" {
 		return false, errors.New("--instance is required")
 	}
-	rowBytes, err := os.ReadFile(*rowPath)
+	rowBytes, err := os.ReadFile(rowPath)
 	if err != nil {
 		return false, err
 	}
 	var row instance
 	if err := codec.Unmarshal(rowBytes, &row); err != nil {
-		return false, fmt.Errorf("%s: %w", *rowPath, err)
+		return false, fmt.Errorf("%s: %w", rowPath, err)
 	}
 	if _, ok := parsers[row.LogParser]; !ok {
 		return false, fmt.Errorf("%s names log_parser %q, which is not ported", row.InstanceID, row.LogParser)
 	}
-	log, err := io.ReadAll(os.Stdin)
+	log, err := io.ReadAll(stdin)
 	if err != nil {
 		return false, fmt.Errorf("reading stdin: %w", err)
 	}
@@ -119,7 +140,7 @@ func run() (resolved bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Println(string(out))
+	fmt.Fprintln(stdout, string(out))
 	return v.Resolved, nil
 }
 
