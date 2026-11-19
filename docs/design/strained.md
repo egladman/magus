@@ -79,6 +79,11 @@ The principle pages name debts of their own:
   benchmark run only, or a figure quoted at a size no run reached. The page
   asks for two sizes and a witness from the run journals; today that is
   review's to hold.
+- **Where slop is cheap** ([Move fast, but leave nothing worse where it costs](principles/move-fast-leave-nothing-worse.md)):
+  no rule reads the `zones` in `analyzers.yaml`, the size limits do not weigh
+  churn, no autofix takes leaf-code slop, and no per-directory budget nets
+  additions against deletions. The study that ranks length and churn above
+  cyclomatic complexity as a predictor of later fixes is not committed.
 
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of [Manual on purpose](judgment/manual-on-purpose.md), or a
