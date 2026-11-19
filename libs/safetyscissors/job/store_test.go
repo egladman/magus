@@ -236,7 +236,7 @@ func (s *StoreSuite) TestAStoreVersionThatDoesNotParseIsRefused() {
 	_, err := Open(s.T().Context(), Config{Dir: s.dir},
 		WithMigrations("v2", func(context.Context, string, apiversion.APIVersion, []codec.Line) error { return nil }))
 
-	s.Require().ErrorContains(err, `job: option WithMigrations: api version "v2" is not`)
+	s.Require().ErrorContains(err, `job: option WithMigrations: api version "v2" is not group`)
 }
 
 // A reader that saw the older file before the lock, and finds another writer migrated

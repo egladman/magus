@@ -179,8 +179,8 @@ func WithHead(head func(context.Context) string) Option {
 // *[OptionError].
 func WithMigrations(version apiversion.APIVersion, migrate Migrate) Option {
 	return func(c *Config) {
-		if _, err := apiversion.Parse(string(version)); err != nil {
-			c.fail("WithMigrations", err.Error())
+		if !version.Valid() {
+			c.fail("WithMigrations", fmt.Sprintf("api version %q is not group/vN[alphaN|betaN]", version))
 			return
 		}
 		if migrate == nil {

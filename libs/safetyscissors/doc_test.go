@@ -88,6 +88,7 @@ func (s *DocSuite) TestJournalImportsOnlyWhatItsDocNames() {
 		"github.com/egladman/magus/libs/safetyscissors/job",
 	}, s.nonStandardImports("journal"))
 	s.Equal([]string{
+		"github.com/egladman/magus/libs/apiversion",
 		"github.com/egladman/magus/libs/codec",
 		"github.com/egladman/magus/libs/safetyscissors/journal",
 	}, s.nonStandardImports(filepath.Join("journal", "stream")))
