@@ -31,8 +31,8 @@ func adoptionIdentity(displayVersion string) string {
 }
 
 // gateIdentity maps a build's DISPLAY version to the identity used for the server
-// adoption gate, judging the build b by its linker stamp first and Go's VCS stamp only
-// when no stamp exists ([buildinfo.Self]): a build in a linked git worktree records
+// adoption gate. It judges the build b by its linker stamp first, and by Go's VCS stamp
+// only when no stamp exists ([buildinfo.Self]). A build in a linked git worktree records
 // another revision and a modified tree in Go's VCS stamp, which would give a clean
 // stamped build a per-file identity. Client and server both run it over their own build,
 // so two builds adopt each other only when their identities are equal. It is total and
@@ -46,12 +46,11 @@ func adoptionIdentity(displayVersion string) string {
 //     with old code; the executable-file identity admits only the byte-identical binary.
 //   - A stamped release version (anything but devVersionSentinel) passes through unchanged,
 //     so releases keep matching on their exact version.
-//   - The dev sentinel is replaced by a build fingerprint: "dev-<commit>" for a CLEAN
-//     build whose commit is known, from the stamp or, failing that, from Go's VCS stamp
-//     (two clean builds of one commit are provably the same code and DO adopt each other,
-//     preserving the run-a-server-then-adopt-into-it workflow), or the per-process
-//     [buildinfo.Unverifiable] token for a build with no identity (never matches:
-//     adoption refused).
+//   - The dev sentinel is replaced by a build fingerprint. A CLEAN build whose commit is
+//     known, from the stamp or else Go's VCS stamp, maps to "dev-<commit>". Two clean
+//     builds of one commit are the same code and adopt each other, which keeps the
+//     run-a-server-then-adopt-into-it workflow. A build with no identity maps to the
+//     per-process [buildinfo.Unverifiable] token, which never matches.
 //
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
 // deliberate and load-bearing: a stale PRE-FIX server compares the string it receives
