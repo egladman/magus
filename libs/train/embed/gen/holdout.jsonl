@@ -286,6 +286,7 @@
 {"group":"file:changes/unreleased/probe-knows-silent-hooks.md","path":"changes/unreleased/probe-knows-silent-hooks.md"}
 {"group":"file:changes/unreleased/probe-mise-dir-witness.md","path":"changes/unreleased/probe-mise-dir-witness.md"}
 {"group":"file:changes/unreleased/proc-exec-timeout-detach.md","path":"changes/unreleased/proc-exec-timeout-detach.md"}
+{"group":"file:changes/unreleased/proofread-api-versions.md","path":"changes/unreleased/proofread-api-versions.md"}
 {"group":"file:changes/unreleased/proofread-fix6-round5.md","path":"changes/unreleased/proofread-fix6-round5.md"}
 {"group":"file:changes/unreleased/proofread-fix8-adjectives.md","path":"changes/unreleased/proofread-fix8-adjectives.md"}
 {"group":"file:changes/unreleased/proofread-local-path.md","path":"changes/unreleased/proofread-local-path.md"}
@@ -1148,6 +1149,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/compat_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/conflict.go"}
 {"group":"dir:internal/guard","path":"internal/guard/conflict_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/copy_write.go"}
+{"group":"dir:internal/guard","path":"internal/guard/copy_write_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cost.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cost_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/credential.go"}
