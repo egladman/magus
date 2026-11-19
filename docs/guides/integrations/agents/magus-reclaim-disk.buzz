@@ -32,7 +32,7 @@ import "flags";
 import "proc";
 import "result";
 import "encoding/json";
-import "diskwatch";
+import "magus/diskwatch";
 import "lib/hook" as hook;
 
 final AGENT_NAME_FLAG = "--agent-name";
