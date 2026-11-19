@@ -41,7 +41,7 @@ export final counters = [
     Counter{ name = "tool-rows-version", file = "internal/agent/tools.go", declaration = "const ToolRowsVersion types.APIVersion = " },
     Counter{ name = "broker-protocol-version", file = "broker/wire.go", declaration = "const APIVersion types.APIVersion = " },
     Counter{ name = "cache-key-version", file = "internal/cache/hash.go", declaration = "const KeyVersion = " },
-    Counter{ name = "forecast-history-version", file = "internal/ci/forecast/history.go", declaration = "const HistoryVersion = " },
+    Counter{ name = "forecast-history-version", file = "internal/ci/forecast/history.go", declaration = "const HistoryVersion apiversion.APIVersion = " },
     Counter{ name = "spell-lock-version", file = "internal/spell/remote/lock.go", declaration = "const lockVersion types.APIVersion = " },
     Counter{ name = "textrank-weights-version", file = "internal/textrank/weights.go", declaration = "const weightsVersion = " },
     Counter{ name = "lifecycle-cache-version", file = "internal/workspace/lifecycle.go", declaration = "const lifecycleCacheVersion = " },

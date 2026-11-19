@@ -200,7 +200,9 @@ decisions/0047-the-magus-module-has-namespaces/
 decisions/0048-a-local-ci-repairs-a-declared-writer/
 decisions/0049-retrieval-is-a-static-table-and-a-ranker/
 decisions/0050-the-harness-is-a-module-named-safetyscissors/
+decisions/0051-the-journal-is-one-package-shaped-like-log-slog/
 decisions/0052-only-a-typed-run-installs/
+decisions/0053-an-op-declares-the-files-it-edits-in-place/
 dependencies/
 design/
 design/judgment/
@@ -220,8 +222,10 @@ design/principles/
 design/principles/a-cache-is-an-accelerator/
 design/principles/a-copy-can-be-the-right-answer/
 design/principles/a-deliberate-break-never-merges-red/
+design/principles/a-file-a-person-edits-is-yaml/
 design/principles/a-harness-is-not-an-agent-thing/
 design/principles/a-measure-is-not-the-goal/
+design/principles/a-selector-does-one-thing/
 design/principles/abstract-at-the-right-layer/
 design/principles/behavior-is-code-facts-are-data/
 design/principles/break-now-hold-still-later/
@@ -234,6 +238,7 @@ design/principles/delete-before-you-add/
 design/principles/enforcement-not-pinky-promises/
 design/principles/every-answer-has-an-address/
 design/principles/everything-is-a-file/
+design/principles/fit-the-work-never-the-benchmark/
 design/principles/flags-config-help-one-source/
 design/principles/friction-that-carries-meaning/
 design/principles/human-first-is-the-ai-integration/
@@ -273,6 +278,7 @@ development/gopherbuzz/
 development/libs-apiversion/
 development/libs-clikit/
 development/libs-cmdline/
+development/libs-codec/
 development/libs-coldread/
 development/libs-commentdash/
 development/libs-conventions/
@@ -291,6 +297,7 @@ development/libs-proofread-train/
 development/libs-proofread/
 development/libs-safetyscissors/
 development/libs-scipbuzz/
+development/libs-secrets/
 development/libs-ssg/
 development/libs-termkit/
 development/libs-testpairing/
@@ -581,6 +588,7 @@ reference/buzz/buzz/
 reference/buzz/charm/
 reference/buzz/crypto/
 reference/buzz/csv/
+reference/buzz/diagram/
 reference/buzz/diff/
 reference/buzz/diskwatch/
 reference/buzz/encoding/
@@ -829,6 +837,7 @@ reference/codes/sandbox/MGS3054/
 reference/codes/sandbox/MGS3055/
 reference/codes/sandbox/MGS3056/
 reference/codes/sandbox/MGS3057/
+reference/codes/sandbox/MGS3058/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -1034,6 +1043,7 @@ reference/rules/code-search/
 reference/rules/compat-marker/
 reference/rules/conflict-commit/
 reference/rules/conflict-rewrite/
+reference/rules/copy-write/
 reference/rules/credential-verb/
 reference/rules/dependency-install/
 reference/rules/dependency-update/
@@ -1330,6 +1340,8 @@ tags/detach/
 tags/determinism/
 tags/deviations/
 tags/diagnostics/
+tags/diagram/
+tags/diagrams/
 tags/diff/
 tags/digest/
 tags/discovery/
@@ -1348,6 +1360,7 @@ tags/error-codes/
 tags/errors/
 tags/eslint/
 tags/events/
+tags/evidence/
 tags/exec/
 tags/execution-and-caching/
 tags/exit-2/
@@ -1466,6 +1479,7 @@ tags/merge/
 tags/mgs-1010/
 tags/mgs-1051/
 tags/mgs-1052/
+tags/mgs-4007/
 tags/mgs-5001/
 tags/mgs-5002/
 tags/mgs/
@@ -1516,6 +1530,7 @@ tags/plugin/
 tags/podman/
 tags/policy/
 tags/pool/
+tags/postconditions/
 tags/powershell/
 tags/preflight/
 tags/prettier/
