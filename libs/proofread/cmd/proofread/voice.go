@@ -3,9 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -13,49 +13,83 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/proofread"
 	"github.com/egladman/magus/libs/proofread/internal/calibrate"
 	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
 
-// runVoice runs `proofread voice build` or `proofread voice eval`.
-func runVoice(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "build":
-			return runVoiceBuild(args[1:], stdin, stderr)
-		case "eval":
-			return runVoiceEval(args[1:], stdout, stderr)
-		}
-	}
+// voiceBuild and voiceEval hold the flags of the one command a process runs.
+var (
+	voiceBuild voiceBuildOptions
+	voiceEval  voiceEvalOptions
+)
 
-	return failure(stderr, errors.New("voice takes a subcommand, build or eval"))
+type voiceBuildOptions struct {
+	kind, field, kindField, out string
+	stdin                       bool
 }
 
-func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
-	fs := flag.NewFlagSet("proofread voice build", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	kind := fs.String("kind", "", "the `kind` of every text, or of every JSON line naming none")
-	field := fs.String("field", "", "read JSON lines and take each text from this `field`")
-	kindField := fs.String("kind-field", "", "with --field, take each text's kind from this `field`")
-	out := fs.String("out", "", "write the voice file to this `path` (default $XDG_CONFIG_HOME/proofread/voice.json)")
-	fromStdin := fs.Bool("stdin", false, "read the texts from stdin")
+type voiceEvalOptions struct {
+	owner, other, kind, field, kindField, format, idField, seed string
+	pool                                                        int
+	paired                                                      bool
+}
 
-	if err := fs.Parse(args); err != nil {
-		return exitError
-	}
+// voiceCmd is `proofread voice build` and `proofread voice eval`.
+var voiceCmd = command.Command{
+	Name:  "voice",
+	Short: "measure your own texts into a voice file, or score which shape features tell them apart",
+	Children: []command.Command{
+		{
+			Name: "build", Short: "measure your own texts into the voice file --voice reads", Usage: "proofread voice build [flags] FILE...|--stdin",
+			Flags: []command.Flag{
+				{Name: "kind", Kind: command.String, Doc: "the `kind` of every text, or of every JSON line naming none", Target: &voiceBuild.kind},
+				{Name: "field", Kind: command.String, Doc: "read JSON lines and take each text from this `field`", Target: &voiceBuild.field},
+				{Name: "kind-field", Kind: command.String, Doc: "with --field, take each text's kind from this `field`", Target: &voiceBuild.kindField},
+				{Name: "out", Kind: command.String, Doc: "write the voice file to this `path` (default $XDG_CONFIG_HOME/proofread/voice.json)", Target: &voiceBuild.out},
+				{Name: "stdin", Kind: command.Bool, Default: false, Doc: "read the texts from stdin", Target: &voiceBuild.stdin},
+			},
+			Effect: command.EffectLocalWrite,
+			Run: func(_ context.Context, inv command.Invocation) error {
+				return reported(runVoiceBuild(&voiceBuild, inv.Args, inv.Stdin, inv.Stderr))
+			},
+		},
+		{
+			Name: "eval", Short: "score which shape features tell --owner's JSON-lines texts from --other's, per kind; --pool N measures chunks of N+ words, --seed S shuffles them",
+			Flags: []command.Flag{
+				{Name: "owner", Kind: command.String, Doc: "read the owner's texts as JSON lines from this `file`", Target: &voiceEval.owner},
+				{Name: "other", Kind: command.String, Doc: "read the texts to tell them from as JSON lines from this `file`", Target: &voiceEval.other},
+				{Name: "kind", Kind: command.String, Doc: "the `kind` of every JSON line naming none", Target: &voiceEval.kind},
+				{Name: "field", Kind: command.String, Default: "text", Doc: "take each text from this `field`", Target: &voiceEval.field},
+				{Name: "kind-field", Kind: command.String, Default: "kind", Doc: "take each text's kind from this `field`", Target: &voiceEval.kindField},
+				{Name: "o", Kind: command.String, Default: "text", Doc: "write the separations as `text` or json", Target: &voiceEval.format},
+				{Name: "pool", Kind: command.Int, Default: 0, Doc: "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing", Target: &voiceEval.pool},
+				{Name: "seed", Kind: command.String, Default: strconv.FormatUint(proofread.VoiceSeed, 10), Doc: "shuffle the texts under this `seed` before pooling", Target: &voiceEval.seed},
+				{Name: "paired", Kind: command.Bool, Default: false, Doc: "read --other as rewrites of the owner's texts, joined by --id-field, and score how each feature moves", Target: &voiceEval.paired},
+				{Name: "id-field", Kind: command.String, Default: "id", Doc: "with --paired, join the two files on this `field`", Target: &voiceEval.idField},
+			},
+			Effect: command.EffectRead,
+			Run: func(_ context.Context, inv command.Invocation) error {
+				return reported(runVoiceEval(&voiceEval, inv.Args, inv.Stdout, inv.Stderr))
+			},
+		},
+	},
+}
 
+func runVoiceBuild(o *voiceBuildOptions, args []string, stdin io.Reader, stderr io.Writer) int {
 	switch {
-	case *fromStdin && fs.NArg() > 0:
+	case o.stdin && len(args) > 0:
 		return failure(stderr, errors.New("--stdin reads the texts, so name no file"))
-	case !*fromStdin && fs.NArg() == 0:
+	case !o.stdin && len(args) == 0:
 		return failure(stderr, errors.New("name the files to measure, or pass --stdin to read the texts from stdin"))
 	}
 
-	texts, err := voiceTexts(proofread.Kind(*kind), *field, *kindField, fs.Args(), stdin)
+	texts, err := voiceTexts(proofread.Kind(o.kind), o.field, o.kindField, args, stdin)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -65,7 +99,7 @@ func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
 		return failure(stderr, err)
 	}
 
-	path := *out
+	path := o.out
 	if path == "" {
 		if path, err = defaultVoicePath(); err != nil {
 			return failure(stderr, err)
@@ -89,31 +123,21 @@ func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
 // runVoiceEval scores, per kind, how far each shape feature separates the
 // owner's texts from the other texts. It reads the two files and writes
 // nothing else.
-func runVoiceEval(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("proofread voice eval", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	owner := fs.String("owner", "", "read the owner's texts as JSON lines from this `file`")
-	other := fs.String("other", "", "read the texts to tell them from as JSON lines from this `file`")
-	kind := fs.String("kind", "", "the `kind` of every JSON line naming none")
-	field := fs.String("field", "text", "take each text from this `field`")
-	kindField := fs.String("kind-field", "kind", "take each text's kind from this `field`")
-	format := fs.String("o", "text", "write the separations as `text` or json")
-	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
-	seed := fs.Uint64("seed", proofread.VoiceSeed, "shuffle the texts under this `seed` before pooling")
-	paired := fs.Bool("paired", false, "read --other as rewrites of the owner's texts, joined by --id-field, and score how each feature moves")
-	idField := fs.String("id-field", "id", "with --paired, join the two files on this `field`")
-
-	if err := fs.Parse(args); err != nil {
-		return exitError
+func runVoiceEval(o *voiceEvalOptions, args []string, stdout, stderr io.Writer) int {
+	seed, err := strconv.ParseUint(o.seed, 10, 64)
+	if err != nil {
+		return failure(stderr, fmt.Errorf("--seed: want a whole number, not %q", o.seed))
 	}
+
+	owner, other, kind, field, kindField, format, pool, paired, idField := &o.owner, &o.other, &o.kind, &o.field, &o.kindField, &o.format, &o.pool, &o.paired, &o.idField
 
 	switch {
 	case *pool < 0:
 		return failure(stderr, fmt.Errorf("--pool is %d: name a word count, or 0 to pool nothing", *pool))
 	case *owner == "" || *other == "":
 		return failure(stderr, errors.New("voice eval needs --owner and --other"))
-	case fs.NArg() > 0:
-		return failure(stderr, fmt.Errorf("voice eval reads --owner and --other, not %s", strings.Join(fs.Args(), " ")))
+	case len(args) > 0:
+		return failure(stderr, fmt.Errorf("voice eval reads --owner and --other, not %s", strings.Join(args, " ")))
 	case *format != "text" && *format != "json":
 		return failure(stderr, fmt.Errorf("unknown -o %q: write text or json", *format))
 	case *field == "":
@@ -125,7 +149,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	if *paired {
 		return runPairedEval(pairedEval{
 			owner: *owner, other: *other, kind: proofread.Kind(*kind), field: *field, kindField: *kindField,
-			idField: *idField, format: *format, pool: *pool, seed: *seed,
+			idField: *idField, format: *format, pool: *pool, seed: seed,
 		}, stdout, stderr)
 	}
 
@@ -143,7 +167,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 			}
 
 			if *pool > 0 {
-				out[k] = proofread.MeasureWindowShapes(list, k, *pool, *seed)
+				out[k] = proofread.MeasureWindowShapes(list, k, *pool, seed)
 
 				continue
 			}

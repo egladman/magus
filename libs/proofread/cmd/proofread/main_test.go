@@ -413,15 +413,15 @@ func TestRunExplainsAHouseRuleAsOff(t *testing.T) {
 	}
 }
 
-func TestRunPrintsTheUsageForNoSubcommandOrAnUnknownOne(t *testing.T) {
+func TestRunRefusesNoSubcommandAnUnknownOneAndTheOldFlag(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
 		lead string
 	}{
-		{"no subcommand", nil, "usage: proofread"},
-		{"an unknown subcommand", []string{"doc"}, "proofread: unknown subcommand \"doc\"\n\nusage: proofread"},
-		{"the old flag", []string{"-kind", "reference"}, "proofread: unknown subcommand \"-kind\"\n\nusage: proofread"},
+		{"no subcommand", nil, "proofread: a subcommand is required"},
+		{"an unknown subcommand", []string{"doc"}, "proofread: unknown subcommand \"doc\""},
+		{"the old flag", []string{"-kind", "reference"}, "proofread: flag provided but not defined: -kind"},
 	}
 
 	for _, tc := range cases {
@@ -432,13 +432,27 @@ func TestRunPrintsTheUsageForNoSubcommandOrAnUnknownOne(t *testing.T) {
 			if code != exitError || out.String() != "" || !strings.HasPrefix(errOut.String(), tc.lead) {
 				t.Fatalf("run: got code %d stdout %q stderr %q, want code 2 and stderr starting %q", code, out.String(), errOut.String(), tc.lead)
 			}
-
-			for _, s := range subcommands {
-				if !strings.Contains(errOut.String(), "  "+s.name+" ") {
-					t.Errorf("the usage does not name %q:\n%s", s.name, errOut.String())
-				}
-			}
 		})
+	}
+}
+
+func TestHelpNamesEverySubcommandAndExitsZero(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"-h"}, strings.NewReader(""), &out, &errOut); code != exitOK || errOut.String() != "" {
+		t.Fatalf("run -h: code %d stderr %q, want code 0 and no stderr", code, errOut.String())
+	}
+
+	for _, name := range []string{"rules", "stats", "explain", "voice"} {
+		if !strings.Contains(out.String(), "  "+name+" ") {
+			t.Errorf("the help does not name %q:\n%s", name, out.String())
+		}
+	}
+
+	for _, s := range subcommands {
+		if !strings.Contains(out.String(), "  "+s.name+" ") {
+			t.Errorf("the help does not name %q:\n%s", s.name, out.String())
+		}
 	}
 }
 
@@ -786,7 +800,7 @@ func TestANameNoTableDeclaresIsAnUnknownSubcommand(t *testing.T) {
 	decisions := writeFile(t, t.TempDir(), "decisions.json", entryTable)
 
 	_, _, stderr := runArgs(t, []string{"entries", "-decisions", decisions, "-stdin"}, "")
-	if !strings.HasPrefix(stderr, "proofread: unknown subcommand \"entries\"\n\nusage: proofread") {
+	if !strings.HasPrefix(stderr, "proofread: unknown subcommand \"entries\"") {
 		t.Errorf("stderr = %q", stderr)
 	}
 }

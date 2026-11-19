@@ -197,7 +197,7 @@ func TestVoiceBuildExitsTwoOnInputItCannotUse(t *testing.T) {
 		args        []string
 		want        string
 	}{
-		{"no subcommand", "", []string{"voice"}, "proofread: voice takes a subcommand, build or eval\n"},
+		{"no subcommand", "", []string{"voice"}, "proofread voice: a command is required, one of build, eval: `proofread voice -h` lists them\n"},
 		{"no files and no --stdin", "It works.", []string{"voice", "build", "-kind", "issue"},
 			"proofread: name the files to measure, or pass --stdin to read the texts from stdin\n"},
 		{"--stdin beside a file", "It works.", []string{"voice", "build", "--stdin", "-kind", "issue", "a.md"},

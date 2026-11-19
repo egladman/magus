@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/proofread"
 	"github.com/egladman/magus/libs/proofread/internal/xdg"
 )
@@ -368,16 +369,20 @@ func (s outcomeState) stats() []ruleStat {
 }
 
 // runStats prints the recorded outcomes of each rule.
-func runStats(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("proofread stats", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	format := fs.String("o", "json", "write the stats as `json` or text")
+func statsCommand() command.Command {
+	var format string
 
-	if err := fs.Parse(args); err != nil {
-		return exitError
+	return command.Command{
+		Name: "stats", Short: "print each rule's recorded outcomes and not-useful rate", Effect: command.EffectRead,
+		Flags: []command.Flag{{Name: "o", Kind: command.String, Default: "json", Doc: "write the stats as `json` or text", Target: &format}},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return reported(runStats(format, inv.Args, inv.Stdout, inv.Stderr))
+		},
 	}
+}
 
-	if fs.NArg() > 0 {
+func runStats(format string, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
 		return failure(stderr, errors.New("stats takes no arguments"))
 	}
 
@@ -393,7 +398,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 
 	rows := state.stats()
 
-	switch *format {
+	switch format {
 	case "json":
 		if err := json.NewEncoder(stdout).Encode(rows); err != nil {
 			return failure(stderr, fmt.Errorf("write the stats: %w", err))
@@ -413,7 +418,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout)
 		}
 	default:
-		return failure(stderr, fmt.Errorf("unknown -o %q: want json or text", *format))
+		return failure(stderr, fmt.Errorf("unknown -o %q: want json or text", format))
 	}
 
 	return exitOK
