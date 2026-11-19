@@ -2,73 +2,65 @@ package main
 
 import (
 	"context"
-	"errors"
-	"flag"
-	"fmt"
-	"os"
-	"os/signal"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/benchtasks"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
-const usage = `usage:
-  benchtasks swebench -o benchmarks/agent/tasks/swebench-multilingual-go.jsonl
-  benchtasks history --repo . --ref main --after 2026-07-01 -o benchmarks/agent/tasks/history-go.jsonl
+func main() { command.Main(root()) }
 
-swebench fetches SWE-bench Multilingual, keeps the rows of its five Go repositories and
-refuses them when their digest differs from the pin compiled into benchtasks. history
-mines the first-parent commits on --ref after --after, the model's training cutoff, for
-bugfix, interrogation and regeneration tasks, keeping a commit only when its tests
-behave at the parent and at the fix. Both replace the task file whole.`
-
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	err := run(ctx, os.Args[1:])
-	stop()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "benchtasks: %v\n", err)
-		if errors.As(err, new(usageError)) {
-			fmt.Fprintln(os.Stderr, usage)
-		}
-		os.Exit(1)
-	}
-}
-
-// usageError is a command line naming no suite benchtasks knows; main prints usage after it.
-type usageError string
-
-func (e usageError) Error() string { return string(e) }
-
-func run(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return usageError("name a suite")
-	}
-	switch args[0] {
-	case "swebench":
-		fs := flag.NewFlagSet("swebench", flag.ContinueOnError)
-		out := fs.String("o", "", "task file to write")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		if *out == "" {
-			return errors.New("swebench: -o is required")
-		}
-		return benchtasks.WriteSWEBench(ctx, *out)
-	case "history":
-		fs := flag.NewFlagSet("history", flag.ContinueOnError)
-		var o benchtasks.HistoryOptions
-		fs.StringVar(&o.Repo, "repo", "", "repository to mine")
-		fs.StringVar(&o.Ref, "ref", "", "branch whose first-parent history is walked, newest first")
-		fs.StringVar(&o.After, "after", "", "the model's training cutoff, YYYY-MM-DD; only commits after it are mined")
-		fs.StringVar(&o.Out, "o", "", "task file to write")
-		fs.IntVar(&o.Bugfix, "bugfix", 20, "bugfix tasks to keep")
-		fs.IntVar(&o.Interrogation, "interrogation", 6, "interrogation tasks to keep")
-		fs.IntVar(&o.Regeneration, "regeneration", 4, "regeneration tasks to keep")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		return benchtasks.WriteHistory(ctx, o)
-	default:
-		return usageError(fmt.Sprintf("unknown suite %q", args[0]))
+// root builds fresh flag targets on each call, so tests can invoke it again.
+func root() command.Command {
+	var out string
+	var o benchtasks.HistoryOptions
+	return command.Command{
+		Name:  "benchtasks",
+		Short: "Write a benchmark task file from SWE-bench or from this repository's history.",
+		Long: "swebench fetches SWE-bench Multilingual, keeps the rows of its five Go repositories and " +
+			"refuses them when their digest differs from the pin compiled into benchtasks. history " +
+			"mines the first-parent commits on --ref after --after, the model's training cutoff, for " +
+			"bugfix, interrogation and regeneration tasks, keeping a commit only when its tests " +
+			"behave at the parent and at the fix. Both replace the task file whole.",
+		Usage: "benchtasks <suite> [flags]",
+		Children: []command.Command{
+			{
+				Name:  "swebench",
+				Short: "Write the SWE-bench Multilingual Go rows.",
+				Usage: "benchtasks swebench -o <file>",
+				Flags: []command.Flag{
+					{Name: "o", Kind: command.String, Doc: "task file to write", Target: &out},
+				},
+				Examples: []command.Example{
+					{Comment: "Pin the SWE-bench Go rows", Command: "benchtasks swebench -o benchmarks/agent/tasks/swebench-multilingual-go.jsonl"},
+				},
+				Run: func(ctx context.Context, _ command.Invocation) error {
+					if out == "" {
+						return exit.Usagef("swebench: -o is required")
+					}
+					return benchtasks.WriteSWEBench(ctx, out)
+				},
+			},
+			{
+				Name:  "history",
+				Short: "Mine this repository's history for bugfix, interrogation and regeneration tasks.",
+				Usage: "benchtasks history --repo <dir> --ref <branch> --after <date> -o <file>",
+				Flags: []command.Flag{
+					{Name: "repo", Kind: command.String, Doc: "repository to mine", Target: &o.Repo},
+					{Name: "ref", Kind: command.String, Doc: "branch whose first-parent history is walked, newest first", Target: &o.Ref},
+					{Name: "after", Kind: command.String, Doc: "the model's training cutoff, YYYY-MM-DD; only commits after it are mined", Target: &o.After},
+					{Name: "o", Kind: command.String, Doc: "task file to write", Target: &o.Out},
+					{Name: "bugfix", Kind: command.Int, Default: 20, Doc: "bugfix tasks to keep", Target: &o.Bugfix},
+					{Name: "interrogation", Kind: command.Int, Default: 6, Doc: "interrogation tasks to keep", Target: &o.Interrogation},
+					{Name: "regeneration", Kind: command.Int, Default: 4, Doc: "regeneration tasks to keep", Target: &o.Regeneration},
+				},
+				Examples: []command.Example{
+					{Comment: "Mine the commits after the training cutoff", Command: "benchtasks history --repo . --ref main --after 2026-07-01 -o benchmarks/agent/tasks/history-go.jsonl"},
+				},
+				Run: func(ctx context.Context, _ command.Invocation) error {
+					return benchtasks.WriteHistory(ctx, o)
+				},
+			},
+		},
 	}
 }
