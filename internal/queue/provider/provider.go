@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/result"
 	magustypes "github.com/egladman/magus/types"
 )
 
@@ -108,6 +110,7 @@ func newSession(ctx context.Context) (*buzz.Session, error) {
 	sess := buzz.NewSession(ctx)
 	out := printRecords{ctx: ctx}
 	buzzstd.RegisterWithOutput(sess, out)
+	sess.SetModuleDecls(result.ModulePath, result.Source)
 	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx, Out: out}, hostModule); err != nil {
 		_ = sess.Close()
 		return nil, err
@@ -140,6 +143,9 @@ func call[Req, Resp any](ctx context.Context, p *Script, op bindgen.ProviderOp[R
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	v, err := p.sess.CallValue(ctx, fn, []vm.Value{op.Encode(req)})
+	if err == nil {
+		v, err = readResult(v)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("%s: %w", p.where(op.Name), err)
 	}
@@ -165,6 +171,45 @@ func acknowledged[Req any](ctx context.Context, p *Script, op bindgen.ProviderOp
 }
 
 func (p *Script) where(op string) string { return fmt.Sprintf("provider %q: %s", p.name, op) }
+
+// readResult opens v when an op answered a result\Result, and a failed one
+// is the op's error. Any other v is an op that cannot fail. The bindings
+// package keeps its own copy of this reading unexported.
+func readResult(v vm.Value) (vm.Value, error) {
+	if v.ObjectTypeName() != "Result" {
+		return v, nil
+	}
+	fields, ok := v.MapView()
+	if !ok {
+		return vm.Null, errors.New("a Result that is not an object")
+	}
+	if failure, _ := fields.MapGet("error"); !failure.IsNull() {
+		return vm.Null, resultFailure(failure)
+	}
+	value, _ := fields.MapGet("value")
+	if value.IsNull() {
+		return vm.Null, errors.New("the Result carries neither a value nor an error")
+	}
+	return value, nil
+}
+
+// resultFailure reads a failed Result's Diagnostic as "[code] message", or
+// the bare message when it has no code.
+func resultFailure(failure vm.Value) error {
+	fields, ok := failure.MapView()
+	if !ok {
+		return fmt.Errorf("error: want a Diagnostic, got %s", failure.TypeName())
+	}
+	message, _ := fields.MapGet("message")
+	if !message.IsString() || message.AsString() == "" {
+		return errors.New("error: a failed Result carries no message")
+	}
+	code, _ := fields.MapGet("code")
+	if code.IsString() && code.AsString() != "" {
+		return fmt.Errorf("[%s] %s", code.AsString(), message.AsString())
+	}
+	return errors.New(message.AsString())
+}
 
 // Describe calls describe. The queue checks what it reports before relying on it.
 func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabilities, error) {
