@@ -1,0 +1,118 @@
+// prompt is the one rule every hack script that asks a person follows: the
+// flag's value when it was passed, else a prompt on an interactive terminal,
+// else a failure naming the flag. An agent or CI passes flags and never sees a
+// prompt; a person who left a flag off is asked for it instead of being sent to
+// read USAGE.
+//
+// Call these only from a script's main, never from a module a hook, a target or
+// a bootstrap imports: hack/lint/prompts-stay-interactive.buzz holds every
+// caller to that. Each returns result\Result rather than raising, so a cancel
+// (ESC, Ctrl-C) arrives as the error "<member>: cancelled" for main to throw.
+namespace prompt;
+
+import "assert";
+import "result";
+import "term";
+
+// missing is the failure for a flag that was not passed where nothing can ask.
+fun missing::<T>(flag: str) > result\Result::<T> {
+    return result\fail::<T>("{flag} is required (no terminal to ask on)");
+}
+
+// choose is given when the flag carried a value, else the item the person picks
+// from items, else a failure naming flag. given is returned as passed, unchecked
+// against items: a flag may take a value the list does not show.
+export fun choose(given: str?, flag: str, items: [str], question: str) > result\Result::<str> {
+    if (given -> value) {
+        return result\ok::<str>(value);
+    }
+    if (!term\isInteractive()) {
+        return missing::<str>(flag);
+    }
+    try {
+        return result\ok::<str>(items[term\pick(items, prompt: question)]);
+    } catch (err) {
+        return result\caught::<str>(err, doing: flag);
+    }
+}
+
+// chooseMany is given when the flag was passed at least once, else the items the
+// person marks (marked are marked to start with), else a failure naming flag.
+export fun chooseMany(given: [str], flag: str, items: [str], question: str, marked: [str] = [<str>]) > result\Result::<[str]> {
+    if (given.len() > 0) {
+        return result\ok::<[str]>(given);
+    }
+    if (!term\isInteractive()) {
+        return missing::<[str]>(flag);
+    }
+    try {
+        return result\ok::<[str]>(term\pickMany(items, prompt: question, marked: marked));
+    } catch (err) {
+        return result\caught::<[str]>(err, doing: flag);
+    }
+}
+
+// search is given when the flag carried a value, else the result the person
+// picks from a live lookup, else a failure naming flag. query is called with the
+// filter text after every keystroke and returns the results to show, best first.
+export fun search(given: str?, flag: str, question: str, query: fun (filter: str) > [str]) > result\Result::<str> {
+    if (given -> value) {
+        return result\ok::<str>(value);
+    }
+    if (!term\isInteractive()) {
+        return missing::<str>(flag);
+    }
+    // term\pick answers with an index into the list query returned last, so
+    // the lookup keeps that list where the answer can be read back.
+    final shown = mut {"last": [<str>]};
+    try {
+        final idx = term\pick([<str>], prompt: question, query: fun (filter: str) > any {
+            final found = query(filter);
+            shown["last"] = found;
+            return found;
+        });
+        return result\ok::<str>(shown["last"]![idx]);
+    } catch (err) {
+        return result\caught::<str>(err, doing: flag);
+    }
+}
+
+// confirmed is true when the flag that says yes (--apply, --push) was passed,
+// else the person's answer to question, else false: with nothing to ask, the
+// run is the dry run the flag's absence already means, and main prints the plan
+// and the flag that would carry it out.
+export fun confirmed(given: bool, flag: str, question: str) > result\Result::<bool> {
+    if (given) {
+        return result\ok::<bool>(true);
+    }
+    if (!term\isInteractive()) {
+        return result\ok::<bool>(false);
+    }
+    try {
+        return result\ok::<bool>(term\confirm(question));
+    } catch (err) {
+        return result\caught::<bool>(err, doing: flag);
+    }
+}
+
+test "a passed flag wins without asking" {
+    assert\equal(choose("docs", flag: "--project", items: ["console"], question: "project").value!, want: "docs", message: "choose");
+    assert\equal(chooseMany(["a"], flag: "--branches", items: ["b"], question: "branches").value!, want: ["a"], message: "chooseMany");
+    assert\equal(search("Run", flag: "--symbol", question: "symbol", query: fun (filter: str) > [str] => [filter]).value!, want: "Run", message: "search");
+    assert\equal(confirmed(true, flag: "--apply", question: "remove?").value!, want: true, message: "confirmed");
+}
+
+test "an absent flag with no terminal fails naming the flag" {
+    assert\equal(choose(null, flag: "--project", items: ["docs"], question: "project").error!.message,
+        want: "--project is required (no terminal to ask on)", message: "choose");
+    assert\equal(chooseMany([<str>], flag: "--branches", items: ["b"], question: "branches").error!.message,
+        want: "--branches is required (no terminal to ask on)", message: "chooseMany");
+    assert\equal(search(null, flag: "--symbol", question: "symbol", query: fun (filter: str) > [str] => [filter]).error!.message,
+        want: "--symbol is required (no terminal to ask on)", message: "search");
+}
+
+test "an absent yes flag with no terminal is the dry run" {
+    final got = confirmed(false, flag: "--apply", question: "remove?");
+    assert\equal(got.error == null, want: true, message: "no error");
+    assert\equal(got.value!, want: false, message: "declined");
+}
