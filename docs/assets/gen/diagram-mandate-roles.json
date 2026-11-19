@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 12,
     "imports": 0
   },
   "figure": "mandate-roles",
   "findings": [],
-  "stamp": "sha256:b13a8825fb61b64072e1485118ebe0ebc78ef184193056678495cc1fbc88867d"
+  "level": "process",
+  "stamp": "sha256:e7ed83ea24a778c1cb0ab31b4907d6eb89f53e53bb1400eb0d714f83bf9e0e4a",
+  "undrilled": []
 }

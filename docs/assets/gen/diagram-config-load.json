@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 1,
+    "imports": 6
   },
   "figure": "config-load",
   "findings": [],
-  "stamp": "sha256:dbe4bb02e1825e9685501ac4a72c34268b8db7a7c68f65e00c584f39e8f60656"
+  "level": "package",
+  "stamp": "sha256:29333d2653d569e4047c2a1468ffd73fcda40979e11875e80a5137655c2d11d7",
+  "undrilled": []
 }

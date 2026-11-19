@@ -36,22 +36,26 @@ func SourceSHA256() string {
 // The types below mirror the module's records field for field, under the Buzz field names;
 // TestMirrorMatchesTheModule holds them to the declarations.
 
-// Look, Stroke, Direction and Axis each hold the name of one of the module's enum cases,
-// such as Look("plain") or Direction("down").
+// Look, Stroke, Direction, Axis, Level and ActorKind each hold the name of one of the
+// module's enum cases, such as Look("plain") or Level("package").
 type (
 	Look      string
 	Stroke    string
 	Direction string
 	Axis      string
+	Level     string
+	ActorKind string
 )
 
-// Figure mirrors figure's Figure. An empty Direction is Direction("across").
+// Figure mirrors figure's Figure. An empty Direction is Direction("across"); a nil Level
+// lets the boxes decide it.
 type Figure struct {
 	ID          string        `json:"id"`
 	Title       string        `json:"title"`
 	Eyebrow     string        `json:"eyebrow"`
 	Desc        string        `json:"desc"`
 	Direction   Direction     `json:"direction"`
+	Level       *Level        `json:"level"`
 	UnscopedWhy string        `json:"unscoped_why"`
 	GraphEdges  bool          `json:"graph_edges"`
 	Boxes       []Box         `json:"boxes"`
@@ -78,13 +82,17 @@ type Box struct {
 	Look  *Look  `json:"look"`
 }
 
-// Actor mirrors figure's Actor. A nil Look is Look("external").
+// Actor mirrors figure's Actor. A nil Kind is ActorKind("step"): a host draws its own
+// units, a project, a target or a job, as the steps of a Level.process figure. A nil Look
+// follows the kind. A host holds no magus\refs result, so it builds no stage.
 type Actor struct {
-	Name string `json:"name"`
-	Sub  string `json:"sub"`
-	Tag  string `json:"tag"`
-	Link string `json:"link"`
-	Look *Look  `json:"look"`
+	Name string     `json:"name"`
+	Sub  string     `json:"sub"`
+	Tag  string     `json:"tag"`
+	Link string     `json:"link"`
+	Look *Look      `json:"look"`
+	Kind *ActorKind `json:"kind"`
+	Dir  *Dir       `json:"dir"`
 }
 
 // Exclusion mirrors figure's Exclusion.
@@ -226,6 +234,23 @@ fun direction(v: any, at: str) > figure\Direction !> str {
     throw refused(at, name: s, kind: "Direction");
 }
 
+fun level(v: any, at: str) > figure\Level? !> str {
+    final s = caseName(v);
+    if (s == null) { return null; }
+    foreach (c in figure\Level) {
+        if (c.value == s!) { return c; }
+    }
+    throw refused(at, name: s!, kind: "Level");
+}
+
+fun actorKind(v: any, at: str) > figure\ActorKind !> str {
+    final s = caseName(v) ?? "step";
+    foreach (c in figure\ActorKind) {
+        if (c.value == s) { return c; }
+    }
+    throw refused(at, name: s, kind: "ActorKind");
+}
+
 fun axis(v: any, at: str) > figure\Axis !> str {
     final s = caseName(v) ?? "";
     foreach (c in figure\Axis) {
@@ -237,7 +262,10 @@ fun axis(v: any, at: str) > figure\Axis !> str {
 fun actor(a: figure\Actor?, at: str) > figure\Actor? !> str {
     if (a == null) { return null; }
     final x = a!;
-    return figure\Actor{ name = x.name, sub = x.sub, tag = x.tag, link = x.link, look = look(x.look, at: at + ".look") };
+    return figure\Actor{
+        name = x.name, sub = x.sub, tag = x.tag, link = x.link, look = look(x.look, at: at + ".look"),
+        kind = actorKind(x.kind, at: at + ".kind"), dir = x.dir,
+    };
 }
 
 fun actors(list: [figure\Actor], at: str) > [figure\Actor] !> str {
@@ -309,7 +337,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
     }
     return figure\Figure{
         id = f.id, title = f.title, eyebrow = f.eyebrow, desc = f.desc,
-        direction = direction(f.direction, at: "{at}direction"),
+        direction = direction(f.direction, at: "{at}direction"), level = level(f.level, at: "{at}level"),
         unscopedWhy = f.unscopedWhy, graphEdges = f.graphEdges,
         boxes = boxes, scopes = f.scopes, exclusions = f.exclusions, hiddenEdges = f.hiddenEdges,
         edgeMarks = marks, flows = flows, zones = zones, alignments = alignments, legends = legends,
@@ -375,6 +403,7 @@ func (f Figure) value() vm.Value {
 		{"eyebrow", vm.StringValue(f.Eyebrow)},
 		{"desc", vm.StringValue(f.Desc)},
 		{"direction", vm.StringValue(string(f.Direction))},
+		{"level", optional(f.Level, caseValue[Level])},
 		{"unscopedWhy", vm.StringValue(f.UnscopedWhy)},
 		{"graphEdges", vm.BoolValue(f.GraphEdges)},
 		{"boxes", list(f.Boxes, Box.value)},
@@ -412,6 +441,9 @@ func (a Actor) value() vm.Value {
 		{"tag", vm.StringValue(a.Tag)},
 		{"link", vm.StringValue(a.Link)},
 		{"look", optional(a.Look, caseValue[Look])},
+		{"kind", optional(a.Kind, caseValue[ActorKind])},
+		{"dir", optional(a.Dir, Dir.value)},
+		{"refs", vm.Null},
 	})
 }
 

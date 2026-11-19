@@ -15,13 +15,12 @@ export fun harnessIntegrationsFigure() > figure\Figure !> any {
     return figure\of("harness-integrations",
             title: "One spell per host writes the hook that reaches the guard",
             eyebrow: "agents",
-            desc: "Each supported host has a harness spell under spells/harness: Claude Code, "
-                + "Codex, Cursor and OpenCode, plus the Claude Code mod. A spell knows where its "
-                + "host keeps hook entries and prints the entry a person merges. magus agent "
-                + "install writes the shared half, the embedded skills and the read-only scout "
-                + "agent, through internal/agent. The hook each spell prints runs the guard before "
-                + "every call. The driver in internal/agent/harness runs a host's loop in tests, "
-                + "so a spell's output is proven against a real hook payload.")
+            direction: figure\Direction.down,
+            desc: "Each supported host has a harness spell under spells/harness that prints the "
+                + "hook entry a person merges into the host's config. magus agent install writes "
+                + "the shared half, the embedded skills and the scout agent, through "
+                + "internal/agent. The hook each spell prints runs the guard before every call, and "
+                + "the driver in internal/agent/harness proves it against a real hook payload.")
         .actor(spells)
         .actor(hook)
         .actor(host)

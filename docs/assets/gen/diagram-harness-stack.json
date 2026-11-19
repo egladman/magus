@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 6,
+    "imports": 2
   },
   "figure": "harness-stack",
   "findings": [],
-  "stamp": "sha256:1751a9058b62471667918734388868a28c2fbaaeb82e407736697b9c97b71817"
+  "level": "package",
+  "stamp": "sha256:a6975185e8a13dba1f7c7686209258c65ccf8df1cf23a4265ea82a0af158fd4c",
+  "undrilled": []
 }

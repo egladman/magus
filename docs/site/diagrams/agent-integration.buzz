@@ -15,17 +15,14 @@ export fun agentIntegrationFigure() > figure\Figure !> any {
     final skills = figure\external("Skills", sub: "embedded, stamped, AGENTS.md", look: figure\Look.plain);
     final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor, OpenCode", tag: "client");
     return figure\of("agent-integration",
-            title: "What an agent host gets, and the gate every call crosses",
+            title: "Every call an agent host makes crosses the guard first",
             eyebrow: "agents",
-            desc: "magus agent install writes the skills and the AGENTS.md block, and the harness "
-                + "spell for the host prints the hook entry a person merges into the host's "
-                + "config. From then on the host runs the guard's PreToolUse hook before every "
-                + "shell command, file edit and magus MCP call, and only an allowed call runs. "
-                + "The guard reads the job store for the lease the call acts as. The harness sits "
-                + "in the same Go module as the task runner: the guard, the job store and the MCP "
-                + "tools import the graph the targets declare, not a layer above it. Skills, guard "
-                + "verdicts and MCP replies all name commands through internal/hint, so a renamed "
-                + "command cannot leave one of them pointing at nothing.")
+            direction: figure\Direction.down,
+            desc: "magus agent install writes the skills and the AGENTS.md block, and a harness "
+                + "spell prints the hook entry for the host's config. The host then runs the guard "
+                + "before every shell command, edit and MCP call, and only an allowed call runs. "
+                + "The guard reads the job store for the call's lease, and every reply names "
+                + "commands through internal/hint.")
         .box(install, label: "Agent install", sub: "writes skills, AGENTS.md")
         .actor(skills)
         .actor(spells)

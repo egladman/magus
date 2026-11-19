@@ -8,7 +8,7 @@ import "../libs/kustomize/kustomize" as kustomize;
 export fun kustomizeArchitectureFigure() > figure\Figure !> any {
     return kustomize\figureOf(kustomize\build("../deploy/kustomize/overlays/dev"),
         id: "kustomize-architecture",
-        title: "The magus daemon in the dev overlay",
+        title: "The dev overlay denies the daemon every port but DNS and HTTPS",
         eyebrow: "kustomize",
         desc: "Read from deploy/kustomize/overlays/dev without the kustomize binary. One pod, "
             + "one claim, no token: the default-deny policy shuts every port, and two "

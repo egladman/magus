@@ -16,12 +16,12 @@ export fun symbolIndexFigure() > figure\Figure !> any {
     return figure\of("symbol-index",
             title: "A SCIP indexer per language writes the file the graph reads lazily",
             eyebrow: "symbols",
-            desc: "Each language has an indexer behind one contract. The Go indexer wraps a Go "
+            direction: figure\Direction.down,
+            desc: "Each language has an indexer behind one contract: the Go indexer wraps a Go "
                 + "analyzer, the Buzz indexer parses with scipbuzz, and the shell indexer reads "
-                + "scripts. The contract fixes the result as one SCIP file per project. The "
-                + "bindings and the spell host call the indexers when a project's sources change, "
-                + "and the knowledge graph opens that file one project at a time instead of "
-                + "loading every symbol.")
+                + "scripts. Each writes one SCIP file per project when its sources change, and the "
+                + "knowledge graph opens that file one project at a time instead of loading every "
+                + "symbol.")
         .box(contract, label: "Index contract", sub: "what an indexer returns", focal: true)
         .box(golang, label: "Go indexer", sub: "packages, symbols")
         .box(buzz, label: "Buzz indexer", sub: "parsed by scipbuzz")

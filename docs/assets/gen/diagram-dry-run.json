@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 9
   },
   "figure": "dry-run",
   "findings": [],
-  "stamp": "sha256:e91937cc0cd489a3e79ee64ab56eafc1be86efb973604ca84b7a5bfb265837d2"
+  "level": "package",
+  "stamp": "sha256:9d2dcf0ee8443b02d17645218657b86c40645173a9cdaa032349582b4a158385",
+  "undrilled": []
 }

@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 4,
+    "imports": 1
   },
   "figure": "inputs-outputs",
   "findings": [],
-  "stamp": "sha256:6768ea563cf074a0ca5762cf50274568bb9b652c6958cce1e10d2de24dcdc914"
+  "level": "package",
+  "stamp": "sha256:daef092bda226e63b047e703f9d837eb40b54968fa44df6cdfa51dc7a37ad260",
+  "undrilled": []
 }

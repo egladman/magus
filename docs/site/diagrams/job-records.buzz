@@ -16,12 +16,10 @@ export fun jobRecordsFigure() > figure\Figure !> any {
     return figure\of("job-records",
             title: "A job row is one record, and four packages read it",
             eyebrow: "job",
-            desc: "The job store keeps one row per job in a JSON Lines file: its goal, checkpoint "
-                + "and write paths, and the leases that release them. Migrations upgrade an old "
-                + "row on read. describe renders the spec an agent reads, the forecast sizes the "
-                + "verifying checks, and the queue types record a landed job. The store reads the "
-                + "session record and the activity log to say who held a lease. The guard judges calls "
-                + "against the row, and the sandbox narrows a run's writes to it.")
+            desc: "The job store keeps one row per job in a JSON Lines file: its goal, checkpoint, "
+                + "write paths and leases. describe renders the spec an agent reads, the forecast "
+                + "sizes the checks, and the queue types record a landed job. The guard judges "
+                + "calls against the row, and the sandbox narrows writes to it.")
         .box(jobs, label: "Job store", sub: "rows and leases", focal: true)
         .box(migrate, label: "Row migrations", sub: "old rows upgrade on read")
         .box(describe, label: "describe job", sub: "the spec an agent reads")

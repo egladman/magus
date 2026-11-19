@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 2,
+    "imports": 10
   },
   "figure": "symbol-index",
   "findings": [],
-  "stamp": "sha256:a44aa75af6d9c716b3b11491471545c33e49029a36aa586aeb34e7eb2d134558"
+  "level": "package",
+  "stamp": "sha256:e1d5f87c3ff106bc6b8fe8be159874a7090bfa05c09308bde4956670a0e97757",
+  "undrilled": []
 }

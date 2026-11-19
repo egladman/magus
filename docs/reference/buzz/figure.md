@@ -27,9 +27,25 @@ without is dirs less drop, in the order dirs holds them.
 
 **Returns:** [magus\Dir]
 
+### person
+
+person is someone outside the code: a user, a reviewer, an operator. look defaults to
+
+**Signature:** `figure\person(name, [sub], [tag], [link], [look]) -> Actor`
+
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `name`    | `str`   |          |             |
+| `sub`     | `str`   | yes      |             |
+| `tag`     | `str`   | yes      |             |
+| `link`    | `str`   | yes      |             |
+| `look`    | `Look?` | yes      |             |
+
+**Returns:** Actor
+
 ### external
 
-external is an actor the figure draws but no directory holds. look defaults to
+external is something outside the code the figure draws: a vendor service, a host, a
 
 **Signature:** `figure\external(name, [sub], [tag], [link], [look]) -> Actor`
 
@@ -43,11 +59,44 @@ external is an actor the figure draws but no directory holds. look defaults to
 
 **Returns:** Actor
 
+### step
+
+step is one step of a process no directory holds: a CI job, a decision, a role. It is
+
+**Signature:** `figure\step(name, [sub], [tag], [link], [look]) -> Actor`
+
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `name`    | `str`   |          |             |
+| `sub`     | `str`   | yes      |             |
+| `tag`     | `str`   | yes      |             |
+| `link`    | `str`   | yes      |             |
+| `look`    | `Look?` | yes      |             |
+
+**Returns:** Actor
+
+### stage
+
+stage is a step that lives inside one package, named by the symbol that carries it out:
+
+**Signature:** `figure\stage(dir, refs, [name], [sub], [tag], [look]) -> Actor`
+
+| Parameter | Type               | Optional | Description |
+| --------- | ------------------ | -------- | ----------- |
+| `dir`     | `magus\Dir`        |          |             |
+| `refs`    | `magus\RefsResult` |          |             |
+| `name`    | `str`              | yes      |             |
+| `sub`     | `str`              | yes      |             |
+| `tag`     | `str`              | yes      |             |
+| `look`    | `Look?`            | yes      |             |
+
+**Returns:** Actor
+
 ### of
 
-of starts an empty figure. direction defaults to Direction.across.
+of starts an empty figure. direction defaults to Direction.across. level is the one level
 
-**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction]) -> mut Figure`
+**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction], [level]) -> mut Figure`
 
 | Parameter   | Type         | Optional | Description |
 | ----------- | ------------ | -------- | ----------- |
@@ -56,6 +105,7 @@ of starts an empty figure. direction defaults to Direction.across.
 | `eyebrow`   | `str`        | yes      |             |
 | `desc`      | `str`        | yes      |             |
 | `direction` | `Direction?` | yes      |             |
+| `level`     | `Level?`     | yes      |             |
 
 **Returns:** mut Figure
 
@@ -77,13 +127,14 @@ draw lays f out and paints it with theme. anchorHref is a URL template: {path} t
 
 drawDiagram paints d, a Figure's diagram(), with theme, as draw
 
-**Signature:** `figure\drawDiagram(d, theme, [anchorHref]) -> str`
+**Signature:** `figure\drawDiagram(d, theme, [anchorHref], [drillHref]) -> str`
 
 | Parameter    | Type      | Optional | Description |
 | ------------ | --------- | -------- | ----------- |
 | `d`          | `Diagram` |          |             |
 | `theme`      | `Theme`   |          |             |
 | `anchorHref` | `str`     | yes      |             |
+| `drillHref`  | `str`     | yes      |             |
 
 **Returns:** str
 
@@ -98,4 +149,41 @@ nodeFact is the line a figure's stamp records for n. A box anchoring a symbol re
 | `n`       | `Node` |          |             |
 
 **Returns:** str
+
+### drillLinks
+
+drillLinks maps the id of each box in d that drills down to the figure it links to.
+
+**Signature:** `figure\drillLinks(d) -> {str:str}`
+
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `d`       | `Diagram` |          |             |
+
+**Returns:** {str:str}
+
+### claims
+
+claims counts d's connectors by what each asserts: "imports" and "calls" the graph holds,
+
+**Signature:** `figure\claims(d) -> {str:int}`
+
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `d`       | `Diagram` |          |             |
+
+**Returns:** {str:int}
+
+### atlas
+
+atlas reads figures together. column is the widest a figure may lay out, in SVG units:
+
+**Signature:** `figure\atlas(figures, [column]) -> Atlas`
+
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `figures` | `[Figure]` |          |             |
+| `column`  | `int`      | yes      |             |
+
+**Returns:** Atlas
 

@@ -18,10 +18,25 @@ figure it cannot draw, naming the call to change.
 ## What a figure is
 
 A figure makes one claim: the title states it, and the boxes and connectors are
-the evidence. There are hard budgets:
-at most 9 boxes, 12 connectors, 3 zones and 2 accented elements. A figure that
-needs more is two figures, an overview and a detail, each with its own
-`figure\of()`.
+the evidence. It draws at one level, so it cannot grow too detailed:
+
+| Level | Its boxes |
+| --- | --- |
+| `figure\Level.process` | steps, `figure\step()` |
+| `figure\Level.project` | projects, `box(dir)` |
+| `figure\Level.package` | packages, `box(dir)` and `group(dirs)` |
+| `figure\Level.symbol` | the symbols inside one package, `figure\stage()` |
+
+`figure\of(id, level:)` declares it; left out, the boxes decide it. A box of
+another level is refused with the figure it belongs in, and a person or an
+external joins any level. `figure\Level.file` has no unit constructor yet and is
+refused.
+
+Past the level there are hard budgets: at most 9 boxes, 12 connectors, 3 zones,
+2 accented elements and a 60-word description, which is the alt text. A figure
+that needs more is two figures, an overview and a detail, each with its own
+`figure\of()`. The docs registry also refuses a figure wider than its 1200-unit
+column.
 
 ## The first figure
 
@@ -33,8 +48,8 @@ import "magus/figure";
 
 export fun cacheReadFigure() > figure\Figure !> any {
     final cache = magus\graph().dir("internal/cache");
-    final run = figure\external("Run target", look: figure\Look.plain);
-    return figure\of("cache-read", title: "A hit skips the run")
+    final run = figure\external("CI runner", look: figure\Look.plain);
+    return figure\of("cache-read", title: "A hit skips the run", level: figure\Level.package)
         .box(cache, label: "Cache key", focal: true)
         .flowOut(cache, dst: run, label: "miss")
         .scope([cache]);
@@ -55,8 +70,15 @@ embed it on a page with `<!--diagram:cache-read-->`.
   glob matches. `+` joins two lists, and `figure\without(dirs, drop: [...])`
   leaves some out. A package added to the layer joins the group with no edit to
   the figure.
-- `figure\external(name, ...)` is an actor: a person, a vendor service, a step,
-  a Buzz file or a decision.
+- An actor is built by what it stands for, and an `Actor` record with no kind is
+  refused:
+  - `figure\person(name, ...)`: someone outside the code.
+  - `figure\external(name, ...)`: a vendor service, a host, a file a person writes.
+  - `figure\step(name, ...)`: a step of a process, only in a `Level.process` figure.
+  - `figure\stage(dir, refs:, name:, ...)`: a step inside one package, carried out by
+    the symbol `magus\graph().refs` names. Its definition must sit directly in `dir`,
+    and the stage is anchored there. Stages draw a `Level.symbol` figure scoped to
+    that one package.
 
 The layers this repository declares live under `"layers"` in the root
 `magusfile.buzz`: transport, handler, service, repository and composition.
@@ -98,8 +120,13 @@ so rendering never reads the ranking and the same source draws the same figure.
 Nothing is drawn until the figure is clean. Each finding names the call to
 change:
 
-- `10 nodes exceeds the budget of 9; split into overview plus detail, one figure\of() each`:
-  cut or fold boxes, or make two figures.
+- `stage("Parser") is a symbol inside "libs/lang", and this figure is Level.package;
+  draw the stages in a Level.symbol figure scoped to "libs/lang", and box that
+  package here`: split the figure by level.
+- `box(".") is the root project, and this figure is Level.package`: box the
+  packages the claim needs.
+- `10 nodes exceeds the budget of 9; split into overview plus detail, one figure\of() each: scope a detail figure to "internal/handler/**", the widest group, ...`:
+  the remedy names the narrower scope to draw apart.
 - `"internal/x" is in scope("internal/**") but nothing draws it`: draw it, or
   narrow the scope. A finding names a list of dirs by the deepest directory
   holding them all, or by its one path.
@@ -107,6 +134,15 @@ change:
 - `"a" has no symbol index`: build it with `magus graph build`.
 - `hideEdges(...) hides no edge the graph draws`: the code changed; drop the
   hide.
+
+## Drill-down
+
+`figure\atlas(figures, column:)` reads a registry's figures together. Its
+`diagram(f)` links each box to the figure one level down that draws it: a package
+box to the `Level.symbol` figure of that package, a group to the `Level.package`
+figure that boxes each of its directories. The page copy paints the link, and
+the receipt beside each figure lists the groups no figure draws under
+`undrilled`.
 
 ## Generating the files
 

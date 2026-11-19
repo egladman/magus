@@ -16,13 +16,11 @@ export fun guardPathFigure() > figure\Figure !> any {
     return figure\of("guard-path",
             title: "One command judges every call, and says what to run instead",
             eyebrow: "guard",
-            desc: "The host's PreToolUse hook, wired by magus agent harness install, pipes the "
-                + "event to magus shell. The built-in rules judge it first, reading the job store "
-                + "for the lease the call acts as and the session record for what the session "
-                + "already did; the workspace's magus\\guard.command rule sees only what they let "
-                + "through and can only add to the verdict. Each judgment goes to the activity log. A "
-                + "deny carries its reason and a next: breadcrumb naming the command to run "
-                + "instead, and the hook renders it into the host's reply.")
+            direction: figure\Direction.down,
+            desc: "The host's PreToolUse hook pipes each event to magus shell. The built-in rules "
+                + "judge it first, reading the job store for the call's lease and the session "
+                + "record; the workspace's own rule sees only what they let through. Each judgment "
+                + "goes to the activity log, and a deny names the command to run instead.")
         .actor(hook)
         .box(shell, label: "magus shell", sub: "the guard with one door")
         .box(guard, label: "Built-in rules", sub: "judged first, in order", focal: true)

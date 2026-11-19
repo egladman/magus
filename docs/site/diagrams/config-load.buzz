@@ -16,12 +16,11 @@ export fun configLoadFigure() > figure\Figure !> any {
     return figure\of("config-load",
             title: "Every key has one declaration, and every source feeds the same load",
             eyebrow: "config",
-            desc: "The load reads magus.yaml, the environment and the flags into one set of "
-                + "keys, resolving user and state paths through the xdg directories. A remote "
-                + "source goes through the HTTP client, a daemon address through the endpoint "
-                + "package, and a key that names a ward or a stamp is checked against it. The "
-                + "keys come from one declaration. The generator writes the typed accessors in "
-                + "gen from it, so a flag, a config key and the help text cannot disagree.")
+            desc: "The load reads magus.yaml, the environment and the flags into one set of keys, "
+                + "resolving paths through the xdg directories, remote sources through the HTTP "
+                + "client and daemon addresses through the endpoint package. The keys come from one "
+                + "declaration, and the generator writes the typed accessors from it, so a flag, a "
+                + "config key and the help cannot disagree.")
         .actor(sources)
         .box(config, label: "Config load", sub: "one set of keys", focal: true)
         .box(gen, label: "Typed keys", sub: "generated accessors", look: figure\Look.store)

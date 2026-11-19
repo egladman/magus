@@ -2,9 +2,13 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 5
   },
   "figure": "guard-internals",
   "findings": [],
-  "stamp": "sha256:d610cbf65e8e1b1e3868106d776a4da1740a65dc4bfb510a598ff347b58f031b"
+  "level": "package",
+  "stamp": "sha256:4b7c9a114cd6397e02a6adfd3e245366dcef2880485f2a7f1d335e60ab0e82c5",
+  "undrilled": [
+    "Policy"
+  ]
 }

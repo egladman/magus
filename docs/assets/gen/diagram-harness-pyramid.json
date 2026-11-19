@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 4,
     "imports": 0
   },
   "figure": "harness-pyramid",
   "findings": [],
-  "stamp": "sha256:abd6dc7fa5d24a27b544993208844e8622b8fe4834e7d636722dab38f135503a"
+  "level": "process",
+  "stamp": "sha256:a4ded18234e6420f1d14ca32bc109696400ccbe1e05162e97961e32be5a8e03f",
+  "undrilled": []
 }

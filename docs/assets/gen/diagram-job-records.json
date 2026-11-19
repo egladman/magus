@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 10
   },
   "figure": "job-records",
   "findings": [],
-  "stamp": "sha256:0c448bc299f6ed0bdb8f29a5d64d4b558c13da0c139f23d76ebc2a08a406fff0"
+  "level": "package",
+  "stamp": "sha256:b79646dbe5adb1687ec437c0fb582ab8af207dbaace4a87d431371eb2fcf18a2",
+  "undrilled": []
 }

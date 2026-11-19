@@ -4,18 +4,10 @@ import "magus";
 import "magus/figure";
 import "site/diagrams/packages" as packages;
 
-// codeStage is an actor for a step that lives inside one package, so a box (one per
-// directory) cannot draw it. The symbol must be defined directly in dir, or the figure
-// raises: the actor is checked against the index the way a box's symbol: anchor is.
+// codeStage is a stage: a step inside dir, carried out by symbol. The figure checks the
+// symbol is defined directly in dir, so a stage cannot outlive the code it names.
 export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: figure\Look? = null) > figure\Actor !> any {
-    final found: magus\RefsResult = magus\graph().refs(symbol);
-    final prefix = dir.path + "/";
-    foreach (site in found.defs) {
-        if (site.file.startsWith(prefix) and site.file.sub(prefix.len()).indexOf("/") == null) {
-            return figure\external(name, sub: sub, look: look ?? figure\Look.plain);
-        }
-    }
-    throw "buzzStages\codeStage(\"{name}\"): {symbol} has no definition directly in {dir.path}";
+    return figure\stage(dir, refs: magus\graph().refs(symbol), name: name, sub: sub, look: look);
 }
 
 // gopherbuzzPackages is every Go package in the gopherbuzz tree. A figure scoped to it meets

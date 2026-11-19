@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 3,
+    "imports": 2
   },
   "figure": "knowledge-graph",
   "findings": [],
-  "stamp": "sha256:2e34a0bfeaa6203ae99d59c4d14969150f4a249be05e4dbf41464df8caad7b8c"
+  "level": "package",
+  "stamp": "sha256:25fe72ef4f9cc1884036c9984d9faac5a6d406854546c6474b9e96fc4957cc27",
+  "undrilled": []
 }

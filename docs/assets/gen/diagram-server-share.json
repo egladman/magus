@@ -1,10 +1,15 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 2,
+    "imports": 4
   },
   "figure": "server-share",
   "findings": [],
-  "stamp": "sha256:57a91de15c77b48009c5be482e7947fabf5d648a3a960a10410b9d1f8ae8ce13"
+  "level": "package",
+  "stamp": "sha256:fb60d34eb9bce769b4807c4ad44acc4a4a21ebe788f95d19eb01b92441479fa4",
+  "undrilled": [
+    "Shared Connect reads",
+    "Never on a share"
+  ]
 }

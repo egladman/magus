@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 2,
+    "imports": 6
   },
   "figure": "workspace-load",
   "findings": [],
-  "stamp": "sha256:b499a430fbe33be395ccc340515998e5a70bc5caa913d9ddc386aebc5aab8bee"
+  "level": "package",
+  "stamp": "sha256:17f6d8ec4bcc52e43192514f5b3a10a174d1e4238baca18f27bbe71ec5db375f",
+  "undrilled": []
 }

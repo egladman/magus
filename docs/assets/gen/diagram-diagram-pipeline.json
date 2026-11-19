@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 5,
+    "imports": 4
   },
   "figure": "diagram-pipeline",
   "findings": [],
-  "stamp": "sha256:13e01c485b8048d2456cdff414be0addd56cf247812214428182ef310d577f79"
+  "level": "package",
+  "stamp": "sha256:1f3e9658c0c73987db3955ba9c56a621fd5c7c5ecb4697e4d1882c57d88ff1ab",
+  "undrilled": []
 }

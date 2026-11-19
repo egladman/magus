@@ -18,10 +18,8 @@ export fun dryRunFigure() > figure\Figure !> any {
             eyebrow: "dry run",
             desc: "internal/dry loads a magusfile or a spell with every host call replaced by a "
                 + "recording stub, so the Buzz runs and nothing outside the process changes. It "
-                + "reads the spell registry and the wards to answer the same way a real run "
-                + "would, uses the generated host mirrors to type the stubs, and hands the "
-                + "recorded graph to the callers: doctor checks a workspace with it, the docs "
-                + "generator runs examples with it and the playground runs a script in a browser.")
+                + "reads the spell registry and the wards to answer as a real run would, and hands "
+                + "the recorded graph to doctor, the docs generator and the browser playground.")
         .box(dry, label: "Dry run", sub: "stubbed host effects", focal: true)
         .box(spell, label: "Spell registry", sub: "ops as declared")
         .box(ward, label: "Ward", sub: "kind checks still apply")

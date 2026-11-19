@@ -27,6 +27,7 @@ import "site/diagrams/agent-integration" as agentIntegration;
 import "site/diagrams/buzz-engine" as buzzEngine;
 import "site/diagrams/buzz-compile" as buzzCompile;
 import "site/diagrams/buzz-run" as buzzRun;
+import "site/diagrams/buzz-packages" as buzzPackages;
 import "site/diagrams/merge-queue-risk" as mergeQueueRisk;
 import "site/diagrams/workspace-load" as workspaceLoad;
 import "site/diagrams/inputs-outputs" as inputsOutputs;
@@ -58,6 +59,14 @@ import "site/diagrams/doctor" as doctor;
 // copies, so rendering a page never needs the symbol index.
 final PAIR_DIR = "assets/gen";
 
+// COLUMN is the widest a figure lays out, in SVG units. A page SVG scales to the prose
+// column, so a wider one shrinks every label below what a reader can take in.
+final COLUMN = 1200;
+
+// DRILL_HREF is where a box links to the figure one level down: its inlined <figure> on the
+// page that embeds it, which inlinePageDiagrams resolves.
+final DRILL_HREF = "#diagram-\{id}";
+
 // allFigures builds every registered figure. A typo in a directory or layer name raises
 // here, naming it.
 export fun allFigures() > [figure\Figure] !> any {
@@ -83,6 +92,7 @@ export fun allFigures() > [figure\Figure] !> any {
         buzzEngine\buzzEngineFigure(),
         buzzCompile\buzzCompileFigure(),
         buzzRun\buzzRunFigure(),
+        buzzPackages\buzzPackagesFigure(),
         mergeQueueRisk\mergeQueueRiskFigure(),
         workspaceLoad\workspaceLoadFigure(),
         inputsOutputs\inputsOutputsFigure(),
@@ -118,38 +128,37 @@ export fun allFigures() > [figure\Figure] !> any {
 object FigureRun {
     id: str,
     stamp: str = "",
+    level: str = "",
     imports: int = 0,
     calls: int = 0,
     flow: int = 0,
+    // The groups no figure one level down draws, by label.
+    undrilled: [str] = [<str>],
     findings: [str] = [<str>],
     dark: str = "",
     light: str = "",
     page: str = "",
 }
 
-// runFigure lays f out once and paints it three ways. A finding is returned, never raised,
-// so its receipt can record it.
-fun runFigure(f: figure\Figure) > FigureRun {
+// runFigure lays f out once, with the atlas's drill-down links, and paints it three ways.
+// Only the page copy links: the dark and light files are opened on their own. A finding is
+// returned, never raised, so its receipt can record it.
+fun runFigure(a: figure\Atlas, f: figure\Figure) > FigureRun {
     try {
-        final d = f.diagram();
-        final lines: mut [str] = mut ["figure {d.id}", "title {d.title}", "unscoped {d.unscoped}"];
-        var imports = 0;
-        var calls = 0;
-        var flow = 0;
+        final d = a.diagram(f);
+        final lines: mut [str] = mut ["figure {d.id}", "title {d.title}", "unscoped {d.unscoped}", "level {d.level.value}"];
         foreach (n in d.nodes) { lines.append(figure\nodeFact(n)); }
-        foreach (e in d.edges) {
-            lines.append("edge {e.src} {e.dst} {e.claim} {e.kind} {e.label}");
-            if (e.claim == "imports") { imports = imports + 1; }
-            if (e.claim == "calls") { calls = calls + 1; }
-            if (e.claim == "flow") { flow = flow + 1; }
-        }
+        foreach (e in d.edges) { lines.append("edge {e.src} {e.dst} {e.claim.value} {e.kind} {e.label}"); }
         foreach (s in d.scope) { lines.append("scope {s} {d.omits[s] ?? ""}"); }
         final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
+        final counts = figure\claims(d);
         return FigureRun{
-            id = f.id, stamp = stamp, imports = imports, calls = calls, flow = flow,
+            id = f.id, stamp = stamp, level = d.level.value,
+            imports = counts["imports"] ?? 0, calls = counts["calls"] ?? 0, flow = counts["flow"] ?? 0,
+            undrilled = a.undrilled(f),
             dark = stamped(figure\drawDiagram(d, theme: figure\Theme.dark), id: f.id, stamp: stamp),
             light = stamped(figure\drawDiagram(d, theme: figure\Theme.light), id: f.id, stamp: stamp),
-            page = stamped(figure\drawDiagram(d, theme: figure\Theme.page), id: f.id, stamp: stamp),
+            page = stamped(figure\drawDiagram(d, theme: figure\Theme.page, drillHref: DRILL_HREF), id: f.id, stamp: stamp),
         };
     } catch (msg: str) {
         return FigureRun{ id = f.id, findings = msg.split("\n") };
@@ -187,7 +196,9 @@ fun receipt(run: FigureRun) > str !> any {
     final record: {str: any} = {
         "figure": run.id,
         "stamp": run.stamp,
+        "level": run.level,
         "claims": {"imports": run.imports, "calls": run.calls, "flow": run.flow},
+        "undrilled": run.undrilled,
         "findings": run.findings,
     };
     return json\stringify(record, indent: "  ") + "\n";
@@ -216,8 +227,9 @@ export fun writeFigures(dir: str) > [str] !> any {
     final expected: mut {str: bool} = mut {<str: bool>};
     final findings: mut [str] = mut [<str>];
     final figures = allFigures();
+    final a = figure\atlas(figures, column: COLUMN);
     foreach (f in figures) {
-        final run = runFigure(f);
+        final run = runFigure(a, f: f);
         foreach (msg in run.findings) { findings.append(msg); }
         final base = dir + "/diagram-" + f.id;
         if (run.findings.len() == 0) {
@@ -280,29 +292,81 @@ fun pageSvgs() > {str: str} !> any {
     return byId;
 }
 
-// inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on
-// the page mentioning one first: a docs build renders hundreds of pages that reference none.
-export fun inlinePageDiagrams(html: str) > str !> any {
+// embeddedIn caches figurePages' one possible result, for the reason rendered does.
+var embeddedIn: {str: str}? = null;
+
+// figurePages maps each figure id to the first docs page, relative to the docs project,
+// that embeds it with `<!--diagram:id-->`. A drill-down link resolves against it.
+export fun figurePages() > {str: str} !> any {
+    if (embeddedIn != null) { return embeddedIn!; }
+    final pages: mut [str] = mut [<str>];
+    fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep !> any {
+        final name = fs\basename(path);
+        if (isDir) {
+            if (path != "." and (name.startsWith(".") or name == "node_modules" or name == "gen")) { return fs\WalkStep.skipDir; }
+            return fs\WalkStep.next;
+        }
+        if (path.endsWith(".md")) { pages.append(path); }
+        return fs\WalkStep.next;
+    });
+    final byId: mut {str: str} = mut {<str: str>};
+    foreach (page in pages.sort(fun (a: str, b: str) > bool => a < b)) {
+        final rel = if (page.startsWith("./")) page.sub(2) else page;
+        foreach (id in markedIds(fs\readFile(page))) {
+            if (byId[id] == null) { byId[id] = rel; }
+        }
+    }
+    embeddedIn = byId;
+    return byId;
+}
+
+// markedIds is every id a page's `<!--diagram:id-->` markers name, in order.
+fun markedIds(md: str) > [str] {
+    final ids: mut [str] = mut [<str>];
+    final parts = md.split("<!--diagram:");
+    var i = 1;
+    while (i < parts.len()) {
+        final end = parts[i].indexOf("-->");
+        if (end != null) { ids.append(parts[i].sub(0, len: end!)); }
+        i = i + 1;
+    }
+    return ids;
+}
+
+test "a page's markers name its figures in order" {
+    assert\equal(markedIds("a <!--diagram:x--> b <!--diagram:y-z-->"), want: ["x", "y-z"], message: "both ids");
+    assert\equal(markedIds("none"), want: [<str>], message: "no marker");
+}
+
+// inlinePageDiagrams swaps any diagram reference on a page for the inline SVG, and points
+// each drill-down link at the page holding its figure: hrefs maps a figure id to that
+// link, relative to this page. Guarded on the page mentioning one first: a docs build
+// renders hundreds of pages that reference none.
+export fun inlinePageDiagrams(html: str, hrefs: {str: str} = {<str: str>}) > str !> any {
     if (html.indexOf("<!--diagram:") == null and html.indexOf("diagram-") == null) {
         return html;
     }
-    return inlineDiagrams(html, svgById: pageSvgs());
+    return inlineDiagrams(html, svgById: pageSvgs(), hrefs: hrefs);
 }
 
 // inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
 // id. Inlining is what makes a figure follow the site's theme toggle: an <img>-loaded SVG
-// is a separate document and only ever sees prefers-color-scheme.
+// is a separate document and only ever sees prefers-color-scheme. Each inlined <figure>
+// carries id="diagram-<id>", the target of a box's drill-down link.
 //
 // A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark
 // passes through. The README carries a real <picture> so GitHub shows the committed pair,
 // and the docs home page, which is the README, still gets the inline copy.
-fun inlineDiagrams(html: str, svgById: {str: str}) > str {
+fun inlineDiagrams(html: str, svgById: {str: str}, hrefs: {str: str} = {<str: str>}) > str {
     var page = html;
     foreach (id in svgById.keys()) {
         final svg = svgById[id] ?? "";
-        final fig = "<figure class=\"magus-diagram-figure\">" + svg + "</figure>";
+        final fig = "<figure class=\"magus-diagram-figure\" id=\"diagram-" + id + "\">" + svg + "</figure>";
         page = page.split("<!--diagram:" + id + "-->").join(fig);
         page = replacePicture(page, needle: "diagram-" + id + ".svg", replacement: fig);
+    }
+    foreach (id, href in hrefs) {
+        page = page.split("href=\"#diagram-" + id + "\"").join("href=\"" + href + "\"");
     }
     return page;
 }
@@ -340,12 +404,26 @@ fun replacePicture(html: str, needle: str, replacement: str) > str {
 
 test "a comment marker and a picture are replaced, an unrelated picture is not" {
     final page = inlineDiagrams("<p>a</p>\n<!--diagram:x-->\n<p>b</p>", svgById: {"x": "<svg/>"});
-    assert\isTrue(page.indexOf("<svg/>") != null and page.indexOf("<!--diagram:x-->") == null, message: "marker");
+    assert\isTrue(page.indexOf("<figure class=\"magus-diagram-figure\" id=\"diagram-x\"><svg/>") != null and page.indexOf("<!--diagram:x-->") == null, message: "marker");
     final markup = "<picture><img src=\"assets/gen/core-loop.svg\"></picture><picture><source srcset=\"assets/gen/diagram-x-light.svg\">"
         + "<img src=\"assets/gen/diagram-x.svg\" alt=\"x\"></picture><p>b</p>";
     final swapped = inlineDiagrams(markup, svgById: {"x": "<svg/>"});
-    assert\equal(swapped, want: "<picture><img src=\"assets/gen/core-loop.svg\"></picture><figure class=\"magus-diagram-figure\"><svg/></figure><p>b</p>",
+    assert\equal(swapped, want: "<picture><img src=\"assets/gen/core-loop.svg\"></picture><figure class=\"magus-diagram-figure\" id=\"diagram-x\"><svg/></figure><p>b</p>",
         message: "the figure's picture goes whole, the recording stays");
+}
+
+test "a drill-down link points at the page holding its figure" {
+    final svg = "<svg><a href=\"#diagram-y\" data-drill=\"y\"><g/></a></svg>";
+    final page = inlineDiagrams("<!--diagram:x-->", svgById: {"x": svg}, hrefs: {"y": "../cache/#diagram-y"});
+    assert\isTrue(page.indexOf("<a href=\"../cache/#diagram-y\" data-drill=\"y\">") != null, message: page);
+}
+
+test "runFigure counts the claims its figure draws and records its level" {
+    final f = figure\of("t", title: "A runs before B").flowAcross(figure\step("A"), dst: figure\step("B")).unscoped(why: "a process");
+    final run = runFigure(figure\atlas([f]), f: f);
+    assert\equal(run.findings, want: [<str>], message: "it draws");
+    assert\equal(run.flow, want: 1, message: "the hand edge counts");
+    assert\equal(run.level, want: "process", message: "steps derive a process");
 }
 
 // unknownMarkers is the reverse check: a magus:diagram marker naming no figure means a

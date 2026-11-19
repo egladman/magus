@@ -24,9 +24,12 @@ export fun serverHttp() > Figure !> any {
 
 | Call                                   | What it does                                                     |
 | -------------------------------------- | ---------------------------------------------------------------- |
-| `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` sets the rest.                     |
+| `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` and `level:` set the rest.         |
 | `without(dirs, drop:)`                 | `dirs` less `drop`; raises when `drop` names one `dirs` lacks.   |
-| `external(name, ...)`                  | An `Actor`: a box that names no directory.                       |
+| `person(name, ...)`                    | An `Actor` for someone outside the code; joins any level.        |
+| `external(name, ...)`                  | An `Actor` for a service or file outside the code; any level.    |
+| `step(name, ...)`                      | An `Actor` for a process step; only in a `Level.process` figure. |
+| `stage(dir, refs:, ...)`               | An `Actor` for a symbol directly in `dir`; `Level.symbol`.       |
 | `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\graph().refs` result.            |
 | `.group(dirs, label:, ...)`            | Every directory in `dirs` as one box.                            |
 | `.actor(a)`                            | Draws an actor at this point in declaration order.               |
@@ -40,16 +43,21 @@ export fun serverHttp() > Figure !> any {
 | `.legend(look, label:)`                | One legend entry.                                                |
 | `draw(f, theme:, anchorHref:)`         | Lay out and paint with `Theme.page`, `.light` or `.dark`.        |
 | `.diagram()`                           | Lay out only, for a receipt of the placed boxes and edges.       |
+| `atlas(figures, column:)`              | Reads figures together: drill-down links and a width budget.     |
+| `drawDiagram(d, theme:, drillHref:)`   | Paints a laid-out figure; `{id}` takes a box's drill target.     |
+| `claims(d)`, `drillLinks(d)`           | A laid-out figure's edges by claim, and its boxes' drill links.  |
 
 ## A figure is data
 
-`Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`,
+`Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`, `level`,
 `unscopedWhy` (empty for a figure that draws code), `graphEdges`, and the lists `boxes`,
 `scopes`, `exclusions`, `hiddenEdges`, `edgeMarks`, `flows`, `zones`, `alignments` and
 `legends`. Their records are `Box`, `Exclusion`, `HiddenEdges`, `EdgeMark`, `Flow` (two
 `End`s, each a directory or an actor), `Zone`, `Alignment` and `Legend`; every set of
 directories is a plain `[magus\Dir]`. A look, stroke,
-direction or axis is always its enum (`Look`, `Stroke`, `Direction`, `Axis`), never a string.
+direction, axis, level or actor kind is always its enum (`Look`, `Stroke`, `Direction`,
+`Axis`, `Level`, `ActorKind`), never a string. A host's actor with no kind is a step: a host
+draws its own units, projects, targets or jobs, as a process.
 
 The builder methods only fill those fields, so a `Figure{...}` literal holding the same
 fields draws the same bytes. Every check runs in `draw()` and `diagram()`.
@@ -62,6 +70,12 @@ Go mirror drifts from the records declared here.
 
 ## Rules the module enforces
 
+- A figure draws at one level: process, project, package or symbol. A box of another
+  level is refused, naming the figure it belongs in. The root `.` is the root project,
+  never a package. A `Level.symbol` figure's stages all sit in the one package it scopes.
+- An actor says what it stands for: an `Actor` with no kind is refused.
+- At most 9 boxes and 12 edges, refused with the narrower scope to draw apart, and a
+  description of at most 60 words.
 - A directory is drawn once. A box inside a group's dirs is refused; drop it with
   `without(dirs, drop: [...])`.
 - Every directory a `scope()` names is drawn or excepted. A package that joins a layer

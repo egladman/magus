@@ -25,10 +25,9 @@ export fun serverShareFigure() > figure\Figure !> any {
             eyebrow: "magus server",
             desc: "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
                 + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
-                + "serves four JSON read routes and the read Connect services, and nothing "
-                + "else. Every other handler in the console's handler layer stays loopback only: "
-                + "the graph, the diff routes, the derived plan, the job store, /mcp and job "
-                + "control.")
+                + "serves four JSON read routes and the read Connect services, nothing else. Every "
+                + "other handler stays loopback only: the graph, the diff routes, the plan, the job "
+                + "store, /mcp and job control.")
         .actor(dash)
         .box(server, label: "/api/v1/share", sub: "loopback + bearer", tag: "route")
         .box(lan, label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", focal: true)

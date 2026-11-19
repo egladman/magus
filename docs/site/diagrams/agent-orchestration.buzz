@@ -16,27 +16,23 @@ export fun agentOrchestrationFigure() > figure\Figure !> any {
     return figure\of("agent-orchestration",
             title: "Three roles, one store, and a guard at every boundary",
             eyebrow: "orchestration",
-            desc: "The orchestrator forks job rows into one JSON Lines store and waits on them; it "
-                + "never does groundwork. Each worker is bound to one row: its write paths, its one "
-                + "check, its own checkout, placed by the worktree bootstrap. The integrator merges "
-                + "the finished branches with git merge --no-ff, regenerates once and runs the full "
-                + "checks. The guard reads the row on every write and command. The sandbox narrows "
-                + "a run's writes to the same row, and its filesystem half applies that grant with "
-                + "landlock where the kernel has it. The broker holds the one build budget every "
-                + "checkout on the machine shares.")
+            direction: figure\Direction.down,
+            desc: "The orchestrator forks job rows into one store and waits on them. Each worker "
+                + "holds one row: its write paths, check and checkout. The integrator merges "
+                + "finished branches and runs the checks. The guard reads the row on every call, "
+                + "the sandbox narrows a run's writes to it, and the broker holds the machine's one "
+                + "build budget.")
         .actor(root)
         .actor(worker)
         .actor(integrator)
         .box(store, label: "Job store", sub: "jobs.jsonl, one per repo", look: figure\Look.store)
         .box(guard, label: "Guard", sub: "every write and command", focal: true)
-        .box(sandbox, label: "Sandbox", sub: "write grant from the row")
-        .box(landlock, label: "Landlock", sub: "the kernel applies the grant")
+        .group([sandbox, landlock], label: "Sandbox", sub: "write grant, landlock applies it")
         .box(broker, label: "Broker", sub: "one machine budget")
         .box(vcs, label: "vcs", sub: "checkpoint, merge")
         .edgesFromGraph()
         .markEdge(guard, dst: store, label: "lease")
         .markEdge(guard, dst: broker, label: "seats")
-        .markEdge(sandbox, dst: landlock, label: "applies")
         .flowIn(root, dst: store, label: "fork, wait")
         .flowAcross(root, dst: worker, label: "./magus, exec")
         .flowIn(worker, dst: guard, label: "each call")

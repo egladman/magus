@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 6,
     "imports": 0
   },
   "figure": "image-build",
   "findings": [],
-  "stamp": "sha256:faa23e9b38e2dfb282e039d17b3d1ecb7deaedd1e2926792d8e76f8322982af0"
+  "level": "process",
+  "stamp": "sha256:1075d225e5b7f3bcad6f28f132d8a7c4c3bc7d9e49d59e4e294b066014ef078c",
+  "undrilled": []
 }

@@ -26,13 +26,11 @@ export fun buzzEngineFigure() > figure\Figure !> any {
     return figure\of("buzz-engine",
             title: "One pipeline, and the modules each host registers",
             eyebrow: "buzz",
-            desc: "Every Buzz program magus touches goes through the same gopherbuzz pipeline: lex, "
-                + "parse, check, compile, run. Hosts differ only in the modules they register first. "
-                + "The host bindings attach to the magusfile engine at init and provide every magus "
-                + "host module, each through the trampoline generated from its descriptor. The "
-                + "browser playground runs the dry evaluator, which installs only the trampolines "
-                + "marked WASM, pure compute with no filesystem, process or network access, and "
-                + "records host calls instead of running them. Both also install the Buzz stdlib.")
+            desc: "Every Buzz program magus touches goes through one gopherbuzz pipeline: lex, "
+                + "parse, check, compile, run. Hosts differ only in the modules they register "
+                + "first. The host bindings give the magusfile engine every host module; the "
+                + "browser playground runs the dry evaluator, which installs only the pure "
+                + "trampolines marked WASM and records host calls instead of running them.")
         .box(bindings, label: "Host bindings", sub: "magus namespace, init()")
         .box(opencode, label: "OpenCode binding", sub: "plugin, runtime")
         .box(opencodeWasm, label: "OpenCode WASM", sub: "main, plugin")

@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 8
   },
   "figure": "cache-internals",
   "findings": [],
-  "stamp": "sha256:1257a73c19d88149259bc5e3295630ee33141ffac624c0a9777aade631a65c9e"
+  "level": "package",
+  "stamp": "sha256:a52cd3b787c7b6a1e02f5a1d8ca7e19e976d70e156eb5225bbff5dd7b1be9146",
+  "undrilled": []
 }
