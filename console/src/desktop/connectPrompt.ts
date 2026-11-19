@@ -97,7 +97,7 @@ export function renderConnectPrompt(
       return;
     }
   }
-  return unreachable(state.connection);
+  return unreachable(state);
 }
 
 // renderEmptyMessage writes an empty state that is not about the connection (nothing kept yet, a
