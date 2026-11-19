@@ -41,7 +41,7 @@ func (c *collector) Handle(_ context.Context, r journal.Record) {
 func (s *EmitSuite) TestFileSinkAppendsJSONL() {
 	var buf bytes.Buffer
 	fs := NewFileSink(&buf)
-	ctx := WithSinks(testCtx(s.T()), fs.Handle)
+	ctx := WithSinks(testContext(s.T()), fs.Handle)
 
 	Emit(ctx, journal.Output{Stream: journal.Stdout, Project: "web", Target: "build", Text: "line one"})
 	Emit(ctx, journal.Run{Status: journal.StatusPass, Ref: "outabc", Duration: 5 * time.Millisecond})
@@ -59,21 +59,21 @@ func (s *EmitSuite) TestFileSinkAppendsJSONL() {
 
 func (s *EmitSuite) TestEmitStampsTheInvocationFromContext() {
 	var c collector
-	ctx := WithInvocationID(WithSinks(testCtx(s.T()), c.Handle), "inv9")
+	ctx := WithInvocationID(WithSinks(testContext(s.T()), c.Handle), "inv9")
 	Emit(ctx, journal.Output{Text: "hi"})
 	s.Require().Len(c.got, 1)
 	s.Equal("inv9", c.got[0].Invocation)
 }
 
 func (s *EmitSuite) TestEmitWithNoSinkDoesNothing() {
-	s.NotPanics(func() { Emit(testCtx(s.T()), journal.Output{Text: "x"}) })
+	s.NotPanics(func() { Emit(testContext(s.T()), journal.Output{Text: "x"}) })
 }
 
 func (s *EmitSuite) TestWithSinksSkipsANilSinkAndKeepsOrder() {
 	var order []string
 	first := func(context.Context, journal.Record) { order = append(order, "first") }
 	second := func(context.Context, journal.Record) { order = append(order, "second") }
-	Emit(WithSinks(testCtx(s.T()), first, nil, second), journal.Finished{Status: journal.StatusPass})
+	Emit(WithSinks(testContext(s.T()), first, nil, second), journal.Finished{Status: journal.StatusPass})
 	s.Equal([]string{"first", "second"}, order)
 }
 
@@ -110,7 +110,7 @@ func (s *EmitSuite) TestWithStepAndStepFromContext() {
 // purpose, as the one high-volume kind a follower opts into.
 func (s *EmitSuite) TestFileSinkFlushesEverythingButOutput() {
 	var buf bytes.Buffer
-	ctx := WithSinks(testCtx(s.T()), NewFileSink(&buf).Handle)
+	ctx := WithSinks(testContext(s.T()), NewFileSink(&buf).Handle)
 
 	Emit(ctx, journal.Output{Text: "buffered"})
 	s.Require().Empty(buf.String(), "output must not force a flush")
@@ -134,7 +134,7 @@ func (s *EmitSuite) TestFileSinkSaysOnceThatItStopped() {
 	defer slog.SetDefault(prev)
 
 	w := &failingWriter{}
-	ctx := WithSinks(testCtx(s.T()), NewFileSink(w).Handle)
+	ctx := WithSinks(testContext(s.T()), NewFileSink(w).Handle)
 	Emit(ctx, journal.Finished{Status: journal.StatusPass})
 	Emit(ctx, journal.Finished{Status: journal.StatusFail})
 	s.Equal(1, strings.Count(logged.String(), "journal.write"), "a failed write is said once")
@@ -227,7 +227,7 @@ func stringFields(t reflect.Type, prefix string) []string {
 // BenchmarkEmitOutput measures the hot path: one output record to a file
 // sink, the per-subprocess-line cost.
 func BenchmarkEmitOutput(b *testing.B) {
-	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(io.Discard).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(backgroundContext(), NewFileSink(io.Discard).Handle), "invbench")
 	out := journal.Output{Stream: journal.Stdout, Project: "web", Target: "build", Text: "some subprocess output line here"}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -239,7 +239,7 @@ func BenchmarkEmitOutput(b *testing.B) {
 // BenchmarkEmitOutput: a result flushes so a live follower sees it, and output
 // stays buffered.
 func BenchmarkEmitResult(b *testing.B) {
-	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(io.Discard).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(backgroundContext(), NewFileSink(io.Discard).Handle), "invbench")
 	run := journal.Run{Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outa1b2c3d4e5f6", Duration: 1200 * time.Millisecond}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -256,7 +256,7 @@ func BenchmarkEmitResultFile(b *testing.B) {
 	}
 	defer func() { _ = f.Close() }()
 
-	ctx := WithInvocationID(WithSinks(bgCtx(), NewFileSink(f).Handle), "invbench")
+	ctx := WithInvocationID(WithSinks(backgroundContext(), NewFileSink(f).Handle), "invbench")
 	run := journal.Run{Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outa1b2c3d4e5f6", Duration: 1200 * time.Millisecond}
 	b.ReportAllocs()
 	for b.Loop() {

@@ -14,7 +14,7 @@ func TestBroadcaster(t *testing.T) { suite.Run(t, new(BroadcasterSuite)) }
 
 // emit sends one record to bc through Emit, the real capture path.
 func emit(bc *Broadcaster, text string) {
-	Emit(WithSinks(bgCtx(), bc.Handle), journal.Output{Text: text})
+	Emit(WithSinks(backgroundContext(), bc.Handle), journal.Output{Text: text})
 }
 
 func text(r journal.Record) string {

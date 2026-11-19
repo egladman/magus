@@ -261,11 +261,11 @@ func (s *Store) Binding(c Caller) Binding {
 // this read ended a row, a row the last pass saw is gone, or recordSweepEvery has passed
 // since it (see [Store.recordsSwept]). A checkout removed under a row that is already
 // over, and a record naming a row that never existed, wait for that interval.
-func (s *Store) sweepRecords(w *sweeper, rows []job.Job, ended bool) {
+func (s *Store) sweepRecords(ctx context.Context, w *sweeper, rows []job.Job, ended bool) {
 	if s.err != nil || s.path == "" {
 		return
 	}
-	if !ended && s.recordsSwept(w.now, rows) {
+	if !ended && s.recordsSwept(ctx, w.now, rows) {
 		return
 	}
 	dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
@@ -273,7 +273,7 @@ func (s *Store) sweepRecords(w *sweeper, rows []job.Job, ended bool) {
 	if err != nil {
 		return
 	}
-	defer s.writeRecordsSwept(w.now, rows)
+	defer s.writeRecordsSwept(ctx, w.now, rows)
 	for _, e := range entries {
 		path := filepath.Join(dir, e.Name())
 		b := readBinding(path)
@@ -317,10 +317,10 @@ func (s *Store) recordsSweptLog() (file.JSONL[recordsPass], error) {
 // recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
 // are still in rows. A history that cannot be read reads as no pass, which costs one early
 // pass.
-func (s *Store) recordsSwept(now int64, rows []job.Job) bool {
+func (s *Store) recordsSwept(ctx context.Context, now int64, rows []job.Job) bool {
 	log, err := s.recordsSweptLog()
 	if err != nil {
-		slog.With(attr.Component("magus")).Warn("records-swept history not opened", attr.Error(err))
+		slog.With(attr.Component("magus")).WarnContext(ctx, "records-swept history not opened", attr.Error(err))
 		return false
 	}
 	passes, err := log.Load()
@@ -338,14 +338,14 @@ func (s *Store) recordsSwept(now int64, rows []job.Job) bool {
 	return !slices.ContainsFunc(last.Rows, func(id string) bool { return !present[id] })
 }
 
-func (s *Store) writeRecordsSwept(now int64, rows []job.Job) {
+func (s *Store) writeRecordsSwept(ctx context.Context, now int64, rows []job.Job) {
 	pass := recordsPass{At: now, Rows: make([]string, len(rows))}
 	for i, r := range rows {
 		pass.Rows[i] = r.ID
 	}
 	log, err := s.recordsSweptLog()
 	if err != nil {
-		slog.With(attr.Component("magus")).Warn("records-swept history not opened", attr.Error(err))
+		slog.With(attr.Component("magus")).WarnContext(ctx, "records-swept history not opened", attr.Error(err))
 		return
 	}
 	_ = log.Update(context.Background(), func([]recordsPass) []recordsPass { return []recordsPass{pass} })

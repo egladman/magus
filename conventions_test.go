@@ -241,13 +241,9 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 						continue
 					}
 					installed, err := os.ReadFile(field)
-					if !assert.NoError(t, err, "%s %q hook references glue that is not installed", event, entry.Matcher) {
-						continue
-					}
+					require.NoError(t, err, "%s %q hook references glue that is not installed", event, entry.Matcher)
 					template, err := os.ReadFile(filepath.Join(hookTemplateDir, filepath.Base(field)))
-					if !assert.NoError(t, err, "%s %q hook runs glue with no template under %s", event, entry.Matcher, hookTemplateDir) {
-						continue
-					}
+					require.NoError(t, err, "%s %q hook runs glue with no template under %s", event, entry.Matcher, hookTemplateDir)
 					assert.True(t, bytes.HasPrefix(installed, template),
 						"%s %q hook glue %s has drifted from its template; re-run magus agent harness install", event, entry.Matcher, field)
 				}

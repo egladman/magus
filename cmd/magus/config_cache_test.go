@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache/remotetest"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,7 +191,7 @@ func (s *cacheShard) run(t *testing.T, args ...string) (string, error) {
 	global.output = s.output
 	var err error
 	stderr := notices(t, func() {
-		err = configCacheCommand(withSecrets(context.Background()), s.root, args)
+		err = configCacheCommand(testkit.WithEnvResolver(context.Background()), s.root, args)
 	})
 	if magusValue != nil {
 		_ = magusValue.Close()

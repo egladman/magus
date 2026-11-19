@@ -1034,7 +1034,7 @@ func (s *Store) sweep(ctx context.Context, f job.Rows) (job.Rows, error) {
 	if err != nil {
 		return job.Rows{}, err
 	}
-	s.sweepRecords(w, f.Jobs, ended)
+	s.sweepRecords(ctx, w, f.Jobs, ended)
 	return f, nil
 }
 

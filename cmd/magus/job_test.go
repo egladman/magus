@@ -594,7 +594,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	worker := t.TempDir()
 	recorded, err := cache.NewOutputStore(filepath.Join(worker, ".magus")).
-		Persist(withSecrets(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", DurationMs: 1500, Revision: "abc123", Dirty: true})
+		Persist(testkit.WithEnvResolver(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", DurationMs: 1500, Revision: "abc123", Dirty: true})
 	require.NoError(t, err)
 	require.NotEmpty(t, recorded.Attempt)
 
@@ -626,7 +626,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	holderCache, err := magus.ResolveCacheDir(holder.Root())
 	require.NoError(t, err)
 	passed, err := cache.NewOutputStore(holderCache).
-		Persist(withSecrets(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "go-test", TimestampMs: time.Now().UnixMilli()})
+		Persist(testkit.WithEnvResolver(t.Context()), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "go-test", TimestampMs: time.Now().UnixMilli()})
 	require.NoError(t, err)
 
 	found, err := storedAttempts(holder.Root())(t.Context(), passed.Ref)
