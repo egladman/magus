@@ -5,9 +5,15 @@ import "fs";
 import "magus";
 import "os";
 import "result";
+import "term";
+import "hack/lib/prompt";
 import "assert";
 
-final USAGE = "usage: magus buzz hack/ci/run-with-harnesses.buzz [--plan <file>] -- <subcommand> [args...]";
+// SUBCOMMANDS are the commands a person is offered when they give none; a workflow
+// always names its own.
+final SUBCOMMANDS = ["doctor", "run ci:gha --no-default-charms ."];
+
+final USAGE = "usage: magus buzz hack/ci/run-with-harnesses.buzz [--plan <file>] -- [--yes] <subcommand> [args...]";
 
 // plan is a file the command reads on stdin. A queue gate hands none.
 object Invocation {
@@ -43,7 +49,19 @@ export fun commandArgs(args: [str]) > result\Result::<Invocation> {
 }
 
 fun main(args: [str]) > void !> any {
-    final command = commandArgs(args);
+    final yes = args.len() > 0 and args[0] == "--yes";
+    var given = if (yes) args.sub(1) else args;
+    if (term\isInteractive()) {
+        if (given.len() == 0) {
+            final asked = prompt\choose(null, flag: "<subcommand>", items: SUBCOMMANDS, question: "Command to run once the harnesses are installed");
+            if (asked.error != null) { throw asked.error!.message; }
+            given = asked.value!.split(" ");
+        }
+        final sure = prompt\confirmed(yes, flag: "--yes", question: "Install the harnesses into this checkout, then run `magus {given.join(" ")}`?");
+        if (sure.error != null) { throw sure.error!.message; }
+        if (!sure.value!) { throw "run-with-harnesses: not confirmed, nothing installed or run"; }
+    }
+    final command = commandArgs(given);
     if (command.error != null) { throw command.error!.message; }
     final inv = command.value!;
     final stdin = if (inv.plan != "") fs\readFile(inv.plan) else "";
@@ -75,4 +93,16 @@ test "a plan file is read off before the command" {
 
 test "no subcommand is a usage failure" {
     assert\equal(commandArgs([<str>]).error != null, want: true, message: "usage");
+}
+
+test "with no terminal a missing subcommand is the usage failure and nothing asks" {
+    if (!term\isInteractive()) {
+        var failure = "";
+        try {
+            main([<str>]);
+        } catch (err: str) {
+            failure = err;
+        }
+        assert\equal(failure, want: USAGE, message: "usage");
+    }
 }

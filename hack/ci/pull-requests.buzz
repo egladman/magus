@@ -24,6 +24,10 @@
 // main had not. Proving it reads main's run once per status, and only when a finished red
 // needs it.
 //
+// On a terminal, status and apply with no selector offer the open pull requests to mark
+// (the caller's own start marked), a dashboard with neither --issue nor --preview asks which,
+// and apply and a dashboard that edits an issue confirm once first. Unattended nothing asks.
+//
 // With no selector the selection is the authenticated user's open pull requests. Every
 // decision is a pure function tested at the bottom; the gh and git calls are not. Apply
 // and act never admin-merge, force-push or edit a branch: code changes are an agent's, and
@@ -38,8 +42,10 @@ import "proc";
 import "result";
 import "serialize";
 import "std";
+import "term";
 import "time";
 import "vcs";
+import "hack/lib/prompt";
 import "hack/magusfile/commits" as commits;
 import "hack/dev/rebase-branches-onto-base" as rebaseonto;
 import "hack/magusfile/regressions" as regressions;
@@ -2546,17 +2552,115 @@ fun dashboard(sel: Selector) > void !> any {
     std\print("pull-requests: wrote the dashboard to {sel.file} and to issue #{sel.issue}");
 }
 
+// DASH_PREVIEW and DASH_ISSUE are what a person is offered for a dashboard that names neither.
+final DASH_PREVIEW = "preview: write dashboard.md and edit no issue";
+final DASH_ISSUE = "replace the body of an issue with the page";
+
+// passes says whether argv passes flag, as "--flag v" or "--flag=v".
+export fun passes(argv: [str], flag: str) > bool {
+    foreach (a in argv) {
+        if (a == flag or a.startsWith(flag + "=")) { return true; }
+    }
+    return false;
+}
+
+// unselected says whether argv names no pull request, author or --all.
+export fun unselected(argv: [str]) > bool {
+    return !passes(argv, flag: "--pr") and !passes(argv, flag: "--author") and !passes(argv, flag: "--all");
+}
+
+// openLines are the open pull requests as "<number> <title>" lines, with the ones login
+// wrote listed second.
+fun openLines() > result\Result::<{str: [str]}> {
+    try {
+        final me = capture("gh", args: ["api", "user", "--jq", ".login"]).trim();
+        final all = mut [<str>];
+        final mine = mut [<str>];
+        foreach (p in openPulls()) {
+            final line = "{p.number} {p.title}";
+            all.append(line);
+            if (p.author == me) { mine.append(line); }
+        }
+        return result\ok::<{str: [str]}>({"all": all, "mine": mine});
+    } catch (err: any) {
+        return result\caught::<{str: [str]}>(err, doing: "listing the open pull requests");
+    }
+}
+
+// openIssues are the open issues as "<number> <title>" lines.
+fun openIssues() > result\Result::<[str]> {
+    try {
+        final lines = mut [<str>];
+        foreach (i in serialize\jsonDecode(capture("gh", args: ["issue", "list", "--state", "open", "--limit", "50",
+            "--json", "number,title"])).listValue()) {
+            lines.append("{i.q("number").integerValue()} {i.q("title").stringValue()}");
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "gh issue list");
+    }
+}
+
 export fun main(args: [str]) > void !> any {
     if (args.len() == 0) {
         throw "pull-requests: no step given\n{usage}";
     }
     final step = args[0];
+    var argv = args.sub(1);
+    final yes = passes(argv, flag: "--yes");
+    argv = argv.filter(fun (index: int, a: str) > bool => a != "--yes");
+    if (term\isInteractive()) {
+        if ((step == "status" or step == "apply") and unselected(argv)) {
+            final open = openLines();
+            if (open.error != null) { throw open.error!.message; }
+            final lines = open.value!;
+            if (lines["all"]!.len() > 0) {
+                final picked = prompt\chooseMany([<str>], flag: "--pr", items: lines["all"]!,
+                    question: "Pull requests to {step}", marked: lines["mine"]!);
+                if (picked.error != null) { throw picked.error!.message; }
+                final flagged = mut [<str>];
+                foreach (line in picked.value!) {
+                    flagged.append("--pr");
+                    flagged.append(line.split(" ")[0]);
+                }
+                argv = argv + flagged;
+            }
+        }
+        if (step == "dashboard" and !passes(argv, flag: "--preview") and !passes(argv, flag: "--issue")) {
+            final mode = prompt\choose(null, flag: "--issue or --preview", items: [DASH_PREVIEW, DASH_ISSUE],
+                question: "Where the dashboard goes");
+            if (mode.error != null) { throw mode.error!.message; }
+            if (mode.value! == DASH_PREVIEW) {
+                argv = argv + ["--preview"];
+            } else {
+                final issues = openIssues();
+                if (issues.error != null) { throw issues.error!.message; }
+                final issue = prompt\choose(null, flag: "--issue", items: issues.value!, question: "Issue whose body the dashboard replaces");
+                if (issue.error != null) { throw issue.error!.message; }
+                argv = argv + ["--issue", issue.value!.split(" ")[0]];
+            }
+        }
+        if (step == "dashboard" and !passes(argv, flag: "--out")) {
+            argv = argv + ["--out", "dashboard.md"];
+        }
+        var question = "";
+        if (step == "apply") {
+            question = "Queue the green stacks and rerun the red runs outside the change's files on the selected pull requests?";
+        } else if (step == "dashboard" and passes(argv, flag: "--issue")) {
+            question = "Replace the body of the chosen issue with the dashboard?";
+        }
+        if (question != "") {
+            final sure = prompt\confirmed(yes, flag: "--yes", question: question);
+            if (sure.error != null) { throw sure.error!.message; }
+            if (!sure.value!) { throw "pull-requests: {step}: not confirmed, nothing done"; }
+        }
+    }
     if (step == "status") {
-        status(parseSelector(step, argv: args.sub(1)));
+        status(parseSelector(step, argv: argv));
     } else if (step == "apply") {
-        apply(parseSelector(step, argv: args.sub(1)));
+        apply(parseSelector(step, argv: argv));
     } else if (step == "dashboard") {
-        dashboard(parseSelector(step, argv: args.sub(1)));
+        dashboard(parseSelector(step, argv: argv));
     } else {
         throw "pull-requests: unknown step \"{step}\"\n{usage}";
     }
@@ -3415,4 +3519,24 @@ test "the dashboard says an unreadable main history is unknown, never an empty l
     final page = renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" },
         regressionsUnread = "gh: HTTP 502" });
     has(page, want: "which change broke it is unknown, the read failed: gh: HTTP 502");
+}
+
+test "a selector is any of --pr, --author or --all, attached or not" {
+    assert\equal(unselected([<str>]), want: true, message: "none");
+    assert\equal(unselected(["--method", "merge"]), want: true, message: "a method is no selector");
+    assert\equal(unselected(["--pr=4"]), want: false, message: "pr");
+    assert\equal(unselected(["--author", "eli"]), want: false, message: "author");
+    assert\equal(unselected(["--all"]), want: false, message: "all");
+}
+
+test "with no terminal a dashboard without --out is today's refusal and nothing asks" {
+    if (!term\isInteractive()) {
+        var failure = "";
+        try {
+            main(["dashboard", "--preview"]);
+        } catch (err: any) {
+            failure = "{err}";
+        }
+        assert\equal(failure.indexOf("--out") != null, want: true, message: "names the flag: {failure}");
+    }
 }

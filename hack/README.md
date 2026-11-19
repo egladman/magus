@@ -150,6 +150,10 @@ failure artifacts is reported as such; read its raw job logs with
 `gh run view <run-id> --log-failed` to diagnose setup failures and jobs or workflows
 without target artifacts. Missing artifacts do not mean a passing run.
 
+On a terminal each script here asks for what its flags left out (a run, a pull request,
+an issue, a repository, a subcommand) and confirms once before an outward step (`--yes` answers it); a
+workflow has no terminal and passes every argument as a flag, so nothing asks there.
+
 | script | does | cost |
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |
