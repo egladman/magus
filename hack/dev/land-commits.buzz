@@ -22,9 +22,11 @@ import "magus";
 import "proc";
 import "result";
 import "std";
+import "term";
 import "vcs";
 import "hack/dev/bootstrap-checkout" as bootstrap;
 import "hack/policy/push" as pushes;
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -139,6 +141,26 @@ fun git(args: [str]) > result\Result::<str> {
     } catch (err: any) {
         return result\caught::<str>(err, doing: "land-commits: git {args[0]}");
     }
+}
+
+// candidateRows are the commits HEAD carries past origin/main, oldest first, one "<sha> <subject>"
+// row each, for the --from prompt.
+fun candidateRows() > result\Result::<[str]> {
+    final listed = git(["log", "--reverse", "--format=%h %s", "origin/main..HEAD"]);
+    if (listed.error -> err) {
+        return result\Result::<[str]>{ error = err };
+    }
+    return result\ok::<[str]>(lines(listed.value!));
+}
+
+// lines are text's non-blank lines, trimmed.
+export fun lines(text: str) > [str] {
+    return text.split("\n").map(fun (i: int, l: str) > str => l.trim()).filter(fun (i: int, l: str) > bool => l != "");
+}
+
+// fromMarked is the --from value a set of marked rows stands for: their shas, in row order.
+export fun fromMarked(rows: [str]) > str {
+    return rows.map(fun (i: int, r: str) > str => r.sub(0, len: r.indexOf(" ") ?? r.len())).join(",");
 }
 
 fun commitsOf(source: str) > result\Result::<[str]> {
@@ -268,11 +290,29 @@ export fun main(args: [str]) > void !> any {
         throw "land-commits: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final branch = parsed.values["--branch"] ?? "";
-    final source = parsed.values["--from"] ?? "";
     final title = parsed.values["--title"] ?? "";
     final bodyFile = parsed.values["--body-file"] ?? "";
-    if (branch == "" or source == "" or title == "" or bodyFile == "") {
-        throw "land-commits: --branch, --from, --title and --body-file are required\n{USAGE}";
+    // No prompt asks for a free string, so these three stay flags a person types.
+    foreach (flag in ["--branch", "--title", "--body-file"]) {
+        if ((parsed.values[flag] ?? "") == "") {
+            throw "land-commits: {flag} is required\n{USAGE}";
+        }
+    }
+    var source = parsed.values["--from"] ?? "";
+    if (source == "") {
+        var rows = [<str>];
+        if (term\isInteractive()) {
+            final found = candidateRows();
+            if (found.error -> err) {
+                throw err.message;
+            }
+            rows = found.value!;
+        }
+        final marked = prompt\chooseMany([<str>], flag: "--from", items: rows, question: "which commits to land? Tab marks, Enter lands", marked: rows);
+        if (marked.error -> err) {
+            throw "land-commits: {err.message}\n{USAGE}";
+        }
+        source = fromMarked(marked.value!);
     }
     if (!fs\isFile(bodyFile)) {
         throw "land-commits: {bodyFile} is not a file";
@@ -292,6 +332,17 @@ export fun main(args: [str]) > void !> any {
             std\print(step);
         }
         return;
+    }
+    // The push and the pull request reach outside the machine, so a person is asked once
+    // before them; a run with every flag and no terminal goes on as it always has.
+    if (term\isInteractive()) {
+        foreach (step in plan(landing)) {
+            std\print(step);
+        }
+        if (!term\confirm("push {branch} and open a pull request against main with {landing.commits.len()} commit(s)?")) {
+            std\print("declined: nothing was changed");
+            return;
+        }
     }
     final landed = land(landing);
     if (landed.error -> err) {
@@ -365,4 +416,29 @@ test "the rule's reply on an unread file is printed and the landing goes on" {
     final v = pushes\decidePush(push, read: unread);
     assert\equal(v.decision == magus\GuardDecision.advise, want: true, message: v.reason);
     assert\equal(pushRefusal(v, branch: "topic"), want: "", message: "advice does not stop the landing");
+}
+
+test "marked rows stand for their shas, oldest first" {
+    assert\equal(fromMarked(["abc1234 add the thing", "def5678 fix it"]), want: "abc1234,def5678", message: "shas");
+    assert\equal(isCommitList(fromMarked(["abc1234 add the thing"])), want: true, message: "a commit list");
+    assert\equal(lines(" abc1234 one \n\n def5678 two\n"), want: ["abc1234 one", "def5678 two"], message: "rows");
+}
+
+test "with no terminal an absent --from fails naming the flag, and an absent text flag too" {
+    if (term\isInteractive()) {
+        return;
+    }
+    var why = "";
+    try {
+        main(["--branch", "topic", "--title", "t", "--body-file", "b.md"]);
+    } catch (err: any) {
+        why = "{err}";
+    }
+    assert\equal(why.startsWith("land-commits: --from is required (no terminal to ask on)"), want: true, message: why);
+    try {
+        main(["--branch", "topic", "--from", "abc1234", "--body-file", "b.md"]);
+    } catch (err: any) {
+        why = "{err}";
+    }
+    assert\equal(why.startsWith("land-commits: --title is required"), want: true, message: why);
 }

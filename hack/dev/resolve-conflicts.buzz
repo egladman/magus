@@ -18,6 +18,9 @@ import "flags";
 import "fs";
 import "result";
 import "std";
+import "term";
+import "vcs";
+import "hack/lib/prompt";
 
 import "assert";
 
@@ -291,25 +294,54 @@ export fun parseChoices(takes: [str], texts: [str], hunks: int) > result\Result:
     return result\ok::<{int: Choice}>(picked);
 }
 
+// hunkLines is one hunk's header and its sides, ours marked <, base | and theirs >.
+export fun hunkLines(h: Hunk) > [str] {
+    final base = if (h.base != null) ", base {h.base!.len()} line(s)" else "";
+    final lines = mut ["hunk {h.index} at line {h.line}: ours ({h.oursLabel}) {h.ours.len()} line(s), theirs ({h.theirsLabel}) {h.theirs.len()} line(s){base}"];
+    foreach (l in h.ours) {
+        lines.append("  < {l}");
+    }
+    if (h.base -> b) {
+        foreach (l in b) {
+            lines.append("  | {l}");
+        }
+    }
+    foreach (l in h.theirs) {
+        lines.append("  > {l}");
+    }
+    return lines;
+}
+
 // listing is the report for a file no choice was given for.
 export fun listing(file: str, c: Conflicted) > [str] {
     final lines = mut ["read-only: {c.hunks.len()} conflict hunk(s) in {file}; choose with --take <n>=ours|theirs|both|base or --text <n>=<file>"];
     foreach (h in c.hunks) {
-        final base = if (h.base != null) ", base {h.base!.len()} line(s)" else "";
-        lines.append("hunk {h.index} at line {h.line}: ours ({h.oursLabel}) {h.ours.len()} line(s), theirs ({h.theirsLabel}) {h.theirs.len()} line(s){base}");
-        foreach (l in h.ours) {
-            lines.append("  < {l}");
-        }
-        if (h.base -> b) {
-            foreach (l in b) {
-                lines.append("  | {l}");
-            }
-        }
-        foreach (l in h.theirs) {
-            lines.append("  > {l}");
+        foreach (l in hunkLines(h)) {
+            lines.append(l);
         }
     }
     return lines;
+}
+
+// sidesFor are the answers a hunk's prompt offers: base only for a diff3 hunk, and skip
+// leaves the hunk as git wrote it.
+export fun sidesFor(h: Hunk) > [str] {
+    final sides = mut ["ours", "theirs", "both"];
+    if (h.base != null) {
+        sides.append("base");
+    }
+    sides.append("skip");
+    return sides;
+}
+
+// conflictedFiles are the paths git lists as unmerged, for the --file prompt.
+fun conflictedFiles() > result\Result::<[str]> {
+    try {
+        final listed = vcs\cmd(["diff", "--name-only", "--diff-filter=U"], opts: vcs\CommandOptions{ quiet = true }).stdout;
+        return result\ok::<[str]>(listed.split("\n").filter(fun (i: int, l: str) > bool => l.trim() != ""));
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "resolve-conflicts: list the unmerged files");
+    }
 }
 
 // writeKeepingMode swaps content in for file through a temp file and a rename in file's own
@@ -327,8 +359,9 @@ fun writeKeepingMode(file: str, content: str) > result\Result::<bool> {
     return result\ok::<bool>(true);
 }
 
-// report prints the patch, writing it first when apply holds.
-fun report(file: str, before: str, after: str, taken: int, hunks: int, apply: bool) > result\Result::<bool> {
+// report prints the patch, writing it first when apply holds. showPatch is false when the
+// caller printed the patch to ask about it.
+fun report(file: str, before: str, after: str, taken: int, hunks: int, apply: bool, showPatch: bool) > result\Result::<bool> {
     final patch = diff\unified(before, b: after, fromLabel: file, toLabel: "{file} resolved");
     if (!apply) {
         std\print("dry run: nothing changed; pass --apply to write");
@@ -341,7 +374,9 @@ fun report(file: str, before: str, after: str, taken: int, hunks: int, apply: bo
         final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
         std\print("resolved {taken} of {hunks} hunk(s) in {file}{next}");
     }
-    std\print(patch);
+    if (showPatch) {
+        std\print(patch);
+    }
     return result\ok::<bool>(true);
 }
 
@@ -354,10 +389,23 @@ export fun main(args: [str]) > void !> any {
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "resolve-conflicts: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
-    final file = parsed.values["--file"] ?? "";
-    if (file == "") {
-        throw "resolve-conflicts: --file is required\n{USAGE}";
+    final named = parsed.values["--file"];
+    var offered = [<str>];
+    if (named == null and term\isInteractive()) {
+        final found = conflictedFiles();
+        if (found.error != null) {
+            throw found.error!.message;
+        }
+        if (found.value!.len() == 0) {
+            throw "resolve-conflicts: no file is unmerged; name one with --file";
+        }
+        offered = found.value!;
     }
+    final asked = prompt\choose(named, flag: "--file", items: offered, question: "which conflicted file?");
+    if (asked.error != null) {
+        throw "resolve-conflicts: {asked.error!.message}\n{USAGE}";
+    }
+    final file = asked.value!;
     final before = fs\readFile(file);
     final split = parse(before);
     if (split.error != null) {
@@ -367,8 +415,26 @@ export fun main(args: [str]) > void !> any {
     if (c.hunks.len() == 0) {
         throw "resolve-conflicts: {file} holds no conflict markers";
     }
-    final takes = parsed.lists["--take"] ?? [<str>];
+    final takes = mut [<str>];
+    foreach (t in parsed.lists["--take"] ?? [<str>]) {
+        takes.append(t);
+    }
     final texts = parsed.lists["--text"] ?? [<str>];
+    // With no choice flag, a person is asked per hunk; the answers are the --take list.
+    if (takes.len() == 0 and texts.len() == 0 and term\isInteractive()) {
+        foreach (h in c.hunks) {
+            foreach (line in hunkLines(h)) {
+                std\print(line);
+            }
+            final side = prompt\choose(null, flag: "--take", items: sidesFor(h), question: "hunk {h.index} of {c.hunks.len()}");
+            if (side.error != null) {
+                throw "resolve-conflicts: {side.error!.message}";
+            }
+            if (side.value! != "skip") {
+                takes.append("{h.index}={side.value!}");
+            }
+        }
+    }
     if (takes.len() == 0 and texts.len() == 0) {
         foreach (line in listing(file, c: c)) {
             std\print(line);
@@ -384,7 +450,19 @@ export fun main(args: [str]) > void !> any {
     if (settled.error != null) {
         throw "resolve-conflicts: {file}: {settled.error!.message}";
     }
-    final reported = report(file, before: before, after: settled.value!, taken: choices.len(), hunks: c.hunks.len(), apply: parsed.values["--apply"] != null);
+    var apply = parsed.values["--apply"] != null;
+    var shown = false;
+    // The patch is the thing to read before the write, so the person sees it, then is asked once.
+    if (!apply and term\isInteractive()) {
+        std\print(diff\unified(before, b: settled.value!, fromLabel: file, toLabel: "{file} resolved"));
+        shown = true;
+        final go = prompt\confirmed(false, flag: "--apply", question: "write {choices.len()} resolved hunk(s) to {file}?");
+        if (go.error != null) {
+            throw "resolve-conflicts: {go.error!.message}";
+        }
+        apply = go.value!;
+    }
+    final reported = report(file, before: before, after: settled.value!, taken: choices.len(), hunks: c.hunks.len(), apply: apply, showPatch: !shown);
     if (reported.error != null) {
         throw reported.error!.message;
     }
@@ -497,4 +575,23 @@ test "an applied resolution swaps the file and keeps its mode" {
     assert\equal(fs\stat(file).mode, want: 0755, message: "mode");
     assert\equal(fs\listDir(dir).len(), want: 1, message: "no temp file left behind");
     fs\removeAll(dir);
+}
+
+test "a hunk offers base only when it has one, and skip last" {
+    final got = parse(DIFF3).value!;
+    assert\equal(sidesFor(got.hunks[0]), want: ["ours", "theirs", "both", "base", "skip"], message: "diff3");
+    assert\equal(sidesFor(parse(TWO_SIDED).value!.hunks[0]), want: ["ours", "theirs", "both", "skip"], message: "two-sided");
+}
+
+test "with no terminal a missing --file fails naming it, and nothing is read" {
+    if (term\isInteractive()) {
+        return;
+    }
+    var why = "";
+    try {
+        main([<str>]);
+    } catch (err: any) {
+        why = "{err}";
+    }
+    assert\equal(why.startsWith("resolve-conflicts: --file is required (no terminal to ask on)"), want: true, message: why);
 }
