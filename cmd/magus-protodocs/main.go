@@ -25,8 +25,9 @@ package main
 
 import (
 	"cmp"
-	"flag"
+	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -43,38 +44,47 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/render/md"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 func main() {
-	descPath := flag.String("descriptor", "../proto/gen/descriptor.binpb", "descriptor set produced by `magus run descriptor proto`")
-	out := flag.String("out", "reference/api", "output directory for the API reference")
-	flag.Parse()
+	var descPath, out string
+	command.Main(command.Command{
+		Name:  "magus-protodocs",
+		Short: "Render the daemon API reference from the .proto descriptor set.",
+		Flags: []command.Flag{
+			{Name: "descriptor", Kind: command.String, Default: "../proto/gen/descriptor.binpb", Doc: "descriptor set produced by `magus run descriptor proto`", Target: &descPath},
+			{Name: "out", Kind: command.String, Default: "reference/api", Doc: "output directory for the API reference", Target: &out},
+		},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			return render(descPath, out, inv.Stdout)
+		},
+	})
+}
 
-	raw, err := os.ReadFile(*descPath)
+func render(descPath, out string, log io.Writer) error {
+	raw, err := os.ReadFile(descPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus-protodocs: read descriptor %s: %v\n(run `magus run descriptor proto` to produce it)\n", *descPath, err)
-		os.Exit(1)
+		return fmt.Errorf("read descriptor %s, which `magus run descriptor proto` produces: %w", descPath, err)
 	}
 	// buf build emits a buf Image, a FileDescriptorSet plus a buf_extension field. Decoding
 	// into FileDescriptorSet drops that extension as an unknown field, which is exactly what
 	// we want: the extension carries buf bookkeeping, not schema.
 	set := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, set); err != nil {
-		fmt.Fprintln(os.Stderr, "magus-protodocs: decode descriptor set:", err)
-		os.Exit(1)
+		return fmt.Errorf("decode descriptor set: %w", err)
 	}
 
 	a, err := newAPI(set)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "magus-protodocs:", err)
-		os.Exit(1)
+		return err
 	}
-	n, err := writeAll(a, *out)
+	n, err := writeAll(a, out)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "magus-protodocs:", err)
-		os.Exit(1)
+		return err
 	}
-	fmt.Printf("magus-protodocs: wrote %d services to %s\n", n, *out)
+	fmt.Fprintf(log, "magus-protodocs: wrote %d services to %s\n", n, out)
+	return nil
 }
 
 type api struct {
