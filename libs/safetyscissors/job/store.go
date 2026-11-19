@@ -97,7 +97,7 @@ type storeConfig struct {
 	clock    func() time.Time
 	declared func(ctx context.Context, path, decl string, body []byte) string
 	head     func(context.Context) string
-	version  int
+	version  apiversion.APIVersion
 	migrate  Migrate
 	creds    wireEnum[CredentialKind]
 	wrapErr  func(error) error
@@ -185,10 +185,11 @@ func WithHead(head func(context.Context) string) StoreOption {
 	return func(c *storeConfig) { c.head = head }
 }
 
-// WithMigrations is the migration this build writes and how a file at an older one is
-// brought to it. Without it the store writes migration zero and refuses a file at any
-// other.
-func WithMigrations(version int, migrate Migrate) StoreOption {
+// WithMigrations is the store version this build writes, as its header's api_version, and
+// how a file at another is converted to it, the way a Kubernetes conversion takes an
+// object between versions of its group. Without it the store writes [APIVersion] and
+// refuses a file at any other. Open refuses a version that does not parse.
+func WithMigrations(version apiversion.APIVersion, migrate Migrate) StoreOption {
 	return func(c *storeConfig) { c.version, c.migrate = version, migrate }
 }
 
@@ -233,9 +234,12 @@ func Open(dir string, opts ...StoreOption) (*Store, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("job: open a store on the directory that holds it, and none was named")
 	}
-	s := &Store{storeConfig: storeConfig{path: filepath.Join(dir, jobsFileName), creds: newWireEnum[CredentialKind]()}}
+	s := &Store{storeConfig: storeConfig{path: filepath.Join(dir, jobsFileName), creds: newWireEnum[CredentialKind](), version: APIVersion}}
 	for _, opt := range opts {
 		opt(&s.storeConfig)
+	}
+	if _, err := apiversion.Parse(string(s.version)); err != nil {
+		return nil, fmt.Errorf("job: WithMigrations: %w", err)
 	}
 	if err := s.checks.refusal(); err != nil {
 		return nil, err
@@ -348,14 +352,11 @@ func (s *Store) refuseDocument() error {
 // rewrite, and each other line is one version of one row. A row's LAST line is the row, and
 // it keeps the place its first line had, so the rows read in the order they were declared.
 //
-// The header's requires annotation refuses the whole file to a reader lacking a feature it
-// names.
+// The header's api_version is the store version [WithMigrations] names, and its requires
+// annotation refuses the whole file to a reader lacking a feature it names.
 type Rows struct {
 	apiversion.TypeMeta
 	Metadata apiversion.Metadata `json:"metadata,omitzero"`
-	// Migration is how many migrations the rows have been through; see [WithMigrations].
-	// A file past this build's is refused.
-	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [WithRetention].
 	Retained int64 `json:"retained"`
 	Jobs     []Job `json:"-"`
@@ -403,7 +404,7 @@ func (f *Rows) UnmarshalJSON(data []byte) error {
 
 // Header is f without its rows.
 func (f Rows) Header() Rows {
-	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Migration: f.Migration, Retained: f.Retained, unknown: f.unknown, stored: f.stored}
+	return Rows{TypeMeta: f.TypeMeta, Metadata: f.Metadata, Retained: f.Retained, unknown: f.unknown, stored: f.stored}
 }
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.
@@ -781,7 +782,6 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // ledger's own shape and named for the moment they were dropped, with their attempts. A
 // second drop within the same second overwrites the first archive.
 func (s *Store) archive(ctx context.Context, f Rows) error {
-	f.Migration = s.version
 	lines, err := s.encodeJobs(f)
 	if err != nil {
 		return err
@@ -859,7 +859,6 @@ func (s *Store) write(f Rows, log jobsLog) error {
 	if err := refuseDuplicateRows(f.Jobs); err != nil {
 		return s.wrap(err)
 	}
-	f.Migration = s.version
 	lines, err := s.encodeJobs(f)
 	if err != nil {
 		return err
@@ -928,19 +927,19 @@ func (s *Store) Read(ctx context.Context) (Rows, error) {
 // ride in its stored record and go back out on the next write. A row requiring a feature
 // this build lacks is read too, and only a write to it is refused (see [Unwritable]).
 //
-// A file at an older migration is migrated first, once, under the lock (see
+// A file at another store version is converted first, once, under the lock (see
 // [WithMigrations]); without wait the caller already holds it.
 func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) {
 	f, log, lines, err := s.parse(ctx, wait)
-	if err != nil || f.Migration == s.version || log.lines == 0 {
+	if err != nil || s.current(f, log) || log.lines == 0 {
 		return f, log, err
 	}
 	// The caller's migrations refuse a newer file in their own words; with none, the store
-	// refuses any other migration than its own.
+	// refuses any other version than its own.
 	if s.migrate == nil {
-		return Rows{}, jobsLog{}, s.wrap(&NewerWriterError{Path: s.path, Found: f.Migration, Known: s.version})
+		return Rows{}, jobsLog{}, s.refuseVersion(f)
 	}
-	migrate := func() error { return s.migrate(ctx, s.path, f.Migration, lines) }
+	migrate := func() error { return s.migrate(ctx, s.path, f.APIVersion, lines) }
 	if wait {
 		err = s.locked(ctx, migrate)
 	} else {
@@ -953,8 +952,8 @@ func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) 
 	return f, log, err
 }
 
-// parse reads the file as it stands; see [Store.readFile]. A file at another migration
-// than this build's has no rows decoded: they are returned as lines.
+// parse reads the file as it stands; see [Store.readFile]. A file at another store
+// version than this build's has no rows decoded: they are returned as lines.
 func (s *Store) parse(ctx context.Context, wait bool) (Rows, jobsLog, []codec.Line, error) {
 	if s.err != nil {
 		return Rows{}, jobsLog{}, nil, s.err
@@ -972,11 +971,11 @@ func (s *Store) parse(ctx context.Context, wait bool) (Rows, jobsLog, []codec.Li
 	if err != nil {
 		return Rows{}, jobsLog{}, nil, err
 	}
-	if f.Migration != s.version {
+	if !s.current(f, log) {
 		return f, log, texts, nil
 	}
-	if f.TypeMeta != jobListType() && log.header != nil {
-		return Rows{}, jobsLog{}, nil, s.refuseRecord(jobListType(), f.TypeMeta, 1)
+	if f.TypeMeta != s.listType() && log.header != nil {
+		return Rows{}, jobsLog{}, nil, s.refuseRecord(s.listType(), f.TypeMeta, 1)
 	}
 	if err := s.decodeRows(texts, &f, &log); err != nil {
 		return Rows{}, jobsLog{}, nil, err
@@ -1087,7 +1086,7 @@ func (s *Store) refuseUnmetFeatures(f Rows) error {
 // encodeJobs renders the ledger as its lines: the header first, then one line per row.
 // Every row, touched this call or not, keeps what its stored record carries.
 func (s *Store) encodeJobs(f Rows) ([][]byte, error) {
-	f.TypeMeta = jobListType()
+	f.TypeMeta = s.listType()
 	header, err := codec.Marshal(f)
 	if err != nil {
 		return nil, err

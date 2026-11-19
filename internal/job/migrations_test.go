@@ -22,6 +22,50 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// numberedHeaderSuite pins the reading of a header that counts its migrations.
+//
+// compat: see migrate.Store.Count.
+type numberedHeaderSuite struct {
+	suite.Suite
+}
+
+func TestNumberedHeaderSuite(t *testing.T) { suite.Run(t, new(numberedHeaderSuite)) }
+
+func (s *numberedHeaderSuite) TestACurrentCountBecomesTheStoreVersion() {
+	body := fmt.Sprintf("{\"api_version\":%q,\"kind\":\"JobList\",\"migration\":%d}\n%s",
+		job.APIVersion, len(jobMigrations()), recordLine("a", "Running", "Running", "", ""))
+	st := tempStore(s.T(), s.T().TempDir())
+	notices := &bytes.Buffer{}
+	st.notices = notices
+	path := plantRaw(s.T(), st, body)
+
+	f, err := st.Read(s.T().Context())
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	header := storedLines(s.T(), path)[0]
+	s.Equal(string(currentStoreVersion()), header["api_version"])
+	s.InDelta(len(jobMigrations()), header["migration"], 0, "the count agrees with the version")
+	s.Contains(notices.String(), fmt.Sprintf("from %s to %s (1 entries); read the header's \"migration\" count as its \"api_version\"",
+		currentStoreVersion(), currentStoreVersion()))
+}
+
+// A magus built before store versions reads a header by its count alone, so a store this
+// build writes must read to it as through every migration, or it would replay them all.
+func (s *numberedHeaderSuite) TestAStoreThisBuildWritesCountsEveryMigration() {
+	st := tempStore(s.T(), s.T().TempDir())
+	seed(s.T(), st, lease("a"))
+	path, err := st.Path()
+	s.Require().NoError(err)
+
+	header := storedLines(s.T(), path)[0]
+
+	s.Equal(string(currentStoreVersion()), header["api_version"])
+	s.InDelta(len(jobMigrations()), header["migration"], 0, "an older magus finds no migration due")
+	f, err := st.Read(s.T().Context())
+	s.Require().NoError(err)
+	s.Len(f.Jobs, 1, "and this build reads it by its version, migrating nothing")
+}
+
 type modelTierSourceJobSuite struct {
 	suite.Suite
 }
@@ -160,7 +204,7 @@ func (s *headerlessStoreSuite) TestAnEnvelopedRowIsRefusedAsDamagedAndNothingWri
 	headerless, ok := errors.AsType[*headerlessStoreError](err)
 	s.Require().True(ok, "%v", err)
 	s.Equal(1, headerless.Line)
-	s.ErrorContains(err, fmt.Sprintf("job store %s has no header line, and line 1 is an enveloped row, which only a store past migration %d holds", path, envelopedAt()))
+	s.ErrorContains(err, fmt.Sprintf("job store %s has no header line, and line 1 is an enveloped row, which only a store at %s or later holds", path, envelopedAt()))
 	s.ErrorContains(err, fmt.Sprintf("move it aside with `mv %s %s.damaged` and fork the jobs again", path, path))
 	s.Equal(fmt.Sprintf("%s\n%s\n", line, line), string(s.read(path)), "nothing was written")
 }
@@ -201,7 +245,7 @@ func (s *rootlessMigrationSuite) TestAWorkingDirectoryNoVersionControlHoldsMigra
 	_, err := st.Read(s.T().Context())
 
 	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
 	s.Contains(notices.String(), "so no base judged this magus")
 }
 
@@ -255,7 +299,10 @@ func (s *regroupSuite) read(path string) string {
 }
 
 // before writes the store back as the migration before groupsMoved left it: in the
-// batch.magus group, its api version under the camelCase key it had then.
+// batch.magus group, its api version under the camelCase key it had then, and its
+// version counted as headers of that time counted it.
+//
+// compat: see migrate.Store.Count.
 func (s *regroupSuite) before() {
 	group := job.APIVersion.Group() + "/"
 	at := slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == groupsMoved })
@@ -431,7 +478,7 @@ func (s *baseFenceSuite) TestABinaryBuiltOnTheBaseMigratesAndStampsItself() {
 	s.Require().NoError(err)
 	s.Equal("ship it", f.Jobs[0].Parent)
 	header := storedLines(s.T(), path)[0]
-	s.InDelta(1, header["migration"], 0)
+	s.Equal(string(storeVersion(1)), header["api_version"])
 	s.Equal(map[string]any{"version": "v0.4.3", "commit": s.base}, header["writer"])
 }
 
@@ -442,7 +489,7 @@ func (s *baseFenceSuite) TestABranchBinaryIsRefused() {
 		fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch))
 
 	s.Equal(&offBaseMigrationError{
-		Path: path, Found: 0, Known: 1, Build: types.StampedBuild("v0.4.3-1-gfeat", s.branch, ""), Base: "origin/main",
+		Path: path, Found: "no api_version", Known: storeVersion(1), Build: types.StampedBuild("v0.4.3-1-gfeat", s.branch, ""), Base: "origin/main",
 		Why: fmt.Sprintf("origin/main at %s does not contain commit %.12s, which built it", s.repo.Git("rev-parse", "--short", s.base), s.branch),
 	}, off)
 	s.Contains(off.Error(), "(its header names no writer")
@@ -479,7 +526,7 @@ func (s *baseFenceSuite) TestAStampedCleanBinaryIgnoresTheVCSStamp() {
 	_, err := st.Read(s.built("v0.5.0-rc.3-205-g"+s.base[:9], s.base))
 
 	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
 	s.NotContains(notices.String(), "VCS stamp")
 }
 
@@ -489,7 +536,7 @@ func (s *baseFenceSuite) TestAnUnstampedBinaryOnTheBaseMigratesAndSaysItFellBack
 	_, err := st.Read(s.unstamped(s.base, false))
 
 	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
 	s.Contains(notices.String(), fmt.Sprintf("job: this magus carries no magus version stamp, so its build commit %.12s was read from Go's VCS stamp before it migrated job store %s\n", s.base, path))
 }
 
@@ -533,7 +580,7 @@ func (s *baseFenceSuite) TestALinkedCheckoutOnTheBaseMigrates() {
 	_, err := st.Read(s.built("v0.4.3", s.base))
 
 	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
 }
 
 func (s *jobSuite) TestARootNoVersionControlHoldsMigratesAndSaysNothingJudgedIt() {
@@ -543,7 +590,7 @@ func (s *jobSuite) TestARootNoVersionControlHoldsMigratesAndSaysNothingJudgedIt(
 	_, err := st.Read(s.T().Context())
 
 	s.Require().NoError(err)
-	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+	s.Equal(string(storeVersion(1)), storedLines(s.T(), path)[0]["api_version"])
 	s.Contains(notices.String(), fmt.Sprintf("job: no version control holds %s, so no base judged this magus before it migrated job store %s\n", root, path))
 }
 
@@ -793,7 +840,10 @@ func (s *snakeStoreSuite) SetupTest() {
 	s.repo.Git("update-ref", "refs/remotes/origin/main", s.base)
 }
 
-// planted is a store at root holding the camel lines, at the migration before keysSnaked.
+// planted is a store at root holding the camel lines, at the migration before keysSnaked,
+// counted as headers of that time counted it.
+//
+// compat: see migrate.Store.Count.
 func (s *snakeStoreSuite) planted() (st *Store, jobs, attempts string) {
 	st = tempStore(s.T(), s.repo.Root())
 	st.notices = &bytes.Buffer{}
@@ -823,9 +873,9 @@ func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
 	s.Equal(job.EntryPointCLI, row.RegisteredBy.EntryPoint)
 	lines := storedLines(s.T(), jobs)
 	s.Require().Len(lines, 2)
-	s.Equal(string(job.APIVersion), lines[0]["api_version"])
+	s.Equal(string(currentStoreVersion()), lines[0]["api_version"])
 	s.NotContains(lines[0], "apiVersion")
-	s.InDelta(len(jobMigrations()), lines[0]["migration"], 0)
+	s.InDelta(len(jobMigrations()), lines[0]["migration"], 0, "the count an older magus reads rides beside the version")
 	s.Equal(map[string]any{"x.example/dependsOn": "keepMe"}, lines[1]["metadata"].(map[string]any)["annotations"])
 
 	tries, err := st.Attempts(ctx)

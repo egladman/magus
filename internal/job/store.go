@@ -237,7 +237,7 @@ func (s *Store) open() *Store {
 		job.WithClock(s.now),
 		job.WithDeclarationDigest(s.declarationDigest),
 		job.WithHead(s.committedRevision),
-		job.WithMigrations(len(s.migrations), s.migrate),
+		job.WithMigrations(migrate.Store{Migrations: s.migrations}.Version(), s.migrate),
 		job.WithCredentialKinds(credentialKinds()...),
 		checkSpec(),
 		job.WithErrorWrap(diagnose),
@@ -519,12 +519,12 @@ func (s *Store) pruneFootprints(rows []job.Job) {
 	}
 }
 
-// migrate brings the file at migration found to the last of s.migrations under the
-// module store's lock. A file past them is refused with MGS3051, a headerless file whose
-// rows are enveloped as damaged, and a migration from a binary the base does not contain
-// as off the base; each refusal names the store's last writer. lines are the file's row
-// lines, and the header is read from the file itself.
-func (s *Store) migrate(ctx context.Context, storePath string, found int, lines []codec.Line) error {
+// migrate brings the file to the version of the last of s.migrations under the module
+// store's lock. A file past them is refused with MGS3051, a headerless file whose rows are
+// enveloped as damaged, and a migration from a binary the base does not contain as off
+// the base; each refusal names the store's last writer. lines are the file's row lines,
+// and the header, which says how far the file has migrated, is read from the file itself.
+func (s *Store) migrate(ctx context.Context, storePath string, _ apiversion.APIVersion, lines []codec.Line) error {
 	read, err := codec.ReadLines(storePath)
 	if err != nil {
 		return fmt.Errorf("job: %w", err)
@@ -545,10 +545,12 @@ func (s *Store) migrate(ctx context.Context, storePath string, found int, lines 
 		}
 		return namePath(err, storePath)
 	}
-	if err := st.Check(found); err != nil {
+	found, err := st.At(header)
+	if err != nil {
 		return refuse(err)
 	}
-	if found < len(s.migrations) {
+	due := found < len(s.migrations) || st.Numbered(header)
+	if due {
 		if err := s.fence(); err != nil {
 			return err
 		}
@@ -558,7 +560,7 @@ func (s *Store) migrate(ctx context.Context, storePath string, found int, lines 
 			return err
 		}
 	}
-	if err := s.refuseOffBase(ctx, storePath, found, last); err != nil {
+	if err := s.refuseOffBase(ctx, storePath, storeAt(st, header, found), due, last); err != nil {
 		return err
 	}
 	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
@@ -664,8 +666,8 @@ func headerWriter(header migrate.Entry) storeWriter {
 }
 
 // beforeWrite runs inside every rewrite of the job store before it writes: it refuses a
-// binary stale against the checkout, stamps this binary as the store's writer, then runs
-// the retention pass.
+// binary stale against the checkout, stamps this binary as the store's writer and the
+// migration count an older magus reads, then runs the retention pass.
 func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) error {
 	if err := s.fence(); err != nil {
 		return err
@@ -675,6 +677,8 @@ func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) err
 		return fmt.Errorf("job: stamping the writer: %w", err)
 	}
 	*f = f.WithMember(writerMember, raw)
+	// compat: see migrate.Store.Count.
+	*f = f.WithMember(migrate.Store{Migrations: s.migrations}.Count())
 	return s.retainDue(ctx, f, now)
 }
 
@@ -724,15 +728,16 @@ type headerlessStoreError struct {
 }
 
 func (e *headerlessStoreError) Error() string {
-	return fmt.Sprintf("job: job store %s has no header line, and line %d is an enveloped row, which only a store past migration %d holds:"+
-		" its header was lost, and replaying every migration from 0 over these rows would guess at what wrote them, so nothing was read or written:"+
+	return fmt.Sprintf("job: job store %s has no header line, and line %d is an enveloped row, which only a store at %s or later holds:"+
+		" its header was lost, and replaying every migration from the first over these rows would guess at what wrote them, so nothing was read or written:"+
 		" move it aside with `mv %s %s.damaged` and fork the jobs again",
 		e.Path, e.Line, envelopedAt(), shellQuote(e.Path), shellQuote(e.Path))
 }
 
-// envelopedAt is the migration a store's rows are enveloped from.
-func envelopedAt() int {
-	return slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == recordsEnveloped }) + 1
+// envelopedAt is the version a store's rows are enveloped from.
+func envelopedAt() apiversion.APIVersion {
+	migrations := jobMigrations()
+	return migrations[slices.IndexFunc(migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped })].To
 }
 
 // refuseHeaderless refuses a file at path with no header whose row lines hold an
@@ -756,9 +761,12 @@ func refuseHeaderless(path string, lines []codec.Line) error {
 // repository shares the store, so once a branch binary migrated it every binary built on
 // the base would refuse it as newer. Nothing was read or written.
 type offBaseMigrationError struct {
-	Path         string
-	Found, Known int
-	Build        types.MagusBuild
+	Path string
+	// Found is how far the store has migrated, as [storeAt] names it, and Known the
+	// version this build writes.
+	Found string
+	Known apiversion.APIVersion
+	Build types.MagusBuild
 	// Base is the base this build was judged against, "" when none resolved.
 	Base string
 	// Why says how the build fails to be on Base.
@@ -773,22 +781,37 @@ func (e *offBaseMigrationError) Error() string {
 	if e.Build.Source == types.BuildSourceVCS {
 		self += ", read from Go's VCS stamp because it carries no magus version stamp"
 	}
-	return fmt.Sprintf("job: job store %s is at migration %d, and this magus (%s) writes migration %d, but %s:"+
+	return fmt.Sprintf("job: job store %s is at %s, and this magus (%s) writes %s, but %s:"+
 		" every checkout and branch shares the store, and once migrated every magus built on %s refuses it as newer, so nothing was read or written%s:"+
 		" rebuild magus from %s, or run this binary under its own XDG_STATE_HOME",
 		e.Path, e.Found, self, e.Known, e.Why, base, e.Last.named(), base)
 }
 
-// refuseOffBase refuses migrating the file at path forward from migration found unless
-// this binary was built on a commit the base of s's repository contains. A root no
-// version control claims has no base: it migrates, and a notice says nothing judged it.
-func (s *Store) refuseOffBase(ctx context.Context, path string, found int, last storeWriter) error {
-	if found >= len(s.migrations) {
+// storeAt names how far a store whose header is header, found of st's migrations along,
+// has migrated.
+func storeAt(st migrate.Store, header migrate.Entry, found int) string {
+	switch {
+	// compat: see migrate.Store.Count.
+	case st.Numbered(header):
+		return fmt.Sprintf("migration %d", found)
+	case found == 0:
+		return "no api_version"
+	}
+	return string(st.Migrations[found-1].To)
+}
+
+// refuseOffBase refuses rewriting the file at path, at found as [storeAt] names it, when
+// a migration is due, unless this binary was built on a commit the base of s's
+// repository contains. A root no version control claims has no base: it migrates, and a
+// notice says nothing judged it.
+func (s *Store) refuseOffBase(ctx context.Context, path, found string, due bool, last storeWriter) error {
+	if !due {
 		return nil
 	}
 	build := runningBuild(ctx)
+	known := migrate.Store{Migrations: s.migrations}.Version()
 	refused := func(base, why string, args ...any) error {
-		return &offBaseMigrationError{Path: path, Found: found, Known: len(s.migrations), Build: build, Base: base, Why: fmt.Sprintf(why, args...), Last: last}
+		return &offBaseMigrationError{Path: path, Found: found, Known: known, Build: build, Base: base, Why: fmt.Sprintf(why, args...), Last: last}
 	}
 	root := s.root
 	if root == "" {
