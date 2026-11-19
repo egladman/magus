@@ -126,6 +126,7 @@ linters:
     - hostvocab
     - ruletext
     - accessorclone
+    - clikitmain
     - asciistrings
     - benchbeside
     - blankerror
@@ -498,6 +499,13 @@ linters:
       accessorclone:
         type: module
         description: reports an exported accessor that returns its own slice or map instead of a copy
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+
+      clikitmain:
+        type: module
+        description: reports a main package that parses its command line by hand
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
