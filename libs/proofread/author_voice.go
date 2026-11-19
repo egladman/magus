@@ -197,9 +197,14 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[lo] + (rank-float64(lo))*(sorted[lo+1]-sorted[lo])
 }
 
-// ReadVoice decodes a voice file. A schema an earlier proofread wrote is an
-// error that names `proofread voice build`, which rebuilds the file. So is
-// any other schema than [VoiceSchema], a field, kind or feature proofread does
+// ErrOldVoice marks a voice file in the form earlier proofread versions wrote,
+// which carried a schema key. A caller that can judge without a voice sets the
+// file aside on it, since `proofread voice build` rebuilds the file from history.
+var ErrOldVoice = errors.New("voice file is from an earlier proofread")
+
+// ReadVoice decodes a voice file. A file in the form an earlier proofread wrote
+// is an [ErrOldVoice] error that names `proofread voice build`, which rebuilds
+// it. A newer or other api_version than [VoiceSchema] is an error, so is a field, kind or feature proofread does
 // not know, a feature voice-drift does not rank on its kind, a window with
 // fewer than two features, a negative subject length, and a reference on a
 // kind that cannot hold it.
@@ -221,8 +226,8 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 
 	switch {
 	case head.Schema != nil:
-		return nil, fmt.Errorf("schema %q is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file",
-			*head.Schema)
+		return nil, fmt.Errorf("schema %q: %w: rerun `proofread voice build` to rebuild the voice file",
+			*head.Schema, ErrOldVoice)
 	case head.APIVersion != VoiceSchema:
 		return nil, fmt.Errorf("api_version %q is not %s", head.APIVersion, VoiceSchema)
 	}
