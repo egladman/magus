@@ -754,7 +754,7 @@ fun claim(file: DiscoveryFile) > DiscoveredProject {
     return DiscoveredProject{path = file.path, role = DiscoveryRole.project,
         notInferred = [DiscoveryGap{file = file.path, why = "make rules: meaning unknown"}]};
 }
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
     return [claim(req.files[0])];
 }
 `

@@ -94,19 +94,28 @@ func writeSpell(t *testing.T, name, srvURL string) string {
 	src := fmt.Sprintf(`
 import "http" as xhttp
 import "magus/spell";
+import "result";
 
 export fun mgs_getName() > str { return %q; }
 
 final BASE = %q;
 
-export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun get_artifact(target: Target, req: ArtifactRequest) > result\Result::<Ack> {
     final url = BASE + "/blob/" + req.hash;
-    return Ack{ ok = xhttp\download(url, req.path, {}) == 200 };
+    try {
+        return result\ok::<Ack>(Ack{ ok = xhttp\download(url, req.path, {}) == 200 });
+    } catch (err: any) {
+        return result\caught::<Ack>(err);
+    }
 }
-export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun put_artifact(target: Target, req: ArtifactRequest) > result\Result::<Ack> {
     final url = BASE + "/blob/" + req.hash;
-    final res = xhttp\upload_chunked("PUT", url, req.path, 0, {});
-    return Ack{ ok = res[0] == 200 };
+    try {
+        final res = xhttp\upload_chunked("PUT", url, req.path, 0, {});
+        return result\ok::<Ack>(Ack{ ok = res[0] == 200 });
+    } catch (err: any) {
+        return result\caught::<Ack>(err);
+    }
 }
 `, name, srvURL)
 	path := filepath.Join(t.TempDir(), name+".buzz")
@@ -148,15 +157,16 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "temp file %s not removed on Close (stat err %v)", tmpPath, err)
 }
 
-// The contract's three answers each reach Go distinctly: false from put_artifact is
-// "already present", a throw is a failure, and a spell with no has_artifact op cannot
-// answer rather than answering no.
+// The contract's three answers each reach Go distinctly. False from
+// put_artifact is "already present". A failed Result is a failure. A spell
+// with no has_artifact op cannot answer rather than answering no.
 func TestSpellRemoteBackendAnswersAreDistinct(t *testing.T) {
 	src := `
 import "magus/spell";
+import "result";
 export fun mgs_getName() > str { return "answering-cache"; }
 export fun put_artifact(target: Target, req: ArtifactRequest) > Ack { return Ack{ ok = false }; }
-export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { throw "store unreachable"; }
+export fun get_artifact(target: Target, req: ArtifactRequest) > result\Result::<Ack> { return result\fail::<Ack>("store unreachable"); }
 `
 	path := filepath.Join(t.TempDir(), "answering-cache.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))

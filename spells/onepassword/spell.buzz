@@ -24,6 +24,7 @@ import "magus/spell";
 
 import "proc";
 import "result";
+import "std";
 // "onepassword", not "op": a spell's registered name has to stand alone - it is what
 // `magus describe spells` and every diagnostic show, with no directory around it to
 // supply the context. `op` is the binary, not the product.
@@ -54,17 +55,11 @@ final SCHEME = "op://";
 //   magus\secret.read("op://Private/Docker Hub/credential")
 //
 // `op read` prints the secret to stdout with a trailing newline; magus trims captured
-// output, so nothing here has to. A locked vault, an expired session, or a typo'd path
-// all fail the read rather than returning a blank that fails later at whatever consumes
-// it - but by way of the classified throws below, not proc\exec's own raise, which
-// allow_failure deliberately turns off so the exit code can be inspected first.
-export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
-    final read = readSecret(req.ref);
-    if (read.error -> e) {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw e.message;
-    }
-    return read.value!;
+// output, so nothing here has to. A locked vault, an expired session or a
+// typo'd path fails the Result rather than returning a blank.
+// allowFailure turns off proc\exec's own raise, so the exit code is classified.
+export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {
+    return readSecret(req.ref);
 }
 
 // failure names which way a nonzero `op read` failed, from its stderr.
@@ -129,4 +124,10 @@ fun readSecret(ref: str) > result\Result::<Secret> {
 
 export fun mgs_getTools() > {str: Tool} {
     return {"op": Tool{probe = Command{bin = "op", args = ["--version"]}}};
+}
+
+test "an empty reference is a failed Result" {
+    final got = resolve_secret(Target{}, req: SecretRef{ ref = "" });
+    std\assert(got.value == null, message: "no secret");
+    std\assert(got.error?.message == "onepassword: no reference given", message: "the reason reaches magus");
 }

@@ -12,16 +12,12 @@ fun source(path: str) > DiscoveryFile {
 }
 
 fun attempt(files: [DiscoveryFile]) > result\Result::<[DiscoveredProject]> {
-    try {
-        return result\ok::<[DiscoveredProject]>(python\discover_projects(Target{}, req: DiscoveryQuery{root = "/w", files = files}));
-    } catch (err: any) {
-        return result\caught::<[DiscoveredProject]>(err);
-    }
+    return python\discover_projects(Target{}, req: DiscoveryQuery{root = "/w", files = files});
 }
 
 fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
     final answered = attempt(files);
-    std\assert(answered.error == null, message: "discover_projects raised");
+    std\assert(answered.error == null, message: "discover_projects failed");
     return answered.value ?? [<DiscoveredProject>];
 }
 
@@ -171,13 +167,8 @@ test "invalid TOML is a gap, not a failure" {
 }
 
 test "a pyproject.toml without content is a contract violation" {
-    var threw = false;
-    try {
-        threw = attempt([source("pyproject.toml")]).error != null;
-    } catch (err: any) {
-        threw = true;
-    }
-    std\assert(threw, message: "core must pass marker content");
+    final failed = attempt([source("pyproject.toml")]).error != null;
+    std\assert(failed, message: "core must pass marker content");
 }
 
 test "decisions are mccabe's keywords and no operator" {

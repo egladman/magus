@@ -96,6 +96,16 @@ export fun list_lifecycles(target: Target, req: LifecycleQuery) > [Lifecycle] { 
 			src:  `export fun resolve_secret(target: Target, req: SecretRef) > str { return ""; }`,
 			want: "line 1: resolve_secret declares > str; the contract wants > Secret",
 		},
+		{
+			name: "an op that can fail returns a Result",
+			src: `export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> { return result\fail::<Secret>("x"); }
+export fun list_lifecycles(target: Target, req: LifecycleQuery) > result\Result::< [Lifecycle] > { return result\ok::<[Lifecycle]>([]); }`,
+		},
+		{
+			name: "an op that raises",
+			src:  `export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { throw "x"; }`,
+			want: "line 1: resolve_secret declares !> any; an op returns > result\\Result::<Secret> and never raises",
+		},
 	})
 }
 

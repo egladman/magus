@@ -268,18 +268,9 @@ no-throw:
       hack/policy/stale.buzz: 2
       internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
-      spells/aws/s3-cache/spell.buzz: 4
-      spells/endoflife-date/spell.buzz: 1
-      spells/experimental/nx/spell.buzz: 1
       spells/git/hooks.buzz: 2
-      spells/github/actions/spell.buzz: 5
-      spells/github/review/spell.buzz: 5
       spells/golang/golangci.buzz: 2
       spells/golang/gomod.buzz: 1
-      spells/onepassword/spell.buzz: 1
-      spells/python/spell.buzz: 1
-      spells/system-keychain/spell.buzz: 1
-      spells/typescript/spell.buzz: 1
       std/lib/diskwatch.buzz: 6
       std/lib/lcov.buzz: 2
       std/lib/reclaimdisk.buzz: 5

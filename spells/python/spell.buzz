@@ -477,12 +477,11 @@ fun pyOrphans(scan: PyScan, dirs: [str]) > [DiscoveredProject] {
 // discover_projects claims a project in every directory holding pyproject.toml,
 // setup.py or setup.cfg. Python sources, requirements files and a Pipfile outside
 // every such directory join their owning project as members, each with a gap naming
-// what is missing. It throws when core omits a pyproject.toml's content.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+// what is missing. It fails when core omits a pyproject.toml's content.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > result\Result::<[DiscoveredProject]> {
     final scanned = pyScan(req);
     if (scanned.error -> err) {
-        //nolint:no-throw // magus reads a raise as a failed discovery
-        throw err.message;
+        return result\Result::<[DiscoveredProject]>{ error = err };
     }
     final scan = scanned.value!;
     final dirs = sortedKeys(scan.markersByDir);
@@ -507,5 +506,5 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     foreach (claim in pyOrphans(scan, dirs: dirs)) {
         claims.append(claim);
     }
-    return claims;
+    return result\ok::<[DiscoveredProject]>(claims);
 }
