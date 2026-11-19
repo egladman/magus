@@ -5,33 +5,40 @@ in the root `conventions_test.go` that walked the tree as text; as an analyzer i
 runs in `magus run lint` beside the stock linters, reports at the offending line,
 and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 
-| Linter          | Reports                                                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                                                    |
-| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                                   |
-| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                              |
+| Linter          | Reports                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hostagnostic`  | a line of non-test source naming an agent host outside a filesystem path                                                                                                                    |
+| `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                                                                                   |
+| `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                                                                              |
 | `accessorclone` | an exported accessor returning its own slice or map instead of `slices.Clone`, `maps.Clone` or an iterator; today's cases sit in the module's `analyzers.yaml` baseline, which only shrinks |
-| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                                        |
-| `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                                           |
-| `stutter`       | an exported package-level name opening with its package's name                                                                              |
-| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                                                            |
-| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                                                            |
-| `namewords`     | a function or method name, exported or not, ending in a listed word (`Of`, `For`, `From`, `To`) or using a listed short form (`Src`, `Ctx`) |
-| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                                                            |
-| `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it                                            |
-| `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once                                            |
-| `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import)                                 |
-| `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag                                      |
-| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record                                    |
-| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see                                        |
+| `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                                                                                        |
+| `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                                                                                           |
+| `closedswitch`  | a switch over a named type with declared constants that misses a member or keeps a default arm                                                                                              |
+| `stutter`       | an exported package-level name opening with its package's name                                                                                                                              |
+| `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                                                                                                            |
+| `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                                                                                                            |
+| `namewords`     | a function or method name, exported or not, ending in a listed word (`Of`, `For`, `From`, `To`) or using a listed short form (`Src`, `Ctx`)                                                 |
+| `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                                                                                                            |
+| `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it                                                                                            |
+| `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once                                                                                            |
+| `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import)                                                                                 |
+| `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag                                                                                      |
+| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record                                                                                    |
+| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see                                                                                        |
+
+`closedswitch` is declared by a person, not mined: the tree sits under the 0.8 adoption floor. The
+`exhaustive-switch` key of the `analyzers.yaml` at the root of the module that holds the file
+holds its `baseline`, one count of violating switches per function, which may only shrink, and its
+`exits`, the switches a person accepted, each with a reason. A module with no such key allows none. A `//nolint:closedswitch` is no exit; `hack/lint/closed-switches-name-every-member.buzz`
+refuses it and judges the TypeScript and Buzz halves of the same rule against the `analyzers.yaml` of their own project.
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
 policy. No diagnostic names this repository's identifiers or paths on its own: an
 analyzer whose remedy is repository-specific takes a `hint` setting, appended to
 each of its diagnostics. An analyzer with a baseline or exits a person types
-(`accessorclone`) reads them, with its `hint`, from its own key of the
-`analyzers.yaml` at the root of the module it lints. A module with no such file
+(`accessorclone`, `closedswitch`) reads them, with its `hint`, from its own key of the
+`analyzers.yaml` at the root of the module it lints (`closedswitch`: the nearest module above each file). A module with no such file
 has no baseline and gets the strict default.
 
 `diagmsg` holds a `log/slog` message to the tag rule alone, and never lets an

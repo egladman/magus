@@ -36,6 +36,241 @@ accessorclone:
   # - {path, symbol, reason}
   exits: []
 
+exhaustive-switch:
+  # Functions that may still hold a switch over a closed set that misses a member or keeps a default
+  # arm. A count may only shrink; a function holding fewer switches than its row fails.
+  baseline:
+    - {path: benchmarks/agent/internal/bench/task.go, symbol: Validate}
+    - {path: cmd/magus-configdocs/main.go, symbol: kindLabel}
+    - {path: cmd/magus-spelldocs/main.go, symbol: describeCharm}
+    - {path: cmd/magus-utils/bindings.go, symbol: buzzValConv}
+    - {path: cmd/magus-utils/bindings.go, symbol: emitBuzzArgDecode}
+    - {path: cmd/magus-utils/mcp_tools.go, symbol: mcpParamType}
+    - {path: cmd/magus-utils/module_decls.go, symbol: buzzArgType}
+    - {path: cmd/magus-utils/module_decls.go, symbol: buzzDefault}
+    - {path: cmd/magus-utils/module_decls.go, symbol: buzzZero}
+    - {path: cmd/magus/affected.go, symbol: affected}
+    - {path: cmd/magus/affected.go, symbol: affectedExplain}
+    - {path: cmd/magus/affected.go, symbol: affectedImpact}
+    - {path: cmd/magus/affected.go, symbol: emitPlan}
+    - {path: cmd/magus/agent.go, symbol: describeHarness}
+    - {path: cmd/magus/attention.go, symbol: attentionList}
+    - {path: cmd/magus/checkpoint.go, symbol: checkpointCommand}
+    - {path: cmd/magus/clean.go, symbol: cleanCommand}
+    - {path: cmd/magus/config.go, symbol: runConfigView}
+    - {path: cmd/magus/describe.go, symbol: describeCharms}
+    - {path: cmd/magus/describe.go, symbol: describeFiles}
+    - {path: cmd/magus/describe.go, symbol: describeGraph}
+    - {path: cmd/magus/describe.go, symbol: describeMCPTools}
+    - {path: cmd/magus/describe.go, symbol: describeModules}
+    - {path: cmd/magus/describe.go, symbol: describeProjects, count: 2}
+    - {path: cmd/magus/describe.go, symbol: describeSpells}
+    - {path: cmd/magus/describe.go, symbol: describeTarget}
+    - {path: cmd/magus/describe.go, symbol: describeTargetCache}
+    - {path: cmd/magus/describe.go, symbol: describeTargets}
+    - {path: cmd/magus/describe.go, symbol: describeTools}
+    - {path: cmd/magus/describe.go, symbol: describeWorkspaces}
+    - {path: cmd/magus/diff.go, symbol: printThread}
+    - {path: cmd/magus/diff.go, symbol: renderDiff}
+    - {path: cmd/magus/doctor.go, symbol: emitDoctor}
+    - {path: cmd/magus/doctor.go, symbol: emitDoctorChecks}
+    - {path: cmd/magus/graph.go, symbol: graphDiff}
+    - {path: cmd/magus/graph.go, symbol: graphOpenServe}
+    - {path: cmd/magus/graph.go, symbol: graphStats}
+    - {path: cmd/magus/graph.go, symbol: renderWorkspaceGraph}
+    - {path: cmd/magus/graph.go, symbol: writeGraphExport}
+    - {path: cmd/magus/job.go, symbol: describeJob}
+    - {path: cmd/magus/job.go, symbol: jobDelete}
+    - {path: cmd/magus/job.go, symbol: jobEnter}
+    - {path: cmd/magus/job.go, symbol: jobExec}
+    - {path: cmd/magus/job.go, symbol: jobExit}
+    - {path: cmd/magus/job.go, symbol: jobFork}
+    - {path: cmd/magus/job.go, symbol: jobPause}
+    - {path: cmd/magus/job.go, symbol: jobPrune}
+    - {path: cmd/magus/job.go, symbol: jobWait}
+    - {path: cmd/magus/job.go, symbol: jobWaitIntegration}
+    - {path: cmd/magus/job.go, symbol: lsJobs}
+    - {path: cmd/magus/job_authority.go, symbol: jobPinOrAdvance}
+    - {path: cmd/magus/job_claim.go, symbol: applyClaim}
+    - {path: cmd/magus/job_graph.go, symbol: jobGraphCommand}
+    - {path: cmd/magus/job_notes.go, symbol: forkDryRun}
+    - {path: cmd/magus/job_stop.go, symbol: jobStop}
+    - {path: cmd/magus/list.go, symbol: lsProjects}
+    - {path: cmd/magus/list.go, symbol: lsTargets}
+    - {path: cmd/magus/notify.go, symbol: notifyCommand}
+    - {path: cmd/magus/query.go, symbol: emitExplainCard}
+    - {path: cmd/magus/query.go, symbol: explainChain}
+    - {path: cmd/magus/query.go, symbol: queryCommand}
+    - {path: cmd/magus/query.go, symbol: queryInvocation}
+    - {path: cmd/magus/query.go, symbol: showOutputIdentity}
+    - {path: cmd/magus/queue.go, symbol: writeDocument}
+    - {path: cmd/magus/refs.go, symbol: emitRefsList}
+    - {path: cmd/magus/refs.go, symbol: refsRenameCommand}
+    - {path: cmd/magus/run.go, symbol: emitSavedPlanDryRun}
+    - {path: cmd/magus/run.go, symbol: runTarget}
+    - {path: cmd/magus/session.go, symbol: advisoriesCommand}
+    - {path: cmd/magus/session.go, symbol: invocationList}
+    - {path: cmd/magus/session.go, symbol: sessionBriefCommand}
+    - {path: cmd/magus/spell.go, symbol: emitPull}
+    - {path: cmd/magus/spell.go, symbol: spellLs}
+    - {path: cmd/magus/status.go, symbol: printStatusWithSilent}
+    - {path: cmd/magus/status.go, symbol: writeStatus}
+    - {path: cmd/magus/vcs.go, symbol: emitCheckout}
+    - {path: cmd/magus/vcs.go, symbol: emitCheckpoint}
+    - {path: cmd/magus/version.go, symbol: runVersion}
+    - {path: cmd/magus/where.go, symbol: emitWhere}
+    - {path: cmd/magus/x.go, symbol: runAndEmit}
+    - {path: conformance_base.go, symbol: inProcessIndexer}
+    - {path: internal/agent/harness_mcp.go, symbol: validateHarnessMCP}
+    - {path: internal/agent/harness_probe.go, symbol: probeHarnessCommands}
+    - {path: internal/agent/model/model.go, symbol: PriceContext}
+    - {path: internal/cache/band.go, symbol: SetLoader}
+    - {path: internal/cache/snapshot.go, symbol: ownedOutputs}
+    - {path: internal/changeset/drift.go, symbol: buildDriftNotice}
+    - {path: internal/changeset/order.go, symbol: why, count: 2}
+    - {path: internal/ci/annotate/annotate.go, symbol: String}
+    - {path: internal/ci/gate.go, symbol: Evaluate}
+    - {path: internal/ci/volatility/volatility.go, symbol: recordOutcome}
+    - {path: internal/doctor/checks.go, symbol: checkGuardWiring}
+    - {path: internal/doctor/checks.go, symbol: checkVCSBaseRef}
+    - {path: internal/doctor/checks.go, symbol: externalOpFinding}
+    - {path: internal/file/watch/pattern.go, symbol: ValidatePattern}
+    - {path: internal/generate/emit/emit.go, symbol: arguments}
+    - {path: internal/generate/emit/emit.go, symbol: bindings}
+    - {path: internal/generate/emit/emit.go, symbol: decode, count: 2}
+    - {path: internal/generate/emit/emit.go, symbol: encode, count: 2}
+    - {path: internal/generate/emit/emit.go, symbol: goExpr}
+    - {path: internal/generate/emit/emit.go, symbol: tag, count: 2}
+    - {path: internal/generate/emit/emit.go, symbol: value}
+    - {path: internal/graph/knowledge/assemble.go, symbol: splitEdges}
+    - {path: internal/graph/knowledge/duplication.go, symbol: describeMember}
+    - {path: internal/graph/knowledge/explain_text.go, symbol: ResolutionNote}
+    - {path: internal/graph/knowledge/guard.go, symbol: writeGuardRefs}
+    - {path: internal/graph/knowledge/markers.go, symbol: assembleMarkers}
+    - {path: internal/graph/knowledge/query.go, symbol: Refs}
+    - {path: internal/graph/knowledge/query.go, symbol: dirRecord, count: 2}
+    - {path: internal/graph/knowledge/refs_render.go, symbol: EmitDefinitions, count: 2}
+    - {path: internal/graph/knowledge/refs_render.go, symbol: EmitOccurrences}
+    - {path: internal/graph/knowledge/staleness.go, symbol: annotateProseStaleness}
+    - {path: internal/graph/knowledge/unreferenced.go, symbol: referencedElsewhere}
+    - {path: internal/graph/knowledge/verdict_text.go, symbol: PrintVerdict}
+    - {path: internal/guard/adoption.go, symbol: classifyCommandLine}
+    - {path: internal/guard/apply_patch.go, symbol: judgePatchRest}
+    - {path: internal/guard/copy_write.go, symbol: judgeCopyWrites}
+    - {path: internal/guard/cost.go, symbol: callerContext}
+    - {path: internal/guard/credential.go, symbol: denyTokenStateCommand}
+    - {path: internal/guard/deviation.go, symbol: denyDeviationCommand}
+    - {path: internal/guard/dialect.go, symbol: ParseDialect}
+    - {path: internal/guard/dialect.go, symbol: variant}
+    - {path: internal/guard/guard.go, symbol: Judge, count: 2}
+    - {path: internal/guard/heredoc.go, symbol: judgeHeredocWrites}
+    - {path: internal/guard/hook_checkout.go, symbol: judgedBy}
+    - {path: internal/guard/hook_verdict.go, symbol: writeVerdict}
+    - {path: internal/guard/lease.go, symbol: workerVCSDenial}
+    - {path: internal/guard/load_restore.go, symbol: loadRestore}
+    - {path: internal/guard/policy.go, symbol: recordedRule}
+    - {path: internal/guard/push.go, symbol: gateCoverageAt}
+    - {path: internal/guard/push.go, symbol: readGateOutcome}
+    - {path: internal/guard/push.go, symbol: readUngated, count: 2}
+    - {path: internal/guard/push_coverage.go, symbol: admits}
+    - {path: internal/guard/root.go, symbol: budgetFigures}
+    - {path: internal/guard/root.go, symbol: resultFigures}
+    - {path: internal/guard/script.go, symbol: judgeScript}
+    - {path: internal/guard/search.go, symbol: judgeSearch}
+    - {path: internal/guard/search.go, symbol: placeSearch}
+    - {path: internal/guard/search.go, symbol: searchVerdictAt}
+    - {path: internal/guard/search_pattern.go, symbol: splitAlternation}
+    - {path: internal/guard/shell.go, symbol: GradeEdit}
+    - {path: internal/guard/shell.go, symbol: fileOperands}
+    - {path: internal/guard/shell.go, symbol: filterWithoutInputDeny}
+    - {path: internal/guard/stall.go, symbol: observeStall}
+    - {path: internal/guard/step.go, symbol: stepDecisionRank}
+    - {path: internal/guard/step.go, symbol: stepRuleJudgment}
+    - {path: internal/guard/workspace_shell.go, symbol: matchWorkspaceShell}
+    - {path: internal/guard/write.go, symbol: sayUnchecked}
+    - {path: internal/handler/activity/service.go, symbol: encodeKind}
+    - {path: internal/handler/activity/service.go, symbol: encodeOutcome}
+    - {path: internal/handler/activity/watch.go, symbol: decodeKind}
+    - {path: internal/handler/graph/wire.go, symbol: directionToProto}
+    - {path: internal/handler/notes/service.go, symbol: anchorKind}
+    - {path: internal/handler/notes/service.go, symbol: anchorToProto}
+    - {path: internal/handler/status/wire.go, symbol: targetStateToProto}
+    - {path: internal/handler/status/wire.go, symbol: workspaceStateToProto}
+    - {path: internal/handler/tool/connect.go, symbol: diagnosticCode}
+    - {path: internal/handler/tool/connect.go, symbol: placeCycle}
+    - {path: internal/handler/tool/connect.go, symbol: verdict}
+    - {path: internal/handler/viewer/wire.go, symbol: kindToProto}
+    - {path: internal/handler/viewer/wire.go, symbol: statusToProto}
+    - {path: internal/handler/viewer/wire.go, symbol: streamToProto}
+    - {path: internal/handler/viewer/wire.go, symbol: triggerToProto}
+    - {path: internal/hint/hint.go, symbol: String}
+    - {path: internal/interactive/difftui/render.go, symbol: rowText}
+    - {path: internal/interactive/difftui/run.go, symbol: apply, count: 2}
+    - {path: internal/interactive/failures/prompt.go, symbol: Prompt}
+    - {path: internal/interactive/failures/prompt.go, symbol: dispatchFailureKeys}
+    - {path: internal/interp/bindings/pry.go, symbol: buzzInstallStepHook}
+    - {path: internal/interp/engine/buzz/debug.go, symbol: toEngineEvent}
+    - {path: internal/interp/mcpclient/client.go, symbol: renameEntry}
+    - {path: internal/job/exec.go, symbol: BaseAdvice}
+    - {path: internal/job/exec.go, symbol: execRefusal}
+    - {path: internal/job/graph.go, symbol: planFlow}
+    - {path: internal/job/outcome.go, symbol: ModelTierRecords}
+    - {path: internal/job/plan.go, symbol: derivedClaim}
+    - {path: internal/job/verify.go, symbol: holds, count: 2}
+    - {path: internal/job/verify.go, symbol: symbolHolds}
+    - {path: internal/langservice/complete.go, symbol: completionKind}
+    - {path: internal/langservice/server.go, symbol: completionItemKind}
+    - {path: internal/notes/diffjoin.go, symbol: hit}
+    - {path: internal/notes/diffjoin.go, symbol: rank}
+    - {path: internal/notes/gap.go, symbol: FindLines}
+    - {path: internal/notes/resolve.go, symbol: degradeHint}
+    - {path: internal/notes/store.go, symbol: Dir}
+    - {path: internal/notes/store.go, symbol: validateBody}
+    - {path: internal/observability/otlp/families.go, symbol: RecordBuzzSessionPool}
+    - {path: internal/queue/approval.go, symbol: classifyChanged}
+    - {path: internal/queue/hook.go, symbol: ClassifyEdit}
+    - {path: internal/queue/provider/provider.go, symbol: RequiredChecks}
+    - {path: internal/queue/types/carry.go, symbol: Allows}
+    - {path: internal/queue/validate.go, symbol: pipeline}
+    - {path: internal/recorder/feedback.go, symbol: ReadFeedback}
+    - {path: internal/release/compat.go, symbol: Judge}
+    - {path: internal/render/md/md.go, symbol: delimiterCell}
+    - {path: internal/render/md/md.go, symbol: minWidth}
+    - {path: internal/render/md/md.go, symbol: pad}
+    - {path: internal/review/diff_patch.go, symbol: ReadPatch}
+    - {path: internal/review/diff_source.go, symbol: RiskBase}
+    - {path: internal/review/impact/evidence.go, symbol: evidenceGapLines}
+    - {path: internal/risk/risk.go, symbol: String}
+    - {path: internal/risk/tier.go, symbol: classify}
+    - {path: internal/risk/tier.go, symbol: gate}
+    - {path: internal/selfupdate/keyring.go, symbol: parseKeyring}
+    - {path: internal/server/probe.go, symbol: probeName}
+    - {path: internal/server/status_text.go, symbol: PrintStatusText}
+    - {path: internal/service/console/runs.go, symbol: resultState}
+    - {path: internal/sessions/brief/brief.go, symbol: briefNextStep}
+    - {path: internal/sessions/cost.go, symbol: SummarizeCost}
+    - {path: internal/sessions/gate.go, symbol: MarshalJSON}
+    - {path: internal/sessions/gate.go, symbol: UnmarshalJSON}
+    - {path: internal/sessions/notify.go, symbol: RenderNotification}
+    - {path: internal/sessions/notify.go, symbol: severityForOutcome}
+    - {path: internal/sessions/show.go, symbol: SummarizeSession}
+    - {path: internal/sessions/touches.go, symbol: readActivity}
+    - {path: internal/spell/patch.go, symbol: applyOp}
+    - {path: libs/image/tree.go, symbol: symlink}
+    - {path: magus.go, symbol: newCallGraph}
+    - {path: spells/descriptor.go, symbol: ValidatePatch}
+    - {path: spells/version.go, symbol: KeyFunc}
+    - {path: std/buzz.go, symbol: braceClosers}
+    - {path: std/module.go, symbol: GoType}
+    - {path: std/term.go, symbol: notifyStyle}
+    - {path: std/validate.go, symbol: validateMCPTools}
+    - {path: tools.go, symbol: buildToolStatus}
+    - {path: types/check/check.go, symbol: Rank}
+    - {path: types/concurrency.go, symbol: Width}
+    - {path: types/target.go, symbol: Gates}
+  # Switches a person accepted, each with the reason it stays.
+  exits: []
+
 no-throw:
   exits:
     - path: spells/harness/opencode/plugins/magus.js

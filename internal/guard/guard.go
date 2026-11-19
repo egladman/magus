@@ -1467,6 +1467,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 				}
 			}
 			switch decision {
+			case "", verdict.Defer, verdict.Advise:
 			case verdict.Ask:
 				judgment.Decision, judgment.Context, judgment.Reason = verdict.Ask, "", reason
 				if !req.RendersAsk {
@@ -1475,8 +1476,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 				}
 				judgment.Rule = string(denyRuleHumanOnly)
 			case verdict.Deny:
-				judgment.Decision, judgment.Context, judgment.Reason = verdict.Deny, "", reason
-				judgment.Rule = string(denyRuleHumanOnly)
+				judgment.Decision, judgment.Context, judgment.Reason, judgment.Rule = verdict.Deny, "", reason, string(denyRuleHumanOnly)
 				if lapsed {
 					// A lapse is retried, never a standing refusal.
 					judgment.Rule = string(advisoryUnfinished)

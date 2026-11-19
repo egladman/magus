@@ -12,13 +12,10 @@
 package accessorclone
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -27,7 +24,6 @@ import (
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
-	"gopkg.in/yaml.v3"
 )
 
 const name = "accessorclone"
@@ -169,36 +165,12 @@ func (l loaded) excuse(e Entry, list, root string) error {
 	return nil
 }
 
-// decode reads the accessorclone key strictly, so a misspelled field fails;
-// the other top-level keys belong to other analyzers and are not read. A
-// missing file or key is the empty policy: the strict default.
+// decode reads the accessorclone key strictly; a missing file or key is the
+// empty policy.
 func decode(path string) (policy, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return policy{}, nil
-	}
-	if err != nil {
-		return policy{}, err
-	}
-	var doc map[string]yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return policy{}, err
-	}
-	node, ok := doc[name]
-	if !ok {
-		return policy{}, nil
-	}
-	raw, err := yaml.Marshal(&node)
-	if err != nil {
-		return policy{}, err
-	}
 	var p policy
-	dec := yaml.NewDecoder(bytes.NewReader(raw))
-	dec.KnownFields(true)
-	if err := dec.Decode(&p); err != nil {
-		return policy{}, fmt.Errorf("%s: %w", name, err)
-	}
-	return p, nil
+	err := source.PolicyKey(path, name, &p)
+	return p, err
 }
 
 func run(pass *analysis.Pass, l loaded) error {
@@ -223,7 +195,7 @@ func run(pass *analysis.Pass, l loaded) error {
 		}
 		for e, list := range l.excused {
 			if e.Path == rel && !hasSymbol(leaks, e.Symbol) {
-				pass.Reportf(f.Name.Pos(), "%s", source.Hint(fmt.Sprintf(staleMessage, listedBy(list),e.Symbol, name, list, l.policy), l.hint))
+				pass.Reportf(f.Name.Pos(), "%s", source.Hint(fmt.Sprintf(staleMessage, listedBy(list), e.Symbol, name, list, l.policy), l.hint))
 			}
 		}
 	}

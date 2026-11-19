@@ -1,0 +1,443 @@
+// closed-switches-name-every-member: a switch over a closed set names every member and has
+// no default arm, so a member added later fails at each switch that forgot it instead of
+// taking a quiet path. Go is judged by the closedswitch analyzer in libs/conventions, which
+// reads the same file; this rule judges TypeScript and Buzz, and holds the Go side to
+// the rest of the contract: no //nolint, and no row naming a file that is gone.
+//
+// TypeScript: no default clause, and the statement after the switch is
+// `unreachable(<the switch's expression>)`, so tsc proves every member is named through
+// `never`. The parser sees no types, so every TS switch is in scope; a switch over an open
+// set (a key name, a path) is a lookup table or an if chain instead.
+// Buzz: a `match` that names enum members has no `else` arm; the checker already refuses a
+// match that misses one.
+//
+// Tier 2, measured shape: declared by a person, since the tree is under the 0.8 adoption floor. The baseline
+// (the exhaustive-switch key of the analyzers.yaml at the root of the project that owns the file, paths
+// relative to that project) holds one count per function and may only shrink. The only other exit is a
+// row under its `exits`, typed by a person, for a Go switch. A project with no analyzers.yaml, or one with
+// no exhaustive-switch key, allows none. A new violation fails at once.
+namespace closedswitches;
+
+import "assert";
+import "proc";
+import "result";
+import "std";
+import "encoding/json";
+import "encoding/yaml";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final THIS = "hack/lint/closed-switches-name-every-member.buzz";
+final POLICY = "analyzers.yaml";
+final CEILING = "exhaustive-switch baseline in its project's " + POLICY;
+final SECTION = "exhaustive-switch";
+final PARSER = "hack/lint/closed-switches-name-every-member.mjs";
+
+final COUNT_FIX = "The " + CEILING + " may only shrink; fix this switch rather than raise it.";
+
+final FUN = std\pattern(`^\s*(?:export\s+)?fun\s+(\w+)`);
+final MATCH = std\pattern(`\bmatch\s*\(`);
+final ENUM_ARM = std\pattern(`^\s*[A-Z]\w*\.\w+(\s*,\s*[A-Z]\w*\.\w+)*\s*->`);
+final ELSE_ARM = std\pattern(`^\s*else\s*->`);
+
+// Site is one violating switch or match.
+export object Site {
+    path: str,
+    symbol: str = "",
+    line: int = 0,
+    col: int = 0,
+    message: str,
+    fix: str,
+}
+
+// Ceiling is one baseline row at its workspace path, the line it sits on, and
+// the analyzers.yaml that holds it.
+export object Ceiling {
+    path: str,
+    symbol: str,
+    count: int,
+    line: int = 0,
+    file: str = POLICY,
+}
+
+// Exit is one exit row at its workspace path, and the analyzers.yaml that holds it.
+export object Exit {
+    path: str,
+    file: str = POLICY,
+}
+
+// Policy is the exhaustive-switch key of one project's analyzers.yaml.
+export object Policy {
+    ceilings: {str: Ceiling},
+    exits: [Exit],
+}
+
+export fun reads() > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.buzz", "**/*.go", "**/" + POLICY, POLICY, PARSER];
+}
+
+// owner is the project holding path, as magus resolves one: the deepest
+// project root path sits under, or "." for the root project.
+export fun owner(path: str, projects: [str]) > str {
+    var best = ".";
+    foreach (p in projects) {
+        if (p != "." and path.startsWith(p + "/") and (best == "." or p.len() > best.len())) {
+            best = p;
+        }
+    }
+    return best;
+}
+
+// policyFile is the analyzers.yaml at project's root.
+export fun policyFile(project: str) > str {
+    return if (project == ".") POLICY else project + "/" + POLICY;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final projects = mut [<str>];
+    foreach (p in support\projects().projects) {
+        projects.append(p.path);
+    }
+    final counts = mut {<str: Ceiling>};
+    final exits = mut [<Exit>];
+    final ts = mut [<Path>];
+    final sites = mut [<Site>];
+    final present = mut {<str: bool>};
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        present[f.value] = true;
+        if (f.value == POLICY or f.value.endsWith("/" + POLICY)) {
+            final project = owner(f.value, projects: projects);
+            if (f.value == policyFile(project)) {
+                final text = support\read(f);
+                final doc: {str: any} = yaml\parse(text);
+                final p = policy(doc[SECTION] ?? {<str: any>}, text: text, project: project);
+                foreach (k, c in p.ceilings) {
+                    counts[k] = c;
+                }
+                foreach (e in p.exits) {
+                    exits.append(e);
+                }
+            }
+        } else if (tsScanned(f.value)) {
+            ts.append(f);
+        } else if (buzzScanned(f.value)) {
+            foreach (m in matches(f.value, src: support\read(f))) {
+                sites.append(m);
+            }
+        } else if (f.value.endsWith(".go")) {
+            foreach (n in nolints(f.value, src: support\read(f))) {
+                found.append(n);
+            }
+        }
+    }
+    final parsed = tsSites(ts);
+    if (parsed.error != null) {
+        throw "{PARSER}: {parsed.error!.message}";
+    }
+    foreach (s in parsed.value!) {
+        sites.append(s);
+    }
+    return found + judge(sites, ceilings: counts, projects: projects)
+        + rowsNamingGoneFiles(counts, exits: exits, present: present);
+}
+
+// tsScanned reports whether the parser reads p: hand-written TypeScript outside tests.
+export fun tsScanned(p: str) > bool {
+    if (("/" + p).indexOf("/testdata/") != null or p.endsWith(".d.ts") or p.endsWith(".test.ts") or p.endsWith(".test.tsx")) {
+        return false;
+    }
+    return p.endsWith(".ts") or p.endsWith(".tsx");
+}
+
+// buzzScanned reports whether the match scan reads p. This file holds match text in its
+// fixtures, and the gopherbuzz benchmarks match over ranges on purpose.
+export fun buzzScanned(p: str) > bool {
+    if (p == THIS or p.startsWith("libs/gopherbuzz/benchmarks/") or ("/" + p).indexOf("/testdata/") != null) {
+        return false;
+    }
+    return p.endsWith(".buzz");
+}
+
+// tsSites runs the parser once per base directory the files sit under.
+fun tsSites(files: [Path]) > result\Result::<[Site]> {
+    final byBase = mut {<str: mut [str]>};
+    foreach (f in files) {
+        final base = if (f.base == "") "." else f.base;
+        if (byBase[base] == null) {
+            byBase[base] = mut [<str>];
+        }
+        byBase[base]!.append(f.value);
+    }
+    final found = mut [<Site>];
+    foreach (base in support\sorted(byBase.keys())) {
+        var run = proc\ExecResult{};
+        try {
+            run = proc\exec("node", args: [PARSER, base],
+                opts: proc\ExecOptions{ stdin = byBase[base]!.join("\n"), quiet = true, allowFailure = true });
+        } catch (err: any) {
+            return result\caught::<[Site]>(err, doing: "run {PARSER} over {base}");
+        }
+        if (run.code != 0) {
+            return result\fail::<[Site]>("exited {run.code}: " + run.stderr.trim());
+        }
+        foreach (line in run.stdout.split("\n")) {
+            if (line == "") {
+                continue;
+            }
+            try {
+                final site = tsSite(json\parse(line));
+                if (site -> s) {
+                    found.append(s);
+                }
+            } catch (err: any) {
+                return result\caught::<[Site]>(err, doing: "read a row of {PARSER}");
+            }
+        }
+    }
+    return result\ok::<[Site]>(found);
+}
+
+// tsSite turns a parser row into a site, or null for a switch that already meets the rule.
+export fun tsSite(row: {str: any}) > Site? {
+    final subject: str = row["subject"] ?? "";
+    final hasDefault: bool = row["hasDefault"] ?? false;
+    final exhausted: bool = row["exhausted"] ?? false;
+    var message = "";
+    var fix = "";
+    if (hasDefault) {
+        message = "switch on {subject} keeps a default arm";
+        fix = "Delete the default arm, give every member its own case, and end with `return unreachable({subject});` "
+            + "(console/src/lib/unreachable.ts). If the set is open, use a lookup table or an if chain. " + COUNT_FIX;
+    } else if (!exhausted) {
+        message = "switch on {subject} is not followed by unreachable({subject})";
+        fix = "Add `return unreachable({subject});` after the switch, so tsc fails when a member is missing. " + COUNT_FIX;
+    } else {
+        return null;
+    }
+    return Site{ path = row["path"] ?? "", symbol = row["symbol"] ?? "", line = std\toInt(row["line"] ?? 0),
+        col = std\toInt(row["col"] ?? 0), message = message, fix = fix };
+}
+
+// matches finds each `match` that names enum members and also has an `else` arm.
+export fun matches(path: str, src: str) > [Site] {
+    final found = mut [<Site>];
+    final lines = src.split("\n");
+    var i = 0;
+    var symbol = "<module>";
+    while (i < lines.len()) {
+        final named = FUN.match(lines[i]);
+        if (named != null) {
+            symbol = named![1];
+        }
+        if (MATCH.match(lines[i]) == null) {
+            i = i + 1;
+            continue;
+        }
+        final start = i;
+        var depth = 0;
+        var opened = false;
+        var enumArm = false;
+        var elseLine = 0;
+        while (i < lines.len()) {
+            final line = lines[i];
+            if (ENUM_ARM.match(line) != null) {
+                enumArm = true;
+            }
+            if (ELSE_ARM.match(line) != null) {
+                elseLine = i + 1;
+            }
+            depth = depth + line.split("{").len() - line.split("}").len();
+            if (depth > 0) {
+                opened = true;
+            }
+            i = i + 1;
+            if (opened and depth <= 0) {
+                break;
+            }
+        }
+        if (enumArm and elseLine > 0) {
+            found.append(Site{ path = path, symbol = symbol, line = elseLine, col = 1,
+                message = "match at line {start + 1} names enum members and keeps an else arm",
+                fix = "Delete the else arm and name every member. " + COUNT_FIX });
+        }
+    }
+    return found;
+}
+
+// nolints refuses a //nolint naming the analyzer: the baseline and the exits are its only exits.
+export fun nolints(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        final at = line.indexOf("nolint:");
+        if (at != null and line.indexOf("closedswitch") != null) {
+            found.append(Finding{ path = path, line = n,
+                message = "a //nolint cannot exempt closedswitch",
+                fix = "Name every member of the set and drop the default arm, or ask a person to add an exit under {SECTION} in the " + POLICY + " of its project." });
+        }
+    }
+    return found;
+}
+
+fun key(path: str, symbol: str) > str {
+    return path + " " + symbol;
+}
+
+// policy reads rules, the exhaustive-switch key of project's analyzers.yaml
+// as yaml\parse answers it from text: baseline rows, where a row with no count
+// holds one switch, and exits. Its paths are relative to project, and policy
+// answers them as workspace paths. A file with no such key is the empty policy.
+export fun policy(rules: {str: any}, text: str, project: str) > Policy {
+    final file = policyFile(project);
+    final prefix = if (project == ".") "" else project + "/";
+    final acc = mut {<str: Ceiling>};
+    final exits = mut [<Exit>];
+    final rows: [any] = rules["baseline"] ?? [<any>];
+    foreach (item in rows) {
+        final row: {str: any} = item;
+        final symbol: str = row["symbol"] ?? "";
+        final c = Ceiling{ path = prefix + (row["path"] ?? ""), symbol = symbol,
+            count = std\toInt(row["count"] ?? 1), line = support\findLine(text, needle: symbol), file = file };
+        acc[key(c.path, symbol: symbol)] = c;
+    }
+    final exitRows: [any] = rules["exits"] ?? [<any>];
+    foreach (item in exitRows) {
+        final row: {str: any} = item;
+        exits.append(Exit{ path = prefix + (row["path"] ?? ""), file = file });
+    }
+    return Policy{ ceilings = acc, exits = exits };
+}
+
+fun judgedHere(path: str) > bool {
+    return !path.endsWith(".go");
+}
+
+// judge fails each site of a function over its count, and a count above what its function
+// holds. A Go row is the analyzer's to judge.
+export fun judge(sites: [Site], ceilings: {str: Ceiling}, projects: [str]) > [Finding] {
+    final bySymbol = mut {<str: mut [Site]>};
+    foreach (s in sites) {
+        final k = key(s.path, symbol: s.symbol);
+        if (bySymbol[k] == null) {
+            bySymbol[k] = mut [<Site>];
+        }
+        bySymbol[k]!.append(s);
+    }
+    final found = mut [<Finding>];
+    foreach (k in support\sorted(bySymbol.keys())) {
+        final held = bySymbol[k]!;
+        final allowed = ceilings[k]?.count ?? 0;
+        if (held.len() <= allowed) {
+            continue;
+        }
+        foreach (s in held) {
+            found.append(Finding{ path = s.path, line = s.line, col = s.col,
+                message = "{s.message}: {s.symbol} in {s.path} holds {held.len()}, over the {allowed} the {SECTION} baseline in {policyFile(owner(s.path, projects: projects))} records",
+                fix = s.fix });
+        }
+    }
+    foreach (k in support\sorted(ceilings.keys())) {
+        final c = ceilings[k]!;
+        if (!judgedHere(c.path)) {
+            continue;
+        }
+        final held = bySymbol[k]?.len() ?? 0;
+        if (held < c.count) {
+            found.append(Finding{ path = c.file, line = c.line,
+                message = "records {c.count} for {c.symbol} in {c.path}, which holds {held}",
+                fix = if (held == 0) "Delete the row: the baseline only shrinks." else "Lower the count to {held}: the baseline only shrinks." });
+        }
+    }
+    return found;
+}
+
+// rowsNamingGoneFiles fails a Go baseline row or exit whose file is not in the tree. The
+// analyzer sees a file only while it exists, so a deleted file's row would otherwise stay.
+export fun rowsNamingGoneFiles(counts: {str: Ceiling}, exits: [Exit], present: {str: bool}) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (k in support\sorted(counts.keys())) {
+        final c = counts[k]!;
+        if (c.path.endsWith(".go") and present[c.path] == null) {
+            found.append(Finding{ path = c.file, line = c.line,
+                message = "records {c.count} for {c.symbol} in {c.path}, which is not in the tree",
+                fix = "Delete the row: the baseline only shrinks." });
+        }
+    }
+    foreach (e in exits) {
+        if (present[e.path] == null) {
+            found.append(Finding{ path = e.file, line = 0,
+                message = "has an exit for {e.path}, which is not in the tree",
+                fix = "Delete the exit." });
+        }
+    }
+    return found;
+}
+
+fun lines(found: [Finding]) > [str] {
+    final acc = mut [<str>];
+    foreach (f in found) {
+        acc.append("{f.path}:{f.line} {f.message}");
+    }
+    return acc;
+}
+
+test "a switch ending in unreachable with no default passes, a default or a missing call fails" {
+    final done = tsSite({"path": "a.ts", "subject": "k", "hasDefault": false, "exhausted": true});
+    assert\equal(done == null, want: true, message: "compliant");
+    final dflt = tsSite({"path": "a.ts", "line": 4, "subject": "k", "hasDefault": true, "exhausted": false});
+    assert\equal(dflt!.message, want: "switch on k keeps a default arm", message: "default");
+    final bare = tsSite({"path": "a.ts", "line": 9, "subject": "k", "hasDefault": false, "exhausted": false});
+    assert\equal(bare!.message, want: "switch on k is not followed by unreachable(k)", message: "no call");
+}
+
+final BASELINE = "exhaustive-switch:\n  baseline:\n    - \{path: a.ts, symbol: f}\n  exits: []\n";
+final GO_BASELINE = "exhaustive-switch:\n  baseline:\n    - \{path: a.go, symbol: f, count: 2}\n  exits:\n    - \{path: b.go, symbol: g, type: T, reason: r}\n";
+
+test "a function at its count passes, over it fails, and a count above the function fails" {
+    final site = Site{ path = "a.ts", symbol = "f", line = 3, message = "m", fix = "f" };
+    final doc: {str: any} = yaml\parse(BASELINE);
+    final at = policy(doc[SECTION] ?? {<str: any>}, text: BASELINE, project: ".").ceilings;
+    final over = "a.ts:3 m: f in a.ts holds 2, over the 1 the exhaustive-switch baseline in analyzers.yaml records";
+    assert\equal(lines(judge([site], ceilings: at, projects: ["."])), want: [<str>], message: "at its count");
+    assert\equal(lines(judge([site, site], ceilings: at, projects: ["."])), want: [over, over], message: "over it");
+    assert\equal(lines(judge([<Site>], ceilings: at, projects: ["."])),
+        want: ["analyzers.yaml:3 records 1 for f in a.ts, which holds 0"], message: "stale");
+}
+
+test "a Go row is the analyzer's, and a Go row or exit for a deleted file fails" {
+    final doc: {str: any} = yaml\parse(GO_BASELINE);
+    final at = policy(doc[SECTION] ?? {<str: any>}, text: GO_BASELINE, project: ".");
+    assert\equal(lines(judge([<Site>], ceilings: at.ceilings, projects: ["."])), want: [<str>], message: "go count left to the analyzer");
+    assert\equal(lines(rowsNamingGoneFiles(at.ceilings, exits: at.exits, present: {<str: bool>})),
+        want: ["analyzers.yaml:3 records 2 for f in a.go, which is not in the tree", "analyzers.yaml:0 has an exit for b.go, which is not in the tree"],
+        message: "gone files");
+}
+
+test "a project's analyzers.yaml judges its own files at workspace paths" {
+    final doc: {str: any} = yaml\parse(BASELINE);
+    final nested = policy(doc[SECTION] ?? {<str: any>}, text: BASELINE, project: "console");
+    assert\equal(nested.ceilings["console/a.ts f"]!.path, want: "console/a.ts", message: "workspace path");
+    final site = Site{ path = "console/a.ts", symbol = "f", line = 3, message = "m", fix = "f" };
+    assert\equal(lines(judge([site, site], ceilings: nested.ceilings, projects: [".", "console"])),
+        want: ["console/a.ts:3 m: f in console/a.ts holds 2, over the 1 the exhaustive-switch baseline in console/analyzers.yaml records",
+            "console/a.ts:3 m: f in console/a.ts holds 2, over the 1 the exhaustive-switch baseline in console/analyzers.yaml records"],
+        message: "over in its project");
+    assert\equal(lines(judge([<Site>], ceilings: nested.ceilings, projects: [".", "console"])),
+        want: ["console/analyzers.yaml:3 records 1 for f in console/a.ts, which holds 0"], message: "stale in its project");
+    assert\equal(owner("console/src/x.ts", projects: [".", "console"]), want: "console", message: "owner");
+    assert\equal(owner("src/x.ts", projects: [".", "console"]), want: ".", message: "root owner");
+}
+
+test "a match naming enum members with an else arm fails, one over ranges passes" {
+    final enumMatch = "fun f(k: Kind) > int \{\n    return match (k) \{\n        Kind.one -> 1,\n        else -> 0,\n    };\n}\n";
+    final rangeMatch = "fun g(i: int) > int \{\n    return match (i) \{\n        0..5 -> 1,\n        else -> 0,\n    };\n}\n";
+    assert\equal(matches("a.buzz", src: enumMatch).len(), want: 1, message: "enum else");
+    assert\equal(matches("a.buzz", src: rangeMatch).len(), want: 0, message: "range else");
+}
+
+test "a nolint naming closedswitch fails" {
+    assert\equal(nolints("a.go", src: "switch x \{ //nolint:closedswitch // why\n}\n").len(), want: 1, message: "nolint");
+    assert\equal(nolints("a.go", src: "switch x \{ //nolint:gosec // why\n}\n").len(), want: 0, message: "other nolint");
+}

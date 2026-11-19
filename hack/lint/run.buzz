@@ -35,6 +35,7 @@ import "hack/lint/buzz-sources-pass-the-static-check" as buzzcheck;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
+import "hack/lint/closed-switches-name-every-member" as closedswitches;
 import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
 import "hack/lint/decisions-meet-their-evidence" as decisionsevidence;
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
@@ -128,6 +129,7 @@ export fun rules() > [Rule] {
         Rule{ name = "decisions-meet-their-evidence", reads = decisionsevidence\reads(), check = decisionsevidence\check },
         Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
         Rule{ name = "sdk-exports", reads = sdkexports\reads(), check = sdkexports\check },
+        Rule{ name = "closed-switches-name-every-member", reads = closedswitches\reads(), check = closedswitches\check },
         Rule{ name = "typescript-never-throws", reads = typescriptthrows\reads(), check = typescriptthrows\check },
         Rule{ name = "gate-pages-say-what-they-do-not-measure", reads = gatemeasures\reads(), check = gatemeasures\check },
         Rule{ name = "lint-findings-carry-a-message-and-a-fix", reads = findingshape\reads(), check = findingshape\check },
