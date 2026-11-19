@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -170,7 +171,7 @@ func (k Keyring) RevokedIDs() []string {
 // verify anything downloaded afterwards, even though this binary was built trusting it.
 func (k Keyring) Without(ids []string) Keyring {
 	if len(ids) == 0 {
-		return k
+		return slices.Clone(k)
 	}
 	drop := make(map[string]bool, len(ids))
 	for _, id := range ids {
