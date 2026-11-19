@@ -485,3 +485,15 @@ func TestShippedGoldenRanking(t *testing.T) {
 		}
 	}
 }
+
+func TestTableReadMarksANumberedFormatLegacy(t *testing.T) {
+	data := append([]byte("MSET"), 2, 0)
+	_, err := ReadTable(data)
+	if !errors.Is(err, ErrLegacyFormat) {
+		t.Fatalf("ReadTable(format number 2) = %v, want ErrLegacyFormat", err)
+	}
+	_, err = ReadTable(appendFormat([]byte("MSET"), "embed.table/v1alpha2"))
+	if err == nil || errors.Is(err, ErrLegacyFormat) {
+		t.Fatalf("ReadTable(newer format) = %v, want a refusal that is not ErrLegacyFormat", err)
+	}
+}

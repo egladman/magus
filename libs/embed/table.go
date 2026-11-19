@@ -276,6 +276,11 @@ func ReadTable(data []byte) (*Table, error) {
 
 var errTruncated = errors.New("truncated table")
 
+// ErrLegacyFormat marks a table written before formats were strings, when the format was
+// the number 1 or 2. It is an older table, to be retrained, not a corrupt or newer one:
+// a caller may treat it as an absent table.
+var ErrLegacyFormat = errors.New("table is in the numbered format that preceded the version strings")
+
 // maxFormat bounds a format string, so a corrupt length cannot ask for a large read.
 const maxFormat = 64
 
@@ -298,6 +303,9 @@ func parseFormat(b []byte) (format string, n int) {
 func readTable(data []byte) (*Table, error) {
 	if !bytes.HasPrefix(data, tableMagic[:]) {
 		return nil, errors.New("not an embedding table (no MSET magic)")
+	}
+	if n := data[len(tableMagic):]; len(n) > 0 && (n[0] == 1 || n[0] == 2) {
+		return nil, fmt.Errorf("%w: it names format number %d", ErrLegacyFormat, n[0])
 	}
 	format, k := parseFormat(data[len(tableMagic):])
 	if k <= 0 {

@@ -238,3 +238,22 @@ func TestEmbedTablePublishRefusesAFileThatMissesThePin(t *testing.T) {
 	require.ErrorIs(t, err, errAbsent)
 	assert.Contains(t, err.Error(), "magus run table libs/train")
 }
+
+func TestEmbedTableReadPinnedTreatsAnOlderFormatAsAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), fileName)
+	old := append([]byte("MSET"), 2, 0, 0)
+	require.NoError(t, os.WriteFile(path, old, 0o644))
+	_, err := readPinned(path, sum(old))
+	require.ErrorIs(t, err, errAbsent)
+	assert.Contains(t, err.Error(), "magus run table libs/train")
+	assert.Contains(t, err.Error(), "magus graph push -table")
+}
+
+func TestEmbedTableReadPinnedRefusesANewerFormat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), fileName)
+	newer := append([]byte("MSET"), 3, 'a', 'b', 'c')
+	require.NoError(t, os.WriteFile(path, newer, 0o644))
+	_, err := readPinned(path, sum(newer))
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errAbsent)
+}

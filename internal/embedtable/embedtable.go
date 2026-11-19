@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -110,7 +111,14 @@ func readPinned(path, pin string) (*embed.Table, error) {
 	if got := sum(data); got != pin {
 		return nil, fmt.Errorf("embedtable: %s hashes to %s, the pin is %s: run `magus graph pull -table` to replace it", path, got, pin)
 	}
-	return embed.ReadTable(data)
+	tbl, err := embed.ReadTable(data)
+	if errors.Is(err, embed.ErrLegacyFormat) {
+		// A derived artifact, like a cache entry: unavailable until retrained, never fatal.
+		slog.Warn("the embedding table is in an older format and is unavailable; the embed list is skipped",
+			slog.String("table", path), slog.String("retrain", "magus run table libs/train"), slog.String("publish", "magus graph push -table"))
+		return nil, fmt.Errorf("%w: %s is in an older format: retrain it with `magus run table libs/train` and publish it with `magus graph push -table`", errAbsent, path)
+	}
+	return tbl, err
 }
 
 // Pull fetches ref's table layer into the cache, writing by rename so no reader sees

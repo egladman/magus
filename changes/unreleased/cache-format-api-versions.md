@@ -11,5 +11,6 @@
   holds the number is refused when read.
 - **Old caches miss once and rebuild.** Nothing migrates, and an entry written under a
   number is never read.
-- **The published embedding table needs retraining.** It is in the old `embed.table`
-  format and is refused until a table in the new format is published.
+- **The published embedding table needs retraining.** A table in the old numbered format
+  is unavailable, not an error: one warning names it and the retrain and publish commands,
+  and ranking skips the embed list as it does with no table. A newer format is refused.
