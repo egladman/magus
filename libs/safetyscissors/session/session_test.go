@@ -464,6 +464,27 @@ func (s *ReadSuite) TestARetiredDecisionRefusesTheStore() {
 	}
 }
 
+// SetAsideRetired renames a file holding a magus.sessions record, keeping its bytes, and
+// leaves a current one.
+func (s *ReadSuite) TestSetAsideRetiredRenamesOnlyOldGroupFiles() {
+	dir := s.T().TempDir()
+	old := filepath.Join(dir, "old.jsonl")
+	s.Require().NoError(os.WriteFile(old, []byte(`{"v":"magus.sessions/v1alpha1","invocation":"old","seq":1,"kind":"target_result","ts":10}`+"\n"), 0o644))
+	current := filepath.Join(dir, "new.jsonl")
+	s.Require().NoError(os.WriteFile(current, []byte(`{"v":"`+string(APIVersion)+`","invocation":"new","seq":1,"kind":"target_result","ts":10,"payload":{}}`+"\n"), 0o644))
+
+	aside, err := SetAsideRetired(s.T().Context(), dir)
+	s.Require().NoError(err)
+	set := filepath.Join(dir, "old.retired-magus.sessions")
+	s.Equal([]string{set}, aside)
+	s.NoFileExists(old)
+	s.FileExists(set, "the records stay on disk")
+	s.FileExists(current)
+
+	_, err = ReadAll(s.T().Context(), dir)
+	s.Require().NoError(err, "the store reads once the old file is set aside")
+}
+
 // A record from before the module took the store carries magus.sessions, and the store
 // is refused with the file named rather than read with that record missing.
 func (s *ReadSuite) TestARetiredGroupRefusesTheStore() {

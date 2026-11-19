@@ -510,6 +510,46 @@ func (e *RetiredGroupError) Error() string {
 	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s)", e.Path, e.Version, APIVersion)
 }
 
+// SetAsideRetired renames every invocation file under dir holding a record stamped
+// [retiredGroup] to <id>.retired-<group> beside it and returns the new paths, so the
+// records stay on disk and no reader sees an invocation. The new name drops [FileExt]
+// because the readers list by that suffix: a name that kept it would be refused again.
+// A file it cannot rename is a [*StoreError] and the rest are still tried.
+//
+// It stops early and returns ctx.Err() as is once ctx is done.
+func SetAsideRetired(ctx context.Context, dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, &StoreError{Op: "read store", Path: dir, Err: err}
+	}
+	var aside []string
+	var errs []error
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return aside, err
+		}
+		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if decodeFile(path).retired == "" {
+			continue
+		}
+		to := filepath.Join(dir, strings.TrimSuffix(e.Name(), FileExt)+".retired-"+retiredGroup)
+		if err := os.Rename(path, to); err != nil {
+			if !os.IsNotExist(err) {
+				errs = append(errs, &StoreError{Op: "set aside retired", Path: path, Err: err})
+			}
+			continue
+		}
+		aside = append(aside, to)
+	}
+	return aside, errors.Join(errs...)
+}
+
 // RetiredDecisionError is a loaded event whose verdict is "pass" or "allow", the names
 // the guard's defer had before its decisions became defer, advise, ask and deny. The
 // store is refused rather than read around it: a skipped event would drop out of every
