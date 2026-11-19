@@ -18,7 +18,7 @@ test("a pool reading passes straight through", async () => {
     workspaces: [],
     cache: null,
   }));
-  assert.deepEqual(got, { running: 2, queued: 1, workspaces: [], cache: null });
+  assert.deepEqual(got, { value: { running: 2, queued: 1, workspaces: [], cache: null } });
 });
 
 // Verified against a real v0.2.0 server, which 404s the route entirely: GetStatus is newer than the
@@ -26,13 +26,13 @@ test("a pool reading passes straight through", async () => {
 // console-spam lib/server.ts's readiness probe goes out of its way to avoid.
 test("a server that does not serve the route is not asked twice", async () => {
   let calls = 0;
-  const denied = async (): Promise<never> => {
+  const denied = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new ConnectError("no such method", Code.Unimplemented);
+    return Promise.reject(new ConnectError("no such method", Code.Unimplemented));
   };
-  assert.equal(await fetchPulse(HOST, denied), null);
-  assert.equal(await fetchPulse(HOST, denied), null);
+  assert.equal((await fetchPulse(HOST, denied)).value ?? null, null);
+  assert.equal((await fetchPulse(HOST, denied)).value ?? null, null);
   assert.equal(calls, 1, "the second poll should never have left the browser");
 });
 
@@ -40,10 +40,10 @@ test("a server that does not serve the route is not asked twice", async () => {
 // a blip would leave the rail blank for the rest of the session over one dropped request.
 test("an outage keeps being retried", async () => {
   let calls = 0;
-  const down = async (): Promise<never> => {
+  const down = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new ConnectError("connection refused", Code.Unavailable);
+    return Promise.reject(new ConnectError("connection refused", Code.Unavailable));
   };
   await fetchPulse(HOST, down);
   await fetchPulse(HOST, down);
@@ -52,12 +52,7 @@ test("an outage keeps being retried", async () => {
   // And it recovers: the earlier failures left nothing behind that blocks a later good answer.
   assert.deepEqual(
     await fetchPulse(HOST, async () => ({ running: 1, queued: 0, workspaces: [], cache: null })),
-    {
-      running: 1,
-      queued: 0,
-      workspaces: [],
-      cache: null,
-    },
+    { value: { running: 1, queued: 0, workspaces: [], cache: null } },
   );
 });
 
@@ -65,10 +60,10 @@ test("an outage keeps being retried", async () => {
 // Latching on the 401 would blank the rail with nothing to report it.
 test("an auth failure keeps being retried", async () => {
   let calls = 0;
-  const unauthorized = async (): Promise<never> => {
+  const unauthorized = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new ConnectError("no token", Code.Unauthenticated);
+    return Promise.reject(new ConnectError("no token", Code.Unauthenticated));
   };
   await fetchPulse(HOST, unauthorized);
   await fetchPulse(HOST, unauthorized);
@@ -77,12 +72,7 @@ test("an auth failure keeps being retried", async () => {
   // And it recovers the moment the token works.
   assert.deepEqual(
     await fetchPulse(HOST, async () => ({ running: 3, queued: 0, workspaces: [], cache: null })),
-    {
-      running: 3,
-      queued: 0,
-      workspaces: [],
-      cache: null,
-    },
+    { value: { running: 3, queued: 0, workspaces: [], cache: null } },
   );
 });
 
@@ -90,10 +80,10 @@ test("an auth failure keeps being retried", async () => {
 // statement that the route is absent, so it retries too.
 test("a permission denial keeps being retried", async () => {
   let calls = 0;
-  const denied = async (): Promise<never> => {
+  const denied = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new ConnectError("forbidden", Code.PermissionDenied);
+    return Promise.reject(new ConnectError("forbidden", Code.PermissionDenied));
   };
   await fetchPulse(HOST, denied);
   await fetchPulse(HOST, denied);
@@ -103,10 +93,10 @@ test("a permission denial keeps being retried", async () => {
 // The other spelling of an absent route: a server that answers NotFound rather than Unimplemented.
 test("a route answered NotFound latches like Unimplemented", async () => {
   let calls = 0;
-  const missing = async (): Promise<never> => {
+  const missing = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new ConnectError("no such route", Code.NotFound);
+    return Promise.reject(new ConnectError("no such route", Code.NotFound));
   };
   await fetchPulse(HOST, missing);
   await fetchPulse(HOST, missing);
@@ -118,10 +108,10 @@ test("a route answered NotFound latches like Unimplemented", async () => {
 // so it says nothing about what the server serves.
 test("a blocked fetch is an outage, not a denial", async () => {
   let calls = 0;
-  const blocked = async (): Promise<never> => {
+  const blocked = (): Promise<never> => {
     calls++;
     // platform double: Connect client
-    throw new TypeError("Failed to fetch");
+    return Promise.reject(new TypeError("Failed to fetch"));
   };
   await fetchPulse(HOST, blocked);
   await fetchPulse(HOST, blocked);
@@ -131,9 +121,9 @@ test("a blocked fetch is an outage, not a denial", async () => {
 // The latch is per-host so that pointing the console at a different server probes it properly rather
 // than inheriting the verdict on the one before it.
 test("the latch does not spread to another server", async () => {
-  await fetchPulse(HOST, async () => {
+  await fetchPulse(HOST, () => {
     // platform double: Connect client
-    throw new ConnectError("no such method", Code.Unimplemented);
+    return Promise.reject(new ConnectError("no such method", Code.Unimplemented));
   });
   const other = await fetchPulse("127.0.0.1:9999", async () => ({
     running: 4,
@@ -141,7 +131,7 @@ test("the latch does not spread to another server", async () => {
     workspaces: [],
     cache: null,
   }));
-  assert.deepEqual(other, { running: 4, queued: 0, workspaces: [], cache: null });
+  assert.deepEqual(other, { value: { running: 4, queued: 0, workspaces: [], cache: null } });
 });
 
 test("no host is no request", async () => {

@@ -10,7 +10,7 @@ import { state, waterfallSource } from "./state";
 import { flashBtnLabel } from "./dom";
 import { encodeFragmentBytes } from "./fragment";
 import { copyText } from "../../render/clipboard";
-import { errMessage } from "../../lib/guards";
+import { attempt, fail, ok, type Result } from "../../gen/magus/types";
 import { reportFailure } from "../../lib/notifications";
 
 // --- Copy link: re-encode the loaded log into a #data= link -------------------
@@ -19,31 +19,30 @@ import { reportFailure } from "../../lib/notifications";
 // SAME format loadFromURL reads: toBinary(JournalSchema, ...) of a Journal, gzip+base64url.
 // A structured log ships its real Journal; a heuristic/pasted log is wrapped into a minimal
 // Journal (one KindOutput event per line) so the link still round-trips the structured path.
-export async function shareLink(btn: HTMLElement | null): Promise<void> {
-  let url: string;
-  try {
-    const bytes = shareBytes();
-    const blob = await encodeFragmentBytes(bytes);
-    // Build the base from origin+pathname so any existing fragment/query is dropped; the
-    // whole link then rides the fragment, which the browser never transmits to a server.
-    const base = location.origin + location.pathname;
-    const frag = (state.currentRef ? "ref=" + state.currentRef + "&" : "") + "data=" + blob;
-    url = base + "#" + frag;
-  } catch (e) {
+export async function shareLink(btn: HTMLElement | null): Promise<Result<null>> {
+  const bytes = attempt(shareBytes);
+  const blob = bytes.error ? bytes : await encodeFragmentBytes(bytes.value);
+  if (blob.error) {
     flashBtnLabel(btn, "Copy failed");
     reportFailure(
       "Log Viewer",
-      "Could not build a link to this log: " + errMessage(e),
+      "Could not build a link to this log: " + blob.error.message,
       "share:build",
     );
-    return;
+    return fail(blob.error);
   }
-  await copyText(url, {
+  // Build the base from origin+pathname so any existing fragment/query is dropped; the
+  // whole link then rides the fragment, which the browser never transmits to a server.
+  const base = location.origin + location.pathname;
+  const frag = (state.currentRef ? "ref=" + state.currentRef + "&" : "") + "data=" + blob.value;
+  const copied = await copyText(base + "#" + frag, {
     source: "Log Viewer",
     what: "the link",
     button: btn,
     confirm: "Copied a link to this log. The output rides the link; nothing was uploaded.",
   });
+  if (copied.error) return fail(copied.error);
+  return ok(null);
 }
 
 // shareBytes serializes the loaded log to the Journal wire bytes the viewer decodes: the real

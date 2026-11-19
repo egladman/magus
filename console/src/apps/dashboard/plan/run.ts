@@ -22,7 +22,9 @@ import {
   readRefusal,
   reportFetchFailure,
   reportHttpStatus,
+  ReadFailure,
 } from "../../../lib/server";
+import { fail, fromPromise, ok, type Result } from "../../../gen/magus/types";
 import { reportFailure } from "../../../lib/notifications";
 import type { Status } from "../../../ui/status";
 import { str } from "./jobs";
@@ -244,7 +246,7 @@ export function runPlanUrl(host: string, target: string): string {
 // the server named what it could not resolve, and that is what a reader can act on. The words are
 // the error envelope's message, or the body itself when it is not one.
 async function unknownTargetDetail(res: Response): Promise<string> {
-  return (await readRefusal(res))?.message ?? "";
+  return (await readRefusal(res)).value?.message ?? "";
 }
 
 // loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the outputs feed.
@@ -255,23 +257,29 @@ async function unknownTargetDetail(res: Response): Promise<string> {
 // the two apart - a 404 that carries no CORS headers surfaces to the browser as a network error
 // with no status at all - so the unreadable copy names the missing route as a possible cause too
 // rather than blaming the connection.
+export type RunPlanFailure = ReadFailure<"absent" | "unknown-target" | "unreadable">;
+
 export async function loadRunPlan(
   host: string,
   target: string,
   signal?: AbortSignal,
-): Promise<RunPlanRead> {
-  let res: Response;
-  try {
-    res = await fetch(runPlanUrl(host, target), {
+): Promise<Result<RunPlanModel, RunPlanFailure>> {
+  const sent = await fromPromise(
+    fetch(runPlanUrl(host, target), {
       headers: authHeaders(),
       cache: "no-store",
       ...(signal ? { signal } : {}),
-    });
-  } catch (e) {
-    reportFetchFailure(host, "the target plan", e);
-    return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
+    }),
+  );
+  if (sent.error) {
+    const cause = sent.error.cause;
+    reportFetchFailure(host, "the target plan", cause);
+    return fail(
+      new ReadFailure("unreadable", cause instanceof Error ? cause.message : String(cause)),
+    );
   }
-  if (res.status === 404 || res.status === 501) return { kind: "absent" };
+  const res = sent.value;
+  if (res.status === 404 || res.status === 501) return fail(new ReadFailure("absent", ""));
   if (res.status === 400) {
     // The server's own sentence about a target it cannot resolve, said on the empty state and in a
     // toast: the reader typed it a moment ago and may not be looking at the pane that answers.
@@ -281,17 +289,25 @@ export async function loadRunPlan(
       detail || "The server does not know the target " + target + ".",
       "plan:unknown-target:" + target,
     );
-    return { kind: "unknown-target", detail };
+    return fail(new ReadFailure("unknown-target", detail));
   }
   if (!res.ok) {
     reportHttpStatus(host, "the target plan", res.status);
-    return { kind: "unreadable", detail: "HTTP " + res.status };
+    return fail(new ReadFailure("unreadable", "HTTP " + res.status));
   }
-  try {
-    return { kind: "ok", plan: parseRunPlan(await res.json()) };
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
+  const plan = await fromPromise(res.json().then(parseRunPlan));
+  if (plan.error) {
+    const cause = plan.error.cause;
+    const detail = cause instanceof Error ? cause.message : String(cause);
     reportFailure("Server", "Could not read the target plan: " + detail, "fetch:plan-body");
-    return { kind: "unreadable", detail };
+    return fail(new ReadFailure("unreadable", detail));
   }
+  return ok(plan.value);
+}
+
+// runPlanRead is the four-way reading of a loadRunPlan answer that the app switches on.
+export function runPlanRead(answer: Awaited<ReturnType<typeof loadRunPlan>>): RunPlanRead {
+  if (!answer.error) return { kind: "ok", plan: answer.value };
+  const { kind, message } = answer.error;
+  return kind === "absent" ? { kind } : { kind, detail: message };
 }

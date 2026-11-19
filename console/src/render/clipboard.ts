@@ -34,13 +34,14 @@ export interface CopyOptions {
 }
 
 // copyText writes text to the clipboard and reports the outcome on the control and, on failure, in a
-// toast. It resolves to whether the write happened.
-export async function copyText(text: string, opts: CopyOptions): Promise<boolean> {
+// toast. It resolves to the write's outcome: the error that was reported, or null for a copy that
+// happened.
+export async function copyText(text: string, opts: CopyOptions): Promise<Result<null>> {
   const written = await writeClipboard(text);
   if (!written.error) {
     flashLabel(opts.button ?? null, "Copied");
     if (opts.confirm) showToast(opts.source, opts.confirm, "ok", { ms: 2500 });
-    return true;
+    return written;
   }
   flashLabel(opts.button ?? null, "Copy failed");
   reportFailure(
@@ -52,7 +53,7 @@ export async function copyText(text: string, opts: CopyOptions): Promise<boolean
       ". Select the text and copy it by hand.",
     "copy:" + opts.what,
   );
-  return false;
+  return written;
 }
 
 async function writeClipboard(text: string): Promise<Result<null>> {

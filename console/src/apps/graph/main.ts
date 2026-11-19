@@ -5667,7 +5667,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): Resu
 // a host; the standalone page auto-boots below. Chrome (nav/search/drawer/settings) comes from the
 // shared main.js on the standalone page, which the console does not load, so there is no self-wired
 // chrome to guard (unlike the dashboard).
-export async function activate() {
+export async function activate(): Promise<Result<null>> {
   resolveDom();
   readTheme();
   // FIRST, before anything that can outlive this activation. bootWireEvents used to create it, and
@@ -5716,7 +5716,7 @@ export async function activate() {
 
   // Attempt a live-mode connection on an explicit server attach (#port, or the
   // server-origin/shared console). Returns true if handled; false falls through.
-  if (await bootLive(lifecycle.signal)) return;
+  if (await bootLive(lifecycle.signal)) return ok(null);
 
   // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
   // #demo / deep-link boot). A cold visit returns instantly, so the spinner never visibly flashes.
@@ -5730,7 +5730,7 @@ export async function activate() {
   }
   if (!loaded) {
     document.body.classList.add("graph-empty");
-    return;
+    return ok(null);
   }
 
   // Run boot's data-to-view pipeline, then the one-time interaction wiring. Splitting the two lets the
@@ -5739,7 +5739,7 @@ export async function activate() {
   if (rendered.error) {
     setStatus("Could not show the graph: " + rendered.error.message, "danger");
     document.body.classList.add("graph-empty");
-    return;
+    return fail(rendered.error);
   }
   finishInteractiveSetup();
   // AFTER the wiring: fitView needs the zoom behavior setupZoomDrag installs and returns
@@ -5762,6 +5762,7 @@ export async function activate() {
   }
 
   bootWireEvents(lifecycle.signal);
+  return ok(null);
 }
 
 // demoHint replaces the empty state's "add #demo" line when that advice cannot work: the page is

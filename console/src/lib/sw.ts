@@ -10,6 +10,8 @@
 // import.meta.url differs per output file and only the caller knows where ../sw.js sits relative to it.
 // Every caller resolves the same gen/sw.js, so the registrations coincide and the second is a no-op.
 
+import { fromPromise, ok, type Result } from "../gen/magus/types";
+
 // registerServiceWorker registers `url` and resolves with the registration, or null when the browser has
 // no service workers, the origin is insecure, or registration failed. It never throws: a missing worker
 // degrades the console (no offline shell) but must never break its boot.
@@ -60,9 +62,12 @@ export function parseBuildId(workerSource: string): string | null {
 }
 
 // servedBuildId fetches sw.js past every cache (the worker never serves it) and reads its build.
-export async function servedBuildId(workerUrl: URL | string): Promise<string | null> {
-  const res = await fetch(workerUrl, { cache: "no-store" });
-  return res.ok ? parseBuildId(await res.text()) : null;
+export async function servedBuildId(workerUrl: URL | string): Promise<Result<string | null>> {
+  const sent = await fromPromise(fetch(workerUrl, { cache: "no-store" }));
+  if (sent.error) return sent;
+  if (!sent.value.ok) return ok(null);
+  const text = await fromPromise(sent.value.text());
+  return text.error ? text : ok(parseBuildId(text.value));
 }
 
 // cachedBuildId is the build the service worker served this page from, or null when no worker
@@ -87,15 +92,14 @@ export function watchServedBuild(
   let told = false;
   const check = async (): Promise<void> => {
     if (told) return;
-    let served: string | null;
-    try {
-      served = await servedBuildId(workerUrl);
-    } catch (e) {
+    const read = await servedBuildId(workerUrl);
+    if (read.error) {
       // reported: a server that cannot serve sw.js is unreachable, which the server transport and the
       // status stream report; this check only answers "which build", and retries next interval.
-      console.debug("served build check", e);
+      console.debug("served build check", read.error.cause ?? read.error);
       return;
     }
+    const served = read.value;
     if (!served) return;
     running ??= (await cachedBuildId()) ?? served;
     if (served === running) return;

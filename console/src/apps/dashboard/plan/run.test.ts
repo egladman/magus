@@ -17,6 +17,7 @@ import {
   anchorPhrase,
   emptyRunPlan,
   loadRunPlan,
+  runPlanRead,
   normalizeAnchor,
   normalizeRunState,
   parseRunPlan,
@@ -295,7 +296,7 @@ async function stubFetch<T>(impl: () => unknown, body: () => Promise<T>): Promis
 test("a 404 is absent - the route is missing, not the plan", async () => {
   const read = await stubFetch(
     () => ({ ok: false, status: 404 }),
-    () => loadRunPlan("127.0.0.1:7391", ""),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "")),
   );
   assert.deepEqual(read, { kind: "absent" });
 });
@@ -303,7 +304,7 @@ test("a 404 is absent - the route is missing, not the plan", async () => {
 test("a 501 is absent too - an unimplemented route is a missing one", async () => {
   const read = await stubFetch(
     () => ({ ok: false, status: 501 }),
-    () => loadRunPlan("127.0.0.1:7391", ""),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "")),
   );
   assert.equal(read.kind, "absent");
 });
@@ -322,7 +323,7 @@ test("a 400 envelope is an unknown target, carrying its message and not the JSON
   });
   const read = await stubFetch(
     () => new Response(envelope, { status: 400 }),
-    () => loadRunPlan("127.0.0.1:7391", "cli"),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "cli")),
   );
   assert.deepEqual(read, {
     kind: "unknown-target",
@@ -338,7 +339,7 @@ test("a 400 is an unknown target, carrying the server's own words", async () => 
       text: () =>
         Promise.resolve('  unknown target "cli"; run `magus describe targets` to list them\n'),
     }),
-    () => loadRunPlan("127.0.0.1:7391", "cli"),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "cli")),
   );
   assert.deepEqual(read, {
     kind: "unknown-target",
@@ -349,7 +350,7 @@ test("a 400 is an unknown target, carrying the server's own words", async () => 
 test("a 400 with no body is still an unknown target, just with nothing to quote", async () => {
   const read = await stubFetch(
     () => ({ ok: false, status: 400, text: () => Promise.resolve("") }),
-    () => loadRunPlan("127.0.0.1:7391", "cli"),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "cli")),
   );
   assert.deepEqual(read, { kind: "unknown-target", detail: "" });
 });
@@ -357,7 +358,7 @@ test("a 400 with no body is still an unknown target, just with nothing to quote"
 test("any other failure is unreadable, and says which", async () => {
   const read = await stubFetch(
     () => ({ ok: false, status: 500 }),
-    () => loadRunPlan("127.0.0.1:7391", ""),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "")),
   );
   assert.deepEqual(read, { kind: "unreadable", detail: "HTTP 500" });
 });
@@ -367,7 +368,7 @@ test("a refused connection is unreadable rather than absent", async () => {
   // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("Failed to fetch"))) as typeof fetch;
   try {
-    const read = await loadRunPlan("127.0.0.1:7391", "");
+    const read = runPlanRead(await loadRunPlan("127.0.0.1:7391", ""));
     assert.deepEqual(read, { kind: "unreadable", detail: "Failed to fetch" });
   } finally {
     globalThis.fetch = real;
@@ -377,7 +378,7 @@ test("a refused connection is unreadable rather than absent", async () => {
 test("a served plan comes back parsed", async () => {
   const read = await stubFetch(
     () => ({ ok: true, status: 200, json: () => Promise.resolve(BODY) }),
-    () => loadRunPlan("127.0.0.1:7391", ""),
+    async () => runPlanRead(await loadRunPlan("127.0.0.1:7391", "")),
   );
   assert.equal(read.kind, "ok");
   assert.equal(read.kind === "ok" ? read.plan.nodes.length : 0, 4);

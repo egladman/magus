@@ -4,13 +4,19 @@
 // data, src, port, token) are parsed out of it here. All local: nothing is fetched, nothing
 // is sent.
 
+import { fromPromise, type Result } from "../../gen/magus/types";
+
 // The parsed #-fragment parameters (ref/data/src/port/token/...).
 export type ViewerParams = Record<string, string>;
 
 // decodeFragmentBytes: base64url -> gunzip -> Uint8Array, for the protobuf Journal payload.
 // It had a text-decoding sibling for legacy text fragments; nothing imported it, so it is gone.
-export async function decodeFragmentBytes(b64url: string): Promise<Uint8Array> {
-  return new Uint8Array(await new Response(await gunzipFragment(b64url)).arrayBuffer());
+export function decodeFragmentBytes(b64url: string): Promise<Result<Uint8Array>> {
+  return fromPromise(gunzipBytes(b64url));
+}
+
+async function gunzipBytes(b64url: string): Promise<Uint8Array> {
+  return new Uint8Array(await new Response(gunzipFragment(b64url)).arrayBuffer());
 }
 
 function gunzipFragment(b64url: string): ReadableStream<Uint8Array> {
@@ -25,7 +31,11 @@ function gunzipFragment(b64url: string): ReadableStream<Uint8Array> {
 // bytes -> gzip -> base64url. Mirrors internal/render EncodeFragmentRaw so a link built
 // here round-trips through the same decode path. Local only: the Share button never leaves
 // the page. base64url = RawURLEncoding (base64, then +/- and //_ swaps, no "=" padding).
-export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
+export function encodeFragmentBytes(bytes: Uint8Array): Promise<Result<string>> {
+  return fromPromise(gzipBase64url(bytes));
+}
+
+async function gzipBase64url(bytes: Uint8Array): Promise<string> {
   // A Blob takes only ArrayBuffer-backed bytes; protobuf's may be shared.
   const stream = new Blob([new Uint8Array(bytes)])
     .stream()

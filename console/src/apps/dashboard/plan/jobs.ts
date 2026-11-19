@@ -26,8 +26,10 @@ import {
   getLiveToken,
   isCapabilityDenied,
   isUnreachable,
+  ReadFailure,
 } from "../../../lib/server";
 import { errMessage } from "../../../lib/guards";
+import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 import type { Status } from "../../../ui/status";
 import { humanBytes } from "../../activity/adapter";
 import { layoutLayered } from "../../graph/layout";
@@ -563,23 +565,32 @@ export type JobsRead =
 // mount the service, or refuses this token, answers with a capability denial rather than an outage
 // (lib/server's isCapabilityDenied), and that is reported as its own kind: a reader told "no jobs"
 // when the truth is "this server will not say" has been told the wrong thing.
-export async function listJobs(client: JobClient, signal?: AbortSignal): Promise<JobsRead> {
+export type JobsFailure = ReadFailure<"denied" | "unreachable" | "unreadable">;
+
+export async function listJobs(
+  client: JobClient,
+  signal?: AbortSignal,
+): Promise<Result<{ jobs: Job[]; overlaps: JobOverlap[] }, JobsFailure>> {
   try {
     const resp = await client.listJobs({}, signal ? { signal } : {});
-    return { kind: "ok", jobs: resp.jobs, overlaps: resp.overlaps };
+    return ok({ jobs: resp.jobs, overlaps: resp.overlaps });
   } catch (e) {
     const kind = isCapabilityDenied(e) ? "denied" : isUnreachable(e) ? "unreachable" : "unreadable";
-    return { kind, detail: errMessage(e) };
+    return fail(new ReadFailure(kind, errMessage(e)));
   }
+}
+
+// jobsRead is the three-way reading of a listJobs answer that the views switch on.
+export function jobsRead(answer: Awaited<ReturnType<typeof listJobs>>): JobsRead {
+  return answer.error
+    ? { kind: answer.error.kind, detail: answer.error.message }
+    : { kind: "ok", jobs: answer.value.jobs, overlaps: answer.value.overlaps };
 }
 
 // SubmitOutcome is what a submit did. ALREADY_RUNNING is a SUCCESS on this contract - the server
 // coalesced an identical job rather than starting a second - so it is a fact about the job, not a
-// failure; only a real refusal (an unknown name, no socket, a rejected token) is one.
-export type SubmitOutcome =
-  | { readonly kind: "started" }
-  | { readonly kind: "already-running" }
-  | { readonly kind: "refused"; readonly detail: string };
+// failure; only a real refusal (an unknown name, no socket, a rejected token) is the error.
+export type SubmitOutcome = { readonly kind: "started" } | { readonly kind: "already-running" };
 
 // submitJob runs one job by its resource name and returns immediately, which is the whole contract:
 // the server holds it from here, and the activity trail is where its result lands.
@@ -587,13 +598,15 @@ export async function submitJob(
   client: JobClient,
   name: string,
   signal?: AbortSignal,
-): Promise<SubmitOutcome> {
+): Promise<Result<SubmitOutcome>> {
   try {
     const resp = await client.runJob({ name }, signal ? { signal } : {});
-    return resp.state === SubmitState.ALREADY_RUNNING
-      ? { kind: "already-running" }
-      : { kind: "started" };
+    return ok(
+      resp.state === SubmitState.ALREADY_RUNNING
+        ? { kind: "already-running" }
+        : { kind: "started" },
+    );
   } catch (e) {
-    return { kind: "refused", detail: errMessage(e) };
+    return fail(new MagusError({ code: "", message: errMessage(e) }, { cause: e }));
   }
 }

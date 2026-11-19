@@ -3,6 +3,7 @@
 // TTL, so callers poll on getPollMs rather than faster.
 
 import { createClient } from "@connectrpc/connect";
+import { fromPromise, type Result } from "../../gen/magus/types";
 import {
   LifecycleState,
   Support,
@@ -57,17 +58,9 @@ export function mapTools(resp: ListToolsResponse): ToolsView {
   };
 }
 
-// fetchToolsView resolves to null when the call failed. The server transport has already raised
-// the failure to the reader, so a null is not reported a second time.
-export async function fetchToolsView(
-  host: string,
-  token: string | null,
-): Promise<ToolsView | null> {
-  try {
-    const client = createClient(ToolService, createServerTransport(host, token));
-    return mapTools(await client.listTools({}));
-  } catch {
-    // reported: by the server transport.
-    return null;
-  }
+// fetchToolsView resolves to the error when the call failed. The server transport has already raised
+// the failure to the reader, so it is not reported a second time.
+export function fetchToolsView(host: string, token: string | null): Promise<Result<ToolsView>> {
+  const client = createClient(ToolService, createServerTransport(host, token));
+  return fromPromise(client.listTools({}).then(mapTools));
 }

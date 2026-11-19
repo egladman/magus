@@ -71,7 +71,7 @@ test("the build bundles exactly the apps the shell loads lazily", () => {
 });
 
 test("the hosted stubs name exactly the manifests' segments", async () => {
-  assert.deepEqual(await appSegments(APPS_DIR), segments);
+  assert.deepEqual((await appSegments(APPS_DIR)).value, segments);
 });
 
 test("the server's link vocabulary names exactly the manifests' segments", () => {

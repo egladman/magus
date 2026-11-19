@@ -16,10 +16,9 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   document.body.replaceChildren();
-  globalThis.fetch = (() => {
+  globalThis.fetch = (() =>
     // platform double: fetch
-    throw new Error("demo mode must not reach the network");
-  }) as typeof fetch;
+    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
 });
 
 afterEach(() => {
@@ -148,7 +147,7 @@ test("Copy thread asks for the conversation by its root and copies the text it i
 
   let copied = "";
   const toasts = await toastsDuring(async () => {
-    const ok = await copyThreadText(
+    const copiedOk = await copyThreadText(
       "127.0.0.1:7391",
       "t 1",
       new AbortController().signal,
@@ -156,7 +155,7 @@ test("Copy thread asks for the conversation by its root and copies the text it i
         copied = t;
       },
     );
-    assert.equal(ok, true);
+    assert.equal(copiedOk.error, undefined);
   });
   assert.equal(url, "http://127.0.0.1:7391/api/v1/diff/thread?id=t+1");
   assert.equal(copied, "thread t1\nbody");
@@ -174,7 +173,7 @@ test("Copy thread toasts the server's refusal and copies nothing", async () => {
 
   let wrote = false;
   const toasts = await toastsDuring(async () => {
-    const ok = await copyThreadText(
+    const refused = await copyThreadText(
       "127.0.0.1:7391",
       "t1",
       new AbortController().signal,
@@ -182,21 +181,19 @@ test("Copy thread toasts the server's refusal and copies nothing", async () => {
         wrote = true;
       },
     );
-    assert.equal(ok, false);
+    assert.ok(refused.error);
   });
   assert.deepEqual(toasts, ["no review is open for this branch"]);
   assert.equal(wrote, false);
 });
 
 test("Copy thread toasts an unreachable server and a clipboard that refuses", async () => {
-  globalThis.fetch = (async () => {
-    // platform double: fetch
-    throw new TypeError("Failed to fetch");
-  }) as typeof fetch;
+  // platform double: fetch
+  globalThis.fetch = (() => Promise.reject(new TypeError("Failed to fetch"))) as typeof fetch;
   const unreachable = await toastsDuring(async () => {
-    assert.equal(
-      await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {}),
-      false,
+    assert.ok(
+      (await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {}))
+        .error,
     );
   });
   assert.equal(unreachable.length, 1, "an unreachable server is reported once");
@@ -204,13 +201,11 @@ test("Copy thread toasts an unreachable server and a clipboard that refuses", as
   globalThis.fetch = (async () =>
     new Response(JSON.stringify({ id: "t1", text: "b" }))) as typeof fetch;
   const refused = await toastsDuring(async () => {
-    assert.equal(
-      await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {
-        // platform double: navigator.clipboard.writeText
-        throw new Error("denied");
-      }),
-      false,
+    const copied = await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, () =>
+      // platform double: navigator.clipboard.writeText
+      Promise.reject(new Error("denied")),
     );
+    assert.ok(copied.error);
   });
   assert.deepEqual(refused, ["Could not copy the thread: denied"]);
 });

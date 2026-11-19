@@ -5,6 +5,7 @@
 // survive with no tab open, so it cannot use the dashboard's store.
 import { createClient, Code, ConnectError } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
+import { fromPromise, ok, type Result } from "../gen/magus/types";
 import { createServerTransport, getLiveToken } from "../lib/server";
 import { isServing } from "../lib/workspace";
 
@@ -53,20 +54,17 @@ async function getPool(host: string): Promise<PulseView | null> {
   };
 }
 
-// Null means "no answer" - no server, an old one, a blip, a token that will not spend. Every failure
-// has to look the same, because the rail hides the reading rather than reporting a zero it did not
-// measure. `call` is injected only so tests can drive the failure classes.
+// An error or a null value means "no answer" - no server, an old one, a blip, a token that will not
+// spend. The rail hides the reading rather than reporting a zero it did not measure, so a caller
+// treats both alike. `call` is injected only so tests can drive the failure classes.
 export async function fetchPulse(
   host: string,
   call: (host: string) => Promise<PulseView | null> = getPool,
-): Promise<PulseView | null> {
-  if (!host || routelessHosts.has(host)) return null;
-  try {
-    return await call(host);
-  } catch (e) {
-    if (isRouteless(e)) routelessHosts.add(host);
-    return null;
-  }
+): Promise<Result<PulseView | null>> {
+  if (!host || routelessHosts.has(host)) return ok(null);
+  const answer = await fromPromise(call(host));
+  if (answer.error && isRouteless(answer.error.cause)) routelessHosts.add(host);
+  return answer;
 }
 
 // Exported for tests, which would otherwise leak one case's latch into the next.

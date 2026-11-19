@@ -38,17 +38,16 @@ export function badgeLabel(count: number): string {
 }
 
 // fetchDiffCount reads how many files the review session is carrying, or null when there is nothing to
-// say. Zero is a real answer and returns 0 - the caller decides whether "nothing changed" is worth a
+// say; an error is an outage, which a caller treats as nothing to say. Zero is a real answer and returns 0 - the caller decides whether "nothing changed" is worth a
 // badge, because that is a display question, not a measurement one.
 export async function fetchDiffCount(
   host: string,
   call: (host: string) => Promise<Result<number | null>> = getDiffCount,
-): Promise<number | null> {
-  if (!host || routeless.has(host)) return null;
+): Promise<Result<number | null>> {
+  if (!host || routeless.has(host)) return ok(null);
   const answer = await call(host);
-  if (!answer.error) return answer.value;
   if (answer.error instanceof RoutelessError) routeless.add(host);
-  return null;
+  return answer;
 }
 
 // The error carried when the server answers "no such route", so fetchDiffCount can tell a permanent absence from

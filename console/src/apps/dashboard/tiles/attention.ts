@@ -31,6 +31,7 @@ import {
   disposeStartsHidden,
   firstLine,
   loadAttention,
+  attentionRead,
   subjectLine,
   type AttentionRead,
   type AttentionRequest,
@@ -657,7 +658,7 @@ export function attentionTile(): Tile {
     }
     const res = await disposeAttention(host, req.id, reason);
     if (torndown) return;
-    if (res.kind === "ok") {
+    if (!res.error) {
       showToast("Attention", "Closed request " + req.id + ".", "ok");
       // Re-read rather than dropping the row locally: another worktree may have closed
       // something else in the meantime, and the store is what every app agrees on.
@@ -665,7 +666,7 @@ export function attentionTile(): Tile {
       refresh();
       return;
     }
-    showToast("Attention", res.detail, "error");
+    showToast("Attention", res.error.message, "error");
     lastRead = 0;
     refresh();
   }
@@ -772,7 +773,7 @@ export function attentionTile(): Tile {
           );
         }
         if (queueList.querySelector(".console-dashboard-attention__composer")) return;
-        renderQueue(read);
+        renderQueue(attentionRead(read));
       })
       .finally(() => {
         window.clearTimeout(timeout);

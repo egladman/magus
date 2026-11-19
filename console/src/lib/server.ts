@@ -1,6 +1,6 @@
 import { errMessage, errName } from "./guards";
 import { reportFailure, type NotifyLink } from "./notifications";
-import { MagusError, fail, ok, type Result } from "../gen/magus/types";
+import { MagusError, fail, fromPromise, ok, parseJSON, type Result } from "../gen/magus/types";
 // server.ts - the ONE audited module for addressing and talking to a magus server.
 //
 // Every app (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -402,15 +402,21 @@ export type ReadinessReport = { ready: boolean; components: ReadinessComponent[]
 //
 // WHY graceful degradation: the server the caller is pointed at may PREDATE this endpoint's CORS/JSON
 // support. Every failure mode here - network error, timeout, an old server's opaque/non-CORS response,
-// a non-200/503 status, a malformed body - must resolve to null quietly (no thrown error, no
+// a non-200/503 status, a malformed body - must resolve to an error quietly (nothing reported, no
 // console.error), so a caller can fall back to the existing SSE-derived connection state without
 // spamming the console for anyone still on an older release. 200 and 503 both carry a valid body (503
 // just means "not ready yet"), so both are treated as a successful read.
+//
+// not-a-failure: an older server has no JSON /readyz; reachability itself is reported by the server
+// transport and fetchSSE. A timeout, a refused connection and a non-JSON body all collapse to the one
+// "could not read" error a caller falls back from.
 export async function fetchReadiness(
   host: string,
   timeoutMs = 3000,
-): Promise<ReadinessReport | null> {
-  if (!host) return null;
+): Promise<Result<ReadinessReport>> {
+  const unread = (message: string): Result<ReadinessReport> =>
+    fail(new MagusError({ code: "", message }));
+  if (!host) return unread("no server host");
   // Defense in depth: the caller passes an already-resolved host (resolveServerHost), but re-verify
   // it is literal loopback OR the page's OWN origin before attaching the bearer token, so a future
   // caller that ever passes a raw string can never send the token to a third-party host. The
@@ -418,27 +424,28 @@ export async function fetchReadiness(
   const safe =
     validateLoopbackHost(host) ??
     (typeof location !== "undefined" && host === location.host ? host : null);
-  if (!safe) return null;
+  if (!safe) return unread("not a loopback host");
   const url = "http://" + safe + "/readyz";
-  try {
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
-    if (res.status !== 200 && res.status !== 503) return null;
-    const body = await res.json();
-    if (typeof body !== "object" || body === null || typeof body.ready !== "boolean") return null;
-    const components: ReadinessComponent[] = Array.isArray(body.components)
-      ? body.components.map((c: Record<string, unknown>) => ({
-          name: String(c?.name ?? ""),
-          status: String(c?.status ?? ""),
-          detail: String(c?.detail ?? ""),
-        }))
-      : [];
-    return { ready: body.ready, components };
-  } catch {
-    // not-a-failure: an older server has no JSON /readyz; reachability itself is reported by the
-    // server transport and fetchSSE. A timeout, a refused connection and a non-JSON body all
-    // collapse to the one "could not read" signal a caller falls back from.
-    return null;
+  const sent = await fromPromise(
+    fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) }),
+  );
+  if (sent.error) return sent;
+  const res = sent.value;
+  if (res.status !== 200 && res.status !== 503) return unread("HTTP " + res.status);
+  const read = await fromPromise(res.json());
+  if (read.error) return read;
+  const body = read.value;
+  if (typeof body !== "object" || body === null || typeof body.ready !== "boolean") {
+    return unread("not a readiness report");
   }
+  const components: ReadinessComponent[] = Array.isArray(body.components)
+    ? body.components.map((c: Record<string, unknown>) => ({
+        name: String(c?.name ?? ""),
+        status: String(c?.status ?? ""),
+        detail: String(c?.detail ?? ""),
+      }))
+    : [];
+  return ok({ ready: body.ready, components });
 }
 
 // ---- the shared token ------------------------------------------------------
@@ -624,37 +631,32 @@ export async function fetchSSE(
   onError: (e: Error) => void,
   signal: AbortSignal,
   onOpen?: () => void,
-): Promise<void> {
-  const lost = (e: Error): void => {
+): Promise<Result<null>> {
+  const lost = (e: Error): Result<null> => {
     reportFailure(
       "Server",
       "Lost the live feed from " + url + " (" + e.message + "); retrying.",
       "sse:" + url + ":" + e.message,
     );
     onError(e);
+    return fail(new MagusError({ code: "", message: e.message }, { cause: e }));
   };
-  let response: Response;
-  try {
-    response = await fetch(url, { headers, signal });
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") return;
-    lost(e instanceof Error ? e : new Error(String(e)));
-    return;
+  const sent = await fromPromise(fetch(url, { headers, signal }));
+  if (sent.error) {
+    const cause = sent.error.cause;
+    if (cause instanceof Error && cause.name === "AbortError") return ok(null);
+    return lost(cause instanceof Error ? cause : new Error(String(cause)));
   }
+  const response = sent.value;
   if (response.status === 401) {
     signalAuthLost(new URL(url).host);
-    onError(new Error("HTTP 401"));
-    return;
+    const refused = new Error("HTTP 401");
+    onError(refused);
+    return fail(new MagusError({ code: "", message: refused.message }, { cause: refused }));
   }
-  if (!response.ok) {
-    lost(new Error("HTTP " + response.status));
-    return;
-  }
+  if (!response.ok) return lost(new Error("HTTP " + response.status));
   if (onOpen) onOpen();
-  if (!response.body) {
-    lost(new Error("no stream body"));
-    return;
-  }
+  if (!response.body) return lost(new Error("no stream body"));
   const deliver = (type: string, data: string): void => {
     try {
       onEvent(type, data);
@@ -671,10 +673,7 @@ export async function fetchSSE(
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) {
-        lost(new Error("stream ended"));
-        return;
-      }
+      if (done) return lost(new Error("stream ended"));
       buf += value;
       // A frame ends at the first blank line, spelled either "\n\n" (magus's
       // framing) or "\r\n\r\n" (CRLF framing). Split on whichever boundary comes
@@ -709,8 +708,9 @@ export async function fetchSSE(
     }
   } catch (e) {
     if (!(e instanceof Error) || e.name !== "AbortError")
-      lost(e instanceof Error ? e : new Error(String(e)));
+      return lost(e instanceof Error ? e : new Error(String(e)));
   }
+  return ok(null);
 }
 
 // ---- ConnectRPC transport --------------------------------------------------
@@ -780,6 +780,18 @@ export function reportHttpStatus(host: string, what: string, status: number): vo
   );
 }
 
+// ReadFailure is an error that says which way a read failed, for a caller that shows each way
+// differently (a server that declines, one that is absent, one that could not be reached). The
+// message is the detail a reader sees.
+export class ReadFailure<K extends string> extends MagusError {
+  readonly kind: K;
+  constructor(kind: K, detail: string) {
+    super({ code: "", message: detail });
+    this.name = "ReadFailure";
+    this.kind = kind;
+  }
+}
+
 // Refusal is what a person needs from a server error body: its message, and the Help link naming
 // the code's page, magus's or the workspace's, when the body carries one.
 export interface Refusal {
@@ -823,22 +835,17 @@ export function parseRefusal(body: unknown): Refusal | null {
 // readRefusal reads the body of a non-2xx /api/ answer: the envelope's message and Help link when
 // the body is one, the trimmed text otherwise. Null when the body is empty or unreadable, so the
 // caller words the status itself. Every plain fetch to /api/ reads a failure body through here.
-export async function readRefusal(res: Response): Promise<Refusal | null> {
-  let text: string;
-  try {
-    text = (await res.text()).trim();
-  } catch {
-    // not-a-failure: the caller reports the status; an unread body only loses the server's words
-    return null;
-  }
-  if (text === "") return null;
-  try {
-    const refusal = parseRefusal(JSON.parse(text));
-    if (refusal) return refusal;
-  } catch {
-    // not-a-failure: a body that is not JSON is the message itself
-  }
-  return { message: text };
+// An unreadable body is an error the caller sets aside (not-a-failure: the caller reports the status;
+// an unread body only loses the server's words), and an empty one is a null refusal.
+export async function readRefusal(res: Response): Promise<Result<Refusal | null>> {
+  const read = await fromPromise(res.text());
+  if (read.error) return read;
+  const text = read.value.trim();
+  if (text === "") return ok(null);
+  const parsed = parseJSON(text);
+  // not-a-failure: a body that is not JSON is the message itself
+  const refusal = parsed.error ? null : parseRefusal(parsed.value);
+  return ok(refusal ?? { message: text });
 }
 
 // makeFailureInterceptor reports every failed call, a server stream's mid-stream failure included:

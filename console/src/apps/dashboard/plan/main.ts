@@ -94,6 +94,7 @@ import {
   lastRunLine,
   layoutNodes,
   listJobs,
+  jobsRead,
   overviewLine,
   sizeLine,
   submitJob,
@@ -111,6 +112,7 @@ import {
 import {
   emptyRunPlan,
   loadRunPlan,
+  runPlanRead,
   runOverviewLine,
   runPlanUrl,
   RUN_STATE_LABEL,
@@ -1044,20 +1046,20 @@ export function activate(host: HTMLElement): JobsInstance {
     state.textContent = "starting...";
     const outcome = await submitJob(ensureClient(serverHost), node.runName, controller.signal);
     if (disposed) return;
-    if (outcome.kind === "refused") {
+    if (outcome.error) {
       // Only a real refusal lands here - an unknown name, no socket to submit to, a rejected token.
       // The button goes back to pressable, because the reader can retry and a dead button says
       // nothing.
-      state.textContent = "could not run " + node.id + ": " + outcome.detail;
+      state.textContent = "could not run " + node.id + ": " + outcome.error.message;
       reportFailure(
         "Jobs",
-        "Could not run " + node.id + ": " + outcome.detail,
+        "Could not run " + node.id + ": " + outcome.error.message,
         "job:run:" + node.id,
       );
       btn.disabled = false;
       return;
     }
-    state.textContent = outcome.kind === "already-running" ? "already running" : "started";
+    state.textContent = outcome.value.kind === "already-running" ? "already running" : "started";
   };
 
   const renderList = (): void => {
@@ -1600,11 +1602,12 @@ export function activate(host: HTMLElement): JobsInstance {
   const refreshJobs = async (serverHost: string): Promise<void> => {
     const token = beginRead("jobs");
     const limit = deadline(token.signal);
-    const [read, feeds] = await Promise.all([
+    const [answer, feeds] = await Promise.all([
       listJobs(ensureClient(serverHost), limit),
       activityRows(serverHost, token.signal),
     ]);
     if (!fresh(token)) return;
+    const read = jobsRead(answer);
     reportTimeout(limit, "The job list");
     feedsUnread = feeds.unread;
     if (read.kind === "denied") {
@@ -1664,7 +1667,7 @@ export function activate(host: HTMLElement): JobsInstance {
   const refreshTargets = async (serverHost: string): Promise<void> => {
     const token = beginRead("targets");
     const limit = deadline(token.signal);
-    const read = await loadRunPlan(serverHost, targetOverride, limit);
+    const read = runPlanRead(await loadRunPlan(serverHost, targetOverride, limit));
     if (!fresh(token)) return;
     reportTimeout(limit, "The target plan");
     if (read.kind === "absent") {

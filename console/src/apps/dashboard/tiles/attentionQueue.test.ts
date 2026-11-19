@@ -162,16 +162,19 @@ test("disposeAttention shows an envelope refusal as its message", async () => {
   const result = await withResponse(new Response(envelope, { status: 404 }), () =>
     disposeAttention("127.0.0.1:7391", "att-0123", "done"),
   );
-  assert.deepEqual(result, { kind: "refused", detail: "MGS9004: no request matches att-0123" });
+  assert.equal(result.error?.kind, "refused");
+  assert.equal(result.error?.message, "MGS9004: no request matches att-0123");
 });
 
 test("disposeAttention keeps a plain-text refusal and words an empty one by status", async () => {
   const text = await withResponse(new Response("already closed by eli\n", { status: 409 }), () =>
     disposeAttention("127.0.0.1:7391", "att-0123", "done"),
   );
-  assert.deepEqual(text, { kind: "refused", detail: "already closed by eli" });
+  assert.equal(text.error?.kind, "refused");
+  assert.equal(text.error?.message, "already closed by eli");
   const empty = await withResponse(new Response("", { status: 500 }), () =>
     disposeAttention("127.0.0.1:7391", "att-0123", "done"),
   );
-  assert.deepEqual(empty, { kind: "unreadable", detail: "HTTP 500" });
+  assert.equal(empty.error?.kind, "unreadable");
+  assert.equal(empty.error?.message, "HTTP 500");
 });

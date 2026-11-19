@@ -44,7 +44,9 @@ test("setReading sends the op and returns the mark, the command included", async
   );
 
   assert.deepEqual(sent, { op: "reading", on: true });
-  assert.deepEqual(result, { reading: true, since: 1700000000000, command: "gh pr comment 7" });
+  assert.deepEqual(result, {
+    value: { reading: true, since: 1700000000000, command: "gh pr comment 7" },
+  });
   assert.deepEqual(toasts, [], "a mark that took raises nothing");
 });
 
@@ -61,7 +63,7 @@ test("setReading toasts the server's reason for a 502 and a 409, and returns nul
     const { result, toasts } = await withToasts(() =>
       setReading("127.0.0.1:7391", true, new AbortController().signal),
     );
-    assert.equal(result, null);
+    assert.ok(result.error);
     assert.deepEqual(toasts, [message]);
   }
 });
@@ -71,19 +73,17 @@ test("setReading says the status when a refusal carries no words", async () => {
   const { result, toasts } = await withToasts(() =>
     setReading("127.0.0.1:7391", false, new AbortController().signal),
   );
-  assert.equal(result, null);
+  assert.ok(result.error);
   assert.equal(toasts.length, 1);
   assert.match(toasts[0] ?? "", /HTTP 502/);
 });
 
 test("setReading toasts a server that cannot be reached", async () => {
-  globalThis.fetch = (() => {
-    // platform double: fetch
-    throw new TypeError("fetch failed");
-  }) as typeof fetch;
+  // platform double: fetch
+  globalThis.fetch = (() => Promise.reject(new TypeError("fetch failed"))) as typeof fetch;
   const { result, toasts } = await withToasts(() =>
     setReading("127.0.0.1:7391", true, new AbortController().signal),
   );
-  assert.equal(result, null);
+  assert.ok(result.error);
   assert.equal(toasts.length, 1);
 });

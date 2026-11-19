@@ -82,6 +82,8 @@ import {
   fetchContext,
   fetchSession,
   fetchReview,
+  closedReview,
+  verdictOf,
   fetchReviewSession,
   fetchBranches,
   runTarget,
@@ -105,7 +107,7 @@ import {
 import { setMarkdown } from "./markdown";
 import { guardOutline, guardReply, outlineKey, outlinesByThread } from "./outline";
 import { copyThreadText } from "./thread-copy";
-import { fetchSessionActivity, renderAgentSession } from "./agent";
+import { activityResult, fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
 import {
   demoSession,
@@ -1685,7 +1687,9 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     renderAgentSession(sessionBody, touch, null);
-    const result = await fetchSessionActivity(hp, touch.session, file.path, request.signal);
+    const result = activityResult(
+      await fetchSessionActivity(hp, touch.session, file.path, request.signal),
+    );
     if (disposed || requestID !== contextRequestID || request.signal.aborted) return;
     renderAgentSession(sessionBody, touch, result);
   };
@@ -1705,14 +1709,14 @@ export function activate(host: HTMLElement): AppInstance {
       setCollaboration("unavailable");
       return null;
     }
-    const s = await mutate(hp, op, controller.signal);
+    const synced = await mutate(hp, op, controller.signal);
     if (disposed) return null;
-    if (!s) {
+    if (synced.error) {
       setCollaboration("degraded");
       return null;
     }
-    applySession(s);
-    return s;
+    applySession(synced.value);
+    return synced.value;
   };
 
   // applySession takes the server's copy as authoritative and re-lays the stream, because a
@@ -2037,10 +2041,11 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     readingButton.disabled = true;
-    const res = await setReading(hp, on, controller.signal);
+    const marked = await setReading(hp, on, controller.signal);
     if (disposed) return;
     readingButton.disabled = false;
-    if (res) {
+    if (!marked.error) {
+      const res = marked.value;
       state.reading = res.reading ? res : null;
       renderReading();
       // Shown as it turns on: the command is what the mark is for, and it is the one thing the
@@ -2328,7 +2333,7 @@ export function activate(host: HTMLElement): AppInstance {
       renderVerdict();
       return;
     }
-    const first = await runTarget(hp, RUN_TARGET, project, true, controller.signal);
+    const first = verdictOf(await runTarget(hp, RUN_TARGET, project, true, controller.signal));
     if (first.undeclared) {
       state.verdicts.set(project, { state: "unknown", asOf, undeclared: first.undeclared });
       renderVerdict();
@@ -2346,7 +2351,7 @@ export function activate(host: HTMLElement): AppInstance {
       await new Promise((r) => setTimeout(r, 1500));
       const hp = host_();
       if (controller.signal.aborted || !hp) return;
-      const v = await runTarget(hp, RUN_TARGET, project, false, controller.signal);
+      const v = verdictOf(await runTarget(hp, RUN_TARGET, project, false, controller.signal));
       if (v.state === "running") continue;
       state.verdicts.set(project, {
         state: v.state,
@@ -3078,8 +3083,9 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const hp = host_();
     if (!hp) return;
-    const info = await fetchReview(hp, controller.signal);
+    const fetched = await fetchReview(hp, controller.signal);
     if (disposed) return;
+    const info = fetched.error ? closedReview(fetched.error) : fetched.value;
     state.review = info;
     await rebuild();
     // Now that they are ON SCREEN, say so. The server marks nothing as it answers - it cannot
@@ -3098,8 +3104,11 @@ export function activate(host: HTMLElement): AppInstance {
     if (disposed || demo) return;
     const hp = host_();
     if (!hp) return;
-    const { branches, unsupported } = await fetchBranches(hp, controller.signal);
+    const listed = await fetchBranches(hp, controller.signal);
     if (disposed) return;
+    const { branches, unsupported } = listed.error
+      ? { branches: [], unsupported: "" }
+      : listed.value;
     // Recorded even when there is nothing to report, so the app can tell "nobody else is
     // touching this" from "this backend has not implemented the lookup". Only the first is
     // reassurance, and only one of them is true.
@@ -3400,7 +3409,7 @@ export function activate(host: HTMLElement): AppInstance {
     btn.disabled = true;
     const copied = await copyThreadText(hp, threadId, controller.signal);
     btn.disabled = false;
-    if (disposed || !copied) return;
+    if (disposed || copied.error) return;
     // Said to the ear as well as the eye, and put back so the button can be used again.
     btn.textContent = "Copied";
     announce("Thread copied");

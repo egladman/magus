@@ -282,7 +282,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
         reportHttpStatus(host, "the share", res.status);
         return;
       }
-      const refusal = await readRefusal(res);
+      const refusal = (await readRefusal(res)).value;
       // Keyed per attempt: a retried share that fails again is a new failure, not a repeat poll.
       reportFailure(
         "Share",
