@@ -174,6 +174,12 @@ func unmarshalStrict(data []byte, v any) error { return decodeError(json.Unmarsh
 
 // decodeError is err with encoding/json's type mismatch as the codec's [*TypeError].
 func decodeError(err error) error {
+	// A type's own UnmarshalJSON can return a codec error it wrapped; rebuilding it from
+	// the mismatch underneath would drop that wrapper, which v2 keeps.
+	var typed *TypeError
+	if errors.As(err, &typed) {
+		return err
+	}
 	var mismatch *json.UnmarshalTypeError
 	if !errors.As(err, &mismatch) {
 		return err

@@ -837,7 +837,7 @@ type AgentEvent struct {
 	// Verdict is what today's rules say about the command: defer, advise or deny. It is
 	// re-judged at load time rather than read off the transcript, so it answers whether
 	// the CURRENT rules would have caught a past command.
-	Verdict verdict.Decision `json:"verdict,omitempty"`
+	Verdict verdict.Decision `json:"verdict,omitzero"`
 	// Rule names the deny rule or the advisory kind behind Verdict. The rule's own
 	// argument is deliberately absent: it renders the resolved argv, which is the content
 	// Text is barred from carrying.
