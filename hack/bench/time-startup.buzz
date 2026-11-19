@@ -22,6 +22,7 @@ import "flags";
 import "fs";
 import "os";
 import "proc";
+import "result";
 import "std";
 
 import "assert";
@@ -79,115 +80,180 @@ final HELP = "cost: one Go build of a release magus, then cases x count x runs m
     + "  --count <n>       samples per case, what benchstat compares (default 10)\n"
     + "  --runs <n>        processes timed as one batch per sample (default 20)";
 
-fun positive(flag: str, value: str?, fallback: int) > int !> any {
+fun positive(flag: str, value: str?, fallback: int) > result\Result::<int> {
     if (value == null) {
-        return fallback;
+        return result\ok::<int>(fallback);
     }
     final n = std\parseInt(value!) ?? 0;
     if (n <= 0) {
-        throw "time-startup: {flag} takes a positive count, not \"{value!}\"\n{USAGE}";
+        return result\fail::<int>("time-startup: {flag} takes a positive count, not \"{value!}\"\n{USAGE}");
     }
-    return n;
+    return result\ok::<int>(n);
 }
 
 // parse returns the run's options, or null for --help.
-export fun parse(args: [str]) > Options? !> any {
-    final parsed = flags\parse(args, switches: ["--help"], valued: ["--binary", "--cases", "--count", "--runs"]);
-    if (parsed.values["--help"] != null) {
-        return null;
-    }
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "time-startup: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
-    var cases = CASES;
-    final wanted = parsed.values["--cases"];
-    if (wanted != null) {
-        final picked = mut [<Case>];
-        foreach (name in wanted!.split(",")) {
-            var found = false;
-            foreach (c in CASES) {
-                if (c.name == name) {
-                    picked.append(c);
-                    found = true;
+export fun parse(args: [str]) > result\Result::<Options?> {
+    try {
+        final parsed = flags\parse(args, switches: ["--help"], valued: ["--binary", "--cases", "--count", "--runs"]);
+        if (parsed.values["--help"] != null) {
+            return result\ok::<Options?>(null);
+        }
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<Options?>("time-startup: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}");
+        }
+        var cases = CASES;
+        final wanted = parsed.values["--cases"];
+        if (wanted != null) {
+            final picked = mut [<Case>];
+            foreach (name in wanted!.split(",")) {
+                var found = false;
+                foreach (c in CASES) {
+                    if (c.name == name) {
+                        picked.append(c);
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    return result\fail::<Options?>("time-startup: no case is named \"{name}\"; the cases are {caseNames(CASES)}");
                 }
             }
-            if (!found) {
-                throw "time-startup: no case is named \"{name}\"; the cases are {caseNames(CASES)}";
-            }
+            cases = picked;
         }
-        cases = picked;
+        final count = positive("--count", value: parsed.values["--count"], fallback: 10);
+        if (count.error -> err) {
+            return result\Result::<Options?>{ error = err };
+        }
+        final runs = positive("--runs", value: parsed.values["--runs"], fallback: 20);
+        if (runs.error -> err) {
+            return result\Result::<Options?>{ error = err };
+        }
+        return result\ok::<Options?>(Options{
+            binary = parsed.values["--binary"] ?? "",
+            cases = cases,
+            count = count.value!,
+            runs = runs.value!,
+        });
+    } catch (err: any) {
+        return result\caught::<Options?>(err, doing: "time-startup: parse the flags");
     }
-    return Options{
-        binary = parsed.values["--binary"] ?? "",
-        cases = cases,
-        count = positive("--count", value: parsed.values["--count"], fallback: 10),
-        runs = positive("--runs", value: parsed.values["--runs"], fallback: 20),
-    };
 }
 
 // build links magus the way a release does (static, stripped, trimmed) into dir.
-export fun build(dir: str) > str !> any {
+export fun build(dir: str) > result\Result::<str> {
     final bin = dir + "/magus";
-    os\withEnv({"CGO_ENABLED": "0", "GOEXPERIMENT": "jsonv2"}, callback: fun () > void !> any {
-        _ = proc\exec("go", args: ["build", "-trimpath", "-tags", "noffi", "-ldflags", "-w -s", "-o", bin, "./cmd/magus"], opts: proc\ExecOptions{ quiet = true });
-    });
-    return bin;
+    var failed: result\Diagnostic? = null;
+    try {
+        os\withEnv({"CGO_ENABLED": "0", "GOEXPERIMENT": "jsonv2"}, callback: fun () > void {
+            try {
+                _ = proc\exec("go", args: ["build", "-trimpath", "-tags", "noffi", "-ldflags", "-w -s", "-o", bin, "./cmd/magus"], opts: proc\ExecOptions{ quiet = true });
+            } catch (err: any) {
+                failed = result\caught::<str>(err, doing: "time-startup: go build").error;
+            }
+        });
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "time-startup: go build");
+    }
+    if (failed -> d) {
+        return result\Result::<str>{ error = d };
+    }
+    return result\ok::<str>(bin);
 }
 
 // workspace makes the smallest tree magus loads as a workspace: one Go module, so `ls`
 // resolves a spell, and an empty magusfile.
-fun workspace(dir: str) > str !> any {
+fun workspace(dir: str) > result\Result::<str> {
     final ws = dir + "/ws";
-    fs\mkdirAll(ws);
-    fs\writeFile(ws + "/go.mod", content: "module bench\n\ngo 1.25\n");
-    fs\writeFile(ws + "/magusfile.buzz", content: "");
-    return ws;
+    try {
+        fs\mkdirAll(ws);
+        fs\writeFile(ws + "/go.mod", content: "module bench\n\ngo 1.25\n");
+        fs\writeFile(ws + "/magusfile.buzz", content: "");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "time-startup: make the workspace");
+    }
+    return result\ok::<str>(ws);
 }
 
 // sample runs c runs times back to back in ws and returns the mean wall time of one.
-fun sample(bin: str, c: Case, ws: str, runs: int) > Sample !> any {
-    final began = os\time();
-    for (var i = 0; i < runs; i = i + 1) {
-        _ = proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
+fun sample(bin: str, c: Case, ws: str, runs: int) > result\Result::<Sample> {
+    try {
+        final began = os\time();
+        for (var i = 0; i < runs; i = i + 1) {
+            _ = proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
+        }
+        final elapsedMs = os\time() - began;
+        return result\ok::<Sample>(Sample{ name = c.name, runs = runs, nsPerOp = std\toInt(elapsedMs * 1000000.0 / std\toDouble(runs)) });
+    } catch (err: any) {
+        return result\caught::<Sample>(err, doing: "time-startup: time {c.name}");
     }
-    final elapsedMs = os\time() - began;
-    return Sample{ name = c.name, runs = runs, nsPerOp = std\toInt(elapsedMs * 1000000.0 / std\toDouble(runs)) };
 }
 
-fun measure(o: Options, scratch: str) > Timing !> any {
-    final bin = if (o.binary != "") o.binary else build(scratch);
-    final ws = workspace(scratch);
+fun measure(o: Options, scratch: str) > result\Result::<Timing> {
+    var bin = o.binary;
+    if (bin == "") {
+        final built = build(scratch);
+        if (built.error -> err) {
+            return result\Result::<Timing>{ error = err };
+        }
+        bin = built.value!;
+    }
+    final made = workspace(scratch);
+    if (made.error -> err) {
+        return result\Result::<Timing>{ error = err };
+    }
+    final ws = made.value!;
     final samples = mut [<Sample>];
     var version = "";
+    var failed: result\Diagnostic? = null;
     // A server would answer `ls` from its warm graph, and a proc socket inherited from this
     // script would hand each run to the magus running it: neither is a cold start.
-    os\withEnv({"MAGUS_SERVER_ENABLED": "false", "MAGUS_PROC_SOCKET": ""}, callback: fun () > void !> any {
-        version = proc\exec(bin, args: ["version"], dir: ws, opts: proc\ExecOptions{ quiet = true }).stdout.split("\n")[0].trim();
-        foreach (c in o.cases) {
-            for (var i = 0; i < WARMUP; i = i + 1) {
-                _ = proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
+    try {
+        os\withEnv({"MAGUS_SERVER_ENABLED": "false", "MAGUS_PROC_SOCKET": ""}, callback: fun () > void {
+            try {
+                version = proc\exec(bin, args: ["version"], dir: ws, opts: proc\ExecOptions{ quiet = true }).stdout.split("\n")[0].trim();
+                foreach (c in o.cases) {
+                    for (var i = 0; i < WARMUP; i = i + 1) {
+                        _ = proc\exec(bin, args: c.argv, dir: ws, opts: proc\ExecOptions{ quiet = true });
+                    }
+                    for (var n = 0; n < o.count; n = n + 1) {
+                        final taken = sample(bin, c: c, ws: ws, runs: o.runs);
+                        if (taken.error != null) {
+                            failed = taken.error;
+                            return;
+                        }
+                        samples.append(taken.value!);
+                    }
+                }
+            } catch (err: any) {
+                failed = result\caught::<bool>(err, doing: "time-startup: time the cases").error;
             }
-            for (var n = 0; n < o.count; n = n + 1) {
-                samples.append(sample(bin, c: c, ws: ws, runs: o.runs));
-            }
-        }
-    });
-    return Timing{ binary = bin, version = version, samples = samples };
+        });
+    } catch (err: any) {
+        return result\caught::<Timing>(err, doing: "time-startup: time the cases");
+    }
+    if (failed -> d) {
+        return result\Result::<Timing>{ error = d };
+    }
+    return result\ok::<Timing>(Timing{ binary = bin, version = version, samples = samples });
 }
 
 // timeStartup builds a release binary unless o names one, times each case, and removes
 // everything it made.
-export fun timeStartup(o: Options) > Timing !> any {
-    final scratch = fs\tempDir("time-startup-");
-    var timing: Timing? = null;
+export fun timeStartup(o: Options) > result\Result::<Timing> {
+    var scratch = "";
     try {
-        timing = measure(o, scratch: scratch);
-    } catch (e) {
-        fs\removeAll(scratch);
-        throw e;
+        scratch = fs\tempDir("time-startup-");
+    } catch (err: any) {
+        return result\caught::<Timing>(err, doing: "time-startup: make a scratch directory");
     }
-    fs\removeAll(scratch);
-    return timing!;
+    final timing = measure(o, scratch: scratch);
+    try {
+        fs\removeAll(scratch);
+    } catch (err: any) {
+        if (timing.error == null) {
+            return result\caught::<Timing>(err, doing: "time-startup: remove {scratch}");
+        }
+    }
+    return timing;
 }
 
 // benchstat renders t as benchstat reads it: config lines, then one line per sample. The
@@ -202,12 +268,20 @@ export fun benchstat(t: Timing, goos: str, goarch: str) > [str] {
 }
 
 export fun main(args: [str]) > void !> any {
-    final o = parse(args);
+    final parsed = parse(args);
+    if (parsed.error != null) {
+        throw parsed.error!.message;
+    }
+    final o = parsed.value;
     if (o == null) {
         std\print(HELP);
         return;
     }
-    final t = timeStartup(o!);
+    final timed = timeStartup(o!);
+    if (timed.error != null) {
+        throw timed.error!.message;
+    }
+    final t = timed.value!;
     final host = os\platform();
     std\print("timed cold starts of {t.version}: {o!.cases.len()} case(s), {o!.count} samples of {o!.runs} runs each");
     foreach (line in benchstat(t, goos: host[0], goarch: host[1])) {
@@ -216,7 +290,7 @@ export fun main(args: [str]) > void !> any {
 }
 
 test "defaults run every case, ten samples of twenty runs" {
-    final o = parse([<str>])!;
+    final o = parse([<str>]).value!;
     assert\equal(caseNames(o.cases), want: "help,version,completion_bash,ls", message: "cases");
     assert\equal(o.count, want: 10, message: "count");
     assert\equal(o.runs, want: 20, message: "runs");
@@ -224,25 +298,15 @@ test "defaults run every case, ten samples of twenty runs" {
 }
 
 test "--cases picks a subset in the order given, and refuses a name it lacks" {
-    assert\equal(caseNames(parse(["--cases", "ls,help"])!.cases), want: "ls,help", message: "subset");
-    var refused = "";
-    try {
-        _ = parse(["--cases", "run"]);
-    } catch (e) {
-        refused = "{e}";
-    }
+    assert\equal(caseNames(parse(["--cases", "ls,help"]).value!.cases), want: "ls,help", message: "subset");
+    final refused = parse(["--cases", "run"]).error!.message;
     assert\equal(refused, want: "time-startup: no case is named \"run\"; the cases are help,version,completion_bash,ls", message: "unknown");
 }
 
 test "a count must be positive, and --help runs nothing" {
-    var refused = "";
-    try {
-        _ = parse(["--runs", "0"]);
-    } catch (e) {
-        refused = "{e}";
-    }
+    final refused = parse(["--runs", "0"]).error!.message;
     assert\isTrue(refused.startsWith("time-startup: --runs takes a positive count, not \"0\""), message: "zero runs");
-    assert\equal(parse(["--help"]), want: null, message: "help");
+    assert\equal(parse(["--help"]).value, want: null, message: "help");
     assert\isTrue(HELP.startsWith("cost: "), message: "the first help line is the cost");
 }
 
