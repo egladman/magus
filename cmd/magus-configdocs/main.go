@@ -1,7 +1,7 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -15,19 +15,23 @@ import (
 )
 
 func main() {
-	out := flag.String("out", "docs/config.md", "output path for the config reference")
-	flag.Parse()
-
-	page, err := render()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
-		os.Exit(1)
-	}
-	if err := os.WriteFile(*out, []byte(page), 0o644); err != nil {
-		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
-		os.Exit(1)
-	}
-	fmt.Printf("magus-configdocs: wrote %d settings to %s\n", len(config.Spec.Settings), *out)
+	var out string
+	command.Main(command.Command{
+		Name:  "magus-configdocs",
+		Short: "Render the magus.yaml configuration reference from the config schema.",
+		Flags: []command.Flag{{Name: "out", Kind: command.String, Default: "docs/config.md", Doc: "output path for the config reference", Target: &out}},
+		Run: func(_ context.Context, inv command.Invocation) error {
+			page, err := render()
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(out, []byte(page), 0o644); err != nil {
+				return err
+			}
+			fmt.Fprintf(inv.Stdout, "magus-configdocs: wrote %d settings to %s\n", len(config.Spec.Settings), out)
+			return nil
+		},
+	})
 }
 
 // render builds the full Markdown page: frontmatter, intro, then one table per
