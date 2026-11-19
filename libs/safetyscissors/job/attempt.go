@@ -1,6 +1,11 @@
 package job
 
-import "slices"
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+)
 
 // Attempt is one try of a Job: what the guard saw start it, how its
 // end was observed, and what it left. A fork of the ended job starts
@@ -182,4 +187,96 @@ type RetryVerdict struct {
 	Change    RetryChange `json:"change,omitempty" yaml:"change,omitempty"`
 	Reason    string      `json:"reason,omitempty" yaml:"reason,omitempty"`
 	Code      Code        `json:"code,omitempty"   yaml:"code,omitempty"`
+}
+
+// InvalidAttemptError is an attempt [Store.RecordAttempt] refused. Nothing was written.
+type InvalidAttemptError struct {
+	Job string
+	N   int
+	// Reason says what the attempt got wrong, such as "n 3 is not the next try, 2".
+	Reason string
+}
+
+func (e *InvalidAttemptError) Error() string {
+	return fmt.Sprintf("job: attempt %d of %s was not recorded: %s", e.N, e.Job, e.Reason)
+}
+
+// RecordAttempt records a try of a job that the caller started and ended itself, for a
+// host that runs its own attempts rather than forking the row again for each: a fork's
+// fold never records such a try, so this call is the only way it is stored.
+//
+// The row a.Job must exist, or the error wraps [ErrUnknownJob]. a.N must be one past the
+// job's newest stored try, 1 for its first. a.Status.Started must be set and no later
+// than a.Status.Ended, and a.Status.End one of [AttemptEndExit], [AttemptEndHandback],
+// [AttemptEndStop] or [AttemptEndJob]; [AttemptEndDeadline] is read, never written. Any
+// other attempt is an [*InvalidAttemptError]. The rest of a.Status, ModelTier,
+// FailingRefs and Retry among it, is stored as given.
+//
+// The check and the append hold the store's row and attempts locks, so two hosts
+// recording the same N cannot both succeed. Like every write it needs a store opened
+// with [WithActor] and [WithNotices].
+func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
+	if err := s.needWriter("RecordAttempt"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(a.Job) == "" {
+		return ErrNoID
+	}
+	if reason := attemptTimesInvalid(a.Status); reason != "" {
+		return s.wrap(&InvalidAttemptError{Job: a.Job, N: a.N, Reason: reason})
+	}
+	log, err := s.attemptsLog()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.locked(ctx, func() error {
+		f, _, err := s.readFile(ctx, false)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(f.Jobs, func(row Job) bool { return row.ID == a.Job }) {
+			return s.wrap(fmt.Errorf("%w: %q", ErrUnknownJob, a.Job))
+		}
+		var refused error
+		err = log.Update(ctx, func(recs []attemptRecord) []attemptRecord {
+			next := 1
+			for _, r := range recs {
+				if r.Spec.Job != a.Job {
+					continue
+				}
+				if refused = s.refuseAttemptVersion(r); refused != nil {
+					return nil
+				}
+				next = max(next, r.Spec.N+1)
+			}
+			if a.N != next {
+				refused = s.wrap(&InvalidAttemptError{Job: a.Job, N: a.N, Reason: fmt.Sprintf("n %d is not the next try, %d", a.N, next)})
+				return nil
+			}
+			return []attemptRecord{recordAttempt(a)}
+		})
+		if err != nil {
+			return fmt.Errorf("job: %s: %w", attemptsFileName, s.wrap(err))
+		}
+		return refused
+	})
+}
+
+// attemptTimesInvalid says what is wrong with an ended try's times and end, "" for nothing.
+func attemptTimesInvalid(st AttemptStatus) string {
+	switch {
+	case st.Started <= 0:
+		return "it has no start time"
+	case st.Ended < st.Started:
+		return fmt.Sprintf("it ended at %d, before it started at %d", st.Ended, st.Started)
+	}
+	switch st.End {
+	case AttemptEndExit, AttemptEndHandback, AttemptEndStop, AttemptEndJob:
+		return ""
+	case AttemptEndDeadline:
+		return "end deadline is read, never written"
+	}
+	return fmt.Sprintf("end %q is not one a try records", st.End)
 }

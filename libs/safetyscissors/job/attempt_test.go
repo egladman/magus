@@ -1,6 +1,7 @@
 package job
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -123,4 +124,115 @@ func (s *AttemptSuite) TestAZeroStatusWritesNoMembers() {
 	out, err := codec.Marshal(AttemptStatus{})
 	s.Require().NoError(err)
 	s.JSONEq(`{}`, string(out))
+}
+
+type RecordAttemptSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestRecordAttemptSuite(t *testing.T) { suite.Run(t, new(RecordAttemptSuite)) }
+
+func (s *RecordAttemptSuite) SetupTest() {
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, writable()...)
+	s.Require().NoError(err)
+	s.store = st
+	_, err = st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+}
+
+// ended is a try of a the host started at 10 and saw exit at 20.
+func ended(n int) Attempt {
+	return Attempt{Job: "a", N: n, Status: AttemptStatus{Started: 10, Ended: 20, End: AttemptEndExit}}
+}
+
+func (s *RecordAttemptSuite) invalid(err error) *InvalidAttemptError {
+	refused, ok := errors.AsType[*InvalidAttemptError](err)
+	s.Require().True(ok, err)
+	return refused
+}
+
+func (s *RecordAttemptSuite) stored() []Attempt {
+	tries, err := s.store.Attempts(s.T().Context())
+	s.Require().NoError(err)
+	return tries
+}
+
+func (s *RecordAttemptSuite) TestAHostRunTryIsStoredWithItsTierRefsAndVerdict() {
+	a := ended(1)
+	a.Status.ModelTier = "design"
+	a.Status.FailingRefs = []string{"r1", "r2"}
+	a.Status.Retry = RetryVerdict{Change: RetryAfterWidening, Reason: "needs b.go", Code: "E1"}
+
+	s.Require().NoError(s.store.RecordAttempt(s.T().Context(), a))
+
+	s.Equal([]Attempt{a}, s.stored())
+}
+
+func (s *RecordAttemptSuite) TestTriesAreRecordedInOrder() {
+	s.Require().NoError(s.store.RecordAttempt(s.T().Context(), ended(1)))
+	s.Require().NoError(s.store.RecordAttempt(s.T().Context(), ended(2)))
+
+	s.Equal([]Attempt{ended(1), ended(2)}, s.stored())
+	s.Equal(2, NewAttempts(s.stored()).LiveN("a"))
+}
+
+func (s *RecordAttemptSuite) TestAnOutOfOrderNIsRefused() {
+	s.Require().NoError(s.store.RecordAttempt(s.T().Context(), ended(1)))
+
+	for _, n := range []int{0, 1, 3} {
+		refused := s.invalid(s.store.RecordAttempt(s.T().Context(), ended(n)))
+		s.Equal(n, refused.N)
+	}
+	s.Len(s.stored(), 1)
+}
+
+func (s *RecordAttemptSuite) TestAnUnknownJobIsRefused() {
+	a := ended(1)
+	a.Job = "b"
+
+	s.Require().ErrorIs(s.store.RecordAttempt(s.T().Context(), a), ErrUnknownJob)
+	s.Empty(s.stored())
+}
+
+func (s *RecordAttemptSuite) TestAnEndBeforeTheStartIsRefused() {
+	a := ended(1)
+	a.Status.Ended = 5
+
+	s.invalid(s.store.RecordAttempt(s.T().Context(), a))
+	s.Empty(s.stored())
+}
+
+func (s *RecordAttemptSuite) TestATryWithNoStartIsRefused() {
+	a := ended(1)
+	a.Status.Started = 0
+
+	s.invalid(s.store.RecordAttempt(s.T().Context(), a))
+}
+
+func (s *RecordAttemptSuite) TestATryWithNoEndIsRefused() {
+	a := ended(1)
+	a.Status.Ended = 0
+
+	s.invalid(s.store.RecordAttempt(s.T().Context(), a))
+}
+
+func (s *RecordAttemptSuite) TestAnUnknownOrDeadlineEndIsRefused() {
+	for _, end := range []AttemptEnd{"", "crashed", AttemptEndDeadline} {
+		a := ended(1)
+		a.Status.End = end
+
+		s.invalid(s.store.RecordAttempt(s.T().Context(), a))
+	}
+	s.Empty(s.stored())
+}
+
+func (s *RecordAttemptSuite) TestAStoreWithNoActorRefusesTheWrite() {
+	st, err := Open(s.T().Context(), Config{Dir: s.T().TempDir()}, WithNotices(func(Notice) {}))
+	s.Require().NoError(err)
+
+	refused, ok := errors.AsType[*UnconfiguredError](st.RecordAttempt(s.T().Context(), ended(1)))
+
+	s.Require().True(ok)
+	s.Equal("WithActor", refused.Option)
 }

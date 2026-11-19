@@ -217,6 +217,20 @@ func (s *NewSuite) TestSessionsFoldWhatTheWriterAppended() {
 	s.Equal(at.UnixMilli(), fold.Records[1].Ts)
 }
 
+func (s *NewSuite) TestAHostRecordsATryItRanItself() {
+	ss := s.open()
+	s.put(ss, job.Job{ID: "fix-login"})
+	try := job.Attempt{Job: "fix-login", N: 1, Status: job.AttemptStatus{
+		Started: 10, Ended: 20, End: job.AttemptEndExit, ModelTier: "design", FailingRefs: []string{"r1"},
+	}}
+
+	s.Require().NoError(ss.Jobs().RecordAttempt(s.T().Context(), try))
+
+	tries, err := ss.Jobs().Attempts(s.T().Context())
+	s.Require().NoError(err)
+	s.Equal([]job.Attempt{try}, tries)
+}
+
 func (s *NewSuite) TestAnEmptyActivityLogHasNoCalls() {
 	var calls []journal.Call
 	for c, err := range s.open().Calls(s.T().Context(), 10) {
