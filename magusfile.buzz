@@ -3422,14 +3422,14 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     final agent = "benchmarks/agent";
     var steps = mut [];
     if (synthetic) {
-        steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
+        steps.append(["makefixture", "-model", "claude-opus-5", fs\join(agent, "results-synthetic")]);
         results = "results-synthetic/results";
     }
     // No -p: the price table is compiled in, so a published figure cannot depend on the cwd.
-    steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl")]);
-    steps.append(["analyze", fs\join(agent, "metrics.jsonl"), "-o", fs\join(agent, "analysis.json"),
-                  "--seed", "20260902"]);
-    steps.append(["report", fs\join(agent, "analysis.json"), "-o", fs\join(agent, "report.md")]);
+    steps.append(["extract", "-o", fs\join(agent, "metrics.jsonl"), fs\join(agent, results)]);
+    steps.append(["analyze", "-o", fs\join(agent, "analysis.json"), "--seed", "20260902",
+                  fs\join(agent, "metrics.jsonl")]);
+    steps.append(["report", "-o", fs\join(agent, "report.md"), fs\join(agent, "analysis.json")]);
     foreach (step in steps) {
         _ = proc\exec(bin, step);
     }
