@@ -3,6 +3,7 @@ namespace agentpolicy\proofread;
 import "std";
 import "fs";
 import "path";
+import "result";
 import "encoding/json";
 
 // RULES is this repository's decisions table for libs/proofread: the house style the
@@ -186,15 +187,19 @@ final PATHS: {str: {str: str}} = {
 // table is the decisions file proofread reads, for a run over files: a PATHS entry joins
 // only when one of files matches it, since proofread refuses a glob matching no argument.
 // Text read from stdin has no files and takes RULES alone.
-export fun table(files: [str]) > {str: any} !> any {
+export fun table(files: [str]) > result\Result::<{str: any}> {
     final paths = mut {<str: any>};
-    foreach (glob, decisions in PATHS) {
-        foreach (file in files) {
-            if (path\matches(glob, path: file)) {
-                paths[glob] = decisions;
-                break;
+    try {
+        foreach (glob, decisions in PATHS) {
+            foreach (file in files) {
+                if (path\matches(glob, path: file)) {
+                    paths[glob] = decisions;
+                    break;
+                }
             }
         }
+    } catch (err: any) {
+        return result\caught::<{str: any}>(err, doing: "proofread: match the path exemptions");
     }
     final decisions = mut {<str: any>};
     decisions["rules"] = RULES;
@@ -202,14 +207,18 @@ export fun table(files: [str]) > {str: any} !> any {
     if (paths.len() > 0) {
         decisions["paths"] = paths;
     }
-    return decisions;
+    return result\ok::<{str: any}>(decisions);
 }
 
 // writeDecisions writes table(files) to a new temp file and returns its path, for
 // `proofread -decisions`. The caller removes it.
 export fun writeDecisions(files: [str]) > str !> any {
+    final decisions = table(files);
+    if (decisions.error != null) {
+        throw decisions.error!.message;
+    }
     final file = fs\tempFile("proofread-decisions");
-    fs\writeFile(file, content: json\stringify(table(files)));
+    fs\writeFile(file, content: json\stringify(decisions.value!));
     return file;
 }
 
@@ -220,12 +229,12 @@ export fun decide(rule: str, given: str) > str {
 }
 
 test "a path exemption joins only a run whose files it matches" {
-    final bare = table([<str>]) catch {<str: any>};
+    final bare = table([<str>]).value!;
     std\assert(bare["paths"] == null, message: "stdin text takes the rules alone");
     std\assert(bare["rules"] != null, message: "the rules");
-    final docs = table(["docs/a.md"]) catch {<str: any>};
+    final docs = table(["docs/a.md"]).value!;
     std\assert(docs["paths"] == null, message: "no file under blog/");
-    final posts = table(["docs/a.md", "blog/p.md"]) catch {<str: any>};
+    final posts = table(["docs/a.md", "blog/p.md"]).value!;
     std\assert(posts["paths"] != null, message: "a post brings its exemption");
 }
 

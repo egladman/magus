@@ -8,6 +8,7 @@ import "os";
 import "path";
 import "proc";
 import "crypto";
+import "result";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
@@ -36,22 +37,30 @@ final stampGlobs = [
 // stampFiles are the stamped files under root, root-relative, tests left out: a test is
 // not linked into the binary. fs\glob answers relative to the working directory, so both
 // sides are made absolute before one is cut from the other.
-fun stampFiles(root: str) > [str] !> any {
-    final base = path\abs(root);
-    final files = mut [<str>];
-    foreach (pattern in stampGlobs) {
-        foreach (found in fs\glob("{base}/{pattern}")) {
-            final rel = path\abs(found.value).sub(base.len() + 1);
-            if (!rel.endsWith("_test.go")) {
-                files.append(rel);
+fun stampFiles(root: str) > result\Result::<[str]> {
+    try {
+        final base = path\abs(root);
+        final files = mut [<str>];
+        foreach (pattern in stampGlobs) {
+            foreach (found in fs\glob("{base}/{pattern}")) {
+                final rel = path\abs(found.value).sub(base.len() + 1);
+                if (!rel.endsWith("_test.go")) {
+                    files.append(rel);
+                }
             }
         }
+        return result\ok::<[str]>(files);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "stale: list the stamped files under {root}");
     }
-    return files;
 }
 
-fun shortDigest(file: str) > str !> any {
-    return crypto\sha256File(file).sub(0, len: 12);
+fun shortDigest(file: str) > result\Result::<str> {
+    try {
+        return result\ok::<str>(crypto\sha256File(file).sub(0, len: 12));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "stale: digest {file}");
+    }
 }
 
 // commitKey names the stamp entry holding the commit the build came from. No source path
@@ -64,22 +73,33 @@ final inputsKey = "@inputs";
 // buildStamp is what go-build links into ./magus: stampEntries, then `@inputs=<digest>` for
 // the Go build inputs under root.
 export fun buildStamp(root: str) > str !> any {
-    return "{stampEntries(root)},{inputsKey}={goInputsDigest(root)}";
+    final entries = stampEntries(root);
+    if (entries.error != null) {
+        throw entries.error!.message;
+    }
+    return "{entries.value!},{inputsKey}={goInputsDigest(root)}";
 }
 
 // stampEntries are `<path>=<digest>` for every stamped file under root, then
 // `@commit=<id>` for the checkout's commit, comma-separated.
-export fun stampEntries(root: str) > str !> any {
+export fun stampEntries(root: str) > result\Result::<str> {
     final entries = mut [<str>];
-    foreach (rel in stampFiles(root)) {
+    final files = stampFiles(root);
+    if (files.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    foreach (rel in files.value!) {
         final digest = shortDigest("{root}/{rel}");
-        entries.append("{rel}={digest}");
+        if (digest.error -> err) {
+            return result\Result::<str>{ error = err };
+        }
+        entries.append("{rel}={digest.value!}");
     }
     final head = vcs\commit() catch null;
     if (head != null) {
         entries.append("{commitKey}={head!.id}");
     }
-    return entries.join(",");
+    return result\ok::<str>(entries.join(","));
 }
 
 // stampedInputs is the Go input digest a stamp records, "" for a stamp from before it did.
@@ -95,46 +115,50 @@ export fun stampedInputs(stamp: str) > str {
 // goInputs are the files under root that listed names, root-relative. listed
 // is one glob per line, absolute or relative to root, ! excluding. A glob
 // outside root drops out. job.ChangedBuildInputs matches the same globs.
-export fun goInputs(listed: str, root: str) > [str] !> any {
-    final base = path\clean(root);
-    final includes = mut [<str>];
-    final excludes = mut [<str>];
-    foreach (line in listed.split("\n")) {
-        final glob = line.trim();
-        if (glob == "") {
-            continue;
-        }
-        final excluded = glob.startsWith("!");
-        var pattern = if (excluded) glob.sub(1) else glob;
-        if (!path\isAbs(pattern)) {
-            pattern = "{base}/{pattern}";
-        }
-        if (!pattern.startsWith(base + "/")) {
-            continue;
-        }
-        final rel = pattern.sub(base.len() + 1);
-        if (excluded) {
-            excludes.append(rel);
-        } else {
-            includes.append(rel);
-        }
-    }
-    final seen = mut {<str: bool>};
-    final files = mut [<str>];
-    foreach (rel in includes) {
-        foreach (found in fs\glob("{base}/{rel}")) {
-            final at = path\abs(found.value);
-            if (!at.startsWith(base + "/")) {
+export fun goInputs(listed: str, root: str) > result\Result::<[str]> {
+    try {
+        final base = path\clean(root);
+        final includes = mut [<str>];
+        final excludes = mut [<str>];
+        foreach (line in listed.split("\n")) {
+            final glob = line.trim();
+            if (glob == "") {
                 continue;
             }
-            final file = at.sub(base.len() + 1);
-            if (!(seen[file] ?? false) and !path\matchesAny(excludes, path: file) and fs\isFile(at)) {
-                seen[file] = true;
-                files.append(file);
+            final excluded = glob.startsWith("!");
+            var pattern = if (excluded) glob.sub(1) else glob;
+            if (!path\isAbs(pattern)) {
+                pattern = "{base}/{pattern}";
+            }
+            if (!pattern.startsWith(base + "/")) {
+                continue;
+            }
+            final rel = pattern.sub(base.len() + 1);
+            if (excluded) {
+                excludes.append(rel);
+            } else {
+                includes.append(rel);
             }
         }
+        final seen = mut {<str: bool>};
+        final files = mut [<str>];
+        foreach (rel in includes) {
+            foreach (found in fs\glob("{base}/{rel}")) {
+                final at = path\abs(found.value);
+                if (!at.startsWith(base + "/")) {
+                    continue;
+                }
+                final file = at.sub(base.len() + 1);
+                if (!(seen[file] ?? false) and !path\matchesAny(excludes, path: file) and fs\isFile(at)) {
+                    seen[file] = true;
+                    files.append(file);
+                }
+            }
+        }
+        return result\ok::<[str]>(files);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "stale: list the go inputs under {root}");
     }
-    return files;
 }
 
 // scopesProbe prints the globs the tree's go spell names for ./cmd/magus. It
@@ -153,7 +177,11 @@ export fun goInputsDigest(root: str) > str !> any {
     if (listed.code != 0) {
         throw "the go spell's mgs_getScopes for ./cmd/magus in {base} exited {listed.code}:\n{listed.stderr.trim()}";
     }
-    final files = goInputs(listed.stdout, root: base).cloneMutable();
+    final inputs = goInputs(listed.stdout, root: base);
+    if (inputs.error != null) {
+        throw inputs.error!.message;
+    }
+    final files = inputs.value!.cloneMutable();
     _ = files.sort(fun (left: str, right: str) > bool => left < right);
     final lines = mut [<str>];
     foreach (rel in files) {
@@ -175,7 +203,7 @@ export fun stampedCommit(stamp: str) > str {
 // movedSince lists the stamped files under root whose content is not what stamp recorded:
 // changed, added, or removed. A file no newer than builtAt, the binary's mtime, is the one
 // the build read, so only newer files are hashed.
-export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
+export fun movedSince(root: str, stamp: str, builtAt: double) > result\Result::<[str]> {
     final recorded = mut {<str: str>};
     final order = mut [<str>];
     foreach (entry in stamp.split(",")) {
@@ -188,13 +216,29 @@ export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
     }
     final moved = mut [<str>];
     final present = mut {<str: bool>};
-    foreach (rel in stampFiles(root)) {
+    final files = stampFiles(root);
+    if (files.error -> err) {
+        return result\Result::<[str]>{ error = err };
+    }
+    foreach (rel in files.value!) {
         present[rel] = true;
         final was = recorded[rel];
         if (was == null) {
             moved.append(rel);
-        } else if (fs\stat("{root}/{rel}").mtime > builtAt and shortDigest("{root}/{rel}") != was!) {
-            moved.append(rel);
+            continue;
+        }
+        try {
+            if (fs\stat("{root}/{rel}").mtime > builtAt) {
+                final digest = shortDigest("{root}/{rel}");
+                if (digest.error -> err) {
+                    return result\Result::<[str]>{ error = err };
+                }
+                if (digest.value! != was!) {
+                    moved.append(rel);
+                }
+            }
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "stale: stat {root}/{rel}");
         }
     }
     foreach (rel in order) {
@@ -202,7 +246,7 @@ export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
             moved.append(rel);
         }
     }
-    return moved;
+    return result\ok::<[str]>(moved);
 }
 
 // HookBinary is what the stale-binary rule knows about the magus answering the hook:
@@ -239,7 +283,7 @@ export fun hookBinary(workspace: str) > HookBinary {
     }
     final built = fs\stat(bin.path) catch null;
     if (built == null) { return none; }
-    final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime) catch [<str>];
+    final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime).value ?? [<str>];
     return HookBinary{ ours = true, stamped = true, moved = moved, commit = stampedCommit(bin.stamp),
         path = bin.path, workspace = workspace };
 }
@@ -532,16 +576,16 @@ test "the stamp records every stamped source, and movedSince names what changed"
     fs\writeFile("{root}/internal/guard/shell_test.go", content: "package guard\n") catch void;
     fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 1;\n") catch void;
 
-    final stamp = stampEntries(root) catch "";
+    final stamp = stampEntries(root).value ?? "";
     std\assert(stamp.indexOf("internal/guard/shell.go=") != null, message: "a rule source");
     std\assert(stamp.indexOf("internal/spell/gen/decls/magus.buzz=") != null, message: "a host declaration");
     std\assert(stamp.indexOf("shell_test.go") == null, message: "a test is not linked in");
-    std\assert((movedSince(root, stamp: stamp, builtAt: 0.0) catch ["error"]).len() == 0, message: "nothing moved");
+    std\assert((movedSince(root, stamp: stamp, builtAt: 0.0).value ?? ["error"]).len() == 0, message: "nothing moved");
 
     fs\writeFile("{root}/internal/spell/gen/decls/magus.buzz", content: "export final a = 2;\n") catch void;
     fs\writeFile("{root}/internal/guard/policy.go", content: "package guard\n") catch void;
     fs\remove("{root}/internal/guard/shell.go") catch void;
-    final moved = movedSince(root, stamp: stamp, builtAt: 0.0) catch [<str>];
+    final moved = movedSince(root, stamp: stamp, builtAt: 0.0).value ?? [<str>];
     std\assert(moved.join(",") == "internal/guard/policy.go,internal/spell/gen/decls/magus.buzz,internal/guard/shell.go", message: moved.join(","));
     fs\removeAll(root) catch void;
 }
@@ -559,7 +603,7 @@ test "the Go inputs are the files under the root the scopes name, less the exclu
     final listed = "{base}/*.go\n{base}/internal/guard/*.go\n!{base}/internal/guard/*_test.go\n"
         + "{base}/internal/guard/rules\n{base}/internal/guard/rules/**\ngo.mod\n{base}/go.work\n"
         + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2/*.go\n{base}-other/x/*.go\n\n";
-    final files = (goInputs(listed, root: base) catch [<str>]).cloneMutable();
+    final files = (goInputs(listed, root: base).value ?? [<str>]).cloneMutable();
     _ = files.sort(fun (left: str, right: str) > bool => left < right);
     std\assert(files.join(",") == "go.mod,internal/guard/brief.go,internal/guard/rules/embedded.txt,run.go",
         message: "tests, missing files and directories outside the root drop out: {files.join(",")}");
@@ -580,7 +624,7 @@ test "the stamp names its commit, which movedSince never reads as a source" {
     std\assert(stampedCommit(stamp) == "0123456789abcdef", message: "the commit");
     std\assert(stampedCommit("internal/guard/shell.go=abc") == "", message: "a stamp from before commits were");
     final root = fs\tempDir("stampcommit") catch "";
-    std\assert((movedSince(root, stamp: "@commit=0123456789abcdef", builtAt: 0.0) catch ["error"]).len() == 0, message: "not a moved source");
+    std\assert((movedSince(root, stamp: "@commit=0123456789abcdef", builtAt: 0.0).value ?? ["error"]).len() == 0, message: "not a moved source");
     fs\removeAll(root) catch void;
 }
 
