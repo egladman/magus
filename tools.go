@@ -112,7 +112,7 @@ func buildToolStatus(project, bin, spell string, t spells.Tool, projBounds spell
 		row.Verdict, row.DiagnosticCode = types.ToolVerdictTooNew, string(types.ToolTooNew)
 	case spells.VerdictInside:
 		row.Verdict = types.ToolVerdictInside
-	default:
+	case spells.VerdictUnknown:
 		// An unparsed bound leaves nothing to compare. Explicit rather than defaulting to
 		// inside: "could not check" must not read as "fine".
 		row.Verdict = types.ToolVerdictUnknown

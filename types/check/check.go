@@ -80,9 +80,9 @@ func (t Tier) Rank() int {
 		return 1
 	case RiskScoped:
 		return 2
-	default:
-		return 3
+	case RiskFull:
 	}
+	return 3
 }
 
 // TierEvidence is one reason behind a tier report. Path names a changed

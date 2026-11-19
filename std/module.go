@@ -84,9 +84,9 @@ func (t TypeTag) GoType() string {
 		return "map[string]any"
 	case TypeAny:
 		return "any"
-	default:
-		return "<invalid>"
+	case TypeInvalid:
 	}
+	return "<invalid>"
 }
 
 // Arg is one positional parameter of a Method.

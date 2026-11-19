@@ -425,12 +425,12 @@ func notifyStyle(level types.LogLevel) termkit.SGR {
 		return termkit.SGRYellow
 	case types.LogTrace, types.LogDebug:
 		return termkit.SGRDim
-	default:
-		// Info, and the empty level a caller who omitted the argument sends.
-		// Unstyled: an ordinary notification should not compete with the
-		// failures pinned above it.
-		return ""
+	case types.LogInfo:
 	}
+	// Info, and the empty level a caller who omitted the argument sends.
+	// Unstyled: an ordinary notification should not compete with the
+	// failures pinned above it.
+	return ""
 }
 
 // TermClearScreen erases the screen, or does nothing when stderr is not a terminal.

@@ -192,7 +192,7 @@ func (t Tree) symlink(root, p, rel, dest string) (entry, error) {
 			return entry{}, fmt.Errorf("symlink resolves to %s, which is not a regular file", real)
 		}
 		return t.file(real, dest, info), nil
-	default:
-		return entry{}, fmt.Errorf("symlink source (symlinks=%s)", t.Symlinks)
+	case SymlinkPolicyRefuse:
 	}
+	return entry{}, fmt.Errorf("symlink source (symlinks=%s)", t.Symlinks)
 }

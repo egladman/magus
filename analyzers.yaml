@@ -238,19 +238,6 @@ exhaustive-switch:
     - {path: internal/sessions/notify.go, symbol: severityForOutcome}
     - {path: internal/sessions/show.go, symbol: SummarizeSession}
     - {path: internal/sessions/touches.go, symbol: readActivity}
-    - {path: internal/spell/patch.go, symbol: applyOp}
-    - {path: libs/image/tree.go, symbol: symlink}
-    - {path: magus.go, symbol: newCallGraph}
-    - {path: spells/descriptor.go, symbol: ValidatePatch}
-    - {path: spells/version.go, symbol: KeyFunc}
-    - {path: std/buzz.go, symbol: braceClosers}
-    - {path: std/module.go, symbol: GoType}
-    - {path: std/term.go, symbol: notifyStyle}
-    - {path: std/validate.go, symbol: validateMCPTools}
-    - {path: tools.go, symbol: buildToolStatus}
-    - {path: types/check/check.go, symbol: Rank}
-    - {path: types/concurrency.go, symbol: Width}
-    - {path: types/target.go, symbol: Gates}
   # Switches a person accepted, each with the reason it stays.
   exits: []
 

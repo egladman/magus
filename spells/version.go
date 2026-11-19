@@ -110,10 +110,10 @@ func (c VersionComponent) KeyFunc() (VersionKeyFunc, error) {
 		return func(v string) string {
 			return strings.TrimSuffix(semver.Canonical(v), semver.Prerelease(v))
 		}, nil
-	default:
-		return nil, fmt.Errorf("unknown version component %s, want one of %s",
-			c, strings.Join(c.Values(), ", "))
+	case VersionNone:
 	}
+	return nil, fmt.Errorf("unknown version component %s, want one of %s",
+		c, strings.Join(c.Values(), ", "))
 }
 
 // VersionKeyFunc narrows an extracted version to the string that enters the cache key.
