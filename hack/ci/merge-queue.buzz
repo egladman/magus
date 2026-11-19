@@ -68,29 +68,33 @@ fun encode(doc: {str: any}) > str {
 }
 
 // need reads what the runner provides; it is never how a workflow passes an input.
-fun need(name: str) > str !> any {
+fun need(name: str) > result\Result::<str> {
     final v = os\env(name) ?? "";
     if (v == "") {
-        throw "queue: {name} is not set; the runner provides it";
+        return result\fail::<str>("queue: {name} is not set; the runner provides it");
     }
-    return v;
+    return result\ok::<str>(v);
 }
 
 // validatedIDs lists the changes the plan gives a validation job: the first `depth` of
 // each partition. The rest wait for the run the next merge starts.
-export fun validatedIDs(plan: str) > [str] !> any {
-    final doc = serialize\jsonDecode(plan);
-    final depth = doc.q("depth").integerValue();
-    final ids = mut [<str>];
-    foreach (partition in doc.q("partitions").listValue()) {
-        final changes = partition.listValue();
-        var i = 0;
-        while (i < changes.len() and i < depth) {
-            ids.append(changes[i].q("id").stringValue());
-            i = i + 1;
+export fun validatedIDs(plan: str) > result\Result::<[str]> {
+    try {
+        final doc = serialize\jsonDecode(plan);
+        final depth = doc.q("depth").integerValue();
+        final ids = mut [<str>];
+        foreach (partition in doc.q("partitions").listValue()) {
+            final changes = partition.listValue();
+            var i = 0;
+            while (i < changes.len() and i < depth) {
+                ids.append(changes[i].q("id").stringValue());
+                i = i + 1;
+            }
         }
+        return result\ok::<[str]>(ids);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "queue: read the plan");
     }
-    return ids;
 }
 
 // outputs renders the plan job's $GITHUB_OUTPUT lines: the validation matrix and its size.
@@ -168,16 +172,20 @@ final APPLY_FLAGS = ["--run", "--base", "--app", "--committer"];
 // jobRan reads a queue.yaml run and its jobs: whether its job named
 // job runs, or null while the run has not said. A run cancelled while
 // it waited for the one ahead of it ends with no such job at all.
-export fun jobRan(view: str, jobs: [serialize\Boxed], job: str) > bool? !> any {
-    foreach (j in jobs) {
-        if (j.q("name").stringValue() == job) {
-            return j.q("conclusion").stringValue() != "skipped";
+export fun jobRan(view: str, jobs: [serialize\Boxed], job: str) > result\Result::<bool?> {
+    try {
+        foreach (j in jobs) {
+            if (j.q("name").stringValue() == job) {
+                return result\ok::<bool?>(j.q("conclusion").stringValue() != "skipped");
+            }
         }
+        if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
+            return result\ok::<bool?>(false);
+        }
+        return result\ok::<bool?>(null);
+    } catch (err: any) {
+        return result\caught::<bool?>(err, doing: "queue: read run {job}");
     }
-    if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
-        return false;
-    }
-    return null;
 }
 
 // Polled is the last answer to one URL, kept for a conditional request.
@@ -261,14 +269,17 @@ export fun answer(url: str, res: http\Response, cached: Polled?, attempt: int) >
 // apiGet reads path from the REST API on the job's own token. It sends
 // the last answer's ETag: GitHub counts no 304 against the hourly budget.
 fun apiGet(path: str, cache: mut {str: Polled}) > result\Result::<str> {
-    var url = path;
-    final hdrs = mut {<str: str>};
-    try {
-        url = need("GITHUB_API_URL") + "/" + path;
-        hdrs["Authorization"] = "Bearer " + need("GITHUB_TOKEN");
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "queue: GET {path}");
+    final api = need("GITHUB_API_URL");
+    if (api.error -> err) {
+        return result\fail::<str>("queue: GET {path}: {err.message}");
     }
+    final token = need("GITHUB_TOKEN");
+    if (token.error -> err) {
+        return result\fail::<str>("queue: GET {path}: {err.message}");
+    }
+    final url = api.value! + "/" + path;
+    final hdrs = mut {<str: str>};
+    hdrs["Authorization"] = "Bearer " + token.value!;
     hdrs["Accept"] = "application/vnd.github+json";
     hdrs["X-GitHub-Api-Version"] = "2022-11-28";
     final cached = cache[url];
@@ -348,32 +359,70 @@ fun listing(path: str, key: str, cache: mut {str: Polled}) > result\Result::<[se
 }
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
-fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (!res.ok) {
-        throw "queue: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+fun capture(cmd: str, args: [str]) > result\Result::<str> {
+    try {
+        final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!res.ok) {
+            return result\fail::<str>("queue: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}");
+        }
+        return result\ok::<str>(res.stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "queue: {cmd} {args.join(" ")}");
     }
-    return res.stdout;
 }
 
-fun queueDir() > str !> any {
-    final dir = need("RUNNER_TEMP") + "/queue";
-    fs\mkdirAll(dir);
-    return dir;
+fun queueDir() > result\Result::<str> {
+    final temp = need("RUNNER_TEMP");
+    if (temp.error -> err) {
+        return temp;
+    }
+    final dir = temp.value! + "/queue";
+    try {
+        fs\mkdirAll(dir);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "queue: make {dir}");
+    }
+    return result\ok::<str>(dir);
 }
 
-fun plan(depth: str) > void !> any {
+fun plan(depth: str) > result\Result::<bool> {
     final dir = queueDir();
+    if (dir.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
     final changes = capture("magus", args: ["queue", "ls", "--provider", "github", "--base", "main"]);
-    fs\writeFile(dir + "/changes.json", content: changes + "\n");
-    _ = proc\exec("magus", args: planArgs(dir, depth: depth), opts: proc\ExecOptions{});
-    final ids = validatedIDs(fs\readFile(dir + "/plan.json"));
-    fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
+    if (changes.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    try {
+        fs\writeFile(dir.value! + "/changes.json", content: changes.value! + "\n");
+        _ = proc\exec("magus", args: planArgs(dir.value!, depth: depth), opts: proc\ExecOptions{});
+        final ids = validatedIDs(fs\readFile(dir.value! + "/plan.json"));
+        if (ids.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        final output = need("GITHUB_OUTPUT");
+        if (output.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        fs\appendFile(output.value!, content: outputs(ids.value!));
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: plan");
+    }
+    return result\ok::<bool>(true);
 }
 
-fun validate(change: str) > void !> any {
+fun validate(change: str) > result\Result::<bool> {
     final dir = queueDir();
-    _ = proc\exec("magus", args: validateArgs(dir, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir + "/plan.json") });
+    if (dir.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    try {
+        _ = proc\exec("magus", args: validateArgs(dir.value!, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir.value! + "/plan.json") });
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: validate {change}");
+    }
+    return result\ok::<bool>(true);
 }
 
 // POLL_MS is the pause between two reads of a run. Most reads are a
@@ -381,8 +430,12 @@ fun validate(change: str) > void !> any {
 final POLL_MS = 30000.0;
 
 // runPath is the API path of run in this repository.
-fun runPath(run: str) > str !> any {
-    return "repos/{need("GITHUB_REPOSITORY")}/actions/runs/{run}";
+fun runPath(run: str) > result\Result::<str> {
+    final repo = need("GITHUB_REPOSITORY");
+    if (repo.error -> err) {
+        return repo;
+    }
+    return result\ok::<str>("repos/{repo.value!}/actions/runs/{run}");
 }
 
 // awaitJob polls until run says whether job runs. A validation run
@@ -391,17 +444,24 @@ fun awaitJob(run: str, job: str) > result\Result::<bool> {
     final cache = mut {<str: Polled>};
     while (true) {
         var ran: bool? = null;
+        final path = runPath(run);
+        if (path.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
         try {
-            final path = runPath(run);
-            final view = apiGet(path, cache: cache);
+            final view = apiGet(path.value!, cache: cache);
             if (view.error != null) {
                 return result\Result::<bool>{ error = view.error };
             }
-            final jobs = listing(path + "/jobs", key: "jobs", cache: cache);
+            final jobs = listing(path.value! + "/jobs", key: "jobs", cache: cache);
             if (jobs.error != null) {
                 return result\Result::<bool>{ error = jobs.error };
             }
-            ran = jobRan(view.value!, jobs: jobs.value!, job: job);
+            final judged = jobRan(view.value!, jobs: jobs.value!, job: job);
+            if (judged.error != null) {
+                return result\Result::<bool>{ error = judged.error };
+            }
+            ran = judged.value;
             if (ran == null) {
                 os\sleep(POLL_MS);
             }
@@ -419,16 +479,20 @@ final VERDICT_PREFIX = "mergequeue-verdict-";
 
 // verdictReady reads a run, then its artifacts. A completed run
 // uploads nothing more, so apply has all it will get.
-export fun verdictReady(view: str, artifacts: [serialize\Boxed]) > bool !> any {
-    if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
-        return true;
-    }
-    foreach (a in artifacts) {
-        if (a.q("name").stringValue().startsWith(VERDICT_PREFIX)) {
-            return true;
+export fun verdictReady(view: str, artifacts: [serialize\Boxed]) > result\Result::<bool> {
+    try {
+        if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
+            return result\ok::<bool>(true);
         }
+        foreach (a in artifacts) {
+            if (a.q("name").stringValue().startsWith(VERDICT_PREFIX)) {
+                return result\ok::<bool>(true);
+            }
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: read the run");
     }
-    return false;
 }
 
 // awaitVerdict polls on the job's own token until run uploads a
@@ -437,17 +501,24 @@ fun awaitVerdict(run: str) > result\Result::<bool> {
     final cache = mut {<str: Polled>};
     while (true) {
         var ready = false;
+        final path = runPath(run);
+        if (path.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
         try {
-            final path = runPath(run);
-            final view = apiGet(path, cache: cache);
+            final view = apiGet(path.value!, cache: cache);
             if (view.error != null) {
                 return result\Result::<bool>{ error = view.error };
             }
-            final artifacts = listing(path + "/artifacts", key: "artifacts", cache: cache);
+            final artifacts = listing(path.value! + "/artifacts", key: "artifacts", cache: cache);
             if (artifacts.error != null) {
                 return result\Result::<bool>{ error = artifacts.error };
             }
-            ready = verdictReady(view.value!, artifacts: artifacts.value!);
+            final judged = verdictReady(view.value!, artifacts: artifacts.value!);
+            if (judged.error != null) {
+                return result\Result::<bool>{ error = judged.error };
+            }
+            ready = judged.value!;
             if (!ready) {
                 os\sleep(POLL_MS);
             }
@@ -463,8 +534,12 @@ fun awaitVerdict(run: str) > result\Result::<bool> {
 fun planned(run: str) > result\Result::<bool> {
     final ran = awaitJob(run, job: PLAN_JOB);
     if (ran.error == null) {
+        final output = need("GITHUB_OUTPUT");
+        if (output.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
         try {
-            fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={ran.value!}\n");
+            fs\appendFile(output.value!, content: "ran={ran.value!}\n");
         } catch (err: any) {
             return result\caught::<bool>(err, doing: "queue: planned: write the output");
         }
@@ -499,43 +574,51 @@ export object Decision {
 // unfinishedIDs reads `gh api repos/<repo>/actions/workflows/queue.yaml/runs` on the
 // base: the runs a push or a dispatch in this repository started that have not finished.
 // A body without its run list is an error, never an empty queue.
-export fun unfinishedIDs(runs: str, repo: str) > [str] !> any {
-    final list = serialize\jsonDecode(runs).q("workflow_runs").list();
-    if (list == null) {
-        throw "queue: start: the run listing names no workflow_runs: {runs}";
-    }
-    final ids = mut [<str>];
-    foreach (r in list!) {
-        final event = r.q("event").stringValue();
-        if (r.q("status").stringValue() != "completed" and (event == "push" or event == "workflow_dispatch")
-            and r.q("head_repository").q("full_name").stringValue() == repo) {
-            ids.append("{r.q("id").integerValue()}");
+export fun unfinishedIDs(runs: str, repo: str) > result\Result::<[str]> {
+    try {
+        final list = serialize\jsonDecode(runs).q("workflow_runs").list();
+        if (list == null) {
+            return result\fail::<[str]>("queue: start: the run listing names no workflow_runs: {runs}");
         }
+        final ids = mut [<str>];
+        foreach (r in list!) {
+            final event = r.q("event").stringValue();
+            if (r.q("status").stringValue() != "completed" and (event == "push" or event == "workflow_dispatch")
+                and r.q("head_repository").q("full_name").stringValue() == repo) {
+                ids.append("{r.q("id").integerValue()}");
+            }
+        }
+        return result\ok::<[str]>(ids);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "queue: read the run listing");
     }
-    return ids;
 }
 
 // validation reads `gh api repos/<repo>/actions/runs/<id>/jobs` of an unfinished run. A
 // run waiting its turn in the concurrency group lists no jobs, so it has read nothing.
-export fun validation(id: str, jobs: str) > Validation !> any {
-    final list = serialize\jsonDecode(jobs).q("jobs").list();
-    if (list == null) {
-        throw "queue: start: run {id}'s job listing names no jobs: {jobs}";
-    }
-    foreach (j in list!) {
-        if (j.q("name").stringValue() != PLAN_JOB) {
-            continue;
+export fun validation(id: str, jobs: str) > result\Result::<Validation> {
+    try {
+        final list = serialize\jsonDecode(jobs).q("jobs").list();
+        if (list == null) {
+            return result\fail::<Validation>("queue: start: run {id}'s job listing names no jobs: {jobs}");
         }
-        final failed = j.q("status").stringValue() == "completed" and j.q("conclusion").stringValue() != "success";
-        foreach (step in j.q("steps").listValue()) {
-            final started = step.q("started_at").stringValue();
-            if (step.q("name").stringValue() == PLAN_STEP and started != "") {
-                return Validation{ id = id, readAt = started, planFailed = failed };
+        foreach (j in list!) {
+            if (j.q("name").stringValue() != PLAN_JOB) {
+                continue;
             }
+            final failed = j.q("status").stringValue() == "completed" and j.q("conclusion").stringValue() != "success";
+            foreach (step in j.q("steps").listValue()) {
+                final started = step.q("started_at").stringValue();
+                if (step.q("name").stringValue() == PLAN_STEP and started != "") {
+                    return result\ok::<Validation>(Validation{ id = id, readAt = started, planFailed = failed });
+                }
+            }
+            return result\ok::<Validation>(Validation{ id = id, readAt = null, planFailed = failed });
         }
-        return Validation{ id = id, readAt = null, planFailed = failed };
+        return result\ok::<Validation>(Validation{ id = id, readAt = null, planFailed = false });
+    } catch (err: any) {
+        return result\caught::<Validation>(err, doing: "queue: read run {id}'s jobs");
     }
-    return Validation{ id = id, readAt = null, planFailed = false };
 }
 
 // decide says whether merge intent seen at intentAt needs a run started on the base,
@@ -544,28 +627,32 @@ export fun validation(id: str, jobs: str) > Validation !> any {
 // pending behind the running one and cancels the older pending run, and a pending run
 // always covers, so this starts a follow-up only when none is pending and never replaces
 // one.
-export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
-    final at = time\parse(TIMESTAMP, value: intentAt);
-    final before = mut [<str>];
-    foreach (r in runs) {
-        if (r.planFailed) {
-            before.append("{r.id} (its plan failed)");
-        } else if (r.readAt == null) {
-            return Decision{ start = false, notice = "queue-dispatch-pending",
-                message = "run {r.id} has not read the queue yet, so it plans this intent" };
-        } else if (time\parse(TIMESTAMP, value: r.readAt!) > at) {
-            return Decision{ start = false, notice = "queue-dispatch-covered",
-                message = "run {r.id} read the queue at {r.readAt!}, after this intent at {intentAt}" };
-        } else {
-            before.append("{r.id} (read the queue at {r.readAt!})");
+export fun decide(runs: [Validation], intentAt: str) > result\Result::<Decision> {
+    try {
+        final at = time\parse(TIMESTAMP, value: intentAt);
+        final before = mut [<str>];
+        foreach (r in runs) {
+            if (r.planFailed) {
+                before.append("{r.id} (its plan failed)");
+            } else if (r.readAt == null) {
+                return result\ok::<Decision>(Decision{ start = false, notice = "queue-dispatch-pending",
+                    message = "run {r.id} has not read the queue yet, so it plans this intent" });
+            } else if (time\parse(TIMESTAMP, value: r.readAt!) > at) {
+                return result\ok::<Decision>(Decision{ start = false, notice = "queue-dispatch-covered",
+                    message = "run {r.id} read the queue at {r.readAt!}, after this intent at {intentAt}" });
+            } else {
+                before.append("{r.id} (read the queue at {r.readAt!})");
+            }
         }
+        if (before.len() == 0) {
+            return result\ok::<Decision>(Decision{ start = true, notice = "queue-dispatch-idle",
+                message = "no validation run is running or pending; starting one for this intent at {intentAt}" });
+        }
+        return result\ok::<Decision>(Decision{ start = true, notice = "queue-dispatch-follow-up",
+            message = "run {before.join(", ")} planned before this intent at {intentAt}; starting one follow-up" });
+    } catch (err: any) {
+        return result\caught::<Decision>(err, doing: "queue: decide whether to start a run");
     }
-    if (before.len() == 0) {
-        return Decision{ start = true, notice = "queue-dispatch-idle",
-            message = "no validation run is running or pending; starting one for this intent at {intentAt}" };
-    }
-    return Decision{ start = true, notice = "queue-dispatch-follow-up",
-        message = "run {before.join(", ")} planned before this intent at {intentAt}; starting one follow-up" };
 }
 
 // dispatch starts a validation run on base once pull-request run run saw merge intent at
@@ -581,10 +668,9 @@ fun dispatch(run: str, base: str, intentAt: str) > result\Result::<bool> {
         }
         return ran;
     }
-    try {
-        start(base, intentAt: intentAt);
-    } catch (err: any) {
-        return result\caught::<bool>(err, doing: "queue: dispatch: start a run on {base}");
+    final started = start(base, intentAt: intentAt);
+    if (started.error -> err) {
+        return result\fail::<bool>("queue: dispatch: start a run on {base}: {err.message}");
     }
     return result\ok::<bool>(true);
 }
@@ -620,20 +706,48 @@ final DISPATCH_FLAGS = ["--run", "--base", "--intent-at"];
 // start starts a validation run of queue.yaml on base for what became ready at intentAt,
 // unless an unfinished run covers it. Any API error fails the step: skipping on one could
 // strand the change.
-fun start(base: str, intentAt: str) > void !> any {
-    final repo = need("GITHUB_REPOSITORY");
-    final began = os\time();
-    final ids = unfinishedIDs(capture("gh", args: ["api", "repos/{repo}/actions/workflows/queue.yaml/runs?branch={base}&exclude_pull_requests=true&per_page=100"]), repo: repo);
-    final runs = mut [<Validation>];
-    foreach (id in ids) {
-        runs.append(validation(id, jobs: capture("gh", args: ["api", "repos/{repo}/actions/runs/{id}/jobs"])));
+fun start(base: str, intentAt: str) > result\Result::<bool> {
+    final need1 = need("GITHUB_REPOSITORY");
+    if (need1.error -> err) {
+        return result\Result::<bool>{ error = err };
     }
-    std\print("queue: read {ids.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
-    final d = decide(runs, intentAt: intentAt);
+    final repo = need1.value!;
+    final began = os\time();
+    final listing = capture("gh", args: ["api", "repos/{repo}/actions/workflows/queue.yaml/runs?branch={base}&exclude_pull_requests=true&per_page=100"]);
+    if (listing.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final ids = unfinishedIDs(listing.value!, repo: repo);
+    if (ids.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final runs = mut [<Validation>];
+    foreach (id in ids.value!) {
+        final jobs = capture("gh", args: ["api", "repos/{repo}/actions/runs/{id}/jobs"]);
+        if (jobs.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        final read = validation(id, jobs: jobs.value!);
+        if (read.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        runs.append(read.value!);
+    }
+    std\print("queue: read {ids.value!.len()} unfinished queue.yaml run(s) on {base} from api.github.com in {ids.value!.len() + 1} request(s), {std\toInt(os\time() - began)}ms");
+    final decided = decide(runs, intentAt: intentAt);
+    if (decided.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final d = decided.value!;
     std\print("::notice title={d.notice}::{d.message}");
     if (d.start) {
-        _ = proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: proc\ExecOptions{});
+        try {
+            _ = proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: proc\ExecOptions{});
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "queue: start a run on {base}");
+        }
     }
+    return result\ok::<bool>(true);
 }
 
 // QUEUE_LABELS are the labels that queue a pull request, one per merge method.
@@ -642,13 +756,17 @@ final QUEUE_LABELS = ["merge-queue: squash", "merge-queue: rebase", "merge-queue
 // ciPulls reads `gh api repos/<repo>/actions/runs/<id>` of a CI run: the head it ran on
 // and the pull requests it ran for, which GitHub lists only for this repository's own
 // branches.
-export fun ciPulls(run: str) > CIRun !> any {
-    final r = serialize\jsonDecode(run);
-    final pulls = mut [<str>];
-    foreach (p in r.q("pull_requests").listValue()) {
-        pulls.append("{p.q("number").integerValue()}");
+export fun ciPulls(run: str) > result\Result::<CIRun> {
+    try {
+        final r = serialize\jsonDecode(run);
+        final pulls = mut [<str>];
+        foreach (p in r.q("pull_requests").listValue()) {
+            pulls.append("{p.q("number").integerValue()}");
+        }
+        return result\ok::<CIRun>(CIRun{ head = r.q("head_sha").stringValue(), pulls = pulls });
+    } catch (err: any) {
+        return result\caught::<CIRun>(err, doing: "queue: read the CI run");
     }
-    return CIRun{ head = r.q("head_sha").stringValue(), pulls = pulls };
 }
 
 object CIRun {
@@ -660,41 +778,82 @@ object CIRun {
 // against base with its head still at head, and carries merge intent (auto-merge, or a
 // queue label on it). A stack member's intent is its stack top's label, whose own CI run
 // starts the queue for the stack.
-export fun queuedAt(pull: str, head: str, base: str) > bool !> any {
-    final pr = serialize\jsonDecode(pull);
-    if (pr.q("state").stringValue() != "open" or pr.q("head").q("sha").stringValue() != head or pr.q("base").q("ref").stringValue() != base) {
-        return false;
-    }
-    if (pr.q("auto_merge").q("merge_method").stringValue() != "") {
-        return true;
-    }
-    foreach (l in pr.q("labels").listValue()) {
-        if (QUEUE_LABELS.indexOf(l.q("name").stringValue()) != null) {
-            return true;
+export fun queuedAt(pull: str, head: str, base: str) > result\Result::<bool> {
+    try {
+        final pr = serialize\jsonDecode(pull);
+        if (pr.q("state").stringValue() != "open" or pr.q("head").q("sha").stringValue() != head or pr.q("base").q("ref").stringValue() != base) {
+            return result\ok::<bool>(false);
         }
+        if (pr.q("auto_merge").q("merge_method").stringValue() != "") {
+            return result\ok::<bool>(true);
+        }
+        foreach (l in pr.q("labels").listValue()) {
+            if (QUEUE_LABELS.indexOf(l.q("name").stringValue()) != null) {
+                return result\ok::<bool>(true);
+            }
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: read the pull request");
     }
-    return false;
 }
 
 // ciQueued writes whether CI run run finished on the current head of a pull request the
 // queue holds: a change waiting on its required checks waits for exactly that, and
 // nothing else starts a validation run once they report.
-fun ciQueued(run: str, base: str) > void !> any {
+fun ciQueued(run: str, base: str) > result\Result::<bool> {
     final repo = need("GITHUB_REPOSITORY");
-    final r = ciPulls(capture("gh", args: ["api", "repos/{repo}/actions/runs/{run}"]));
+    if (repo.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final view = capture("gh", args: ["api", "repos/{repo.value!}/actions/runs/{run}"]);
+    if (view.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final pulled = ciPulls(view.value!);
+    if (pulled.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final r = pulled.value!;
     var queued = false;
     foreach (n in r.pulls) {
-        if (queuedAt(capture("gh", args: ["api", "repos/{repo}/pulls/{n}"]), head: r.head, base: base)) {
+        final pull = capture("gh", args: ["api", "repos/{repo.value!}/pulls/{n}"]);
+        if (pull.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        final at = queuedAt(pull.value!, head: r.head, base: base);
+        if (at.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        if (at.value!) {
             queued = true;
             break;
         }
     }
-    fs\appendFile(need("GITHUB_OUTPUT"), content: "queued={queued}\n");
+    final output = need("GITHUB_OUTPUT");
+    if (output.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    try {
+        fs\appendFile(output.value!, content: "queued={queued}\n");
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: ci-queued: write the output");
+    }
+    return result\ok::<bool>(true);
 }
 
-fun apply(run: str, base: str, app: str, committer: str) > void !> any {
-    final args = applyArgs(run, repo: need("GITHUB_REPOSITORY"), base: base, committer: committer, app: app);
-    _ = proc\exec("magus", args: args, opts: proc\ExecOptions{});
+fun apply(run: str, base: str, app: str, committer: str) > result\Result::<bool> {
+    final repo = need("GITHUB_REPOSITORY");
+    if (repo.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final args = applyArgs(run, repo: repo.value!, base: base, committer: committer, app: app);
+    try {
+        _ = proc\exec("magus", args: args, opts: proc\ExecOptions{});
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: apply");
+    }
+    return result\ok::<bool>(true);
 }
 
 // reviewsArgs classifies with main's own workspace, as plan does, so the approvals a
@@ -713,39 +872,60 @@ final REVIEWS_FORK_FLAGS = ["--pr", "--head-owner", "--head-branch"];
 
 // pullsAt reads `gh api repos/<repo>/pulls?head=<owner>:<branch>`: the open pull
 // requests whose head is still head. A listing without a list is an error, never none.
-export fun pullsAt(listing: str, head: str) > [str] !> any {
-    final list = serialize\jsonDecode(listing).list();
-    if (list == null) {
-        throw "queue: reviews: the pull request listing is not a list: {listing}";
-    }
-    final found = mut [<str>];
-    foreach (p in list!) {
-        if (p.q("head").q("sha").stringValue() == head) {
-            found.append("{p.q("number").integerValue()}");
+export fun pullsAt(listing: str, head: str) > result\Result::<[str]> {
+    try {
+        final list = serialize\jsonDecode(listing).list();
+        if (list == null) {
+            return result\fail::<[str]>("queue: reviews: the pull request listing is not a list: {listing}");
         }
+        final found = mut [<str>];
+        foreach (p in list!) {
+            if (p.q("head").q("sha").stringValue() == head) {
+                found.append("{p.q("number").integerValue()}");
+            }
+        }
+        return result\ok::<[str]>(found);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "queue: reviews: read the pull request listing");
     }
-    return found;
 }
 
 // reviews classifies the approvals on pr, or, when the run named none, on each open pull
 // request from owner:branch at head. That lookup is one read of the API; nothing of the
 // fork's is run.
-fun reviews(pr: str, head: str, base: str, owner: str, branch: str) > void !> any {
+fun reviews(pr: str, head: str, base: str, owner: str, branch: str) > result\Result::<bool> {
     var prs = [pr];
     if (pr == "") {
         if (owner == "" or branch == "") {
-            throw "queue: reviews needs --pr, or --head-owner and --head-branch to find it\n{usage}";
+            return result\fail::<bool>("queue: reviews needs --pr, or --head-owner and --head-branch to find it\n{usage}");
         }
-        prs = pullsAt(capture("gh", args: ["api", "--method", "GET", "repos/{need("GITHUB_REPOSITORY")}/pulls",
-            "-f", "state=open", "-f", "head={owner}:{branch}", "-f", "per_page=100"]), head: head);
+        final repo = need("GITHUB_REPOSITORY");
+        if (repo.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        final listing = capture("gh", args: ["api", "--method", "GET", "repos/{repo.value!}/pulls",
+            "-f", "state=open", "-f", "head={owner}:{branch}", "-f", "per_page=100"]);
+        if (listing.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        final found = pullsAt(listing.value!, head: head);
+        if (found.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        prs = found.value!;
         if (prs.len() == 0) {
             std\print("::notice title=queue-reviews-no-pull-request::no open pull request from {owner}:{branch} is at {head}");
-            return;
+            return result\ok::<bool>(true);
         }
     }
     foreach (n in prs) {
-        _ = proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: proc\ExecOptions{});
+        try {
+            _ = proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: proc\ExecOptions{});
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "queue: reviews: classify pull request {n}");
+        }
     }
+    return result\ok::<bool>(true);
 }
 
 final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
@@ -761,20 +941,24 @@ final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
 
 // options parses one step's flags, all valued. Each name in required must be given a
 // value; optional ones may be empty. Anything the step does not declare is refused.
-export fun options(step: str, argv: [str], required: [str], optional: [str]) > {str: str} !> any {
-    final valued = mut [<str>];
-    foreach (name in required) { valued.append(name); }
-    foreach (name in optional) { valued.append(name); }
-    final parsed = flags\parse(argv, switches: [<str>], valued: valued);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "queue: {step} does not take {(parsed.unknown + parsed.positionals).join(" ")}\n{usage}";
-    }
-    foreach (name in required) {
-        if ((parsed.values[name] ?? "") == "") {
-            throw "queue: {step} needs {name}\n{usage}";
+export fun options(step: str, argv: [str], required: [str], optional: [str]) > result\Result::<{str: str}> {
+    try {
+        final valued = mut [<str>];
+        foreach (name in required) { valued.append(name); }
+        foreach (name in optional) { valued.append(name); }
+        final parsed = flags\parse(argv, switches: [<str>], valued: valued);
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<{str: str}>("queue: {step} does not take {(parsed.unknown + parsed.positionals).join(" ")}\n{usage}");
         }
+        foreach (name in required) {
+            if ((parsed.values[name] ?? "") == "") {
+                return result\fail::<{str: str}>("queue: {step} needs {name}\n{usage}");
+            }
+        }
+        return result\ok::<{str: str}>(parsed.values);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "queue: {step}");
     }
-    return parsed.values;
 }
 
 // PICKED are the flags a person is offered a list for when they leave one off, by step:
@@ -801,13 +985,21 @@ fun offers(flag: str) > result\Result::<[str]> {
     try {
         final lines = mut [<str>];
         if (flag == "--run") {
-            foreach (r in serialize\jsonDecode(capture("gh", args: ["run", "list", "--workflow", fs\basename(WORKFLOW),
-                "--limit", "20", "--json", "databaseId,displayTitle,status"])).listValue()) {
+            final fetched = capture("gh", args: ["run", "list", "--workflow", fs\basename(WORKFLOW),
+                "--limit", "20", "--json", "databaseId,displayTitle,status"]);
+            if (fetched.error -> err) {
+                return result\Result::<[str]>{ error = err };
+            }
+            foreach (r in serialize\jsonDecode(fetched.value!).listValue()) {
                 lines.append("{r.q("databaseId").integerValue()} {r.q("displayTitle").stringValue()} ({r.q("status").stringValue()})");
             }
         } else {
-            foreach (p in serialize\jsonDecode(capture("gh", args: ["pr", "list", "--state", "open", "--limit", "50",
-                "--json", "number,title"])).listValue()) {
+            final fetched = capture("gh", args: ["pr", "list", "--state", "open", "--limit", "50",
+                "--json", "number,title"]);
+            if (fetched.error -> err) {
+                return result\Result::<[str]>{ error = err };
+            }
+            foreach (p in serialize\jsonDecode(fetched.value!).listValue()) {
                 lines.append("{p.q("number").integerValue()} {p.q("title").stringValue()}");
             }
         }
@@ -841,41 +1033,55 @@ export fun main(args: [str]) > void !> any {
             if (!sure.value!) { throw "queue: {step}: not confirmed, nothing done"; }
         }
     }
-    if (step == "plan") {
-        plan(options(step, argv: argv, required: ["--depth"], optional: [<str>])["--depth"]!);
-    } else if (step == "validate") {
-        validate(options(step, argv: argv, required: ["--change"], optional: [<str>])["--change"]!);
-    } else if (step == "planned") {
-        final ran = planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
-        if (ran.error != null) {
-            throw ran.error!.message;
-        }
-    } else if (step == "await-verdict") {
-        final ready = awaitVerdict(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
-        if (ready.error != null) {
-            throw ready.error!.message;
-        }
-    } else if (step == "apply") {
-        final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
-        apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
-    } else if (step == "dispatch") {
-        final o = options(step, argv: argv, required: DISPATCH_FLAGS, optional: [<str>]);
-        final dispatched = dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
-        if (dispatched.error != null) {
-            throw dispatched.error!.message;
-        }
-    } else if (step == "ci-queued") {
-        final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
-        ciQueued(o["--run"]!, base: o["--base"]!);
-    } else if (step == "start") {
-        final o = options(step, argv: argv, required: START_FLAGS, optional: [<str>]);
-        start(o["--base"]!, intentAt: o["--intent-at"]!);
-    } else if (step == "reviews") {
-        final o = options(step, argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
-        reviews(o["--pr"] ?? "", head: o["--head"]!, base: o["--base"]!, owner: o["--head-owner"] ?? "", branch: o["--head-branch"] ?? "");
-    } else {
+    final unknown = step != "plan" and step != "validate" and step != "planned" and step != "await-verdict"
+        and step != "apply" and step != "dispatch" and step != "ci-queued" and step != "start" and step != "reviews";
+    if (unknown) {
         throw "queue: unknown step \"{step}\"\n{usage}";
     }
+    var required = [<str>];
+    var optional = [<str>];
+    if (step == "plan") {
+        required = ["--depth"];
+    } else if (step == "validate") {
+        required = ["--change"];
+    } else if (step == "planned" or step == "await-verdict") {
+        required = ["--run"];
+    } else if (step == "apply") {
+        required = APPLY_FLAGS;
+    } else if (step == "dispatch") {
+        required = DISPATCH_FLAGS;
+    } else if (step == "ci-queued") {
+        required = ["--run", "--base"];
+    } else if (step == "start") {
+        required = START_FLAGS;
+    } else {
+        required = REVIEWS_FLAGS;
+        optional = REVIEWS_FORK_FLAGS;
+    }
+    final parsed = options(step, argv: argv, required: required, optional: optional);
+    if (parsed.error != null) { throw parsed.error!.message; }
+    final o = parsed.value!;
+    var done: result\Result::<bool> = result\ok::<bool>(true);
+    if (step == "plan") {
+        done = plan(o["--depth"]!);
+    } else if (step == "validate") {
+        done = validate(o["--change"]!);
+    } else if (step == "planned") {
+        done = planned(o["--run"]!);
+    } else if (step == "await-verdict") {
+        done = awaitVerdict(o["--run"]!);
+    } else if (step == "apply") {
+        done = apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
+    } else if (step == "dispatch") {
+        done = dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
+    } else if (step == "ci-queued") {
+        done = ciQueued(o["--run"]!, base: o["--base"]!);
+    } else if (step == "start") {
+        done = start(o["--base"]!, intentAt: o["--intent-at"]!);
+    } else {
+        done = reviews(o["--pr"] ?? "", head: o["--head"]!, base: o["--base"]!, owner: o["--head-owner"] ?? "", branch: o["--head-branch"] ?? "");
+    }
+    if (done.error != null) { throw done.error!.message; }
 }
 
 fun planDoc(depth: int, partitions: [[str]]) > str {
@@ -891,7 +1097,7 @@ fun planDoc(depth: int, partitions: [[str]]) > str {
 }
 
 // listed is the key list of one listing page holding docs.
-fun listed(key: str, docs: [{str: any}]) > [serialize\Boxed] !> any {
+fun listed(key: str, docs: [{str: any}]) > [serialize\Boxed] {
     return entries(encode({"total_count": docs.len(), key: docs}), key: key).value!;
 }
 
@@ -904,20 +1110,20 @@ test "apply runs once the plan job runs, and not when it was skipped or never ma
         }
         return listed("jobs", docs: docs);
     };
-    assert\equal(jobRan(run("in_progress"), jobs: jobs("skipped"), job: "queue plan"), want: false, message: "no merge intent");
-    assert\equal(jobRan(run("in_progress"), jobs: jobs("success"), job: "queue plan"), want: true, message: "planned");
-    assert\equal(jobRan(run("completed"), jobs: jobs("failure"), job: "queue plan"), want: true, message: "apply resets stale statuses whatever the plan did");
-    assert\equal(jobRan(run("in_progress"), jobs: jobs(""), job: "queue plan"), want: true, message: "running");
-    assert\equal(jobRan(run("completed"), jobs: jobs(null), job: "queue plan"), want: false, message: "cancelled before it started");
-    assert\equal(jobRan(run("queued"), jobs: jobs(null), job: "queue plan"), want: null, message: "still waiting");
-    assert\equal(jobRan(run("completed"), jobs: jobs("success"), job: INTENT_JOB), want: false, message: "another job's conclusion says nothing");
+    assert\equal(jobRan(run("in_progress"), jobs: jobs("skipped"), job: "queue plan").value, want: false, message: "no merge intent");
+    assert\equal(jobRan(run("in_progress"), jobs: jobs("success"), job: "queue plan").value, want: true, message: "planned");
+    assert\equal(jobRan(run("completed"), jobs: jobs("failure"), job: "queue plan").value, want: true, message: "apply resets stale statuses whatever the plan did");
+    assert\equal(jobRan(run("in_progress"), jobs: jobs(""), job: "queue plan").value, want: true, message: "running");
+    assert\equal(jobRan(run("completed"), jobs: jobs(null), job: "queue plan").value, want: false, message: "cancelled before it started");
+    assert\equal(jobRan(run("queued"), jobs: jobs(null), job: "queue plan").value, want: null, message: "still waiting");
+    assert\equal(jobRan(run("completed"), jobs: jobs("success"), job: INTENT_JOB).value, want: false, message: "another job's conclusion says nothing");
 }
 
 test "dispatch reads only whether the intent job ran" {
     final jobs = listed("jobs", docs: [{"name": INTENT_JOB, "conclusion": "skipped"}]);
-    assert\equal(jobRan(encode({"status": "completed"}), jobs: jobs, job: INTENT_JOB), want: false, message: "its if: found no intent");
+    assert\equal(jobRan(encode({"status": "completed"}), jobs: jobs, job: INTENT_JOB).value, want: false, message: "its if: found no intent");
     final ran = listed("jobs", docs: [{"name": INTENT_JOB, "conclusion": "success"}]);
-    assert\equal(jobRan(encode({"status": "in_progress"}), jobs: ran, job: INTENT_JOB), want: true, message: "intent");
+    assert\equal(jobRan(encode({"status": "in_progress"}), jobs: ran, job: INTENT_JOB).value, want: true, message: "intent");
 }
 
 // An action triggered but not weighed starts runs that queue nothing.
@@ -952,10 +1158,10 @@ test "apply mints its token once the run uploads a verdict or ends" {
         }
         return listed("artifacts", docs: docs);
     };
-    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts([<str>])), want: false, message: "nothing uploaded");
-    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan"])), want: false, message: "the plan alone");
-    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan", "mergequeue-verdict-632"])), want: true, message: "a verdict");
-    assert\equal(verdictReady(run("completed"), artifacts: artifacts([<str>])), want: true, message: "a run that ended with none");
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts([<str>])).value!, want: false, message: "nothing uploaded");
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan"])).value!, want: false, message: "the plan alone");
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan", "mergequeue-verdict-632"])).value!, want: true, message: "a verdict");
+    assert\equal(verdictReady(run("completed"), artifacts: artifacts([<str>])).value!, want: true, message: "a run that ended with none");
 }
 
 test "a listing page without its list is an error, never an empty page" {
@@ -994,13 +1200,13 @@ test "a retry waits 5s, doubling, at most a minute" {
 
 
 test "each partition gives its first depth changes a validation job" {
-    final ids = validatedIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
+    final ids = validatedIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]])).value!;
     assert\equal(ids, want: ["1", "2", "4"], message: "depth 2 over partitions of three and one");
 }
 
 test "a plan with no partitions validates nothing" {
-    assert\equal(validatedIDs(`{"depth": 3, "partitions": null}`).len(), want: 0, message: "null partitions");
-    assert\equal(validatedIDs(`{"depth": 3}`).len(), want: 0, message: "absent partitions");
+    assert\equal(validatedIDs(`{"depth": 3, "partitions": null}`).value!.len(), want: 0, message: "null partitions");
+    assert\equal(validatedIDs(`{"depth": 3}`).value!.len(), want: 0, message: "absent partitions");
 }
 
 test "outputs render a compact matrix and its count" {
@@ -1033,9 +1239,9 @@ test "apply follows the validation run as its source, pinned to the base and que
 }
 
 test "a CI run starts the queue only when it finished on the current head of a queued pull request" {
-    final r = ciPulls(`{"head_sha": "h1", "pull_requests": [{"number": 7}, {"number": 9}]}`);
+    final r = ciPulls(`{"head_sha": "h1", "pull_requests": [{"number": 7}, {"number": 9}]}`).value!;
     assert\equal([r.head, r.pulls.join(",")], want: ["h1", "7,9"], message: "the head and the pull requests it ran for");
-    assert\equal(ciPulls(`{"head_sha": "h1", "pull_requests": []}`).pulls.len(), want: 0, message: "a fork's run lists none");
+    assert\equal(ciPulls(`{"head_sha": "h1", "pull_requests": []}`).value!.pulls.len(), want: 0, message: "a fork's run lists none");
     final pull = fun (state: str, head: str, base: str, auto: str, labels: [str]) > str {
         final named = mut [<{str: str}>];
         foreach (l in labels) {
@@ -1047,42 +1253,32 @@ test "a CI run starts the queue only when it finished on the current head of a q
         }
         return serialize\jsonEncode(serialize\Boxed.init({"state": state, "head": {"sha": head}, "base": {"ref": base}, "auto_merge": automerge, "labels": named}));
     };
-    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: true, message: "auto-merge");
-    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: rebase"]), head: "h1", base: "main"), want: true, message: "a queue label");
-    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["queue: queued", "queue: kicked back"]), head: "h1", base: "main"),
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main").value, want: true, message: "auto-merge");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["merge-queue: rebase"]), head: "h1", base: "main").value, want: true, message: "a queue label");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "main", auto: "", labels: ["queue: queued", "queue: kicked back"]), head: "h1", base: "main").value,
         want: false, message: "a mark is no intent");
-    assert\equal(queuedAt(pull("open", head: "h2", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "CI on a head since replaced");
-    assert\equal(queuedAt(pull("open", head: "h1", base: "release", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "another base");
-    assert\equal(queuedAt(pull("closed", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main"), want: false, message: "closed");
+    assert\equal(queuedAt(pull("open", head: "h2", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main").value, want: false, message: "CI on a head since replaced");
+    assert\equal(queuedAt(pull("open", head: "h1", base: "release", auto: "squash", labels: [<str>]), head: "h1", base: "main").value, want: false, message: "another base");
+    assert\equal(queuedAt(pull("closed", head: "h1", base: "main", auto: "squash", labels: [<str>]), head: "h1", base: "main").value, want: false, message: "closed");
 }
 
 test "apply refuses to run without the queue app's slug and committer" {
     final all = ["--run", "7", "--base", "main", "--app", "q", "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>"];
-    assert\equal(options("apply", argv: all, required: APPLY_FLAGS, optional: [<str>])["--app"], want: "q", message: "every flag given");
+    assert\equal(options("apply", argv: all, required: APPLY_FLAGS, optional: [<str>]).value!["--app"], want: "q", message: "every flag given");
     foreach (argv in [["--run", "7", "--base", "main"], ["--run", "7", "--base", "main", "--app", "q"],
         ["--run", "7", "--base", "main", "--committer", "c"], ["--run", "7", "--base", "main", "--app", "", "--committer", ""]]) {
-        var refused = false;
-        try {
-            _ = options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]);
-        } catch (e) {
-            refused = true;
-        }
+        final refused = options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]).error != null;
         assert\equal(refused, want: true, message: argv.join(" "));
     }
 }
 
 test "each step takes the flags it declares and refuses the rest" {
-    final o = options("planned", argv: ["--run", "7", "--base=main", "--note", ""], required: ["--run"], optional: ["--base", "--note"]);
+    final o = options("planned", argv: ["--run", "7", "--base=main", "--note", ""], required: ["--run"], optional: ["--base", "--note"]).value!;
     assert\equal(o["--run"], want: "7", message: "a valued flag");
     assert\equal(o["--base"], want: "main", message: "the =value form");
     assert\equal(o["--note"], want: "", message: "an optional flag may be empty");
     foreach (argv in [["--depth"], ["--depth", ""], ["3"], ["--depth", "3", "--extra", "x"]]) {
-        var refused = false;
-        try {
-            _ = options("plan", argv: argv, required: ["--depth"], optional: [<str>]);
-        } catch (e) {
-            refused = true;
-        }
+        final refused = options("plan", argv: argv, required: ["--depth"], optional: [<str>]).error != null;
         assert\equal(refused, want: true, message: argv.join(" "));
     }
 }
@@ -1120,36 +1316,26 @@ test "dispatch weighs only unfinished runs a push or a dispatch in this reposito
         queueRun(4, status: "queued", event: "pull_request", repo: "o/r"),
         queueRun(5, status: "queued", event: "push", repo: "fork/r"),
     ]);
-    assert\equal(unfinishedIDs(runs, repo: "o/r"), want: ["1", "2"], message: "unfinished base runs");
+    assert\equal(unfinishedIDs(runs, repo: "o/r").value!, want: ["1", "2"], message: "unfinished base runs");
 }
 
 test "dispatch fails on an API error rather than reading it as no runs" {
     foreach (body in [`{"message": "Bad credentials", "status": "401"}`, `{"workflow_runs": null}`]) {
-        var failed = false;
-        try {
-            _ = unfinishedIDs(body, repo: "o/r");
-        } catch (e) {
-            failed = true;
-        }
+        final failed = unfinishedIDs(body, repo: "o/r").error != null;
         assert\equal(failed, want: true, message: "run listing " + body);
     }
-    var failed = false;
-    try {
-        _ = validation("1", jobs: `{"message": "Not Found"}`);
-    } catch (e) {
-        failed = true;
-    }
+    final failed = validation("1", jobs: `{"message": "Not Found"}`).error != null;
     assert\equal(failed, want: true, message: "job listing");
 }
 
 test "a run has read the queue once its plan step started" {
-    final pending = validation("1", jobs: planJobs("", conclusion: "", readAt: ""));
+    final pending = validation("1", jobs: planJobs("", conclusion: "", readAt: "")).value!;
     assert\equal([pending.readAt, pending.planFailed], want: [null, false], message: "waiting in the concurrency group");
-    final setup = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
+    final setup = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: "")).value!;
     assert\equal([setup.readAt, setup.planFailed], want: [null, false], message: "plan job still setting up");
-    final read = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T17:02:00Z"));
+    final read = validation("1", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T17:02:00Z")).value!;
     assert\equal([read.readAt, read.planFailed], want: ["2026-09-26T17:02:00Z", false], message: "plan step started");
-    final failed = validation("1", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T17:02:00Z"));
+    final failed = validation("1", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T17:02:00Z")).value!;
     assert\equal(failed.planFailed, want: true, message: "plan failed");
 }
 
@@ -1158,7 +1344,7 @@ test "dispatch starts a run only when no unfinished run plans the intent" {
     final early = Validation{ id = "7", readAt = "2026-09-26T17:02:00Z", planFailed = false };
     final pending = Validation{ id = "8", readAt = null, planFailed = false };
     final verdict = fun (runs: [Validation]) > [any] {
-        final d = decide(runs, intentAt: intent);
+        final d = decide(runs, intentAt: intent).value!;
         return [d.start, d.notice];
     };
     assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
@@ -1172,26 +1358,22 @@ test "dispatch starts a run only when no unfinished run plans the intent" {
         want: [true, "queue-dispatch-follow-up"], message: "a read in the same second may have missed it");
     assert\equal(verdict([Validation{ id = "7", readAt = "2026-09-26T17:12:00Z", planFailed = true }]),
         want: [true, "queue-dispatch-follow-up"], message: "a failed plan validates nothing");
-    assert\equal(decide([early], intentAt: intent).message,
+    assert\equal(decide([early], intentAt: intent).value!.message,
         want: "run 7 (read the queue at 2026-09-26T17:02:00Z) planned before this intent at 2026-09-26T17:10:00Z; starting one follow-up",
         message: "the notice names the run and both times");
 }
 
 test "start and dispatch refuse to run without the moment the change became ready" {
-    assert\equal(options("start", argv: ["--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: START_FLAGS, optional: [<str>])["--intent-at"],
+    assert\equal(options("start", argv: ["--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: START_FLAGS, optional: [<str>]).value!["--intent-at"],
         want: "2026-09-26T17:10:00Z", message: "start with every flag");
-    assert\equal(options("dispatch", argv: ["--run", "7", "--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: DISPATCH_FLAGS, optional: [<str>])["--run"],
+    assert\equal(options("dispatch", argv: ["--run", "7", "--base", "main", "--intent-at", "2026-09-26T17:10:00Z"], required: DISPATCH_FLAGS, optional: [<str>]).value!["--run"],
         want: "7", message: "dispatch with every flag");
     foreach (c in [["start", "--base", "main"], ["start", "--base", "main", "--intent-at", ""], ["dispatch", "--run", "7", "--base", "main"]]) {
         var refused = false;
-        try {
-            if (c[0] == "start") {
-                _ = options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]);
-            } else {
-                _ = options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]);
-            }
-        } catch (e) {
-            refused = true;
+        if (c[0] == "start") {
+            refused = options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]).error != null;
+        } else {
+            refused = options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]).error != null;
         }
         assert\equal(refused, want: true, message: c.join(" "));
     }
@@ -1202,14 +1384,14 @@ test "CI finishing on a queued head starts a run only when no unfinished run pla
     // ready, so it needs a follow-up; one that has yet to read the queue sees CI green.
     final finished = "2026-09-26T18:40:00Z";
     final verdict = fun (runs: [Validation]) > [any] {
-        final d = decide(runs, intentAt: finished);
+        final d = decide(runs, intentAt: finished).value!;
         return [d.start, d.notice];
     };
-    final queued = validation("9", jobs: planJobs("", conclusion: "", readAt: ""));
-    final setup = validation("9", jobs: planJobs("in_progress", conclusion: "", readAt: ""));
-    final before = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:20:00Z"));
-    final after = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:41:00Z"));
-    final failed = validation("8", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T18:41:00Z"));
+    final queued = validation("9", jobs: planJobs("", conclusion: "", readAt: "")).value!;
+    final setup = validation("9", jobs: planJobs("in_progress", conclusion: "", readAt: "")).value!;
+    final before = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:20:00Z")).value!;
+    final after = validation("8", jobs: planJobs("in_progress", conclusion: "", readAt: "2026-09-26T18:41:00Z")).value!;
+    final failed = validation("8", jobs: planJobs("completed", conclusion: "failure", readAt: "2026-09-26T18:41:00Z")).value!;
     assert\equal(verdict([<Validation>]), want: [true, "queue-dispatch-idle"], message: "no run");
     assert\equal(verdict([queued]), want: [false, "queue-dispatch-pending"], message: "a run waiting its turn");
     assert\equal(verdict([setup]), want: [false, "queue-dispatch-pending"], message: "a run still setting up its plan");
@@ -1223,29 +1405,19 @@ test "reviews dismisses through the queue's own classifier, pinned to the push i
     assert\equal(reviewsArgs("482", head: "abc", base: "main"), want: ["queue", "reviews", "--provider", "github", "--base", "main",
         "--change", "482", "--head", "abc", "--dismiss"], message: "argv");
     foreach (argv in [["--pr", "482", "--base", "main"], ["--pr", "482", "--head", "", "--base", "main"], ["--pr", "482", "--head", "abc"]]) {
-        var refused = false;
-        try {
-            _ = options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
-        } catch (e) {
-            refused = true;
-        }
+        final refused = options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS).error != null;
         assert\equal(refused, want: true, message: argv.join(" "));
     }
     final fork = options("reviews", argv: ["--head", "abc", "--base", "main", "--head-owner", "alice", "--head-branch", "fix"],
-        required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
+        required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS).value!;
     assert\equal([fork["--pr"] ?? "", fork["--head-owner"] ?? "", fork["--head-branch"] ?? ""], want: ["", "alice", "fix"], message: "a fork's run names its head instead of a pull request");
 }
 
 test "a fork's pull request is the open one from its branch still at the head the run saw" {
     final listing = `[{"number": 7, "head": {"sha": "abc"}}, {"number": 9, "head": {"sha": "old"}}]`;
-    assert\equal(pullsAt(listing, head: "abc"), want: ["7"], message: "the one at the head");
-    assert\equal(pullsAt(listing, head: "new").len(), want: 0, message: "pushed again since");
-    var failed = false;
-    try {
-        _ = pullsAt(`{"message": "Bad credentials"}`, head: "abc");
-    } catch (e) {
-        failed = true;
-    }
+    assert\equal(pullsAt(listing, head: "abc").value!, want: ["7"], message: "the one at the head");
+    assert\equal(pullsAt(listing, head: "new").value!.len(), want: 0, message: "pushed again since");
+    final failed = pullsAt(`{"message": "Bad credentials"}`, head: "abc").error != null;
     assert\equal(failed, want: true, message: "an API error is no empty listing");
 }
 

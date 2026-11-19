@@ -345,9 +345,6 @@ no-throw:
       benchmarks/large-monorepo/queue-local.buzz: 2
       evals/buzz/grade.buzz: 1
       evals/buzz/solutions/ports.buzz: 1
-      hack/ci/merge-queue.buzz: 20
-      hack/ci/pull-requests.buzz: 29
-      hack/ci/show-failures.buzz: 5
       hack/dev/bootstrap-checkout.buzz: 2
       hack/lint/banned-words.buzz: 5
       hack/lint/buzz-glue-is-wired-as-plain-argv.buzz: 1

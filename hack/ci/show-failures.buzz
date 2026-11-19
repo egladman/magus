@@ -25,28 +25,36 @@ object Filter {
     run: str = "",
 }
 
-export fun parseFilter(argv: [str]) > Filter !> any {
-    final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run"]);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
+export fun parseFilter(argv: [str]) > result\Result::<Filter> {
+    try {
+        final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run"]);
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail("failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}");
+        }
+        final run = parsed.values["--run"] ?? "";
+        if (run != "" and (std\parseInt(run) ?? 0) <= 0) {
+            return result\fail("failures: --run \"{run}\" is not a run id\n{usage}");
+        }
+        return result\ok::<Filter>(Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run });
+    } catch (err: any) {
+        return result\caught::<Filter>(err, doing: "parse the flags");
     }
-    final run = parsed.values["--run"] ?? "";
-    if (run != "" and (std\parseInt(run) ?? 0) <= 0) {
-        throw "failures: --run \"{run}\" is not a run id\n{usage}";
-    }
-    return Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run };
 }
 
 // logArtifacts names the run's unexpired magus-logs artifacts, as the artifacts API lists them.
-export fun logArtifacts(listing: str) > [str] !> any {
-    final names = mut [<str>];
-    foreach (a in serialize\jsonDecode(listing).q("artifacts").listValue()) {
-        final name = a.q("name").stringValue();
-        if (name.startsWith(ARTIFACT_PREFIX) and !a.q("expired").booleanValue()) {
-            names.append(name);
+export fun logArtifacts(listing: str) > result\Result::<[str]> {
+    try {
+        final names = mut [<str>];
+        foreach (a in serialize\jsonDecode(listing).q("artifacts").listValue()) {
+            final name = a.q("name").stringValue();
+            if (name.startsWith(ARTIFACT_PREFIX) and !a.q("expired").booleanValue()) {
+                names.append(name);
+            }
         }
+        return result\ok::<[str]>(names);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "read the artifacts listing");
     }
-    return names;
 }
 
 export final TAIL_LINES = 80;
@@ -57,14 +65,18 @@ export object FailedJob {
 }
 
 // failedJobs lists the run's jobs that concluded in failure, as `gh run view --json jobs` prints them.
-export fun failedJobs(listing: str) > [FailedJob] !> any {
-    final jobs = mut [<FailedJob>];
-    foreach (j in serialize\jsonDecode(listing).q("jobs").listValue()) {
-        if (j.q("conclusion").stringValue() == "failure") {
-            jobs.append(FailedJob{ id = j.q("databaseId").integerValue(), name = j.q("name").stringValue() });
+export fun failedJobs(listing: str) > result\Result::<[FailedJob]> {
+    try {
+        final jobs = mut [<FailedJob>];
+        foreach (j in serialize\jsonDecode(listing).q("jobs").listValue()) {
+            if (j.q("conclusion").stringValue() == "failure") {
+                jobs.append(FailedJob{ id = j.q("databaseId").integerValue(), name = j.q("name").stringValue() });
+            }
         }
+        return result\ok::<[FailedJob]>(jobs);
+    } catch (err: any) {
+        return result\caught::<[FailedJob]>(err, doing: "read the jobs listing");
     }
-    return jobs;
 }
 
 // tail keeps the last count lines of text.
@@ -92,28 +104,43 @@ export fun covered(job: str, artifacts: [str]) > bool {
 
 // fallbackLogs reads the `gh run view --log-failed` tail of each failed job that no artifact
 // in artifacts accounts for; gh is the call to the gh CLI.
-export fun fallbackLogs(run: str, artifacts: [str], gh: fun (args: [str]) > str !> any) > str !> any {
+export fun fallbackLogs(run: str, artifacts: [str], gh: fun (args: [str]) > result\Result::<str>) > result\Result::<str> {
     final report = mut [<str>];
-    foreach (job in failedJobs(gh(["run", "view", run, "--json", "jobs"]))) {
+    final listing = gh(["run", "view", run, "--json", "jobs"]);
+    if (listing.error != null) {
+        return result\Result::<str>{ error = listing.error };
+    }
+    final failed = failedJobs(listing.value!);
+    if (failed.error != null) {
+        return result\Result::<str>{ error = failed.error };
+    }
+    foreach (job in failed.value!) {
         if (covered(job.name, artifacts: artifacts)) {
             continue;
         }
         final log = gh(["run", "view", "--job", "{job.id}", "--log-failed"]);
-        report.append("== {job.name} (job {job.id}): last {TAIL_LINES} lines of gh run view --job {job.id} --log-failed\n{tail(log, count: TAIL_LINES)}");
+        if (log.error != null) {
+            return result\Result::<str>{ error = log.error };
+        }
+        report.append("== {job.name} (job {job.id}): last {TAIL_LINES} lines of gh run view --job {job.id} --log-failed\n{tail(log.value!, count: TAIL_LINES)}");
     }
-    return report.join("\n");
+    return result\ok::<str>(report.join("\n"));
 }
 
 fun note(line: str) > void {
     io\stderr.write(line + "\n") catch void;
 }
 
-fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (!res.ok) {
-        throw "failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+fun capture(cmd: str, args: [str]) > result\Result::<str> {
+    try {
+        final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!res.ok) {
+            return result\fail("failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}");
+        }
+        return result\ok::<str>(res.stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "{cmd} {args.join(" ")}");
     }
-    return res.stdout;
 }
 
 // No stdout parameter: stdout carries output records only.
@@ -128,8 +155,12 @@ final THIS_COMMIT = "the run of this commit";
 // recentRuns lists the newest runs of the CI workflow, one "<id> <title> (<conclusion>)" line each.
 fun recentRuns() > result\Result::<[str]> {
     try {
-        final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--workflow", WORKFLOW, "--limit", "20",
-            "--json", "databaseId,displayTitle,conclusion,status"])).listValue();
+        final fetched = capture("gh", args: ["run", "list", "--workflow", WORKFLOW, "--limit", "20",
+            "--json", "databaseId,displayTitle,conclusion,status"]);
+        if (fetched.error != null) {
+            return result\Result::<[str]>{ error = fetched.error };
+        }
+        final listed = serialize\jsonDecode(fetched.value!).listValue();
         final lines = mut [<str>];
         foreach (r in listed) {
             var state = r.q("conclusion").stringValue();
@@ -158,7 +189,9 @@ export fun hasFlag(argv: [str], name: str) > bool {
 // main copies the records in the run's artifacts to stdout untouched, for
 // `magus query output --stdin`; a commit with no CI run exits 3.
 export fun main(args: [str]) > void !> any {
-    final given = parseFilter(args);
+    final parsedFilter = parseFilter(args);
+    if (parsedFilter.error != null) { throw parsedFilter.error!.message; }
+    final given = parsedFilter.value!;
     var want = given;
     if (term\isInteractive() and given.run == "" and !hasFlag(args, name: "--commit")) {
         final runs = recentRuns();
@@ -176,16 +209,24 @@ export fun main(args: [str]) > void !> any {
             throw "failures: git rev-parse --verify {want.commit}: exit {parsed.code}: {parsed.stderr}";
         }
         final sha = parsed.stdout.trim();
-        final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--commit", sha, "--workflow", WORKFLOW,
-            "--limit", "1", "--json", "databaseId"])).listValue();
+        final runList = capture("gh", args: ["run", "list", "--commit", sha, "--workflow", WORKFLOW,
+            "--limit", "1", "--json", "databaseId"]);
+        if (runList.error != null) { throw runList.error!.message; }
+        final listed = serialize\jsonDecode(runList.value!).listValue();
         if (listed.len() == 0) {
             note("no {WORKFLOW} run for {sha}");
             os\exit(NOT_FOUND);
         }
         run = "{listed[0].q("databaseId").integerValue()}";
     }
-    final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
-    final fallback = fallbackLogs(run, artifacts: names, gh: fun (ghArgs: [str]) > str !> any => capture("gh", args: ghArgs));
+    final artifactListing = capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]);
+    if (artifactListing.error != null) { throw artifactListing.error!.message; }
+    final namesRun = logArtifacts(artifactListing.value!);
+    if (namesRun.error != null) { throw namesRun.error!.message; }
+    final names = namesRun.value!;
+    final fallbackRun = fallbackLogs(run, artifacts: names, gh: fun (ghArgs: [str]) > result\Result::<str> => capture("gh", args: ghArgs));
+    if (fallbackRun.error != null) { throw fallbackRun.error!.message; }
+    final fallback = fallbackRun.value!;
     if (fallback != "") {
         reportFallback(run, fallback, note);
     }
@@ -197,7 +238,8 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     final dir = fs\tempDir("show-failures-");
-    _ = capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
+    final downloaded = capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
+    if (downloaded.error != null) { throw downloaded.error!.message; }
     var found = 0;
     foreach (f in fs\glob(dir + "/*/" + RECORDS)) {
         io\stdout.write(fs\readFile(f.value)) catch void;
@@ -212,21 +254,21 @@ export fun main(args: [str]) > void !> any {
 final LISTING = "\{\"artifacts\": [\{\"name\": \"magus-logs-01\", \"expired\": false}, \{\"name\": \"magus-history-01\", \"expired\": false}, \{\"name\": \"magus-logs-02\", \"expired\": true}]}";
 
 test "only unexpired magus-logs artifacts are downloaded" {
-    assert\equal(logArtifacts(LISTING) catch [<str>], want: ["magus-logs-01"], message: "names");
+    assert\equal(logArtifacts(LISTING).value ?? [<str>], want: ["magus-logs-01"], message: "names");
 }
 
 final JOBS = "\{\"jobs\": [\{\"databaseId\": 11, \"name\": \"doctor\", \"conclusion\": \"failure\"}, \{\"databaseId\": 12, \"name\": \"lint\", \"conclusion\": \"success\"}]}";
 
 test "a failed plain job falls back to its gh log tail" {
     final seen = mut [<str>];
-    final stub = fun (ghArgs: [str]) > str !> any {
+    final stub = fun (ghArgs: [str]) > result\Result::<str> {
         seen.append(ghArgs.join(" "));
         if (ghArgs.indexOf("--json") != null) {
-            return JOBS;
+            return result\ok::<str>(JOBS);
         }
-        return "setup\nerror one\nerror two";
+        return result\ok::<str>("setup\nerror one\nerror two");
     };
-    final report = fallbackLogs("99", artifacts: [<str>], gh: stub) catch "";
+    final report = fallbackLogs("99", artifacts: [<str>], gh: stub).value ?? "";
     assert\equal(report.indexOf("doctor (job 11)") != null, want: true, message: "names the job");
     assert\equal(report.indexOf("error two") != null, want: true, message: "carries the log");
     assert\equal(report.indexOf("lint") == null, want: true, message: "passing job skipped");
@@ -237,14 +279,14 @@ final MIXED = "\{\"jobs\": [\{\"databaseId\": 21, \"name\": \"1d go\", \"conclus
 
 test "a failed plain job beside a failed shard with an artifact is still read" {
     final seen = mut [<str>];
-    final stub = fun (ghArgs: [str]) > str !> any {
+    final stub = fun (ghArgs: [str]) > result\Result::<str> {
         seen.append(ghArgs.join(" "));
         if (ghArgs.indexOf("--json") != null) {
-            return MIXED;
+            return result\ok::<str>(MIXED);
         }
-        return "doctor says no";
+        return result\ok::<str>("doctor says no");
     };
-    final report = fallbackLogs("99", artifacts: ["magus-logs-1d"], gh: stub) catch "";
+    final report = fallbackLogs("99", artifacts: ["magus-logs-1d"], gh: stub).value ?? "";
     assert\equal(report.indexOf("doctor (job 22)") != null, want: true, message: "plain job read");
     assert\equal(report.indexOf("1d go") == null, want: true, message: "covered shard skipped");
     assert\equal(seen.len(), want: 2, message: "one log call for the one uncovered job");
@@ -267,11 +309,12 @@ test "tail keeps the last lines" {
 }
 
 test "the run id must be a number" {
-    final f = parseFilter(["--run", "37808757097"]) catch Filter{};
+    final f = parseFilter(["--run", "37808757097"]).value ?? Filter{};
     assert\equal(f.run, want: "37808757097", message: "run");
     assert\equal(f.commit, want: "HEAD", message: "default commit");
-    final bad = parseFilter(["--run", "abc"]) catch Filter{ run = "refused" };
-    assert\equal(bad.run, want: "refused", message: "non-numeric run");
+    final bad = parseFilter(["--run", "abc"]);
+    assert\equal(bad.value == null, want: true, message: "non-numeric run");
+    assert\equal(bad.error!.message.startsWith("failures: --run \"abc\" is not a run id"), want: true, message: "refusal");
 }
 
 test "a run id leads each listed run, and a flag is found with or without its value attached" {
