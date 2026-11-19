@@ -1101,7 +1101,14 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["**/gen/*test/*.go", "**/mocks_test.go"]);
     _ = proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
-    mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));
+    final assertions = mockassert\files(fs\readFile(".mockery.yaml"));
+    if (assertions.error != null) {
+        throw assertions.error!.message;
+    }
+    final written = mockassert\write(assertions.value!);
+    if (written.error != null) {
+        throw written.error!.message;
+    }
 }
 
 // Reinstalls the agent skills from their embedded sources in internal/agent/skills.
@@ -2718,9 +2725,17 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final typescript_pct = fs\readFile(typescript).trim();
 
     fs\mkdirAll("gen/site/assets");
-    fs\writeFile("gen/site/assets/go-coverage.svg", content: badges\coverage("go coverage", percent: go_pct, radius: 3));
-    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: badges\coverage("buzz coverage", percent: buzz_pct, radius: 3));
-    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: badges\coverage("typescript coverage", percent: typescript_pct, radius: 3));
+    final go_badge = badges\coverage("go coverage", percent: go_pct, radius: 3);
+    final buzz_badge = badges\coverage("buzz coverage", percent: buzz_pct, radius: 3);
+    final typescript_badge = badges\coverage("typescript coverage", percent: typescript_pct, radius: 3);
+    foreach (badge in [go_badge, buzz_badge, typescript_badge]) {
+        if (badge.error != null) {
+            throw badge.error!.message;
+        }
+    }
+    fs\writeFile("gen/site/assets/go-coverage.svg", content: go_badge.value!);
+    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: buzz_badge.value!);
+    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: typescript_badge.value!);
     magus\log.info("coverage: go " + go_pct + "% ({go_totals["covered"]}/{go_totals["statements"]} statements), buzz "
         + buzz_pct + "%, typescript " + typescript_pct + "%");
 }
