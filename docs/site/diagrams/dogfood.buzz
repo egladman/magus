@@ -1,16 +1,16 @@
 namespace dogfood;
 
-import "magus/figure";
+import "magus/diagram";
 
-export fun dogfoodFigure() > figure\Figure !> any {
-    final commit = figure\step("This commit", sub: "magusfile + Go source", look: figure\Look.plain);
-    final fromSource = figure\step("Built from source", sub: "setup-magus source-path", look: figure\Look.plain);
-    final gates = figure\step("Every gate", sub: "lint, build, test, ci", look: figure\Look.focal);
-    final pinned = figure\step("Last release", sub: "setup-magus git-ref");
-    final compat = figure\step("audit compat", sub: "red is a signal, not a stop", look: figure\Look.optional);
+export fun dogfoodDiagram() > diagram\Diagram !> any {
+    final commit = diagram\step("This commit", sub: "magusfile + Go source", look: diagram\Look.plain);
+    final fromSource = diagram\step("Built from source", sub: "setup-magus source-path", look: diagram\Look.plain);
+    final gates = diagram\step("Every gate", sub: "lint, build, test, ci", look: diagram\Look.focal);
+    final pinned = diagram\step("Last release", sub: "setup-magus git-ref");
+    final compat = diagram\step("audit compat", sub: "red is a signal, not a stop", look: diagram\Look.optional);
     // Two tracks, not a build cycle: a cycle shows the bootstrap but not why one job pins the
     // last release.
-    return figure\of("dogfood",
+    return diagram\of("dogfood",
             title: "magus builds magus, then runs the last release at it too",
             eyebrow: "development",
             desc: "Almost every CI job builds magus from the commit under test and runs it "
@@ -22,10 +22,10 @@ export fun dogfoodFigure() > figure\Figure !> any {
         .flowAcross(commit, dst: fromSource)
         .flowAcross(commit, dst: pinned)
         .flowAcross(fromSource, dst: gates, label: "must pass")
-        .flowAcross(pinned, dst: compat, label: "may fail", stroke: figure\Stroke.focal)
+        .flowAcross(pinned, dst: compat, label: "may fail", stroke: diagram\Stroke.focal)
         .zone("blocking: the binary this commit defines", actors: [fromSource, gates])
         .zone("advisory: the last release, same magusfile", actors: [pinned, compat])
-        .legend(figure\Look.focal, label: "blocks the branch")
-        .legend(figure\Look.optional, label: "advisory only")
+        .legend(diagram\Look.focal, label: "blocks the branch")
+        .legend(diagram\Look.optional, label: "advisory only")
         .unscoped(why: "a CI arrangement, not a Go package");
 }

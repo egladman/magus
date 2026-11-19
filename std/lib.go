@@ -3,7 +3,7 @@ package std
 import (
 	_ "embed"
 
-	figuresrc "github.com/egladman/magus/libs/figure"
+	diagramsrc "github.com/egladman/magus/libs/diagram"
 	resultsrc "github.com/egladman/magus/libs/result"
 )
 
@@ -31,10 +31,10 @@ var sourceBuiltin = []SourceModule{
 		Source: lcovSource,
 	},
 	{
-		Name:   "figure",
-		Path:   "magus/figure",
-		Doc:    "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.",
-		Source: figuresrc.Source,
+		Name:   "diagram",
+		Path:   "magus/diagram",
+		Doc:    "Architecture diagrams drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.",
+		Source: diagramsrc.Source,
 	},
 	{
 		Name:   "modeltiers",

@@ -148,8 +148,8 @@ export fun nodes(kind: str) > result\Result::<[magus\KnowledgeNode]> {
     return result\ok::<[magus\KnowledgeNode]>(found);
 }
 
-// figureSvgs is every drawn figure's light SVG under root, sorted.
-export fun figureSvgs(root: str) > result\Result::<[str]> {
+// diagramSvgs is every drawn diagram's light SVG under root, sorted.
+export fun diagramSvgs(root: str) > result\Result::<[str]> {
     try {
         final paths: mut [str] = mut [];
         foreach (p in fs\glob(fs\join(root, name: "docs/assets/gen/diagram-*-light.svg"))) {
@@ -158,12 +158,12 @@ export fun figureSvgs(root: str) > result\Result::<[str]> {
         _ = paths.sort(fun (a: str, b: str) > bool => a < b);
         return result\ok::<[str]>(paths);
     } catch (err: any) {
-        return result\caught::<[str]>(err, doing: "sources: list figures under {root}");
+        return result\caught::<[str]>(err, doing: "sources: list diagrams under {root}");
     }
 }
 
-// figureId is the id in a figure SVG's name, diagram-<id>-light.svg.
-export fun figureId(svg: str) > str {
+// diagramId is the id in a diagram SVG's name, diagram-<id>-light.svg.
+export fun diagramId(svg: str) > str {
     final base = fs\basename(svg);
     return base.sub(8, len: base.len() - 8 - 10);
 }
@@ -224,19 +224,19 @@ export fun load() > result\Result::<Snapshot> {
                 keptSet[p] = true;
             }
         }
-        final figures: mut {str: bool} = mut {};
-        final svgs = figureSvgs(root);
+        final diagrams: mut {str: bool} = mut {};
+        final svgs = diagramSvgs(root);
         if (svgs.error -> e) {
             return result\Result::<Snapshot>{ error = e };
         }
         foreach (svg in svgs.value!) {
-            figures[figureId(svg)] = true;
+            diagrams[diagramId(svg)] = true;
         }
         final linked = outputLinks(generated, kept: keptSet);
         if (linked.error -> e) {
             return result\Result::<Snapshot>{ error = e };
         }
-        final split = holdout\deal(kept, generated: generated, figures: figures, links: linked.value!);
+        final split = holdout\deal(kept, generated: generated, diagrams: diagrams, links: linked.value!);
         final files: mut [SourceFile] = mut [];
         final byPath: mut {str: SourceFile} = mut {};
         foreach (p in kept) {
@@ -744,9 +744,9 @@ fun inputs() > [{str: any}] {
 }
 
 // write emits gen/sources.jsonl: the pinned downloads, the forced vocabulary sets, the
-// figures and every source file, each line tagged by kind and sorted within it. A
+// diagrams and every source file, each line tagged by kind and sorted within it. A
 // file's sha256 pins the blob every pairs.jsonl span indexes into.
-export fun write(c: Snapshot, figures: [{str: any}], target: str) > result\Result::<{str: int}> {
+export fun write(c: Snapshot, diagrams: [{str: any}], target: str) > result\Result::<{str: int}> {
     final sets = forcedSets(c);
     if (sets.error -> e) {
         return result\Result::<{str: int}>{ error = e };
@@ -759,8 +759,8 @@ export fun write(c: Snapshot, figures: [{str: any}], target: str) > result\Resul
         foreach (s in sets.value!) {
             lines.append(json\stringify(tagged("forced", record: s)));
         }
-        foreach (f in figures) {
-            lines.append(json\stringify(tagged("figure", record: f)));
+        foreach (f in diagrams) {
+            lines.append(json\stringify(tagged("diagram", record: f)));
         }
         final counts: mut {str: int} = mut {};
         foreach (f in c.files) {

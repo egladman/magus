@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/diagram"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/vcs"
@@ -124,7 +124,7 @@ func TestDiagramsListingProbesTheIndexWithoutLoadingTheImportGraph(t *testing.T)
 func TestDiagramSecondRequestIsServedFromTheCache(t *testing.T) {
 	h := NewHandler(chainWorkspace(), nil)
 	var compiles atomic.Int32
-	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Diagram, error) {
 		compiles.Add(1)
 		return render(ctx, g, desc, href)
 	}
@@ -140,7 +140,7 @@ func TestDiagramSecondRequestIsServedFromTheCache(t *testing.T) {
 	assert.Equal(t, int32(1), compiles.Load())
 
 	serve("/api/v1/diagrams/projects?focus=libs/core&depth=1")
-	assert.Equal(t, int32(2), compiles.Load(), "another lens is another figure")
+	assert.Equal(t, int32(2), compiles.Load(), "another lens is another diagram")
 
 	h.ws = func() cannedWorkspace {
 		ws := chainWorkspace()
@@ -154,7 +154,7 @@ func TestDiagramSecondRequestIsServedFromTheCache(t *testing.T) {
 func TestDiagramConcurrentRequestsRenderOnce(t *testing.T) {
 	h := NewHandler(chainWorkspace(), nil)
 	var compiles atomic.Int32
-	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Diagram, error) {
 		compiles.Add(1)
 		return render(ctx, g, desc, href)
 	}
@@ -183,7 +183,7 @@ func TestDiagramRefusalIsNotCached(t *testing.T) {
 	}
 	h := NewHandler(ws, nil)
 	var compiles atomic.Int32
-	h.compile = func(ctx context.Context, g graph, desc, href string) (Figure, error) {
+	h.compile = func(ctx context.Context, g graph, desc, href string) (Diagram, error) {
 		compiles.Add(1)
 		return render(ctx, g, desc, href)
 	}
@@ -240,7 +240,7 @@ func TestDiagramRendersTargets(t *testing.T) {
 	assert.Contains(t, unknown.Body.String(), `"reason":"MGS9024"`)
 }
 
-func TestDiagramFocusAndDepthCutTheFigure(t *testing.T) {
+func TestDiagramFocusAndDepthCutTheDiagram(t *testing.T) {
 	w := get(t, chainWorkspace(), "/api/v1/diagrams/projects?focus=libs/core&depth=1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var out Rendered
@@ -326,32 +326,32 @@ func TestDiagramSourceURL(t *testing.T) {
 	assert.Empty(t, out.SourceURL)
 }
 
-// The server hands figure\draw a Figure built as data; the browser builds the same record.
-func TestDiagramFigureOfIsData(t *testing.T) {
+// The server hands diagram\draw a Diagram built as data; the browser builds the same record.
+func TestBuildDiagramIsData(t *testing.T) {
 	g := graph{
 		id: "projects", title: "Projects", claim: "flow",
 		nodes: []Node{{ID: "a", Anchor: "app", Label: "app"}, {ID: "b", Anchor: "libs/lib", Label: "lib"}},
 		edges: []edge{{src: "a", dst: "b"}},
 	}
-	plain := figure.Look("plain")
-	app := &figure.Actor{Name: "app", Link: "/code/app", Look: &plain}
-	lib := &figure.Actor{Name: "lib", Link: "/code/libs/lib", Look: &plain}
-	assert.Equal(t, figure.Figure{
+	plain := diagram.Look("plain")
+	app := &diagram.Actor{Name: "app", Link: "/code/app", Look: &plain}
+	lib := &diagram.Actor{Name: "lib", Link: "/code/libs/lib", Look: &plain}
+	assert.Equal(t, diagram.Diagram{
 		ID: "projects", Title: "Projects", Desc: "focus app, depth 1",
 		UnscopedWhy: "served from the workspace graph: focus app, depth 1",
-		Boxes:       []figure.Box{{Actor: app}, {Actor: lib}},
-		Flows:       []figure.Flow{{Src: figure.End{Actor: app}, Dst: figure.End{Actor: lib}}},
-	}, buildFigure(g, "focus app, depth 1", "/code/{path}"))
+		Boxes:       []diagram.Box{{Actor: app}, {Actor: lib}},
+		Flows:       []diagram.Flow{{Src: diagram.End{Actor: app}, Dst: diagram.End{Actor: lib}}},
+	}, buildDiagram(g, "focus app, depth 1", "/code/{path}"))
 
 	g.claim = KindImports
-	assert.Equal(t, figure.Figure{
+	assert.Equal(t, diagram.Diagram{
 		ID: "projects", Title: "Projects", Desc: "",
 		GraphEdges: true,
-		Boxes: []figure.Box{
-			{Label: "app", Dir: &figure.Dir{Path: "app", ID: "dir:app", Language: "go", Imports: []string{"libs/lib"}, ImportsIndexed: true, Files: 1}},
-			{Label: "lib", Dir: &figure.Dir{Path: "libs/lib", ID: "dir:libs/lib", Language: "go", ImportsIndexed: true, Files: 1}},
+		Boxes: []diagram.Box{
+			{Label: "app", Dir: &diagram.Dir{Path: "app", ID: "dir:app", Language: "go", Imports: []string{"libs/lib"}, ImportsIndexed: true, Files: 1}},
+			{Label: "lib", Dir: &diagram.Dir{Path: "libs/lib", ID: "dir:libs/lib", Language: "go", ImportsIndexed: true, Files: 1}},
 		},
-	}, buildFigure(g, "", "/code/{path}"))
+	}, buildDiagram(g, "", "/code/{path}"))
 }
 
 func anchors(nodes []Node) []string {

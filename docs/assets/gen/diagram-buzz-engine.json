@@ -4,9 +4,9 @@
     "flow": 1,
     "imports": 8
   },
-  "figure": "buzz-engine",
+  "diagram": "buzz-engine",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:d30d96a8c6b1f0078b8676bc1e684ff31c5936cbea02f4ca5ac53740b64e9360",
+  "stamp": "sha256:3f8935f4153b8fe8c5bad2463ed189a78d95e424db8f0df2e678cd5669cb5575",
   "undrilled": []
 }

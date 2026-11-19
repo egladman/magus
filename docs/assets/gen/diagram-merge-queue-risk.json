@@ -4,9 +4,9 @@
     "flow": 7,
     "imports": 2
   },
-  "figure": "merge-queue-risk",
+  "diagram": "merge-queue-risk",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:e3f9d77dd562221ef0340f4da949721b333a08d9ba5bfc1a52194227b808527c",
+  "stamp": "sha256:aae59b12e18ef904955bde676b1dc519dbeecc79377572d1bb146b47b1492b7f",
   "undrilled": []
 }

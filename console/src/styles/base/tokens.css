@@ -247,7 +247,7 @@
   --console-node-module:     #2b5c8c;  /* 6.97:1 */
   --console-node-dir:        #4071a2;  /* 5.12:1 */
   --console-node-file:       #5b85b1;  /* 3.86:1 */
-  --console-node-figure:     #6b92bc;  /* 3.25:1 */
+  --console-node-diagram:     #6b92bc;  /* 3.25:1 */
 }
 /* Prose, h 310 */
 :root {
@@ -313,7 +313,7 @@
   --console-node-module:     #86b1dd;  /* 6.48:1 */
   --console-node-dir:        #9bc7f5;  /* 8.23:1 */
   --console-node-file:       #bdddff;  /* 10.36:1 */
-  --console-node-figure:     #e0efff;  /* 12.44:1 */
+  --console-node-diagram:     #e0efff;  /* 12.44:1 */
 }
 /* Prose, h 310 */
 :root.pf-v6-theme-dark {
@@ -353,9 +353,9 @@
   --console-qr-frame: var(--pf-t--color--white);
 }
 
-/* magus/figure paints an inlined figure with var(--magus-diagram-*, light hex). Each role maps onto a
+/* magus/diagram paints an inlined diagram with var(--magus-diagram-*, light hex). Each role maps onto a
    theme-aware slot, so there is no dark copy. soft stays unmixed because a mix toward the paper fell
-   under 4.5:1 at the figure's smallest type. The Diagrams app's tests pin all nine. */
+   under 4.5:1 at the diagram's smallest type. The Diagrams app's tests pin all nine. */
 :root {
   --magus-diagram-paper: var(--pf-t--global--background--color--primary--default);
   --magus-diagram-fill: var(--console-chrome);

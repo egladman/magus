@@ -4,10 +4,10 @@
     "flow": 2,
     "imports": 4
   },
-  "figure": "server-share",
+  "diagram": "server-share",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:fb60d34eb9bce769b4807c4ad44acc4a4a21ebe788f95d19eb01b92441479fa4",
+  "stamp": "sha256:00d9c266ee2e45cce5ba642b689f6c20317824a103f34026e26621d92ee36c8d",
   "undrilled": [
     "Shared Connect reads",
     "Never on a share"

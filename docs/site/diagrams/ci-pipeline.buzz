@@ -1,12 +1,12 @@
 namespace ciPipeline;
 
-import "magus/figure";
+import "magus/diagram";
 
-export fun ciPipelineFigure() > figure\Figure !> any {
-    final cmd = figure\step("magus affected ci", look: figure\Look.focal);
+export fun ciPipelineDiagram() > diagram\Diagram !> any {
+    final cmd = diagram\step("magus affected ci", look: diagram\Look.focal);
     // A fan-out, not a chain: drawn as a sequence, it read as magus owning a fixed pipeline,
     // which the page around it says magus does not.
-    final f = figure\of("ci-pipeline",
+    final f = diagram\of("ci-pipeline",
             title: "ci declares steps, not an order",
             eyebrow: "targets",
             desc: "A ci target names its steps in a single needs call, so they are independent "
@@ -15,11 +15,11 @@ export fun ciPipelineFigure() > figure\Figure !> any {
         .actor(cmd)
         .unscoped(why: "a magusfile convention, not a package: nothing in the tree to hold it to");
     foreach (step in ["generate", "format", "lint", "build", "test", "security"]) {
-        _ = f.actor(figure\step(step, look: figure\Look.plain));
+        _ = f.actor(diagram\step(step, look: diagram\Look.plain));
     }
     // An actor is keyed by its name, so these join the boxes declared above.
     foreach (step in ["generate", "build", "format", "test", "lint", "security"]) {
-        _ = f.flowAcross(cmd, dst: figure\step(step, look: figure\Look.plain));
+        _ = f.flowAcross(cmd, dst: diagram\step(step, look: diagram\Look.plain));
     }
     return f;
 }

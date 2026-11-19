@@ -1,16 +1,16 @@
 ---
-title: figure module
+title: diagram module
 generated_from: reference/buzz/
-aliases: [modules/figure]
-description: "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls."
-tags: [figure, module, stdlib, magusfile]
+aliases: [modules/diagram]
+description: "Architecture diagrams drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls."
+tags: [diagram, module, stdlib, magusfile]
 ---
 
-# figure
+# diagram
 
-Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.
+Architecture diagrams drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.
 
-> **Naming convention:** import the module under its bare name (`import "figure"`), reach members with a backslash, and call methods in `camelCase`: `figure\someMethod`.
+> **Naming convention:** import the module under its bare name (`import "diagram"`), reach members with a backslash, and call methods in `camelCase`: `diagram\someMethod`.
 
 ## Methods
 
@@ -18,7 +18,7 @@ Architecture figures drawn from graph records: boxes and groups over Dir records
 
 without is dirs less drop, in the order dirs holds them.
 
-**Signature:** `figure\without(dirs, drop) -> [magus\Dir]`
+**Signature:** `diagram\without(dirs, drop) -> [magus\Dir]`
 
 | Parameter | Type          | Optional | Description |
 | --------- | ------------- | -------- | ----------- |
@@ -31,7 +31,7 @@ without is dirs less drop, in the order dirs holds them.
 
 person is someone outside the code: a user, a reviewer, an operator. look defaults to
 
-**Signature:** `figure\person(name, [sub], [tag], [link], [look]) -> Actor`
+**Signature:** `diagram\person(name, [sub], [tag], [link], [look]) -> Actor`
 
 | Parameter | Type    | Optional | Description |
 | --------- | ------- | -------- | ----------- |
@@ -45,9 +45,9 @@ person is someone outside the code: a user, a reviewer, an operator. look defaul
 
 ### external
 
-external is something outside the code the figure draws: a vendor service, a host, a
+external is something outside the code the diagram draws: a vendor service, a host, a
 
-**Signature:** `figure\external(name, [sub], [tag], [link], [look]) -> Actor`
+**Signature:** `diagram\external(name, [sub], [tag], [link], [look]) -> Actor`
 
 | Parameter | Type    | Optional | Description |
 | --------- | ------- | -------- | ----------- |
@@ -63,7 +63,7 @@ external is something outside the code the figure draws: a vendor service, a hos
 
 step is one step of a process no directory holds: a CI job, a decision, a role. It is
 
-**Signature:** `figure\step(name, [sub], [tag], [link], [look]) -> Actor`
+**Signature:** `diagram\step(name, [sub], [tag], [link], [look]) -> Actor`
 
 | Parameter | Type    | Optional | Description |
 | --------- | ------- | -------- | ----------- |
@@ -79,7 +79,7 @@ step is one step of a process no directory holds: a CI job, a decision, a role. 
 
 stage is a step that lives inside one package, named by the symbol that carries it out:
 
-**Signature:** `figure\stage(dir, refs, [name], [sub], [tag], [look]) -> Actor`
+**Signature:** `diagram\stage(dir, refs, [name], [sub], [tag], [look]) -> Actor`
 
 | Parameter | Type               | Optional | Description |
 | --------- | ------------------ | -------- | ----------- |
@@ -94,9 +94,9 @@ stage is a step that lives inside one package, named by the symbol that carries 
 
 ### of
 
-of starts an empty figure. direction defaults to Direction.across. level is the one level
+of starts an empty diagram. direction defaults to Direction.across. level is the one level
 
-**Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction], [level]) -> mut Figure`
+**Signature:** `diagram\of(id, [title], [eyebrow], [desc], [direction], [level]) -> mut Diagram`
 
 | Parameter   | Type         | Optional | Description |
 | ----------- | ------------ | -------- | ----------- |
@@ -107,42 +107,42 @@ of starts an empty figure. direction defaults to Direction.across. level is the 
 | `direction` | `Direction?` | yes      |             |
 | `level`     | `Level?`     | yes      |             |
 
-**Returns:** mut Figure
+**Returns:** mut Diagram
 
 ### draw
 
 draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
 
-**Signature:** `figure\draw(f, theme, [anchorHref]) -> str`
-
-| Parameter    | Type     | Optional | Description |
-| ------------ | -------- | -------- | ----------- |
-| `f`          | `Figure` |          |             |
-| `theme`      | `Theme`  |          |             |
-| `anchorHref` | `str`    | yes      |             |
-
-**Returns:** str
-
-### drawDiagram
-
-drawDiagram paints d, a Figure's diagram(), with theme, as draw
-
-**Signature:** `figure\drawDiagram(d, theme, [anchorHref], [drillHref]) -> str`
+**Signature:** `diagram\draw(f, theme, [anchorHref]) -> str`
 
 | Parameter    | Type      | Optional | Description |
 | ------------ | --------- | -------- | ----------- |
-| `d`          | `Diagram` |          |             |
+| `f`          | `Diagram` |          |             |
 | `theme`      | `Theme`   |          |             |
 | `anchorHref` | `str`     | yes      |             |
-| `drillHref`  | `str`     | yes      |             |
+
+**Returns:** str
+
+### drawLayout
+
+drawLayout paints d, a Diagram's layout(), with theme, as draw
+
+**Signature:** `diagram\drawLayout(d, theme, [anchorHref], [drillHref]) -> str`
+
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `d`          | `Layout` |          |             |
+| `theme`      | `Theme`  |          |             |
+| `anchorHref` | `str`    | yes      |             |
+| `drillHref`  | `str`    | yes      |             |
 
 **Returns:** str
 
 ### nodeFact
 
-nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
+nodeFact is the line a diagram's stamp records for n. A box anchoring a symbol records the
 
-**Signature:** `figure\nodeFact(n) -> str`
+**Signature:** `diagram\nodeFact(n) -> str`
 
 | Parameter | Type   | Optional | Description |
 | --------- | ------ | -------- | ----------- |
@@ -152,13 +152,13 @@ nodeFact is the line a figure's stamp records for n. A box anchoring a symbol re
 
 ### drillLinks
 
-drillLinks maps the id of each box in d that drills down to the figure it links to.
+drillLinks maps the id of each box in d that drills down to the diagram it links to.
 
-**Signature:** `figure\drillLinks(d) -> {str:str}`
+**Signature:** `diagram\drillLinks(d) -> {str:str}`
 
-| Parameter | Type      | Optional | Description |
-| --------- | --------- | -------- | ----------- |
-| `d`       | `Diagram` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `d`       | `Layout` |          |             |
 
 **Returns:** {str:str}
 
@@ -166,24 +166,24 @@ drillLinks maps the id of each box in d that drills down to the figure it links 
 
 claims counts d's connectors by what each asserts: "imports" and "calls" the graph holds,
 
-**Signature:** `figure\claims(d) -> {str:int}`
+**Signature:** `diagram\claims(d) -> {str:int}`
 
-| Parameter | Type      | Optional | Description |
-| --------- | --------- | -------- | ----------- |
-| `d`       | `Diagram` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `d`       | `Layout` |          |             |
 
 **Returns:** {str:int}
 
 ### atlas
 
-atlas reads figures together. column is the widest a figure may lay out, in SVG units:
+atlas reads diagrams together. column is the widest a diagram may lay out, in SVG units:
 
-**Signature:** `figure\atlas(figures, [column]) -> Atlas`
+**Signature:** `diagram\atlas(diagrams, [column]) -> Atlas`
 
-| Parameter | Type       | Optional | Description |
-| --------- | ---------- | -------- | ----------- |
-| `figures` | `[Figure]` |          |             |
-| `column`  | `int`      | yes      |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `diagrams` | `[Diagram]` |          |             |
+| `column`   | `int`       | yes      |             |
 
 **Returns:** Atlas
 

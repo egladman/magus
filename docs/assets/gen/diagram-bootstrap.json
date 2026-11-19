@@ -4,9 +4,9 @@
     "flow": 9,
     "imports": 0
   },
-  "figure": "bootstrap",
+  "diagram": "bootstrap",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:b9b2d44fc8bf874ec50194daaff419d0fa5bf625f44536b8c86e68cdbdf9ab2f",
+  "stamp": "sha256:281bcc143f489a9b2e61d19bfc80045c512233a8be4bb724bec0970eceebb124",
   "undrilled": []
 }

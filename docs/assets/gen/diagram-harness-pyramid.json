@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 0
   },
-  "figure": "harness-pyramid",
+  "diagram": "harness-pyramid",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:a4ded18234e6420f1d14ca32bc109696400ccbe1e05162e97961e32be5a8e03f",
+  "stamp": "sha256:d8685a4d1c1fdad1a0e0009eaea97cf1685969985b467b83bb4f06b19bc2e50e",
   "undrilled": []
 }

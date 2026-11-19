@@ -33,8 +33,8 @@ func TestExcludedModules(t *testing.T) {
 		"base64", "csv", "diff", "hex", "ini", "log", "math", "merge", "sort", "url",
 		"flags", "html",
 		"magus",
-		"result", // pure Buzz: it imports nothing, and figure imports it
-		"figure", // pure Buzz: it takes magus\ records as values and calls no host module
+		"result",  // pure Buzz: it imports nothing, and diagram imports it
+		"diagram", // pure Buzz: it takes magus\ records as values and calls no host module
 	}
 	got := names(ExcludedModules(available))
 	assert.ElementsMatch(t, []string{

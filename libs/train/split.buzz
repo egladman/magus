@@ -193,7 +193,7 @@ export fun plan(items: [Item], links: [[str]]) > [Placed] {
         paths.append(it.path);
     }
     final none: {str: bool} = {};
-    final dealt = holdout\deal(paths, generated: none, figures: none, links: links);
+    final dealt = holdout\deal(paths, generated: none, diagrams: none, links: links);
     final dealtTotal: mut {str: int} = mut {};
     foreach (it in items) {
         dealtTotal[it.language] = total(dealtTotal, key: it.language) + it.bytes;

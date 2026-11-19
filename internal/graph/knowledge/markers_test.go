@@ -127,7 +127,7 @@ func TestAssembleMarkers(t *testing.T) {
 		},
 	}, share)
 	gone, _ := g.node("marker:internal/share/share.go:3")
-	assert.Equal(t, "no docs page embeds figure gone", gone.Attrs[attrMarkerUnresolved])
+	assert.Equal(t, "no docs page embeds diagram gone", gone.Attrs[attrMarkerUnresolved])
 	nowhere, _ := g.node("marker:internal/client/c.go:5")
 	assert.Equal(t, "magus:calls destination nowhere is not a directory", nowhere.Attrs[attrMarkerUnresolved])
 

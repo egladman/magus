@@ -1,14 +1,14 @@
-// figure-link.test.ts - the payload of a #figure= link, read the way figure-link.buzz writes it:
+// diagram-link.test.ts - the payload of a #diagram-link= link, read the way diagram-link.buzz writes it:
 // JSON, UTF-8, base64url with no padding. Every refusal names what was wrong with the link.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeFigureLink } from "./figure-link";
-import { figureForLink, linkedRows } from "./wasm";
+import { decodeDiagramLink } from "./diagram-link";
+import { diagramForLink, linkedRows } from "./wasm";
 
-// The payload figure-link.buzz's figureLink writes for the graph decoded below: UTF-8 JSON as
+// The payload diagram-link.buzz's diagramLink writes for the graph decoded below: UTF-8 JSON as
 // unpadded base64url. The last node's label puts a "-" in it. Two edges are plain and one is
-// optional and labelled, the way a session figure draws spawns and dependencies.
+// optional and labelled, the way a session diagram draws spawns and dependencies.
 const FIXTURE =
   "eyJ2IjoyLCJraW5kIjoiZGVwcyIsInRpdGxlIjoiU2Vzc2lvbiBzLTE6IGNhZsOpIOKGkiBqb2JzIiwibm9kZXMiOlt7ImlkIjoic2Vzc2lvbiIsImxhYmVsIjoic2Vzc2lvbiIsInNlZWQiOnRydWV9LHsiaWQiOiJqb2ItYSIsImxhYmVsIjoiam9iLWEgKGRvbmUpIiwic2VlZCI6ZmFsc2V9LHsiaWQiOiJqb2ItYiIsImxhYmVsIjoiasO2Yi1iPz8-Iiwic2VlZCI6ZmFsc2V9XSwiZWRnZXMiOltbInNlc3Npb24iLCJqb2ItYSJdLFsic2Vzc2lvbiIsImpvYi1iIl0sWyJqb2ItYSIsImpvYi1iIiwib3B0aW9uYWwiLCJhZnRlciJdXX0";
 
@@ -29,13 +29,13 @@ const ok = {
 };
 
 function refusal(payload: string): string {
-  const read = decodeFigureLink(payload);
+  const read = decodeDiagramLink(payload);
   assert.ok(read.error, "expected a refusal");
   return read.error.message;
 }
 
 test("the fixture decodes to the graph it was built from", () => {
-  assert.deepEqual(decodeFigureLink(FIXTURE), {
+  assert.deepEqual(decodeDiagramLink(FIXTURE), {
     value: {
       title: "Session s-1: café → jobs",
       nodes: [
@@ -64,7 +64,7 @@ test("every stroke and label survives the round trip", () => {
     ["b", "a", "external", "calls"],
     ["a", "b", "plain", "spawns"],
   ];
-  const read = decodeFigureLink(encode({ ...ok, nodes, edges }));
+  const read = decodeDiagramLink(encode({ ...ok, nodes, edges }));
   assert.ok(!read.error, read.error?.message);
   assert.deepEqual(
     read.value.edges.map((e) => [e.from, e.to, e.stroke, e.label]),
@@ -79,16 +79,16 @@ test("every stroke and label survives the round trip", () => {
 });
 
 test("a padded payload is read as well", () => {
-  assert.equal(decodeFigureLink(FIXTURE + "==").error, undefined);
+  assert.equal(decodeDiagramLink(FIXTURE + "==").error, undefined);
 });
 
 test("a node without a seed flag is no seed", () => {
-  const read = decodeFigureLink(encode({ ...ok, nodes: [{ id: "a", label: "a" }] }));
+  const read = decodeDiagramLink(encode({ ...ok, nodes: [{ id: "a", label: "a" }] }));
   assert.deepEqual(read.value?.nodes, [{ id: "a", label: "a", seed: false }]);
 });
 
 test("an empty payload is refused", () => {
-  assert.match(refusal(""), /no figure/);
+  assert.match(refusal(""), /no diagram/);
 });
 
 test("characters outside base64url are refused", () => {
@@ -118,7 +118,7 @@ test("an unknown version is refused by name", () => {
 });
 
 test("an unknown kind is refused by name", () => {
-  assert.match(refusal(encode({ ...ok, kind: "flow" })), /"flow" figure/);
+  assert.match(refusal(encode({ ...ok, kind: "flow" })), /"flow" diagram/);
 });
 
 test("a missing title, nodes or edges is refused", () => {
@@ -155,7 +155,7 @@ test("an edge that is not two known ids, a stroke and a label is refused by inde
 // ---- the record the runtime draws --------------------------------------------------------
 
 const linked = (seeds: number) => {
-  const read = decodeFigureLink(
+  const read = decodeDiagramLink(
     encode({
       ...ok,
       nodes: ["a", "b", "c", "d"].map((id, i) => ({ id, label: id, seed: i < seeds })),
@@ -171,7 +171,7 @@ const linked = (seeds: number) => {
 };
 
 test("the record is actors and flows carrying each edge's stroke and label, seeds tagged edited", () => {
-  const built = figureForLink(linked(1));
+  const built = diagramForLink(linked(1));
   assert.ok(!built.error);
   const f = built.value;
   assert.deepEqual(
@@ -193,11 +193,11 @@ test("the record is actors and flows carrying each edge's stroke and label, seed
   );
   assert.equal(f.title, "t");
   assert.equal(f.graph_edges, false);
-  assert.notEqual(f.unscoped_why, "", "an actor-only figure says why it draws no directory");
+  assert.notEqual(f.unscoped_why, "", "an actor-only diagram says why it draws no directory");
 });
 
-test("seeds past the figure's accent budget are tagged and left plain", () => {
-  const built = figureForLink(linked(3));
+test("seeds past the diagram's accent budget are tagged and left plain", () => {
+  const built = diagramForLink(linked(3));
   assert.ok(!built.error);
   const f = built.value;
   assert.deepEqual(
@@ -212,7 +212,7 @@ test("seeds past the figure's accent budget are tagged and left plain", () => {
 });
 
 test("a label two nodes share takes the node's id", () => {
-  const read = decodeFigureLink(
+  const read = decodeDiagramLink(
     encode({
       ...ok,
       nodes: [
@@ -222,7 +222,7 @@ test("a label two nodes share takes the node's id", () => {
     }),
   );
   assert.ok(!read.error);
-  const built = figureForLink(read.value);
+  const built = diagramForLink(read.value);
   assert.ok(!built.error);
   assert.deepEqual(
     built.value.boxes.map((b) => b.actor?.name),

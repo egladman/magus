@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 5
   },
-  "figure": "lease-loop",
+  "diagram": "lease-loop",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:4429ce303246bf0fce6ff0880aa68408d22a84c62f522ea7a49ca6fbdb33cce3",
+  "stamp": "sha256:f55515c5895f4a5a9d7318457af5e6a7bf2b9b05906b23f2274f0c135f3c9ad6",
   "undrilled": []
 }

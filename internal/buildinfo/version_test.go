@@ -22,13 +22,13 @@ func TestUnknownVersionMatchesWardDevVersion(t *testing.T) {
 	assert.Equal(t, ward.DevVersion, UnknownVersion)
 }
 
-// The digest is what diagrams-generate keys on, so it must name the figure.buzz this
+// The digest is what diagrams-generate keys on, so it must name the diagram.buzz this
 // binary was built from.
-func TestVersionOutputDigestsTheEmbeddedFigureSource(t *testing.T) {
-	disk, err := os.ReadFile(filepath.Join("..", "..", "libs", "figure", "figure.buzz"))
+func TestVersionOutputDigestsTheEmbeddedDiagramSource(t *testing.T) {
+	disk, err := os.ReadFile(filepath.Join("..", "..", "libs", "diagram", "diagram.buzz"))
 	require.NoError(t, err)
 	sum := sha256.Sum256(disk)
-	assert.Equal(t, hex.EncodeToString(sum[:]), NewVersionOutput(types.MagusBuild{}, "").Embedded.FigureSHA256)
+	assert.Equal(t, hex.EncodeToString(sum[:]), NewVersionOutput(types.MagusBuild{}, "").Embedded.DiagramSHA256)
 }
 
 func TestServerLine(t *testing.T) {

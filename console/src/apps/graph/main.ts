@@ -2,7 +2,7 @@ import { errMessage } from "../../lib/guards";
 import { MagusError, attempt, fail, fromPromise, ok, type Result } from "../../gen/magus/types";
 import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import type { AppInstance } from "../../desktop/standalone";
-import { activate as activateFigures } from "./diagrams/main";
+import { activate as activateDiagrams } from "./diagrams/main";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
@@ -164,7 +164,7 @@ const KINDS = [
   "module",
   "file",
   "dir",
-  "figure",
+  "diagram",
   "target",
   "spell",
   "op",
@@ -3693,7 +3693,7 @@ let suppressHash = false;
 
 // Fragment keys that name the GRAPH rather than the view: updateHash copies these through
 // rather than rewriting them. `data` is absent on purpose - it bails out of updateHash entirely.
-const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor", "figure"];
+const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor", "diagram-link"];
 
 function updateHash() {
   renderScope(); // called wherever the applied state changes, which is what the bar reflects
@@ -5681,7 +5681,7 @@ export async function activate() {
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
   // works in the live/empty states as well.
   wireToolbarOverflow();
-  // Before any early return too: the Figures mode works whether or not a graph loads.
+  // Before any early return too: the Diagrams mode works whether or not a graph loads.
   wireGraphModes(lifecycle.signal);
 
   // Register file-open listeners before any early return so the installed PWA
@@ -6100,7 +6100,8 @@ function bootWireEvents(lifecycleSignal: AbortSignal) {
   window.addEventListener(
     "hashchange",
     () => {
-      if (hashParams().figure !== undefined && graphMode !== "figures") setGraphMode("figures");
+      if (hashParams()["diagram-link"] !== undefined && graphMode !== "diagrams")
+        setGraphMode("diagrams");
       suppressHash = true;
       applyDeepLinks();
       suppressHash = false;
@@ -6379,17 +6380,17 @@ async function bootLive(lifecycleSignal: AbortSignal) {
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
-// Figures is the Graph's second mode: the diagrams view (./diagrams), drawn by the server from the
+// Diagrams is the Graph's second mode: the diagrams view (./diagrams), drawn by the server from the
 // same workspace graph, mounted in the explorer's place the way the Dashboard mounts its Jobs
-// view. /console/diagrams/ opens it, and so does a #figure= link, which carries its own graph.
-type GraphMode = "explore" | "figures";
+// view. /console/diagrams/ opens it, and so does a #diagram-link= link, which carries its own graph.
+type GraphMode = "explore" | "diagrams";
 let graphMode: GraphMode = "explore";
-let figuresMount: AppInstance | null = null;
+let diagramsMount: AppInstance | null = null;
 // The console's word on this pane; the explorer is shown only while it is true AND in front.
 let paneVisible = true;
 
 function isGraphMode(mode: string | null): mode is GraphMode {
-  return mode === "explore" || mode === "figures";
+  return mode === "explore" || mode === "diagrams";
 }
 
 function installGraphKeys(): void {
@@ -6397,44 +6398,44 @@ function installGraphKeys(): void {
   uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 }
 
-function disposeFigures(): void {
-  figuresMount?.deactivate();
-  figuresMount = null;
+function disposeDiagrams(): void {
+  diagramsMount?.deactivate();
+  diagramsMount = null;
 }
 
 function setGraphMode(mode: GraphMode): void {
   const app = document.querySelector<HTMLElement>(".console-graph-app");
-  const host = el("graph-figures-host");
+  const host = el("graph-diagrams-host");
   if (!app || !host) return;
   graphMode = mode;
   app.hidden = mode !== "explore";
-  host.hidden = mode !== "figures";
-  const controls = el("graph-figures-controls");
-  if (controls) controls.hidden = mode !== "figures";
+  host.hidden = mode !== "diagrams";
+  const controls = el("graph-diagrams-controls");
+  if (controls) controls.hidden = mode !== "diagrams";
   showExplorer(paneVisible && mode === "explore");
-  if (mode === "figures") {
-    // The figure reads f, +, - and 0 on its own frame; the explorer's single keys would fire too.
+  if (mode === "diagrams") {
+    // The diagram reads f, +, - and 0 on its own frame; the explorer's single keys would fire too.
     uninstallKeys?.();
     uninstallKeys = null;
-    if (!figuresMount) figuresMount = activateFigures(host);
-    figuresMount.setVisible?.(paneVisible);
+    if (!diagramsMount) diagramsMount = activateDiagrams(host);
+    diagramsMount.setVisible?.(paneVisible);
     return;
   }
   // Rebuilt on return rather than kept hidden, the Jobs view's reason: no stale poll or listener.
-  disposeFigures();
+  disposeDiagrams();
   installGraphKeys();
 }
 
 function wireGraphModes(signal: AbortSignal): void {
   document
-    .querySelector("[data-graph-mode='figures']")
-    ?.addEventListener("click", () => setGraphMode("figures"), { signal });
-  el("graph-figures-back")?.addEventListener("click", () => setGraphMode("explore"), { signal });
+    .querySelector("[data-graph-mode='diagrams']")
+    ?.addEventListener("click", () => setGraphMode("diagrams"), { signal });
+  el("graph-diagrams-back")?.addEventListener("click", () => setGraphMode("explore"), { signal });
   registerCommand({
-    id: "graph.figures.toggle",
-    label: "Graph: show the figures",
+    id: "graph.diagrams.toggle",
+    label: "Graph: show the diagrams",
     group: "Graph",
-    run: () => setGraphMode(graphMode === "figures" ? "explore" : "figures"),
+    run: () => setGraphMode(graphMode === "diagrams" ? "explore" : "diagrams"),
   });
   onModeRequest(
     "graph",
@@ -6445,8 +6446,8 @@ function wireGraphModes(signal: AbortSignal): void {
   );
   const intent = takeModeIntent("graph");
   if (isGraphMode(intent)) setGraphMode(intent);
-  // A shared figure link names its mode itself and wins over an intent.
-  if (hashParams().figure !== undefined) setGraphMode("figures");
+  // A shared diagram link names its mode itself and wins over an intent.
+  if (hashParams()["diagram-link"] !== undefined) setGraphMode("diagrams");
 }
 
 // setVisible is the console's app contract (page.ts). Here it is not a formality: a graph
@@ -6457,7 +6458,7 @@ function wireGraphModes(signal: AbortSignal): void {
 // that drifted while they were elsewhere.
 export function setVisible(visible: boolean): void {
   paneVisible = visible;
-  figuresMount?.setVisible?.(visible && graphMode === "figures");
+  diagramsMount?.setVisible?.(visible && graphMode === "diagrams");
   showExplorer(visible && graphMode === "explore");
 }
 
@@ -6477,7 +6478,7 @@ function showExplorer(visible: boolean): void {
 }
 
 export function deactivate(): void {
-  disposeFigures();
+  disposeDiagrams();
   graphMode = "explore";
   paneVisible = true;
   // Forget the selected node: this module is a singleton the console re-activates on reopen, so a

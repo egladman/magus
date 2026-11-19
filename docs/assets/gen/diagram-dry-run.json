@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 9
   },
-  "figure": "dry-run",
+  "diagram": "dry-run",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:9d2dcf0ee8443b02d17645218657b86c40645173a9cdaa032349582b4a158385",
+  "stamp": "sha256:44ed66a23af59d441b2b36dcf1ab9fdeff0d7a78adeb16302171ba49cded9b95",
   "undrilled": []
 }

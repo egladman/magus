@@ -13,30 +13,30 @@ import (
 )
 
 const (
-	figureModule = "magus/figure"
-	magusModule  = "magus"
+	diagramModule = "magus/diagram"
+	magusModule   = "magus"
 
-	// attrEyebrow is a figure's eyebrow, the short topic line above its title.
+	// attrEyebrow is a diagram's eyebrow, the short topic line above its title.
 	attrEyebrow = "eyebrow"
-	// attrUnresolved names the figure arguments that are not string literals, comma-joined.
-	// A figure keyed by its function instead of its id carries "id" here.
+	// attrUnresolved names the diagram arguments that are not string literals, comma-joined.
+	// A diagram keyed by its function instead of its id carries "id" here.
 	attrUnresolved = "unresolved"
-	// attrDuplicate is every other source that builds a figure with the same id.
+	// attrDuplicate is every other source that builds a diagram with the same id.
 	attrDuplicate = "duplicate"
 )
 
-func figureID(id string) string { return fmt.Sprintf("%s:%s", types.KindFigure, id) }
+func diagramID(id string) string { return fmt.Sprintf("%s:%s", types.KindDiagram, id) }
 
-// figureExtractor reads figure\of calls across the Buzz files of one shard, so a figure id
+// diagramExtractor reads diagram\of calls across the Buzz files of one shard, so a diagram id
 // built twice is reported on the first node instead of merged away.
-type figureExtractor struct {
+type diagramExtractor struct {
 	scanned map[string]bool
-	byID    map[string]int // figure node id -> index in the shard's Nodes
+	byID    map[string]int // diagram node id -> index in the shard's Nodes
 }
 
-// figureNamespaces returns the names prog binds magus/figure and magus under, and false
-// when it imports no figure namespace and so builds no figure.
-func figureNamespaces(prog *ast.Program) (figure, magus string, ok bool) {
+// diagramNamespaces returns the names prog binds magus/diagram and magus under, and false
+// when it imports no diagram namespace and so builds no diagram.
+func diagramNamespaces(prog *ast.Program) (diagram, magus string, ok bool) {
 	for _, stmt := range prog.Stmts {
 		imp, isImport := stmt.(*ast.ImportStmt)
 		if !isImport || imp.Alias == "_" || len(imp.Only) > 0 {
@@ -47,13 +47,13 @@ func figureNamespaces(prog *ast.Program) (figure, magus string, ok bool) {
 			name = path.Base(imp.Path)
 		}
 		switch imp.Path {
-		case figureModule:
-			figure = name
+		case diagramModule:
+			diagram = name
 		case magusModule:
 			magus = name
 		}
 	}
-	return figure, magus, figure != ""
+	return diagram, magus, diagram != ""
 }
 
 // stringConsts maps each top-level final whose value folds to a string to that string.
@@ -136,12 +136,12 @@ func labeledArg(ce *ast.CallExpr, label string) (ast.Node, bool) { //nolint:iret
 	return nil, false
 }
 
-// figureCalls finds the figure\of calls in body and the directories its magus\graph().dir
+// diagramCalls finds the diagram\of calls in body and the directories its magus\graph().dir
 // calls name, sorted and deduplicated. dirUnresolved reports a magus\graph().dir argument that
 // does not fold to a string.
-func figureCalls(body ast.Node, figureNS, magusNS string, consts map[string]string) (calls []*ast.CallExpr, dirs []string, dirUnresolved bool) {
+func diagramCalls(body ast.Node, diagramNS, magusNS string, consts map[string]string) (calls []*ast.CallExpr, dirs []string, dirUnresolved bool) {
 	ast.Inspect(body, func(n ast.Node) bool {
-		if ce, member, ok := namespaceCall(n, figureNS); ok && member == "of" {
+		if ce, member, ok := namespaceCall(n, diagramNS); ok && member == "of" {
 			calls = append(calls, ce)
 		}
 		if magusNS == "" {
@@ -170,17 +170,17 @@ func figureCalls(body ast.Node, figureNS, magusNS string, consts map[string]stri
 	return calls, slices.Compact(dirs), dirUnresolved
 }
 
-// appendFigures adds a node per figure\of call in d and a depicts edge from it to every
+// appendDiagrams adds a node per diagram\of call in d and a depicts edge from it to every
 // directory a magus\graph().dir call in d names, and to the project rooted there when one is.
 // An argument that does not fold to a string is listed in the node's unresolved attr,
-// never dropped: a figure with no literal id is keyed by its function instead.
-func (x *figureExtractor) appendFigures(s *Shard, rel string, d *ast.FunDecl, figureNS, magusNS string, consts map[string]string) {
+// never dropped: a diagram with no literal id is keyed by its function instead.
+func (x *diagramExtractor) appendDiagrams(s *Shard, rel string, d *ast.FunDecl, diagramNS, magusNS string, consts map[string]string) {
 	if d.Body == nil {
 		return
 	}
-	calls, dirs, dirUnresolved := figureCalls(d.Body, figureNS, magusNS, consts)
+	calls, dirs, dirUnresolved := diagramCalls(d.Body, diagramNS, magusNS, consts)
 	for _, ce := range calls {
-		node, text := figureNode(rel, d.Name, ce, consts, dirUnresolved)
+		node, text := diagramNode(rel, d.Name, ce, consts, dirUnresolved)
 		if i, seen := x.byID[node.ID]; seen {
 			kept := &s.Nodes[i]
 			if kept.Attrs == nil {
@@ -207,9 +207,9 @@ func (x *figureExtractor) appendFigures(s *Shard, rel string, d *ast.FunDecl, fi
 	}
 }
 
-// figureNode builds the node for one figure\of call and the text the lexical index reads
+// diagramNode builds the node for one diagram\of call and the text the lexical index reads
 // for it: the eyebrow and the whole desc, which a node doc would cut.
-func figureNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirUnresolved bool) (types.KnowledgeNode, string) {
+func diagramNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirUnresolved bool) (types.KnowledgeNode, string) {
 	attrs := map[string]string{}
 	var unresolved []string
 	field := func(label string) string {
@@ -231,9 +231,9 @@ func figureNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirU
 		unresolved = append(unresolved, "dir")
 	}
 
-	nodeID := figureID(id)
+	nodeID := diagramID(id)
 	if id == "" {
-		nodeID = figureID(fmt.Sprintf("%s:%s", rel, fn))
+		nodeID = diagramID(fmt.Sprintf("%s:%s", rel, fn))
 	}
 	if eyebrow != "" {
 		attrs[attrEyebrow] = eyebrow
@@ -242,7 +242,7 @@ func figureNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dirU
 		attrs[attrUnresolved] = strings.Join(unresolved, ",")
 	}
 	node := types.KnowledgeNode{
-		ID: nodeID, Kind: types.KindFigure, Label: cmp.Or(title, id), Doc: desc,
+		ID: nodeID, Kind: types.KindDiagram, Label: cmp.Or(title, id), Doc: desc,
 		Source: fmt.Sprintf("%s:%s", rel, strconv.Itoa(ce.Line)), Attrs: nilIfEmpty(attrs),
 	}
 	return node, strings.TrimSpace(fmt.Sprintf("%s\n%s", eyebrow, desc))

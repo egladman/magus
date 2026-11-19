@@ -1,4 +1,4 @@
-// Turns the server's SVG into the page's figure and builds its node list and inline notices.
+// Turns the server's SVG into the page's diagram and builds its node list and inline notices.
 // Listeners beyond the list's own live in interact.ts.
 
 import { h } from "../../../desktop/view";
@@ -37,16 +37,16 @@ export interface PrepareOptions {
   readonly sourceUrl: string;
 }
 
-// prepareSvg parses the server's SVG into the page's figure: graphics roles, every node labelled,
+// prepareSvg parses the server's SVG into the page's diagram: graphics roles, every node labelled,
 // every anchored node a link that works without script, no fixed size. Server links are kept.
 export function prepareSvg(text: string, opts: PrepareOptions): Result<SVGSVGElement> {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const parsed = doc.documentElement;
   if (!isSvg(parsed) || doc.querySelector("parsererror"))
-    return fail(new MagusError({ code: "", message: "the figure is not an SVG document" }));
+    return fail(new MagusError({ code: "", message: "the diagram is not an SVG document" }));
   const svg = document.importNode(parsed, true);
   if (!isSvg(svg))
-    return fail(new MagusError({ code: "", message: "the figure is not an SVG document" }));
+    return fail(new MagusError({ code: "", message: "the diagram is not an SVG document" }));
   sanitize(svg);
 
   // role="img" would make every node presentational, and the nodes are the point.
@@ -96,7 +96,7 @@ export interface NodeListOptions {
   readonly onFocus: (id: string) => void;
 }
 
-// renderNodeList is the figure in words: every box, its source link, and a control that focuses
+// renderNodeList is the diagram in words: every box, its source link, and a control that focuses
 // it in the drawing.
 export function renderNodeList(list: HTMLElement, opts: NodeListOptions): void {
   list.replaceChildren();
@@ -105,7 +105,7 @@ export function renderNodeList(list: HTMLElement, opts: NodeListOptions): void {
     li.dataset.nodeId = n.id;
     const focus = h("button", "pf-v6-c-button pf-m-link pf-m-inline", n.label);
     focus.type = "button";
-    focus.setAttribute("aria-label", "Focus " + n.label + " in the figure");
+    focus.setAttribute("aria-label", "Focus " + n.label + " in the diagram");
     focus.addEventListener("click", () => opts.onFocus(n.id));
     li.append(focus);
     const href = sourceHref(opts.sourceUrl, n.anchor);
@@ -122,7 +122,7 @@ export function renderNodeList(list: HTMLElement, opts: NodeListOptions): void {
   }
 }
 
-// markListFocus mirrors the figure's focus in the list.
+// markListFocus mirrors the diagram's focus in the list.
 export function markListFocus(
   list: HTMLElement,
   focused: string | null,

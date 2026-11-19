@@ -4,9 +4,9 @@
     "flow": 5,
     "imports": 6
   },
-  "figure": "guard-path",
+  "diagram": "guard-path",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:2d655a1eecb75914fb00404f4867a2179faa03e3ade364c7016bb8ea22071a21",
+  "stamp": "sha256:eb75cfc887132ff7427478ff74851bae42d598862e8d5ffeb19c134291398f25",
   "undrilled": []
 }

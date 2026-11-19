@@ -100,7 +100,7 @@ func TestRetrievalEval(t *testing.T) {
 		rankeval.SetDocmaskGo:   "not built: plan row 6 (docmask-eval) builds it",
 		rankeval.SetDocmaskBuzz: "not built: plan row 6 (docmask-eval) builds it",
 		rankeval.SetBuzzIdent:   "not built: plan row 6 (docmask-eval) builds it",
-		rankeval.SetFigures:     "not built: the figure-nodes row builds it",
+		rankeval.SetDiagrams:    "not built: the diagram-nodes row builds it",
 	}
 	reportOnlyRead := false
 	if judgedAbsent != "" {

@@ -1,6 +1,6 @@
 // Package evidence reads what the workspace and its knowledge graph say about a job
 // row: the graph a command loads once, the boundary a lease derives, the gates a
-// verification grades and the figures of a plan.
+// verification grades and the diagrams of a plan.
 //
 // It sits beside internal/job rather than in it, because cache, guard, bindings and
 // workspace all import job, and the knowledge and deps tests import it too. What the
@@ -39,7 +39,7 @@ type Env struct {
 	DomainGraph     func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
 	// Notes are the regenerated outputs and unrun gates of row in m.
 	Notes func(ctx context.Context, m *magus.Magus, row jobtypes.Job) ([]job.RegeneratedOutput, []job.UnrunGate)
-	// HolderCell names a row's holder in a plan figure.
+	// HolderCell names a row's holder in a plan diagram.
 	HolderCell func(row jobtypes.Job) string
 	// GateMergeScanLimit is how many commits the green-gate scan reads for a merge.
 	GateMergeScanLimit int

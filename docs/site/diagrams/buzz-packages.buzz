@@ -1,24 +1,24 @@
 namespace buzzPackages;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/buzz-stages" as buzzStages;
 
-// buzzPackagesFigure is the package overview of the gopherbuzz pipeline. Its root and vm
+// buzzPackagesDiagram is the package overview of the gopherbuzz pipeline. Its root and vm
 // boxes drill into buzz-compile and buzz-run, which draw the steps inside each.
-export fun buzzPackagesFigure() > figure\Figure !> any {
+export fun buzzPackagesDiagram() > diagram\Diagram !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
     final lexer = magus\graph().dir("libs/gopherbuzz/token");
     final tree = magus\graph().dir("libs/gopherbuzz/ast");
     final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
     final vm = magus\graph().dir("libs/gopherbuzz/vm");
-    return figure\of("buzz-packages",
+    return diagram\of("buzz-packages",
             title: "The root package drives every step; vm runs what it compiles",
             eyebrow: "gopherbuzz",
             desc: "The gopherbuzz root package holds the session and every compile step. It reads "
                 + "tokens from token, builds trees from ast, checks them against types, and hands "
                 + "the chunk it compiles to vm, which runs it.",
-            level: figure\Level.package)
+            level: diagram\Level.package)
         .box(session, label: "Session", sub: "parse, import, check, compile", focal: true)
         .box(lexer, label: "Lexer", sub: "token.Tokenize")
         .box(tree, label: "Syntax tree", sub: "ast.Program")

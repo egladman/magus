@@ -1,9 +1,9 @@
 namespace typeRecords;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun typesFigure() > figure\Figure !> any {
+export fun typesDiagram() > diagram\Diagram !> any {
     final types = magus\graph().dir("types");
     final enums = magus\graph().dir("types/enum");
     final daemon = magus\graph().dir("types/daemon");
@@ -12,7 +12,7 @@ export fun typesFigure() > figure\Figure !> any {
     final image = magus\graph().dir("types/image");
     final json = magus\graph().dir("libs/codec");
     final diagnostics = magus\graph().dir("libs/diagnostics");
-    return figure\of("types",
+    return diagram\of("types",
             title: "The shared records sit at the bottom, and the groups lean on them",
             eyebrow: "types",
             desc: "types holds the records every other package passes around: targets, runs, "
@@ -30,7 +30,7 @@ export fun typesFigure() > figure\Figure !> any {
         .box(image, label: "Image records", sub: "OCI specs")
         .edgesFromGraph()
         .hideEdges([daemon, diff], dst: [enums],
-            why: "each group imports the enums as well as the base; the figure draws that once, from the base")
-        .legend(figure\Look.focal, label: "the base every package imports")
+            why: "each group imports the enums as well as the base; the diagram draws that once, from the base")
+        .legend(diagram\Look.focal, label: "the base every package imports")
         .scope([types, enums, daemon, diff, feedback, image, diagnostics, json]);
 }

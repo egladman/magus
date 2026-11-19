@@ -55,7 +55,7 @@ generated files and `magus refs` text counts.
   `magus\harness.provider`. `std.Namespace` declares it (`std/module.go:159`).
 - A handle is a record a function returns, with methods that call Go:
   `magus\workspace().jobs()`. 49 methods sit on 8 records (`magus.buzz:2907-2955`).
-- A slash import path already exists: `import "magus/figure";` binds `figure\Figure`,
+- A slash import path already exists: `import "magus/diagram";` binds `diagram\Diagram`,
   and `import "magus/spell/go";` binds `go`. `import "magus/` occurs 615 times in 399
   files.
 - None of the three scopes a type. An object declares fields, static fields and
@@ -342,8 +342,8 @@ not have.
 
 ### A top-level module per package, `agent\Step`
 
-`import "magus/agent";` binding under its last segment, as `magus/figure` binds
-`figure`. It lost on two measurements. `diff` is already a host module with 3 functions,
+`import "magus/agent";` binding under its last segment, as `magus/diagram` binds
+`diagram`. It lost on two measurements. `diff` is already a host module with 3 functions,
 and two modules may not share a name (`std/module.go:401`). Upstream binds the declared
 namespace, not the path's last segment, so the spelling would not survive the
 one-dialect change. A script that wants the short name writes
@@ -398,8 +398,8 @@ if a package is found whose types belong in two namespaces.
   moved package has needed it yet.
 - Whether upstream lets a function `shop\order` and a namespace `shop\order` coexist.
   If it does, the refusal in part 2 is narrower than it needs to be.
-- Whether `magus/figure` and `magus/spell/*` declare `namespace magus\figure` in the
-  one-dialect change, which would change `figure\Figure` to `magus\figure\Figure`.
+- Whether `magus/diagram` and `magus/spell/*` declare `namespace magus\diagram` in the
+  one-dialect change, which would change `diagram\Diagram` to `magus\diagram\Diagram`.
 - Whether the queue provider's 38 `Queue*` names drop their prefix by the same rule.
   They are written to a different output, and its scripts read it under another module.
 - What `std.Namespace` is renamed to. A package rename needs Eli's pick.

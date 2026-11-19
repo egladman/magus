@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 6
   },
-  "figure": "agent-orchestration",
+  "diagram": "agent-orchestration",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:bbbaab3f6b5af22a3239c2b34bc488990874d30fcca2f4536db55aee722a5ee2",
+  "stamp": "sha256:625c41ed7e74ded8c129aaa93f85c8137ccd6420675538ebb81d69497d35d3a2",
   "undrilled": []
 }

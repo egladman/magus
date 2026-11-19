@@ -2,7 +2,7 @@
 title: "ADR 0029: the mod draws magus figures it does not compute"
 order: 29
 description: >-
-  The Claude Code mod gets three inline views: the job plan an agent forks, a live run of magus run or magus affected, and the shape of a magus query and its answer. Each figure is composed in Buzz with magus/figure and drawn by libs/figure, from data core already serves or will journal. The mod's TypeScript only notices the call, runs the Buzz script through magus, and places the SVG. A mod cannot load WebAssembly, so the OpenCode wasm shim does not carry over; a process per frame does.
+  The Claude Code mod gets three inline views: the job plan an agent forks, a live run of magus run or magus affected, and the shape of a magus query and its answer. Each figure is composed in Buzz with magus/figure and drawn by libs/diagram, from data core already serves or will journal. The mod's TypeScript only notices the call, runs the Buzz script through magus, and places the SVG. A mod cannot load WebAssembly, so the OpenCode wasm shim does not carry over; a process per frame does.
 tags: [adr, decision, agents, claude-code, mod, figure, buzz]
 status: proposed
 date: 2026-11-07
@@ -19,8 +19,8 @@ runs that command mid-session.
 
 What exists on main at `d29cea148`:
 
-- `magus job graph -o svg` writes the live job plan through `job.NewPlan(...).Figures()`
-  and libs/figure. Nothing in the mod shows it.
+- `magus job graph -o svg` writes the live job plan through `job.NewPlan(...).Diagrams()`
+  and libs/diagram. Nothing in the mod shows it.
 - The terminal run band draws a live wait tree from `cache.plan` and `cache.step` records
   (#694). Those records are band-only: the run journal (`proto/magus/viewer/v1alpha1`)
   holds `KIND_EXEC` and `KIND_RESULT` per target, and no plan, edges or start.
@@ -28,8 +28,8 @@ What exists on main at `d29cea148`:
 - `magus query -o json` carries the raw `query` string, each match's `why.terms` with the
   field a term scored on, and the neighborhood's `nodes` and `links`. It does not carry the
   parsed filters (`kind=`, `id=~`, `!=`).
-- Buzz composes figures with `magus/figure` outside the docs site:
-  `hack/dev/show-session-figure.buzz` draws a box per job and an edge per spawn. The
+- Buzz composes figures with `magus/diagram` outside the docs site:
+  `hack/dev/show-session-diagram.buzz` draws a box per job and an edge per spawn. The
   console runs the same figures in wasm (`console/src/apps/graph/diagrams/wasm.ts`).
 - The mod (`docs/guides/integrations/agents/claude-code/mod`) is TSX, 948 lines in
   `docs/guides/integrations/agents/claude-code/mod/hooks/register.tsx`. Its environment has no `WebAssembly`, no `eval` and no Node; the
@@ -44,19 +44,19 @@ The mod draws three figures. It computes none of them.
 | Layer                                          | Owns                                                                          | Language             |
 | ---------------------------------------------- | ----------------------------------------------------------------------------- | -------------------- |
 | core                                           | the data: job rows, the run journal, the query record; the figure library     | Go                   |
-| figure scripts, in the `claude-code-mod` spell | which boxes, edges, zones and states each view draws                          | Buzz, `magus/figure` |
+| figure scripts, in the `claude-code-mod` spell | which boxes, edges, zones and states each view draws                          | Buzz, `magus/diagram` |
 | mod                                            | noticing the call, running the script, placing the SVG, the terminal fallback | TSX                  |
 
 ### The workspace owns the figures
 
 The figure scripts are part of the `claude-code-mod` harness spell
-(`spells/harness/claude-code-mod/figures/<view>.buzz`), not the Go source and not the
+(`spells/harness/claude-code-mod/diagrams/<view>.buzz`), not the Go source and not the
 plugin folder. A workspace that wants other figures copies the spell into its tree and
 declares the copy as a `path:` override of the registry path in `magus.yaml`, the
 ownership switch [Agents](../guides/integrations/agents.md#set-up-your-host) already
 documents for a shipped harness. Its agents and people edit that Buzz and see the change
 on the next frame, with no magus release and no plugin update. The spell exports
-`mgs_figures()`, a map from view to script path. The mod reads that map through
+`mgs_diagrams()`, a map from view to script path. The mod reads that map through
 `magus describe harness claude-code-mod -o json`, so it never names a path itself.
 
 ### Three parts, three update paths
@@ -96,7 +96,7 @@ carries.
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
 | journal `cache.plan` as `KIND_PLAN` and `cache.step` as `KIND_STEP` (`v1alpha1`, additive)             | a run figure needs the planned targets, their edges and when each started | proposed                                 |
 | a `parsed` field on the query record: each filter's field, operator and value, and the free terms      | the parser stays the one in Go; a script never splits a query string      | proposed                                 |
-| a running state in libs/figure that animates (a SMIL pulse on the box)                                 | every figure, console included, gets the same running mark                | proposed                                 |
+| a running state in libs/diagram that animates (a SMIL pulse on the box)                                 | every figure, console included, gets the same running mark                | proposed                                 |
 | every MCP tool call journals an invocation with its command and the tool call's id, as a CLI call does | the mod finds a call's invocation the same way for both doors             | proposed (not yet checked for each tool) |
 
 ### What the mod adds
@@ -105,7 +105,7 @@ carries.
   `mcp__magus__*` call. It finds the invocations the call started in `ListInvocations`,
   picks the view from each one's command, and draws the engine's own row, then the figure.
 - The figure comes from one `$.process.run` of `./magus buzz <script>`, where the script is
-  the one `mgs_figures()` names for the view, called with the call's identity (job id, invocation id, query text) as arguments. The script
+  the one `mgs_diagrams()` names for the view, called with the call's identity (job id, invocation id, query text) as arguments. The script
   prints the SVG and a one-line `alt`.
 - A live run redraws once a second until `KIND_FINISHED`, one process per frame, never
   two in flight.
@@ -133,7 +133,7 @@ carries.
 
 ### Compute and draw the figures in TSX
 
-Rejected. It would be a second layout beside libs/figure, a second query parser, and a
+Rejected. It would be a second layout beside libs/diagram, a second query parser, and a
 third copy of the job tree (the mod's
 `docs/guides/integrations/agents/claude-code/mod/hooks/tree.ts` is already one). The
 console could not reuse it. A workspace could change it only by forking the plugin. Reopen

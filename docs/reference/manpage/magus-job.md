@@ -244,7 +244,7 @@ them and magus describe job prints one job's terms.
 : Submit one of the server's own jobs and return
 
 **graph**
-: Draw the live plan, one figure per group of jobs
+: Draw the live plan, one diagram per group of jobs
 
 **rm**
 : Remove one job from the plan

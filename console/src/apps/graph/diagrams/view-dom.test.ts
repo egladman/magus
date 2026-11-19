@@ -1,11 +1,11 @@
-// view-dom.test.ts - a figure as the page shows it: the server's SVG prepared (roles, names, real
-// links), then upgraded by attachFigure (focus and dim, hover, keys, Tab order). The fixture is
-// shaped like magus/figure's output: data-node groups with data-anchor, data-edge paths.
+// view-dom.test.ts - a diagram as the page shows it: the server's SVG prepared (roles, names, real
+// links), then upgraded by attachDiagram (focus and dim, hover, keys, Tab order). The fixture is
+// shaped like magus/diagram's output: data-node groups with data-anchor, data-edge paths.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, test } from "node:test";
-import { attachFigure, type FigureController } from "./interact";
+import { attachDiagram, type DiagramController } from "./interact";
 import {
   markListFocus,
   notice,
@@ -45,13 +45,13 @@ function prepared(text: string, opts: PrepareOptions): SVGSVGElement {
   return result.value;
 }
 
-let figure: FigureController | null = null;
+let diagram: DiagramController | null = null;
 // Scoped to this suite: the dom tests share one process, where a top-level hook would run around
 // every other file's tests too.
-describe("a prepared figure", () => {
+describe("a prepared diagram", () => {
   afterEach(() => {
-    figure?.destroy();
-    figure = null;
+    diagram?.destroy();
+    diagram = null;
     document.body.replaceChildren();
   });
 
@@ -60,7 +60,7 @@ describe("a prepared figure", () => {
     const svg = prepared(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: TEMPLATE });
     frame.append(svg);
     document.body.append(frame);
-    figure = attachFigure({ frame, svg, reducedMotion: () => true });
+    diagram = attachDiagram({ frame, svg, reducedMotion: () => true });
     return { frame, svg };
   }
 
@@ -84,10 +84,10 @@ describe("a prepared figure", () => {
     assert.equal(sourceHref(TEMPLATE, ""), "");
   });
 
-  test("the prepared figure is a graphics document whose anchored nodes are links", () => {
+  test("the prepared diagram is a graphics document whose anchored nodes are links", () => {
     const { svg } = mount();
     assert.equal(svg.getAttribute("role"), "graphics-document");
-    assert.equal(svg.hasAttribute("width"), false, "the frame sizes the figure");
+    assert.equal(svg.hasAttribute("width"), false, "the frame sizes the diagram");
     const a = node(svg, "a");
     assert.equal(a.localName, "a");
     assert.equal(a.getAttribute("href"), "https://github.com/acme/widgets/blob/abc/internal/job");
@@ -108,7 +108,7 @@ describe("a prepared figure", () => {
     assert.equal(node(svg, "a").getAttribute("href"), "https://example.test/code/internal/job");
   });
 
-  test("nothing in the figure can run", () => {
+  test("nothing in the diagram can run", () => {
     const { svg } = mount();
     assert.equal(svg.querySelector("script"), null);
     assert.equal(svg.querySelector("[onclick]"), null);
@@ -132,7 +132,7 @@ describe("a prepared figure", () => {
 
   test("focusing a node with no declared edges lights nothing but itself", () => {
     const { svg } = mount();
-    figure?.focusNode("c");
+    diagram?.focusNode("c");
     assert.equal(node(svg, "c").hasAttribute("data-dim"), false);
     for (const id of ["a", "b", "d"])
       assert.equal(node(svg, id).hasAttribute("data-dim"), true, id);
@@ -166,7 +166,7 @@ describe("a prepared figure", () => {
       walk.push(at.getAttribute("data-node") ?? "");
       const ev = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
       at.dispatchEvent(ev);
-      if (!ev.defaultPrevented) break; // the last node lets Tab leave the figure
+      if (!ev.defaultPrevented) break; // the last node lets Tab leave the diagram
       const next = svg.querySelector('[data-node][tabindex="0"]');
       assert.ok(next);
       at = next;
@@ -190,12 +190,12 @@ describe("a prepared figure", () => {
     assert.equal(browserZoom.defaultPrevented, false);
     assert.equal(svg.getAttribute("viewBox"), zoomed);
     frame.dispatchEvent(new KeyboardEvent("keydown", { key: "0", bubbles: true }));
-    assert.equal(svg.getAttribute("viewBox"), "0 0 480 280", "0 is the figure's own size");
+    assert.equal(svg.getAttribute("viewBox"), "0 0 480 280", "0 is the diagram's own size");
     frame.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
     assert.equal(svg.getAttribute("viewBox"), fitted);
   });
 
-  test("a plain wheel is the page's and a ctrl-wheel zooms the figure", () => {
+  test("a plain wheel is the page's and a ctrl-wheel zooms the diagram", () => {
     const { frame, svg } = mount();
     const before = svg.getAttribute("viewBox");
     const plain = new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true });
@@ -217,11 +217,11 @@ describe("a prepared figure", () => {
 
   test("a re-layout swaps the drawing and keeps the reader's zoom", () => {
     const { frame, svg } = mount();
-    figure?.zoom(2);
+    diagram?.zoom(2);
     const kept = svg.getAttribute("viewBox");
     const next = prepared(FIXTURE_SVG, { nodes: FIXTURE_NODES, sourceUrl: "" });
     svg.replaceWith(next);
-    figure?.replace(next);
+    diagram?.replace(next);
     assert.equal(next.getAttribute("viewBox"), kept);
     assert.equal(frame.querySelector("svg"), next);
   });
@@ -262,7 +262,7 @@ describe("a prepared figure", () => {
   });
 
   test("a notice names its severity in words and draws it as a shape, never a letter", () => {
-    const danger = notice("danger", "Could not read the figure", "HTTP 500");
+    const danger = notice("danger", "Could not read the diagram", "HTTP 500");
     assert.equal(danger.getAttribute("role"), "alert", "a failure is always announced");
     assert.match(danger.textContent ?? "", /Danger alert/);
     assert.ok(danger.querySelector(".pf-v6-c-alert__icon svg"), "the icon is PF's glyph");
@@ -286,7 +286,7 @@ describe("a prepared figure", () => {
     assert.equal(el.querySelector("code")?.textContent, "magus server start");
   });
 
-  // Every role cssVarPalette paints (magus/figure, libs/figure/figure.buzz) needs a console
+  // Every role cssVarPalette paints (magus/diagram, libs/diagram/diagram.buzz) needs a console
   // definition, or that role falls back to its light hex on a dark console.
   test("tokens.css defines every --magus-diagram-* role", () => {
     const css = readFileSync("src/styles/base/tokens.css", "utf8");

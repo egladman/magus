@@ -618,11 +618,11 @@ fun substituteVersionTokens(md: str, site: Site) > str {
 // injectDemoCallout inserts the "Interactive demo" callout after a page's intro (the first
 // </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a
 // link or a button - it signals "there is a runnable demonstration of this concept."
-// drillHrefs maps each figure id to its <figure> on the docs page that embeds it, relative
+// drillHrefs maps each diagram id to its <figure> on the docs page that embeds it, relative
 // to the page at clean directory pageDir: where a box's drill-down link lands.
 export fun drillHrefs(pageDir: str, site: Site) > {str: str} !> any {
     final hrefs: mut {str: str} = mut {<str: str>};
-    foreach (id, rel in diagrams\figurePages()) {
+    foreach (id, rel in diagrams\diagramPages()) {
         final at = newCleanDirectory(rel, site);
         if (at == pageDir) {
             hrefs[id] = "#diagram-" + id;
@@ -739,9 +739,9 @@ test "substituteVersionTokens is a no-op before any release has shipped" {
 }
 
 
-// writeFigures re-exports the registry's writer so the magusfile can reach it through
+// writeDiagrams re-exports the registry's writer so the magusfile can reach it through
 // render.buzz. It lives behind this module because the registry may have exactly one
 // importer, and the site render is it. Returns the findings, which the caller fails on.
-export fun writeFigures(dir: str) > [str] !> any {
-    return diagrams\writeFigures(dir);
+export fun writeDiagrams(dir: str) > [str] !> any {
+    return diagrams\writeDiagrams(dir);
 }

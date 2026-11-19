@@ -1,11 +1,11 @@
 namespace buzzEngine;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/packages" as packages;
 import "site/diagrams/buzz-stages" as buzzStages;
 
-export fun buzzEngineFigure() > figure\Figure !> any {
+export fun buzzEngineDiagram() > diagram\Diagram !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
     final pipeline = [
         session,
@@ -22,8 +22,8 @@ export fun buzzEngineFigure() > figure\Figure !> any {
     final hostModules = magus\graph().dir("std");
     final buzzStdlib = magus\graph().dir("libs/gopherbuzz/std");
     final dry = magus\graph().dir("internal/dry");
-    final playground = figure\external("Browser playground", sub: "js/wasm editor", tag: "client", look: figure\Look.plain);
-    return figure\of("buzz-engine",
+    final playground = diagram\external("Browser playground", sub: "js/wasm editor", tag: "client", look: diagram\Look.plain);
+    return diagram\of("buzz-engine",
             title: "One pipeline, and the modules each host registers",
             eyebrow: "buzz",
             desc: "Every Buzz program magus touches goes through one gopherbuzz pipeline: lex, "
@@ -48,12 +48,12 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .markEdge(engine, dst: session)
         .markEdge(bindings, dst: engine, label: "init()")
         .markEdge(bindings, dst: trampolines)
-        .markEdge(dry, dst: trampolines, stroke: figure\Stroke.focal)
+        .markEdge(dry, dst: trampolines, stroke: diagram\Stroke.focal)
         .markEdge(dry, dst: session)
         .flowIn(playground, dst: dry, label: "runs")
         .rank(dirs: [opencodeWasm, opencode, bindings])
         .row(dirs: [dry, trampolines])
-        .legend(figure\Look.focal, label: "the browser's subset")
+        .legend(diagram\Look.focal, label: "the browser's subset")
         .scope(buzzStages\gopherbuzzPackages())
         .scope(packages\goPackages("internal/interp/**"))
         .scope(packages\goPackages("internal/dry/**"))

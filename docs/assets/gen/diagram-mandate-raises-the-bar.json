@@ -4,9 +4,9 @@
     "flow": 3,
     "imports": 0
   },
-  "figure": "mandate-raises-the-bar",
+  "diagram": "mandate-raises-the-bar",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:41d454818a9df0721de71dde0771ad5b6ca0d7b5e167534be0f2a08fc2de2d2f",
+  "stamp": "sha256:93d13d81b67173e31a906be9f110eb84ca3693bf0c68ca20e3e222151030e160",
   "undrilled": []
 }

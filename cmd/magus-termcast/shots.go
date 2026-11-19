@@ -111,7 +111,7 @@ func runBand(t screen.Theme) (string, error) {
 	fmt.Fprint(s, "$ magus affected ci\n")
 	projects := []string{
 		"internal/cache", "internal/interp", "internal/spell", "std", "types", "cmd/magus",
-		"console", "docs", "libs/figure", "libs/gopherbuzz",
+		"console", "docs", "libs/diagram", "libs/gopherbuzz",
 	}
 	plan := make([]cache.PlannedStep, 0, len(projects))
 	for _, p := range projects {
@@ -170,7 +170,7 @@ func runWaits(t screen.Theme) (string, error) {
 		event("cache.plan", slog.Any("steps", []cache.PlannedStep{
 			{Ref: test}, {Ref: docs},
 			{Ref: ref("docs/guides/integrations/agents", "lint"), Upstreams: []types.TargetRef{test}},
-			{Ref: ref("libs/figure", "lint"), Upstreams: []types.TargetRef{test}},
+			{Ref: ref("libs/diagram", "lint"), Upstreams: []types.TargetRef{test}},
 			{Ref: console, Upstreams: []types.TargetRef{docs}},
 			{Ref: ref("console", "test"), Upstreams: []types.TargetRef{console}},
 			{Ref: ref("deploy", "build"), Upstreams: []types.TargetRef{console, test}},

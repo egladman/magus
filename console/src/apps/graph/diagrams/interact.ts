@@ -1,7 +1,7 @@
-// Upgrades a static figure on the page: viewBox zoom and pan, fit, focus-and-dim, hover, and
+// Upgrades a static diagram on the page: viewBox zoom and pan, fit, focus-and-dim, hover, and
 // keyboard travel through the nodes. It only adds listeners and data-* attributes.
 //
-// Unlike the graph explorer, a plain wheel scrolls the page, since the figure sits in one; only
+// Unlike the graph explorer, a plain wheel scrolls the page, since the diagram sits in one; only
 // ctrl/cmd+wheel, which a trackpad pinch also sends, zooms.
 
 export interface ViewBox {
@@ -23,12 +23,12 @@ export interface ScreenRect {
   readonly height: number;
 }
 
-// Relative to the figure's own size: 8x in, and out to where the figure is a quarter of the frame.
+// Relative to the diagram's own size: 8x in, and out to where the diagram is a quarter of the frame.
 export const MIN_SCALE = 0.25;
 export const MAX_SCALE = 8;
 export const ZOOM_STEP = 1.25;
 export const GLIDE_MS = 180;
-// Gap kept around the figure when it is fitted, in figure units.
+// Gap kept around the diagram when it is fitted, in diagram units.
 export const FIT_PAD = 16;
 
 export function parseViewBox(s: string | null): ViewBox | null {
@@ -49,12 +49,12 @@ export function formatViewBox(v: ViewBox): string {
   return [r(v.x), r(v.y), r(v.w), r(v.h)].join(" ");
 }
 
-// zoomScale is how far v is zoomed relative to the figure's natural box: 2 is twice as close.
+// zoomScale is how far v is zoomed relative to the diagram's natural box: 2 is twice as close.
 export function zoomScale(natural: ViewBox, v: ViewBox): number {
   return natural.w / v.w;
 }
 
-// zoomAbout zooms by factor (above 1 is closer) keeping the figure point p where it is on
+// zoomAbout zooms by factor (above 1 is closer) keeping the diagram point p where it is on
 // screen, clamped to [MIN_SCALE, MAX_SCALE] of the natural box.
 export function zoomAbout(natural: ViewBox, v: ViewBox, factor: number, p: Point): ViewBox {
   const target = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoomScale(natural, v) * factor));
@@ -68,7 +68,7 @@ export function boxCenter(v: ViewBox): Point {
   return { x: v.x + v.w / 2, y: v.y + v.h / 2 };
 }
 
-// fitBox frames the whole figure with FIT_PAD around it. The svg keeps its default
+// fitBox frames the whole diagram with FIT_PAD around it. The svg keeps its default
 // preserveAspectRatio (xMidYMid meet), so the frame's aspect needs no correction here.
 export function fitBox(natural: ViewBox): ViewBox {
   return {
@@ -79,15 +79,15 @@ export function fitBox(natural: ViewBox): ViewBox {
   };
 }
 
-// unitsPerPixel is the figure distance one screen pixel covers under meet scaling.
+// unitsPerPixel is the diagram distance one screen pixel covers under meet scaling.
 export function unitsPerPixel(v: ViewBox, rect: ScreenRect): number {
   if (rect.width <= 0 || rect.height <= 0) return 1;
   return Math.max(v.w / rect.width, v.h / rect.height);
 }
 
-// clientToFigure maps a pointer position to figure units, accounting for the letterbox meet
+// clientToDiagram maps a pointer position to diagram units, accounting for the letterbox meet
 // scaling leaves on the short axis.
-export function clientToFigure(
+export function clientToDiagram(
   v: ViewBox,
   rect: ScreenRect,
   clientX: number,
@@ -129,7 +129,7 @@ export function parseEdge(s: string | null): readonly [string, string] | null {
 }
 
 // neighbours is focus plus every node one edge away in either direction. Edges come only from the
-// figure's own data-edge set, so a highlight never shows a relation the figure does not draw.
+// diagram's own data-edge set, so a highlight never shows a relation the diagram does not draw.
 export function neighbours(
   edges: readonly (readonly [string, string])[],
   focus: string,
@@ -152,7 +152,7 @@ export interface Placed {
 const ROW_SLACK = 24;
 
 // readingOrder is top to bottom, then left to right within a row. Declaration order is not the
-// order a reader scans once flow has laid the figure out.
+// order a reader scans once flow has laid the diagram out.
 export function readingOrder(nodes: readonly Placed[]): string[] {
   const sorted = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x);
   const rows: Placed[][] = [];
@@ -165,7 +165,7 @@ export function readingOrder(nodes: readonly Placed[]): string[] {
   return rows.flatMap((r) => r.sort((a, b) => a.x - b.x).map((n) => n.id));
 }
 
-export type FigureAction = "fit" | "zoom-in" | "zoom-out" | "actual" | "clear";
+export type DiagramAction = "fit" | "zoom-in" | "zoom-out" | "actual" | "clear";
 
 export interface KeyInput {
   readonly key: string;
@@ -174,9 +174,9 @@ export interface KeyInput {
   readonly altKey: boolean;
 }
 
-// figureKey maps a key pressed inside the figure. A modified key is never ours: ctrl/cmd with
+// diagramKey maps a key pressed inside the diagram. A modified key is never ours: ctrl/cmd with
 // +, -, 0 is the browser's page zoom, and the console's chords all carry a modifier.
-export function figureKey(e: KeyInput): FigureAction | null {
+export function diagramKey(e: KeyInput): DiagramAction | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
   switch (e.key) {
     case "f":
@@ -196,8 +196,8 @@ export function figureKey(e: KeyInput): FigureAction | null {
   }
 }
 
-export interface FigureOptions {
-  // The element that frames the svg; keys are read here, so they reach the figure only while
+export interface DiagramOptions {
+  // The element that frames the svg; keys are read here, so they reach the diagram only while
   // focus is inside it.
   readonly frame: HTMLElement;
   readonly svg: SVGSVGElement;
@@ -206,7 +206,7 @@ export interface FigureOptions {
   readonly onFocusChange?: (id: string | null) => void;
 }
 
-export interface FigureController {
+export interface DiagramController {
   fit(): void;
   zoom(factor: number): void;
   actual(): void;
@@ -268,13 +268,13 @@ function readPosition(el: Element): Point {
   return { x: 0, y: 0 };
 }
 
-// setRoving makes exactly one node tabbable, so Tab enters the figure once, travels the nodes
+// setRoving makes exactly one node tabbable, so Tab enters the diagram once, travels the nodes
 // in reading order through the keydown handler below, and leaves from either end.
 function setRoving(nodes: readonly Element[], current: Element | null): void {
   for (const n of nodes) n.setAttribute("tabindex", n === current ? "0" : "-1");
 }
 
-export function attachFigure(opts: FigureOptions): FigureController {
+export function attachDiagram(opts: DiagramOptions): DiagramController {
   const { frame } = opts;
   let svg = opts.svg;
   let natural = readNaturalBox(svg);
@@ -358,7 +358,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
   const closestNode = (t: EventTarget | null): Element | null =>
     t instanceof Element ? t.closest("[data-node]") : null;
 
-  const controller: FigureController = {
+  const controller: DiagramController = {
     fit: () => moveTo(fitBox(natural)),
     zoom: (factor) => moveTo(zoomAbout(natural, current, factor, boxCenter(current))),
     actual: () => moveTo(natural),
@@ -391,7 +391,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
     (e) => {
       if (!e.ctrlKey && !e.metaKey) return; // a plain wheel scrolls the page
       e.preventDefault();
-      const p = clientToFigure(current, rect(), e.clientX, e.clientY);
+      const p = clientToDiagram(current, rect(), e.clientX, e.clientY);
       if (glide) cancelAnimationFrame(glide);
       glide = 0;
       apply(zoomAbout(natural, current, wheelFactor(e.deltaY, e.deltaMode), p));
@@ -473,7 +473,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
       if (e.key === "Tab" && n && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const i = order.indexOf(n);
         const next = order[i + (e.shiftKey ? -1 : 1)];
-        if (i < 0 || !next) return; // the ends let Tab leave the figure
+        if (i < 0 || !next) return; // the ends let Tab leave the diagram
         e.preventDefault();
         setRoving(order, next);
         (next as HTMLElement | SVGElement).focus();
@@ -485,7 +485,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
         controller.focusNode(n.getAttribute("data-node"));
         return;
       }
-      const action = figureKey(e);
+      const action = diagramKey(e);
       if (!action || (action === "clear" && focusedId === null)) return;
       // The graph explorer binds bare keys on document; stop ours reaching it.
       e.stopPropagation();

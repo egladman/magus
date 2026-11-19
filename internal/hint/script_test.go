@@ -275,7 +275,7 @@ func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 func TestScriptsForGrantsReadsOnlyToAnUnchangedReadScript(t *testing.T) {
 	root := t.TempDir()
 	read := scriptFixture(t, root, "hack/dev/show-memory-kills.buzz", ScriptEffectRead)
-	edited := scriptFixture(t, root, "hack/dev/show-session-figure.buzz", ScriptEffectRead)
+	edited := scriptFixture(t, root, "hack/dev/show-session-diagram.buzz", ScriptEffectRead)
 	write := scriptFixture(t, root, "hack/dev/merge-job-branches.buzz", ScriptEffectWrite)
 	undeclared := scriptFixture(t, root, "hack/dev/ls-uncommitted.buzz", "")
 	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"code:MGS3009": {read, edited, write, undeclared}})
@@ -290,10 +290,10 @@ func TestScriptsForGrantsReadsOnlyToAnUnchangedReadScript(t *testing.T) {
 		reads[n.ID] = n.Reads
 	}
 	assert.Equal(t, map[string]bool{
-		"script-show-memory-kills":   true,
-		"script-show-session-figure": false,
-		"script-merge-job-branches":  false,
-		"script-ls-uncommitted":      false,
+		"script-show-memory-kills":    true,
+		"script-show-session-diagram": false,
+		"script-merge-job-branches":   false,
+		"script-ls-uncommitted":       false,
 	}, reads, "a stamp that moved means the effect describes bytes no longer there")
 }
 

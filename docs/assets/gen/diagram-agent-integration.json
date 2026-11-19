@@ -4,10 +4,10 @@
     "flow": 5,
     "imports": 6
   },
-  "figure": "agent-integration",
+  "diagram": "agent-integration",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:f5322edb38d4f1b3451f2a7375c7e8f943267480a42c7654dd3845f6c64a1004",
+  "stamp": "sha256:b63dedf17133a924b9db441f2e92f9dca128f2b1ad59befb2587a3c66a4cf2ae",
   "undrilled": [
     "MCP tools"
   ]

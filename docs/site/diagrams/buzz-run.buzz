@@ -1,32 +1,32 @@
 namespace buzzRun;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/buzz-stages" as buzzStages;
 
-// buzzRunFigure draws the steps inside package vm. Session.runChunk, in the root package,
+// buzzRunDiagram draws the steps inside package vm. Session.runChunk, in the root package,
 // hands the chunk in; buzz-compile draws where it comes from.
-export fun buzzRunFigure() > figure\Figure !> any {
+export fun buzzRunDiagram() > diagram\Diagram !> any {
     final vm = magus\graph().dir("libs/gopherbuzz/vm");
-    final chunk = figure\external("Compiled chunk", sub: "from Session.runChunk", look: figure\Look.input);
+    final chunk = diagram\external("Compiled chunk", sub: "from Session.runChunk", look: diagram\Look.input);
     final run = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Run().", name: "VM.Run",
         sub: "register window, inline caches");
     final compile = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#jitRun().", name: "Baseline JIT",
         sub: "depths, then golang-asm");
     final native = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/jitEntry().", name: "Native code",
-        sub: "int and float fast paths", look: figure\Look.focal);
+        sub: "int and float fast paths", look: diagram\Look.focal);
     final interpreter = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Exec().", name: "Interpreter",
         sub: "VM.Exec, one dispatch switch");
     final heap = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/Owner#", name: "Heap table",
-        sub: "NaN-box handles, freed on Close", look: figure\Look.store);
-    return figure\of("buzz-run",
+        sub: "NaN-box handles, freed on Close", look: diagram\Look.store);
+    return diagram\of("buzz-run",
             title: "Interpreter first, native code when the chunk allows it",
             eyebrow: "gopherbuzz",
             desc: "VM.Run offers the chunk to the baseline JIT, which judges it once: a numeric "
                 + "chunk becomes native code, anything else runs on the interpreter. Native code "
                 + "deopts to the interpreter at the instruction it stopped on. The interpreter "
                 + "allocates heap objects as handles into one table the session frees when it closes.",
-            direction: figure\Direction.down, level: figure\Level.symbol)
+            direction: diagram\Direction.down, level: diagram\Level.symbol)
         .actor(chunk)
         .actor(run)
         .actor(compile)
@@ -38,10 +38,10 @@ export fun buzzRunFigure() > figure\Figure !> any {
         .flowAcross(run, dst: interpreter, label: "JIT off")
         .flowAcross(compile, dst: native, label: "compiled")
         .flowAcross(compile, dst: interpreter, label: "declined")
-        .flowAcross(native, dst: interpreter, label: "deopt at ip", stroke: figure\Stroke.focal)
+        .flowAcross(native, dst: interpreter, label: "deopt at ip", stroke: diagram\Stroke.focal)
         .flowAcross(interpreter, dst: heap, label: "allocates")
         .rank(actors: [native, interpreter])
-        .legend(figure\Look.focal, label: "the native tier")
-        .legend(figure\Look.input, label: "what the session hands in")
+        .legend(diagram\Look.focal, label: "the native tier")
+        .legend(diagram\Look.input, label: "what the session hands in")
         .scope([vm]);
 }

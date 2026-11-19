@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 )
 
-// Figures and the console read these keys; an empty map stays a map, since absence is
+// Diagrams and the console read these keys; an empty map stays a map, since absence is
 // Indexed's to say.
 func TestImportGraphJSONKeys(t *testing.T) {
 	t.Parallel()

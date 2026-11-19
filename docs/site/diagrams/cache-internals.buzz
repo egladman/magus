@@ -1,9 +1,9 @@
 namespace cacheInternals;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun cacheInternalsFigure() > figure\Figure !> any {
+export fun cacheInternalsDiagram() > diagram\Diagram !> any {
     final cache = magus\graph().dir("internal/cache");
     final reflink = magus\graph().dir("internal/cache/reflink");
     final remotetest = magus\graph().dir("internal/cache/remotetest");
@@ -13,7 +13,7 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
     final jobs = magus\graph().dir("internal/job");
     final journal = magus\graph().dir("internal/recorder");
     final spawn = magus\graph().dir("internal/proc/spawn");
-    return figure\of("cache-internals",
+    return diagram\of("cache-internals",
             title: "A hit restores outputs; only a miss runs the target and signs it",
             eyebrow: "cache",
             desc: "A lookup hashes a target's declared inputs and asks the local store, then the "
@@ -26,15 +26,15 @@ export fun cacheInternalsFigure() > figure\Figure !> any {
         .box(reflink, label: "Reflink restore", sub: "copy-on-write clones")
         .box(httpx, label: "Remote tier", sub: "HTTP client")
         .box(spawn, label: "Spawner", sub: "runs a miss")
-        .group([jobs, journal], label: "Run records", sub: "whose writes, what ran", look: figure\Look.store)
-        .box(secret, label: "Signing key", sub: "sign and verify", look: figure\Look.input)
+        .group([jobs, journal], label: "Run records", sub: "whose writes, what ran", look: diagram\Look.store)
+        .box(secret, label: "Signing key", sub: "sign and verify", look: diagram\Look.input)
         .rank(dirs: [jobs, journal, secret])
         .edgesFromGraph()
         .hideEdges([httpx, spawn], dst: [journal, secret],
-            why: "the remote tier and the spawner record and redact for their own verbs; the figure follows a lookup")
-        .legend(figure\Look.focal, label: "the lookup")
-        .legend(figure\Look.input, label: "trusted runs only")
-        .legend(figure\Look.store, label: "append-only")
+            why: "the remote tier and the spawner record and redact for their own verbs; the diagram follows a lookup")
+        .legend(diagram\Look.focal, label: "the lookup")
+        .legend(diagram\Look.input, label: "trusted runs only")
+        .legend(diagram\Look.store, label: "append-only")
         .scope([cache, reflink, remotetest])
         .except([remotetest], why: "a test server for the remote protocols, linked only by tests");
 }

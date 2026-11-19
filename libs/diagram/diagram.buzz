@@ -1,14 +1,14 @@
-// magus/figure: architecture figures drawn from the graph's own records.
+// magus/diagram: architecture diagrams drawn from the graph's own records.
 //
 //     import "magus";
-//     import "magus/figure";
+//     import "magus/diagram";
 //
-//     export fun serverHttp() > Figure !> any {
+//     export fun serverHttp() > Diagram !> any {
 //         final g = magus\graph();
 //         final guard = g.dir("internal/httpx");
 //         final mcp = g.dir("internal/handler/mcp");
-//         final rpc = figure\without(g.layer("handler").dirs, drop: [mcp]);
-//         return figure\of("server-http")
+//         final rpc = diagram\without(g.layer("handler").dirs, drop: [mcp]);
+//         return diagram\of("server-http")
 //             .box(guard, label: "Guard", focal: true)
 //             .box(mcp, label: "/mcp")
 //             .group(rpc, label: "Connect RPC")
@@ -19,13 +19,13 @@
 // external(). Edges come from the records: imports and declared calls between drawn
 // boxes. The only hand-drawn edges are flowIn, flowOut and flowAcross, and each has an
 // actor at one end. Coverage is by set: every directory scope() names is drawn or
-// excepted, so a package joining a layer joins its group or fails the figure.
+// excepted, so a package joining a layer joins its group or fails the diagram.
 //
 // The module imports magus for the Dir, Layer and RefsResult record types and calls no
-// host function: the figure hands it the records, so it never reaches into a workspace,
+// host function: the diagram hands it the records, so it never reaches into a workspace,
 // and a test builds them as map literals.
 //
-// The design system these figures follow is cathrynlavery/diagram-design (MIT),
+// The design system these diagrams follow is cathrynlavery/diagram-design (MIT),
 // https://github.com/cathrynlavery/diagram-design: its palette, role treatments, zones,
 // legend strip, connector and label rules. The title face, the Pico font variables, the
 // header band, the budgets and the layout are this module's own.
@@ -33,7 +33,7 @@
 // Attributes hold only concrete values: a var() there is invalid SVG.
 // Theme.page adds a <style> block that repaints role classes
 // from the page's `--magus-diagram-*` properties.
-namespace figure;
+namespace diagram;
 
 import "result";
 import "std";
@@ -42,8 +42,8 @@ import "magus";
 
 // Result is what the private layers return. Exported calls raise it.
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value. It
-// copies html\escape because figure runs in sessions that register only the
-// Buzz stdlib (libs/figure/embed.go), where no host module resolves.
+// copies html\escape because diagram runs in sessions that register only the
+// Buzz stdlib (libs/diagram/embed.go), where no host module resolves.
 fun escapeSvg(s: str) > str {
     return s.replace("&", with: "&amp;").replace("\"", with: "&quot;").replace("<", with: "&lt;").replace(">", with: "&gt;");
 }
@@ -56,25 +56,25 @@ final Grid = 4;
 // can refuse a declaration in its own terms before any placement runs.
 final MaxNodes = 9;
 final MaxEdges = 12;
-// A figure's desc is its alt text, spoken whole by a screen reader.
+// A diagram's desc is its alt text, spoken whole by a screen reader.
 final MaxDescWords = 60;
 final MaxAccent = 2;
 // An edge label is a word or two on a connector; past this it is a note.
 final MaxEdgeLabel = 14;
 
-// HeaderPad is the band a title reserves above the figure. Content keeps its authored
+// HeaderPad is the band a title reserves above the diagram. Content keeps its authored
 // coordinates and the whole group is translated down by this much, so no diagram leaves room
 // for its own heading by hand.
 final HeaderPad = 40;
 
-// The bottom LegendStrip px of a figure with a legend belong to the strip; a node there is
+// The bottom LegendStrip px of a diagram with a legend belong to the strip; a node there is
 // a finding, since the design system forbids a legend inside the diagram area.
 final LegendStrip = 60;
-// More zones than this and the figure is a swimlane.
+// More zones than this and the diagram is a swimlane.
 final MaxZones = 3;
 // Four exits from one diamond is a nested decision drawn flat.
 final MaxDecisionExits = 3;
-// The tightest corner the design system allows. In an authored figure a leg too short to
+// The tightest corner the design system allows. In an authored diagram a leg too short to
 // seat it is a finding, never a sharper corner.
 final BendFloor = 6;
 // Space between an edge label's mask and the stroke it names.
@@ -84,7 +84,7 @@ final LabelClear = 6;
 
 // Palette carries the nine semantic roles every diagram draws from, as hex.
 // A role at an opacity is painted with fill-opacity over the role itself, so a
-// themed figure's tints follow the page. A themed palette writes role classes.
+// themed diagram's tints follow the page. A themed palette writes role classes.
 object Palette {
     themed: bool = false,
     paper: str = "",        // page ground, and the opaque mask under every node
@@ -161,7 +161,7 @@ fun paint(p: Palette, s: Style, fill: Paint? = null, stroke: Paint? = null, face
     return attrs;
 }
 
-// themeStyle is a themed figure's style sheet, where var() is valid. An unset
+// themeStyle is a themed diagram's style sheet, where var() is valid. An unset
 // property falls back to light hex, or dark under a dark scheme. Inlined, it
 // applies page-wide, so each rule is scoped to the root class.
 fun themeStyle(p: Palette, s: Style) > str {
@@ -173,10 +173,10 @@ fun themeStyle(p: Palette, s: Style) > str {
     final rules: mut [str] = mut [<str>];
     foreach (r in Paints) {
         final t = token(r);
-        light.append("--magus-figure-{t}:var(--magus-diagram-{t},{colorOf(l, r: r)})");
-        dark.append("--magus-figure-{t}:var(--magus-diagram-{t},{colorOf(d, r: r)})");
-        rules.append(".magus-diagram .magus-fill-{t}\{fill:var(--magus-figure-{t})\}");
-        rules.append(".magus-diagram .magus-stroke-{t}\{stroke:var(--magus-figure-{t})\}");
+        light.append("--magus-diagram-paint-{t}:var(--magus-diagram-{t},{colorOf(l, r: r)})");
+        dark.append("--magus-diagram-paint-{t}:var(--magus-diagram-{t},{colorOf(d, r: r)})");
+        rules.append(".magus-diagram .magus-fill-{t}\{fill:var(--magus-diagram-paint-{t})\}");
+        rules.append(".magus-diagram .magus-stroke-{t}\{stroke:var(--magus-diagram-paint-{t})\}");
     }
     rules.append(".magus-diagram .magus-sans\{font-family:var(--pico-font-family,{s.fontFamily})\}");
     rules.append(".magus-diagram .magus-mono\{font-family:var(--pico-font-family-monospace,{s.monoFamily})\}");
@@ -186,14 +186,14 @@ fun themeStyle(p: Palette, s: Style) > str {
 }
 
 // lightPalette and darkPalette are diagram-design's own skin, for the standalone .svg pair
-// GitHub loads. They deliberately do not mirror the site: an inlined figure blends into the
+// GitHub loads. They deliberately do not mirror the site: an inlined diagram blends into the
 // page through the CSS vars, while a standalone file is a document of its own and paints the
 // skill's paper. fill is the skill's backend fill (light) and paper-2 (dark).
 //
 // Every colour is an opaque hex. SVG paint takes no rgba(), and a rasterizer that follows
 // the spec (Inkscape, librsvg) paints one black, so rule and accentTint are the tints
 // pre-blended over the fill and paper they sit on. soft is the smallest text in the
-// figure, so it holds 4.5:1 against both paper and fill.
+// diagram, so it holds 4.5:1 against both paper and fill.
 fun lightPalette() > Palette {
     return Palette{
         paper = "#f5f5f5", fill = "#ffffff", ink = "#2d3142", muted = "#4f5d75",
@@ -217,7 +217,7 @@ fun darkPalette() > Palette {
 //
 // The omissions are deliberate. Grid, the budgets and flow()'s column geometry are
 // structural rather than painted: validate() reasons about them, so a per-render override
-// would let a caller ship a figure the validator approved under different numbers. Text
+// would let a caller ship a diagram the validator approved under different numbers. Text
 // baselines and the character-width estimates that size an opaque label mask are calibrated
 // against the sizes below and only ever move together with them.
 //
@@ -261,7 +261,7 @@ object Style {
 
     // A URL template with `{path}`; when set, every anchored node links to its path.
     anchorHref: str = "",
-    // A URL template with `{id}`; when set, a node with a drill links to that figure, ahead
+    // A URL template with `{id}`; when set, a node with a drill links to that diagram, ahead
     // of its anchor.
     drillHref: str = "",
 
@@ -309,7 +309,7 @@ object Node {
     // A URL the box links to when what it depicts lives outside the repo: another service,
     // a vendor's docs. Painted as an <a>; unlike anchor, nothing checks it.
     link: str = "",
-    // The id of the figure one level down that draws what this box stands for; set by an
+    // The id of the diagram one level down that draws what this box stands for; set by an
     // Atlas, painted as a link when the draw passes drillHref.
     drill: str = "",
     x: int = 0,
@@ -366,13 +366,13 @@ object LegendItem {
     label: str = "",
 }
 
-// Diagram is a figure laid out: what Figure.diagram() returns and
-// drawDiagram paints. A caller that reads the layout, as the docs
+// Layout is a diagram laid out: what Diagram.layout() returns and
+// drawLayout paints. A caller that reads the layout, as the docs
 // registry's drift stamp does, paints it in each theme without a second
 // layout. id namespaces the SVG's marker ids: several diagrams inlined
 // into one page share a document id space, and duplicate marker ids
 // silently repoint every arrowhead at the first definition.
-export object Diagram {
+export object Layout {
     id: str = "",
     title: str = "",
     eyebrow: str = "",
@@ -385,15 +385,15 @@ export object Diagram {
     nodes: [Node] = [<Node>],
     edges: [Edge] = [<Edge>],
     legend: [LegendItem] = [<LegendItem>],
-    // Globs of the tree this figure claims to depict, and the paths under them it leaves
+    // Globs of the tree this diagram claims to depict, and the paths under them it leaves
     // out on purpose, each with its reason. Read by a drift check, never by the painters.
     scope: [str] = [<str>],
     omits: {str: str} = {<str: str>},
-    // Digest of the observed set a flow composed in, empty for a figure nobody observed.
+    // Digest of the observed set a flow composed in, empty for a diagram nobody observed.
     // Painted nowhere; a drift check compares it against a fresh observation.
     stamp: str = "",
-    // Why a figure with no scope depicts no code, as its author said it. Painted nowhere;
-    // the drift summary reports it so an unchecked figure says why it is unchecked.
+    // Why a diagram with no scope depicts no code, as its author said it. Painted nowhere;
+    // the drift summary reports it so an unchecked diagram says why it is unchecked.
     unscoped: str = "",
     // 0 spreads slot k of n at k/(n+1) along its side, the authored form. A positive pitch
     // puts the n slots that far apart, symmetric about the side's midline, as flow fans.
@@ -436,14 +436,14 @@ fun onGrid(n: int) > bool {
 
 // findNode returns the node with id, or null when the edge names something that is not
 // there. validate reports that; render treats it as unreachable.
-fun findNode(d: Diagram, id: str) > Node? {
+fun findNode(d: Layout, id: str) > Node? {
     foreach (n in d.nodes) {
         if (n.id == id) { return n; }
     }
     return null;
 }
 
-fun isDecision(d: Diagram, id: str) > bool {
+fun isDecision(d: Layout, id: str) > bool {
     final n = findNode(d, id);
     if (n == null) { return false; }
     return n!.role == Role.decision;
@@ -452,7 +452,7 @@ fun isDecision(d: Diagram, id: str) > bool {
 // edgeSegments returns an edge's route as axis-aligned segments, each [x1, y1, x2, y2].
 // It must branch exactly as connectorPath and routePath do, or the overlap check below
 // validates a route nobody draws.
-fun edgeSegments(d: Diagram, e: Edge) > [[int]] {
+fun edgeSegments(d: Layout, e: Edge) > [[int]] {
     final geo = edgeGeometry(d, e);
     if (e.via.len() > 0) {
         final pts = edgePoints(geo, e);
@@ -526,10 +526,10 @@ fun overlapLen(p1: int, p2: int, q1: int, q2: int) > int {
 // overlappingConnectors reports each pair of edges that share a stroke line. Runs on
 // automatic placement too, which is exactly where this goes wrong unnoticed.
 // optimization: segment each edge once, not once per pair it joins.
-//   measured: the 49 docs figures' 147 checks, 70-83ms to 11-13ms (n=5).
+//   measured: the 49 docs diagrams' 147 checks, 70-83ms to 11-13ms (n=5).
 //   trade-off: every edge's segments are held at once.
 //   assumes: edgeSegments reads only d and e.
-fun overlappingConnectors(d: Diagram) > [Fault] {
+fun overlappingConnectors(d: Layout) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     final segs: mut [[[int]]] = mut [<[[int]]>];
     foreach (e in d.edges) { segs.append(edgeSegments(d, e: e)); }
@@ -585,7 +585,7 @@ fun edgeWeight(e: Edge) > int {
 // inside both, so a shared end or a touch is none. The lesser edge carries the bridge, and
 // of two equals the one declared later. A crossing is drawn, never refused; only a bridge
 // with no room to seat is a fault.
-fun crossings(d: Diagram) > [Crossing] {
+fun crossings(d: Layout) > [Crossing] {
     final found: mut [Crossing] = mut [<Crossing>];
     final segs: mut [[[int]]] = mut [<[[int]]>];
     foreach (e in d.edges) { segs.append(edgeSegments(d, e: e)); }
@@ -622,7 +622,7 @@ fun crossings(d: Diagram) > [Crossing] {
 
 // bridgeRoom is how far a crossing's hop may reach along the bridged leg before it meets the
 // leg's end or halfway to another hop on it.
-fun bridgeRoom(d: Diagram, c: Crossing, found: [Crossing]) > int {
+fun bridgeRoom(d: Layout, c: Crossing, found: [Crossing]) > int {
     var room = 0;
     foreach (seg in edgeSegments(d, e: d.edges[c.bridged])) {
         if (onSegment(seg, x: c.x, y: c.y)) {
@@ -639,7 +639,7 @@ fun bridgeRoom(d: Diagram, c: Crossing, found: [Crossing]) > int {
 }
 
 // bridgeFaults reports a crossing whose hop cannot seat.
-fun bridgeFaults(d: Diagram, found: [Crossing]) > [Fault] {
+fun bridgeFaults(d: Layout, found: [Crossing]) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     foreach (c in found) {
         final room = bridgeRoom(d, c: c, found: found);
@@ -675,7 +675,7 @@ object Fault {
 
 // validate returns one message per broken rule, empty when the diagram is sound: each
 // fault's text, then its fix after "; ".
-fun validate(d: Diagram) > [str] {
+fun validate(d: Layout) > [str] {
     final msgs: mut [str] = mut [<str>];
     foreach (f in faults(d)) {
         if (f.fix == "") {
@@ -691,7 +691,7 @@ fun validate(d: Diagram) > [str] {
 // non-negotiables plus the structural ones a renderer cannot paper over: an edge naming a
 // missing node, two nodes occupying the same space, two connectors landing on the same
 // point of the same box.
-fun faults(d: Diagram) > [Fault] {
+fun faults(d: Layout) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
 
     if (d.id == "") { errs.append(Fault{ rule = "id", text = "diagram has no id", fix = "marker ids would collide when inlined" }); }
@@ -749,7 +749,7 @@ fun faults(d: Diagram) > [Fault] {
         }
     }
     if (d.zones.len() > MaxZones) {
-        errs.append(Fault{ rule = "zoneBudget", text = "{d.zones.len()} zones exceeds the budget of {MaxZones}", fix = "a figure banded that finely is a swimlane" });
+        errs.append(Fault{ rule = "zoneBudget", text = "{d.zones.len()} zones exceeds the budget of {MaxZones}", fix = "a diagram banded that finely is a swimlane" });
     }
 
     var i = 0;
@@ -821,7 +821,7 @@ fun faults(d: Diagram) > [Fault] {
 
 // viaFaults holds a polyline to the rules connectorPath enforces by construction: every
 // corner on the grid, and every leg axis-aligned, so a via cannot smuggle in a diagonal.
-fun viaFaults(d: Diagram, e: Edge) > [Fault] {
+fun viaFaults(d: Layout, e: Edge) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     final ends = [e.src, e.dst];
     if (e.via.len() == 0) { return errs; }
@@ -863,7 +863,7 @@ fun bounds(outer: Node, inner: Node) > bool {
 // tightestBend returns the largest radius the painters could seat at the edge's tightest
 // turning corner, or BendFloor when nothing turns. It repeats connectorPath's and routePath's
 // clamps, so a finding here is exactly a corner they would have drawn sharper.
-fun tightestBend(d: Diagram, e: Edge) > int {
+fun tightestBend(d: Layout, e: Edge) > int {
     final geo = edgeGeometry(d, e);
     if (e.via.len() > 0) {
         if (e.via.len() % 2 != 0) { return BendFloor; }
@@ -909,7 +909,7 @@ fun tightestBend(d: Diagram, e: Edge) > int {
 
 // sharedAttachPoints reports connectors that land on the same point of the same box. Two
 // edges may share a side, but only by declaring different slots of the same total.
-fun sharedAttachPoints(d: Diagram) > [Fault] {
+fun sharedAttachPoints(d: Layout) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
     final seen: mut [str] = mut [<str>];
     foreach (e in d.edges) {
@@ -929,7 +929,7 @@ fun sharedAttachPoints(d: Diagram) > [Fault] {
     return errs;
 }
 
-fun attachKey(d: Diagram, e: Edge, isFrom: bool) > str {
+fun attachKey(d: Layout, e: Edge, isFrom: bool) > str {
     var n = e.dst;
     var slot = e.dstSlot;
     var slots = e.dstSlots;
@@ -944,7 +944,7 @@ fun attachKey(d: Diagram, e: Edge, isFrom: bool) > str {
 
 // resolveSide turns "auto" into a concrete side by comparing box centers: the wider gap
 // wins, so two boxes side by side connect left-to-right rather than looping over the top.
-fun resolveSide(d: Diagram, e: Edge, isFrom: bool) > Side {
+fun resolveSide(d: Layout, e: Edge, isFrom: bool) > Side {
     var declared = e.dstSide;
     if (isFrom) { declared = e.srcSide; }
     if (declared != Side.auto) { return declared; }
@@ -1147,14 +1147,14 @@ fun edgeStroke(kind: str) > Paint {
 // box face; a boundary goes under them because crossing it is what a connector is for.
 //
 // Style is optional: renderSvg(d, palette) draws the design system as shipped.
-fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > result\Result::<str> {
+fun renderSvg(d: Layout, p: Palette, s: Style = Style{}) > result\Result::<str> {
     final errs = validate(d);
     if (errs.len() > 0) {
         return result\fail::<str>("diagram \"{d.id}\": " + errs.join("; "));
     }
 
     // A heading gets its own band and the content is translated beneath it, so authored
-    // coordinates describe the figure alone.
+    // coordinates describe the diagram alone.
     var pad = 0;
     if (d.title != "" or d.eyebrow != "") { pad = HeaderPad; }
     final total = d.height + pad;
@@ -1210,7 +1210,7 @@ fun drawn(r: result\Result::<str>) > str {
 // renderMarkers defines one arrowhead per connector kind. All three are always emitted:
 // an arrowhead referencing a marker that was not defined renders as a bare line, and which
 // kinds a diagram uses is not worth tracking to save 200 bytes.
-fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
+fun renderMarkers(d: Layout, p: Palette, s: Style) > str {
     final parts: mut [str] = mut ["<defs>"];
     final half = s.arrowHeight / 2;
     foreach (k in ["default", "accent", "link"]) {
@@ -1222,7 +1222,7 @@ fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
     return parts.join("");
 }
 
-fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
+fun renderHeader(d: Layout, p: Palette, s: Style) > str {
     var svg = "";
     if (d.eyebrow != "") {
         svg = svg + "<text x=\"{s.margin}\" y=\"32\"" + paint(p, s: s, fill: Paint.soft, face: Face.mono)
@@ -1289,7 +1289,7 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 // renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
 // Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
 // followable before any script loads. A node with a link of its own is always one. No
-// line is painted: a figure moves only when what it depicts does, never when an edit
+// line is painted: a diagram moves only when what it depicts does, never when an edit
 // shifts the anchored definition.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
@@ -1356,7 +1356,7 @@ fun renderNodeBody(n: Node, p: Palette, s: Style) > str {
 
 // renderEdge paints one connector. id is its stable fragment, so a link can target one
 // arrow and CSS :target can light it with no script; hops are the crossings it bridges.
-fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style, id: str, hops: [[int]]) > str {
+fun renderEdge(d: Layout, e: Edge, p: Palette, s: Style, id: str, hops: [[int]]) > str {
     final geo = edgeGeometry(d, e);
     var dash = "";
     if (e.dashed) { dash = " stroke-dasharray=\"{s.edgeDash}\""; }
@@ -1383,10 +1383,10 @@ fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style, id: str, hops: [[int]]
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
 }
 
-// edgeIds names each connector `<figure>-edge-<src>-<dst>`, every byte outside
+// edgeIds names each connector `<diagram>-edge-<src>-<dst>`, every byte outside
 // [A-Za-z0-9_-] written as _ and its hex, so the id is a valid fragment. The same pair drawn
 // twice takes -2, -3 on the later ones, so no two paths share an id.
-fun edgeIds(d: Diagram) > [str] {
+fun edgeIds(d: Layout) > [str] {
     final ids: mut [str] = mut [<str>];
     final seen: mut {str: int} = mut {<str: int>};
     foreach (e in d.edges) {
@@ -1421,7 +1421,7 @@ fun fragment(s: str) > str {
 
 // edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a
 // five-int list beats threading five result params through the painters.
-fun edgeGeometry(d: Diagram, e: Edge) > [int] {
+fun edgeGeometry(d: Layout, e: Edge) > [int] {
     final a = findNode(d, id: e.src);
     final b = findNode(d, id: e.dst);
     if (a == null or b == null) { return [0, 0, 0, 0, 1]; }
@@ -1449,7 +1449,7 @@ fun renderEdgeLabel(e: Edge, p: Palette, s: Style, at: [int]) > str {
 // labelPlacement returns [cx, cy, w] for an edge label: centred on cx, baseline just under
 // cy, over a mask w wide spanning cy-8 to cy+4. Empty when no spot is clear, which validate
 // reports as a finding naming the edge, or when e is not one of d's edges.
-fun labelPlacement(d: Diagram, e: Edge) > [int] {
+fun labelPlacement(d: Layout, e: Edge) > [int] {
     final spots = labelSpots(d);
     var k = 0;
     while (k < d.edges.len()) {
@@ -1462,7 +1462,7 @@ fun labelPlacement(d: Diagram, e: Edge) > [int] {
 
 // labelSpots places every edge's label in declaration order, each mask an obstacle to the
 // labels after it; an unlabelled edge, or one with no clear spot, gets an empty entry.
-fun labelSpots(d: Diagram) > [[int]] {
+fun labelSpots(d: Layout) > [[int]] {
     final obstacles: mut [[int]] = mut [<[int]>];
     foreach (s in connectorObstacles(d)) { obstacles.append(s); }
     final spots: mut [[int]] = mut [<[int]>];
@@ -1479,7 +1479,7 @@ fun labelSpots(d: Diagram) > [[int]] {
 
 // connectorObstacles is every leg of every connector, plus the square each bridge's hop can reach, as
 // the obstacles a label keeps clear of: [x1, y1, x2, y2], a leg or a box's corners.
-fun connectorObstacles(d: Diagram) > [[int]] {
+fun connectorObstacles(d: Layout) > [[int]] {
     final all: mut [[int]] = mut [<[int]>];
     foreach (e in d.edges) {
         foreach (seg in edgeSegments(d, e: e)) { all.append(seg); }
@@ -1495,7 +1495,7 @@ fun connectorObstacles(d: Diagram) > [[int]] {
 // it; a horizontal leg takes the label above its stroke, else below, a vertical one right,
 // else left. The first spot whose mask stays on the canvas and keeps LabelClear from every
 // stroke and box wins, so a label crowded off one leg moves to the next.
-fun labelSpot(d: Diagram, e: Edge, strokes: [[int]]) > [int] {
+fun labelSpot(d: Layout, e: Edge, strokes: [[int]]) > [int] {
     final w = snap(e.label.len() * 5 + 12);
     final flat: mut [[int]] = mut [<[int]>];
     final upright: mut [[int]] = mut [<[int]>];
@@ -1547,7 +1547,7 @@ fun insertByLength(segs: mut [[int]], seg: [int]) > void {
 // labelClear reports whether a label mask at [cx, cy, w] sits on the canvas and keeps
 // LabelClear from every box and stroke. A security boundary is exempt: a label inside one
 // reads as inside the boundary.
-fun labelClear(d: Diagram, at: [int], strokes: [[int]]) > bool {
+fun labelClear(d: Layout, at: [int], strokes: [[int]]) > bool {
     final mask = [at[0] - at[2] / 2, at[1] - 8, at[2], 12];
     if (mask[0] < 0 or mask[1] < 0 or mask[0] + mask[2] > d.width or mask[1] + mask[3] > d.height) {
         return false;
@@ -1567,9 +1567,9 @@ fun labelClear(d: Diagram, at: [int], strokes: [[int]]) > bool {
     return true;
 }
 
-// renderLegend draws the strip in the figure's bottom LegendStrip px, which validate keeps
+// renderLegend draws the strip in the diagram's bottom LegendStrip px, which validate keeps
 // free of nodes: a hairline, the LEGEND word, then one swatch per entry.
-fun renderLegend(d: Diagram, p: Palette, s: Style) > str {
+fun renderLegend(d: Layout, p: Palette, s: Style) > str {
     if (d.legend.len() == 0) { return ""; }
     final top = d.height - LegendStrip;
     final y = d.height - s.margin;
@@ -1594,8 +1594,8 @@ fun renderLegend(d: Diagram, p: Palette, s: Style) > str {
 
 // twoBox is the smallest sound diagram: two boxes on one row, one connector between them.
 // Tests mutate a copy of it so each one states only the rule it is about.
-fun twoBox() > Diagram {
-    return Diagram{
+fun twoBox() > Layout {
+    return Layout{
         id = "t",
         title = "Two boxes",
         desc = "a and b",
@@ -1615,7 +1615,7 @@ test "a well-formed diagram validates clean" {
 
 test "authored coordinates must sit on the grid" {
     final d = twoBox();
-    final bad = Diagram{
+    final bad = Layout{
         id = d.id, width = d.width, height = d.height,
         nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
     };
@@ -1623,7 +1623,7 @@ test "authored coordinates must sit on the grid" {
 }
 
 test "overlapping nodes are a finding" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 480, height = 240,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
@@ -1634,7 +1634,7 @@ test "overlapping nodes are a finding" {
 }
 
 test "an edge naming a missing node is a finding" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 480, height = 240,
         nodes = [ Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 } ],
         edges = [ Edge{ src = "a", dst = "ghost" } ],
@@ -1645,7 +1645,7 @@ test "an edge naming a missing node is a finding" {
 // The rule this pins is the one that makes a diagram unreadable rather than merely ugly:
 // two connectors landing on the same point of the same box cannot be told apart.
 test "two connectors on one attach point are a finding" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 640, height = 320,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
@@ -1661,7 +1661,7 @@ test "two connectors on one attach point are a finding" {
 }
 
 test "fanning the same side with distinct slots validates clean" {
-    final good = Diagram{
+    final good = Layout{
         id = "t", width = 640, height = 320,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
@@ -1717,7 +1717,7 @@ test "marker ids are namespaced by diagram id" {
 }
 
 test "an invalid diagram fails the render rather than shipping crooked" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 480, height = 240,
         nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
     };
@@ -1765,9 +1765,9 @@ test "a customized Style field reaches the attribute" {
     std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
 }
 
-// The docs lease-loop figure, bend at the corridor's centre so both legs seat the bend floor.
-fun leaseLoopGeometry() > Diagram {
-    return Diagram{
+// The docs lease-loop diagram, bend at the corridor's centre so both legs seat the bend floor.
+fun leaseLoopGeometry() > Layout {
+    return Layout{
         id = "lease-loop", width = 960, height = 600,
         nodes = [
             Node{ id = "cp", label = "cp", x = 32, y = 88, w = 200, h = 64 },
@@ -1813,18 +1813,18 @@ test "an edge label on a bent route clears every box" {
 
 test "a horizontal leg long enough for the label carries it above the stroke" {
     final base = twoBox();
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+    final d = Layout{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = [ Edge{ src = "a", dst = "b", label = "calls" } ] };
     assert\equal(labelPlacement(d, e: d.edges[0]), want: [240, 126, 36], message: "centred on the leg, mask bottom 10px above y=140");
 }
 
 test "the legend strip carries its word and keeps nodes out" {
     final base = twoBox();
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
+    final d = Layout{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = base.edges, legend = [ LegendItem{ role = Role.focal, label = "focal" } ] };
     final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf(">LEGEND</text>") != null, message: "the strip is labelled");
-    final low = Diagram{ id = base.id, width = base.width, height = base.height, legend = d.legend,
+    final low = Layout{ id = base.id, width = base.width, height = base.height, legend = d.legend,
         nodes = [ Node{ id = "a", label = "A", x = 32, y = 176, w = 160, h = 56 } ] };
     final errs = validate(low);
     assert\equal(errs.len(), want: 1, message: "a box reaching y=232 sits in the strip below y=180");
@@ -1832,7 +1832,7 @@ test "the legend strip carries its word and keeps nodes out" {
 }
 
 test "input and security paint the skill's treatments" {
-    final d = Diagram{
+    final d = Layout{
         id = "t", width = 640, height = 320,
         nodes = [
             Node{ id = "trust", label = "trusted", role = Role.security, x = 16, y = 32, w = 400, h = 160 },
@@ -1847,7 +1847,7 @@ test "input and security paint the skill's treatments" {
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
     std\assert((svg.indexOf("data-node=\"trust\"") ?? 0) < (svg.indexOf("data-edge=") ?? 0), message: "the boundary paints under the connector");
-    final straddle = Diagram{ id = "t", width = 640, height = 320,
+    final straddle = Layout{ id = "t", width = 640, height = 320,
         nodes = [ d.nodes[0], Node{ id = "b", label = "B", x = 320, y = 64, w = 160, h = 56 } ] };
     assert\equal(validate(straddle).len(), want: 1, message: "a box straddling the boundary still overlaps it");
 }
@@ -1855,7 +1855,7 @@ test "input and security paint the skill's treatments" {
 test "a boundary zone paints the security treatment and a plain zone does not" {
     final base = twoBox();
     final z = ZoneRect{ label = "trusted", x = 16, y = 80, w = 448, h = 120, boundary = true };
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
+    final d = Layout{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
     assert\equal(validate(d).len(), want: 0, message: "a boundary is a zone, so boxes inside it are no overlap");
     final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "dashed accent at half");
@@ -1865,7 +1865,7 @@ test "a boundary zone paints the security treatment and a plain zone does not" {
 
 test "a node link paints an <a> whatever anchorHref says" {
     final base = twoBox();
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
+    final d = Layout{ id = base.id, width = base.width, height = base.height, edges = base.edges,
         nodes = [ Node{ id = "a", label = "A", link = "https://stripe.com/docs", x = 32, y = 112 }, base.nodes[1] ] };
     final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("<a href=\"https://stripe.com/docs\" data-node=\"a\"><g>") != null, message: "linked: {svg}");
@@ -1873,7 +1873,7 @@ test "a node link paints an <a> whatever anchorHref says" {
 }
 
 test "faults carry the rule and subjects validate's message leaves in prose" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 640, height = 400,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
@@ -1906,8 +1906,8 @@ test "a decision takes at most three exits" {
         Edge{ src = "q", dst = "e", srcSide = Side.right, dstSide = Side.left },
         Edge{ src = "q", dst = "s", srcSide = Side.bottom, dstSide = Side.top },
     ];
-    assert\equal(validate(Diagram{ id = "t", width = 640, height = 360, nodes = nodes, edges = three }).len(), want: 0, message: "three exits");
-    final four = Diagram{ id = "t", width = 640, height = 360, nodes = nodes,
+    assert\equal(validate(Layout{ id = "t", width = 640, height = 360, nodes = nodes, edges = three }).len(), want: 0, message: "three exits");
+    final four = Layout{ id = "t", width = 640, height = 360, nodes = nodes,
         edges = [ three[0], three[1], three[2], Edge{ src = "q", dst = "w", srcSide = Side.left, dstSide = Side.right } ] };
     final errs = validate(four);
     assert\equal(errs.len(), want: 1, message: "a fourth exit is a finding");
@@ -1917,24 +1917,24 @@ test "a decision takes at most three exits" {
 test "zones paint a solid hairline wash and stop at three" {
     final base = twoBox();
     final z = ZoneRect{ label = "core", x = 16, y = 80, w = 448, h = 120 };
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
+    final d = Layout{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
     final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("fill=\"#2d3142\" stroke=\"#2d3142\" fill-opacity=\"0.02\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
         message: "ink wash, ink hairline, no dash");
     std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#5f6780\" font-family=\"monospace\" font-size=\"7\"") != null, message: "label centred, 7px, soft");
-    final four = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
+    final four = Layout{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, zones = [z, z, z, z] };
     assert\equal(validate(four).len(), want: 1, message: "a fourth zone is a finding");
 }
 
 test "a bend too tight for the floor is a finding, not a sharper corner" {
     final base = twoBox();
     final nodes = [ base.nodes[0], Node{ id = "b", label = "B", x = 288, y = 176, w = 160, h = 56 } ];
-    final tight = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
+    final tight = Layout{ id = base.id, width = base.width, height = base.height, nodes = nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = Side.right, dstSide = Side.left, bend = 196 } ] };
     final errs = validate(tight);
     assert\equal(errs.len(), want: 1, message: "a 4px leg cannot seat a 6px bend");
     std\assert(errs[0].indexOf("leaves 4px") != null, message: "named: {errs[0]}");
-    final roomy = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
+    final roomy = Layout{ id = base.id, width = base.width, height = base.height, nodes = nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = Side.right, dstSide = Side.left } ] };
     final svg = drawn(renderSvg(roomy, p: lightPalette(), s: Style{ bendRadius = 2 }));
     std\assert(svg.indexOf("L 234 140 Q 240 140 240 146") != null, message: "a radius under the floor is raised to 6");
@@ -1942,7 +1942,7 @@ test "a bend too tight for the floor is a finding, not a sharper corner" {
 
 test "anchorHref links an anchored node and leaves the rest alone" {
     final base = twoBox();
-    final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
+    final d = Layout{ id = base.id, width = base.width, height = base.height, edges = base.edges,
         nodes = [ Node{ id = "a", label = "A", anchor = "internal/job", x = 32, y = 112 }, base.nodes[1] ] };
     final linked = drawn(renderSvg(d, p: lightPalette(), s: Style{ anchorHref = "/code/\{path\}" }));
     std\assert(linked.indexOf("<a href=\"/code/internal/job\" data-node=\"a\" data-anchor=\"internal/job\"><g>") != null,
@@ -2057,7 +2057,7 @@ test "a via route rounds every corner" {
 // is a finding rather than something the painter quietly draws.
 test "a via route is validated leg by leg" {
     final base = twoBox();
-    final routed = Diagram{
+    final routed = Layout{
         id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = [
             Edge{ src = "a", dst = "b", srcSide = Side.right, dstSide = Side.left, via = [240, 140] },
@@ -2066,7 +2066,7 @@ test "a via route is validated leg by leg" {
         ],
     };
     assert\equal(validate(routed).len(), want: 0, message: "a straight via and a return leg are sound");
-    final diagonal = Diagram{
+    final diagonal = Layout{
         id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = Side.bottom, dstSide = Side.left, via = [112, 200, 240, 200] } ],
     };
@@ -2074,8 +2074,8 @@ test "a via route is validated leg by leg" {
 }
 
 // cross is a plus: a->b runs across y=140, c->d down x=240, crossing at 240,140.
-fun cross(across: Edge, down: Edge) > Diagram {
-    return Diagram{
+fun cross(across: Edge, down: Edge) > Layout {
+    return Layout{
         id = "t", width = 480, height = 320,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 112, w = 112, h = 56 },
@@ -2104,7 +2104,7 @@ test "every proper crossing hops the dashed or lesser edge" {
 }
 
 test "a crossing too near a bend to seat its hop is a finding, never a refusal of the crossing" {
-    final tight = Diagram{
+    final tight = Layout{
         id = "t", width = 480, height = 320,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 112, w = 112, h = 56 },
@@ -2124,7 +2124,7 @@ test "a crossing too near a bend to seat its hop is a finding, never a refusal o
 
 test "a label with no spot 6px clear of every stroke and box is a finding naming its edge" {
     final nodes = [ Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 }, Node{ id = "b", label = "B", x = 264, y = 112, w = 160, h = 56 } ];
-    final d = Diagram{ id = "t", width = 480, height = 240, nodes = nodes, edges = [ Edge{ src = "a", dst = "b", label = "abcdefghijklmn" } ] };
+    final d = Layout{ id = "t", width = 480, height = 240, nodes = nodes, edges = [ Edge{ src = "a", dst = "b", label = "abcdefghijklmn" } ] };
     final errs = faults(d);
     assert\equal(errs.len(), want: 1, message: "one fault: {validate(d)}");
     assert\equal([errs[0].rule, errs[0].subjects[0], errs[0].subjects[1]], want: ["label", "a", "b"], message: "an 80px mask on a 72px leg");
@@ -2133,7 +2133,7 @@ test "a label with no spot 6px clear of every stroke and box is a finding naming
 
 test "every edge path carries a stable id a fragment can target" {
     final base = twoBox();
-    final d = Diagram{ id = "my fig", width = base.width, height = base.height, nodes = [
+    final d = Layout{ id = "my fig", width = base.width, height = base.height, nodes = [
             Node{ id = "a/b", label = "A", x = 32, y = 112, w = 160, h = 56 },
             Node{ id = "c", label = "C", x = 288, y = 112, w = 160, h = 56 },
         ],
@@ -2143,7 +2143,7 @@ test "every edge path carries a stable id a fragment can target" {
     std\assert(svg.indexOf("data-edge=\"a/b->c\" id=\"my_20fig-edge-a_2fb-c\"") != null, message: "beside data-edge: {svg}");
 }
 
-// Layout constants for flow()'s automatic placement. Wider columns than an authored figure
+// Layout constants for flow()'s automatic placement. Wider columns than an authored diagram
 // uses, because a label there is a project or target name nobody shortened for the picture.
 final LayerNodeW = 216;
 final LayerNodeH = 56;
@@ -2154,7 +2154,7 @@ final LayerTop = 64;
 // Distinct attach slots are NOT enough: two connectors can leave one box at different points
 // and still turn onto the same crossing line.
 test "two connectors sharing a crossing line are a finding" {
-    final bad = Diagram{
+    final bad = Layout{
         id = "t", width = 640, height = 400,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
@@ -2172,7 +2172,7 @@ test "two connectors sharing a crossing line are a finding" {
 }
 
 test "offsetting one bend clears the overlap" {
-    final good = Diagram{
+    final good = Layout{
         id = "t", width = 640, height = 400,
         nodes = [
             Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
@@ -2223,8 +2223,8 @@ final FaceIn = 1;
 final FaceBefore = 2;
 final FaceAfter = 3;
 
-// Role picks a box's treatment. focal takes the accent (two per figure, counting focal
-// edges); store is a persistent thing; external sits outside what the figure depicts; input
+// Role picks a box's treatment. focal takes the accent (two per diagram, counting focal
+// edges); store is a persistent thing; external sits outside what the diagram depicts; input
 // is data arriving from outside; optional is dashed; decision is a diamond with at most
 // three exits and no tag or sub. A trust boundary is a group, not a box: boundary().
 enum<str> Role { default, focal, store, external, input, optional, decision, security }
@@ -2257,8 +2257,8 @@ object ObservedEdge {
     dst: str = "",
 }
 
-// Observed is the generated half of a figure. stamp identifies the observation, so a later
-// check can tell a figure drawn from a stale one.
+// Observed is the generated half of a diagram. stamp identifies the observation, so a later
+// check can tell a diagram drawn from a stale one.
 object Observed {
     nodes: [ObservedNode] = [<ObservedNode>],
     edges: [ObservedEdge] = [<ObservedEdge>],
@@ -2279,8 +2279,8 @@ object Hidden {
     why: str = "",
 }
 
-// Sketch is the layout's figure under construction. Build one with flow(), chain the
-// declarations, and finish with diagram() or svg(). Nothing here takes a coordinate or a
+// Sketch is the layout's diagram under construction. Build one with flow(), chain the
+// declarations, and finish with layout() or svg(). Nothing here takes a coordinate or a
 // weight: rank, row and order relate declared nodes, and a declaration the layout cannot
 // honour is refused with a finding naming the flow call to change.
 object Sketch {
@@ -2308,7 +2308,7 @@ object Sketch {
     // gopherbuzz's checker lets a str through where an enum is declared, and its value then
     // reads null; each such argument is recorded here and refused with the declarations.
     stringly: mut [str],
-    // Only flow reads the constraints, so they stay here rather than on the Diagram.
+    // Only flow reads the constraints, so they stay here rather than on the Layout.
     ranks: mut [[str]],
     rows: mut [[str]],
     orders: mut [[str]],
@@ -2368,7 +2368,7 @@ object Sketch {
     // zone stacks its members into one band, bands in declaration order, unzoned nodes
     // last unless one alone feeds a band, its neighbours all lie in two adjacent bands,
     // where it takes a row between them, or its rank lies outside every zone, where it
-    // lines up with its neighbours across the figure. A node belongs to at most one zone or
+    // lines up with its neighbours across the diagram. A node belongs to at most one zone or
     // boundary.
     mut fun zone(label: str, members: [str]) > mut Sketch {
         this.zones.append(FlowZone{ label = label, members = members });
@@ -2389,14 +2389,14 @@ object Sketch {
         return this;
     }
 
-    // scope names the directories the figure depicts, so the drift check can report a
+    // scope names the directories the diagram depicts, so the drift check can report a
     // package under them that no node anchors and no omit names.
     mut fun scope(globs: [str]) > mut Sketch {
         foreach (g in globs) { this.scopeGlobs.append(g); }
         return this;
     }
 
-    // unscoped says why a figure depicts no code: a decision process, a CI arrangement. The
+    // unscoped says why a diagram depicts no code: a decision process, a CI arrangement. The
     // reason reaches the drift summary.
     mut fun unscoped(why: str) > mut Sketch {
         this.isUnscoped = true;
@@ -2413,7 +2413,7 @@ object Sketch {
     }
 
     // omitEdge hides one observed edge. The reason is required, so the next reader of the
-    // figure learns why the code's edge is missing from the picture.
+    // diagram learns why the code's edge is missing from the picture.
     mut fun omitEdge(src: str, dst: str, why: str) > mut Sketch {
         this.hidden.append(Hidden{ src = src, dst = dst, why = why });
         return this;
@@ -2442,10 +2442,10 @@ object Sketch {
         return this;
     }
 
-    // diagram lays the figure out and validates it. Throws one finding per line, each
+    // layout lays the diagram out and validates it. Throws one finding per line, each
     // naming the flow call to change, when the declaration contradicts itself or no layout
-    // the search tries comes out clean. Same declarations, same Diagram.
-    fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
+    // the search tries comes out clean. Same declarations, same Layout.
+    fun layout() > Layout !> str { //nolint:no-throw // the exported call raises
         final laid = layoutFlow(this);
         if (laid.error -> e) {
             throw e.message; //nolint:no-throw // the exported call raises
@@ -2454,7 +2454,7 @@ object Sketch {
     }
 
     fun svg(p: Palette, s: Style = Style{}) > str !> str { //nolint:no-throw // the exported call raises
-        final d = this.diagram();
+        final d = this.layout();
         final drawnSvg = renderSvg(d, p: p, s: s);
         if (drawnSvg.error -> e) {
             throw e.message; //nolint:no-throw // the exported call raises
@@ -2463,7 +2463,7 @@ object Sketch {
     }
 }
 
-// flow starts an empty left-to-right figure, composed over observed when a generator
+// flow starts an empty left-to-right diagram, composed over observed when a generator
 // supplies one: its nodes and edges are drawn unless a declaration overrides them. The
 // collections are built here because a mut collection field cannot carry a default.
 fun flow(id: str, observed: Observed = Observed{}) > mut Sketch {
@@ -2704,7 +2704,7 @@ fun compose(declared: Sketch) > Sketch {
 
 // compositionFindings reports what the merge rule cannot settle on its own: an omitEdge that
 // no longer hides anything or gives no reason, two sides disagreeing on where a box lives in
-// the code, a declared box drawing a path the figure omits, and a declared edge passing an
+// the code, a declared box drawing a path the diagram omits, and a declared edge passing an
 // observed import off as narrative.
 fun compositionFindings(declared: Sketch) > mut [str] {
     final errs: mut [str] = mut [<str>];
@@ -2863,7 +2863,7 @@ fun declarationFindings(f: Sketch) > [str] {
     if (f.nodes.len() > MaxNodes) { errs.append("{f.nodes.len()} nodes exceeds the budget of {MaxNodes}; {split}"); }
     if (f.edges.len() > MaxEdges) { errs.append("{f.edges.len()} edges exceeds the budget of {MaxEdges}; {split}"); }
     if (focal > MaxAccent) {
-        errs.append("{focal} focal nodes and edges exceed the budget of {MaxAccent}; keep Role.focal and EdgeRole.focal for the one point the figure makes");
+        errs.append("{focal} focal nodes and edges exceed the budget of {MaxAccent}; keep Role.focal and EdgeRole.focal for the one point the diagram makes");
     }
     if (f.zones.len() > MaxZones) {
         errs.append("{f.zones.len()} zones and boundaries exceed the budget of {MaxZones}; merge bands or {split}");
@@ -2939,7 +2939,7 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
     }
     final succ = lists(nn);
     foreach (e in f.edges) { succ[idx[e.src] ?? 0].append(idx[e.dst] ?? 0); }
-    // reach[a][b]: a directed path runs from a to b, walked from every node; figures are small.
+    // reach[a][b]: a directed path runs from a to b, walked from every node; diagrams are small.
     final reach: mut [mut {int: bool}] = mut [<mut {int: bool}>];
     i = 0;
     while (i < nn) {
@@ -3997,7 +3997,7 @@ fun straightenLanes(pl: Plan, pos: mut [int], pc: Placer, free: [bool], bandLo: 
 // order; the ranks no zone reaches are aligned last, against everything. What the geometry
 // itself refuses, a fan too wide for its box or a row() it cannot line up, lands in found.
 // widen[g] is room added to gap g beyond what its channels need.
-fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
+fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Layout {
     final lr = f.topDown == false;
     final nn = pl.nodeCount;
     final ne = pl.fromItem.len();
@@ -4015,7 +4015,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     }
 
     // A rank no zone reaches has no band to sit in: it is placed against its neighbours
-    // across the whole figure rather than stacking after the last band, the way a lone
+    // across the whole diagram rather than stacking after the last band, the way a lone
     // source feeding two zones sits between them. A rank a zone's box spans is reached even
     // with no member in it, or a box placed there would land inside a zone it is not part of.
     final zoneLo = zeros(nz);
@@ -4105,7 +4105,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     }
 
     // Each connector's declared ends and the faces they attach to. A back edge takes the
-    // side of the figure where more of its ends are outermost in their ranks; an end that
+    // side of the diagram where more of its ends are outermost in their ranks; an end that
     // is outermost leaves across the flow, straight to the lane, and one that is not steps
     // back through its gap first.
     final srcOf = zeros(ne);
@@ -4156,7 +4156,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             if (sOut) { srcFace[li] = sideFace; }
             if (dOut) { dstFace[li] = sideFace; }
             // The lane runs inside the ends' band when nothing of another band lies between
-            // it and them in any rank it passes; otherwise outside the whole figure.
+            // it and them in any rank it passes; otherwise outside the whole diagram.
             final band = pl.bandOf[s];
             var owned = pl.bandOf[d] == band;
             var r = pl.rankOf[d];
@@ -4221,13 +4221,13 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             final n = faceCount[ni * 4 + face];
             if (isDecision[ni] == false) { size = imax(size, b: fanRoom(n)); }
             if (isDecision[ni] == false and fanRoom(n) > crossBase * MaxFanGrowth) {
-                found.append("node {quote(f.nodes[ni].id)} fans {n} connectors on one side; split the figure or add order([...])");
+                found.append("node {quote(f.nodes[ni].id)} fans {n} connectors on one side; split the diagram or add order([...])");
             }
         }
         half[ni] = size / 2;
         ni = ni + 1;
     }
-    if (found.len() > 0) { return Diagram{}; }
+    if (found.len() > 0) { return Layout{}; }
     var mainSize = LayerNodeW;
     var mainStart = Margin;
     var crossStart = LayerTop;
@@ -4282,7 +4282,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         }
         ni = ni + 1;
     }
-    // A flat edge keeps a rank gap between its boxes. Across a down() figure it runs level,
+    // A flat edge keeps a rank gap between its boxes. Across a down() diagram it runs level,
     // so its label sits above it and the gap also fits the label, LabelClear off each box.
     final flatTo = zeros(items);
     final flatGap = zeros(items);
@@ -4436,13 +4436,13 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     while (ni < nn) {
         final lead = leader[ni];
         if (lead >= 0 and pos[ni] != pos[lead]) {
-            found.append("{call("row", ids: rowIds[lined.find(ni)]!)} cannot line {quote(f.nodes[ni].id)} up with {quote(f.nodes[lead].id)}; another box, row() or order() holds that line, so drop one of them or split the figure");
+            found.append("{call("row", ids: rowIds[lined.find(ni)]!)} cannot line {quote(f.nodes[ni].id)} up with {quote(f.nodes[lead].id)}; another box, row() or order() holds that line, so drop one of them or split the diagram");
         }
         ni = ni + 1;
     }
-    if (found.len() > 0) { return Diagram{}; }
+    if (found.len() > 0) { return Layout{}; }
 
-    // Lanes: a band's inside its pad, the figure's outside everything. Then everything moves
+    // Lanes: a band's inside its pad, the diagram's outside everything. Then everything moves
     // so the outermost of it starts at the top margin.
     var low = Far;
     var high = 0 - Far;
@@ -5036,7 +5036,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     final legendW = f.legendItems.len() * Style{}.legendPitch + 2 * Margin;
     if (legendW > width) { width = legendW; }
 
-    return Diagram{
+    return Layout{
         id = f.id,
         title = f.titleText,
         eyebrow = f.eyebrowText,
@@ -5056,14 +5056,14 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     };
 }
 
-// voiced puts the figure's id in front of every finding, one per line.
+// voiced puts the diagram's id in front of every finding, one per line.
 fun voiced(id: str, found: [str]) > str {
     final lines: mut [str] = mut [<str>];
     foreach (msg in found) { lines.append("flow {quote(id)}: {msg}"); }
     return lines.join("\n");
 }
 
-// layoutFindings restates what validate found in a placed figure. declarationFindings has
+// layoutFindings restates what validate found in a placed diagram. declarationFindings has
 // already refused every fault a declaration can cause. Two connectors on one line are
 // something a declaration can straighten; anything else is the layout's own, and an author
 // can only report it.
@@ -5072,7 +5072,7 @@ fun layoutFindings(found: [Fault]) > [str] {
     foreach (fault in found) {
         final s = fault.subjects;
         if (fault.rule == "sameLine") {
-            msgs.append("edges {quote(s[0])} -> {quote(s[1])} and {quote(s[2])} -> {quote(s[3])} run along one line; line their ends up with row([...]) or split the figure");
+            msgs.append("edges {quote(s[0])} -> {quote(s[1])} and {quote(s[2])} -> {quote(s[3])} run along one line; line their ends up with row([...]) or split the diagram");
             continue;
         }
         if (fault.rule == "bend") {
@@ -5080,7 +5080,7 @@ fun layoutFindings(found: [Fault]) > [str] {
             continue;
         }
         if (fault.rule == "label") {
-            msgs.append("{edgeName(s[0], dst: s[1])} label has no spot clear of every stroke, box and label; shorten it or split the figure");
+            msgs.append("{edgeName(s[0], dst: s[1])} label has no spot clear of every stroke, box and label; shorten it or split the diagram");
             continue;
         }
         msgs.append("{fault.text}; layout bug, report it");
@@ -5088,30 +5088,30 @@ fun layoutFindings(found: [Fault]) > [str] {
     return msgs;
 }
 
-fun layoutFlow(declared: Sketch) > result\Result::<Diagram> {
+fun layoutFlow(declared: Sketch) > result\Result::<Layout> {
     final f = compose(declared);
     final structural = compositionFindings(declared);
     foreach (msg in declarationFindings(f)) { structural.append(msg); }
-    if (structural.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: structural)); }
+    if (structural.len() > 0) { return result\fail::<Layout>(voiced(f.id, found: structural)); }
     final pl = plan(f);
     final contradictions = constraintFindings(f, pl: pl);
-    if (contradictions.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: contradictions)); }
+    if (contradictions.len() > 0) { return result\fail::<Layout>(voiced(f.id, found: contradictions)); }
     // A label with no spot clear of every stroke sits in a gap its channels crowd; each gap
-    // the connector spans grows by WidenStep and the figure is placed again. Past MaxWiden
+    // the connector spans grows by WidenStep and the diagram is placed again. Past MaxWiden
     // rounds the label is the author's finding.
     final widen = zeros(pl.maxRank + 1);
     var round = 0;
     while (round <= MaxWiden) {
         final found: mut [str] = mut [<str>];
         final d = place(f, pl: pl, found: found, widen: widen);
-        if (found.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: found)); }
+        if (found.len() > 0) { return result\fail::<Layout>(voiced(f.id, found: found)); }
         final wrong = faults(d);
         var crowded = 0;
         foreach (fault in wrong) {
             if (fault.rule == "label") { crowded = crowded + 1; }
         }
-        if (wrong.len() == 0) { return result\ok::<Diagram>(d); }
-        if (crowded < wrong.len() or round == MaxWiden) { return result\fail::<Diagram>(voiced(f.id, found: layoutFindings(wrong))); }
+        if (wrong.len() == 0) { return result\ok::<Layout>(d); }
+        if (crowded < wrong.len() or round == MaxWiden) { return result\fail::<Layout>(voiced(f.id, found: layoutFindings(wrong))); }
         foreach (fault in wrong) {
             var li = 0;
             while (li < f.edges.len()) {
@@ -5130,10 +5130,10 @@ fun layoutFlow(declared: Sketch) > result\Result::<Diagram> {
         }
         round = round + 1;
     }
-    return result\ok::<Diagram>(Diagram{});
+    return result\ok::<Layout>(Layout{});
 }
 
-fun lookupNode(d: Diagram, id: str) > Node {
+fun lookupNode(d: Layout, id: str) > Node {
     foreach (n in d.nodes) {
         if (n.id == id) { return n; }
     }
@@ -5152,7 +5152,7 @@ fun sidePoint(n: Node, side: Side, slot: int, slots: int) > [int] {
 
 // edgeLegs rebuilds a connector's legs from its public fields the way the renderer draws
 // them, so a test reasons about geometry without the renderer's private helpers.
-fun edgeLegs(d: Diagram, e: Edge) > [[int]] {
+fun edgeLegs(d: Layout, e: Edge) > [[int]] {
     final s = sidePoint(lookupNode(d, id: e.src), side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots);
     final t = sidePoint(lookupNode(d, id: e.dst), side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots);
     final pts: mut [int] = mut [s[0], s[1]];
@@ -5194,7 +5194,7 @@ fun legEntersBox(leg: [int], n: Node) > bool {
     return n.x < x1 and x1 < n.x + n.w and imax(y1, b: n.y) < imin(y2, b: n.y + n.h);
 }
 
-// fig is a test figure: laid out for its own sake, depicting no code.
+// fig is a test diagram: laid out for its own sake, depicting no code.
 fun fig(observed: Observed = Observed{}) > mut Sketch {
     return flow("t", observed: observed).unscoped("a layout test");
 }
@@ -5281,7 +5281,7 @@ fun observedServerScope() > mut Sketch {
 }
 
 test "a chain ranks into one column per step" {
-    final d = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
+    final d = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "the layout is sound");
     std\assert(lookupNode(d, id: "a").x < lookupNode(d, id: "b").x, message: "b sits right of a");
     std\assert(lookupNode(d, id: "b").x < lookupNode(d, id: "c").x, message: "c sits right of b");
@@ -5289,7 +5289,7 @@ test "a chain ranks into one column per step" {
 }
 
 test "a diamond lays out without a crossing" {
-    final d = diamond().diagram() catch Diagram{};
+    final d = diamond().layout() catch Layout{};
     std\assert(d.nodes.len() == 4, message: "laid out");
     std\assert(lookupNode(d, id: "b").x == lookupNode(d, id: "c").x, message: "b and c share a rank");
     std\assert(crossings(d).len() == 0, message: "no two connectors cross");
@@ -5299,7 +5299,7 @@ test "an edge spanning three ranks routes around every box" {
     final d = fig()
         .node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d").edge("a", dst: "d")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(d.edges.len() == 4, message: "laid out");
     final long = d.edges[3];
     std\assert(long.via.len() > 0, message: "the long edge carries a via route");
@@ -5314,7 +5314,7 @@ test "an edge spanning three ranks routes around every box" {
 test "a cycle renders with one dashed reversed edge" {
     final f = fig().node("a").node("b").node("c")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "a");
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     var dashed = 0;
     foreach (e in d.edges) {
         if (e.dashed) { dashed = dashed + 1; }
@@ -5330,7 +5330,7 @@ test "a zone keeps its members contiguous" {
         .node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("a", dst: "c").edge("a", dst: "d")
         .zone("pair", members: ["b", "d"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final b = lookupNode(d, id: "b");
     final c = lookupNode(d, id: "c");
     final dd = lookupNode(d, id: "d");
@@ -5356,8 +5356,8 @@ test "a node in two zones is a finding" {
 }
 
 test "down() transposes the layout" {
-    final across = diamond().diagram() catch Diagram{};
-    final down = diamond().down().diagram() catch Diagram{};
+    final across = diamond().layout() catch Layout{};
+    final down = diamond().down().layout() catch Layout{};
     std\assert(validate(down).len() == 0, message: "the transposed layout is sound");
     std\assert(lookupNode(down, id: "b").y == lookupNode(down, id: "c").y, message: "a rank is a row");
     std\assert(lookupNode(down, id: "b").x < lookupNode(down, id: "c").x, message: "ordered across it");
@@ -5370,7 +5370,7 @@ test "down() transposes the layout" {
 test "the server-http twin lays out clean" {
     final msg = thrown(serverHttpTwin());
     std\assert(msg == "", message: "no findings: {msg}");
-    final d = serverHttpTwin().diagram() catch Diagram{};
+    final d = serverHttpTwin().layout() catch Layout{};
     std\assert(d.nodes.len() == 9, message: "every box placed");
     std\assert(validate(d).len() == 0, message: "no findings");
     std\assert(crossings(d).len() == 0, message: "no crossings");
@@ -5416,7 +5416,7 @@ fun fanIn(n: int) > mut Sketch {
 
 test "every channel sits >= 16px from both faces" {
     foreach (f in [fanIn(5), serverHttpTwin()]) {
-        final d = f.diagram() catch Diagram{};
+        final d = f.layout() catch Layout{};
         foreach (e in d.edges) {
             final a = lookupNode(d, id: e.src);
             final b = lookupNode(d, id: e.dst);
@@ -5430,7 +5430,7 @@ test "every channel sits >= 16px from both faces" {
 }
 
 test "edges in one gap whose vertical spans do not overlap share a channel; a lone channel sits at the gap's centre x" {
-    final d = fanIn(3).diagram() catch Diagram{};
+    final d = fanIn(3).layout() catch Layout{};
     final c0 = lookupNode(d, id: "c0");
     final centre = (c0.x + c0.w + lookupNode(d, id: "root").x) / 2;
     std\assert(d.edges[0].bend == centre and d.edges[2].bend == centre, message: "one channel for both: {d.edges[0].bend}, {d.edges[2].bend}, centre {centre}");
@@ -5438,7 +5438,7 @@ test "edges in one gap whose vertical spans do not overlap share a channel; a lo
 }
 
 test "k channels sit at centre + (i-(k-1)/2)*12, rounded to nearest; the k-th rising edge mirrors the k-th falling one" {
-    final d = fanIn(5).diagram() catch Diagram{};
+    final d = fanIn(5).layout() catch Layout{};
     final c0 = lookupNode(d, id: "c0");
     final centre = (c0.x + c0.w + lookupNode(d, id: "root").x) / 2;
     final bends: mut [int] = mut [<int>];
@@ -5449,14 +5449,14 @@ test "k channels sit at centre + (i-(k-1)/2)*12, rounded to nearest; the k-th ri
 }
 
 test "an odd fan puts its middle slot on the midline; an edge to a same-row neighbour takes the midline at both ends" {
-    final d = fan(3).diagram() catch Diagram{};
+    final d = fan(3).layout() catch Layout{};
     final root = lookupNode(d, id: "root");
     final mid = d.edges[1];
     std\assert(sidePoint(root, side: mid.srcSide, slot: mid.srcSlot, slots: mid.srcSlots)[1] == midY(root), message: "the middle slot on the midline");
     std\assert(midY(lookupNode(d, id: "c1")) == midY(root), message: "and its target shares the row");
     // Four routes: the Guard's even fan anchors the route on its own row at the midline and
     // steps the rest out from it, rather than straddling the midline and jogging all four.
-    final http = serverHttpTwin().diagram() catch Diagram{};
+    final http = serverHttpTwin().layout() catch Layout{};
     final guard = lookupNode(http, id: "guard");
     var anchored = 0;
     foreach (e in http.edges) {
@@ -5473,9 +5473,9 @@ test "an odd fan puts its middle slot on the midline; an edge to a same-row neig
 // A 56px box grows to at most 112px, and eight slots with room to anchor the straight one
 // need 120.
 test "a fan whose 12px pitch overflows the box is a finding, never a 4px pack" {
-    std\assert(thrown(fan(8)) == "flow \"t\": node \"root\" fans 8 connectors on one side; split the figure or add order([...])",
+    std\assert(thrown(fan(8)) == "flow \"t\": node \"root\" fans 8 connectors on one side; split the diagram or add order([...])",
         message: "refused: {thrown(fan(8))}");
-    final d = fanIn(7).diagram() catch Diagram{};
+    final d = fanIn(7).layout() catch Layout{};
     final root = lookupNode(d, id: "root");
     final ys: mut [int] = mut [<int>];
     foreach (e in d.edges) { ys.append(sidePoint(root, side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots)[1]); }
@@ -5492,7 +5492,7 @@ test "a fan whose 12px pitch overflows the box is a finding, never a 4px pack" {
 // that is row order, below it the reverse.
 test "slots follow their targets' rows, so no fan crosses itself at its source" {
     foreach (f in [fan(5), fan(4), fanIn(4), serverHttpTwin()]) {
-        final d = f.diagram() catch Diagram{};
+        final d = f.layout() catch Layout{};
         foreach (a in d.edges) {
             foreach (b in d.edges) {
                 if (a.src == b.src and a.srcSide == b.srcSide and midY(lookupNode(d, id: a.dst)) < midY(lookupNode(d, id: b.dst))) {
@@ -5513,7 +5513,7 @@ test "a node with one neighbour in the adjacent rank shares its midline whenever
         .node("a").node("b").node("c").node("d").node("s").node("t")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d").edge("s", dst: "t")
         .rank(["d", "t"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     foreach (id in ["b", "c", "d"]) {
         std\assert(midY(lookupNode(d, id: id)) == midY(lookupNode(d, id: "a")), message: "{id} on a's row");
@@ -5528,7 +5528,7 @@ test "a fan keeps its slots and channels a Pitch apart, so every leg seats the b
     foreach (id in ["a", "b", "c", "d", "e"]) { _ = f.node(id).edge("root", dst: id); }
     final msg = thrown(f);
     std\assert(msg == "", message: "an authored fan of five passes the bend floor: {msg}");
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     final root = lookupNode(d, id: "root");
     foreach (side in [Side.top, Side.right, Side.bottom]) {
         final along: mut [int] = mut [<int>];
@@ -5548,7 +5548,7 @@ test "a fan keeps its slots and channels a Pitch apart, so every leg seats the b
 }
 
 test "neighbouring ranks on one row connect straight" {
-    final d = serverHttpTwin().diagram() catch Diagram{};
+    final d = serverHttpTwin().layout() catch Layout{};
     var straight = 0;
     foreach (e in d.edges) {
         final a = lookupNode(d, id: e.src);
@@ -5566,7 +5566,7 @@ test "a band's sole parent sits beside it" {
         .node("u").node("b").node("c").node("v").node("w")
         .edge("u", dst: "b").edge("u", dst: "c").edge("v", dst: "w")
         .zone("pair", members: ["b", "c"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final u = lookupNode(d, id: "u");
     final z = d.zones[0];
     std\assert(u.y >= z.y and u.y + u.h <= z.y + z.h, message: "u sits within the band's rows");
@@ -5579,7 +5579,7 @@ test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap
         .node("p").node("l").node("s").node("k").node("r").node("v")
         .edge("p", dst: "l").edge("s", dst: "p").edge("k", dst: "s").edge("s", dst: "r")
         .zone("top", members: ["p", "l"]).zone("bottom", members: ["k", "r"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final s = lookupNode(d, id: "s");
     final top = d.zones[0];
@@ -5592,7 +5592,7 @@ test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap
         .node("x0").node("x1").node("x2").node("y0").node("y1").node("z2").node("s")
         .edge("x0", dst: "x1").edge("x1", dst: "x2").edge("y0", dst: "y1").edge("x0", dst: "s").edge("s", dst: "z2").edge("y1", dst: "z2")
         .zone("one", members: ["x0", "x1", "x2"]).zone("two", members: ["y0", "y1"]).zone("three", members: ["z2"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(apart.zones.len() == 3, message: "laid out");
     final far = lookupNode(apart, id: "s");
     foreach (z in apart.zones) {
@@ -5611,21 +5611,21 @@ fun pair() > Observed {
 fun thrown(f: Sketch) > str {
     var msg = "";
     try {
-        _ = f.diagram();
+        _ = f.layout();
     } catch (e: str) {
         msg = e;
     }
     return msg;
 }
 
-fun findEdge(d: Diagram, src: str, dst: str) > Edge? {
+fun findEdge(d: Layout, src: str, dst: str) > Edge? {
     foreach (e in d.edges) {
         if (e.src == src and e.dst == dst) { return e; }
     }
     return null;
 }
 
-// serverHttpComposed is the twin rebuilt the way a figure composes: the six anchored
+// serverHttpComposed is the twin rebuilt the way a diagram composes: the six anchored
 // packages arrive observed, the declaration relabels them, adds the clients and the request
 // flow, and hides every import the request flow does not follow.
 fun serverHttpComposed() > mut Sketch {
@@ -5649,7 +5649,7 @@ fun serverHttpComposed() > mut Sketch {
     foreach (imp in imports) {
         edges.append(ObservedEdge{ src = "pkg-" + imp[0].replace("/", with: "-"), dst = "pkg-" + imp[1].replace("/", with: "-") });
     }
-    final mounts = "the server mounts every handler; the figure draws the request path";
+    final mounts = "the server mounts every handler; the diagram draws the request path";
     return flow("server-http", observed: Observed{ nodes = nodes, edges = edges, stamp = "sha256:0929" })
         .eyebrow("magus server")
         .title("The HTTP routes, and the one route without a guard")
@@ -5702,7 +5702,7 @@ fun serverHttpAnchored() > mut Sketch {
         ],
         stamp = "sha256:0929",
     };
-    final mounts = "the server mounts every handler; the figure draws the request path";
+    final mounts = "the server mounts every handler; the diagram draws the request path";
     return serverHttpTwin(observed: o)
         .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
         .omitEdge("health", dst: "reads", why: mounts)
@@ -5714,7 +5714,7 @@ fun serverHttpAnchored() > mut Sketch {
 test "a declared anchor takes over the observed box it depicts" {
     final msg = thrown(serverHttpAnchored());
     std\assert(msg == "", message: "composed: {msg}");
-    final d = serverHttpAnchored().diagram() catch Diagram{};
+    final d = serverHttpAnchored().layout() catch Layout{};
     std\assert(d.nodes.len() == 9, message: "nine boxes: {d.nodes.len()}");
     final ids = ["agent", "console", "probe", "guard", "mcp", "reads", "review", "connect", "health"];
     final declared: mut {str: bool} = mut {<str: bool>};
@@ -5744,7 +5744,7 @@ test "a node matching one observation by id and another by anchor is a finding" 
 
 test "observed nodes and edges render" {
     final f = fig(observed: pair());
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     std\assert(d.nodes.len() == 2 and d.edges.len() == 1, message: "both boxes and the import placed");
     std\assert(lookupNode(d, id: "a").label == "pkg/a" and lookupNode(d, id: "b").label == "b", message: "an empty label shows the id");
     std\assert(lookupNode(d, id: "b").anchor == "pkg/b", message: "the observed anchor kept");
@@ -5754,12 +5754,12 @@ test "observed nodes and edges render" {
 }
 
 test "a declared node overrides an observed label and keeps its anchor" {
-    final d = fig(observed: pair()).node("a", label: "Alpha", sub: "the source", role: Role.focal).diagram() catch Diagram{};
+    final d = fig(observed: pair()).node("a", label: "Alpha", sub: "the source", role: Role.focal).layout() catch Layout{};
     std\assert(d.nodes.len() == 2, message: "merged, not duplicated");
     final a = lookupNode(d, id: "a");
     std\assert(a.label == "Alpha" and a.sub == "the source" and a.role == Role.focal, message: "the declaration wins");
     std\assert(a.anchor == "pkg/a", message: "an empty declared anchor keeps the observed one");
-    final plain = fig(observed: pair()).node("a", sub: "only a sub").diagram() catch Diagram{};
+    final plain = fig(observed: pair()).node("a", sub: "only a sub").layout() catch Layout{};
     std\assert(lookupNode(plain, id: "a").label == "pkg/a", message: "an empty declared label keeps the observed one");
 }
 
@@ -5770,7 +5770,7 @@ test "a node anchored apart from its observation is a finding" {
 }
 
 test "a declared edge replaces an observed one" {
-    final d = fig(observed: pair()).edge("a", dst: "b", label: "http", claim: Claim.calls).diagram() catch Diagram{};
+    final d = fig(observed: pair()).edge("a", dst: "b", label: "http", claim: Claim.calls).layout() catch Layout{};
     std\assert(d.edges.len() == 1, message: "replaced, not doubled");
     std\assert(d.edges[0].claim == Claim.calls and d.edges[0].label == "http", message: "the declaration's claim and label win");
 }
@@ -5779,7 +5779,7 @@ test "a declared edge over an observed import must claim it or omit it" {
     final flowing = thrown(fig(observed: pair()).edge("a", dst: "b", label: "reads"));
     std\assert(flowing == "flow \"t\": edge \"a\" -> \"b\" replaces an observed import but claims flow; claim Claim.imports or omitEdge it",
         message: "named: {flowing}");
-    final d = fig(observed: pair()).edge("a", dst: "b", label: "reads", claim: Claim.imports).diagram() catch Diagram{};
+    final d = fig(observed: pair()).edge("a", dst: "b", label: "reads", claim: Claim.imports).layout() catch Layout{};
     std\assert(d.edges.len() == 1 and d.edges[0].claim == Claim.imports and d.edges[0].label == "reads", message: "claimed, it relabels the import");
     final both = thrown(fig(observed: pair()).edge("a", dst: "b").omitEdge("a", dst: "b", why: "drawn by hand"));
     std\assert(both.indexOf("edge \"a\" -> \"b\" is declared and also hidden by omitEdge; drop one of them") != null, message: "both: {both}");
@@ -5790,7 +5790,7 @@ test "omitEdge hides an observed edge and is reported when stale" {
         nodes = [ObservedNode{ id = "a" }, ObservedNode{ id = "b" }, ObservedNode{ id = "c" }],
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }],
     };
-    final d = fig(observed: o).omitEdge("a", dst: "b", why: "a test seam").diagram() catch Diagram{};
+    final d = fig(observed: o).omitEdge("a", dst: "b", why: "a test seam").layout() catch Layout{};
     std\assert(d.edges.len() == 1 and findEdge(d, src: "a", dst: "b") == null, message: "hidden");
     final stale = thrown(fig(observed: o).omitEdge("a", dst: "c", why: "gone"));
     std\assert(stale == "flow \"t\": omitEdge \"a\" -> \"c\" names no observed edge; drop the omitEdge", message: "stale: {stale}");
@@ -5806,17 +5806,17 @@ test "an edge to an id neither side supplies is a finding" {
     std\assert(bare == msg, message: "one message whether or not a set is observed: {bare}");
 }
 
-test "the stamp reaches the Diagram" {
-    final d = fig(observed: pair()).diagram() catch Diagram{};
+test "the stamp reaches the Layout" {
+    final d = fig(observed: pair()).layout() catch Layout{};
     std\assert(d.stamp == "sha256:0123", message: "stamped: {d.stamp}");
-    final plain = diamond().diagram() catch Diagram{};
-    std\assert(plain.stamp == "", message: "an unobserved figure carries none");
+    final plain = diamond().layout() catch Layout{};
+    std\assert(plain.stamp == "", message: "an unobserved diagram carries none");
 }
 
 test "the server-http twin composed from an observation lays out clean" {
     final msg = thrown(serverHttpComposed());
     std\assert(msg == "", message: "composed: {msg}");
-    final d = serverHttpComposed().diagram() catch Diagram{};
+    final d = serverHttpComposed().layout() catch Layout{};
     std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "every box and connector placed");
     std\assert(lookupNode(d, id: "pkg-internal-httpx").label == "Guard", message: "relabelled");
     std\assert(lookupNode(d, id: "pkg-internal-httpx").anchor == "internal/httpx", message: "anchored by observation");
@@ -5829,10 +5829,10 @@ test "an omit drops the observed box it names and every connector touching it" {
         nodes = [ObservedNode{ id = "a", anchor = "pkg/a" }, ObservedNode{ id = "b", anchor = "pkg/b" }, ObservedNode{ id = "c", anchor = "pkg/c" }],
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }, ObservedEdge{ src = "a", dst = "c" }],
     };
-    final d = fig(observed: o).omit("pkg/b", why: "folded into a").diagram() catch Diagram{};
+    final d = fig(observed: o).omit("pkg/b", why: "folded into a").layout() catch Layout{};
     std\assert(d.nodes.len() == 2 and lookupNode(d, id: "b").id == "", message: "b is gone: {d.nodes.len()}");
     std\assert(d.edges.len() == 1 and findEdge(d, src: "a", dst: "c") != null, message: "only a -> c remains: {d.edges.len()}");
-    std\assert(d.omits["pkg/b"] == "folded into a", message: "the omit reaches the Diagram");
+    std\assert(d.omits["pkg/b"] == "folded into a", message: "the omit reaches the Layout");
 }
 
 test "a declared node anchored at an omitted path is a finding" {
@@ -5901,10 +5901,10 @@ fun serverHttpObserved() > Observed {
 
 // serverHttpOmitting is the twin over the whole scope, leaving out the twelve handler
 // packages with the reasons docs/site/diagrams/server-http.buzz gives. The six imports left
-// run against the request path the figure claims, so each is hidden with its reason.
+// run against the request path the diagram claims, so each is hidden with its reason.
 fun serverHttpOmitting() > mut Sketch {
     final connect = "a Connect service, inside the Connect RPC box";
-    final mounts = "the server mounts every handler; the figure draws the request path";
+    final mounts = "the server mounts every handler; the diagram draws the request path";
     return serverHttpTwin(observed: serverHttpObserved())
         .omitEdge("reads", dst: "guard", why: "the read views use guard helpers; requests run the other way")
         .omitEdge("health", dst: "guard", why: "the server builds the guard; drawn, the unguarded probe would pass through it")
@@ -5929,7 +5929,7 @@ fun serverHttpOmitting() > mut Sketch {
 test "the server-http twin over its whole scope lays out clean once it omits the handlers it folds" {
     final msg = thrown(serverHttpOmitting());
     std\assert(msg == "", message: "composed: {msg}");
-    final d = serverHttpOmitting().diagram() catch Diagram{};
+    final d = serverHttpOmitting().layout() catch Layout{};
     std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "nine boxes, seven connectors: {d.nodes.len()}, {d.edges.len()}");
     std\assert(lookupNode(d, id: "guard").anchor == "internal/httpx", message: "the declared id kept");
     std\assert(d.omits.size() == 12, message: "every omit kept");
@@ -5948,7 +5948,7 @@ fun decisionTree(down: bool) > mut Sketch {
 
 test "a decision leaves by its vertices, one connector each" {
     foreach (down in [false, true]) {
-        final d = decisionTree(down).diagram() catch Diagram{};
+        final d = decisionTree(down).layout() catch Layout{};
         std\assert(validate(d).len() == 0, message: "down={down}: {validate(d)}");
         foreach (id in ["q", "r"]) {
             final sides: mut {str: bool} = mut {<str: bool>};
@@ -5987,18 +5987,18 @@ test "two declared boxes may share the anchor of one observed package" {
         .node("quote", label: "Quote", anchor: "pkg/a")
         .edge("contract", dst: "quote");
     std\assert(thrown(f) == "", message: "no finding: {thrown(f)}");
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     std\assert(d.nodes.len() == 2, message: "the observation merged into one of them: {d.nodes.len()}");
 }
 
 test "merging an observation keeps the declaration's order" {
     final d = fig(observed: pair())
         .node("b", label: "B").node("a", label: "A").node("c")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final ids: mut [str] = mut [<str>];
     foreach (n in d.nodes) { ids.append(n.id); }
     std\assert(ids.join(",") == "b,a,c", message: "declared order: {ids.join(",")}");
-    final extra = fig(observed: pair()).node("z").diagram() catch Diagram{};
+    final extra = fig(observed: pair()).node("z").layout() catch Layout{};
     std\assert(extra.nodes[0].id == "z" and extra.nodes[1].id == "a", message: "observed-only boxes follow the declared ones");
 }
 
@@ -6007,7 +6007,7 @@ test "a rank no zone reaches centers between the bands" {
         .node("s").node("a1").node("a2").node("b1").node("b2")
         .edge("s", dst: "a1").edge("a1", dst: "a2").edge("s", dst: "b1").edge("b1", dst: "b2")
         .zone("one", members: ["a1", "a2"]).zone("two", members: ["b1", "b2"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final s = lookupNode(d, id: "s");
     final mid = s.y + s.h / 2;
@@ -6019,7 +6019,7 @@ test "a zone's box never takes in a rank it spans without a member there" {
         .node("p").node("m").node("q")
         .edge("p", dst: "m").edge("m", dst: "q")
         .zone("pair", members: ["p", "q"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final m = lookupNode(d, id: "m");
     final z = d.zones[0];
     std\assert(m.y >= z.y + z.h or m.y + m.h <= z.y, message: "m sits outside the band's box");
@@ -6030,7 +6030,7 @@ test "edge roles map onto the renderer's treatments" {
         .edge("a", dst: "b", role: EdgeRole.focal)
         .edge("a", dst: "c", role: EdgeRole.external)
         .edge("a", dst: "d", role: EdgeRole.optional)
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(d.edges[0].kind == "accent" and d.edges[0].dashed == false, message: "focal is the accent");
     std\assert(d.edges[1].kind == "link" and d.edges[1].dashed == false, message: "external is the link colour");
     std\assert(d.edges[2].kind == "default" and d.edges[2].dashed, message: "optional is dashed");
@@ -6051,19 +6051,19 @@ test "a string where a Role, EdgeRole or Claim belongs is a finding" {
 }
 
 test "a node links outside the repo or anchors inside it, never both" {
-    final d = fig().node("stripe", label: "Stripe", role: Role.external, link: "https://stripe.com/docs").diagram() catch Diagram{};
+    final d = fig().node("stripe", label: "Stripe", role: Role.external, link: "https://stripe.com/docs").layout() catch Layout{};
     std\assert(lookupNode(d, id: "stripe").link == "https://stripe.com/docs", message: "the link reaches the node");
     final both = thrown(fig().node("a", anchor: "pkg/a", link: "https://example.com"));
     std\assert(both == "flow \"t\": node \"a\" sets both anchor and link; keep anchor for a path in this repo, link for anything outside it",
         message: "both: {both}");
 }
 
-test "a figure says what code it depicts, or why it depicts none" {
+test "a diagram says what code it depicts, or why it depicts none" {
     final bare = thrown(flow("t").node("a"));
     std\assert(bare == "flow \"t\": names no code; add scope([...]) or unscoped(why:)", message: "bare: {bare}");
     std\assert(thrown(flow("t").node("a").scope(["pkg/a"])) == "", message: "a scope names code");
-    final d = flow("t").node("a").unscoped("a decision a person makes").diagram() catch Diagram{};
-    std\assert(d.unscoped == "a decision a person makes", message: "the reason reaches the Diagram: {d.unscoped}");
+    final d = flow("t").node("a").unscoped("a decision a person makes").layout() catch Layout{};
+    std\assert(d.unscoped == "a decision a person makes", message: "the reason reaches the Layout: {d.unscoped}");
     final silent = thrown(flow("t").node("a").unscoped(""));
     std\assert(silent == "flow \"t\": unscoped gives no reason; say why in unscoped(why:)", message: "silent: {silent}");
     final both = thrown(flow("t").node("a").scope(["pkg/a"]).unscoped("both"));
@@ -6073,7 +6073,7 @@ test "a figure says what code it depicts, or why it depicts none" {
 test "a boundary paints as a trust boundary and counts against the band budget" {
     final f = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c")
         .boundary("trusted", members: ["b", "c"]);
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     std\assert(d.zones.len() == 1 and d.zones[0].boundary, message: "one boundary band: {thrown(f)}");
     final svg = f.svg(lightPalette()) catch "threw";
     std\assert(svg.indexOf("stroke-dasharray=\"4,4\"") != null and svg.indexOf(">TRUSTED</text>") != null, message: "the security treatment");
@@ -6107,7 +6107,7 @@ test "constraints that hold lay out, and ones that contradict are refused" {
     std\assert(banded.indexOf("names \"a\" in zone \"one\" and \"d\" in zone \"two\"; bands never share a row") != null, message: "banded: {banded}");
 }
 
-test "every finding names the figure, one per line, with a fix" {
+test "every finding names the diagram, one per line, with a fix" {
     final msg = thrown(flow("t").node("a").node("a").edge("a", dst: "z"));
     final lines = msg.split("\n");
     std\assert(lines.len() == 3, message: "three findings: {msg}");
@@ -6117,14 +6117,14 @@ test "every finding names the figure, one per line, with a fix" {
 }
 
 // Two connectors on one line are the author's to separate, with row() or a split; any other
-// fault in a placed figure is the layout's.
+// fault in a placed diagram is the layout's.
 test "a layout fault reaches the author as a finding or a layout bug, never as a bend to move" {
     final got = layoutFindings([
         Fault{ rule = "sameLine", subjects = ["a", "b", "c", "d"], text = "connectors a->b and c->d run along the same line", fix = "offset one of their bends" },
         Fault{ rule = "bend", subjects = ["a", "b"], text = "edge a->b: a leg leaves 4px for a bend that needs 6", fix = "move the bend or the boxes" },
         Fault{ rule = "overlap", subjects = ["a", "b"], text = "nodes \"a\" and \"b\" overlap" },
     ]);
-    std\assert(got[0] == "edges \"a\" -> \"b\" and \"c\" -> \"d\" run along one line; line their ends up with row([...]) or split the figure", message: "{got[0]}");
+    std\assert(got[0] == "edges \"a\" -> \"b\" and \"c\" -> \"d\" run along one line; line their ends up with row([...]) or split the diagram", message: "{got[0]}");
     std\assert(got[1] == "edge \"a\" -> \"b\" has a leg too short to bend; layout bug, report it", message: "{got[1]}");
     std\assert(got[2] == "nodes \"a\" and \"b\" overlap; layout bug, report it", message: "{got[2]}");
     foreach (line in got) { std\assert(line.indexOf("move") == null, message: "no bend to move: {line}"); }
@@ -6149,7 +6149,7 @@ fun leaseLoopTwin() > mut Sketch {
 
 test "a reversed edge runs outside the outermost row of the ranks it spans, takes no dummy slot, never moves a spine node" {
     final f = leaseLoopTwin();
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {thrown(f)}");
     final spine = ["cp", "part", "decl", "work", "verify", "integrate"];
     final x = midX(lookupNode(d, id: "cp"));
@@ -6180,9 +6180,9 @@ test "row lines its members up on one midline across ranks" {
         return fig().node("x").node("y").node("z").node("w")
             .edge("x", dst: "y").edge("x", dst: "z").edge("z", dst: "w");
     };
-    final free = shape().diagram() catch Diagram{};
+    final free = shape().layout() catch Layout{};
     std\assert(midY(lookupNode(free, id: "w")) != midY(lookupNode(free, id: "x")), message: "left alone, w follows z");
-    final lined = shape().row(["x", "w"]).diagram() catch Diagram{};
+    final lined = shape().row(["x", "w"]).layout() catch Layout{};
     std\assert(validate(lined).len() == 0, message: "sound: {thrown(shape().row(["x", "w"]))}");
     std\assert(midY(lookupNode(lined, id: "w")) == midY(lookupNode(lined, id: "x")), message: "row puts w on x's midline");
     final crossed = thrown(fig().node("a").node("p").node("b").node("q")
@@ -6191,9 +6191,9 @@ test "row lines its members up on one midline across ranks" {
 }
 
 test "order fixes the cross order within a rank before the barycentre sweep" {
-    final plain = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").diagram() catch Diagram{};
+    final plain = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").layout() catch Layout{};
     std\assert(lookupNode(plain, id: "b").y < lookupNode(plain, id: "c").y, message: "declaration order by default");
-    final ordered = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").order(["c", "b"]).diagram() catch Diagram{};
+    final ordered = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").order(["c", "b"]).layout() catch Layout{};
     std\assert(lookupNode(ordered, id: "c").y < lookupNode(ordered, id: "b").y, message: "order puts c first");
     std\assert(crossings(ordered).len() == 0, message: "and the slots follow");
     final banded = thrown(diamond().zone("one", members: ["c"]).order(["b", "c"]));
@@ -6205,7 +6205,7 @@ test "rank puts its members in one column" {
     final d = fig().node("a").node("b").node("c").node("x").node("y")
         .edge("a", dst: "b").edge("b", dst: "c").edge("x", dst: "y")
         .rank(["c", "y"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound");
     std\assert(lookupNode(d, id: "y").x == lookupNode(d, id: "c").x, message: "y joins c's column");
     std\assert(lookupNode(d, id: "x").x == lookupNode(d, id: "a").x, message: "x keeps its own");
@@ -6215,7 +6215,7 @@ test "a chain declared in one rank lies flat, each connector straight across it"
     final d = fig().node("a").node("b").node("c").node("d")
         .edge("a", dst: "b", label: "runs magus").edge("b", dst: "c").edge("c", dst: "d")
         .rank(["a", "b", "c"]).down()
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final a = lookupNode(d, id: "a");
     final b = lookupNode(d, id: "b");
@@ -6233,7 +6233,7 @@ test "a flat edge leaving the unzoned rest for a zone stacks the rest first" {
     final d = fig().node("p").node("q").node("r").node("s")
         .edge("p", dst: "q").edge("q", dst: "r").edge("r", dst: "s")
         .zone("z", members: ["q"]).rank(["p", "q"]).down()
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     std\assert(lookupNode(d, id: "p").x + lookupNode(d, id: "p").w < d.zones[0].x, message: "p sits before the zone it feeds");
 }
@@ -6255,7 +6255,7 @@ test "server-share's box with no connector closes up on its rank instead of keep
     final d = fig().node("console").node("share").node("lan").node("phone").node("viewer").node("status").node("never")
         .edge("console", dst: "share").edge("share", dst: "lan").edge("share", dst: "viewer").edge("share", dst: "status")
         .edge("phone", dst: "lan")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final phone = lookupNode(d, id: "phone");
     std\assert(lookupNode(d, id: "never").y == phone.y + phone.h + LayerRowGap, message: "a row gap below phone, at {lookupNode(d, id: "never").y}");
@@ -6265,7 +6265,7 @@ test "zones whose ranks do not overlap share a track along the flow" {
     final d = fig().node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d")
         .zone("one", members: ["a", "b"]).zone("two", members: ["c", "d"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final one = d.zones[0];
     final two = d.zones[1];
@@ -6274,11 +6274,11 @@ test "zones whose ranks do not overlap share a track along the flow" {
     final overlapping = fig().node("a").node("b").node("c").node("d")
         .edge("a", dst: "b").edge("a", dst: "c").edge("c", dst: "d")
         .zone("one", members: ["a", "b"]).zone("two", members: ["c", "d"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(overlapping.zones[0].y + overlapping.zones[0].h < overlapping.zones[1].y, message: "zones sharing a rank still stack across it");
 }
 
-// Each shape below is a docs figure's, cut to the boxes and connectors whose placement the
+// Each shape below is a docs diagram's, cut to the boxes and connectors whose placement the
 // test pins.
 test "commit-generated's decision spine runs down one column" {
     final d = fig().down()
@@ -6288,7 +6288,7 @@ test "commit-generated's decision spine runs down one column" {
         .edge("start", dst: "pure").edge("pure", dst: "needed").edge("needed", dst: "read").edge("read", dst: "churn")
         .edge("pure", dst: "skip").edge("needed", dst: "skip").edge("churn", dst: "skip")
         .edge("read", dst: "commit").edge("churn", dst: "commit")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final x = midX(lookupNode(d, id: "start"));
     foreach (id in ["pure", "needed", "read", "churn"]) { std\assert(midX(lookupNode(d, id: id)) == x, message: "{id} off the spine"); }
@@ -6303,7 +6303,7 @@ test "volatility's questions line up rather than zigzag" {
         .edge("fail", dst: "det").edge("det", dst: "report").edge("det", dst: "hist").edge("hist", dst: "retry")
         .edge("hist", dst: "rate").edge("rate", dst: "retry").edge("rate", dst: "regress").edge("retry", dst: "pass")
         .edge("pass", dst: "volatile").edge("pass", dst: "regress")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final x = midX(lookupNode(d, id: "hist"));
     foreach (id in ["rate", "retry", "pass"]) { std\assert(midX(lookupNode(d, id: id)) == x, message: "{id} off hist's column"); }
@@ -6316,7 +6316,7 @@ test "image-build's channel diamond shares a row with the middle of its fan, not
         .node("commit").node("unstable").node("stable")
         .edge("run", dst: "cd").edge("cd", dst: "local").edge("cd", dst: "channel")
         .edge("channel", dst: "commit").edge("channel", dst: "unstable").edge("channel", dst: "stable")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     std\assert(midY(lookupNode(d, id: "run")) == midY(lookupNode(d, id: "cd")), message: "run and cd on one row");
     std\assert(midY(lookupNode(d, id: "channel")) == midY(lookupNode(d, id: "unstable")), message: "channel on its middle exit's row");
@@ -6327,14 +6327,14 @@ test "server-jobs' and server-share's one-child chains run straight" {
         .node("fs", sub: "x", tag: "x").node("cli").node("watch").node("idx").node("job").node("ws")
         .edge("fs", dst: "watch").edge("fs", dst: "idx").edge("cli", dst: "job")
         .edge("watch", dst: "ws").edge("idx", dst: "ws").edge("job", dst: "ws")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(jobs).len() == 0, message: "jobs sound: {validate(jobs)}");
     std\assert(midY(lookupNode(jobs, id: "cli")) == midY(lookupNode(jobs, id: "job")), message: "magus run level with its only child");
     final share = fig()
         .node("dash").node("sharep").node("lan").node("phone").node("served").node("connectreads").node("withheld")
         .edge("dash", dst: "sharep").edge("sharep", dst: "lan").edge("phone", dst: "lan")
         .edge("lan", dst: "served").edge("lan", dst: "connectreads")
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(share).len() == 0, message: "share sound: {validate(share)}");
     std\assert(midY(lookupNode(share, id: "dash")) == midY(lookupNode(share, id: "sharep")) and midY(lookupNode(share, id: "sharep")) == midY(lookupNode(share, id: "lan")),
         message: "Console, share and LAN on one row");
@@ -6346,7 +6346,7 @@ test "ci-providers' long edge leaves its row once, with no hump" {
         .edge("run", dst: "contract").edge("contract", dst: "ops").edge("ops", dst: "vendor")
         .edge("prefixes", dst: "quote", role: EdgeRole.optional).edge("quote", dst: "vendor")
         .zone("binary", members: ["run", "contract", "quote"]).zone("spell", members: ["ops", "prefixes"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final long = findEdge(d, src: "quote", dst: "vendor");
     std\assert(long != null and edgeLegs(d, e: long!).len() <= 3, message: "one jog at most: {edgeLegs(d, e: long!)}");
@@ -6361,13 +6361,13 @@ fun ciPipelineTwin() > mut Sketch {
 
 // A port's first leg runs across the flow from the source's face; its one corner lands on
 // the line its far end enters at.
-fun portTurn(d: Diagram, e: Edge) > [int] {
+fun portTurn(d: Layout, e: Edge) > [int] {
     final legs = edgeLegs(d, e: e);
     return [legs[0][0], legs[0][1], legs[0][2], legs[0][3], legs.len()];
 }
 
 test "an edge whose target lies wholly beyond the source's cross span, with the source column clear, leaves top or bottom at the source midline and bends once, at the target midline" {
-    final http = serverHttpTwin().rank(["mcp", "reads", "review", "connect", "health"]).diagram() catch Diagram{};
+    final http = serverHttpTwin().rank(["mcp", "reads", "review", "connect", "health"]).layout() catch Layout{};
     final guard = lookupNode(http, id: "guard");
     final mcp = findEdge(http, src: "guard", dst: "mcp")!;
     final up = portTurn(http, e: mcp);
@@ -6378,7 +6378,7 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
     std\assert(findEdge(http, src: "guard", dst: "reads")!.srcSide == Side.right, message: "the route on the Guard's row stays on the forward face");
     std\assert(validate(http).len() == 0 and crossings(http).len() == 0, message: "clean: {validate(http)}");
 
-    final ci = ciPipelineTwin().diagram() catch Diagram{};
+    final ci = ciPipelineTwin().layout() catch Layout{};
     final cmd = lookupNode(ci, id: "cmd");
     final gen = findEdge(ci, src: "cmd", dst: "generate")!;
     final climb = portTurn(ci, e: gen);
@@ -6386,7 +6386,7 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
         message: "cmd->generate leaves the top at the midline and turns once: {edgeLegs(ci, e: gen)}");
     std\assert(validate(ci).len() == 0 and crossings(ci).len() == 0, message: "the whole fan clean: {validate(ci)}");
 
-    final across = fig().down().node("s").node("a").node("b").edge("s", dst: "a").edge("s", dst: "b").diagram() catch Diagram{};
+    final across = fig().down().node("s").node("a").node("b").edge("s", dst: "a").edge("s", dst: "b").layout() catch Layout{};
     final sb = findEdge(across, src: "s", dst: "b")!;
     final side = portTurn(across, e: sb);
     std\assert(sb.srcSide == Side.right and side[4] == 2 and side[1] == midY(lookupNode(across, id: "s")) and side[2] == midX(lookupNode(across, id: "b")),
@@ -6398,7 +6398,7 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
         .node("cli").node("sock").node("pool").node("ws").node("runs").node("svc").node("serve")
         .edge("cli", dst: "sock").edge("sock", dst: "pool").edge("sock", dst: "ws").edge("sock", dst: "runs").edge("sock", dst: "svc")
         .edge("cli", dst: "serve", role: EdgeRole.optional)
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(findEdge(socket, src: "sock", dst: "svc")!.srcSide == Side.right, message: "a box in the column keeps the side port");
     std\assert(findEdge(socket, src: "sock", dst: "pool")!.srcSide == Side.top, message: "while the clear side takes the port");
 
@@ -6409,7 +6409,7 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
         .edge("run", dst: "contract").edge("contract", dst: "ops").edge("ops", dst: "vendor")
         .edge("prefixes", dst: "quote", role: EdgeRole.optional).edge("quote", dst: "vendor")
         .zone("binary", members: ["run", "contract", "quote"]).zone("spell", members: ["ops", "prefixes"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     std\assert(findEdge(bands, src: "prefixes", dst: "quote")!.srcSide == Side.right, message: "a zone border in the column keeps the side port");
 }
 
@@ -6424,7 +6424,7 @@ fun volatilityTwin() > mut Sketch {
 
 // Bends are legs less one.
 test "a decision's out-edge to a target on its own midline takes the outbound vertex" {
-    final d = volatilityTwin().diagram() catch Diagram{};
+    final d = volatilityTwin().layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     std\assert(findEdge(d, src: "hist", dst: "rate")!.srcSide == Side.bottom, message: "rate, straight below, takes the outbound vertex");
     std\assert(findEdge(d, src: "det", dst: "report")!.srcSide == Side.bottom, message: "report, straight below, takes the outbound vertex");
@@ -6435,7 +6435,7 @@ test "a decision's out-edge to a target on its own midline takes the outbound ve
     foreach (first in [true, false]) {
         final f = fig().node("q", role: Role.decision).node("m").node("b").edge("q", dst: "m").edge("q", dst: "b");
         if (first == false) { _ = f.order(["b", "m"]); }
-        final two = f.row(["q", "m"]).diagram() catch Diagram{};
+        final two = f.row(["q", "m"]).layout() catch Layout{};
         std\assert(findEdge(two, src: "q", dst: "m")!.srcSide == Side.right, message: "the midline exit sorted first={first} still leaves the outbound vertex");
         std\assert(edgeLegs(two, e: findEdge(two, src: "q", dst: "m")!).len() == 1, message: "and runs straight");
     }
@@ -6452,7 +6452,7 @@ fun commitGeneratedTwin() > mut Sketch {
 }
 
 test "every proper crossing hops the dashed or lesser edge" {
-    final d = commitGeneratedTwin().diagram() catch Diagram{};
+    final d = commitGeneratedTwin().layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     final found = crossings(d);
     std\assert(found.len() == 1, message: "one crossing: {found.len()}");
@@ -6469,7 +6469,7 @@ test "every proper crossing hops the dashed or lesser edge" {
         .edge("run", dst: "contract").edge("contract", dst: "ops").edge("ops", dst: "vendor")
         .edge("prefixes", dst: "quote", role: EdgeRole.optional).edge("quote", dst: "vendor")
         .zone("binary", members: ["run", "contract", "quote"]).zone("spell", members: ["ops", "prefixes"])
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final pc = crossings(providers);
     std\assert(pc.len() == 1 and providers.edges[pc[0].bridged].src == "quote", message: "quote->vendor hops contract->ops: {pc.len()}");
 }
@@ -6481,7 +6481,7 @@ test "a bent-route label never touches a stroke" {
         .edge("run", dst: "cd").edge("cd", dst: "local", label: "no").edge("cd", dst: "channel", label: "yes")
         .edge("channel", dst: "commit", label: "default").edge("channel", dst: "unstable", label: "unstable")
         .edge("channel", dst: "stable", label: "stable");
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     std\assert(validate(d).len() == 0, message: "sound: {thrown(f)}");
     final strokes: mut [[int]] = mut [<[int]>];
     foreach (e in d.edges) {
@@ -6508,19 +6508,19 @@ test "a bent-route label never touches a stroke" {
     // An 80px mask has no room on a 72px gap between two boxes, so the gap widens for it.
     final wide = fig().node("a").node("b").edge("a", dst: "b", label: "abcdefghijklmn");
     std\assert(thrown(wide) == "", message: "the gap widens for the label: {thrown(wide)}");
-    final pair = wide.diagram() catch Diagram{};
+    final pair = wide.layout() catch Layout{};
     std\assert(lookupNode(pair, id: "b").x - lookupNode(pair, id: "a").x - lookupNode(pair, id: "a").w > LayerColGap, message: "wider than the house gap");
     std\assert(layoutFindings([Fault{ rule = "label", subjects = ["a", "b"] }])[0]
-        == "edge \"a\" -> \"b\" label has no spot clear of every stroke, box and label; shorten it or split the figure",
+        == "edge \"a\" -> \"b\" label has no spot clear of every stroke, box and label; shorten it or split the diagram",
         message: "past the widening rounds it is a finding naming the edge");
 }
 
 
-// The figure API. Everything above is the layout and the renderer, private to this
+// The diagram API. Everything above is the layout and the renderer, private to this
 // module; everything below is what an author calls.
 
-// Look picks a box's treatment. focal takes the accent, two per figure counting focal
-// strokes; store is a persistent thing; external sits outside what the figure depicts;
+// Look picks a box's treatment. focal takes the accent, two per diagram counting focal
+// strokes; store is a persistent thing; external sits outside what the diagram depicts;
 // input is data arriving from outside; optional is dashed; decision is a diamond with at
 // most three exits, for an external alone.
 export enum<str> Look { plain, focal, store, external, input, optional, decision }
@@ -6586,16 +6586,16 @@ fun notDirs(dirs: [magus\Dir], call: str) > str? {
     return null;
 }
 
-// Level is the one abstraction level a figure draws at, and every box in it is a unit of
+// Level is the one abstraction level a diagram draws at, and every box in it is a unit of
 // that level: a process's steps, the workspace's projects, a scope's packages, or the
-// symbols inside one package. file has no unit constructor yet, so a figure declaring it is
+// symbols inside one package. file has no unit constructor yet, so a diagram declaring it is
 // refused. A level is not a layer: magus\layer() names a tier of packages, drawn at
 // Level.package.
 export enum<str> Level { process, project, package, file, symbol }
 
 // ActorKind is what an actor stands for, set by the constructor that built it: person()
-// and external() sit outside the code and join a figure at any level; step() is a unit of a
-// Level.process figure; stage() is a symbol inside one package, a unit of Level.symbol.
+// and external() sit outside the code and join a diagram at any level; step() is a unit of a
+// Level.process diagram; stage() is a symbol inside one package, a unit of Level.symbol.
 export enum<str> ActorKind { person, external, step, stage }
 
 // Actor is a box that names no directory. Build one with person(), external(), step() or
@@ -6623,21 +6623,21 @@ export fun person(name: str, sub: str = "", tag: str = "", link: str = "", look:
     return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.person };
 }
 
-// external is something outside the code the figure draws: a vendor service, a host, a
+// external is something outside the code the diagram draws: a vendor service, a host, a
 // forge, a file a person writes. look defaults to Look.external.
 export fun external(name: str, sub: str = "", tag: str = "", link: str = "", look: Look? = null) > Actor {
     return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.external };
 }
 
 // step is one step of a process no directory holds: a CI job, a decision, a role. It is
-// the unit of a Level.process figure, and refused in any other.
+// the unit of a Level.process diagram, and refused in any other.
 export fun step(name: str, sub: str = "", tag: str = "", link: str = "", look: Look? = null) > Actor {
     return Actor{ name = name, sub = sub, tag = tag, link = link, look = look, kind = ActorKind.step };
 }
 
 // stage is a step that lives inside one package, named by the symbol that carries it out:
 // refs is magus\graph().refs(symbol), and its definition must sit directly in dir. It is the
-// unit of a Level.symbol figure scoped to dir, anchored at that definition. name defaults
+// unit of a Level.symbol diagram scoped to dir, anchored at that definition. name defaults
 // to the symbol.
 export fun stage(dir: magus\Dir, refs: magus\RefsResult, name: str = "", sub: str = "", tag: str = "", look: Look? = null) > Actor {
     var named = name;
@@ -6729,11 +6729,11 @@ export object Legend {
     label: str = "",
 }
 
-// Figure is a figure as plain data: of() starts one, the builder methods fill its fields,
+// Diagram is a diagram as plain data: of() starts one, the builder methods fill its fields,
 // and draw() lays it out and paints it. A host may build the record itself. Nothing is
-// checked until draw() or diagram(), which raise every finding at once, one per line, each
+// checked until draw() or layout(), which raise every finding at once, one per line, each
 // naming the call to change.
-export object Figure {
+export object Diagram {
     id: str = "",
     title: str = "",
     eyebrow: str = "",
@@ -6741,7 +6741,7 @@ export object Figure {
     direction: Direction = Direction.across,
     // Null derives the level from the boxes; set, every box must be a unit of it.
     level: Level? = null,
-    // Why the figure draws no directory; empty for a figure that draws some.
+    // Why the diagram draws no directory; empty for a diagram that draws some.
     unscopedWhy: str = "",
     // Draws the imports and declared calls the drawn records hold.
     graphEdges: bool = false,
@@ -6755,8 +6755,8 @@ export object Figure {
     alignments: [Alignment] = [<Alignment>],
     legends: [Legend] = [<Legend>],
 
-    // unscoped says why a figure draws no directory: a decision process, a CI arrangement.
-    mut fun unscoped(why: str) > mut Figure {
+    // unscoped says why a diagram draws no directory: a decision process, a CI arrangement.
+    mut fun unscoped(why: str) > mut Diagram {
         this.unscopedWhy = why;
         return this;
     }
@@ -6764,34 +6764,34 @@ export object Figure {
     // box draws one directory. The label defaults to its path.
     // symbol anchors the box at a definition inside it, via magus\graph().refs.
     // A symbol defined elsewhere is a finding. focal is Look.focal.
-    mut fun box(dir: magus\Dir, label: str = "", sub: str = "", tag: str = "", focal: bool = false, look: Look? = null, symbol: magus\RefsResult? = null) > mut Figure {
+    mut fun box(dir: magus\Dir, label: str = "", sub: str = "", tag: str = "", focal: bool = false, look: Look? = null, symbol: magus\RefsResult? = null) > mut Diagram {
         this.boxes = this.boxes + [Box{ dir = dir, label = label, sub = sub, tag = tag, focal = focal, look = look, symbol = symbol }];
         return this;
     }
 
     // group draws every directory in dirs as one box. Handed a layer's dirs, it takes a
     // directory joining the layer later.
-    mut fun group(dirs: [magus\Dir], label: str, sub: str = "", tag: str = "", focal: bool = false, look: Look? = null) > mut Figure {
+    mut fun group(dirs: [magus\Dir], label: str, sub: str = "", tag: str = "", focal: bool = false, look: Look? = null) > mut Diagram {
         this.boxes = this.boxes + [Box{ group = dirs, label = label, sub = sub, tag = tag, focal = focal, look = look }];
         return this;
     }
 
     // actor draws an Actor. flowIn, flowOut and flowAcross draw theirs on first use, so
     // actor() only fixes where one falls in declaration order.
-    mut fun actor(a: Actor) > mut Figure {
+    mut fun actor(a: Actor) > mut Diagram {
         this.useActor(a);
         return this;
     }
 
-    // scope names directories the figure answers for: each must be drawn by a box or a
+    // scope names directories the diagram answers for: each must be drawn by a box or a
     // group, or excluded with except(dirs, why:).
-    mut fun scope(dirs: [magus\Dir]) > mut Figure {
+    mut fun scope(dirs: [magus\Dir]) > mut Diagram {
         this.scopes = this.scopes + [dirs];
         return this;
     }
 
     // except leaves directories in scope undrawn on purpose; why reaches the drift summary.
-    mut fun except(dirs: [magus\Dir], why: str) > mut Figure {
+    mut fun except(dirs: [magus\Dir], why: str) > mut Diagram {
         this.exclusions = this.exclusions + [Exclusion{ dirs = dirs, why = why }];
         return this;
     }
@@ -6799,42 +6799,42 @@ export object Figure {
     // edgesFromGraph draws what the records hold between drawn boxes: every import, claimed
     // imports, and every declared magus:calls marker, claimed calls. An edge inside one
     // group is not drawn. Every drawn directory must carry a symbol index.
-    mut fun edgesFromGraph() > mut Figure {
+    mut fun edgesFromGraph() > mut Diagram {
         this.graphEdges = true;
         return this;
     }
 
     // hideEdges keeps the graph's edges from a directory in src to one in dst out of the
     // picture. why is required, and a hide that matches nothing is a finding.
-    mut fun hideEdges(src: [magus\Dir], dst: [magus\Dir], why: str) > mut Figure {
+    mut fun hideEdges(src: [magus\Dir], dst: [magus\Dir], why: str) > mut Diagram {
         this.hiddenEdges = this.hiddenEdges + [HiddenEdges{ src = src, dst = dst, why = why }];
         return this;
     }
 
     // markEdge labels or strokes the edge edgesFromGraph() draws from the box holding src to
     // the box holding dst.
-    mut fun markEdge(src: magus\Dir, dst: magus\Dir, label: str = "", stroke: Stroke? = null) > mut Figure {
+    mut fun markEdge(src: magus\Dir, dst: magus\Dir, label: str = "", stroke: Stroke? = null) > mut Diagram {
         this.edgeMarks = this.edgeMarks + [EdgeMark{ src = src, dst = dst, label = label, stroke = stroke }];
         return this;
     }
 
     // flowIn draws a hand edge from an actor to the box holding dir: flow the graph cannot
     // hold, such as a person running a tool. It claims flow, which nothing checks.
-    mut fun flowIn(src: Actor, dst: magus\Dir, label: str = "", stroke: Stroke? = null) > mut Figure {
+    mut fun flowIn(src: Actor, dst: magus\Dir, label: str = "", stroke: Stroke? = null) > mut Diagram {
         this.useActor(src);
         this.flows = this.flows + [Flow{ src = End{ actor = src }, dst = End{ dir = dst }, label = label, stroke = stroke }];
         return this;
     }
 
     // flowOut draws a hand edge from the box holding dir to an actor.
-    mut fun flowOut(src: magus\Dir, dst: Actor, label: str = "", stroke: Stroke? = null) > mut Figure {
+    mut fun flowOut(src: magus\Dir, dst: Actor, label: str = "", stroke: Stroke? = null) > mut Diagram {
         this.useActor(dst);
         this.flows = this.flows + [Flow{ src = End{ dir = src }, dst = End{ actor = dst }, label = label, stroke = stroke }];
         return this;
     }
 
     // flowAcross draws a hand edge between two actors.
-    mut fun flowAcross(src: Actor, dst: Actor, label: str = "", stroke: Stroke? = null) > mut Figure {
+    mut fun flowAcross(src: Actor, dst: Actor, label: str = "", stroke: Stroke? = null) > mut Diagram {
         this.useActor(src);
         this.useActor(dst);
         this.flows = this.flows + [Flow{ src = End{ actor = src }, dst = End{ actor = dst }, label = label, stroke = stroke }];
@@ -6843,39 +6843,39 @@ export object Figure {
 
     // zone stacks the boxes drawing dirs, and the actors, into one band. A group joins
     // only whole: a zone taking part of one is a finding.
-    mut fun zone(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+    mut fun zone(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Diagram {
         this.zones = this.zones + [Zone{ label = label, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
     // boundary is a zone painted as a trust boundary.
-    mut fun boundary(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+    mut fun boundary(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Diagram {
         this.zones = this.zones + [Zone{ label = label, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>], boundary = true }];
         return this;
     }
 
     // rank puts the boxes drawing dirs, and the actors, in one rank. A connector between two
     // of them lies flat, across the rank, so a chain declared in one rank reads across a
-    // down() figure instead of down it.
-    mut fun rank(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+    // down() diagram instead of down it.
+    mut fun rank(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Diagram {
         this.alignments = this.alignments + [Alignment{ axis = Axis.rank, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
     // row lines the boxes drawing dirs, and the actors, up on one midline across ranks.
-    mut fun row(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+    mut fun row(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Diagram {
         this.alignments = this.alignments + [Alignment{ axis = Axis.row, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
-    mut fun legend(look: Look, label: str) > mut Figure {
+    mut fun legend(look: Look, label: str) > mut Diagram {
         this.legends = this.legends + [Legend{ look = look, label = label }];
         return this;
     }
 
-    // diagram lays the figure out. Raises every finding, one per line, each naming the call
-    // to change. Same declarations and records, same Diagram.
-    fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
+    // layout lays the diagram out. Raises every finding, one per line, each naming the call
+    // to change. Same declarations and records, same Layout.
+    fun layout() > Layout !> str { //nolint:no-throw // the exported call raises
         final laid = laidOut(this);
         if (laid.error -> e) {
             throw e.message; //nolint:no-throw // the exported call raises
@@ -6892,14 +6892,14 @@ export object Figure {
     }
 }
 
-// of starts an empty figure. direction defaults to Direction.across. level is the one level
-// the figure draws at; left null, the boxes decide it, and boxes of two levels are refused
+// of starts an empty diagram. direction defaults to Direction.across. level is the one level
+// the diagram draws at; left null, the boxes decide it, and boxes of two levels are refused
 // either way.
 //
 // The enum parameters default to null rather than a case: gopherbuzz resolves a default in
 // the caller's scope.
-export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null, level: Level? = null) > mut Figure {
-    return mut Figure{
+export fun of(id: str, title: str = "", eyebrow: str = "", desc: str = "", direction: Direction? = null, level: Level? = null) > mut Diagram {
+    return mut Diagram{
         id = id, title = title, eyebrow = eyebrow, desc = desc,
         direction = direction ?? Direction.across, level = level,
     };
@@ -6921,7 +6921,7 @@ object Part {
     signature: str? = null,
     link: str = "",
     // What the part is a unit of, from its constructor; null for a person or an external,
-    // which sit outside the code and join any level. A box's level waits for the figure's.
+    // which sit outside the code and join any level. A box's level waits for the diagram's.
     actorKind: ActorKind? = null,
     // The package a stage sits in.
     stageDir: str = "",
@@ -6979,25 +6979,25 @@ object DrawnBand {
 // draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
 // box's anchor. Raises every finding at once, one per line,
 // each naming the call to change.
-export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
+export fun draw(f: Diagram, theme: Theme, anchorHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
     final named: str? = theme.value;
     if (named == null) {
-        throw "figure {quote(f.id)}: draw takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
+        throw "diagram {quote(f.id)}: draw takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
     }
     final d = laidOut(f);
     if (d.error -> e) {
         throw e.message; //nolint:no-throw // the exported call raises
     }
-    return drawDiagram(d.value!, theme: theme, anchorHref: anchorHref);
+    return drawLayout(d.value!, theme: theme, anchorHref: anchorHref);
 }
 
-// drawDiagram paints d, a Figure's diagram(), with theme, as draw
-// does. Painting one figure in several themes lays it out once. drillHref is a URL
-// template: {id} takes the figure a box drills down to, from an Atlas.
-export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "", drillHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
+// drawLayout paints d, a Diagram's layout(), with theme, as draw
+// does. Painting one diagram in several themes lays it out once. drillHref is a URL
+// template: {id} takes the diagram a box drills down to, from an Atlas.
+export fun drawLayout(d: Layout, theme: Theme, anchorHref: str = "", drillHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
     final named: str? = theme.value;
     if (named == null) {
-        throw "diagram {quote(d.id)}: drawDiagram takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
+        throw "diagram {quote(d.id)}: drawLayout takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
     }
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
@@ -7010,11 +7010,11 @@ export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "", drillHref
     return XmlDeclaration + painted.value!;
 }
 
-// nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
+// nodeFact is the line a diagram's stamp records for n. A box anchoring a symbol records the
 // symbol and its signature in place of the file it is defined in, so moving the definition,
 // in its file or to another, leaves the stamp alone and a signature change moves it, the
 // change `magus diff` classifies as a signature change. A signature the index rendered none
-// for is unknown. A box that drills down records the figure it links to.
+// for is unknown. A box that drills down records the diagram it links to.
 export fun nodeFact(n: Node) > str {
     var drill = "";
     if (n.drill != "") { drill = " drill {n.drill}"; }
@@ -7024,8 +7024,8 @@ export fun nodeFact(n: Node) > str {
     return "node {n.id} {n.role.value} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}{drill}";
 }
 
-// drillLinks maps the id of each box in d that drills down to the figure it links to.
-export fun drillLinks(d: Diagram) > {str: str} {
+// drillLinks maps the id of each box in d that drills down to the diagram it links to.
+export fun drillLinks(d: Layout) > {str: str} {
     final links: mut {str: str} = mut {<str: str>};
     foreach (n in d.nodes) {
         if (n.drill != "") { links[n.id] = n.drill; }
@@ -7033,21 +7033,21 @@ export fun drillLinks(d: Diagram) > {str: str} {
     return links;
 }
 
-fun laidOut(fig: Figure, drills: {str: str} = {<str: str>}) > result\Result::<Diagram> {
+fun laidOut(fig: Diagram, drills: {str: str} = {<str: str>}) > result\Result::<Layout> {
     final lowest = lowered(fig, drills: drills);
     if (lowest.error -> e) {
-        return result\Result::<Diagram>{ error = e };
+        return result\Result::<Layout>{ error = e };
     }
     final laid = layoutFlow(lowest.value!);
     if (laid.error -> e) {
-        return result\fail::<Diagram>(revoiced(e.message));
+        return result\fail::<Layout>(revoiced(e.message));
     }
     return laid;
 }
 
 // claims counts d's connectors by what each asserts: "imports" and "calls" the graph holds,
 // "flow" an author drew. Every key is present.
-export fun claims(d: Diagram) > {str: int} {
+export fun claims(d: Layout) > {str: int} {
     final counts: mut {str: int} = mut {"imports": 0, "calls": 0, "flow": 0};
     foreach (e in d.edges) {
         counts[e.claim.value] = (counts[e.claim.value] ?? 0) + 1;
@@ -7055,33 +7055,33 @@ export fun claims(d: Diagram) > {str: int} {
     return counts;
 }
 
-// Atlas is a registry's figures read together, so a box links to the figure one level down
-// that draws what it stands for, and a figure wider than the column the registry shows it
+// Atlas is a registry's diagrams read together, so a box links to the diagram one level down
+// that draws what it stands for, and a diagram wider than the column the registry shows it
 // in is refused. Build one with atlas().
 export object Atlas {
-    figures: [Figure] = [<Figure>],
-    // The widest a figure may lay out, in SVG units; 0 sets no budget.
+    diagrams: [Diagram] = [<Diagram>],
+    // The widest a diagram may lay out, in SVG units; 0 sets no budget.
     column: int = 0,
 
-    // diagram lays f out as Figure.diagram() does, with each box's drill set, and raises
-    // every finding at once, a figure past the column among them.
-    fun diagram(f: Figure) > Diagram !> str { //nolint:no-throw // the exported call raises
+    // diagram lays f out as Diagram.layout() does, with each box's drill set, and raises
+    // every finding at once, a diagram past the column among them.
+    fun layout(f: Diagram) > Layout !> str { //nolint:no-throw // the exported call raises
         final laid = laidOut(f, drills: this.drills(f));
         if (laid.error -> e) {
             throw e.message; //nolint:no-throw // the exported call raises
         }
         final d = laid.value!;
         if (this.column > 0 and d.width > this.column) {
-            throw "figure {quote(f.id)}: lays out {d.width} wide, past the column of {this.column}; set direction: Direction.down in of(), or split it"; //nolint:no-throw // the exported call raises
+            throw "diagram {quote(f.id)}: lays out {d.width} wide, past the column of {this.column}; set direction: Direction.down in of(), or split it"; //nolint:no-throw // the exported call raises
         }
         return d;
     }
 
-    // drills maps the id of each box in f to the figure one level down that draws it: a
-    // package's Level.symbol figure, the Level.package figure that boxes each of a group's
-    // directories on its own, a project's Level.package figure inside it. The narrowest
+    // drills maps the id of each box in f to the diagram one level down that draws it: a
+    // package's Level.symbol diagram, the Level.package diagram that boxes each of a group's
+    // directories on its own, a project's Level.package diagram inside it. The narrowest
     // wins, then the first registered.
-    fun drills(f: Figure) > {str: str} {
+    fun drills(f: Diagram) > {str: str} {
         final level = quickLevel(f);
         final found: mut {str: str} = mut {<str: str>};
         foreach (b in f.boxes) {
@@ -7104,8 +7104,8 @@ export object Atlas {
         return found;
     }
 
-    // undrilled is the label of each group in f that no figure one level down draws.
-    fun undrilled(f: Figure) > [str] {
+    // undrilled is the label of each group in f that no diagram one level down draws.
+    fun undrilled(f: Diagram) > [str] {
         final drawn = this.drills(f);
         final left: mut [str] = mut [<str>];
         foreach (b in f.boxes) {
@@ -7114,10 +7114,10 @@ export object Atlas {
         return left;
     }
 
-    fun below(f: Figure, level: Level, isGroup: bool, dirs: [str]) > str {
+    fun below(f: Diagram, level: Level, isGroup: bool, dirs: [str]) > str {
         var best = "";
         var bestSize = 0;
-        foreach (g in this.figures) {
+        foreach (g in this.diagrams) {
             if (g.id == f.id) { continue; }
             final gl = quickLevel(g);
             final scope = scopePaths(g);
@@ -7146,16 +7146,16 @@ export object Atlas {
     }
 }
 
-// atlas reads figures together. column is the widest a figure may lay out, in SVG units:
+// atlas reads diagrams together. column is the widest a diagram may lay out, in SVG units:
 // the prose column the registry inlines them in.
-export fun atlas(figures: [Figure], column: int = 0) > Atlas {
-    return Atlas{ figures = figures, column = column };
+export fun atlas(diagrams: [Diagram], column: int = 0) > Atlas {
+    return Atlas{ diagrams = diagrams, column = column };
 }
 
-// quickLevel is the level a figure declares, or the one its boxes name first: a stage is
+// quickLevel is the level a diagram declares, or the one its boxes name first: a stage is
 // Level.symbol, a box or group Level.package, the root box Level.project, a step
-// Level.process. A figure of two levels is refused when it lays out, so the first serves.
-fun quickLevel(f: Figure) > Level {
+// Level.process. A diagram of two levels is refused when it lays out, so the first serves.
+fun quickLevel(f: Diagram) > Level {
     if (f.level != null) {
         final named: str? = f.level!.value;
         if (named != null) { return f.level!; }
@@ -7172,7 +7172,7 @@ fun quickLevel(f: Figure) > Level {
     return Level.process;
 }
 
-fun scopePaths(f: Figure) > [str] {
+fun scopePaths(f: Diagram) > [str] {
     final seen: mut {str: bool} = mut {<str: bool>};
     final paths: mut [str] = mut [<str>];
     foreach (dirs in f.scopes) {
@@ -7188,7 +7188,7 @@ fun scopePaths(f: Figure) > [str] {
 }
 
 // boxedPaths is the directory of each dir box in f, groups left out.
-fun boxedPaths(f: Figure) > [str] {
+fun boxedPaths(f: Diagram) > [str] {
     final paths: mut [str] = mut [<str>];
     foreach (b in f.boxes) {
         if (b.dir != null and recordPath(b.dir!) != "") { paths.append(b.dir!.path); }
@@ -7196,7 +7196,7 @@ fun boxedPaths(f: Figure) > [str] {
     return paths;
 }
 
-fun stageDirsOf(f: Figure) > [str] {
+fun stageDirsOf(f: Diagram) > [str] {
     final seen: mut {str: bool} = mut {<str: bool>};
     final dirs: mut [str] = mut [<str>];
     foreach (b in f.boxes) {
@@ -7499,9 +7499,9 @@ fun resolveBand(verb: str, label: str, dirs: [magus\Dir], actors: [Actor], bound
     return DrawnBand{ verb = verb, label = label, dirs = paths, actors = names, boundary = boundary, call = call };
 }
 
-// revoiced turns the layout's findings, spoken for flow(), into the figure's own.
+// revoiced turns the layout's findings, spoken for flow(), into the diagram's own.
 fun revoiced(msg: str) > str {
-    return msg.replace("flow \"", with: "figure \"").replace("one flow() each", with: "one figure\\of() each");
+    return msg.replace("flow \"", with: "diagram \"").replace("one flow() each", with: "one diagram\\of() each");
 }
 
 // stagedIn reports whether a stage among parts sits in dir, which then counts as drawn.
@@ -7522,7 +7522,7 @@ fun descWords(desc: str) > int {
 }
 
 // unitLevel is the level part is a unit of, or null for a person or an external, which
-// join any level. A box is a package unless the figure says its boxes are projects; the
+// join any level. A box is a package unless the diagram says its boxes are projects; the
 // root "." holds every directory, so it is always the root project.
 fun unitLevel(part: Part, declared: Level?) > Level? {
     if (part.kind == "box" or part.kind == "group") {
@@ -7537,7 +7537,7 @@ fun unitLevel(part: Part, declared: Level?) > Level? {
 
 // levelFindings is the one level fig draws at: the declared one, or the level most of its
 // boxes are units of. Every box of another level is a finding naming where it belongs.
-fun levelFindings(fig: Figure, parts: [Part], found: mut [str]) > Level {
+fun levelFindings(fig: Diagram, parts: [Part], found: mut [str]) > Level {
     var declared: Level? = null;
     if (fig.level != null) {
         final named: str? = fig.level!.value;
@@ -7583,25 +7583,25 @@ fun levelFindings(fig: Figure, parts: [Part], found: mut [str]) > Level {
     return level;
 }
 
-// mixedFinding names a part drawn at the wrong level and the figure it belongs in.
+// mixedFinding names a part drawn at the wrong level and the diagram it belongs in.
 fun mixedFinding(part: Part, unit: Level, level: Level) > str {
-    final at = "and this figure is Level.{level.value}";
+    final at = "and this diagram is Level.{level.value}";
     if (unit == Level.symbol) {
-        return "{part.call} is a symbol inside {quote(part.stageDir)}, {at}; draw the stages in a Level.symbol figure scoped to {quote(part.stageDir)}, and box that package here";
+        return "{part.call} is a symbol inside {quote(part.stageDir)}, {at}; draw the stages in a Level.symbol diagram scoped to {quote(part.stageDir)}, and box that package here";
     }
     if (unit == Level.project) {
-        return "{part.call} is the root project, {at}; draw it in a Level.project figure, or box the packages the claim needs";
+        return "{part.call} is the root project, {at}; draw it in a Level.project diagram, or box the packages the claim needs";
     }
     if (unit == Level.process) {
-        return "{part.call} is a process step, {at}; draw the process in a Level.process figure, or build it with person() or external() when it sits outside the code";
+        return "{part.call} is a process step, {at}; draw the process in a Level.process diagram, or build it with person() or external() when it sits outside the code";
     }
     if (level == Level.symbol) {
-        return "{part.call} is a package, {at}, which draws inside one package; draw the packages in a Level.package figure whose box links here";
+        return "{part.call} is a package, {at}, which draws inside one package; draw the packages in a Level.package diagram whose box links here";
     }
-    return "{part.call} is a Level.{unit.value} unit, {at}; draw it in a Level.{unit.value} figure of its own";
+    return "{part.call} is a Level.{unit.value} unit, {at}; draw it in a Level.{unit.value} diagram of its own";
 }
 
-// narrower is the remedy a figure past a budget takes: the narrower scope to draw apart.
+// narrower is the remedy a diagram past a budget takes: the narrower scope to draw apart.
 fun narrower(level: Level, parts: [Part]) > str {
     if (level == Level.package or level == Level.project) {
         var widest: Part? = null;
@@ -7609,14 +7609,14 @@ fun narrower(level: Level, parts: [Part]) > str {
             if (part.kind == "group" and (widest == null or part.dirs.len() > widest!.dirs.len())) { widest = part; }
         }
         if (widest -> w) {
-            return "scope a detail figure to {setName(w.dirs)}, the widest group, and keep {w.call} here as its box";
+            return "scope a detail diagram to {setName(w.dirs)}, the widest group, and keep {w.call} here as its box";
         }
-        return "group the packages the title does not single out, and scope a detail figure to that group";
+        return "group the packages the title does not single out, and scope a detail diagram to that group";
     }
     if (level == Level.symbol) {
-        return "keep the stages the title names, and draw the rest in a second Level.symbol figure";
+        return "keep the stages the title names, and draw the rest in a second Level.symbol diagram";
     }
-    return "draw one branch of the process as its own Level.process figure, and keep one step here for it";
+    return "draw one branch of the process as its own Level.process diagram, and keep one step here for it";
 }
 
 // Derived is one part-to-part edge the graph holds.
@@ -7626,9 +7626,9 @@ object Derived {
     claim: Claim = "imports",
 }
 
-// lowered checks the figure against its records and turns it into the flow the layout
+// lowered checks the diagram against its records and turns it into the flow the layout
 // places, or raises every finding at once.
-fun lowered(fig: Figure, drills: {str: str}) > result\Result::<Sketch> {
+fun lowered(fig: Diagram, drills: {str: str}) > result\Result::<Sketch> {
     final found: mut [str] = mut [<str>];
     final records: mut {str: magus\Dir} = mut {<str: magus\Dir>};
     final actorRecords: mut {str: Actor} = mut {<str: Actor>};
@@ -7761,7 +7761,7 @@ fun lowered(fig: Figure, drills: {str: str}) > result\Result::<Sketch> {
     if (stageDirs.size() > 1) {
         final named: mut [str] = mut [<str>];
         foreach (d, _ in stageDirs) { named.append(quote(d)); }
-        found.append("draws stages in {named.sort(fun (a: str, b: str) > bool => a < b).join(" and ")}, and a Level.symbol figure draws inside one package; split it, one figure per package");
+        found.append("draws stages in {named.sort(fun (a: str, b: str) > bool => a < b).join(" and ")}, and a Level.symbol diagram draws inside one package; split it, one diagram per package");
     }
     foreach (d, _ in stageDirs) {
         if (level == Level.symbol and scoped[d] == null) {
@@ -7910,15 +7910,15 @@ fun lowered(fig: Figure, drills: {str: str}) > result\Result::<Sketch> {
     // internal/handler/diagram's 422 test pins "N nodes exceeds the budget of 9" and
     // "split into overview plus detail".
     if (parts.len() > MaxNodes) {
-        found.append("{parts.len()} nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one figure\\of() each: {narrower(level, parts: parts)}");
+        found.append("{parts.len()} nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one diagram\\of() each: {narrower(level, parts: parts)}");
     }
     if (sortedEdges.len() > MaxEdges) {
-        found.append("{sortedEdges.len()} edges exceeds the budget of {MaxEdges}; split into overview plus detail, one figure\\of() each: {narrower(level, parts: parts)}");
+        found.append("{sortedEdges.len()} edges exceeds the budget of {MaxEdges}; split into overview plus detail, one diagram\\of() each: {narrower(level, parts: parts)}");
     }
 
     if (found.len() > 0) {
         final lines: mut [str] = mut [<str>];
-        foreach (msg in found) { lines.append("figure {quote(fig.id)}: {msg}"); }
+        foreach (msg in found) { lines.append("diagram {quote(fig.id)}: {msg}"); }
         return result\fail::<Sketch>(lines.join("\n"));
     }
     return result\ok::<Sketch>(f);
@@ -7982,7 +7982,7 @@ fun bandMembers(parts: [Part], actors: {str: Actor}, band: DrawnBand, drawnBy: {
     }
     foreach (name in band.actors) {
         if (actors[name] == null) {
-            found.append("{band.call} names external {quote(name)}, which the figure does not draw; draw it with actor() first");
+            found.append("{band.call} names external {quote(name)}, which the diagram does not draw; draw it with actor() first");
             continue;
         }
         members.append(actorId(name));
@@ -8036,8 +8036,8 @@ fun serverDir() > magus\Dir {
 
 fun handlers() > magus\Layer { return newLayer("handler", dirs: [mcpDir(), graphDir(), jobDir()]); }
 
-// serverHttp is the decided shape of the server-http figure.
-fun serverHttp(layer: magus\Layer) > mut Figure !> str { //nolint:no-throw // a fixture; its tests catch the raise
+// serverHttp is the decided shape of the server-http diagram.
+fun serverHttp(layer: magus\Layer) > mut Diagram !> str { //nolint:no-throw // a fixture; its tests catch the raise
     final guard = guardDir();
     final mcp = mcpDir();
     return of("server-http", title: "The HTTP routes")
@@ -8047,26 +8047,26 @@ fun serverHttp(layer: magus\Layer) > mut Figure !> str { //nolint:no-throw // a 
         .edgesFromGraph();
 }
 
-fun failure(f: Figure) > str {
+fun failure(f: Diagram) > str {
     var msg = "";
     try {
-        _ = f.diagram();
+        _ = f.layout();
     } catch (e: str) {
         msg = e;
     }
     return msg;
 }
 
-fun edgeBetween(d: Diagram, src: str, dst: str) > Edge? {
+fun edgeBetween(d: Layout, src: str, dst: str) > Edge? {
     foreach (e in d.edges) {
         if (e.src == src and e.dst == dst) { return e; }
     }
     return null;
 }
 
-test "the server-http figure lays out from its records" {
-    final d = serverHttp(handlers()).diagram() catch Diagram{};
-    assert\equal(d.id, want: "server-http", message: "the figure lays out");
+test "the server-http diagram lays out from its records" {
+    final d = serverHttp(handlers()).layout() catch Layout{};
+    assert\equal(d.id, want: "server-http", message: "the diagram lays out");
     assert\equal(d.nodes.len(), want: 3, message: "guard, /mcp and the group");
     std\assert(lookupNode(d, id: "internal/httpx").role == Role.focal, message: "focal: true is the accent");
     assert\equal(lookupNode(d, id: "internal/handler/mcp").anchor, want: "internal/handler/mcp", message: "a box anchors its directory");
@@ -8075,25 +8075,25 @@ test "the server-http figure lays out from its records" {
     std\assert(mcp != null and mcp!.claim == Claim.imports, message: "/mcp -> guard claims imports");
     final group = edgeBetween(d, src: "group:Connect RPC", dst: "internal/httpx");
     std\assert(group != null and group!.claim == Claim.imports, message: "the group -> guard claims imports");
-    assert\equal(d.scope.join(","), want: "internal/handler/graph,internal/handler/job,internal/handler/mcp,internal/httpx", message: "the scope is what the figure draws");
+    assert\equal(d.scope.join(","), want: "internal/handler/graph,internal/handler/job,internal/handler/mcp,internal/httpx", message: "the scope is what the diagram draws");
 }
 
 test "a package added to a layer joins its group" {
     final notes = dirAt("internal/handler/notes", layer: "handler", imports: ["internal/httpx"]);
     final grown = newLayer("handler", dirs: [mcpDir(), graphDir(), jobDir(), notes]);
-    final before = serverHttp(handlers()).diagram() catch Diagram{};
-    final after = serverHttp(grown).diagram() catch Diagram{};
+    final before = serverHttp(handlers()).layout() catch Layout{};
+    final after = serverHttp(grown).layout() catch Layout{};
     assert\equal(after.nodes.len(), want: before.nodes.len(), message: "no new box");
     assert\equal(after.edges.len(), want: before.edges.len(), message: "notes' import folds into the group's edge");
-    std\assert(listHolds(after.scope, item: "internal/handler/notes"), message: "and the figure answers for it");
+    std\assert(listHolds(after.scope, item: "internal/handler/notes"), message: "and the diagram answers for it");
 }
 
 test "every directory in scope is drawn or excepted" {
     final f = (serverHttp(handlers()) catch of("x")).scope([serverDir(), guardDir()]);
-    assert\equal(failure(f), want: "figure \"server-http\": \"internal/server\" is in scope(\"internal/**\") but nothing draws it; add it to a box or a group, or except([...], why:)",
+    assert\equal(failure(f), want: "diagram \"server-http\": \"internal/server\" is in scope(\"internal/**\") but nothing draws it; add it to a box or a group, or except([...], why:)",
         message: "an undrawn directory in scope is a finding");
-    final d = f.except([serverDir()], why: "builds the guard and mounts every route").diagram() catch Diagram{};
-    assert\equal(d.omits["internal/server"] ?? "", want: "builds the guard and mounts every route", message: "the reason reaches the Diagram");
+    final d = f.except([serverDir()], why: "builds the guard and mounts every route").layout() catch Layout{};
+    assert\equal(d.omits["internal/server"] ?? "", want: "builds the guard and mounts every route", message: "the reason reaches the Layout");
     std\assert(listHolds(d.scope, item: "internal/server"), message: "an excepted directory stays in scope");
 }
 
@@ -8103,7 +8103,7 @@ test "a finding names a set by the directory holding it, never every path" {
     assert\equal(setName(["internal/handler/graph", "internal/handler/job", "internal/handler/mcp"]), want: "\"internal/handler/**\"", message: "siblings");
     assert\equal(setName(["internal/file", "internal/file/diff"]), want: "\"internal/file/**\"", message: "a directory and its child");
     assert\equal(setName(["internal/file", "internal/filex"]), want: "\"internal/**\"", message: "by segment, not by character");
-    assert\equal(setName(["cmd/magus", "internal/guard", "libs/figure"]), want: "\"cmd/magus\" and 2 more", message: "no shared directory");
+    assert\equal(setName(["cmd/magus", "internal/guard", "libs/diagram"]), want: "\"cmd/magus\" and 2 more", message: "no shared directory");
     assert\equal(setName([".", "internal/guard"]), want: "\".\" and 1 more", message: "the root shares nothing");
 }
 
@@ -8111,17 +8111,17 @@ test "except takes dirs, with a reason, over a scope" {
     final base = serverHttp(handlers()) catch of("x");
     final msg = failure(base.except([serverDir(), guardDir()], why: ""));
     final want = [
-        "figure \"server-http\": except(\"internal/**\") gives no reason; say why in except(dirs, why:)",
-        "figure \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which box(\"internal/httpx\") draws; drop one of them",
-        "figure \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which no scope(...) holds; drop it from the except",
-        "figure \"server-http\": except(\"internal/**\") excludes \"internal/server\", which no scope(...) holds; drop it from the except",
+        "diagram \"server-http\": except(\"internal/**\") gives no reason; say why in except(dirs, why:)",
+        "diagram \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which box(\"internal/httpx\") draws; drop one of them",
+        "diagram \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which no scope(...) holds; drop it from the except",
+        "diagram \"server-http\": except(\"internal/**\") excludes \"internal/server\", which no scope(...) holds; drop it from the except",
     ];
     assert\equal(msg, want: want.join("\n"), message: "except findings");
 }
 
 test "a directory is drawn once" {
     final f = of("t").box(mcpDir()).group(handlers().dirs, label: "handlers").edgesFromGraph();
-    assert\equal(failure(f), want: "figure \"t\": \"internal/handler/mcp\" is drawn by box(\"internal/handler/mcp\") and group(\"handlers\"); draw it once, dropping it from the group's dirs with without(dirs, drop: [...])",
+    assert\equal(failure(f), want: "diagram \"t\": \"internal/handler/mcp\" is drawn by box(\"internal/handler/mcp\") and group(\"handlers\"); draw it once, dropping it from the group's dirs with without(dirs, drop: [...])",
         message: "a box inside a group's dirs is a finding");
 }
 
@@ -8139,7 +8139,7 @@ test "without refuses a stale drop" {
 }
 
 test "a dir named twice draws once" {
-    final d = of("t").box(mcpDir()).group([guardDir(), guardDir()], label: "Guard").edgesFromGraph().diagram() catch Diagram{};
+    final d = of("t").box(mcpDir()).group([guardDir(), guardDir()], label: "Guard").edgesFromGraph().layout() catch Layout{};
     assert\equal(lookupNode(d, id: "group:Guard").label, want: "Guard", message: "the group lays out");
     assert\equal(d.scope.join(","), want: "internal/handler/mcp,internal/httpx", message: "and holds the directory once");
 }
@@ -8147,34 +8147,34 @@ test "a dir named twice draws once" {
 test "a declared call claims calls and outranks an import" {
     final api = dirAt("internal/api", imports: ["internal/store"], calls: [callTo("internal/store", transport: "http")]);
     final store = dirAt("internal/store");
-    final d = of("t").box(api).box(store).edgesFromGraph().diagram() catch Diagram{};
+    final d = of("t").box(api).box(store).edgesFromGraph().layout() catch Layout{};
     assert\equal(d.edges.len(), want: 1, message: "one edge per pair of boxes");
     std\assert(d.edges[0].claim == Claim.calls, message: "the declared call wins");
 }
 
 test "hideEdges takes graph edges out by dirs, and a stale hide is a finding" {
     final f = serverHttp(handlers()) catch of("x");
-    final d = f.hideEdges([mcpDir()], dst: [guardDir()], why: "requests run the other way").diagram() catch Diagram{};
+    final d = f.hideEdges([mcpDir()], dst: [guardDir()], why: "requests run the other way").layout() catch Layout{};
     assert\equal(d.edges.len(), want: 1, message: "the hidden import is gone");
     std\assert(edgeBetween(d, src: "internal/handler/mcp", dst: "internal/httpx") == null, message: "and it is that one");
     final stale = (serverHttp(handlers()) catch of("x")).hideEdges([guardDir()], dst: [mcpDir()], why: "x");
-    assert\equal(failure(stale), want: "figure \"server-http\": hideEdges(\"internal/httpx\", dst: \"internal/handler/mcp\") hides no edge the graph draws; drop it",
+    assert\equal(failure(stale), want: "diagram \"server-http\": hideEdges(\"internal/httpx\", dst: \"internal/handler/mcp\") hides no edge the graph draws; drop it",
         message: "a hide that matches nothing");
 }
 
 test "edgesFromGraph refuses a directory with no symbol index" {
     final f = of("t").box(dirAt("a", indexed: false)).box(dirAt("b")).edgesFromGraph();
-    assert\equal(failure(f), want: "figure \"t\": \"a\" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`",
+    assert\equal(failure(f), want: "diagram \"t\": \"a\" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`",
         message: "unknown is not absent");
 }
 
-test "code boxes need edgesFromGraph, and a figure names code or says why not" {
-    assert\equal(failure(of("t").box(guardDir()).box(mcpDir())), want: "figure \"t\": draws 2 boxes of code and no edge between them; call edgesFromGraph()", message: "no edges");
+test "code boxes need edgesFromGraph, and a diagram names code or says why not" {
+    assert\equal(failure(of("t").box(guardDir()).box(mcpDir())), want: "diagram \"t\": draws 2 boxes of code and no edge between them; call edgesFromGraph()", message: "no edges");
     final person = external("Author");
-    assert\equal(failure(of("t").actor(person)), want: "figure \"t\": draws no directory; draw a box() or group(), or say why in unscoped(why:)", message: "no code");
-    assert\equal(failure(of("t").box(guardDir()).unscoped(why: "x")), want: "figure \"t\": draws directories and declares unscoped(why:); drop the unscoped", message: "both");
-    final d = of("t").flowAcross(person, dst: external("GitHub"), label: "pushes").unscoped(why: "a process").diagram() catch Diagram{};
-    assert\equal(d.unscoped, want: "a process", message: "an unscoped figure lays out");
+    assert\equal(failure(of("t").actor(person)), want: "diagram \"t\": draws no directory; draw a box() or group(), or say why in unscoped(why:)", message: "no code");
+    assert\equal(failure(of("t").box(guardDir()).unscoped(why: "x")), want: "diagram \"t\": draws directories and declares unscoped(why:); drop the unscoped", message: "both");
+    final d = of("t").flowAcross(person, dst: external("GitHub"), label: "pushes").unscoped(why: "a process").layout() catch Layout{};
+    assert\equal(d.unscoped, want: "a process", message: "an unscoped diagram lays out");
     std\assert(d.edges[0].claim == Claim.flow, message: "a hand edge claims flow");
 }
 
@@ -8184,7 +8184,7 @@ test "a hand edge has an actor at one end and a drawn box at the other" {
     final d = (serverHttp(handlers()) catch of("x"))
         .flowIn(person, dst: mcpDir(), label: "tools")
         .flowOut(guardDir(), dst: github, label: "webhooks", stroke: Stroke.external)
-        .diagram() catch Diagram{};
+        .layout() catch Layout{};
     final into = edgeBetween(d, src: "external:Author", dst: "internal/handler/mcp");
     std\assert(into != null and into!.claim == Claim.flow and into!.label == "tools", message: "flowIn draws a flow edge");
     final leaving = edgeBetween(d, src: "internal/httpx", dst: "external:GitHub");
@@ -8192,20 +8192,20 @@ test "a hand edge has an actor at one end and a drawn box at the other" {
     std\assert(lookupNode(d, id: "external:Author").role == Role.input, message: "an actor keeps its look");
     assert\equal(lookupNode(d, id: "external:GitHub").link, want: "https://github.com", message: "and its link");
     final undrawn = (serverHttp(handlers()) catch of("x")).flowIn(person, dst: serverDir());
-    assert\equal(failure(undrawn), want: "figure \"server-http\": flowIn(\"Author\", dst: \"internal/server\") names a directory no box or group draws; draw it first", message: "an undrawn end");
+    assert\equal(failure(undrawn), want: "diagram \"server-http\": flowIn(\"Author\", dst: \"internal/server\") names a directory no box or group draws; draw it first", message: "an undrawn end");
 }
 
 test "markEdge labels a graph edge, and one the graph lacks is a finding" {
-    final d = (serverHttp(handlers()) catch of("x")).markEdge(mcpDir(), dst: guardDir(), label: "every call", stroke: Stroke.focal).diagram() catch Diagram{};
+    final d = (serverHttp(handlers()) catch of("x")).markEdge(mcpDir(), dst: guardDir(), label: "every call", stroke: Stroke.focal).layout() catch Layout{};
     final e = edgeBetween(d, src: "internal/handler/mcp", dst: "internal/httpx");
     std\assert(e != null and e!.label == "every call" and e!.kind == "accent" and e!.claim == Claim.imports, message: "the mark reaches the edge and keeps its claim");
     final wrong = (serverHttp(handlers()) catch of("x")).markEdge(guardDir(), dst: mcpDir());
-    assert\equal(failure(wrong), want: "figure \"server-http\": markEdge(\"internal/httpx\", dst: \"internal/handler/mcp\") matches no edge edgesFromGraph() draws; drop it, or check which way the import runs", message: "a mark against the import");
+    assert\equal(failure(wrong), want: "diagram \"server-http\": markEdge(\"internal/httpx\", dst: \"internal/handler/mcp\") matches no edge edgesFromGraph() draws; drop it, or check which way the import runs", message: "a mark against the import");
 }
 
 test "a symbol anchors its box at the definition" {
     final ok = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12, signature: "type Guard struct")).box(mcpDir()).edgesFromGraph();
-    final d = ok.diagram() catch Diagram{};
+    final d = ok.layout() catch Layout{};
     final node = lookupNode(d, id: "internal/httpx");
     assert\equal(node.anchor, want: "internal/httpx/guard.go", message: "the anchor is the defining file");
     assert\equal(node.symbol, want: "httpx.Guard", message: "and the symbol");
@@ -8223,7 +8223,7 @@ test "a symbol anchors its box at the definition" {
 
 fun guardFact(file: str, line: int, signature: str?) > str {
     final f = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: [file], line: line, signature: signature)).box(mcpDir()).edgesFromGraph();
-    final d = f.diagram() catch Diagram{};
+    final d = f.layout() catch Layout{};
     return nodeFact(lookupNode(d, id: "internal/httpx"));
 }
 
@@ -8240,19 +8240,19 @@ test "a moved definition leaves a node's stamp line alone and a signature change
 test "a zone takes a group whole" {
     final guarded = handlers().dirs + [guardDir()];
     final zoned = (serverHttp(handlers()) catch of("x")).zone("guarded", dirs: guarded);
-    final d = zoned.diagram() catch Diagram{};
+    final d = zoned.layout() catch Layout{};
     assert\equal(d.zones.len(), want: 1, message: "the zone lays out");
     final part = (serverHttp(handlers()) catch of("x")).zone("guarded", dirs: [guardDir(), graphDir()]);
-    assert\equal(failure(part), want: "figure \"server-http\": zone(\"guarded\") takes part of group(\"Connect RPC\"), leaving out \"internal/handler/job\"; name every directory of the group or none",
+    assert\equal(failure(part), want: "diagram \"server-http\": zone(\"guarded\") takes part of group(\"Connect RPC\"), leaving out \"internal/handler/job\"; name every directory of the group or none",
         message: "a split group");
 }
 
 test "a string where a Look or Stroke belongs is a finding" {
     final f = of("t").box(guardDir(), look: "store").box(mcpDir()).markEdge(mcpDir(), dst: guardDir(), stroke: "focal").legend("focal", label: "x").edgesFromGraph();
     final want = [
-        "figure \"t\": box(\"internal/httpx\") takes look: Look.<case>, not a string",
-        "figure \"t\": markEdge(\"internal/handler/mcp\", dst: \"internal/httpx\") takes stroke: Stroke.<case>, not a string",
-        "figure \"t\": legend \"x\" takes look: Look.<case>, not a string",
+        "diagram \"t\": box(\"internal/httpx\") takes look: Look.<case>, not a string",
+        "diagram \"t\": markEdge(\"internal/handler/mcp\", dst: \"internal/httpx\") takes stroke: Stroke.<case>, not a string",
+        "diagram \"t\": legend \"x\" takes look: Look.<case>, not a string",
     ];
     assert\equal(failure(f), want: want.join("\n"), message: "stringly");
 }
@@ -8270,13 +8270,13 @@ test "draw paints each theme" {
         message: "dark bakes hex");
 }
 
-test "drawDiagram paints a figure's diagram the bytes draw paints" {
+test "drawLayout paints a diagram's layout in the bytes draw paints" {
     var threw = "";
     try {
         final f = serverHttp(handlers());
-        final d = f.diagram();
+        final d = f.layout();
         foreach (theme in [Theme.dark, Theme.light, Theme.page]) {
-            assert\equal(drawDiagram(d, theme: theme), want: draw(f, theme: theme), message: "theme {theme.value}");
+            assert\equal(drawLayout(d, theme: theme), want: draw(f, theme: theme), message: "theme {theme.value}");
         }
     } catch (e: str) {
         threw = e;
@@ -8307,8 +8307,8 @@ test "every theme writes no var() in an attribute" {
     final flows = of("t", title: "T").unscoped(why: "a process")
         .actor(a).actor(b).flowAcross(a, dst: b, label: "calls", stroke: Stroke.external)
         .legend(Look.focal, label: "hot").legend(Look.store, label: "kept");
-    final figures = [serverHttp(handlers()) catch of("x"), flows];
-    foreach (f in figures) {
+    final diagrams = [serverHttp(handlers()) catch of("x"), flows];
+    foreach (f in diagrams) {
         foreach (theme in [Theme.page, Theme.light, Theme.dark]) {
             final svg = draw(f, theme: theme) catch "threw";
             final head = if (theme == Theme.page) "<svg" else XmlDeclaration + "<svg";
@@ -8318,12 +8318,12 @@ test "every theme writes no var() in an attribute" {
     }
 }
 
-test "a Figure written as data draws the bytes its builders draw" {
+test "a Diagram written as data draws the bytes its builders draw" {
     final a = external("a", link: "/code/a", look: Look.plain);
     final b = external("b", look: Look.plain);
     final built = of("t", title: "T", direction: Direction.down).unscoped(why: "a process")
         .actor(a).actor(b).flowAcross(a, dst: b, stroke: Stroke.focal).legend(Look.focal, label: "hot");
-    final data = Figure{
+    final data = Diagram{
         id = "t", title = "T", direction = Direction.down, unscopedWhy = "a process",
         boxes = [Box{ actor = a }, Box{ actor = b }],
         flows = [Flow{ src = End{ actor = a }, dst = End{ actor = b }, stroke = Stroke.focal }],
@@ -8334,7 +8334,7 @@ test "a Figure written as data draws the bytes its builders draw" {
     assert\equal(draw(data, theme: Theme.page) catch "data threw", want: want, message: "one record, one picture");
 
     final boxes = of("i").box(guardDir(), label: "Guard").box(mcpDir()).edgesFromGraph();
-    final hosted = Figure{
+    final hosted = Diagram{
         id = "i", graphEdges = true,
         boxes = [asRecord::<Box>({ "dir": guardDir(), "label": "Guard", "sub": "", "tag": "", "focal": false }), Box{ dir = mcpDir() }],
     };
@@ -8344,9 +8344,9 @@ test "a Figure written as data draws the bytes its builders draw" {
 
 test "a value that is not a record is refused where it enters" {
     final notDir = asRecord::<magus\Dir>({ "id": "dir:x" });
-    assert\equal(failure(of("t").box(notDir).unscoped(why: "x")), want: "figure \"t\": box takes a Dir from magus\\graph().dir, and this argument is not one", message: "box");
+    assert\equal(failure(of("t").box(notDir).unscoped(why: "x")), want: "diagram \"t\": box takes a Dir from magus\\graph().dir, and this argument is not one", message: "box");
     assert\equal(failure(of("t").group([guardDir(), notDir], label: "g").unscoped(why: "x")),
-        want: "figure \"t\": group(\"g\") takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one\nfigure \"t\": draws directories and declares unscoped(why:); drop the unscoped",
+        want: "diagram \"t\": group(\"g\") takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one\ndiagram \"t\": draws directories and declares unscoped(why:); drop the unscoped",
         message: "group");
     var msg = "";
     try {
@@ -8357,21 +8357,21 @@ test "a value that is not a record is refused where it enters" {
     assert\equal(msg, want: "without takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one", message: "without");
 }
 
-test "a figure past the box budget names the narrower scope" {
+test "a diagram past the box budget names the narrower scope" {
     var f = of("t").unscoped(why: "budget");
     var n = 0;
     while (n < 10) {
         f = f.actor(step("step {n}"));
         n = n + 1;
     }
-    assert\equal(failure(f), want: "figure \"t\": 10 nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one figure\\of() each: draw one branch of the process as its own Level.process figure, and keep one step here for it", message: "a process");
+    assert\equal(failure(f), want: "diagram \"t\": 10 nodes exceeds the budget of {MaxNodes}; split into overview plus detail, one diagram\\of() each: draw one branch of the process as its own Level.process diagram, and keep one step here for it", message: "a process");
     var g = (serverHttp(handlers()) catch of("x"));
     n = 0;
     while (n < 7) {
         g = g.actor(person("reader {n}"));
         n = n + 1;
     }
-    std\assert(failure(g).indexOf("scope a detail figure to \"internal/handler/**\", the widest group, and keep group(\"Connect RPC\") here as its box") != null, message: "a package figure names its widest group: {failure(g)}");
+    std\assert(failure(g).indexOf("scope a detail diagram to \"internal/handler/**\", the widest group, and keep group(\"Connect RPC\") here as its box") != null, message: "a package diagram names its widest group: {failure(g)}");
 }
 
 // parserRefs is a symbol defined directly in libs/lang, the package parserStages draws inside.
@@ -8380,8 +8380,8 @@ fun astDir() > magus\Dir { return dirAt("libs/lang/ast"); }
 fun parseRefs() > magus\RefsResult { return refsAt("Parse", files: ["libs/lang/parse.go"], line: 12, signature: "func Parse(src string) (*ast.File, error)"); }
 fun checkRefs() > magus\RefsResult { return refsAt("Check", files: ["libs/lang/check.go"], line: 3); }
 
-// langStages is a Level.symbol figure of two stages inside libs/lang.
-fun langStages() > mut Figure {
+// langStages is a Level.symbol diagram of two stages inside libs/lang.
+fun langStages() > mut Diagram {
     final parse = stage(langDir(), refs: parseRefs(), name: "Parser");
     final check = stage(langDir(), refs: checkRefs());
     return of("lang-stages", title: "A file is parsed, then checked", level: Level.symbol)
@@ -8390,60 +8390,60 @@ fun langStages() > mut Figure {
 }
 
 test "a stage is a symbol inside its package, anchored at its definition" {
-    final d = langStages().diagram() catch Diagram{};
+    final d = langStages().layout() catch Layout{};
     assert\equal(d.level.value, want: "symbol", message: "declared");
     final parser = lookupNode(d, id: "external:Parser");
     assert\equal(parser.anchor, want: "libs/lang/parse.go", message: "anchored at the definition");
     assert\equal(parser.symbol, want: "Parse", message: "and the symbol");
     assert\equal(lookupNode(d, id: "external:Check").label, want: "Check", message: "the name defaults to the symbol");
     assert\equal(d.scope.join(","), want: "libs/lang", message: "the stages draw the scope's one package");
-    final derived = of("t").flowAcross(stage(langDir(), refs: parseRefs()), dst: stage(langDir(), refs: checkRefs())).scope([langDir()]).diagram() catch Diagram{};
+    final derived = of("t").flowAcross(stage(langDir(), refs: parseRefs()), dst: stage(langDir(), refs: checkRefs())).scope([langDir()]).layout() catch Layout{};
     assert\equal(derived.level.value, want: "symbol", message: "derived from the stages");
 }
 
 test "a stage not defined directly in its package is refused" {
     final nested = refsAt("Node", files: ["libs/lang/ast/node.go"], line: 1);
     final f = of("t").actor(stage(langDir(), refs: nested)).scope([langDir()]);
-    std\assert(failure(f).startsWith("figure \"t\": stage(\"Node\") names symbol \"Node\", defined in libs/lang/ast/node.go and not directly in \"libs/lang\"; build the stage on the package that defines it\n"),
+    std\assert(failure(f).startsWith("diagram \"t\": stage(\"Node\") names symbol \"Node\", defined in libs/lang/ast/node.go and not directly in \"libs/lang\"; build the stage on the package that defines it\n"),
         message: "a symbol of a sub-package: {failure(f)}");
 }
 
 test "stages in two packages, or outside every scope, are refused" {
     final f = of("t").flowAcross(stage(langDir(), refs: parseRefs()), dst: stage(astDir(), refs: refsAt("Node", files: ["libs/lang/ast/node.go"], line: 1)))
         .scope([langDir(), astDir()]);
-    std\assert(failure(f).indexOf("draws stages in \"libs/lang\" and \"libs/lang/ast\", and a Level.symbol figure draws inside one package; split it, one figure per package") != null, message: failure(f));
+    std\assert(failure(f).indexOf("draws stages in \"libs/lang\" and \"libs/lang/ast\", and a Level.symbol diagram draws inside one package; split it, one diagram per package") != null, message: failure(f));
     final g = of("t").actor(stage(langDir(), refs: parseRefs())).unscoped(why: "x");
     std\assert(failure(g).indexOf("draws stages inside \"libs/lang\", which no scope(...) holds") != null, message: failure(g));
 }
 
-test "a package figure refuses a stage, naming the figure it belongs in" {
+test "a package diagram refuses a stage, naming the diagram it belongs in" {
     final f = of("t", level: Level.package).box(langDir()).box(astDir()).edgesFromGraph()
         .actor(stage(langDir(), refs: parseRefs(), name: "Parser"));
-    assert\equal(failure(f), want: "figure \"t\": stage(\"Parser\") is a symbol inside \"libs/lang\", and this figure is Level.package; draw the stages in a Level.symbol figure scoped to \"libs/lang\", and box that package here",
+    assert\equal(failure(f), want: "diagram \"t\": stage(\"Parser\") is a symbol inside \"libs/lang\", and this diagram is Level.package; draw the stages in a Level.symbol diagram scoped to \"libs/lang\", and box that package here",
         message: "the audit's mixed case");
 }
 
-test "a derived figure names its odd box out and the level to declare" {
+test "a derived diagram names its odd box out and the level to declare" {
     final f = of("t").box(dirAt(".")).box(guardDir()).box(mcpDir()).edgesFromGraph();
-    assert\equal(failure(f), want: "figure \"t\": box(\".\") is the root project, and this figure is Level.package; draw it in a Level.project figure, or box the packages the claim needs, or declare the level in of(level:)",
+    assert\equal(failure(f), want: "diagram \"t\": box(\".\") is the root project, and this diagram is Level.package; draw it in a Level.project diagram, or box the packages the claim needs, or declare the level in of(level:)",
         message: "the root beside packages");
 }
 
-test "a step joins only a process figure, and a box never does" {
+test "a step joins only a process diagram, and a box never does" {
     final f = (serverHttp(handlers()) catch of("x")).actor(step("Review"));
-    assert\equal(failure(f), want: "figure \"server-http\": step(\"Review\") is a process step, and this figure is Level.package; draw the process in a Level.process figure, or build it with person() or external() when it sits outside the code, or declare the level in of(level:)",
+    assert\equal(failure(f), want: "diagram \"server-http\": step(\"Review\") is a process step, and this diagram is Level.package; draw the process in a Level.process diagram, or build it with person() or external() when it sits outside the code, or declare the level in of(level:)",
         message: "a step among packages");
     final g = of("t", level: Level.process).box(guardDir()).actor(step("Review"));
-    std\assert(failure(g).indexOf("box(\"internal/httpx\") is a Level.package unit, and this figure is Level.process") != null, message: failure(g));
-    final d = of("t").flowAcross(person("Author"), dst: step("Review")).unscoped(why: "a process").diagram() catch Diagram{};
+    std\assert(failure(g).indexOf("box(\"internal/httpx\") is a Level.package unit, and this diagram is Level.process") != null, message: failure(g));
+    final d = of("t").flowAcross(person("Author"), dst: step("Review")).unscoped(why: "a process").layout() catch Layout{};
     assert\equal(d.level.value, want: "process", message: "steps and people derive a process");
-    final outside = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).flowOut(mcpDir(), dst: external("Forge")).diagram() catch Diagram{};
-    assert\equal(outside.level.value, want: "package", message: "people and externals join a package figure");
+    final outside = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).flowOut(mcpDir(), dst: external("Forge")).layout() catch Layout{};
+    assert\equal(outside.level.value, want: "package", message: "people and externals join a package diagram");
 }
 
 test "an actor with no kind and Level.file are refused" {
     final f = of("t").actor(Actor{ name = "Parser" }).unscoped(why: "x");
-    assert\equal(failure(f), want: "figure \"t\": Actor\{ name = \"Parser\" } names no kind, so nothing says what it stands for or which level it is; build it with person(), external(), step() or stage()",
+    assert\equal(failure(f), want: "diagram \"t\": Actor\{ name = \"Parser\" } names no kind, so nothing says what it stands for or which level it is; build it with person(), external(), step() or stage()",
         message: "a plain actor");
     final g = of("t", level: Level.file).actor(person("A")).unscoped(why: "x");
     std\assert(failure(g).indexOf("is Level.file, and no constructor draws a file yet") != null, message: failure(g));
@@ -8457,43 +8457,43 @@ test "a desc past the budget is refused" {
         n = n + 1;
     }
     final f = of("t", desc: words).actor(person("A")).unscoped(why: "x");
-    assert\equal(failure(f), want: "figure \"t\": desc runs {MaxDescWords + 1} words, past the budget of {MaxDescWords}; it is the alt text, so keep what the picture shows and move the rest to the page",
+    assert\equal(failure(f), want: "diagram \"t\": desc runs {MaxDescWords + 1} words, past the budget of {MaxDescWords}; it is the alt text, so keep what the picture shows and move the rest to the page",
         message: "alt text stays short");
 }
 
-test "an atlas links a box to the figure one level down" {
+test "an atlas links a box to the diagram one level down" {
     final overview = of("lang", title: "The checker reads the parser's tree").box(langDir()).box(astDir()).edgesFromGraph()
         .scope([langDir(), astDir()]);
     final routes = (serverHttp(handlers()) catch of("x")).scope(handlers().dirs + [guardDir()]);
-    final handlerFigure = of("handlers", title: "Each handler mounts on the guard").box(mcpDir()).box(graphDir()).box(jobDir()).box(guardDir())
+    final handlerDiagram = of("handlers", title: "Each handler mounts on the guard").box(mcpDir()).box(graphDir()).box(jobDir()).box(guardDir())
         .edgesFromGraph().scope(handlers().dirs + [guardDir()]);
-    final a = atlas([overview, langStages(), routes, handlerFigure]);
-    final d = a.diagram(overview) catch Diagram{};
+    final a = atlas([overview, langStages(), routes, handlerDiagram]);
+    final d = a.layout(overview) catch Layout{};
     assert\equal(lookupNode(d, id: "libs/lang").drill, want: "lang-stages", message: "the package box drills into its stages");
     assert\equal(lookupNode(d, id: "libs/lang/ast").drill, want: "", message: "nothing draws inside ast");
-    final svg = drawDiagram(d, theme: Theme.light, drillHref: "#diagram-\{id}") catch "threw";
+    final svg = drawLayout(d, theme: Theme.light, drillHref: "#diagram-\{id}") catch "threw";
     std\assert(svg.indexOf("<a href=\"#diagram-lang-stages\" data-node=\"libs/lang\" data-anchor=\"libs/lang\" data-drill=\"lang-stages\">") != null, message: "painted as a link");
-    final plain = drawDiagram(d, theme: Theme.light) catch "threw";
+    final plain = drawLayout(d, theme: Theme.light) catch "threw";
     std\assert(plain.indexOf("href=\"#diagram") == null and plain.indexOf("data-drill=\"lang-stages\"") != null, message: "no template, no link");
-    final r = a.diagram(routes) catch Diagram{};
-    assert\equal(lookupNode(r, id: "group:Connect RPC").drill, want: "handlers", message: "a group drills into the package figure that boxes each of its directories");
+    final r = a.layout(routes) catch Layout{};
+    assert\equal(lookupNode(r, id: "group:Connect RPC").drill, want: "handlers", message: "a group drills into the package diagram that boxes each of its directories");
     final lonely = of("lonely").group([guardDir(), langDir()], label: "odd").box(mcpDir()).edgesFromGraph();
-    assert\equal(atlas([overview, lonely]).undrilled(lonely).join(","), want: "odd", message: "a group no figure draws is listed");
+    assert\equal(atlas([overview, lonely]).undrilled(lonely).join(","), want: "odd", message: "a group no diagram draws is listed");
 }
 
-test "an atlas refuses a figure wider than its column" {
+test "an atlas refuses a diagram wider than its column" {
     final a = atlas([serverHttp(handlers()) catch of("x")], column: 200);
     var msg = "";
     try {
-        _ = a.diagram(a.figures[0]);
+        _ = a.layout(a.diagrams[0]);
     } catch (e: str) {
         msg = e;
     }
-    std\assert(msg.startsWith("figure \"server-http\": lays out ") and msg.endsWith(" wide, past the column of 200; set direction: Direction.down in of(), or split it"), message: msg);
+    std\assert(msg.startsWith("diagram \"server-http\": lays out ") and msg.endsWith(" wide, past the column of 200; set direction: Direction.down in of(), or split it"), message: msg);
 }
 
 test "claims counts each connector by what it asserts" {
-    final d = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).diagram() catch Diagram{};
+    final d = (serverHttp(handlers()) catch of("x")).flowIn(person("Agent"), dst: guardDir()).layout() catch Layout{};
     final c = claims(d);
     assert\equal(c["imports"] ?? -1, want: 2, message: "the two imports");
     assert\equal(c["calls"] ?? -1, want: 0, message: "no calls");

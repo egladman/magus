@@ -1,9 +1,9 @@
 namespace sessions;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun sessionsFigure() > figure\Figure !> any {
+export fun sessionsDiagram() > diagram\Diagram !> any {
     final sessions = magus\graph().dir("internal/sessions");
     final journal = magus\graph().dir("libs/safetyscissors/journal");
     final recorder = magus\graph().dir("internal/recorder");
@@ -11,7 +11,7 @@ export fun sessionsFigure() > figure\Figure !> any {
     final attention = magus\graph().dir("internal/handler/attention");
     final viewer = magus\graph().dir("internal/handler/viewer");
     final guard = magus\graph().dir("internal/guard");
-    return figure\of("sessions",
+    return diagram\of("sessions",
             title: "A session record is written by the hook and read by four others",
             eyebrow: "sessions",
             desc: "Each agent host session gets one record: who started it, its checkout and what "
@@ -20,7 +20,7 @@ export fun sessionsFigure() > figure\Figure !> any {
                 + "rehydrate a session, and the console's attention and viewer handlers show it to "
                 + "the person watching.")
         .box(sessions, label: "Session record", sub: "one per host session", focal: true)
-        .box(journal, label: "Journal", sub: "append-only lines", look: figure\Look.store)
+        .box(journal, label: "Journal", sub: "append-only lines", look: diagram\Look.store)
         .box(recorder, label: "Recorder", sub: "which session changed what")
         .box(agent, label: "Agent install", sub: "rehydrate a lost session")
         .box(guard, label: "Guard", sub: "appends on every call")
@@ -30,7 +30,7 @@ export fun sessionsFigure() > figure\Figure !> any {
         .hideEdges([guard], dst: [agent, journal, recorder],
             why: "the guard's other reads are drawn in guard-internals; here it only writes the record")
         .hideEdges([viewer], dst: [journal], why: "the viewer reads the record, which holds the journal")
-        .legend(figure\Look.focal, label: "the record")
-        .legend(figure\Look.store, label: "append-only")
+        .legend(diagram\Look.focal, label: "the record")
+        .legend(diagram\Look.store, label: "append-only")
         .scope([sessions, journal, recorder, agent, attention, viewer]);
 }

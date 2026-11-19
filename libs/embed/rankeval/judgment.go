@@ -61,21 +61,21 @@ const (
 	// old ranker's output, so it is biased toward that ranker. It is disjoint from no
 	// set; definition-lookup reuses its identifiers.
 	SetAgentAgreement EvalSet = "agent-agreement"
-	// SetFigures asks a figure's node-suggest for its depicted nodes. Report-only. It
-	// is disjoint from training by figure fold.
-	SetFigures EvalSet = "figures"
+	// SetDiagrams asks a diagram's node-suggest for its depicted nodes. Report-only. It
+	// is disjoint from training by diagram fold.
+	SetDiagrams EvalSet = "diagrams"
 )
 
 // EvalSets is every named set in report order: the gate sets first, then the guards,
 // then the report-only sets.
 var EvalSets = []EvalSet{
 	SetJudgedDev, SetJudgedHoldout, SetDefinitionLookup, SetDocmaskGo, SetDocmaskBuzz,
-	SetBuzzIdent, SetAgentAgreement, SetFigures,
+	SetBuzzIdent, SetAgentAgreement, SetDiagrams,
 }
 
 // ReportOnly reports whether s may never gate or select.
 func (s EvalSet) ReportOnly() bool {
-	return s == SetAgentAgreement || s == SetFigures
+	return s == SetAgentAgreement || s == SetDiagrams
 }
 
 var (

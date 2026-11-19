@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 6
   },
-  "figure": "buzz-packages",
+  "diagram": "buzz-packages",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:704789be0405249ba9cc1e6b4973714e94286ac12e789b02940fb59490102627",
+  "stamp": "sha256:3138e61cfa88421597b5294ee583e151453fd71d0e3257ce50a646f60e4c243f",
   "undrilled": []
 }

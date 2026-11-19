@@ -4,9 +4,9 @@
     "flow": 7,
     "imports": 0
   },
-  "figure": "project-reference",
+  "diagram": "project-reference",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:e9bd33832832d8744d482d7fbc8ec6a476fdde6d976491be4dc1a98011f55c35",
+  "stamp": "sha256:26fdfaaad6d8c50328a47e20ccb4b4dd945b20facdbd65946be716fca3ad504e",
   "undrilled": []
 }

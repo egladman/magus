@@ -1,5 +1,5 @@
-// The Graph's Figures mode: one server-drawn figure at a time, through a declared lens. The
-// server's SVG is the figure as soon as it arrives. The Buzz runtime (wasm.ts), loaded only on
+// The Graph's Diagrams mode: one server-drawn diagram at a time, through a declared lens. The
+// server's SVG is the diagram as soon as it arrives. The Buzz runtime (wasm.ts), loaded only on
 // request, lays out later lens changes in the page without a round trip.
 
 import { reportFailure } from "../../../lib/notifications";
@@ -17,8 +17,8 @@ import {
   type RenderedDiagram,
 } from "./api";
 import { demoDiagramList, renderDemoDiagram } from "./demo";
-import { decodeFigureLink } from "./figure-link";
-import { attachFigure, readEdges, neighbours, type FigureController } from "./interact";
+import { decodeDiagramLink } from "./diagram-link";
+import { attachDiagram, readEdges, neighbours, type DiagramController } from "./interact";
 import { attachFlow, type Flow } from "./flow";
 import {
   EMPTY_LENS,
@@ -36,17 +36,17 @@ import {
   anchorTemplate,
   drawnNodes,
   ensureBuzz,
-  figureForLink,
+  diagramForLink,
   linkedRows,
   relayout,
   toRelayout,
   IMPORTS,
   type BuzzRuntime,
-  type FigureMeta,
+  type DiagramMeta,
 } from "./wasm";
 
-const SOURCE = "Figures";
-// The id a shared link's figure goes by; no server figure has it.
+const SOURCE = "Diagrams";
+// The id a shared link's diagram goes by; no server diagram has it.
 const LINK_ID = "link";
 
 // Per mount, so each mount's control reflects its own request. The wasm is one Go instance per
@@ -57,7 +57,7 @@ type RuntimeState =
   | { readonly kind: "ready"; readonly runtime: BuzzRuntime }
   | { readonly kind: "failed"; readonly detail: string };
 
-type FigureState =
+type DiagramState =
   | { readonly kind: "empty" }
   | { readonly kind: "loading"; readonly id: string; readonly lens: Lens }
   | {
@@ -69,11 +69,11 @@ type FigureState =
     }
   | { readonly kind: "refused"; readonly id: string; readonly lens: Lens };
 
-// The whole figure as the server declared it: what the runtime re-cuts for a new lens.
+// The whole diagram as the server declared it: what the runtime re-cuts for a new lens.
 interface Base {
   readonly id: string;
   readonly decl: Declaration;
-  readonly meta: FigureMeta;
+  readonly meta: DiagramMeta;
   readonly rendered: RenderedDiagram;
 }
 
@@ -132,11 +132,11 @@ function textInput(name: string, placeholder: string): HTMLInputElement {
   return i;
 }
 
-// build lays the app out: the bar (figure and lens), the figure's controls in a row above it
-// (never over it), then the figure beside its node list.
+// build lays the app out: the bar (diagram and lens), the diagram's controls in a row above it
+// (never over it), then the diagram beside its node list.
 export function build(host: HTMLElement): DiagramsRefs {
   const page = h("section", "console-diagrams");
-  page.setAttribute("aria-label", "Figures");
+  page.setAttribute("aria-label", "Diagrams");
 
   const bar = h("header", "console-diagrams__bar");
   bar.dataset.controlSize = "default";
@@ -155,7 +155,7 @@ export function build(host: HTMLElement): DiagramsRefs {
   // choosing which node the server centers the drawing on. The field is still `focus` in the lens
   // and in the fragment.
   lensForm.append(field("Scope", scope), field("Center on", focus), field("Depth", depth), apply);
-  bar.append(field("Figure", picker), lensForm);
+  bar.append(field("Diagram", picker), lensForm);
 
   // Each notice carries its own live role (ui/alert.ts), so this host announces nothing itself: a
   // live container around role=alert children read every notice twice.
@@ -168,9 +168,9 @@ export function build(host: HTMLElement): DiagramsRefs {
   // A group, not a toolbar: role=toolbar promises arrow-key movement between its buttons, and these
   // are ordinary Tab stops.
   controls.setAttribute("role", "group");
-  controls.setAttribute("aria-label", "Figure controls");
+  controls.setAttribute("aria-label", "Diagram controls");
   const fit = button("Fit", "pf-m-secondary");
-  fit.title = "Fit the figure (f)";
+  fit.title = "Fit the diagram (f)";
   const zoomOut = button("Zoom out", "pf-m-secondary");
   zoomOut.title = "Zoom out (-)";
   const zoomIn = button("Zoom in", "pf-m-secondary");
@@ -188,22 +188,22 @@ export function build(host: HTMLElement): DiagramsRefs {
   controls.append(fit, zoomOut, zoomIn, focusNode, clearFocus, runtime, runtimeStatus);
 
   const figure = h("figure", "console-diagrams__figure");
-  // What is on screen when there is no figure to show: a spinner while it draws, a PF empty state
+  // What is on screen when there is no diagram to show: a spinner while it draws, a PF empty state
   // when there is nothing to draw, no server, or a refusal. A sibling of the frame and not inside
-  // it, because the frame's only SVG is the figure.
+  // it, because the frame's only SVG is the diagram.
   const state = h("div", "console-diagrams__state");
   state.hidden = true;
   const frame = h("div", "console-diagrams__frame");
   frame.tabIndex = 0;
   // The name is the thing; the keys are a shortcut list and a description, so a screen reader says
-  // "Figure" and then, on request, how to drive it.
-  frame.setAttribute("aria-label", "Figure");
+  // "Diagram" and then, on request, how to drive it.
+  frame.setAttribute("aria-label", "Diagram");
   frame.setAttribute("aria-keyshortcuts", "f + - 0 Escape");
   frame.setAttribute("aria-describedby", KEYS_ID);
   const keys = h(
     "p",
     "pf-v6-screen-reader",
-    "f fits the figure, plus and minus zoom, 0 is actual size, Escape clears focus.",
+    "f fits the diagram, plus and minus zoom, 0 is actual size, Escape clears focus.",
   );
   keys.id = KEYS_ID;
   const caption = h("figcaption", "console-diagrams__caption");
@@ -243,7 +243,7 @@ export function build(host: HTMLElement): DiagramsRefs {
   };
 }
 
-// parseClaim reads the kind from the figure id, as the handler's parseLens does.
+// parseClaim reads the kind from the diagram id, as the handler's parseLens does.
 function parseClaim(id: string): string {
   return id.split(":")[0] === IMPORTS ? IMPORTS : "flow";
 }
@@ -291,11 +291,11 @@ function command(before: string, cmd: string, after = "."): HTMLElement {
 }
 
 const READ_NOTICE: Record<DiagramFailure["kind"], { tone: NoticeTone; title: string }> = {
-  refused: { tone: "warning", title: "This figure is too big to draw through this lens" },
+  refused: { tone: "warning", title: "This diagram is too big to draw through this lens" },
   unindexed: { tone: "warning", title: "No symbol index to draw imports from" },
-  "bad-lens": { tone: "warning", title: "The lens names something the figure does not have" },
+  "bad-lens": { tone: "warning", title: "The lens names something the diagram does not have" },
   absent: { tone: "danger", title: "Not served here" },
-  unreadable: { tone: "danger", title: "Could not read the figure" },
+  unreadable: { tone: "danger", title: "Could not read the diagram" },
 };
 
 // activate builds the app into host. Everything is per mount; only the runtime is shared.
@@ -305,10 +305,10 @@ export function activate(host: HTMLElement): AppInstance {
   const demo = wantsDemo(parseHash());
   const refs = build(host);
   let entries: DiagramEntry[] = [];
-  let figure: FigureState = { kind: "empty" };
+  let diagram: DiagramState = { kind: "empty" };
   let runtimeState: RuntimeState = { kind: "off" };
   let base: Base | null = null;
-  let controller: FigureController | null = null;
+  let controller: DiagramController | null = null;
   let flow: Flow | null = null;
   let current: AbortController | null = null;
   let lastNode: string | null = null;
@@ -320,7 +320,7 @@ export function activate(host: HTMLElement): AppInstance {
   };
   const clearNotices = (): void => refs.notices.replaceChildren();
 
-  // showState puts the frame's stand-in on screen, or takes it away for a figure. The frame is
+  // showState puts the frame's stand-in on screen, or takes it away for a diagram. The frame is
   // hidden while a stand-in shows, so its stale contents and focus stop cannot be reached.
   const showState = (view: HTMLElement | null): void => {
     if (view) refs.state.replaceChildren(view);
@@ -329,8 +329,8 @@ export function activate(host: HTMLElement): AppInstance {
     refs.frame.hidden = view !== null;
   };
 
-  // syncControls enables a control only when it has something to act on: the figure's own controls
-  // need a figure, the picker, lens and runtime need a server's list to act on, and Clear focus needs
+  // syncControls enables a control only when it has something to act on: the diagram's own controls
+  // need a diagram, the picker, lens and runtime need a server's list to act on, and Clear focus needs
   // a focus. A dead button that answers a click with nothing reads as broken.
   const syncControls = (): void => {
     const has = controller !== null;
@@ -380,7 +380,7 @@ export function activate(host: HTMLElement): AppInstance {
     markListFocus(refs.nodes, id, lit);
   };
 
-  // A first figure fits; a re-layout of the same figure swaps in place keeping the reader's zoom.
+  // A first diagram fits; a re-layout of the same diagram swaps in place keeping the reader's zoom.
   const mount = (rendered: RenderedDiagram, keepView: boolean): Result<void> => {
     const prepared = prepareSvg(rendered.svg, {
       nodes: rendered.nodes,
@@ -401,7 +401,7 @@ export function activate(host: HTMLElement): AppInstance {
     } else {
       controller?.destroy();
       refs.frame.replaceChildren(svg);
-      controller = attachFigure({ frame: refs.frame, svg, reducedMotion, onFocusChange });
+      controller = attachDiagram({ frame: refs.frame, svg, reducedMotion, onFocusChange });
     }
     flow?.stop();
     flow = attachFlow(svg, { reducedMotion });
@@ -416,7 +416,7 @@ export function activate(host: HTMLElement): AppInstance {
     return ok(undefined);
   };
 
-  const clearFigure = (): void => {
+  const clearDiagram = (): void => {
     controller?.destroy();
     controller = null;
     flow?.stop();
@@ -427,20 +427,20 @@ export function activate(host: HTMLElement): AppInstance {
     syncControls();
   };
 
-  // refusedState is the frame's stand-in once a figure could not be shown: the notice above says why,
+  // refusedState is the frame's stand-in once a diagram could not be shown: the notice above says why,
   // so this only says that the frame is empty on purpose.
   const refusedState = (): void =>
-    showState(stateView("empty", "No figure shown", "The notice above says why."));
+    showState(stateView("empty", "No diagram shown", "The notice above says why."));
 
   const renderFromServer = async (id: string, lens: Lens): Promise<void> => {
     current?.abort();
     const ac = new AbortController();
     current = ac;
-    figure = { kind: "loading", id, lens };
+    diagram = { kind: "loading", id, lens };
     refs.frame.setAttribute("aria-busy", "true");
-    // A figure already on screen stays (dimmed, busy) while the next one draws; only a frame with
+    // A diagram already on screen stays (dimmed, busy) while the next one draws; only a frame with
     // nothing in it gets the spinner.
-    if (controller === null) showState(stateView("loading", "Drawing the figure"));
+    if (controller === null) showState(stateView("loading", "Drawing the diagram"));
     const read = demo
       ? readDemo(renderDemoDiagram(id))
       : await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
@@ -448,28 +448,28 @@ export function activate(host: HTMLElement): AppInstance {
     refs.frame.removeAttribute("aria-busy");
     if (read.kind === "aborted") return;
     if (read.kind !== "ok") {
-      clearFigure();
-      figure = { kind: "refused", id, lens };
+      clearDiagram();
+      diagram = { kind: "refused", id, lens };
       showRead(read);
       refusedState();
       return;
     }
     clearNotices();
-    const sameFigure = base?.id === id && controller !== null;
+    const sameDiagram = base?.id === id && controller !== null;
     const claim = parseClaim(id);
     const rendered: RenderedDiagram = {
       ...read.value,
       nodes: drawnNodes(read.value.nodes, claim),
     };
-    const mounted = mount(rendered, sameFigure);
+    const mounted = mount(rendered, sameDiagram);
     if (mounted.error) {
       const detail = mounted.error.message;
-      reportFailure(SOURCE, "Could not show figure " + id + ": " + detail, "diagrams:mount:" + id);
-      showNotice("danger", "Could not show the figure", detail);
+      reportFailure(SOURCE, "Could not show diagram " + id + ": " + detail, "diagrams:mount:" + id);
+      showNotice("danger", "Could not show the diagram", detail);
       if (controller === null) refusedState();
       return;
     }
-    figure = { kind: "shown", id, lens, rendered, laidOut: "server" };
+    diagram = { kind: "shown", id, lens, rendered, laidOut: "server" };
     if (lensIsEmpty(lens)) {
       const svg = refs.frame.querySelector("svg");
       base = {
@@ -486,7 +486,7 @@ export function activate(host: HTMLElement): AppInstance {
     } else if (base?.id !== id) base = null;
   };
 
-  // False when the runtime cannot lay the figure out (not loaded, no declaration to cut), so the
+  // False when the runtime cannot lay the diagram out (not loaded, no declaration to cut), so the
   // caller asks the server instead.
   const renderInPage = (id: string, lens: Lens): boolean => {
     const rt = runtimeState;
@@ -508,8 +508,8 @@ export function activate(host: HTMLElement): AppInstance {
     current?.abort();
     if (out.kind !== "ok") {
       reportFailure(SOURCE, out.detail, "diagrams:" + out.kind + ":" + id);
-      clearFigure();
-      figure = { kind: "refused", id, lens };
+      clearDiagram();
+      diagram = { kind: "refused", id, lens };
       showRead(out);
       refusedState();
       return true;
@@ -524,12 +524,12 @@ export function activate(host: HTMLElement): AppInstance {
     if (mounted.error) {
       reportFailure(
         SOURCE,
-        "The runtime's figure would not display: " + mounted.error.message,
+        "The runtime's diagram would not display: " + mounted.error.message,
         "diagrams:relayout-mount:" + id,
       );
       return false;
     }
-    figure = { kind: "shown", id, lens, rendered, laidOut: "runtime" };
+    diagram = { kind: "shown", id, lens, rendered, laidOut: "runtime" };
     return true;
   };
 
@@ -549,13 +549,13 @@ export function activate(host: HTMLElement): AppInstance {
         stateView(
           "empty",
           "No server",
-          command("Figures are drawn by a running server. Start one with ", "magus server start"),
+          command("Diagrams are drawn by a running server. Start one with ", "magus server start"),
         ),
       );
       syncControls();
       return;
     }
-    showState(stateView("loading", "Loading the figures"));
+    showState(stateView("loading", "Loading the diagrams"));
     const read: DiagramRead<DiagramEntry[]> = demo
       ? { kind: "ok", value: demoDiagramList() }
       : await listDiagrams({ host: serverHost });
@@ -582,7 +582,11 @@ export function activate(host: HTMLElement): AppInstance {
     const start = entries.find((e) => e.id === wanted.id) ?? entries[0];
     if (!start) {
       showState(
-        stateView("empty", "Nothing to draw", "This workspace has no figures the server can draw."),
+        stateView(
+          "empty",
+          "Nothing to draw",
+          "This workspace has no diagrams the server can draw.",
+        ),
       );
       syncControls();
       return;
@@ -639,13 +643,13 @@ export function activate(host: HTMLElement): AppInstance {
         showNotice(
           "danger",
           "The interactive runtime did not load",
-          runtimeState.detail + ". The figure above is still the server's.",
+          runtimeState.detail + ". The diagram above is still the server's.",
         );
     })();
   });
 
   // A shared link is drawn from its fragment alone. The runtime loads at once because nothing
-  // else can draw it, and the picker and lens have no server figure to act on.
+  // else can draw it, and the picker and lens have no server diagram to act on.
   const openLink = async (payload: string): Promise<void> => {
     linkPayload = payload;
     current?.abort();
@@ -653,23 +657,23 @@ export function activate(host: HTMLElement): AppInstance {
     current = ac;
     refs.bar.hidden = true;
     refs.runtime.hidden = true;
-    clearFigure();
+    clearDiagram();
     clearNotices();
     const refuse = (title: string, detail: string): void => {
-      clearFigure();
-      figure = { kind: "refused", id: LINK_ID, lens: EMPTY_LENS };
+      clearDiagram();
+      diagram = { kind: "refused", id: LINK_ID, lens: EMPTY_LENS };
       reportFailure(SOURCE, title + ": " + detail, "diagrams:link");
       showNotice("danger", title, detail);
       refusedState();
     };
-    const read = decodeFigureLink(payload);
+    const read = decodeDiagramLink(payload);
     if (read.error) {
-      refuse("This figure link could not be read", read.error.message);
+      refuse("This diagram link could not be read", read.error.message);
       return;
     }
-    figure = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
+    diagram = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
     refs.frame.setAttribute("aria-busy", "true");
-    showState(stateView("loading", "Drawing the figure"));
+    showState(stateView("loading", "Drawing the diagram"));
     runtimeState = { kind: "loading" };
     syncRuntime();
     const loaded = await ensureBuzz();
@@ -680,17 +684,17 @@ export function activate(host: HTMLElement): AppInstance {
       : { kind: "ready", runtime: loaded.value };
     syncRuntime();
     if (loaded.error) {
-      refuse("The runtime that draws this figure did not load", loaded.error.message);
+      refuse("The runtime that draws this diagram did not load", loaded.error.message);
       return;
     }
-    const linkFigure = figureForLink(read.value);
-    if (linkFigure.error) {
-      refuse("This figure could not be drawn", linkFigure.error.message);
+    const linkDiagram = diagramForLink(read.value);
+    if (linkDiagram.error) {
+      refuse("This diagram could not be drawn", linkDiagram.error.message);
       return;
     }
-    const out = toRelayout(loaded.value.drawFigure(linkFigure.value, ""));
+    const out = toRelayout(loaded.value.drawDiagram(linkDiagram.value, ""));
     if (out.kind !== "ok") {
-      refuse("This figure could not be drawn", out.detail);
+      refuse("This diagram could not be drawn", out.detail);
       return;
     }
     const rendered: RenderedDiagram = {
@@ -702,27 +706,27 @@ export function activate(host: HTMLElement): AppInstance {
     };
     const mounted = mount(rendered, false);
     if (mounted.error) {
-      refuse("Could not show the figure", mounted.error.message);
+      refuse("Could not show the diagram", mounted.error.message);
       return;
     }
     base = null;
-    figure = { kind: "shown", id: LINK_ID, lens: EMPTY_LENS, rendered, laidOut: "runtime" };
+    diagram = { kind: "shown", id: LINK_ID, lens: EMPTY_LENS, rendered, laidOut: "runtime" };
   };
 
   const onHashChange = (): void => {
-    const next = parseHash().figure;
+    const next = parseHash()["diagram-link"];
     if (next !== undefined && next !== linkPayload) void openLink(next);
   };
   window.addEventListener("hashchange", onHashChange);
 
   syncRuntime();
-  const linked = parseHash().figure;
+  const linked = parseHash()["diagram-link"];
   if (linked !== undefined) void openLink(linked);
   else void loadList();
 
   const unsubscribeHost = subscribeDefaultHost(() => {
     if (demo || linkPayload !== null) return; // neither needs a server
-    if (figure.kind === "shown") return; // a figure being read keeps the server it came from
+    if (diagram.kind === "shown") return; // a diagram being read keeps the server it came from
     serverHost = resolveServerHost(parseHash()) ?? "";
     void loadList();
   });
@@ -744,7 +748,7 @@ function readDemo(r: Result<RenderedDiagram>): DiagramRead<RenderedDiagram> {
   return r.error ? { kind: "absent", detail: r.error.message } : { kind: "ok", value: r.value };
 }
 
-// cutNodes is the base's node rows for the boxes a re-layout actually drew, in figure order.
+// cutNodes is the base's node rows for the boxes a re-layout actually drew, in diagram order.
 function cutNodes(base: Base, svg: string): RenderedDiagram["nodes"] {
   const drawn = new Set([...svg.matchAll(/data-node="([^"]*)"/g)].map((m) => m[1]));
   return base.decl.nodes.filter((n) => drawn.has(n.id));

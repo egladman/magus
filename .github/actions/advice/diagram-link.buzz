@@ -1,13 +1,13 @@
-// The figure a pull-request comment or issue body carries: a link to the hosted console,
-// which draws the graph client-side with magus/figure. The graph rides in the link's URL
+// The diagram a pull-request comment or issue body carries: a link to the hosted console,
+// which draws the graph client-side with magus/diagram. The graph rides in the link's URL
 // fragment and a fragment never reaches a server, so the link sends project names nowhere.
 //
-//	<consoleBase>graph/#figure=<base64url(utf-8 JSON)>
+//	<consoleBase>graph/#diagram-link=<base64url(utf-8 JSON)>
 //	{"v":2,"kind":"deps","title":"...","nodes":[{"id":"...","label":"...","seed":true}],
 //	 "edges":[["fromId","toId"],["fromId","toId","optional","after"]]}
 //
-// An edge is [from, to, stroke?, label?]. stroke names a magus/figure Stroke case, so the
-// console draws the edge as figure\draw would: "optional" dashed, "plain" solid. A stroke
+// An edge is [from, to, stroke?, label?]. stroke names a magus/diagram Stroke case, so the
+// console draws the edge as diagram\draw would: "optional" dashed, "plain" solid. A stroke
 // left out is "plain" and a label left out is "", which keeps the common edge short. A seed
 // is a node the change edited. The console reads this shape, so a change here is a change
 // there.
@@ -26,23 +26,23 @@ export final defaultConsoleBase = "https://eli.gladman.cc/magus/console/";
 // beside it needs most of them.
 final maxLinkLength = 16384;
 
-final marker = "#figure=";
+final marker = "#diagram-link=";
 
-// magus/figure's Stroke cases, the treatments an edge may name.
+// magus/diagram's Stroke cases, the treatments an edge may name.
 final strokes = ["plain", "focal", "external", "optional"];
 
-export object FigureNode {
+export object DiagramNode {
     id: str,
     label: str,
     seed: bool = false,
 }
 
-// figureLink returns the console link for a graph, or "" when the encoded link would run past
+// diagramLink returns the console link for a graph, or "" when the encoded link would run past
 // maxLinkLength. base may be empty for the default and need not end in a slash. Each edge is
-// [fromId, toId], optionally followed by a figure\Stroke case's value and a label:
+// [fromId, toId], optionally followed by a diagram\Stroke case's value and a label:
 // ["a", "b", "optional", "after"] draws dashed and labelled. Throws on an edge of another
-// length or a stroke figure does not declare.
-export fun figureLink(base: str, title: str, nodes: [FigureNode], edges: [[str]]) > str !> any {
+// length or a stroke diagram does not declare.
+export fun diagramLink(base: str, title: str, nodes: [DiagramNode], edges: [[str]]) > str !> any {
     final drawn = mut [<any>];
     foreach (n in nodes) {
         drawn.append({"id": n.id, "label": n.label, "seed": n.seed});
@@ -67,11 +67,11 @@ export fun figureLink(base: str, title: str, nodes: [FigureNode], edges: [[str]]
 // wireEdge checks e and drops its trailing defaults, a "plain" stroke and an empty label.
 fun wireEdge(e: [str], index: int) > [str] !> any {
     if (e.len() < 2 or e.len() > 4) {
-        throw "figure-link: edge {index} is not [from, to, stroke?, label?]";
+        throw "diagram-link: edge {index} is not [from, to, stroke?, label?]";
     }
     final stroke = if (e.len() > 2) e[2] else "plain";
     if (strokes.indexOf(stroke) == null) {
-        throw "figure-link: edge {index} has stroke \"{stroke}\", not one of " + strokes.join(", ");
+        throw "diagram-link: edge {index} has stroke \"{stroke}\", not one of " + strokes.join(", ");
     }
     final label = if (e.len() > 3) e[3] else "";
     if (label != "") { return [e[0], e[1], stroke, label]; }
@@ -79,29 +79,29 @@ fun wireEdge(e: [str], index: int) > [str] !> any {
     return [e[0], e[1]];
 }
 
-// decodeFigureLink returns the JSON document a figureLink link carries. Throws on a link
-// without a figure fragment.
-export fun decodeFigureLink(link: str) > serialize\Boxed !> any {
+// decodeDiagramLink returns the JSON document a diagramLink link carries. Throws on a link
+// without a diagram fragment.
+export fun decodeDiagramLink(link: str) > serialize\Boxed !> any {
     final at = link.indexOf(marker);
-    if (at == null) { throw "figure-link: no " + marker + " fragment in " + link; }
+    if (at == null) { throw "diagram-link: no " + marker + " fragment in " + link; }
     var payload = link.sub(at! + marker.len()).replace("-", with: "+").replace("_", with: "/");
     while (payload.len() % 4 != 0) { payload = payload + "="; }
     return serialize\jsonDecode(payload.decodeBase64());
 }
 
-// FigureGraph is one figure's content, the arguments figureLink takes.
-export object FigureGraph {
+// DiagramGraph is one diagram's content, the arguments diagramLink takes.
+export object DiagramGraph {
     title: str,
-    nodes: [FigureNode],
+    nodes: [DiagramNode],
     edges: [[str]],
 }
 
 test "a link decodes to the graph it was built from" {
-    final link = figureLink("https://example.test/console/", title: "How far this change reaches",
-        nodes: [FigureNode{ id = "libs/a", label = "a", seed = true }, FigureNode{ id = "cmd/b", label = "b" }],
+    final link = diagramLink("https://example.test/console/", title: "How far this change reaches",
+        nodes: [DiagramNode{ id = "libs/a", label = "a", seed = true }, DiagramNode{ id = "cmd/b", label = "b" }],
         edges: [["libs/a", "cmd/b"]]);
-    assert\equal(link.startsWith("https://example.test/console/graph/#figure="), want: true, message: link);
-    final doc = decodeFigureLink(link);
+    assert\equal(link.startsWith("https://example.test/console/graph/#diagram-link="), want: true, message: link);
+    final doc = decodeDiagramLink(link);
     assert\equal(doc.q("v").integerValue(), want: 2, message: "version");
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "How far this change reaches", message: "title");
@@ -117,7 +117,7 @@ test "a link decodes to the graph it was built from" {
 
 fun wireEdges(link: str) > [[str]] !> any {
     final read = mut [<[str]>];
-    foreach (e in decodeFigureLink(link).q("edges").listValue()) {
+    foreach (e in decodeDiagramLink(link).q("edges").listValue()) {
         final parts = mut [<str>];
         foreach (part in e.listValue()) {
             parts.append(part.stringValue());
@@ -128,8 +128,8 @@ fun wireEdges(link: str) > [[str]] !> any {
 }
 
 test "each edge keeps its stroke and label, and drops the defaults" {
-    final link = figureLink("", title: "Session s-1: 3 jobs",
-        nodes: [FigureNode{ id = "session", label = "session", seed = true }, FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }],
+    final link = diagramLink("", title: "Session s-1: 3 jobs",
+        nodes: [DiagramNode{ id = "session", label = "session", seed = true }, DiagramNode{ id = "a", label = "a" }, DiagramNode{ id = "b", label = "b" }],
         edges: [["session", "a"], ["session", "b", "plain", ""], ["a", "b", "optional", "after"], ["b", "a", "focal"]]);
     assert\equal(wireEdges(link), want: [["session", "a"], ["session", "b"], ["a", "b", "optional", "after"], ["b", "a", "focal"]], message: "edges");
 }
@@ -139,7 +139,7 @@ test "an edge with an undeclared stroke or the wrong length is refused" {
     foreach (edges in bad) {
         var refused = false;
         try {
-            _ = figureLink("", title: "t", nodes: [FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }], edges: edges);
+            _ = diagramLink("", title: "t", nodes: [DiagramNode{ id = "a", label = "a" }, DiagramNode{ id = "b", label = "b" }], edges: edges);
         } catch (e) {
             refused = true;
         }
@@ -149,37 +149,37 @@ test "an edge with an undeclared stroke or the wrong length is refused" {
 
 test "the payload is unpadded base64url" {
     // Bytes chosen so the standard alphabet would emit + and /.
-    final link = figureLink("", title: "???>>>", nodes: [FigureNode{ id = "x", label = "~~~" }], edges: [<[str]>]);
+    final link = diagramLink("", title: "???>>>", nodes: [DiagramNode{ id = "x", label = "~~~" }], edges: [<[str]>]);
     final payload = link.sub(link.indexOf(marker)! + marker.len());
     assert\equal(payload.indexOf("+") == null and payload.indexOf("/") == null and payload.indexOf("=") == null,
         want: true, message: payload);
-    assert\equal(decodeFigureLink(link).q("title").stringValue(), want: "???>>>", message: "round trip");
+    assert\equal(decodeDiagramLink(link).q("title").stringValue(), want: "???>>>", message: "round trip");
 }
 
 test "non-ASCII labels survive the round trip" {
-    final link = figureLink("", title: "caf\195\169", nodes: [FigureNode{ id = "p", label = "caf\195\169" }], edges: [<[str]>]);
-    assert\equal(decodeFigureLink(link).q("nodes").listValue()[0].q("label").stringValue(), want: "caf\195\169", message: "utf-8");
+    final link = diagramLink("", title: "caf\195\169", nodes: [DiagramNode{ id = "p", label = "caf\195\169" }], edges: [<[str]>]);
+    assert\equal(decodeDiagramLink(link).q("nodes").listValue()[0].q("label").stringValue(), want: "caf\195\169", message: "utf-8");
 }
 
 test "the base defaults and gains its trailing slash" {
-    final none = figureLink("", title: "t", nodes: [<FigureNode>], edges: [<[str]>]);
-    assert\equal(none.startsWith(defaultConsoleBase + "graph/#figure="), want: true, message: none);
-    final bare = figureLink("https://example.test/console", title: "t", nodes: [<FigureNode>], edges: [<[str]>]);
-    assert\equal(bare.startsWith("https://example.test/console/graph/#figure="), want: true, message: bare);
+    final none = diagramLink("", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]);
+    assert\equal(none.startsWith(defaultConsoleBase + "graph/#diagram-link="), want: true, message: none);
+    final bare = diagramLink("https://example.test/console", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]);
+    assert\equal(bare.startsWith("https://example.test/console/graph/#diagram-link="), want: true, message: bare);
 }
 
 test "a graph too large for a comment yields no link" {
-    final many = mut [<FigureNode>];
+    final many = mut [<DiagramNode>];
     for (var i = 0; i < 600; i = i + 1) {
-        many.append(FigureNode{ id = "projects/service-{i}", label = "service-{i}" });
+        many.append(DiagramNode{ id = "projects/service-{i}", label = "service-{i}" });
     }
-    assert\equal(figureLink("", title: "t", nodes: many, edges: [<[str]>]), want: "", message: "left out");
+    assert\equal(diagramLink("", title: "t", nodes: many, edges: [<[str]>]), want: "", message: "left out");
 }
 
 test "a link without a fragment is refused" {
     var refused = false;
     try {
-        _ = decodeFigureLink("https://example.test/console/graph/");
+        _ = decodeDiagramLink("https://example.test/console/graph/");
     } catch (e) {
         refused = true;
     }

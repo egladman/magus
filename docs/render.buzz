@@ -352,8 +352,8 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: m
     if (updateUrls) { updateUrlLock(site); }
 }
 
-// site_figures writes every figure's SVGs and receipt for the diagrams-generate target and
+// site_diagrams writes every diagram's SVGs and receipt for the diagrams-generate target and
 // returns the findings. It forwards to engine/page, which owns the registry import.
-export fun site_figures(dir: str) > [str] !> any {
-    return writeFigures(dir);
+export fun site_diagrams(dir: str) > [str] !> any {
+    return writeDiagrams(dir);
 }

@@ -467,3 +467,8 @@ development/libs-cmdline/
 development/libs-embed-train/
 # The goals tag became postconditions when a job's goal was renamed postcondition.
 tags/goals/
+# libs/figure became libs/diagram, and magus/figure magus/diagram: the generated development
+# and Buzz reference pages went with the old names, and the figures tag with its pages.
+development/libs-figure/
+reference/buzz/figure/
+tags/figures/

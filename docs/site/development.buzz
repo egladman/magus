@@ -169,7 +169,7 @@ fun workspaceDependencies(graph: magus\ProjectGraph) > str {
         buf.append("| [`" + label + "`](" + UP + slug + "/) | " + depCell + " | "
             + "{graph.blastRadius[n] ?? 0}" + " |\n");
     }
-    // No figure here on purpose. A layered placement of THIS graph is unreadable: most
+    // No diagram here on purpose. A layered placement of THIS graph is unreadable: most
     // projects are roots or wholly independent, so it draws a tall stack of disconnected
     // boxes with a few edges wandering across empty canvas. The table above says the same
     // thing in less space.

@@ -4,9 +4,9 @@
     "flow": 7,
     "imports": 0
   },
-  "figure": "buzz-compile",
+  "diagram": "buzz-compile",
   "findings": [],
   "level": "symbol",
-  "stamp": "sha256:15a3b7d681d732db2b3798ad6444c0a97b2daf0b84140c596b463210c5bde7bf",
+  "stamp": "sha256:e997141a7d693fbd6b8d523979d60249d80afeaaa80ad46b33eff57a17b454c8",
   "undrilled": []
 }

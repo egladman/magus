@@ -4,9 +4,9 @@
     "flow": 5,
     "imports": 2
   },
-  "figure": "merge-queue-workflows",
+  "diagram": "merge-queue-workflows",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:52b25e9db7aa39802d63bedc6096c7d6ae924dda111ccced30627395e9903e7f",
+  "stamp": "sha256:6a438cbd3ba84fbefa509473ad60ee115958ae3dc1f984b4a9b98df9186d0571",
   "undrilled": []
 }

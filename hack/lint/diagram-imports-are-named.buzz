@@ -1,8 +1,8 @@
-// figure-imports-are-named refuses a blank import in a figure source.
+// diagram-imports-are-named refuses a blank import in a diagram source.
 // A module imported as _ runs for its side effects and hides what draws.
 //
 // Tier 1, mechanical: the fix names the import or drops it.
-namespace figureimports;
+namespace diagramimports;
 
 import "assert";
 import "std";
@@ -33,26 +33,26 @@ export fun check(files: [Path]) > [Finding] !> any {
         final line = blankLine(support\read(f));
         if (line > 0) {
             found.append(Finding{ path = f.value, line = line,
-                message = "{f.value} imports a module as _, so nothing in the figure names it",
-                fix = "Import the module under a name the figure uses, or drop the import." });
+                message = "{f.value} imports a module as _, so nothing in the diagram names it",
+                fix = "Import the module under a name the diagram uses, or drop the import." });
         }
     }
     return found;
 }
 
-test "a figure with named imports passes" {
+test "a diagram with named imports passes" {
     final got = check(support\fixture({
         "docs/site/diagrams/one.buzz": "import \"magus\";\nimport \"site/diagrams/packages\" as packages;\n",
     }));
     assert\equal(got.len(), want: 0, message: "clean");
 }
 
-test "a figure with a blank import is reported at its line" {
+test "a diagram with a blank import is reported at its line" {
     final got = check(support\fixture({
         "docs/site/diagrams/two.buzz": "import \"magus\";\nimport \"site/diagrams/packages\" as _;\n",
     }));
     assert\equal(support\messages(got), want: [
-        "docs/site/diagrams/two.buzz imports a module as _, so nothing in the figure names it",
+        "docs/site/diagrams/two.buzz imports a module as _, so nothing in the diagram names it",
     ], message: "findings");
     assert\equal(got[0].line, want: 2, message: "the line of the blank import");
 }

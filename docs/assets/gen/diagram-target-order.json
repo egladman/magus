@@ -4,9 +4,9 @@
     "flow": 11,
     "imports": 0
   },
-  "figure": "target-order",
+  "diagram": "target-order",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:4c63ea5acd3db4d01f72fc540ca51f0414c71000dfa80a3d669260895df6c11e",
+  "stamp": "sha256:cdbbac8bf6a3f7d1a5ac63e0713dc605f21e0d99b039f42b064bd079da84ee10",
   "undrilled": []
 }

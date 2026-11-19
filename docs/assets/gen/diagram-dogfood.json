@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 0
   },
-  "figure": "dogfood",
+  "diagram": "dogfood",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:5c8b42f1785bfc7453d97fefcfbb131da22b84df8391590700c8f9767f6fcd17",
+  "stamp": "sha256:83c79d48ef5425bcde80c91254b0e34aada3be538a788bf972a3c341b48dea6b",
   "undrilled": []
 }

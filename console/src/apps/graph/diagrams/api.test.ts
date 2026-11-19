@@ -1,5 +1,5 @@
-// api.test.ts - the diagrams client's error mapping and decoding. Every non-figure answer comes
-// back as a read the view can put in words; none of them may decode as an empty figure.
+// api.test.ts - the diagrams client's error mapping and decoding. Every non-diagram answer comes
+// back as a read the view can put in words; none of them may decode as an empty diagram.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -55,14 +55,14 @@ test("each refusal keeps the server's sentence and its own kind", () => {
   });
 });
 
-test("a figure's URL carries its id and lens", () => {
+test("a diagram's URL carries its id and lens", () => {
   assert.equal(
     diagramUrl(HOST, "targets:libs/lib", { scope: ["libs"], focus: "", depth: null }),
     "http://127.0.0.1:7391/api/v1/diagrams/targets:libs/lib?scope=libs",
   );
 });
 
-test("a 422 comes back as refused with the finding, never as an empty figure", async () => {
+test("a 422 comes back as refused with the finding, never as an empty diagram", async () => {
   const seen: string[] = [];
   const read = await renderDiagram(
     { host: HOST, fetch: respond(422, "10 nodes exceeds the budget of 9", seen) },
@@ -127,7 +127,7 @@ test("the listing decodes its optional fields only when present", () => {
   assert.match(bad.error.message, /id is not a string/);
 });
 
-test("a rendered figure decodes source_url and tolerates missing node fields", () => {
+test("a rendered diagram decodes source_url and tolerates missing node fields", () => {
   assert.deepEqual(
     parseRendered({
       id: "projects",

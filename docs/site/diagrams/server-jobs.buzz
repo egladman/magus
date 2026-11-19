@@ -1,16 +1,16 @@
 namespace serverJobs;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun serverJobsFigure() > figure\Figure !> any {
+export fun serverJobsDiagram() > diagram\Diagram !> any {
     final watch = magus\graph().dir("internal/file/watch");
     final registry = magus\graph().dir("internal/workspace");
     final server = magus\graph().dir("internal/server");
     final graph = magus\graph().dir("internal/graph/knowledge");
-    final fs = figure\external("Source files", sub: "magusfiles, code", tag: "input");
-    final cli = figure\external("magus run", sub: "any invocation", tag: "input");
-    return figure\of("server-jobs",
+    final fs = diagram\external("Source files", sub: "magusfiles, code", tag: "input");
+    final cli = diagram\external("magus run", sub: "any invocation", tag: "input");
+    return diagram\of("server-jobs",
             title: "Watchers and coalesced graph builds keep one warm workspace current",
             eyebrow: "magus server",
             desc: "File changes reach the watchers, which tell the workspace registry what to "
@@ -20,7 +20,7 @@ export fun serverJobsFigure() > figure\Figure !> any {
         .actor(fs)
         .actor(cli)
         .box(watch, label: "File watchers", sub: "invalidate on change", tag: "job")
-        .box(registry, label: "Workspace registry", sub: "the warm copy", look: figure\Look.focal)
+        .box(registry, label: "Workspace registry", sub: "the warm copy", look: diagram\Look.focal)
         .box(server, label: "Server", sub: "runs the jobs", tag: "job")
         .box(graph, label: "Graph build", sub: "coalesced, async", tag: "job")
         .edgesFromGraph()
@@ -29,7 +29,7 @@ export fun serverJobsFigure() > figure\Figure !> any {
         .markEdge(server, dst: registry, label: "writes")
         .flowIn(fs, dst: watch)
         .flowIn(cli, dst: server, label: "queues")
-        .legend(figure\Look.external, label: "outside the server")
-        .legend(figure\Look.focal, label: "the one warm copy")
+        .legend(diagram\Look.external, label: "outside the server")
+        .legend(diagram\Look.focal, label: "the one warm copy")
         .scope([watch, registry, server, graph]);
 }

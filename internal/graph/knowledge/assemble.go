@@ -351,7 +351,7 @@ func assembleDomain(in Inputs) []Shard {
 		if l := assembleLinksIn(tree, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
 			shards = append(shards, l)
 		}
-		// Markers resolve a figure id against the doc shard's pages and sections, so they
+		// Markers resolve a diagram id against the doc shard's pages and sections, so they
 		// run once those are known.
 		var docPages []string
 		for _, n := range docNodes {

@@ -1,9 +1,9 @@
 namespace vcsBoxes;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun vcsFigure() > figure\Figure !> any {
+export fun vcsDiagram() > diagram\Diagram !> any {
     final vcs = magus\graph().dir("vcs");
     final file = magus\graph().dir("internal/file");
     final stamp = magus\graph().dir("internal/stamp");
@@ -22,10 +22,10 @@ export fun vcsFigure() > figure\Figure !> any {
         magus\graph().dir("internal/race"),
         magus\graph().dir("internal/work"),
     ];
-    return figure\of("vcs",
+    return diagram\of("vcs",
             title: "One VCS interface answers git, Mercurial, Sapling and Jujutsu",
             eyebrow: "vcs",
-            direction: figure\Direction.down,
+            direction: diagram\Direction.down,
             desc: "The vcs package names the revision, the branch, the dirty digest and the changed "
                 + "files for whichever backend the checkout uses, so no other package runs a VCS "
                 + "command. Job leases and the cache key read the revision, the session and "
@@ -36,14 +36,14 @@ export fun vcsFigure() > figure\Figure !> any {
         .box(stamp, label: "Build stamp", sub: "who ran it")
         .box(xdg, label: "XDG paths", sub: "state")
         .group(runs, label: "Runs", sub: "leases, cache key, queue")
-        .group(records, label: "Records", sub: "sessions, activity", look: figure\Look.store)
+        .group(records, label: "Records", sub: "sessions, activity", look: diagram\Look.store)
         .group(landing, label: "Landing", sub: "settle, race, work")
         .edgesFromGraph()
         .hideEdges(runs + records + landing, dst: [file, xdg, stamp],
-            why: "every caller leans on these for its own work; the figure shows what vcs leans on")
+            why: "every caller leans on these for its own work; the diagram shows what vcs leans on")
         .hideEdges(landing, dst: records,
-            why: "the landing code records its own steps; the figure shows who reads vcs")
-        .legend(figure\Look.focal, label: "the one interface")
-        .legend(figure\Look.store, label: "append-only")
+            why: "the landing code records its own steps; the diagram shows who reads vcs")
+        .legend(diagram\Look.focal, label: "the one interface")
+        .legend(diagram\Look.store, label: "append-only")
         .scope([vcs]);
 }

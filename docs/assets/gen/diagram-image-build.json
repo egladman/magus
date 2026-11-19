@@ -4,9 +4,9 @@
     "flow": 6,
     "imports": 0
   },
-  "figure": "image-build",
+  "diagram": "image-build",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:1075d225e5b7f3bcad6f28f132d8a7c4c3bc7d9e49d59e4e294b066014ef078c",
+  "stamp": "sha256:b0b4836f73f22966fc0e32d3e5aee7286bd2b57992b96919aa42d22457190f86",
   "undrilled": []
 }

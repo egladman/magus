@@ -46,9 +46,9 @@ final SKIPPED = {
     THIS: "it spells the words it refuses",
 };
 
-// LANES_ARE_ROUTING is where lane stays: the figure router's term for the channel a long or
+// LANES_ARE_ROUTING is where lane stays: the diagram router's term for the channel a long or
 // back edge runs in beside the boxes.
-final LANES_ARE_ROUTING = ["libs/figure/figure.buzz"];
+final LANES_ARE_ROUTING = ["libs/diagram/diagram.buzz"];
 
 // SANCTIONED holds each finding kept on purpose, by "<path>: <matched text>", with why. An
 // entry that no longer has a finding is itself a finding, so the list only shrinks.
@@ -340,8 +340,8 @@ test "ratchet is refused as any word, in prose or an identifier" {
         want: ["1:20 \"ratchet\" says ratchet", "2:6 \"TestAnalyzerRatchetsFiles\" says ratchets"], message: "ratchet");
 }
 
-test "the figure router keeps its lanes" {
-    assert\equal(lines("libs/figure/figure.buzz", src: "// a back edge's lane\n// the corpus\n"),
+test "the diagram router keeps its lanes" {
+    assert\equal(lines("libs/diagram/diagram.buzz", src: "// a back edge's lane\n// the corpus\n"),
         want: ["2:8 \"corpus\" says corpus"], message: "lane passes, corpus does not");
 }
 

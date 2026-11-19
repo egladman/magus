@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 1
   },
-  "figure": "ci-providers",
+  "diagram": "ci-providers",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:4207003e30608ad51dc96f3acd7cd84752993edebdc065166117ebe1099d9798",
+  "stamp": "sha256:af66787fee7ce1adfe0f00876543f05a00cc7e436db18083dfdf255385e5ed6f",
   "undrilled": []
 }

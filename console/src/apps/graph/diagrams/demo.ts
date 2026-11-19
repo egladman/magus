@@ -1,14 +1,14 @@
-// demo.ts - the Figures mode's showcase of the acme monorepo.
+// demo.ts - the Diagrams mode's showcase of the acme monorepo.
 // It draws from plain data and sends no request.
 
 import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 import { WORKSPACE_ROOT } from "../../../desktop/demo-scenario";
 import type { DiagramEntry, RenderedDiagram } from "./api";
 
-interface DemoFigure {
+interface DemoDiagram {
   readonly entry: DiagramEntry;
   readonly title: string;
-  // The import figure keys boxes by directory; the other draws actors.
+  // The import diagram keys boxes by directory; the other draws actors.
   readonly byPath: boolean;
 }
 
@@ -36,7 +36,7 @@ const EDGES: readonly (readonly [string, string])[] = [
   ["tools/migrate", "libs/protocol"],
 ];
 
-const FIGURES: readonly DemoFigure[] = [
+const DIAGRAMS: readonly DemoDiagram[] = [
   {
     entry: { id: "imports", kind: "imports", title: "Imports across acme", indexed: true },
     title: "Imports across " + WORKSPACE_ROOT + " (demo)",
@@ -59,7 +59,7 @@ function escapeXml(s: string): string {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-function draw(fig: DemoFigure): string {
+function draw(fig: DemoDiagram): string {
   const key = (name: string): string => (fig.byPath ? name : "external:" + name);
   const place = new Map<string, { x: number; y: number }>();
   CONSUMERS.forEach((n, i) => place.set(n, { x: PAD, y: PAD + i * ROW }));
@@ -105,15 +105,15 @@ function draw(fig: DemoFigure): string {
 }
 
 export function demoDiagramList(): DiagramEntry[] {
-  return FIGURES.map((f) => f.entry);
+  return DIAGRAMS.map((f) => f.entry);
 }
 
-// renderDemoDiagram answers with the figure a server would draw for id.
-// The lens does not apply: the demo has one fixed cut of each figure.
+// renderDemoDiagram answers with the diagram a server would draw for id.
+// The lens does not apply: the demo has one fixed cut of each diagram.
 export function renderDemoDiagram(id: string): Result<RenderedDiagram> {
-  const fig = FIGURES.find((f) => f.entry.id === id);
+  const fig = DIAGRAMS.find((f) => f.entry.id === id);
   if (!fig) {
-    return fail(new MagusError({ code: "", message: "the demo has no figure " + id }));
+    return fail(new MagusError({ code: "", message: "the demo has no diagram " + id }));
   }
   return ok({
     id,

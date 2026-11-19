@@ -4,10 +4,10 @@
     "flow": 3,
     "imports": 4
   },
-  "figure": "server-http",
+  "diagram": "server-http",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:ecf3f740300cbc6d5e10f9b49f155ba1129ce0a59a39190ce13439abacdf91f0",
+  "stamp": "sha256:6ae1b0e4c662994309bcb52011c43e546a04e393267d948b36e64891bfbcb987",
   "undrilled": [
     "Console routes"
   ]

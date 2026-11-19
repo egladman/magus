@@ -17,12 +17,12 @@
 // It says whether the project was edited directly (a seed).
 // When it was not, it names the files that pulled it in.
 // One typed call covers the whole set.
-// The figure follows, a link the console draws it from.
+// The diagram follows, a link the console draws it from.
 //
 // Reads the `fanout-share` and `console-base` inputs.
 import "vcs";
 import "advice";
-import "figure-link" as figurelink;
+import "diagram-link" as diagramlink;
 import "magus";
 import "std";
 
@@ -49,19 +49,19 @@ export fun trips(reached: int, total: int, share: double) > bool {
     return reached >= total * share;
 }
 
-// figure is the console link for reachGraph's graph, "" when the link would be too long for a
+// diagram is the console link for reachGraph's graph, "" when the link would be too long for a
 // comment.
-export fun figure(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > str !> any {
+export fun diagram(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > str !> any {
     final g = reachGraph(reached, seeds: seeds, dependsOn: dependsOn);
-    return figurelink\figureLink(base, title: g.title, nodes: g.nodes, edges: g.edges);
+    return diagramlink\diagramLink(base, title: g.title, nodes: g.nodes, edges: g.edges);
 }
 
 // reachGraph is the reached projects, the ones the change edited marked and the dependencies
 // among them drawn. A dependency outside the set is not drawn.
-export fun reachGraph(reached: [str], seeds: [str], dependsOn: {str: [str]}) > figurelink\FigureGraph {
-    final nodes = mut [<figurelink\FigureNode>];
+export fun reachGraph(reached: [str], seeds: [str], dependsOn: {str: [str]}) > diagramlink\DiagramGraph {
+    final nodes = mut [<diagramlink\DiagramNode>];
     foreach (path in reached) {
-        nodes.append(figurelink\FigureNode{ id = path, label = path, seed = seeds.indexOf(path) != null });
+        nodes.append(diagramlink\DiagramNode{ id = path, label = path, seed = seeds.indexOf(path) != null });
     }
     final edges = mut [<[str]>];
     foreach (path in reached) {
@@ -69,7 +69,7 @@ export fun reachGraph(reached: [str], seeds: [str], dependsOn: {str: [str]}) > f
             if (reached.indexOf(dep) != null) { edges.append([dep, path]); }
         }
     }
-    return figurelink\FigureGraph{ title = "How far this change reaches", nodes = nodes, edges = edges };
+    return diagramlink\DiagramGraph{ title = "How far this change reaches", nodes = nodes, edges = edges };
 }
 
 // body renders the section.
@@ -153,7 +153,7 @@ fun main() > void !> any {
     // Only the reached projects, so the picture is this change's reach and not the whole
     // workspace - the workspace-wide graph is already rendered in MAGUS.md.
     final g = reachGraph(reached, seeds: seeds, dependsOn: magus\graph().projectGraph().dependsOn);
-    final link = figurelink\figureLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
+    final link = diagramlink\diagramLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
 
     advice\publish(repo, pr: pr, name: section,
         title: "How far this change reaches ({reached.len()} of {total} projects)",
@@ -191,7 +191,7 @@ test "body says splitting will not help when everything is downstream" {
 }
 
 test "body links the console graph and draws no mermaid fence" {
-    final link = figure("https://example.test/console/", reached: ["libs/a", "cmd/b"], seeds: ["libs/a"],
+    final link = diagram("https://example.test/console/", reached: ["libs/a", "cmd/b"], seeds: ["libs/a"],
         dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "libs/a": [<str>]});
     final text = body(["libs/a", "cmd/b"], reasons: ["edited here", "depends on a project you edited"], total: 9, link: link);
     std\assert(text.indexOf("](" + link + ")") != null, message: "the link is in the body");
@@ -199,11 +199,11 @@ test "body links the console graph and draws no mermaid fence" {
     std\assert(text.indexOf("![") == null, message: "no image");
 }
 
-test "figure marks the seeds and draws dependency to dependent among the reached only" {
-    final link = figure("", reached: ["libs/a", "cmd/b", "docs"], seeds: ["libs/a"],
+test "diagram marks the seeds and draws dependency to dependent among the reached only" {
+    final link = diagram("", reached: ["libs/a", "cmd/b", "docs"], seeds: ["libs/a"],
         dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "docs": ["cmd/b"]});
-    std\assert(link.startsWith(figurelink\defaultConsoleBase + "graph/#figure="), message: "the default base");
-    final doc = figurelink\decodeFigureLink(link);
+    std\assert(link.startsWith(diagramlink\defaultConsoleBase + "graph/#diagram-link="), message: "the default base");
+    final doc = diagramlink\decodeDiagramLink(link);
     std\assert(doc.q("title").stringValue() == "How far this change reaches", message: "title");
     final nodes = doc.q("nodes").listValue();
     std\assert(nodes.len() == 3, message: "only the reached projects");

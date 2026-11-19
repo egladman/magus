@@ -237,7 +237,7 @@ func TestShellDirNeverLists(t *testing.T) {
 	require.ErrorIs(t, err, fs.ErrPermission)
 }
 
-// The Graph's Figures mode compiles the playground's Buzz runtime in the page: the wasm is served
+// The Graph's Diagrams mode compiles the playground's Buzz runtime in the page: the wasm is served
 // typed for WebAssembly.instantiateStreaming, and the CSP admits compiling it and nothing more.
 func TestConsoleServesTheBuzzRuntime(t *testing.T) {
 	dir := consoleDir(t)

@@ -1,8 +1,8 @@
 // markdown-carries-no-mermaid refuses a mermaid fence in this repository's markdown. magus
-// draws its figures with magus/figure, and nothing here renders mermaid any more, so a
+// draws its diagrams with magus/diagram, and nothing here renders mermaid any more, so a
 // fence would show as a block of source.
 //
-// Tier 1, mechanical: the fix is a figure, a table or a list.
+// Tier 1, mechanical: the fix is a diagram, a table or a list.
 namespace nomermaid;
 
 import "assert";
@@ -23,7 +23,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (t.startsWith("```mermaid") or t.startsWith("~~~mermaid")) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "a mermaid fence; nothing in this repository renders mermaid",
-                    fix = "Draw it with magus/figure (see the magus-diagram skill), or describe it as a table or list." });
+                    fix = "Draw it with magus/diagram (see the magus-diagram skill), or describe it as a table or list." });
             }
         }
     }

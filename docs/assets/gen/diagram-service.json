@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 5
   },
-  "figure": "service",
+  "diagram": "service",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:ce299d6bacd44ff9a70faf64103d8f85f27fd64f1022dfa03ff9c389504079ab",
+  "stamp": "sha256:27c0083d541f978d9d2c550bee3e258ab71ccb278b4dc887f345a3308e67753d",
   "undrilled": []
 }

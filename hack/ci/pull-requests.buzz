@@ -49,7 +49,7 @@ import "hack/lib/prompt";
 import "hack/magusfile/commits" as commits;
 import "hack/dev/rebase-branches-onto-base" as rebaseonto;
 import "hack/magusfile/regressions" as regressions;
-import "../../.github/actions/advice/figure-link" as figurelink;
+import "../../.github/actions/advice/diagram-link" as diagramlink;
 
 import "assert";
 
@@ -240,7 +240,7 @@ object Selector {
     file: str = "",
     issue: str = "",
     runUrl: str = "",
-    console: str = figurelink\defaultConsoleBase,
+    console: str = diagramlink\defaultConsoleBase,
 }
 
 fun encode(doc: {str: any}) > str {
@@ -1459,7 +1459,7 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     final file = parsed.values["--out"] ?? "";
     return Selector{ prs = prs, author = author ?? "", all = all, method = method,
         base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "",
-        console = parsed.values["--console-base"] ?? figurelink\defaultConsoleBase };
+        console = parsed.values["--console-base"] ?? diagramlink\defaultConsoleBase };
 }
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
@@ -2251,7 +2251,7 @@ fun whyLine(x: Placed, b: Board) > str {
 // queueGraph is the queue's graph: the base, then each queued change after the one it is
 // stacked on. A change kicked back is a node with no edge, since it is stacked on nothing.
 // Null when nothing is queued or kicked.
-export fun queueGraph(b: Board, sections: {int: str}) > figurelink\FigureGraph? {
+export fun queueGraph(b: Board, sections: {int: str}) > diagramlink\DiagramGraph? {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -2270,12 +2270,12 @@ export fun queueGraph(b: Board, sections: {int: str}) > figurelink\FigureGraph? 
     foreach (p in b.open) {
         titles[p.number] = p.title;
     }
-    final nodes = mut [figurelink\FigureNode{ id = "base", label = ascii(b.base) }];
+    final nodes = mut [diagramlink\DiagramNode{ id = "base", label = ascii(b.base) }];
     foreach (n in ids) {
-        nodes.append(figurelink\FigureNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
+        nodes.append(diagramlink\DiagramNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
     }
     foreach (n in kicked) {
-        nodes.append(figurelink\FigureNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
+        nodes.append(diagramlink\DiagramNode{ id = "pr{n}", label = "#{n} " + ascii(clip(titles[n] ?? "", n: 40)).trim() });
     }
     final edges = mut [<[str]>];
     foreach (q in b.queue) {
@@ -2285,7 +2285,7 @@ export fun queueGraph(b: Board, sections: {int: str}) > figurelink\FigureGraph? 
         }
         edges.append([below, "pr{q.id}"]);
     }
-    return figurelink\FigureGraph{ title = "Merge queue into " + ascii(b.base), nodes = nodes, edges = edges };
+    return diagramlink\DiagramGraph{ title = "Merge queue into " + ascii(b.base), nodes = nodes, edges = edges };
 }
 
 // mergedLine counts the week's merges into base by who merged them.
@@ -2367,7 +2367,7 @@ export fun renderDashboard(b: Board) > str !> any {
     }
     final g = queueGraph(b, sections: sections);
     if (g != null) {
-        final link = figurelink\figureLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
+        final link = diagramlink\diagramLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
         if (link != "") {
             meta.append("[queue graph]({link})");
         }
@@ -3063,7 +3063,7 @@ test "status and dashboard take --all; dashboard takes its page's flags" {
     final preview = ["--all", "--preview", "--out", "d.md"];
     assert\equal(parseSelector("dashboard", argv: preview).issue, want: "", message: "a preview edits no issue");
     assert\equal(parseSelector("dashboard", argv: preview).base, want: "main", message: "the default base");
-    assert\equal(parseSelector("dashboard", argv: preview).console, want: figurelink\defaultConsoleBase, message: "the default console");
+    assert\equal(parseSelector("dashboard", argv: preview).console, want: diagramlink\defaultConsoleBase, message: "the default console");
     assert\equal(parseSelector("dashboard", argv: preview + ["--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
 }
 
@@ -3125,7 +3125,7 @@ test "the checks on the head decide running, green, red-inherited and red" {
     _ = expect([green("t"), Check{ name = "u", conclusion = "SKIPPED" }], facts: Facts{}, want: "green");
     final gateSkipped = expect([green("magus plan"), Check{ name = "ci gate", conclusion = "SKIPPED", run = "11" }], facts: Facts{}, want: "red");
     assert\equal(gateSkipped.newChecks, want: ["ci gate"], message: "a required check skipped judged nothing");
-    final allSkipped = expect([Check{ name = "magus shard 0: .", conclusion = "SKIPPED" }, Check{ name = "docs figures", conclusion = "SKIPPED" }],
+    final allSkipped = expect([Check{ name = "magus shard 0: .", conclusion = "SKIPPED" }, Check{ name = "docs diagrams", conclusion = "SKIPPED" }],
         facts: Facts{}, want: "red");
     assert\equal(allSkipped.newChecks.len(), want: 2, message: "skips with nothing that succeeded never read green");
 
@@ -3205,15 +3205,15 @@ fun lacks(page: str, want: str) > void !> any {
     assert\equal(page.indexOf(want) == null, want: true, message: "no {want} in:\n{page}");
 }
 
-// figureIn decodes the graph a page links, and throws when it links none.
-fun figureIn(page: str) > serialize\Boxed !> any {
+// diagramIn decodes the graph a page links, and throws when it links none.
+fun diagramIn(page: str) > serialize\Boxed !> any {
     final open = "[queue graph](";
     final at = page.indexOf(open);
     if (at == null) {
         throw "no graph link in:\n{page}";
     }
     final rest = page.sub(at! + open.len());
-    return figurelink\decodeFigureLink(rest.sub(0, len: rest.indexOf(")")!));
+    return diagramlink\decodeDiagramLink(rest.sub(0, len: rest.indexOf(")")!));
 }
 
 // nodeIds is the ids of the graph's nodes, in order.
@@ -3284,7 +3284,7 @@ test "the page for an empty queue matches its golden" {
         mainRun = MainRun{ state = "green", url = "https://github.com/o/r/actions/runs/70" } };
     final page = renderDashboard(b);
     assert\equal(page, want: fs\readFile("hack/testdata/queue-dashboard-empty.md.golden"), message: "hack/testdata/queue-dashboard-empty.md.golden");
-    lacks(page, want: "#figure=");
+    lacks(page, want: "#diagram-link=");
     lacks(page, want: "###");
     assert\equal(page.endsWith("\n" + DASHBOARD_MARKER + "\n"), want: true, message: "the marker closes the page");
 }
@@ -3383,8 +3383,8 @@ test "a partition of three links each behind the base" {
         queue = [Queued{ id = 1 }, Queued{ id = 2 }, Queued{ id = 3 }],
         flights = {1: Flight{ url = "https://github.com/o/r/actions/runs/9/job/8", since = "2026-09-26T19:30:00Z" }} };
     final page = renderDashboard(b);
-    has(page, want: "[queue graph](" + figurelink\defaultConsoleBase + "graph/#figure=");
-    final doc = figureIn(page);
+    has(page, want: "[queue graph](" + diagramlink\defaultConsoleBase + "graph/#diagram-link=");
+    final doc = diagramIn(page);
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "Merge queue into main", message: "title");
     assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
@@ -3400,7 +3400,7 @@ test "a stack links each member behind the one it is stacked on" {
         Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
     ];
     final page = renderDashboard(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
-    assert\equal(graphEdges(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
+    assert\equal(graphEdges(diagramIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
     has(page, want: "| queued 2nd | running | - | wait: stacked on #10, which has not merged |");
 }
 
@@ -3417,7 +3417,7 @@ test "each kick code goes to the author, and a regeneration to a manual merge, a
         has(page, want: "`{code}`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/");
     }
     has(page, want: "- **#5** labeled {KICKED}, and no kick-back comment says why<br>by hand, once fixed: `gh pr merge 5 --auto --squash`");
-    final doc = figureIn(page);
+    final doc = diagramIn(page);
     assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
     assert\equal(graphEdges(doc).len(), want: 0, message: "stacked on nothing");
     final labeled = renderDashboard(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
@@ -3431,7 +3431,7 @@ test "a title cannot break a table, a comment or the graph" {
     final odd = Pull{ number = 31, head = "a|b", author = "x|y", title = "t", review = "APPROVED", checks = [green("t")] };
     has(renderDashboard(board([odd], queue: [<Queued>])), want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |");
     lacks(page, want: "<!-- magus-queue: start -->");
-    assert\equal(figureIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
+    assert\equal(diagramIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
 }
 
 test "the week's merges are counted by who merged them" {

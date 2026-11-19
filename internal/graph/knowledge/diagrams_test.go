@@ -12,86 +12,86 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// figureWorkspace holds a project and four Buzz files of figures: one with literal
-// ids and dirs, one built from parameters, a duplicate id, and an unrelated figure
+// diagramWorkspace holds a project and four Buzz files of diagrams: one with literal
+// ids and dirs, one built from parameters, a duplicate id, and an unrelated diagram
 // namespace.
-func figureWorkspace(t *testing.T) string {
+func diagramWorkspace(t *testing.T) string {
 	t.Helper()
 	ws := testkit.NewWorkspace(t)
 	ws.Write("libs/engine/magusfile.buzz", "export fun ci() > void {}\n")
 	ws.Write("diagrams/engine.buzz", `namespace engine;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
 final TOPIC = "engine";
 
-export fun engineFigure() > figure\Figure !> any {
+export fun engineDiagram() > diagram\Diagram !> any {
     final engine = magus\graph().dir("libs/engine");
     final vm = magus\graph().dir("libs/engine/vm/");
-    return figure\of("engine",
+    return diagram\of("engine",
             title: "One engine",
             eyebrow: TOPIC,
             desc: "Every program goes through "
                 + "one pipeline.",
-            direction: figure\Direction.across)
+            direction: diagram\Direction.across)
         .box(engine, label: "Engine")
         .box(vm, label: "VM")
         .box(magus\graph().dir("libs/engine"), label: "again");
 }
 `)
 	ws.Write("diagrams/session.buzz", `import "magus" as m;
-import "magus/figure" as fig;
+import "magus/diagram" as fig;
 
-fun sessionFigure(name: str, dir: str) > fig\Figure !> any {
+fun sessionDiagram(name: str, dir: str) > fig\Diagram !> any {
     return fig\of("session-{name}",
             title: "Session",
             desc: "Jobs of " + name)
         .box(m\graph().dir(dir), label: "jobs");
 }
 `)
-	ws.Write("diagrams/later.buzz", `import "magus/figure";
+	ws.Write("diagrams/later.buzz", `import "magus/diagram";
 
-fun again() > figure\Figure !> any {
-    return figure\of("engine", title: "A second engine");
+fun again() > diagram\Diagram !> any {
+    return diagram\of("engine", title: "A second engine");
 }
 `)
-	// No magus/figure import: an unrelated namespace called figure draws nothing.
-	ws.Write("diagrams/other.buzz", `import "figure";
+	// No magus/diagram import: an unrelated namespace called diagram draws nothing.
+	ws.Write("diagrams/other.buzz", `import "diagram";
 
 fun other() > void {
-    figure\of("not-a-figure");
+    diagram\of("not-a-diagram");
 }
 `)
 	return ws.Root()
 }
 
-func TestFiguresFromBuzz(t *testing.T) {
-	shard := assembleBuzz(figureWorkspace(t))
+func TestDiagramsFromBuzz(t *testing.T) {
+	shard := assembleBuzz(diagramWorkspace(t))
 	out := mergeAll([]Shard{shard}).Output()
 
-	var figures []types.KnowledgeNode
+	var diagrams []types.KnowledgeNode
 	for _, n := range out.Nodes {
-		if n.Kind == types.KindFigure {
-			figures = append(figures, n)
+		if n.Kind == types.KindDiagram {
+			diagrams = append(diagrams, n)
 		}
 	}
 	assert.Equal(t, []types.KnowledgeNode{
 		{
-			ID: "figure:diagrams/session.buzz:sessionFigure", Kind: types.KindFigure, Label: "Session",
+			ID: "diagram:diagrams/session.buzz:sessionDiagram", Kind: types.KindDiagram, Label: "Session",
 			Source: "diagrams/session.buzz:5", Attrs: map[string]string{attrUnresolved: "id,desc,dir"},
 		},
 		{
-			ID: "figure:engine", Kind: types.KindFigure, Label: "One engine",
+			ID: "diagram:engine", Kind: types.KindDiagram, Label: "One engine",
 			Doc: "Every program goes through one pipeline.", Source: "diagrams/engine.buzz:11",
 			Attrs: map[string]string{attrEyebrow: "engine", attrDuplicate: "diagrams/later.buzz:4"},
 		},
-	}, figures)
+	}, diagrams)
 
-	assert.Equal(t, "engine\nEvery program goes through one pipeline.", shard.Text["figure:engine"],
+	assert.Equal(t, "engine\nEvery program goes through one pipeline.", shard.Text["diagram:engine"],
 		"the lexical body carries the eyebrow and the whole desc")
-	_, ok := shard.Text["figure:diagrams/session.buzz:sessionFigure"]
-	assert.False(t, ok, "a figure with no literal eyebrow or desc has no body")
+	_, ok := shard.Text["diagram:diagrams/session.buzz:sessionDiagram"]
+	assert.False(t, ok, "a diagram with no literal eyebrow or desc has no body")
 
 	var depicts []string
 	for _, e := range out.Links {
@@ -100,16 +100,16 @@ func TestFiguresFromBuzz(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{
-		"figure:engine -> dir:libs/engine",
-		"figure:engine -> dir:libs/engine/vm",
-		"figure:engine -> project:libs/engine",
+		"diagram:engine -> dir:libs/engine",
+		"diagram:engine -> dir:libs/engine/vm",
+		"diagram:engine -> project:libs/engine",
 	}, depicts)
 
-	e, ok := findEdge(out, "file:diagrams/engine.buzz", "figure:engine", types.RelationContains)
-	require.True(t, ok, "the file contains the figure it builds")
+	e, ok := findEdge(out, "file:diagrams/engine.buzz", "diagram:engine", types.RelationContains)
+	require.True(t, ok, "the file contains the diagram it builds")
 	assert.Equal(t, types.ConfidenceExtracted, e.Confidence)
-	assert.False(t, hasEdge(out, "file:diagrams/later.buzz", "figure:engine", types.RelationContains),
-		"a duplicate id is recorded on the first figure, never merged into it")
+	assert.False(t, hasEdge(out, "file:diagrams/later.buzz", "diagram:engine", types.RelationContains),
+		"a duplicate id is recorded on the first diagram, never merged into it")
 }
 
 func TestLiteralString(t *testing.T) {

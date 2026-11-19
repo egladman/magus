@@ -1871,7 +1871,7 @@ export function startConsole(
     mount(tab);
   }
 
-  // openMode opens an app on one of its modes (the Dashboard's jobs, the Graph's figures). The
+  // openMode opens an app on one of its modes (the Dashboard's jobs, the Graph's diagrams). The
   // intent reaches a lazily loaded bundle even on its first mount; the event switches an
   // already-mounted one immediately.
   function openMode(pageId: string, mode: string): void {

@@ -1,12 +1,12 @@
 namespace kustomizeArchitecture;
 
-import "magus/figure";
+import "magus/diagram";
 import "../libs/kustomize/kustomize" as kustomize;
 
 // The objects come from the dev overlay's own YAML, so an edit to a manifest moves the
-// figure and nobody redraws it.
-export fun kustomizeArchitectureFigure() > figure\Figure !> any {
-    return kustomize\figureOf(kustomize\build("../deploy/kustomize/overlays/dev"),
+// diagram and nobody redraws it.
+export fun kustomizeArchitectureDiagram() > diagram\Diagram !> any {
+    return kustomize\diagram(kustomize\build("../deploy/kustomize/overlays/dev"),
         id: "kustomize-architecture",
         title: "The dev overlay denies the daemon every port but DNS and HTTPS",
         eyebrow: "kustomize",

@@ -1,6 +1,6 @@
-// Moving dashes along a figure's edges. Each solid connector gets a dashed overlay clone in the
-// accent, travelling source to destination; the figure's SVG and its static docs copy stay
-// untouched. One d3-timer serves every mounted figure on the page.
+// Moving dashes along a diagram's edges. Each solid connector gets a dashed overlay clone in the
+// accent, travelling source to destination; the diagram's SVG and its static docs copy stay
+// untouched. One d3-timer serves every mounted diagram on the page.
 
 import { select, selectAll } from "d3-selection";
 import { timer, type Timer } from "d3-timer";
@@ -8,7 +8,7 @@ import { FLOW_DASH_PX, FLOW_GAP_PX, dashOffset, flowSpeed } from "../flow.js";
 
 export const FLOW_CLASS = "console-diagrams__flow";
 
-// A figure draws every connector source to destination, so each overlay runs forward. Figures do
+// A diagram draws every connector source to destination, so each overlay runs forward. Diagrams do
 // not say which relation an edge is, so they share the default speed.
 const SPEED = flowSpeed("");
 
@@ -17,7 +17,7 @@ export interface FlowOptions {
 }
 
 export interface Flow {
-  // stop removes the overlays and leaves the shared timer if this was its last figure.
+  // stop removes the overlays and leaves the shared timer if this was its last diagram.
   // Idempotent.
   stop(): void;
 }
@@ -43,7 +43,7 @@ function frame(elapsed: number): void {
     return;
   }
   for (const r of running) {
-    // Reduced motion turned on, or the figure was swapped out without a stop().
+    // Reduced motion turned on, or the diagram was swapped out without a stop().
     if (r.reducedMotion() || !r.svg.isConnected) {
       remove(r);
       continue;

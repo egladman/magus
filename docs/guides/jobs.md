@@ -691,10 +691,10 @@ running magus in a pipeline.
 
 `magus job graph -o svg` draws the live jobs as SVG. Each box is a job with its state
 and holder. A solid edge is a fork or a merge, and a dashed one is a declared
-dependency. One figure holds at most nine boxes and twelve edges. A larger plan splits
-into an overview, with one box per group of jobs, and one figure per group. A group is a
+dependency. One diagram holds at most nine boxes and twelve edges. A larger plan splits
+into an overview, with one box per group of jobs, and one diagram per group. A group is a
 job and every job forked from it, or an integrator and every job it merges. A group's
-box links to its own figure.
+box links to its own diagram.
 
 ```console
 $ magus job graph -o svg --dir plan
@@ -704,7 +704,7 @@ plan/plan-integrate-wave.svg
 
 The overview prints first. The same plan writes the same bytes, and nothing is
 rasterized. Without `--dir` the files go to `job-graph/` in the workspace cache
-directory. Without `-o`, the command prints each figure's boxes and edges as text.
+directory. Without `-o`, the command prints each diagram's boxes and edges as text.
 
 ## Where to go next
 

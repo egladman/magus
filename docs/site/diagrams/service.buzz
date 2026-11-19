@@ -1,9 +1,9 @@
 namespace service;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun serviceFigure() > figure\Figure !> any {
+export fun serviceDiagram() > diagram\Diagram !> any {
     final service = magus\graph().dir("internal/service");
     final identity = magus\graph().dir("internal/service/identity");
     final audit = magus\graph().dir("internal/serviceaudit");
@@ -11,7 +11,7 @@ export fun serviceFigure() > figure\Figure !> any {
     final spawn = magus\graph().dir("internal/proc/spawn");
     final bindings = magus\graph().dir("internal/interp/bindings");
     final doctor = magus\graph().dir("internal/doctor");
-    return figure\of("service",
+    return diagram\of("service",
             title: "A service op is one long-running process with one identity",
             eyebrow: "services",
             desc: "A service op names a long-running process. internal/service starts it through "
@@ -28,6 +28,6 @@ export fun serviceFigure() > figure\Figure !> any {
         .edgesFromGraph()
         .hideEdges([ward, audit, bindings, doctor], dst: [identity],
             why: "every reader keys by identity; one arrow from the service shows where it is defined")
-        .legend(figure\Look.focal, label: "the record")
+        .legend(diagram\Look.focal, label: "the record")
         .scope([service, identity, audit, ward]);
 }

@@ -1004,7 +1004,7 @@ test "real branch names get the verdicts and served names in the table" {
         Case{ name = "cache-20260930", paths = ["internal/cache/cache.go"],
             rules = ["date"], served = "cache" },
         Case{ name = "buzz-heap-ownership", paths = ["libs/gopherbuzz/vm/heap.go"], rules = [<str>], served = "" },
-        Case{ name = "diagram-drift", paths = ["libs/figure/diagram.buzz", "hack/ci/drift.buzz"], rules = [<str>], served = "" },
+        Case{ name = "diagram-drift", paths = ["libs/diagram/diagram.buzz", "hack/ci/drift.buzz"], rules = [<str>], served = "" },
         Case{ name = "guard-floors", paths = ["internal/guard/floor.go"], rules = [<str>], served = "" },
         Case{ name = "mgs1040-readable", paths = ["internal/diag/mgs1040.go"], rules = [<str>], served = "" },
         Case{ name = "ed25519-signing", paths = [<str>], rules = [<str>], served = "" },

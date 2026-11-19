@@ -100,9 +100,9 @@ test("the query builder is named, and is not drawn as an overflow menu", () => {
   );
 });
 
-// Figures opens a different view; it is not a third graph. As a segment of the single-select Graph
+// Diagrams opens a different view; it is not a third graph. As a segment of the single-select Graph
 // group it was clipped off the sidebar's right edge and announced as one of the choices.
-test("Figures is a button of its own, not a segment of the Graph group", () => {
+test("Diagrams is a button of its own, not a segment of the Graph group", () => {
   const host = parse();
   const group = host.querySelector('[aria-labelledby="graphkind-label"]');
   assert.ok(group, "the Graph group");
@@ -111,9 +111,9 @@ test("Figures is a button of its own, not a segment of the Graph group", () => {
     ["targets", "knowledge"],
   );
   assert.equal(group.querySelector("[data-graph-mode]"), null);
-  const open = host.querySelector<HTMLElement>("#graph-figures-open");
-  assert.ok(open, "a Figures button");
-  assert.equal(open.getAttribute("data-graph-mode"), "figures");
+  const open = host.querySelector<HTMLElement>("#graph-diagrams-open");
+  assert.ok(open, "a Diagrams button");
+  assert.equal(open.getAttribute("data-graph-mode"), "diagrams");
   assert.equal(open.closest(".pf-v6-c-toggle-group"), null);
   assert.equal(open.hasAttribute("aria-pressed"), false, "it opens a view; it is not a toggle");
 });
@@ -165,12 +165,12 @@ test("the remember row uses a PF check and the reference table a PF table", () =
   assert.equal(host.querySelector(".console-graph-help__table"), null);
 });
 
-test("the way back from Figures is a plain button, not a one-item navigation landmark", () => {
+test("the way back from Diagrams is a plain button, not a one-item navigation landmark", () => {
   const host = parse();
-  const bar = host.querySelector("#graph-figures-controls");
+  const bar = host.querySelector("#graph-diagrams-controls");
   assert.ok(bar);
   assert.notEqual(bar.tagName, "NAV");
-  assert.ok(bar.querySelector("#graph-figures-back"));
+  assert.ok(bar.querySelector("#graph-diagrams-back"));
 });
 
 test("the empty state names no menu that does not feed this app", () => {

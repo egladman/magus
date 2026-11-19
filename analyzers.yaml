@@ -334,7 +334,7 @@ no-throw:
       .github/actions/advice/advise.buzz: 2
       .github/actions/advice/blast-radius.buzz: 2
       .github/actions/advice/conformance.buzz: 1
-      .github/actions/advice/figure-link.buzz: 4
+      .github/actions/advice/diagram-link.buzz: 4
       .github/actions/advice/first-contribution.buzz: 1
       .github/actions/advice/merge-conflict.buzz: 2
       .github/actions/advice/merge-queue.buzz: 1

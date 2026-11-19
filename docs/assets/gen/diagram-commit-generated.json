@@ -4,9 +4,9 @@
     "flow": 9,
     "imports": 0
   },
-  "figure": "commit-generated",
+  "diagram": "commit-generated",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:c3b7272470104dab84062a6a3f0ea70348d4ea32b1fcf58ec8f419d7b7e39eea",
+  "stamp": "sha256:a353bb194085a1c1ba20c2d7c12d7b082678b2f4482eb695f52eb61eb35a09bb",
   "undrilled": []
 }

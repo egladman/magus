@@ -511,7 +511,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("magus__Change__risk", shaped("magus.risk", risk))
 	m.MapSet("magus__Workspace__risk", shaped("magus.risk", risk))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
-	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
+	// fields a diagram reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.
 	firstStr := func(args []vm.Value) string {
 		if len(args) > 0 && args[0].IsString() {

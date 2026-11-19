@@ -24,7 +24,7 @@ import (
 // checkout that has never built one.
 const markersShardName = "@markers"
 
-// attrMarkerUnresolved says why a marker has no references edge: a figure no page
+// attrMarkerUnresolved says why a marker has no references edge: a diagram no page
 // embeds, a destination that is not a directory. The marker node stays, so the
 // declaration is still findable and the reason travels with it.
 const attrMarkerUnresolved = "unresolved"
@@ -40,8 +40,8 @@ var markerTokenRe = regexp.MustCompile(`^magus:([a-z]+)(?::(begin|end))?(?:\s|$)
 // markerPairRe is one stamp pair: `k=v` or the `k: v` spelling the AGENTS.md stamp uses.
 var markerPairRe = regexp.MustCompile(`^([a-z][a-z0-9_.-]*)\s*(?:=|:\s)\s*(\S.*)$`)
 
-// figureEmbedRe is a docs page placing a figure, alone on its line.
-var figureEmbedRe = regexp.MustCompile(`^<!--diagram:([^\s>]+)-->$`)
+// diagramEmbedRe is a docs page placing a diagram, alone on its line.
+var diagramEmbedRe = regexp.MustCompile(`^<!--diagram:([^\s>]+)-->$`)
 
 // markerReservedAttrs are the keys the scanner writes itself; a stamp pair never
 // overwrites one.
@@ -319,15 +319,15 @@ func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages 
 			switch types.MarkerFamily(m.family) {
 			case types.MarkerDiagram:
 				if len(positional) == 0 {
-					unresolved = "magus:diagram names no figure id"
+					unresolved = "magus:diagram names no diagram id"
 					break
 				}
 				if embeds == nil {
-					embeds = figureEmbeds(root, docPages, idx)
+					embeds = diagramEmbeds(root, docPages, idx)
 				}
 				targets = embeds[positional[0]]
 				if len(targets) == 0 {
-					unresolved = "no docs page embeds figure " + positional[0]
+					unresolved = "no docs page embeds diagram " + positional[0]
 				}
 			case types.MarkerCalls:
 				dst, transport, reason := resolveCall(root, positional)
@@ -397,9 +397,9 @@ func resolveCall(root string, positional []string) (dst, transport, reason strin
 	return dst, positional[1], ""
 }
 
-// figureEmbeds maps a figure id to the docsection (or, above every heading, the doc)
+// diagramEmbeds maps a diagram id to the docsection (or, above every heading, the doc)
 // holding its `<!--diagram:<id>-->` line. Only nodes the doc shard holds are returned.
-func figureEmbeds(root string, docPages []string, idx docIndex) map[string][]string {
+func diagramEmbeds(root string, docPages []string, idx docIndex) map[string][]string {
 	out := map[string][]string{}
 	for _, rel := range docPages {
 		if !idx.docs[rel] {
@@ -429,7 +429,7 @@ func figureEmbeds(root string, docPages []string, idx docIndex) map[string][]str
 		})
 		offset := 0
 		for _, line := range bytes.Split(body, []byte("\n")) {
-			if m := figureEmbedRe.FindSubmatch(bytes.TrimSpace(line)); m != nil {
+			if m := diagramEmbedRe.FindSubmatch(bytes.TrimSpace(line)); m != nil {
 				target := docID(rel)
 				for _, h := range headings {
 					if h.start > offset {

@@ -5,7 +5,7 @@ import "crypto";
 import "fs";
 import "encoding/json";
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/server-http" as serverHttp;
 import "site/diagrams/server-socket" as serverSocket;
 import "site/diagrams/server-jobs" as serverJobs;
@@ -35,7 +35,7 @@ import "site/diagrams/bootstrap" as bootstrap;
 import "site/diagrams/target-order" as targetOrder;
 import "site/diagrams/agent-orchestration" as agentOrchestration;
 import "site/diagrams/kustomize-architecture" as kustomizeArchitecture;
-import "site/diagrams/mandate" as mandatefigures;
+import "site/diagrams/mandate" as mandatediagrams;
 import "site/diagrams/harness-pyramid" as harnessPyramid;
 import "site/diagrams/guard-internals" as guardInternals;
 import "site/diagrams/job-records" as jobRecords;
@@ -59,80 +59,80 @@ import "site/diagrams/doctor" as doctor;
 // copies, so rendering a page never needs the symbol index.
 final PAIR_DIR = "assets/gen";
 
-// COLUMN is the widest a figure lays out, in SVG units. A page SVG scales to the prose
+// COLUMN is the widest a diagram lays out, in SVG units. A page SVG scales to the prose
 // column, so a wider one shrinks every label below what a reader can take in.
 final COLUMN = 1200;
 
-// DRILL_HREF is where a box links to the figure one level down: its inlined <figure> on the
+// DRILL_HREF is where a box links to the diagram one level down: its inlined <figure> on the
 // page that embeds it, which inlinePageDiagrams resolves.
 final DRILL_HREF = "#diagram-\{id}";
 
-// allFigures builds every registered figure. A typo in a directory or layer name raises
+// allDiagrams builds every registered diagram. A typo in a directory or layer name raises
 // here, naming it.
-export fun allFigures() > [figure\Figure] !> any {
+export fun allDiagrams() > [diagram\Diagram] !> any {
     return [
-        serverHttp\serverHttpFigure(),
-        serverSocket\serverSocketFigure(),
-        serverJobs\serverJobsFigure(),
-        serverShare\serverShareFigure(),
-        ciPipeline\ciPipelineFigure(),
-        ciProviders\ciProvidersFigure(),
-        imageBuild\imageBuildFigure(),
-        ociAssembly\ociAssemblyFigure(),
-        dogfood\dogfoodFigure(),
-        projectReference\projectReferenceFigure(),
-        volatility\volatilityFigure(),
-        commitGenerated\commitGeneratedFigure(),
-        leaseLoop\leaseLoopFigure(),
-        cacheTrust\cacheTrustFigure(),
-        diagramPipeline\diagramPipelineFigure(),
-        knowledgeGraph\knowledgeGraphFigure(),
-        guardPath\guardPathFigure(),
-        agentIntegration\agentIntegrationFigure(),
-        buzzEngine\buzzEngineFigure(),
-        buzzCompile\buzzCompileFigure(),
-        buzzRun\buzzRunFigure(),
-        buzzPackages\buzzPackagesFigure(),
-        mergeQueueRisk\mergeQueueRiskFigure(),
-        workspaceLoad\workspaceLoadFigure(),
-        inputsOutputs\inputsOutputsFigure(),
-        bootstrap\bootstrapFigure(),
-        targetOrder\targetOrderFigure(),
-        agentOrchestration\agentOrchestrationFigure(),
-        kustomizeArchitecture\kustomizeArchitectureFigure(),
-        mandatefigures\mandateRolesFigure(),
-        mandatefigures\mandateBarFigure(),
-        harnessPyramid\harnessPyramidFigure(),
-        harnessPyramid\harnessStackFigure(),
-        guardInternals\guardInternalsFigure(),
-        jobRecords\jobRecordsFigure(),
-        sandbox\sandboxFigure(),
-        symbolIndex\symbolIndexFigure(),
-        harnessIntegrations\harnessIntegrationsFigure(),
-        mergeQueueWorkflows\mergeQueueWorkflowsFigure(),
-        ciCdSplit\ciCdSplitFigure(),
-        cacheInternals\cacheInternalsFigure(),
-        vcsBoxes\vcsFigure(),
-        typeRecords\typesFigure(),
-        languageService\languageServiceFigure(),
-        dryRun\dryRunFigure(),
-        sessions\sessionsFigure(),
-        configLoad\configLoadFigure(),
-        service\serviceFigure(),
-        bindingsGenerate\bindingsGenerateFigure(),
-        doctor\doctorFigure(),
+        serverHttp\serverHttpDiagram(),
+        serverSocket\serverSocketDiagram(),
+        serverJobs\serverJobsDiagram(),
+        serverShare\serverShareDiagram(),
+        ciPipeline\ciPipelineDiagram(),
+        ciProviders\ciProvidersDiagram(),
+        imageBuild\imageBuildDiagram(),
+        ociAssembly\ociAssemblyDiagram(),
+        dogfood\dogfoodDiagram(),
+        projectReference\projectReferenceDiagram(),
+        volatility\volatilityDiagram(),
+        commitGenerated\commitGeneratedDiagram(),
+        leaseLoop\leaseLoopDiagram(),
+        cacheTrust\cacheTrustDiagram(),
+        diagramPipeline\diagramPipelineDiagram(),
+        knowledgeGraph\knowledgeGraphDiagram(),
+        guardPath\guardPathDiagram(),
+        agentIntegration\agentIntegrationDiagram(),
+        buzzEngine\buzzEngineDiagram(),
+        buzzCompile\buzzCompileDiagram(),
+        buzzRun\buzzRunDiagram(),
+        buzzPackages\buzzPackagesDiagram(),
+        mergeQueueRisk\mergeQueueRiskDiagram(),
+        workspaceLoad\workspaceLoadDiagram(),
+        inputsOutputs\inputsOutputsDiagram(),
+        bootstrap\bootstrapDiagram(),
+        targetOrder\targetOrderDiagram(),
+        agentOrchestration\agentOrchestrationDiagram(),
+        kustomizeArchitecture\kustomizeArchitectureDiagram(),
+        mandatediagrams\mandateRolesDiagram(),
+        mandatediagrams\mandateBarDiagram(),
+        harnessPyramid\harnessPyramidDiagram(),
+        harnessPyramid\harnessStackDiagram(),
+        guardInternals\guardInternalsDiagram(),
+        jobRecords\jobRecordsDiagram(),
+        sandbox\sandboxDiagram(),
+        symbolIndex\symbolIndexDiagram(),
+        harnessIntegrations\harnessIntegrationsDiagram(),
+        mergeQueueWorkflows\mergeQueueWorkflowsDiagram(),
+        ciCdSplit\ciCdSplitDiagram(),
+        cacheInternals\cacheInternalsDiagram(),
+        vcsBoxes\vcsDiagram(),
+        typeRecords\typesDiagram(),
+        languageService\languageServiceDiagram(),
+        dryRun\dryRunDiagram(),
+        sessions\sessionsDiagram(),
+        configLoad\configLoadDiagram(),
+        service\serviceDiagram(),
+        bindingsGenerate\bindingsGenerateDiagram(),
+        doctor\doctorDiagram(),
     ];
 }
 
-// FigureRun is one figure's outcome: its paints, or the findings that stopped it.
-object FigureRun {
+// DiagramRun is one diagram's outcome: its paints, or the findings that stopped it.
+object DiagramRun {
     id: str,
     stamp: str = "",
     level: str = "",
     imports: int = 0,
     calls: int = 0,
     flow: int = 0,
-    // The groups no figure one level down draws, by label.
+    // The groups no diagram one level down draws, by label.
     undrilled: [str] = [<str>],
     findings: [str] = [<str>],
     dark: str = "",
@@ -140,30 +140,30 @@ object FigureRun {
     page: str = "",
 }
 
-// runFigure lays f out once, with the atlas's drill-down links, and paints it three ways.
+// runDiagram lays f out once, with the atlas's drill-down links, and paints it three ways.
 // Only the page copy links: the dark and light files are opened on their own. A finding is
 // returned, never raised, so its receipt can record it.
-fun runFigure(a: figure\Atlas, f: figure\Figure) > FigureRun {
+fun runDiagram(a: diagram\Atlas, f: diagram\Diagram) > DiagramRun {
     try {
-        final d = a.diagram(f);
-        final lines: mut [str] = mut ["figure {d.id}", "title {d.title}", "unscoped {d.unscoped}", "level {d.level.value}"];
-        foreach (n in d.nodes) { lines.append(figure\nodeFact(n)); }
+        final d = a.layout(f);
+        final lines: mut [str] = mut ["diagram {d.id}", "title {d.title}", "unscoped {d.unscoped}", "level {d.level.value}"];
+        foreach (n in d.nodes) { lines.append(diagram\nodeFact(n)); }
         foreach (e in d.edges) { lines.append("edge {e.src} {e.dst} {e.claim.value} {e.kind} {e.label}"); }
         foreach (s in d.scope) { lines.append("scope {s} {d.omits[s] ?? ""}"); }
         final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
-        final counts = figure\claims(d);
-        return FigureRun{
+        final counts = diagram\claims(d);
+        return DiagramRun{
             id = f.id, stamp = stamp, level = d.level.value,
             imports = counts["imports"] ?? 0, calls = counts["calls"] ?? 0, flow = counts["flow"] ?? 0,
             undrilled = a.undrilled(f),
-            dark = stamped(figure\drawDiagram(d, theme: figure\Theme.dark), id: f.id, stamp: stamp),
-            light = stamped(figure\drawDiagram(d, theme: figure\Theme.light), id: f.id, stamp: stamp),
-            page = stamped(figure\drawDiagram(d, theme: figure\Theme.page, drillHref: DRILL_HREF), id: f.id, stamp: stamp),
+            dark = stamped(diagram\drawLayout(d, theme: diagram\Theme.dark), id: f.id, stamp: stamp),
+            light = stamped(diagram\drawLayout(d, theme: diagram\Theme.light), id: f.id, stamp: stamp),
+            page = stamped(diagram\drawLayout(d, theme: diagram\Theme.page, drillHref: DRILL_HREF), id: f.id, stamp: stamp),
         };
     } catch (msg: str) {
-        return FigureRun{ id = f.id, findings = msg.split("\n") };
+        return DiagramRun{ id = f.id, findings = msg.split("\n") };
     }
-    return FigureRun{ id = f.id };
+    return DiagramRun{ id = f.id };
 }
 
 // stamped puts the stamp in the SVG's metadata, so a reader of the file and a later run
@@ -174,27 +174,27 @@ fun stamped(svg: str, id: str, stamp: str) > str {
     final open = svg.sub(root!).indexOf(">");
     if (open == null) { return svg; }
     final end = root! + open!;
-    final meta = "<metadata>\{\"figure\":\"{id}\",\"stamp\":\"{stamp}\"}</metadata>";
+    final meta = "<metadata>\{\"diagram\":\"{id}\",\"stamp\":\"{stamp}\"}</metadata>";
     return svg.sub(0, len: end + 1) + meta + svg.sub(end + 1);
 }
 
 test "the stamp skips an XML declaration" {
     assert\equal(stamped("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><g/></svg>", id: "x", stamp: "s"),
-        want: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><metadata>\{\"figure\":\"x\",\"stamp\":\"s\"}</metadata><g/></svg>",
+        want: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><metadata>\{\"diagram\":\"x\",\"stamp\":\"s\"}</metadata><g/></svg>",
         message: "after the root tag");
 }
 
 test "the stamp lands inside the svg element" {
     assert\equal(stamped("<svg a=\"1\"><g/></svg>", id: "x", stamp: "sha256:0"),
-        want: "<svg a=\"1\"><metadata>\{\"figure\":\"x\",\"stamp\":\"sha256:0\"}</metadata><g/></svg>",
+        want: "<svg a=\"1\"><metadata>\{\"diagram\":\"x\",\"stamp\":\"sha256:0\"}</metadata><g/></svg>",
         message: "first child of the svg");
 }
 
-// receipt is the JSON beside a figure's SVGs. It carries no symbol index digest: that moves
-// on every indexed edit anywhere, and the receipt must move only with its figure.
-fun receipt(run: FigureRun) > str !> any {
+// receipt is the JSON beside a diagram's SVGs. It carries no symbol index digest: that moves
+// on every indexed edit anywhere, and the receipt must move only with its diagram.
+fun receipt(run: DiagramRun) > str !> any {
     final record: {str: any} = {
-        "figure": run.id,
+        "diagram": run.id,
         "stamp": run.stamp,
         "level": run.level,
         "claims": {"imports": run.imports, "calls": run.calls, "flow": run.flow},
@@ -205,31 +205,31 @@ fun receipt(run: FigureRun) > str !> any {
 }
 
 test "a receipt counts the claims and records a finding" {
-    final a = receipt(FigureRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 }) catch "";
+    final a = receipt(DiagramRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 }) catch "";
     assert\isTrue(a.indexOf("\"imports\": 2") != null, message: "claims counted: {a}");
     assert\isTrue(a.indexOf("symbolIndex") == null, message: "no index digest: {a}");
-    final c = receipt(FigureRun{ id = "x", findings = ["figure \"x\": gone"] }) catch "";
+    final c = receipt(DiagramRun{ id = "x", findings = ["diagram \"x\": gone"] }) catch "";
     assert\isTrue(a != c, message: "a finding is a change");
 }
 
-// writeFigures writes, for every registered figure, the dark and light pair GitHub loads
+// writeDiagrams writes, for every registered diagram, the dark and light pair GitHub loads
 // through <img>, the page copy the site inlines, and the receipt, into dir. Returns every
-// finding: the figures' own and each magus:diagram marker naming no figure. A file is
+// finding: the diagrams' own and each magus:diagram marker naming no diagram. A file is
 // rewritten only when its bytes move.
 //
 // Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
 // carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
-export fun writeFigures(dir: str) > [str] !> any {
+export fun writeDiagrams(dir: str) > [str] !> any {
     if (magus\graph().indexed == false) {
         throw "diagrams-generate needs the symbol index, and magus\\graph() answered indexed=false; build it with `magus graph build`, then rerun";
     }
     fs\mkdirAll(dir);
     final expected: mut {str: bool} = mut {<str: bool>};
     final findings: mut [str] = mut [<str>];
-    final figures = allFigures();
-    final a = figure\atlas(figures, column: COLUMN);
-    foreach (f in figures) {
-        final run = runFigure(a, f: f);
+    final diagrams = allDiagrams();
+    final a = diagram\atlas(diagrams, column: COLUMN);
+    foreach (f in diagrams) {
+        final run = runDiagram(a, f: f);
         foreach (msg in run.findings) { findings.append(msg); }
         final base = dir + "/diagram-" + f.id;
         if (run.findings.len() == 0) {
@@ -241,7 +241,7 @@ export fun writeFigures(dir: str) > [str] !> any {
         foreach (suffix in [".svg", "-light.svg", "-page.svg", ".json"]) { expected["diagram-" + f.id + suffix] = true; }
     }
     prune(dir, expected: expected);
-    foreach (msg in unknownMarkers(figures)) { findings.append(msg); }
+    foreach (msg in unknownMarkers(diagrams)) { findings.append(msg); }
     return findings;
 }
 
@@ -250,7 +250,7 @@ fun writeIfMoved(path: str, content: str) > void !> any {
     fs\writeFile(path, content: content);
 }
 
-// prune removes every diagram-* file in dir no registered figure wrote: an obsolete id, or
+// prune removes every diagram-* file in dir no registered diagram wrote: an obsolete id, or
 // a filesystem-de-collided copy, which the cache would otherwise replay into other checkouts.
 fun prune(dir: str, expected: {str: bool}) > void !> any {
     foreach (glob in ["/diagram-*.svg", "/diagram-*.json"]) {
@@ -278,7 +278,7 @@ test "prune removes an obsolete owned file and leaves the rest" {
 // string a render creates stays pinned for the process's life. See plans/reclaim-the-buzz-heap.md.
 var rendered: {str: str}? = null;
 
-// pageSvgs is the committed page copy of each figure, keyed by id. diagrams-generate wrote
+// pageSvgs is the committed page copy of each diagram, keyed by id. diagrams-generate wrote
 // them; a page render reads them rather than laying anything out.
 fun pageSvgs() > {str: str} !> any {
     if (rendered != null) { return rendered!; }
@@ -292,12 +292,12 @@ fun pageSvgs() > {str: str} !> any {
     return byId;
 }
 
-// embeddedIn caches figurePages' one possible result, for the reason rendered does.
+// embeddedIn caches diagramPages' one possible result, for the reason rendered does.
 var embeddedIn: {str: str}? = null;
 
-// figurePages maps each figure id to the first docs page, relative to the docs project,
+// diagramPages maps each diagram id to the first docs page, relative to the docs project,
 // that embeds it with `<!--diagram:id-->`. A drill-down link resolves against it.
-export fun figurePages() > {str: str} !> any {
+export fun diagramPages() > {str: str} !> any {
     if (embeddedIn != null) { return embeddedIn!; }
     final pages: mut [str] = mut [<str>];
     fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep !> any {
@@ -333,13 +333,13 @@ fun markedIds(md: str) > [str] {
     return ids;
 }
 
-test "a page's markers name its figures in order" {
+test "a page's markers name its diagrams in order" {
     assert\equal(markedIds("a <!--diagram:x--> b <!--diagram:y-z-->"), want: ["x", "y-z"], message: "both ids");
     assert\equal(markedIds("none"), want: [<str>], message: "no marker");
 }
 
 // inlinePageDiagrams swaps any diagram reference on a page for the inline SVG, and points
-// each drill-down link at the page holding its figure: hrefs maps a figure id to that
+// each drill-down link at the page holding its diagram: hrefs maps a diagram id to that
 // link, relative to this page. Guarded on the page mentioning one first: a docs build
 // renders hundreds of pages that reference none.
 export fun inlinePageDiagrams(html: str, hrefs: {str: str} = {<str: str>}) > str !> any {
@@ -350,7 +350,7 @@ export fun inlinePageDiagrams(html: str, hrefs: {str: str} = {<str: str>}) > str
 }
 
 // inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
-// id. Inlining is what makes a figure follow the site's theme toggle: an <img>-loaded SVG
+// id. Inlining is what makes a diagram follow the site's theme toggle: an <img>-loaded SVG
 // is a separate document and only ever sees prefers-color-scheme. Each inlined <figure>
 // carries id="diagram-<id>", the target of a box's drill-down link.
 //
@@ -409,28 +409,28 @@ test "a comment marker and a picture are replaced, an unrelated picture is not" 
         + "<img src=\"assets/gen/diagram-x.svg\" alt=\"x\"></picture><p>b</p>";
     final swapped = inlineDiagrams(markup, svgById: {"x": "<svg/>"});
     assert\equal(swapped, want: "<picture><img src=\"assets/gen/core-loop.svg\"></picture><figure class=\"magus-diagram-figure\" id=\"diagram-x\"><svg/></figure><p>b</p>",
-        message: "the figure's picture goes whole, the recording stays");
+        message: "the diagram's picture goes whole, the recording stays");
 }
 
-test "a drill-down link points at the page holding its figure" {
+test "a drill-down link points at the page holding its diagram" {
     final svg = "<svg><a href=\"#diagram-y\" data-drill=\"y\"><g/></a></svg>";
     final page = inlineDiagrams("<!--diagram:x-->", svgById: {"x": svg}, hrefs: {"y": "../cache/#diagram-y"});
     assert\isTrue(page.indexOf("<a href=\"../cache/#diagram-y\" data-drill=\"y\">") != null, message: page);
 }
 
-test "runFigure counts the claims its figure draws and records its level" {
-    final f = figure\of("t", title: "A runs before B").flowAcross(figure\step("A"), dst: figure\step("B")).unscoped(why: "a process");
-    final run = runFigure(figure\atlas([f]), f: f);
+test "runDiagram counts the claims its diagram draws and records its level" {
+    final f = diagram\of("t", title: "A runs before B").flowAcross(diagram\step("A"), dst: diagram\step("B")).unscoped(why: "a process");
+    final run = runDiagram(diagram\atlas([f]), f: f);
     assert\equal(run.findings, want: [<str>], message: "it draws");
     assert\equal(run.flow, want: 1, message: "the hand edge counts");
     assert\equal(run.level, want: "process", message: "steps derive a process");
 }
 
-// unknownMarkers is the reverse check: a magus:diagram marker naming no figure means a
-// figure was renamed or dropped while the code still points at it.
-fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
+// unknownMarkers is the reverse check: a magus:diagram marker naming no diagram means a
+// diagram was renamed or dropped while the code still points at it.
+fun unknownMarkers(diagrams: [diagram\Diagram]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
-    foreach (f in figures) { known[f.id] = true; }
+    foreach (f in diagrams) { known[f.id] = true; }
     final result: QueryResult = magus\graph().query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
     foreach (n in result.nodes) {
@@ -440,7 +440,7 @@ fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
 }
 
 // DiagramMarker is the part of a graph marker node the reverse check reads: source is
-// "<file>:<line>" and args starts with the figure id.
+// "<file>:<line>" and args starts with the diagram id.
 object DiagramMarker {
     source: str,
     args: str,
@@ -453,19 +453,19 @@ fun unknownMarkerFindings(known: {str: bool}, marked: [DiagramMarker]) > [str] {
         final space = args.indexOf(" ");
         final id = if (space != null) args.sub(0, len: space!) else args;
         if (id != "" and known[id] == null) {
-            found.append("{m.source}: marks diagram \"{id}\", which no figure declares");
+            found.append("{m.source}: marks diagram \"{id}\", which no diagram declares");
         }
     }
     return found;
 }
 
-test "a diagram marker naming no figure is a finding" {
+test "a diagram marker naming no diagram is a finding" {
     final known: {str: bool} = {"server-http": true};
     final marked = [
         DiagramMarker{ source = "a.go:3", args = "server-http the guard" },
         DiagramMarker{ source = "b.go:9", args = "gone" },
     ];
     assert\equal(unknownMarkerFindings(known, marked: marked),
-        want: ["b.go:9: marks diagram \"gone\", which no figure declares"],
-        message: "only the marker naming a missing figure is reported");
+        want: ["b.go:9: marks diagram \"gone\", which no diagram declares"],
+        message: "only the marker naming a missing diagram is reported");
 }

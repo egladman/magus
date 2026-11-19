@@ -44,7 +44,7 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 }
 
 // onceGraphs answers every graph read of one evaluation from one build.
-// So a figure calling magus\graph().dir per box builds the graph once.
+// So a diagram calling magus\graph().dir per box builds the graph once.
 type onceGraphs struct {
 	g    knowledgeGraphs
 	once *types.EvalOnce

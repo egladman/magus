@@ -1,4 +1,4 @@
-// A mode is a view an app switches to inside itself: the Dashboard's jobs, the Graph's figures.
+// A mode is a view an app switches to inside itself: the Dashboard's jobs, the Graph's diagrams.
 export type AppNavigation = {
   pageId: string;
   mode?: string;

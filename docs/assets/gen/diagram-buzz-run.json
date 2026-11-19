@@ -4,9 +4,9 @@
     "flow": 7,
     "imports": 0
   },
-  "figure": "buzz-run",
+  "diagram": "buzz-run",
   "findings": [],
   "level": "symbol",
-  "stamp": "sha256:eedf852f21e59217989b66b9e4e0fa4f52c5d717b6fedd421a8a3eccc9fc3c85",
+  "stamp": "sha256:c7c2d9a4869b5db40dfa159059b1dd5b5a9a3efc90f8966463ccd54cf81d8b83",
   "undrilled": []
 }
