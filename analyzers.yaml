@@ -135,7 +135,6 @@ no-throw:
       hack/magusfile/run-golangci.buzz: 5
       hack/policy/guard.buzz: 2
       hack/policy/stale.buzz: 1
-      internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
       spells/golang/golangci.buzz: 2
 

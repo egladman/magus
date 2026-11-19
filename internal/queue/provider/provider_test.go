@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,13 +22,17 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
+//go:embed testdata/github_tests.buzz
+var githubTests string
+
 // The GitHub provider's own `test` blocks, run on the same VM modules the queue gives it.
+// They sit in testdata, after the provider's source, in the one session.
 func TestGitHubProviderBuzzTests(t *testing.T) {
 	ctx := context.Background()
 	sess, err := newSession(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sess.Close() })
-	require.NoError(t, sess.Exec(ctx, githubSource))
+	require.NoError(t, sess.Exec(ctx, strings.Join([]string{githubSource, githubTests}, "\n")))
 	tests := sess.Tests()
 	require.NotEmpty(t, tests)
 	for _, tc := range tests {
