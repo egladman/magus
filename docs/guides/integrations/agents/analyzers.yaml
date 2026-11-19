@@ -1,0 +1,22 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+no-throw:
+  # construct: {file: count}
+  baseline:
+    throw:
+      opencode-plugin.test.ts: 1
+    async-no-result:
+      claude-code/mod/hooks/bin.ts: 1
+      claude-code/mod/hooks/json-view.tsx: 1
+      claude-code/mod/hooks/register.tsx: 1
+      claude-code/mod/hooks/ui.ts: 1
+    buzz-error-signature:
+      lib/bindings.buzz: 3
+      lib/embed.buzz: 1
+      lib/hook.buzz: 2
+      magus-command.buzz: 1
+      magus-path.buzz: 1
+      magus-reclaim-disk.buzz: 1
+      magusfile.buzz: 1
