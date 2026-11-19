@@ -40,7 +40,9 @@ export fun summarize(fails: [str]) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     if (repo == "" or pr == "") {
@@ -48,9 +50,12 @@ fun main() > void !> any {
         return;
     }
 
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("doctor: silenced by label");
         return;
     }
@@ -61,8 +66,9 @@ fun main() > void !> any {
         fails.append("`" + c.name + "`: " + c.message);
     }
     final body = summarize(fails);
-    advice\publish(repo, pr: pr, name: section,
+    final posted = advice\publish(repo, pr: pr, name: section,
         title: "Workspace health ({fails.len()} failing)", body: body);
+    if (posted.error -> err) { throw err.message; }
     if (body == "") { std\print("doctor: no failing check"); return; }
     std\print("doctor: advised on {fails.len()} failure(s)");
 }

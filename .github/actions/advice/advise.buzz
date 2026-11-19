@@ -6,6 +6,7 @@
 import "advice";
 import "magus";
 import "os";
+import "result";
 import "std";
 // Used by the test blocks.
 import "assert";
@@ -37,25 +38,25 @@ final reading = [
 
 // requireToken throws unless the calling step set GITHUB_TOKEN. Every advisor reads and
 // writes the comment through gh, which authenticates from it.
-export fun requireToken(token: str) > void !> str {
-    if (token != "") { return; }
-    throw "advice: GITHUB_TOKEN is not set. Set it from a secret in the env of the step that "
-        + "uses this action: `GITHUB_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}`";
+export fun requireToken(token: str) > result\Result::<bool> {
+    if (token != "") { return result\ok::<bool>(true); }
+    return result\fail::<bool>("advice: GITHUB_TOKEN is not set. Set it from a secret in the env of the step that "
+        + "uses this action: `GITHUB_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}`");
 }
 
 // enabled returns the advisors whose input is "true", in comment order. Throws on a switch
 // that is missing or reads as anything but "true" or "false": a misspelled value silently
 // turning an advisor off is the failure this refuses.
-export fun enabled(inputs: {str: str}) > [Advisor] !> str {
+export fun enabled(inputs: {str: str}) > result\Result::<[Advisor]> {
     final on = mut [<Advisor>];
     foreach (a in reading) {
         final value = inputs[a.input] ?? "";
         if (value == "true") { on.append(a); continue; }
         if (value != "false") {
-            throw "advice: input " + a.input + " must be 'true' or 'false', got '" + value + "'";
+            return result\fail::<[Advisor]>("advice: input " + a.input + " must be 'true' or 'false', got '" + value + "'");
         }
     }
-    return on;
+    return result\ok::<[Advisor]>(on);
 }
 
 // runEach runs every advisor, whether or not an earlier one failed, and returns one line
@@ -91,9 +92,14 @@ fun main() > void !> any {
     if (inputs.error != null) {
         throw inputs.error!.message;
     }
-    final advisors = enabled(inputs.value!);
-    requireToken(os\env("GITHUB_TOKEN") ?? "");
-    if (advice\pullRequest().number == "") {
+    final chosen = enabled(inputs.value!);
+    if (chosen.error -> err) { throw err.message; }
+    final advisors = chosen.value!;
+    final token = requireToken(os\env("GITHUB_TOKEN") ?? "");
+    if (token.error -> err) { throw err.message; }
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    if (pulled.value!.number == "") {
         std\print("advice: this event carries no pull request; nothing to advise");
         return;
     }
@@ -111,7 +117,7 @@ test "enabled keeps the switched-on advisors, in comment order" {
     foreach (a in reading) { inputs[a.input] = "false"; }
     inputs["exported-api"] = "true";
     inputs["doctor"] = "true";
-    final on = enabled(inputs);
+    final on = enabled(inputs).value!;
     assert\equal(on.len(), want: 2, message: "only the two switched on");
     assert\equal(on[0].script, want: "doctor.buzz", message: "doctor first");
     assert\equal(on[1].script, want: "exported-api.buzz", message: "exported-api after it");
@@ -121,20 +127,14 @@ test "enabled refuses a switch it cannot read" {
     final inputs = mut {<str: str>};
     foreach (a in reading) { inputs[a.input] = "false"; }
     inputs["doctor"] = "yes";
-    final garbled = enabled(inputs) catch [Advisor{script = "refused"}];
-    assert\equal(garbled[0].script, want: "refused", message: "'yes' is not a switch value");
-    final none = enabled({<str: str>}) catch [Advisor{script = "refused"}];
-    assert\equal(none[0].script, want: "refused", message: "a missing switch is not off");
+    std\assert(enabled(inputs).error != null, message: "'yes' is not a switch value");
+    std\assert(enabled({<str: str>}).error != null, message: "a missing switch is not off");
 }
 
 test "requireToken names the fix" {
-    requireToken("ghs_token");
-    var message = "";
-    try {
-        requireToken("");
-    } catch (e: str) {
-        message = e;
-    }
+    std\assert(requireToken("ghs_token").error == null, message: "a set token passes");
+    final refused = requireToken("");
+    final message = refused.error?.message ?? "";
     std\assert(message.indexOf("GITHUB_TOKEN is not set") != null, message: "says what is missing");
     std\assert(message.indexOf("secrets.GITHUB_TOKEN") != null, message: "and where it comes from");
 }

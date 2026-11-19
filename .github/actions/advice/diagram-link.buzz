@@ -14,6 +14,7 @@
 //
 // Shared by the advisors here and by hack/ci/pull-requests.buzz, which imports it by path:
 // this directory ships with the action and is the one place both can reach.
+import "result";
 import "serialize";
 // Used by the test blocks.
 import "assert";
@@ -42,51 +43,61 @@ export object DiagramNode {
 // [fromId, toId], optionally followed by a diagram\Stroke case's value and a label:
 // ["a", "b", "optional", "after"] draws dashed and labelled. Throws on an edge of another
 // length or a stroke diagram does not declare.
-export fun diagramLink(base: str, title: str, nodes: [DiagramNode], edges: [[str]]) > str !> any {
+export fun diagramLink(base: str, title: str, nodes: [DiagramNode], edges: [[str]]) > result\Result::<str> {
     final drawn = mut [<any>];
     foreach (n in nodes) {
         drawn.append({"id": n.id, "label": n.label, "seed": n.seed});
     }
     final wire = mut [<[str]>];
     foreach (e in edges) {
-        wire.append(wireEdge(e, index: wire.len()));
+        final edge = wireEdge(e, index: wire.len());
+        if (edge.error -> err) { return result\Result::<str>{ error = err }; }
+        wire.append(edge.value!);
     }
-    final json = serialize\jsonEncode({"v": 2, "kind": "deps", "title": title, "nodes": drawn, "edges": wire});
-    var payload = json.encodeBase64().replace("+", with: "-").replace("/", with: "_");
-    while (payload.endsWith("=")) {
-        payload = payload.sub(0, len: payload.len() - 1);
+    try {
+        final json = serialize\jsonEncode({"v": 2, "kind": "deps", "title": title, "nodes": drawn, "edges": wire});
+        var payload = json.encodeBase64().replace("+", with: "-").replace("/", with: "_");
+        while (payload.endsWith("=")) {
+            payload = payload.sub(0, len: payload.len() - 1);
+        }
+        var root = base;
+        if (root == "") { root = defaultConsoleBase; }
+        if (!root.endsWith("/")) { root = root + "/"; }
+        final link = root + "graph/" + marker + payload;
+        if (link.len() > maxLinkLength) { return result\ok::<str>(""); }
+        return result\ok::<str>(link);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "diagram-link: encode the graph");
     }
-    var root = base;
-    if (root == "") { root = defaultConsoleBase; }
-    if (!root.endsWith("/")) { root = root + "/"; }
-    final link = root + "graph/" + marker + payload;
-    if (link.len() > maxLinkLength) { return ""; }
-    return link;
 }
 
 // wireEdge checks e and drops its trailing defaults, a "plain" stroke and an empty label.
-fun wireEdge(e: [str], index: int) > [str] !> any {
+fun wireEdge(e: [str], index: int) > result\Result::<[str]> {
     if (e.len() < 2 or e.len() > 4) {
-        throw "diagram-link: edge {index} is not [from, to, stroke?, label?]";
+        return result\fail::<[str]>("diagram-link: edge {index} is not [from, to, stroke?, label?]");
     }
     final stroke = if (e.len() > 2) e[2] else "plain";
     if (strokes.indexOf(stroke) == null) {
-        throw "diagram-link: edge {index} has stroke \"{stroke}\", not one of " + strokes.join(", ");
+        return result\fail::<[str]>("diagram-link: edge {index} has stroke \"{stroke}\", not one of " + strokes.join(", "));
     }
     final label = if (e.len() > 3) e[3] else "";
-    if (label != "") { return [e[0], e[1], stroke, label]; }
-    if (stroke != "plain") { return [e[0], e[1], stroke]; }
-    return [e[0], e[1]];
+    if (label != "") { return result\ok::<[str]>([e[0], e[1], stroke, label]); }
+    if (stroke != "plain") { return result\ok::<[str]>([e[0], e[1], stroke]); }
+    return result\ok::<[str]>([e[0], e[1]]);
 }
 
 // decodeDiagramLink returns the JSON document a diagramLink link carries. Throws on a link
 // without a diagram fragment.
-export fun decodeDiagramLink(link: str) > serialize\Boxed !> any {
+export fun decodeDiagramLink(link: str) > result\Result::<serialize\Boxed> {
     final at = link.indexOf(marker);
-    if (at == null) { throw "diagram-link: no " + marker + " fragment in " + link; }
+    if (at == null) { return result\fail::<serialize\Boxed>("diagram-link: no " + marker + " fragment in " + link); }
     var payload = link.sub(at! + marker.len()).replace("-", with: "+").replace("_", with: "/");
     while (payload.len() % 4 != 0) { payload = payload + "="; }
-    return serialize\jsonDecode(payload.decodeBase64());
+    try {
+        return result\ok::<serialize\Boxed>(serialize\jsonDecode(payload.decodeBase64()));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed>(err, doing: "diagram-link: decode the link");
+    }
 }
 
 // DiagramGraph is one diagram's content, the arguments diagramLink takes.
@@ -99,9 +110,9 @@ export object DiagramGraph {
 test "a link decodes to the graph it was built from" {
     final link = diagramLink("https://example.test/console/", title: "How far this change reaches",
         nodes: [DiagramNode{ id = "libs/a", label = "a", seed = true }, DiagramNode{ id = "cmd/b", label = "b" }],
-        edges: [["libs/a", "cmd/b"]]);
+        edges: [["libs/a", "cmd/b"]]).value!;
     assert\equal(link.startsWith("https://example.test/console/graph/#diagram-link="), want: true, message: link);
-    final doc = decodeDiagramLink(link);
+    final doc = decodeDiagramLink(link).value!;
     assert\equal(doc.q("v").integerValue(), want: 2, message: "version");
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "How far this change reaches", message: "title");
@@ -115,56 +126,57 @@ test "a link decodes to the graph it was built from" {
         want: ["libs/a", "cmd/b"], message: "dependency first");
 }
 
-fun wireEdges(link: str) > [[str]] !> any {
+fun wireEdges(link: str) > result\Result::<[[str]]> {
+    final doc = decodeDiagramLink(link);
+    if (doc.error -> err) { return result\Result::<[[str]]>{ error = err }; }
     final read = mut [<[str]>];
-    foreach (e in decodeDiagramLink(link).q("edges").listValue()) {
-        final parts = mut [<str>];
-        foreach (part in e.listValue()) {
-            parts.append(part.stringValue());
+    try {
+        foreach (e in doc.value!.q("edges").listValue()) {
+            final parts = mut [<str>];
+            foreach (part in e.listValue()) {
+                parts.append(part.stringValue());
+            }
+            read.append(parts);
         }
-        read.append(parts);
+        return result\ok::<[[str]]>(read);
+    } catch (err: any) {
+        return result\caught::<[[str]]>(err, doing: "diagram-link: read the edges");
     }
-    return read;
 }
 
 test "each edge keeps its stroke and label, and drops the defaults" {
     final link = diagramLink("", title: "Session s-1: 3 jobs",
         nodes: [DiagramNode{ id = "session", label = "session", seed = true }, DiagramNode{ id = "a", label = "a" }, DiagramNode{ id = "b", label = "b" }],
-        edges: [["session", "a"], ["session", "b", "plain", ""], ["a", "b", "optional", "after"], ["b", "a", "focal"]]);
-    assert\equal(wireEdges(link), want: [["session", "a"], ["session", "b"], ["a", "b", "optional", "after"], ["b", "a", "focal"]], message: "edges");
+        edges: [["session", "a"], ["session", "b", "plain", ""], ["a", "b", "optional", "after"], ["b", "a", "focal"]]).value!;
+    assert\equal(wireEdges(link).value!, want: [["session", "a"], ["session", "b"], ["a", "b", "optional", "after"], ["b", "a", "focal"]], message: "edges");
 }
 
 test "an edge with an undeclared stroke or the wrong length is refused" {
     final bad = [[["a"]], [["a", "b", "dotted"]], [["a", "b", "plain", "x", "y"]]];
     foreach (edges in bad) {
-        var refused = false;
-        try {
-            _ = diagramLink("", title: "t", nodes: [DiagramNode{ id = "a", label = "a" }, DiagramNode{ id = "b", label = "b" }], edges: edges);
-        } catch (e) {
-            refused = true;
-        }
-        assert\equal(refused, want: true, message: "refused");
+        final got = diagramLink("", title: "t", nodes: [DiagramNode{ id = "a", label = "a" }, DiagramNode{ id = "b", label = "b" }], edges: edges);
+        assert\equal(got.error != null, want: true, message: "refused");
     }
 }
 
 test "the payload is unpadded base64url" {
     // Bytes chosen so the standard alphabet would emit + and /.
-    final link = diagramLink("", title: "???>>>", nodes: [DiagramNode{ id = "x", label = "~~~" }], edges: [<[str]>]);
+    final link = diagramLink("", title: "???>>>", nodes: [DiagramNode{ id = "x", label = "~~~" }], edges: [<[str]>]).value!;
     final payload = link.sub(link.indexOf(marker)! + marker.len());
     assert\equal(payload.indexOf("+") == null and payload.indexOf("/") == null and payload.indexOf("=") == null,
         want: true, message: payload);
-    assert\equal(decodeDiagramLink(link).q("title").stringValue(), want: "???>>>", message: "round trip");
+    assert\equal(decodeDiagramLink(link).value!.q("title").stringValue(), want: "???>>>", message: "round trip");
 }
 
 test "non-ASCII labels survive the round trip" {
-    final link = diagramLink("", title: "caf\195\169", nodes: [DiagramNode{ id = "p", label = "caf\195\169" }], edges: [<[str]>]);
-    assert\equal(decodeDiagramLink(link).q("nodes").listValue()[0].q("label").stringValue(), want: "caf\195\169", message: "utf-8");
+    final link = diagramLink("", title: "caf\195\169", nodes: [DiagramNode{ id = "p", label = "caf\195\169" }], edges: [<[str]>]).value!;
+    assert\equal(decodeDiagramLink(link).value!.q("nodes").listValue()[0].q("label").stringValue(), want: "caf\195\169", message: "utf-8");
 }
 
 test "the base defaults and gains its trailing slash" {
-    final none = diagramLink("", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]);
+    final none = diagramLink("", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]).value!;
     assert\equal(none.startsWith(defaultConsoleBase + "graph/#diagram-link="), want: true, message: none);
-    final bare = diagramLink("https://example.test/console", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]);
+    final bare = diagramLink("https://example.test/console", title: "t", nodes: [<DiagramNode>], edges: [<[str]>]).value!;
     assert\equal(bare.startsWith("https://example.test/console/graph/#diagram-link="), want: true, message: bare);
 }
 
@@ -173,15 +185,9 @@ test "a graph too large for a comment yields no link" {
     for (var i = 0; i < 600; i = i + 1) {
         many.append(DiagramNode{ id = "projects/service-{i}", label = "service-{i}" });
     }
-    assert\equal(diagramLink("", title: "t", nodes: many, edges: [<[str]>]), want: "", message: "left out");
+    assert\equal(diagramLink("", title: "t", nodes: many, edges: [<[str]>]).value!, want: "", message: "left out");
 }
 
 test "a link without a fragment is refused" {
-    var refused = false;
-    try {
-        _ = decodeDiagramLink("https://example.test/console/graph/");
-    } catch (e) {
-        refused = true;
-    }
-    assert\equal(refused, want: true, message: "no fragment");
+    assert\equal(decodeDiagramLink("https://example.test/console/graph/").error != null, want: true, message: "no fragment");
 }

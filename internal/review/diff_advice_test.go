@@ -45,8 +45,11 @@ import "std";
 
 fun main() > void !> any {
     std\print("echo: looked at the tree");
-    final pull = advice\pullRequest();
-    advice\publish(pull.repo, pr: pull.number, name: "echo", title: pull.headSha, body: pull.base);
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
+    final posted = advice\publish(pull.repo, pr: pull.number, name: "echo", title: pull.headSha, body: pull.base);
+    if (posted.error -> err) { throw err.message; }
 }
 `
 
@@ -59,14 +62,16 @@ fun main() > void !> any {
     foreach (part in ["standing", "still"]) {
         text = part + text;
     }
-    advice\publish("", pr: "", name: "warned", title: "Ran anyway", body: text);
+    final posted = advice\publish("", pr: "", name: "warned", title: "Ran anyway", body: text);
+    if (posted.error -> err) { throw err.message; }
 }
 `
 
 const retractingAdvisor = `import "advice";
 
 fun main() > void !> any {
-    advice\publish("", pr: "", name: "quiet", title: "Nothing to report", body: "");
+    final posted = advice\publish("", pr: "", name: "quiet", title: "Nothing to report", body: "");
+    if (posted.error -> err) { throw err.message; }
 }
 `
 
@@ -76,9 +81,13 @@ fun main() > void !> any {
 const rangeAdvisor = `import "advice";
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
-    advice\publish("", pr: "", name: "range", title: "Range",
-        body: advice\diffRange(pull.base, head: pull.headSha));
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
+    final range = advice\diffRange(pull.base, head: pull.headSha);
+    if (range.error -> err) { throw err.message; }
+    final posted = advice\publish("", pr: "", name: "range", title: "Range", body: range.value!);
+    if (posted.error -> err) { throw err.message; }
 }
 `
 
@@ -98,8 +107,12 @@ const brokenAdvisor = `fun main() > void !> any {
 const staleBaseAdvisor = `import "advice";
 
 fun main() > void !> any {
-    advice\fetchBase("magus-advice-no-such-base", refspec: true);
-    advice\publish("", pr: "", name: "stale", title: "Stale base", body: advice\pullRequest().base);
+    final fetched = advice\fetchBase("magus-advice-no-such-base", refspec: true);
+    if (fetched.error -> err) { throw err.message; }
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final posted = advice\publish("", pr: "", name: "stale", title: "Stale base", body: pulled.value!.base);
+    if (posted.error -> err) { throw err.message; }
 }
 `
 

@@ -207,11 +207,7 @@ export fun link(tr: JobTree, base: str) > result\Result::<str> {
     final edges = mut [<[str]>];
     foreach (e in tr.spawns) { edges.append(e); }
     foreach (e in tr.depends) { edges.append([e[0], e[1], "optional", "after"]); }
-    try {
-        return result\ok::<str>(diagramlink\diagramLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges));
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "show-session-diagram: build the console link");
-    }
+    return diagramlink\diagramLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges);
 }
 
 fun counts(tr: JobTree) > str {
@@ -344,7 +340,7 @@ test "without -o it prints a one-line summary and the console link" {
 
 test "the console link carries the tree and decodes to it" {
     final tr = fixture().value!;
-    final doc = diagramlink\decodeDiagramLink(link(tr, base: "https://example.test/console/").value!);
+    final doc = diagramlink\decodeDiagramLink(link(tr, base: "https://example.test/console/").value!).value!;
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     final nodes = doc.q("nodes").listValue();
     assert\equal(nodes.len(), want: tr.nodes.len() + 1, message: "every job and the session");

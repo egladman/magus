@@ -38,7 +38,9 @@ fun body(floor: str) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -51,24 +53,32 @@ fun main() > void !> any {
         throw "version-floor: the pull request's number, base and head sha must be set together";
     }
 
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("version-floor: silenced by label");
         return;
     }
 
-    advice\fetchBase(base, refspec: false);
-    final diff = vcs\cmd(["diff", advice\diffRange(base, head: head), "--", "magus.yaml"],
+    final fetched = advice\fetchBase(base, refspec: false);
+    if (fetched.error -> err) { throw err.message; }
+    final range = advice\diffRange(base, head: head);
+    if (range.error -> err) { throw err.message; }
+    final diff = vcs\cmd(["diff", range.value!, "--", "magus.yaml"],
         opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true }).stdout;
     final floor = raised(diff);
     if (floor == "") {
         // Retract: a floor raise that was reverted must not leave the note behind.
-        advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: "");
+        final none = advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: "");
+        if (none.error -> err) { throw err.message; }
         std\print("version-floor: unchanged");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: body(floor));
+    final posted = advice\publish(repo, pr: pr, name: section, title: "The magus version floor moved", body: body(floor));
+    if (posted.error -> err) { throw err.message; }
     std\print("version-floor: advised on " + floor);
 }
 

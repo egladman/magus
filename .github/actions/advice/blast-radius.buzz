@@ -24,19 +24,27 @@ import "vcs";
 import "advice";
 import "diagram-link" as diagramlink;
 import "magus";
+import "result";
 import "std";
 
 final section = "blast-radius";
 
-fun changed(base: str, head: str) > [str] !> any {
-    advice\fetchBase(base, refspec: false);
-    final res = vcs\cmd(["diff", "--name-only", advice\diffRange(base, head: head)],
-        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
-    var paths = mut [];
-    foreach (line in res.stdout.split("\n")) {
-        if (line != "") { paths.append(line); }
+fun changed(base: str, head: str) > result\Result::<[str]> {
+    final fetched = advice\fetchBase(base, refspec: false);
+    if (fetched.error -> err) { return result\Result::<[str]>{ error = err }; }
+    final range = advice\diffRange(base, head: head);
+    if (range.error -> err) { return result\Result::<[str]>{ error = err }; }
+    try {
+        final res = vcs\cmd(["diff", "--name-only", range.value!],
+            opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
+        var paths = mut [<str>];
+        foreach (line in res.stdout.split("\n")) {
+            if (line != "") { paths.append(line); }
+        }
+        return result\ok::<[str]>(paths);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "blast-radius: list the changed files");
     }
-    return paths;
 }
 
 // trips reports whether `reached` of `total` projects is enough to be worth saying. Pure,
@@ -51,7 +59,7 @@ export fun trips(reached: int, total: int, share: double) > bool {
 
 // diagram is the console link for reachGraph's graph, "" when the link would be too long for a
 // comment.
-export fun diagram(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > str !> any {
+export fun diagram(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > result\Result::<str> {
     final g = reachGraph(reached, seeds: seeds, dependsOn: dependsOn);
     return diagramlink\diagramLink(base, title: g.title, nodes: g.nodes, edges: g.edges);
 }
@@ -101,7 +109,9 @@ fun body(projects: [str], reasons: [str], total: int, link: str) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -113,15 +123,20 @@ fun main() > void !> any {
     if (pr == "" or base == "" or head == "") {
         throw "blast-radius: the pull request's number, base and head sha must be set together";
     }
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("blast-radius: silenced by label");
         return;
     }
 
     var share = 0.5;
-    final configured = advice\input("fanout-share");
+    final shareInput = advice\input("fanout-share");
+    if (shareInput.error -> err) { throw err.message; }
+    final configured = shareInput.value!;
     // parseDouble, not parseFloat: Buzz's floating type is `double` and there is no
     // parseFloat, so the guessed name was null at run time - which a test over the pure
     // functions could never catch, because only main() reads the input.
@@ -145,7 +160,8 @@ fun main() > void !> any {
     var total = 0;
     foreach (p in magus\describe.graph().projects) { total = total + 1; }
     if (!trips(reached.len(), total: total, share: share)) {
-        advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
+        final below = advice\publish(repo, pr: pr, name: section, title: "How far this change reaches", body: "");
+        if (below.error -> err) { throw err.message; }
         std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");
         return;
     }
@@ -153,11 +169,16 @@ fun main() > void !> any {
     // Only the reached projects, so the picture is this change's reach and not the whole
     // workspace - the workspace-wide graph is already rendered in MAGUS.md.
     final g = reachGraph(reached, seeds: seeds, dependsOn: magus\graph().projectGraph().dependsOn);
-    final link = diagramlink\diagramLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
+    final consoleInput = advice\input("console-base");
+    if (consoleInput.error -> err) { throw err.message; }
+    final linked = diagramlink\diagramLink(consoleInput.value!, title: g.title, nodes: g.nodes, edges: g.edges);
+    if (linked.error -> err) { throw err.message; }
+    final link = linked.value!;
 
-    advice\publish(repo, pr: pr, name: section,
+    final posted = advice\publish(repo, pr: pr, name: section,
         title: "How far this change reaches ({reached.len()} of {total} projects)",
         body: body(reached, reasons: why, total: total, link: link));
+    if (posted.error -> err) { throw err.message; }
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
@@ -192,7 +213,7 @@ test "body says splitting will not help when everything is downstream" {
 
 test "body links the console graph and draws no mermaid fence" {
     final link = diagram("https://example.test/console/", reached: ["libs/a", "cmd/b"], seeds: ["libs/a"],
-        dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "libs/a": [<str>]});
+        dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "libs/a": [<str>]}).value!;
     final text = body(["libs/a", "cmd/b"], reasons: ["edited here", "depends on a project you edited"], total: 9, link: link);
     std\assert(text.indexOf("](" + link + ")") != null, message: "the link is in the body");
     std\assert(text.indexOf("```mermaid") == null, message: "no mermaid fence");
@@ -201,9 +222,9 @@ test "body links the console graph and draws no mermaid fence" {
 
 test "diagram marks the seeds and draws dependency to dependent among the reached only" {
     final link = diagram("", reached: ["libs/a", "cmd/b", "docs"], seeds: ["libs/a"],
-        dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "docs": ["cmd/b"]});
+        dependsOn: {"cmd/b": ["libs/a", "libs/outside"], "docs": ["cmd/b"]}).value!;
     std\assert(link.startsWith(diagramlink\defaultConsoleBase + "graph/#diagram-link="), message: "the default base");
-    final doc = diagramlink\decodeDiagramLink(link);
+    final doc = diagramlink\decodeDiagramLink(link).value!;
     std\assert(doc.q("title").stringValue() == "How far this change reaches", message: "title");
     final nodes = doc.q("nodes").listValue();
     std\assert(nodes.len() == 3, message: "only the reached projects");

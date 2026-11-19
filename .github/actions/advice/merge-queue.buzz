@@ -13,6 +13,7 @@
 import "proc";
 import "advice";
 import "magus";
+import "result";
 import "serialize";
 import "std";
 
@@ -51,33 +52,46 @@ export fun suggestion(base: str, pr: str, prefix: str, methods: [str]) > str {
 // carryNotes renders the approvals a `magus queue reviews -o json` report carries over
 // the change since them, one line each; the ones it does not carry the queue-apply
 // reviews job dismisses, and GitHub shows those itself.
-export fun carryNotes(report: str) > str !> any {
-    final lines = mut [<str>];
-    foreach (r in serialize\jsonDecode(report).q("reviews").listValue()) {
-        if (r.q("carry").booleanValue()) {
-            lines.append("- approval by @" + r.q("reviewer").stringValue() + " carries: " + r.q("tier").stringValue()
-                + " (" + r.q("reason").stringValue() + ")");
+export fun carryNotes(report: str) > result\Result::<str> {
+    try {
+        final lines = mut [<str>];
+        foreach (r in serialize\jsonDecode(report).q("reviews").listValue()) {
+            if (r.q("carry").booleanValue()) {
+                lines.append("- approval by @" + r.q("reviewer").stringValue() + " carries: " + r.q("tier").stringValue()
+                    + " (" + r.q("reason").stringValue() + ")");
+            }
         }
+        if (lines.len() == 0) {
+            return result\ok::<str>("");
+        }
+        return result\ok::<str>("Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n" + lines.join("\n") + "\n");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "merge-queue: read the review report");
     }
-    if (lines.len() == 0) {
-        return "";
-    }
-    return "Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n" + lines.join("\n") + "\n";
 }
 
 fun main() > void !> any {
     if (advice\collecting()) { return; }
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
-    final provider = advice\input("merge-queue-provider");
-    final queueBase = advice\input("merge-queue-base");
+    final providerInput = advice\input("merge-queue-provider");
+    if (providerInput.error -> err) { throw err.message; }
+    final provider = providerInput.value!;
+    final baseInput = advice\input("merge-queue-base");
+    if (baseInput.error -> err) { throw err.message; }
+    final queueBase = baseInput.value!;
     if (repo == "" or pr == "" or provider == "" or queueBase == "") {
         std\print("merge-queue: no pull request or queue to advise on");
         return;
     }
-    if (advice\silenced(repo, pr: pr, name: section)) {
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("merge-queue: silenced by label");
         return;
     }
@@ -88,7 +102,8 @@ fun main() > void !> any {
         opts: magus\CommandOptions{ quiet = true, allowFailure = true });
     if (!viewed.ok or !described.ok) {
         // Unknown is not queueable: retract rather than leave an answer nobody checked.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("merge-queue: could not read the pull request or the provider");
         return;
     }
@@ -112,7 +127,9 @@ fun main() > void !> any {
     final reviewed = magus\cmd("queue", args: ["reviews", "-o", "json", "--provider", provider, "--base", queueBase, "--change", pr],
         opts: magus\CommandOptions{ quiet = true, allowFailure = true });
     if (reviewed.ok) {
-        final notes = carryNotes(reviewed.stdout);
+        final carried = carryNotes(reviewed.stdout);
+        if (carried.error -> err) { throw err.message; }
+        final notes = carried.value!;
         if (notes != "" and body != "") {
             body = body + "\n";
         }
@@ -120,7 +137,8 @@ fun main() > void !> any {
     } else {
         std\print("merge-queue: could not classify the approvals: {reviewed.stderr}");
     }
-    advice\publish(repo, pr: pr, name: section, title: title, body: body);
+    final posted = advice\publish(repo, pr: pr, name: section, title: title, body: body);
+    if (posted.error -> err) { throw err.message; }
     std\print("merge-queue: advised {body != ""}");
 }
 
@@ -161,9 +179,9 @@ test "an approval that carries is noted with its tier, and one that does not is 
         {"reviewer": "ann", "review_id": "12", "commit": "c", "carry": true, "tier": "prose", "changed": [], "reason": "head h is c rebased; changed since the approval: a.md (prose: a prose glob)", "dismissed": false},
         {"reviewer": "bob", "review_id": "13", "commit": "c", "carry": false, "tier": "code", "changed": [], "reason": "changed since the approval at c: a.go (code: x)", "dismissed": true}
     ]}`;
-    std\assert(carryNotes(report) == "Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n"
+    std\assert(carryNotes(report).value! =="Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n"
         + "- approval by @ann carries: prose (head h is c rebased; changed since the approval: a.md (prose: a prose glob))\n", message: "ann's carry, not bob's dismissal");
-    std\assert(carryNotes(`{"schema": "mergequeue.reviews/v1alpha1", "change": "7", "head": "h", "reviews": []}`) == "", message: "nothing to note");
+    std\assert(carryNotes(`{"schema": "mergequeue.reviews/v1alpha1", "change": "7", "head": "h", "reviews": []}`).value! == "", message: "nothing to note");
 }
 
 test "the advice names gh pr merge --auto for each allowed method, and the label only for a stack" {

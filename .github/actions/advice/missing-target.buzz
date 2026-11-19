@@ -193,7 +193,9 @@ fun body(items: [{str: str}]) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -205,18 +207,25 @@ fun main() > void !> any {
     if (pr == "" or base == "" or head == "") {
         throw "missing-target: the pull request's number, base and head sha must be set together";
     }
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("missing-target: silenced by label");
         return;
     }
 
     var minCohort = 5;
-    final configuredCohort = advice\input("missing-target-min-cohort");
+    final cohortInput = advice\input("missing-target-min-cohort");
+    if (cohortInput.error -> err) { throw err.message; }
+    final configuredCohort = cohortInput.value!;
     if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
     var minShare = 0.8;
-    final configuredShare = advice\input("missing-target-min-share");
+    final shareInput = advice\input("missing-target-min-share");
+    if (shareInput.error -> err) { throw err.message; }
+    final configuredShare = shareInput.value!;
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var projects = mut [];
@@ -233,7 +242,8 @@ fun main() > void !> any {
     final all = gaps(projects, minCohort: minCohort, minShare: minShare);
 
     // Scoped to the projects a gap names, so a silent workspace runs no git.
-    advice\fetchBase(base, refspec: false);
+    final fetched = advice\fetchBase(base, refspec: false);
+    if (fetched.error -> err) { throw err.message; }
     var atBase = mut {<str: any>};
     var asked = mut [<str>];
     foreach (f in all) {
@@ -247,13 +257,15 @@ fun main() > void !> any {
 
     final items = keepIntroduced(all, base: atBase);
     if (items.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, title: "A project is missing a target its peers have", body: "");
+        final none = advice\publish(repo, pr: pr, name: section, title: "A project is missing a target its peers have", body: "");
+        if (none.error -> err) { throw err.message; }
         std\print("missing-target: nothing to say ({projects.len()} projects, cohort>={minCohort}, share>={minShare}; {all.len()} standing gap(s), none opened here)");
         return;
     }
-    advice\publish(repo, pr: pr, name: section,
+    final posted = advice\publish(repo, pr: pr, name: section,
         title: "A project is missing a target its peers have ({items.len()})",
         body: body(items));
+    if (posted.error -> err) { throw err.message; }
     std\print("missing-target: advised on {items.len()} gap(s)");
 }
 

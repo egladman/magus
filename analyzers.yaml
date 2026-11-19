@@ -119,17 +119,6 @@ no-throw:
       benchmarks/large-monorepo/enrich/platform/http/index.mjs: 1
       hack/docs/screenshot.mjs: 1
     buzz-error-signature:
-      .github/actions/advice/advice.buzz: 11
-      .github/actions/advice/advise.buzz: 2
-      .github/actions/advice/blast-radius.buzz: 2
-      .github/actions/advice/conformance.buzz: 1
-      .github/actions/advice/diagram-link.buzz: 4
-      .github/actions/advice/first-contribution.buzz: 1
-      .github/actions/advice/merge-conflict.buzz: 2
-      .github/actions/advice/merge-queue.buzz: 1
-      .github/actions/advice/trusted-script-moved.buzz: 5
-      .github/actions/advice/unclaimed.buzz: 1
-      .github/actions/ci-outcome/ci-outcome.buzz: 1
       benchmarks/install/bench.buzz: 8
       benchmarks/large-monorepo/queue-local.buzz: 2
       evals/buzz/grade.buzz: 1
