@@ -4,10 +4,10 @@
     "flow": 0,
     "imports": 5
   },
-  "figure": "guard-internals",
+  "diagram": "guard-internals",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:4b7c9a114cd6397e02a6adfd3e245366dcef2880485f2a7f1d335e60ab0e82c5",
+  "stamp": "sha256:eec2ccd30f1d951998b48717eed828efbdb4ba0f33dcf8c73e89a6e2ae45000a",
   "undrilled": [
     "Policy"
   ]

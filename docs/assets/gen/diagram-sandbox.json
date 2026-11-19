@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 9
   },
-  "figure": "sandbox",
+  "diagram": "sandbox",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:c60be7b8fc99936d54dbc1a739da2daa80b1858cb2adb240918fe5c9f5692cf8",
+  "stamp": "sha256:d2050f5ebfe03e111ef6bd5b0f61c798cbfaeba7514c13a7d1d3790044f177e9",
   "undrilled": []
 }

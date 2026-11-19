@@ -4,9 +4,9 @@
     "flow": 12,
     "imports": 0
   },
-  "figure": "mandate-roles",
+  "diagram": "mandate-roles",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:e7ed83ea24a778c1cb0ab31b4907d6eb89f53e53bb1400eb0d714f83bf9e0e4a",
+  "stamp": "sha256:6e89d23ca6aa454f184071b6cef4ca744ddb3c5650880bc784d1de9fd89ccf97",
   "undrilled": []
 }

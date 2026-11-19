@@ -4,9 +4,9 @@
     "flow": 2,
     "imports": 6
   },
-  "figure": "workspace-load",
+  "diagram": "workspace-load",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:17f6d8ec4bcc52e43192514f5b3a10a174d1e4238baca18f27bbe71ec5db375f",
+  "stamp": "sha256:57250142b3cd6d45ca2f363391f9d891f69c1a2b0734c2d42747820ce21dc080",
   "undrilled": []
 }

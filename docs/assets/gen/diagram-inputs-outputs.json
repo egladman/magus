@@ -4,9 +4,9 @@
     "flow": 4,
     "imports": 1
   },
-  "figure": "inputs-outputs",
+  "diagram": "inputs-outputs",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:daef092bda226e63b047e703f9d837eb40b54968fa44df6cdfa51dc7a37ad260",
+  "stamp": "sha256:91c7841a00a1528869acbd1208e3c47578f878b2a149da5cc64da89888ae30e5",
   "undrilled": []
 }

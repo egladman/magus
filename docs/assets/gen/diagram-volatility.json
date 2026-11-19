@@ -4,9 +4,9 @@
     "flow": 9,
     "imports": 0
   },
-  "figure": "volatility",
+  "diagram": "volatility",
   "findings": [],
   "level": "symbol",
-  "stamp": "sha256:d8b635d2ef468da6ea6f58a376106826e022b6cb0f7bf61df5760f936cedd55c",
+  "stamp": "sha256:e7cffb92298867785ab791a2d08881baac55117ee15e87b441e5209718bf1f7e",
   "undrilled": []
 }

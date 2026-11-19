@@ -4,9 +4,9 @@
     "flow": 1,
     "imports": 5
   },
-  "figure": "language-service",
+  "diagram": "language-service",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:20cb65a1b3a06f2fa20feca98266ab9bcb4b1b739f99f3c841b6307098a36c1f",
+  "stamp": "sha256:d1e916bbfe2be44f88860ea78bc0fa9742c9604852796a0b0f1eef2f28ebeb68",
   "undrilled": []
 }

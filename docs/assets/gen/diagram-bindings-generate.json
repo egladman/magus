@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 6
   },
-  "figure": "bindings-generate",
+  "diagram": "bindings-generate",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:b48ceaa52babdfffe40429caac8d12bf57c2961772d7b0a997d2f11c34e7916b",
+  "stamp": "sha256:4549b5810307f0bf848cfacf66f077d22041ef71a76a6591801612eb09f8e972",
   "undrilled": []
 }

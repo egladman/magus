@@ -4,9 +4,9 @@
     "flow": 3,
     "imports": 3
   },
-  "figure": "oci-assembly",
+  "diagram": "oci-assembly",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:207bf6bfab31fc2aee9f98247acd7ad49730b309777b7ccf8accacae9c2bd12e",
+  "stamp": "sha256:e5d4d92a8505af25995d9d9f8a28ae1b492a7e8bd44ea886c33f1c18d8887830",
   "undrilled": []
 }

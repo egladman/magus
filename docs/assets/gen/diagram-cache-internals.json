@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 8
   },
-  "figure": "cache-internals",
+  "diagram": "cache-internals",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:a52cd3b787c7b6a1e02f5a1d8ca7e19e976d70e156eb5225bbff5dd7b1be9146",
+  "stamp": "sha256:d67f83130e114019e18bc60fe77c4c041002d44b0f7c577ba84d4acc2dbbd39c",
   "undrilled": []
 }

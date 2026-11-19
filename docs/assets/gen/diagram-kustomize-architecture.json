@@ -4,9 +4,9 @@
     "flow": 7,
     "imports": 0
   },
-  "figure": "kustomize-architecture",
+  "diagram": "kustomize-architecture",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:4922cd9176f644c4ce23a3e1efe84d8ed3b1cc2f69c8d8085aebe8e0f98c69fb",
+  "stamp": "sha256:6cdecf0e625f7e5af4309e8d2e9c2dcf9891a59e8fd6f7a9c2d9f3e83b613178",
   "undrilled": []
 }

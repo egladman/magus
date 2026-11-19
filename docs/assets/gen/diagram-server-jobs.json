@@ -4,9 +4,9 @@
     "flow": 2,
     "imports": 4
   },
-  "figure": "server-jobs",
+  "diagram": "server-jobs",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:e43eb252519e92095adafb817b6845878c4c5b2b30971ad4dacc98494014fa96",
+  "stamp": "sha256:c7e138366f2751f62ad10bb3353e2b3b1edbfa2b14220e97bc22e99761d34723",
   "undrilled": []
 }

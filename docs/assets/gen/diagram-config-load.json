@@ -4,9 +4,9 @@
     "flow": 1,
     "imports": 6
   },
-  "figure": "config-load",
+  "diagram": "config-load",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:29333d2653d569e4047c2a1468ffd73fcda40979e11875e80a5137655c2d11d7",
+  "stamp": "sha256:15258389618c8c7b04ce867e2d18ad9800bd77017995755196b889deb2ab6c4c",
   "undrilled": []
 }

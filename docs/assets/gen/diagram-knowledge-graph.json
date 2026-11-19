@@ -4,9 +4,9 @@
     "flow": 3,
     "imports": 2
   },
-  "figure": "knowledge-graph",
+  "diagram": "knowledge-graph",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:25fe72ef4f9cc1884036c9984d9faac5a6d406854546c6474b9e96fc4957cc27",
+  "stamp": "sha256:f5e6c9990f7bac45b14dbbf74d9d34b869571f37bdc2dd5fa941646d756e307d",
   "undrilled": []
 }

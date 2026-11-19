@@ -4,9 +4,9 @@
     "flow": 1,
     "imports": 4
   },
-  "figure": "server-socket",
+  "diagram": "server-socket",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:67aa88540f5cc96ddb6c4a6b5ae70178835cf7548e67dbee4ad59ca06eeef595",
+  "stamp": "sha256:5153e73226657970f0d8d73ecec4858a6535d282a25d3d354391a538fda5ee21",
   "undrilled": []
 }

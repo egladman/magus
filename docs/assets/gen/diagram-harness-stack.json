@@ -4,9 +4,9 @@
     "flow": 6,
     "imports": 2
   },
-  "figure": "harness-stack",
+  "diagram": "harness-stack",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:a6975185e8a13dba1f7c7686209258c65ccf8df1cf23a4265ea82a0af158fd4c",
+  "stamp": "sha256:df95497b694de9ace4b4703a7092b6c3f4f189fa389ced6cd83dd8043e99603c",
   "undrilled": []
 }

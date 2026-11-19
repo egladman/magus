@@ -4,9 +4,9 @@
     "flow": 6,
     "imports": 0
   },
-  "figure": "ci-pipeline",
+  "diagram": "ci-pipeline",
   "findings": [],
   "level": "process",
-  "stamp": "sha256:e07fef77728cb7a6174806cd5c4d158bca8e2c1074d225ca653c385bd091b232",
+  "stamp": "sha256:b76ef51cf5ca060e1dfb245cbdfd9a040445360da9af921b798ee688515ed74c",
   "undrilled": []
 }

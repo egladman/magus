@@ -4,10 +4,10 @@
     "flow": 0,
     "imports": 8
   },
-  "figure": "vcs",
+  "diagram": "vcs",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:dc534d6335ed2e51f7a511bd72ae9790123ef38ae5c4181c1fab0af934237ed6",
+  "stamp": "sha256:ff003fe00a36ef7f766337869ad9c343206f5b11c49fe7bacafc4d7ec076773a",
   "undrilled": [
     "Runs",
     "Landing"

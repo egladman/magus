@@ -4,9 +4,9 @@
     "flow": 3,
     "imports": 0
   },
-  "figure": "cache-trust",
+  "diagram": "cache-trust",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:d1c8e57790f8f6d3a641a2419d4410b708370eef9ca106022359ce7a4fb871ac",
+  "stamp": "sha256:e1e521a3e8d675e1645f3dc23a727fd8a8dbe33fca9c7e57ad01745c144fd6a8",
   "undrilled": []
 }

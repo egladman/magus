@@ -4,9 +4,9 @@
     "flow": 2,
     "imports": 10
   },
-  "figure": "symbol-index",
+  "diagram": "symbol-index",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:e1d5f87c3ff106bc6b8fe8be159874a7090bfa05c09308bde4956670a0e97757",
+  "stamp": "sha256:6a0a0923e150347611f72e6ef326c3b7b80e5cb102b855631360fb1335ead1d9",
   "undrilled": []
 }

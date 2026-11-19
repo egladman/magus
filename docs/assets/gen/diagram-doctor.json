@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 6
   },
-  "figure": "doctor",
+  "diagram": "doctor",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:6a03c43622e22cfbd81a4f3f0b2ee75d60a7095ea1d44db1e3f7bbcc125ee490",
+  "stamp": "sha256:9b0280a84d33115eb2c1a0c8628e2556e0f65c6c7a4dccae0ce47b59aa89c77c",
   "undrilled": []
 }

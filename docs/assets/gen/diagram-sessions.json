@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 10
   },
-  "figure": "sessions",
+  "diagram": "sessions",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:fd56addc061a7490fcaf2f7d59d0d6d0a164620f318e0c74b240c3d059db68ca",
+  "stamp": "sha256:53b9b7ed24c0886f36a5554547bea565b5d98d1f4a3bf2ab625e2f66291a8d9a",
   "undrilled": []
 }

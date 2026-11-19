@@ -4,9 +4,9 @@
     "flow": 5,
     "imports": 4
   },
-  "figure": "diagram-pipeline",
+  "diagram": "diagram-pipeline",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:1f3e9658c0c73987db3955ba9c56a621fd5c7c5ecb4697e4d1882c57d88ff1ab",
+  "stamp": "sha256:d728d04bc7a8728cab8565a6e8b07e6d933d77e797f0073fc9112fa4b9241a52",
   "undrilled": []
 }

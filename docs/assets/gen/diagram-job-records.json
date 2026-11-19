@@ -4,9 +4,9 @@
     "flow": 0,
     "imports": 10
   },
-  "figure": "job-records",
+  "diagram": "job-records",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:b79646dbe5adb1687ec437c0fb582ab8af207dbaace4a87d431371eb2fcf18a2",
+  "stamp": "sha256:ac3693ad713d0e5bb1746fe9995bc6421a7d7259ee6a3eb4f3093a72cd6d4c76",
   "undrilled": []
 }

@@ -4,10 +4,10 @@
     "flow": 6,
     "imports": 3
   },
-  "figure": "ci-cd-split",
+  "diagram": "ci-cd-split",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:dace8e36ca2f8e528caeeb4b58b0eb4e6b3891dd56f11447b4b6d91b626d7efc",
+  "stamp": "sha256:6bbc92bb29f0e63feb3bcdc396f5998cb29e1e1465285c7c84915833ff9a49b8",
   "undrilled": [
     "Forecast"
   ]
