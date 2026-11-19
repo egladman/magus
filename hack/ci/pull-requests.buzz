@@ -2576,14 +2576,12 @@ export fun renderDashboard(b: Board) > result\Result::<str> {
     }
     final g = queueGraph(b, sections: sections);
     if (g != null) {
-        var link = "";
-        try {
-            link = diagramlink\diagramLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
-        } catch (err: any) {
-            return result\caught::<str>(err, doing: "pull-requests: link the queue graph");
+        final linked = diagramlink\diagramLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
+        if (linked.error -> err) {
+            return result\Result::<str>{ error = err };
         }
-        if (link != "") {
-            meta.append("[queue graph]({link})");
+        if (linked.value! != "") {
+            meta.append("[queue graph]({linked.value!})");
         }
     }
     final merges = mergedLine(b);
@@ -3535,11 +3533,7 @@ fun diagramIn(page: str) > result\Result::<serialize\Boxed> {
         return result\fail::<serialize\Boxed>("no graph link in:\n{page}");
     }
     final rest = page.sub(at! + open.len());
-    try {
-        return result\ok::<serialize\Boxed>(diagramlink\decodeDiagramLink(rest.sub(0, len: rest.indexOf(")")!)));
-    } catch (err: any) {
-        return result\caught::<serialize\Boxed>(err, doing: "decode the graph link");
-    }
+    return diagramlink\decodeDiagramLink(rest.sub(0, len: rest.indexOf(")")!));
 }
 
 // nodeIds is the ids of the graph's nodes, in order.
