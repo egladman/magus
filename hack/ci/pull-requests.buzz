@@ -419,12 +419,16 @@ export fun parsePull(doc: serialize\Boxed) > Pull {
     };
 }
 
-export fun parsePulls(body: str) > [Pull] !> any {
-    final acc = mut[<Pull>];
-    foreach (doc in serialize\jsonDecode(body).listValue()) {
-        acc.append(parsePull(doc));
+export fun parsePulls(body: str) > result\Result::<[Pull]> {
+    try {
+        final acc = mut[<Pull>];
+        foreach (doc in serialize\jsonDecode(body).listValue()) {
+            acc.append(parsePull(doc));
+        }
+        return result\ok::<[Pull]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Pull]>(err, doing: "pull-requests: read the pull request listing");
     }
-    return acc;
 }
 
 // stackParent is the open pull request p is stacked on: the one whose branch p targets.
@@ -649,7 +653,10 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
     try {
         final listed = capture("gh", args: ["run", "list", "--branch", base, "--event", "push", "--workflow", CI_WORKFLOW,
             "--status", "completed", "--limit", "20", "--json", "databaseId,headSha,status"]);
-        final parsedRuns = regressions\parseMainRuns(listed);
+        if (listed.error -> err) {
+            return result\Result::<[regressions\Regression]>{ error = err };
+        }
+        final parsedRuns = regressions\parseMainRuns(listed.value!);
         if (parsedRuns.error -> err) {
             return result\fail::<[regressions\Regression]>("pull-requests: attribute main's red checks: {err.message}");
         }
@@ -658,7 +665,10 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
         var i = 0;
         while (i < runs.len()) {
             final jobs = capture("gh", args: ["run", "view", runs[i].id, "--json", "jobs"]);
-            runs[i] = regressions\CiRun{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs, keyOf: regressions\checkKey) };
+            if (jobs.error -> err) {
+                return result\Result::<[regressions\Regression]>{ error = err };
+            }
+            runs[i] = regressions\CiRun{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs.value!, keyOf: regressions\checkKey) };
             if (i == 0) {
                 red = regressions\redKeys(runs[0]);
             }
@@ -667,8 +677,12 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
             }
             i = i + 1;
         }
-        final parsedMerged = regressions\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", base,
-            "--limit", "100", "--json", "number,mergeCommit,mergedAt"]));
+        final mergedList = capture("gh", args: ["pr", "list", "--state", "merged", "--base", base,
+            "--limit", "100", "--json", "number,mergeCommit,mergedAt"]);
+        if (mergedList.error -> err) {
+            return result\Result::<[regressions\Regression]>{ error = err };
+        }
+        final parsedMerged = regressions\parseMerged(mergedList.value!);
         if (parsedMerged.error -> err) {
             return result\fail::<[regressions\Regression]>("pull-requests: attribute main's red checks: {err.message}");
         }
@@ -680,15 +694,6 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
     } catch (err: any) {
         return result\caught::<[regressions\Regression]>(err, doing: "pull-requests: attribute main's red checks");
     }
-}
-
-// mainRegressions turns a failed read into the throw its callers need.
-fun mainRegressions(base: str, open: [Pull]) > [regressions\Regression] !> any {
-    final read = readRegressions(base, open: open);
-    if (read.error -> err) {
-        throw err.message;
-    }
-    return read.value!;
 }
 
 final failMarker = "--- FAIL: ";
@@ -717,26 +722,34 @@ export fun parseFailingTests(log: str) > [str] {
 // parseBaselineRun picks main's latest run that judged anything from `gh run list --json
 // databaseId,conclusion,url`, newest first: a cancelled or skipped run failed nothing on
 // its merits, so it is passed over. Null when none did.
-export fun parseBaselineRun(body: str) > serialize\Boxed? !> any {
-    foreach (run in serialize\jsonDecode(body).listValue()) {
-        final conclusion = run.q("conclusion").stringValue();
-        if (conclusion == "success" or conclusion == "failure") {
-            return run;
+export fun parseBaselineRun(body: str) > result\Result::<serialize\Boxed?> {
+    try {
+        foreach (run in serialize\jsonDecode(body).listValue()) {
+            final conclusion = run.q("conclusion").stringValue();
+            if (conclusion == "success" or conclusion == "failure") {
+                return result\ok::<serialize\Boxed?>(run);
+            }
         }
+        return result\ok::<serialize\Boxed?>(null);
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed?>(err, doing: "pull-requests: read main's runs");
     }
-    return null;
 }
 
 // parseFailingJobs names the jobs of `gh run view --json jobs` that failed. A cancelled job
 // on main is not proof the check fails there.
-export fun parseFailingJobs(body: str) > [str] !> any {
-    final acc = mut [<str>];
-    foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
-        if (job.q("conclusion").stringValue() == "failure") {
-            acc.append(job.q("name").stringValue());
+export fun parseFailingJobs(body: str) > result\Result::<[str]> {
+    try {
+        final acc = mut [<str>];
+        foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
+            if (job.q("conclusion").stringValue() == "failure") {
+                acc.append(job.q("name").stringValue());
+            }
         }
+        return result\ok::<[str]>(acc);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "pull-requests: read a run's jobs");
     }
-    return acc;
 }
 
 // mergeStage reads the first thing other than its checks standing between p and a merge,
@@ -905,21 +918,25 @@ fun driftPaths(message: str) > [str] {
 // ".github" and say nothing about where. A drift gate's own throw is the one exception:
 // it names its files in the MESSAGE, not in path or start_line, so a "." or missing line
 // there does not disqualify it.
-export fun parseAnnotations(body: str) > [Annotation] !> any {
-    final acc = mut[<Annotation>];
-    foreach (a in serialize\jsonDecode(body).listValue()) {
-        final path = a.q("path").stringValue();
-        final message = a.q("message").stringValue();
-        if (a.q("annotation_level").stringValue() != "failure") {
-            continue;
+export fun parseAnnotations(body: str) > result\Result::<[Annotation]> {
+    try {
+        final acc = mut[<Annotation>];
+        foreach (a in serialize\jsonDecode(body).listValue()) {
+            final path = a.q("path").stringValue();
+            final message = a.q("message").stringValue();
+            if (a.q("annotation_level").stringValue() != "failure") {
+                continue;
+            }
+            if (!isDriftMessage(message) and (a.q("start_line").integerValue() <= 0
+                or path == "." or path == ".github")) {
+                continue;
+            }
+            acc.append(Annotation{ path = path, message = message });
         }
-        if (!isDriftMessage(message) and (a.q("start_line").integerValue() <= 0
-            or path == "." or path == ".github")) {
-            continue;
-        }
-        acc.append(Annotation{ path = path, message = message });
+        return result\ok::<[Annotation]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Annotation]>(err, doing: "pull-requests: read a check run's annotations");
     }
-    return acc;
 }
 
 // setupOnly reports failed steps that are all runner setup, and at least one.
@@ -1391,226 +1408,281 @@ final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
 
 // parseSelector parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
-export fun parseSelector(step: str, argv: [str]) > Selector !> any {
-    final prs = mut [<int>];
-    final rest = mut [<str>];
-    var i = 0;
-    while (i < argv.len()) {
-        final a = argv[i];
-        var value: str? = null;
-        if (a == "--pr") {
-            if (i + 1 >= argv.len()) {
-                throw "pull-requests: --pr takes a number\n{usage}";
+export fun parseSelector(step: str, argv: [str]) > result\Result::<Selector> {
+    try {
+        final prs = mut [<int>];
+        final rest = mut [<str>];
+        var i = 0;
+        while (i < argv.len()) {
+            final a = argv[i];
+            var value: str? = null;
+            if (a == "--pr") {
+                if (i + 1 >= argv.len()) {
+                    return result\fail::<Selector>("pull-requests: --pr takes a number\n{usage}");
+                }
+                value = argv[i + 1];
+                i = i + 1;
+            } else if (a.startsWith("--pr=")) {
+                value = a.sub(5);
+            } else {
+                rest.append(a);
             }
-            value = argv[i + 1];
+            if (value != null) {
+                final n = std\parseInt(value!) ?? 0;
+                if (n <= 0 or "{n}" != value!) {
+                    return result\fail::<Selector>("pull-requests: --pr \"{value!}\" is not a pull request number\n{usage}");
+                }
+                prs.append(n);
+            }
             i = i + 1;
-        } else if (a.startsWith("--pr=")) {
-            value = a.sub(5);
+        }
+        final valued = mut ["--author"];
+        final switches = mut [<str>];
+        if (step == "apply") {
+            valued.append("--method");
         } else {
-            rest.append(a);
+            // apply acts on what it selects, so it never reaches past the caller's own.
+            switches.append("--all");
         }
-        if (value != null) {
-            final n = std\parseInt(value!) ?? 0;
-            if (n <= 0 or "{n}" != value!) {
-                throw "pull-requests: --pr \"{value!}\" is not a pull request number\n{usage}";
+        // A dashboard edits its issue unless --preview says it should not, so a workflow whose
+        // issue variable is unset passes an empty --issue and is refused, not rendered green.
+        final required = mut [<str>];
+        if (step == "dashboard") {
+            foreach (f in ["--base", "--out", "--issue", "--run-url", "--console-base"]) {
+                valued.append(f);
             }
-            prs.append(n);
+            switches.append("--preview");
+            required.append("--out");
+            if (rest.indexOf("--preview") == null) {
+                required.append("--issue");
+            }
         }
-        i = i + 1;
-    }
-    final valued = mut ["--author"];
-    final switches = mut [<str>];
-    if (step == "apply") {
-        valued.append("--method");
-    } else {
-        // apply acts on what it selects, so it never reaches past the caller's own.
-        switches.append("--all");
-    }
-    // A dashboard edits its issue unless --preview says it should not, so a workflow whose
-    // issue variable is unset passes an empty --issue and is refused, not rendered green.
-    final required = mut [<str>];
-    if (step == "dashboard") {
-        foreach (f in ["--base", "--out", "--issue", "--run-url", "--console-base"]) {
-            valued.append(f);
+        final parsed = flags\parse(rest, switches: switches, valued: valued, required: required);
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<Selector>("pull-requests: {step} does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}");
         }
-        switches.append("--preview");
-        required.append("--out");
-        if (rest.indexOf("--preview") == null) {
-            required.append("--issue");
+        final author = parsed.values["--author"];
+        if (author != null and author! == "") {
+            return result\fail::<Selector>("pull-requests: --author needs a login\n{usage}");
         }
+        final all = parsed.values["--all"] != null;
+        if (all and (author != null or prs.len() > 0)) {
+            return result\fail::<Selector>("pull-requests: --all selects every open pull request, so it takes no --author or --pr\n{usage}");
+        }
+        final method = parsed.values["--method"] ?? "squash";
+        if (METHODS.indexOf(method) == null) {
+            return result\fail::<Selector>("pull-requests: --method is one of {METHODS.join(", ")}, not \"{method}\"\n{usage}");
+        }
+        final base = parsed.values["--base"] ?? "main";
+        if (base == "") {
+            return result\fail::<Selector>("pull-requests: --base needs a branch\n{usage}");
+        }
+        final issue = parsed.values["--issue"] ?? "";
+        final number = std\parseInt(issue) ?? 0;
+        if (issue != "" and (number <= 0 or "{number}" != issue)) {
+            return result\fail::<Selector>("pull-requests: --issue \"{issue}\" is not an issue number\n{usage}");
+        }
+        if (issue != "" and parsed.values["--preview"] != null) {
+            return result\fail::<Selector>("pull-requests: --preview edits no issue, so it takes no --issue\n{usage}");
+        }
+        final file = parsed.values["--out"] ?? "";
+        return result\ok::<Selector>(Selector{ prs = prs, author = author ?? "", all = all, method = method,
+            base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "",
+            console = parsed.values["--console-base"] ?? diagramlink\defaultConsoleBase });
+    } catch (err: any) {
+        return result\caught::<Selector>(err, doing: "pull-requests: {step}");
     }
-    final parsed = flags\parse(rest, switches: switches, valued: valued, required: required);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "pull-requests: {step} does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
-    }
-    final author = parsed.values["--author"];
-    if (author != null and author! == "") {
-        throw "pull-requests: --author needs a login\n{usage}";
-    }
-    final all = parsed.values["--all"] != null;
-    if (all and (author != null or prs.len() > 0)) {
-        throw "pull-requests: --all selects every open pull request, so it takes no --author or --pr\n{usage}";
-    }
-    final method = parsed.values["--method"] ?? "squash";
-    if (METHODS.indexOf(method) == null) {
-        throw "pull-requests: --method is one of {METHODS.join(", ")}, not \"{method}\"\n{usage}";
-    }
-    final base = parsed.values["--base"] ?? "main";
-    if (base == "") {
-        throw "pull-requests: --base needs a branch\n{usage}";
-    }
-    final issue = parsed.values["--issue"] ?? "";
-    final number = std\parseInt(issue) ?? 0;
-    if (issue != "" and (number <= 0 or "{number}" != issue)) {
-        throw "pull-requests: --issue \"{issue}\" is not an issue number\n{usage}";
-    }
-    if (issue != "" and parsed.values["--preview"] != null) {
-        throw "pull-requests: --preview edits no issue, so it takes no --issue\n{usage}";
-    }
-    final file = parsed.values["--out"] ?? "";
-    return Selector{ prs = prs, author = author ?? "", all = all, method = method,
-        base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "",
-        console = parsed.values["--console-base"] ?? diagramlink\defaultConsoleBase };
 }
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
-fun capture(cmd: str, args: [str]) > str !> any {
-    final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (!res.ok) {
-        throw "pull-requests: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+fun capture(cmd: str, args: [str]) > result\Result::<str> {
+    try {
+        final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!res.ok) {
+            return result\fail::<str>("pull-requests: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}");
+        }
+        return result\ok::<str>(res.stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "pull-requests: {cmd} {args.join(" ")}");
     }
-    return res.stdout;
 }
 
 // openPulls lists every open pull request once. A full page may be missing some, and a
 // stack whose parent is missing would read as unstacked, so that is an error.
-fun openPulls() > [Pull] !> any {
-    final open = parsePulls(capture("gh", args: ["pr", "list", "--state", "open", "--limit", "{LIMIT}", "--json", FIELDS]));
-    if (open.len() >= LIMIT) {
-        throw "pull-requests: {open.len()} open pull requests fill gh's page of {LIMIT}; raise LIMIT";
+fun openPulls() > result\Result::<[Pull]> {
+    final listed = capture("gh", args: ["pr", "list", "--state", "open", "--limit", "{LIMIT}", "--json", FIELDS]);
+    if (listed.error -> err) {
+        return result\Result::<[Pull]>{ error = err };
+    }
+    final open = parsePulls(listed.value!);
+    if (open.error -> err) {
+        return open;
+    }
+    if (open.value!.len() >= LIMIT) {
+        return result\fail::<[Pull]>("pull-requests: {open.value!.len()} open pull requests fill gh's page of {LIMIT}; raise LIMIT");
     }
     return open;
 }
 
 // findSquashed names, per conflicting pull request, the squash-merged pull request whose head
 // it still carries past its base. findConflicts fetched both already.
-fun findSquashed(pulls: [Pull]) > {int: rebaseonto\Squashed} !> any {
+fun findSquashed(pulls: [Pull]) > result\Result::<{int: rebaseonto\Squashed}> {
     final acc = mut {<int: rebaseonto\Squashed>};
     if (pulls.len() == 0) {
-        return acc;
+        return result\ok::<{int: rebaseonto\Squashed}>(acc);
     }
-    final merged = rebaseonto\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefOid"]));
-    foreach (p in pulls) {
-        final listed = vcs\cmd(["rev-list", "origin/{p.base}..{p.oid}"], opts: vcs\CommandOptions{ quiet = true });
-        if (rebaseonto\squashedBase(listed.stdout.split("\n"), merged: merged) -> s) {
-            acc[p.number] = s;
+    final mergedList = capture("gh", args: ["pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefOid"]);
+    if (mergedList.error -> err) {
+        return result\Result::<{int: rebaseonto\Squashed}>{ error = err };
+    }
+    final parsedMerged = rebaseonto\parseMerged(mergedList.value!);
+    if (parsedMerged.error -> err) {
+        return result\Result::<{int: rebaseonto\Squashed}>{ error = err };
+    }
+    try {
+        final merged = parsedMerged.value!;
+        foreach (p in pulls) {
+            final listed = vcs\cmd(["rev-list", "origin/{p.base}..{p.oid}"], opts: vcs\CommandOptions{ quiet = true });
+            if (rebaseonto\squashedBase(listed.stdout.split("\n"), merged: merged) -> s) {
+                acc[p.number] = s;
+            }
         }
+    } catch (err: any) {
+        return result\caught::<{int: rebaseonto\Squashed}>(err, doing: "pull-requests: find squash-merged heads");
     }
-    return acc;
+    return result\ok::<{int: rebaseonto\Squashed}>(acc);
 }
 
 // findConflicts fetches each pull request's head and its base, merges them in memory with
 // git merge-tree (nothing is checked out or written to a branch), and reads each
 // conflicted file's markers.
-fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
+fun findConflicts(pulls: [Pull]) > result\Result::<{int: [Conflict]}> {
     final acc = mut{<int: [Conflict]>};
     if (pulls.len() == 0) {
-        return acc;
+        return result\ok::<{int: [Conflict]}>(acc);
     }
-    final refspecs = mut [<str>];
-    foreach (p in pulls) {
-        final base = "+refs/heads/{p.base}:refs/remotes/origin/{p.base}";
-        if (refspecs.indexOf(base) == null) {
-            refspecs.append(base);
-        }
-        refspecs.append("refs/pull/{p.number}/head");
-    }
-    final fetch = mut ["fetch", "--no-tags", "--quiet", "origin"];
-    foreach (r in refspecs) {
-        fetch.append(r);
-    }
-    final fetched = vcs\cmd(fetch, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-    if (!fetched.ok) {
-        throw "pull-requests: git {fetch.join(" ")}: exit {fetched.code}: {fetched.stderr}";
-    }
-    final all = mut [<str>];
-    final found = mut {<int: [str]>};
-    final contents = mut {<str: str>};
-    foreach (p in pulls) {
-        final res = vcs\cmd(["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
-            opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-        // Exit 1 is a merge with conflicts; anything else is git failing.
-        if (res.code != 0 and res.code != 1) {
-            throw "pull-requests: git merge-tree for #{p.number}: exit {res.code}: {res.stderr}";
-        }
-        final paths = conflictedPaths(res.stdout);
-        final tree = res.stdout.split("\n")[0];
-        found[p.number] = paths;
-        foreach (path in paths) {
-            if (all.indexOf(path) == null) {
-                all.append(path);
+    try {
+        final refspecs = mut [<str>];
+        foreach (p in pulls) {
+            final base = "+refs/heads/{p.base}:refs/remotes/origin/{p.base}";
+            if (refspecs.indexOf(base) == null) {
+                refspecs.append(base);
             }
-            final blob = vcs\cmd(["cat-file", "-p", "{tree}:{path}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-            contents["{p.number}:{path}"] = blob.stdout;
+            refspecs.append("refs/pull/{p.number}/head");
         }
-    }
-    final generated = rebaseonto\findGenerated(all);
-    foreach (number, paths in found) {
-        final conflicts = mut [<Conflict>];
-        foreach (path in paths) {
-            conflicts.append(Conflict{ path = path, generated = generated.indexOf(path) != null,
-                listShaped = listShaped(contents["{number}:{path}"] ?? "") });
+        final fetch = mut ["fetch", "--no-tags", "--quiet", "origin"];
+        foreach (r in refspecs) {
+            fetch.append(r);
         }
-        acc[number] = conflicts;
+        final fetched = vcs\cmd(fetch, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!fetched.ok) {
+            return result\fail::<{int: [Conflict]}>("pull-requests: git {fetch.join(" ")}: exit {fetched.code}: {fetched.stderr}");
+        }
+        final all = mut [<str>];
+        final found = mut {<int: [str]>};
+        final contents = mut {<str: str>};
+        foreach (p in pulls) {
+            final res = vcs\cmd(["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
+                opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+            // Exit 1 is a merge with conflicts; anything else is git failing.
+            if (res.code != 0 and res.code != 1) {
+                return result\fail::<{int: [Conflict]}>("pull-requests: git merge-tree for #{p.number}: exit {res.code}: {res.stderr}");
+            }
+            final paths = conflictedPaths(res.stdout);
+            final tree = res.stdout.split("\n")[0];
+            found[p.number] = paths;
+            foreach (path in paths) {
+                if (all.indexOf(path) == null) {
+                    all.append(path);
+                }
+                final blob = vcs\cmd(["cat-file", "-p", "{tree}:{path}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+                contents["{p.number}:{path}"] = blob.stdout;
+            }
+        }
+        final foundGenerated = rebaseonto\findGenerated(all);
+        if (foundGenerated.error -> err) {
+            return result\Result::<{int: [Conflict]}>{ error = err };
+        }
+        final generated = foundGenerated.value!;
+        foreach (number, paths in found) {
+            final conflicts = mut [<Conflict>];
+            foreach (path in paths) {
+                conflicts.append(Conflict{ path = path, generated = generated.indexOf(path) != null,
+                    listShaped = listShaped(contents["{number}:{path}"] ?? "") });
+            }
+            acc[number] = conflicts;
+        }
+    } catch (err: any) {
+        return result\caught::<{int: [Conflict]}>(err, doing: "pull-requests: find conflicts");
     }
-    return acc;
+    return result\ok::<{int: [Conflict]}>(acc);
 }
 
 // fetchAnnotations reads the failure annotations of p's failing check runs, one request each.
-fun fetchAnnotations(p: Pull) > {str: [Annotation]} !> any {
+fun fetchAnnotations(p: Pull) > result\Result::<{str: [Annotation]}> {
     final acc = mut{<str: [Annotation]>};
     foreach (c in failing(p.checks)) {
         if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
             continue;
         }
-        acc[c.job] = parseAnnotations(capture("gh", args: ["api", "repos/\{owner}/\{repo}/check-runs/{c.job}/annotations?per_page=100"]));
+        final body = capture("gh", args: ["api", "repos/\{owner}/\{repo}/check-runs/{c.job}/annotations?per_page=100"]);
+        if (body.error -> err) {
+            return result\Result::<{str: [Annotation]}>{ error = err };
+        }
+        final notes = parseAnnotations(body.value!);
+        if (notes.error -> err) {
+            return result\Result::<{str: [Annotation]}>{ error = err };
+        }
+        acc[c.job] = notes.value!;
     }
-    return acc;
+    return result\ok::<{str: [Annotation]}>(acc);
 }
 
 // fetchFailedSteps reads the failed step names of p's failing check jobs, one request each.
-fun fetchFailedSteps(p: Pull) > {str: [str]} !> any {
+fun fetchFailedSteps(p: Pull) > result\Result::<{str: [str]}> {
     final acc = mut{<str: [str]>};
     foreach (c in failing(p.checks)) {
         if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
             continue;
         }
         final steps = mut [<str>];
-        foreach (line in capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/jobs/{c.job}",
-            "--jq", `.steps[] | select(.conclusion == "failure") | .name`]).split("\n")) {
+        final listed = capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/jobs/{c.job}",
+            "--jq", `.steps[] | select(.conclusion == "failure") | .name`]);
+        if (listed.error -> err) {
+            return result\Result::<{str: [str]}>{ error = err };
+        }
+        foreach (line in listed.value!.split("\n")) {
             if (line.trim() != "") {
                 steps.append(line.trim());
             }
         }
         acc[c.job] = steps;
     }
-    return acc;
+    return result\ok::<{str: [str]}>(acc);
 }
 
-fun countAttempts(runs: [str]) > {str: int} !> any {
+fun countAttempts(runs: [str]) > result\Result::<{str: int}> {
     final acc = mut{<str: int>};
     foreach (run in runs) {
-        acc[run] = std\parseInt(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}", "--jq", ".run_attempt"]).trim()) ?? 1;
+        final attempt = capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}", "--jq", ".run_attempt"]);
+        if (attempt.error -> err) {
+            return result\Result::<{str: int}>{ error = err };
+        }
+        acc[run] = std\parseInt(attempt.value!.trim()) ?? 1;
     }
-    return acc;
+    return result\ok::<{str: int}>(acc);
 }
 
 // selectPulls is what sel selects: every open pull request, the numbers asked for (open or
 // not), or an author's, the caller's when nothing else is named.
-fun selectPulls(sel: Selector, open: [Pull]) > [Pull] !> any {
+fun selectPulls(sel: Selector, open: [Pull]) > result\Result::<[Pull]> {
     var author = sel.author;
     if (!sel.all and sel.prs.len() == 0 and author == "") {
-        author = capture("gh", args: ["api", "user", "--jq", ".login"]).trim();
+        final login = capture("gh", args: ["api", "user", "--jq", ".login"]);
+        if (login.error -> err) {
+            return result\Result::<[Pull]>{ error = err };
+        }
+        author = login.value!.trim();
     }
     final chosen = mut [<Pull>];
     foreach (p in selected(open, prs: sel.prs, author: author)) {
@@ -1618,20 +1690,36 @@ fun selectPulls(sel: Selector, open: [Pull]) > [Pull] !> any {
     }
     foreach (n in sel.prs) {
         if (selected(open, prs: [n], author: "").len() == 0) {
-            final view = parsePull(serialize\jsonDecode(capture("gh", args: ["pr", "view", "{n}", "--json", FIELDS])));
-            if (author == "" or view.author == author) {
-                chosen.append(view);
+            final shown = capture("gh", args: ["pr", "view", "{n}", "--json", FIELDS]);
+            if (shown.error -> err) {
+                return result\Result::<[Pull]>{ error = err };
+            }
+            try {
+                final view = parsePull(serialize\jsonDecode(shown.value!));
+                if (author == "" or view.author == author) {
+                    chosen.append(view);
+                }
+            } catch (err: any) {
+                return result\caught::<[Pull]>(err, doing: "pull-requests: read pull request #{n}");
             }
         }
     }
     _ = chosen.sort(fun (a: Pull, b: Pull) > bool => a.number < b.number);
-    return chosen;
+    return result\ok::<[Pull]>(chosen);
 }
 
 // records selects the pull requests, gathers the facts each state reads, and classifies.
-fun records(sel: Selector) > [Record] !> any {
-    final open = openPulls();
-    final chosen = selectPulls(sel, open: open);
+fun records(sel: Selector) > result\Result::<[Record]> {
+    final openRead = openPulls();
+    if (openRead.error -> err) {
+        return result\Result::<[Record]>{ error = err };
+    }
+    final open = openRead.value!;
+    final chosenRead = selectPulls(sel, open: open);
+    if (chosenRead.error -> err) {
+        return result\Result::<[Record]>{ error = err };
+    }
+    final chosen = chosenRead.value!;
 
     final conflicting = mut [<Pull>];
     foreach (p in chosen) {
@@ -1639,8 +1727,16 @@ fun records(sel: Selector) > [Record] !> any {
             conflicting.append(p);
         }
     }
-    final conflicts = findConflicts(conflicting);
-    final squashed = findSquashed(conflicting);
+    final conflictsRead = findConflicts(conflicting);
+    if (conflictsRead.error -> err) {
+        return result\Result::<[Record]>{ error = err };
+    }
+    final conflicts = conflictsRead.value!;
+    final squashedRead = findSquashed(conflicting);
+    if (squashedRead.error -> err) {
+        return result\Result::<[Record]>{ error = err };
+    }
+    final squashed = squashedRead.value!;
     // main's run is read once, and only when a finished red needs comparing with it.
     var baseline: Baseline? = null;
     var attributed = [<regressions\Regression>];
@@ -1651,12 +1747,24 @@ fun records(sel: Selector) > [Record] !> any {
         var tests = [<str>];
         if (completedRed(p) and stage != "merged" and stage != "closed") {
             if (baseline == null) {
-                baseline = mainBaseline();
+                final read = mainBaseline();
+                if (read.error -> err) {
+                    return result\Result::<[Record]>{ error = err };
+                }
+                baseline = read.value!;
             }
             if (inheritedChecks(p, baseline: baseline!)) {
-                tests = fetchFailingTests(p);
+                final failingTests = fetchFailingTests(p);
+                if (failingTests.error -> err) {
+                    return result\Result::<[Record]>{ error = err };
+                }
+                tests = failingTests.value!;
                 if (!attributedRead) {
-                    attributed = mainRegressions(sel.base, open: open);
+                    final regressionsRead = readRegressions(sel.base, open: open);
+                    if (regressionsRead.error -> err) {
+                        return result\fail::<[Record]>(err.message);
+                    }
+                    attributed = regressionsRead.value!;
                     attributedRead = true;
                 }
             }
@@ -1665,21 +1773,37 @@ fun records(sel: Selector) > [Record] !> any {
             squashed = squashed[p.number], regressions = attributed };
         final verdict = judge(p, facts: facts);
         if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
-            facts = Facts{ annotations = fetchAnnotations(p), failedSteps = fetchFailedSteps(p), baseline = baseline, failingTests = tests,
+            final annotations = fetchAnnotations(p);
+            if (annotations.error -> err) {
+                return result\Result::<[Record]>{ error = err };
+            }
+            final failedSteps = fetchFailedSteps(p);
+            if (failedSteps.error -> err) {
+                return result\Result::<[Record]>{ error = err };
+            }
+            facts = Facts{ annotations = annotations.value!, failedSteps = failedSteps.value!, baseline = baseline, failingTests = tests,
                 regressions = attributed };
         } else if (stage == "kicked-back" and p.kick != null) {
-            facts = Facts{ generated = rebaseonto\findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests,
+            final kickGenerated = rebaseonto\findGenerated(p.kick!.paths);
+            if (kickGenerated.error -> err) {
+                return result\Result::<[Record]>{ error = err };
+            }
+            facts = Facts{ generated = kickGenerated.value!, baseline = baseline, failingTests = tests,
                 regressions = attributed };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
+            final attempts = countAttempts(r.evidence.rerun);
+            if (attempts.error -> err) {
+                return result\Result::<[Record]>{ error = err };
+            }
             r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
-                attempts = countAttempts(r.evidence.rerun), baseline = baseline, failingTests = tests, regressions = attributed });
+                attempts = attempts.value!, baseline = baseline, failingTests = tests, regressions = attributed });
         }
         acc.append(r);
     }
-    return acc;
+    return result\ok::<[Record]>(acc);
 }
 
 // The workflow whose push runs on main are the baseline a pull request's failures are
@@ -1688,24 +1812,42 @@ final CI_WORKFLOW = "ci.yaml";
 
 // mainBaseline reads main's latest push run of CI that judged anything: its failing jobs,
 // and the Go tests their logs report failing.
-fun mainBaseline() > Baseline !> any {
+fun mainBaseline() > result\Result::<Baseline> {
     final runs = capture("gh", args: ["run", "list", "--branch", "main", "--event", "push", "--workflow", CI_WORKFLOW,
         "--status", "completed", "--limit", "20", "--json", "databaseId,conclusion,url"]);
-    final run = parseBaselineRun(runs);
+    if (runs.error -> err) {
+        return result\Result::<Baseline>{ error = err };
+    }
+    final picked = parseBaselineRun(runs.value!);
+    if (picked.error -> err) {
+        return result\Result::<Baseline>{ error = err };
+    }
+    final run = picked.value;
     if (run == null) {
-        throw "pull-requests: no completed {CI_WORKFLOW} run on main passed or failed among the last 20";
+        return result\fail::<Baseline>("pull-requests: no completed {CI_WORKFLOW} run on main passed or failed among the last 20");
     }
     final id = "{run!.q("databaseId").integerValue()}";
-    final failing = parseFailingJobs(capture("gh", args: ["run", "view", id, "--json", "jobs"]));
-    var tests = [<str>];
-    if (failing.len() > 0) {
-        tests = parseFailingTests(capture("gh", args: ["run", "view", id, "--log-failed"]));
+    final jobs = capture("gh", args: ["run", "view", id, "--json", "jobs"]);
+    if (jobs.error -> err) {
+        return result\Result::<Baseline>{ error = err };
     }
-    return Baseline{ url = run!.q("url").stringValue(), failingChecks = failing, failingTests = tests };
+    final failing = parseFailingJobs(jobs.value!);
+    if (failing.error -> err) {
+        return result\Result::<Baseline>{ error = err };
+    }
+    var tests = [<str>];
+    if (failing.value!.len() > 0) {
+        final log = capture("gh", args: ["run", "view", id, "--log-failed"]);
+        if (log.error -> err) {
+            return result\Result::<Baseline>{ error = err };
+        }
+        tests = parseFailingTests(log.value!);
+    }
+    return result\ok::<Baseline>(Baseline{ url = run!.q("url").stringValue(), failingChecks = failing.value!, failingTests = tests });
 }
 
 // fetchFailingTests reads the Go tests p's failing runs report failing, one log per run.
-fun fetchFailingTests(p: Pull) > [str] !> any {
+fun fetchFailingTests(p: Pull) > result\Result::<[str]> {
     final acc = mut [<str>];
     final read = mut [<str>];
     foreach (c in failing(p.checks)) {
@@ -1713,31 +1855,48 @@ fun fetchFailingTests(p: Pull) > [str] !> any {
             continue;
         }
         read.append(c.run);
-        foreach (name in parseFailingTests(capture("gh", args: ["run", "view", c.run, "--log-failed"]))) {
+        final log = capture("gh", args: ["run", "view", c.run, "--log-failed"]);
+        if (log.error -> err) {
+            return result\Result::<[str]>{ error = err };
+        }
+        foreach (name in parseFailingTests(log.value!)) {
             if (acc.indexOf(name) == null) {
                 acc.append(name);
             }
         }
     }
-    return acc;
+    return result\ok::<[str]>(acc);
 }
 
-fun status(sel: Selector) > void !> any {
-    foreach (r in records(sel)) {
+fun status(sel: Selector) > result\Result::<bool> {
+    final read = records(sel);
+    if (read.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    foreach (r in read.value!) {
         std\print(render(r));
     }
+    return result\ok::<bool>(true);
 }
 
-fun apply(sel: Selector) > void !> any {
-    foreach (r in records(sel)) {
+fun apply(sel: Selector) > result\Result::<bool> {
+    final read = records(sel);
+    if (read.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    foreach (r in read.value!) {
         foreach (cmd in applyCommands(r, method: sel.method)) {
-            _ = capture(cmd[0], args: cmd.sub(1));
+            final ran = capture(cmd[0], args: cmd.sub(1));
+            if (ran.error -> err) {
+                return result\Result::<bool>{ error = err };
+            }
             std\print(encode({"pr": r.pr, "action": r.action, "command": cmd}));
         }
         foreach (cmd in personCommands(r, method: sel.method)) {
             std\print(encode({"pr": r.pr, "action": r.action, "for_person": cmd}));
         }
     }
+    return result\ok::<bool>(true);
 }
 
 // The dashboard is one markdown page of every open pull request's place in the
@@ -1846,70 +2005,90 @@ object Ranked {
 }
 
 // parseQueue reads `magus queue ls`'s mergequeue.changes/v1alpha1 document.
-export fun parseQueue(body: str) > [Queued] !> any {
-    final acc = mut [<Queued>];
-    foreach (c in serialize\jsonDecode(body).q("changes").listValue()) {
-        acc.append(Queued{ id = std\parseInt(c.q("id").stringValue()) ?? 0, parent = std\parseInt(c.q("parent").stringValue()) });
+export fun parseQueue(body: str) > result\Result::<[Queued]> {
+    try {
+        final acc = mut [<Queued>];
+        foreach (c in serialize\jsonDecode(body).q("changes").listValue()) {
+            acc.append(Queued{ id = std\parseInt(c.q("id").stringValue()) ?? 0, parent = std\parseInt(c.q("parent").stringValue()) });
+        }
+        return result\ok::<[Queued]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Queued]>(err, doing: "pull-requests: read the queue listing");
     }
-    return acc;
 }
 
 // parseMerged reads `gh pr list --state merged --json number,mergedAt,statusCheckRollup`.
-export fun parseMerged(body: str) > [Merged] !> any {
-    final acc = mut [<Merged>];
-    foreach (doc in serialize\jsonDecode(body).listValue()) {
-        acc.append(Merged{ number = doc.q("number").integerValue(), at = doc.q("mergedAt").stringValue(),
-            byQueue = parseQueueStatus(doc.q("statusCheckRollup").listValue()) == "SUCCESS" });
+export fun parseMerged(body: str) > result\Result::<[Merged]> {
+    try {
+        final acc = mut [<Merged>];
+        foreach (doc in serialize\jsonDecode(body).listValue()) {
+            acc.append(Merged{ number = doc.q("number").integerValue(), at = doc.q("mergedAt").stringValue(),
+                byQueue = parseQueueStatus(doc.q("statusCheckRollup").listValue()) == "SUCCESS" });
+        }
+        return result\ok::<[Merged]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Merged]>(err, doing: "pull-requests: read the merged pull requests");
     }
-    return acc;
 }
 
 // parseWait reads the merge-queue status from a commit's combined status, null when the
 // queue has posted none.
-export fun parseWait(body: str) > Wait? !> any {
-    foreach (s in serialize\jsonDecode(body).q("statuses").listValue()) {
-        if (s.q("context").stringValue() == QUEUE_STATUS) {
-            return Wait{ description = s.q("description").stringValue(), since = s.q("updated_at").stringValue() };
+export fun parseWait(body: str) > result\Result::<Wait?> {
+    try {
+        foreach (s in serialize\jsonDecode(body).q("statuses").listValue()) {
+            if (s.q("context").stringValue() == QUEUE_STATUS) {
+                return result\ok::<Wait?>(Wait{ description = s.q("description").stringValue(), since = s.q("updated_at").stringValue() });
+            }
         }
+        return result\ok::<Wait?>(null);
+    } catch (err: any) {
+        return result\caught::<Wait?>(err, doing: "pull-requests: read a commit's statuses");
     }
-    return null;
 }
 
 // parseFlights reads `gh run view <id> --json jobs` of a validation run: the validation
 // jobs not yet completed, by pull request.
-export fun parseFlights(body: str) > {int: Flight} !> any {
-    final acc = mut {<int: Flight>};
-    foreach (j in serialize\jsonDecode(body).q("jobs").listValue()) {
-        final name = j.q("name").stringValue();
-        if (!name.startsWith(VALIDATE_JOB) or j.q("status").stringValue().lower() == "completed") {
-            continue;
+export fun parseFlights(body: str) > result\Result::<{int: Flight}> {
+    try {
+        final acc = mut {<int: Flight>};
+        foreach (j in serialize\jsonDecode(body).q("jobs").listValue()) {
+            final name = j.q("name").stringValue();
+            if (!name.startsWith(VALIDATE_JOB) or j.q("status").stringValue().lower() == "completed") {
+                continue;
+            }
+            final n = std\parseInt(name.sub(VALIDATE_JOB.len())) ?? 0;
+            if (n > 0) {
+                acc[n] = Flight{ url = j.q("url").stringValue(), since = j.q("startedAt").stringValue() };
+            }
         }
-        final n = std\parseInt(name.sub(VALIDATE_JOB.len())) ?? 0;
-        if (n > 0) {
-            acc[n] = Flight{ url = j.q("url").stringValue(), since = j.q("startedAt").stringValue() };
-        }
+        return result\ok::<{int: Flight}>(acc);
+    } catch (err: any) {
+        return result\caught::<{int: Flight}>(err, doing: "pull-requests: read a validation run's jobs");
     }
-    return acc;
 }
 
 // parseMainRun reads `gh run list --json status,conclusion,url`, newest first: the newest
 // run still going, or else the newest that passed or failed. A cancelled run judged
 // nothing, so it is passed over. Null when no run says either.
-export fun parseMainRun(body: str) > MainRun? !> any {
-    foreach (run in serialize\jsonDecode(body).listValue()) {
-        final url = run.q("url").stringValue();
-        if (run.q("status").stringValue() != "completed") {
-            return MainRun{ state = "running", url = url };
+export fun parseMainRun(body: str) > result\Result::<MainRun?> {
+    try {
+        foreach (run in serialize\jsonDecode(body).listValue()) {
+            final url = run.q("url").stringValue();
+            if (run.q("status").stringValue() != "completed") {
+                return result\ok::<MainRun?>(MainRun{ state = "running", url = url });
+            }
+            final conclusion = run.q("conclusion").stringValue();
+            if (conclusion == "success") {
+                return result\ok::<MainRun?>(MainRun{ state = "green", url = url });
+            }
+            if (conclusion == "failure") {
+                return result\ok::<MainRun?>(MainRun{ state = "red", url = url });
+            }
         }
-        final conclusion = run.q("conclusion").stringValue();
-        if (conclusion == "success") {
-            return MainRun{ state = "green", url = url };
-        }
-        if (conclusion == "failure") {
-            return MainRun{ state = "red", url = url };
-        }
+        return result\ok::<MainRun?>(null);
+    } catch (err: any) {
+        return result\caught::<MainRun?>(err, doing: "pull-requests: read main's runs");
     }
-    return null;
 }
 
 // ascii keeps printable ASCII and turns anything else into "?", one per character, so
@@ -1958,21 +2137,25 @@ fun when(ts: str) > str {
 
 // age is how long before now since was, in its largest whole unit, "-" when there is
 // no since.
-fun age(since: str, now: str) > str !> any {
+fun age(since: str, now: str) > result\Result::<str> {
     if (since.len() < 20) {
-        return "-";
+        return result\ok::<str>("-");
     }
-    final minutes = std\toInt((time\parse(RFC3339, value: now) - time\parse(RFC3339, value: since)) / 60000.0);
-    if (minutes < 1) {
-        return "now";
+    try {
+        final minutes = std\toInt((time\parse(RFC3339, value: now) - time\parse(RFC3339, value: since)) / 60000.0);
+        if (minutes < 1) {
+            return result\ok::<str>("now");
+        }
+        if (minutes < 60) {
+            return result\ok::<str>("{minutes}m");
+        }
+        if (minutes < 48 * 60) {
+            return result\ok::<str>("{minutes / 60}h");
+        }
+        return result\ok::<str>("{minutes / (24 * 60)}d");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "pull-requests: age of {since}");
     }
-    if (minutes < 60) {
-        return "{minutes}m";
-    }
-    if (minutes < 48 * 60) {
-        return "{minutes / 60}h";
-    }
-    return "{minutes / (24 * 60)}d";
 }
 
 fun ordinal(n: int) > str {
@@ -2152,7 +2335,7 @@ export fun rankRows(b: Board, placed: [Placed]) > [Ranked] {
 
 // stateCell is where x stands on its way to merging, and for how long when the board knows.
 // CI and review have columns of their own.
-export fun stateCell(x: Ranked, b: Board) > str !> any {
+export fun stateCell(x: Ranked, b: Board) > result\Result::<str> {
     final p = x.placed.pull;
     final s = x.placed.section;
     var label = "can join";
@@ -2178,14 +2361,17 @@ export fun stateCell(x: Ranked, b: Board) > str !> any {
         }
     }
     final held = age(since, now: b.at);
-    if (held != "-") {
-        label = "{label}, {held}";
+    if (held.error -> err) {
+        return held;
     }
-    return label;
+    if (held.value! != "-") {
+        label = "{label}, {held.value!}";
+    }
+    return result\ok::<str>(label);
 }
 
 // nextCell is the one thing to do next for x.
-fun nextCell(x: Ranked, b: Board) > str !> any {
+fun nextCell(x: Ranked, b: Board) > str {
     final p = x.placed.pull;
     final s = x.placed.section;
     if (s == "flight") {
@@ -2217,7 +2403,7 @@ fun nextCell(x: Ranked, b: Board) > str !> any {
 
 // tableRow is x's leaderboard row: rank, the pull request with its author and branch,
 // state, CI, review, and the one thing to do next.
-fun tableRow(x: Ranked, b: Board) > str !> any {
+fun tableRow(x: Ranked, b: Board) > result\Result::<str> {
     final p = x.placed.pull;
     final r = x.placed.record;
     // A pipe in a code span still splits a table row; GitHub reads "\|" there as "|".
@@ -2242,7 +2428,11 @@ fun tableRow(x: Ranked, b: Board) > str !> any {
     } else if (p.review == "REVIEW_REQUIRED") {
         review = "pending";
     }
-    return row([x.rank, pr, stateCell(x, b: b), ci, review, nextCell(x, b: b)]);
+    final state = stateCell(x, b: b);
+    if (state.error -> err) {
+        return state;
+    }
+    return result\ok::<str>(row([x.rank, pr, state.value!, ci, review, nextCell(x, b: b)]));
 }
 
 // whyLine is x's line in the details under the leaderboard: the full reason, and the
@@ -2300,27 +2490,31 @@ export fun queueGraph(b: Board, sections: {int: str}) > diagramlink\DiagramGraph
 }
 
 // mergedLine counts the week's merges into base by who merged them.
-fun mergedLine(b: Board) > str !> any {
-    final now = time\parse(RFC3339, value: b.at);
-    final since = time\add(now, duration: "-" + MERGED_WINDOW);
+fun mergedLine(b: Board) > result\Result::<str> {
     var queue = 0;
     var past = 0;
-    foreach (m in b.merged) {
-        if (time\parse(RFC3339, value: m.at) < since) {
-            continue;
+    try {
+        final now = time\parse(RFC3339, value: b.at);
+        final since = time\add(now, duration: "-" + MERGED_WINDOW);
+        foreach (m in b.merged) {
+            if (time\parse(RFC3339, value: m.at) < since) {
+                continue;
+            }
+            if (m.byQueue) {
+                queue = queue + 1;
+            } else {
+                past = past + 1;
+            }
         }
-        if (m.byQueue) {
-            queue = queue + 1;
-        } else {
-            past = past + 1;
-        }
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "pull-requests: count the week's merges");
     }
     // A full listing that never leaves the week may be missing older merges from it.
     var span = "in 7 days";
     if (b.merged.len() >= MERGED_LIMIT and queue + past == b.merged.len()) {
         span = "in the newest {MERGED_LIMIT}, all from the last 7 days";
     }
-    return "merged {span}: {queue} by the queue, {past} past it";
+    return result\ok::<str>("merged {span}: {queue} by the queue, {past} past it");
 }
 
 fun mainLine(b: Board) > str {
@@ -2336,7 +2530,7 @@ fun mainLine(b: Board) > str {
 }
 
 // renderDashboard renders the page from what the step read; it reads nothing itself.
-export fun renderDashboard(b: Board) > str !> any {
+export fun renderDashboard(b: Board) > result\Result::<str> {
     final placed = placePulls(b);
     final sections = mut {<int: str>};
     final counts = mut {<str: int>};
@@ -2378,12 +2572,21 @@ export fun renderDashboard(b: Board) > str !> any {
     }
     final g = queueGraph(b, sections: sections);
     if (g != null) {
-        final link = diagramlink\diagramLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
+        var link = "";
+        try {
+            link = diagramlink\diagramLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "pull-requests: link the queue graph");
+        }
         if (link != "") {
             meta.append("[queue graph]({link})");
         }
     }
-    meta.append(mergedLine(b));
+    final merges = mergedLine(b);
+    if (merges.error -> err) {
+        return merges;
+    }
+    meta.append(merges.value!);
 
     final lines = mut ["## Merge queue", ""];
     if (status.len() > 0) {
@@ -2411,7 +2614,11 @@ export fun renderDashboard(b: Board) > str !> any {
     } else {
         lines.append(TABLE_HEAD);
         foreach (x in ranked) {
-            lines.append(tableRow(x, b: b));
+            final tabled = tableRow(x, b: b);
+            if (tabled.error -> err) {
+                return tabled;
+            }
+            lines.append(tabled.value!);
         }
     }
     lines.append("");
@@ -2485,26 +2692,64 @@ export fun renderDashboard(b: Board) > str !> any {
     lines.append("</details>");
     lines.append("");
     lines.append(DASHBOARD_MARKER);
-    return lines.join("\n") + "\n";
+    return result\ok::<str>(lines.join("\n") + "\n");
 }
 
 // fetchBoard reads what the page shows. Every read is a GitHub API call, reported with its
 // count and time.
-fun fetchBoard(sel: Selector) > Board !> any {
+fun fetchBoard(sel: Selector) > result\Result::<Board> {
     final began = os\time();
-    final open = openPulls();
-    var requests = 1;
-    final pulls = selectPulls(sel, open: open);
-    final listed = magus\cmd("queue", args: ["ls", "--provider", "github", "--base", sel.base], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
-    if (!listed.ok) {
-        throw "pull-requests: magus queue ls: {listed.stderr.trim()}";
+    final openRead = openPulls();
+    if (openRead.error -> err) {
+        return result\Result::<Board>{ error = err };
     }
-    final queue = parseQueue(listed.stdout);
-    final merged = parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", sel.base,
-        "--limit", "{MERGED_LIMIT}", "--json", "number,mergedAt,statusCheckRollup"]));
-    final tip = capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{sel.base}", "--jq", ".sha"]).trim();
-    final ci = parseMainRun(capture("gh", args: ["run", "list", "--branch", sel.base, "--event", "push", "--workflow", CI_WORKFLOW,
-        "--limit", "20", "--json", "status,conclusion,url"]));
+    final open = openRead.value!;
+    var requests = 1;
+    final pullsRead = selectPulls(sel, open: open);
+    if (pullsRead.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final pulls = pullsRead.value!;
+    var queueText = "";
+    try {
+        final listed = magus\cmd("queue", args: ["ls", "--provider", "github", "--base", sel.base], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
+        if (!listed.ok) {
+            return result\fail::<Board>("pull-requests: magus queue ls: {listed.stderr.trim()}");
+        }
+        queueText = listed.stdout;
+    } catch (err: any) {
+        return result\caught::<Board>(err, doing: "pull-requests: magus queue ls");
+    }
+    final queueRead = parseQueue(queueText);
+    if (queueRead.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final queue = queueRead.value!;
+    final mergedList = capture("gh", args: ["pr", "list", "--state", "merged", "--base", sel.base,
+        "--limit", "{MERGED_LIMIT}", "--json", "number,mergedAt,statusCheckRollup"]);
+    if (mergedList.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final mergedRead = parseMerged(mergedList.value!);
+    if (mergedRead.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final merged = mergedRead.value!;
+    final tipRead = capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{sel.base}", "--jq", ".sha"]);
+    if (tipRead.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final tip = tipRead.value!.trim();
+    final ciList = capture("gh", args: ["run", "list", "--branch", sel.base, "--event", "push", "--workflow", CI_WORKFLOW,
+        "--limit", "20", "--json", "status,conclusion,url"]);
+    if (ciList.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final ciRead = parseMainRun(ciList.value!);
+    if (ciRead.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    final ci = ciRead.value;
     requests = requests + 3;
     var attributed = [<regressions\Regression>];
     var unread = "";
@@ -2523,44 +2768,91 @@ fun fetchBoard(sel: Selector) > Board !> any {
     final waits = mut {<int: Wait>};
     foreach (p in pulls) {
         if (p.state == "OPEN" and (ids.indexOf(p.number) != null or intent(p, open: open))) {
-            final w = parseWait(capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{p.oid}/status"]));
+            final status = capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{p.oid}/status"]);
+            if (status.error -> err) {
+                return result\Result::<Board>{ error = err };
+            }
+            final waitRead = parseWait(status.value!);
+            if (waitRead.error -> err) {
+                return result\Result::<Board>{ error = err };
+            }
             requests = requests + 1;
+            final w = waitRead.value;
             if (w != null) {
                 waits[p.number] = w!;
             }
         }
     }
     final flights = mut {<int: Flight>};
-    final runs = serialize\jsonDecode(capture("gh", args: ["run", "list", "--workflow", "queue.yaml", "--branch", sel.base,
-        "--status", "in_progress", "--json", "databaseId"])).listValue();
+    final runList = capture("gh", args: ["run", "list", "--workflow", "queue.yaml", "--branch", sel.base,
+        "--status", "in_progress", "--json", "databaseId"]);
+    if (runList.error -> err) {
+        return result\Result::<Board>{ error = err };
+    }
+    var runs = [<serialize\Boxed>];
+    try {
+        runs = serialize\jsonDecode(runList.value!).listValue();
+    } catch (err: any) {
+        return result\caught::<Board>(err, doing: "pull-requests: read the running validations");
+    }
     requests = requests + 1;
     foreach (run in runs) {
-        foreach (n, f in parseFlights(capture("gh", args: ["run", "view", "{run.q("databaseId").integerValue()}", "--json", "jobs"]))) {
+        final view = capture("gh", args: ["run", "view", "{run.q("databaseId").integerValue()}", "--json", "jobs"]);
+        if (view.error -> err) {
+            return result\Result::<Board>{ error = err };
+        }
+        final flown = parseFlights(view.value!);
+        if (flown.error -> err) {
+            return result\Result::<Board>{ error = err };
+        }
+        foreach (n, f in flown.value!) {
             flights[n] = f;
         }
         requests = requests + 1;
     }
-    std\print("pull-requests: read {open.len()} open and {merged.len()} merged pull requests, {waits.len()} statuses and "
-        + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
-        + "{std\toInt(os\time() - began)}ms");
-    return Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
+    var at = "";
+    try {
+        std\print("pull-requests: read {open.len()} open and {merged.len()} merged pull requests, {waits.len()} statuses and "
+            + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
+            + "{std\toInt(os\time() - began)}ms");
+        at = time\nowIso();
+    } catch (err: any) {
+        return result\caught::<Board>(err, doing: "pull-requests: stamp the board");
+    }
+    return result\ok::<Board>(Board{ base = sel.base, at = at, tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
         queue = queue, merged = merged, waits = waits, flights = flights, mainRun = ci, regressions = attributed,
-        regressionsUnread = unread };
+        regressionsUnread = unread });
 }
 
 // dashboard renders the board and writes it to --out and the --issue body.
-fun dashboard(sel: Selector) > void !> any {
-    final body = renderDashboard(fetchBoard(sel));
-    if (body.len() > BODY_LIMIT) {
-        throw "pull-requests: the dashboard is {body.len()} bytes, past the {BODY_LIMIT} characters GitHub takes in an issue body";
+fun dashboard(sel: Selector) > result\Result::<bool> {
+    final board = fetchBoard(sel);
+    if (board.error -> err) {
+        return result\Result::<bool>{ error = err };
     }
-    fs\writeFile(sel.file, content: body);
+    final page = renderDashboard(board.value!);
+    if (page.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final body = page.value!;
+    if (body.len() > BODY_LIMIT) {
+        return result\fail::<bool>("pull-requests: the dashboard is {body.len()} bytes, past the {BODY_LIMIT} characters GitHub takes in an issue body");
+    }
+    try {
+        fs\writeFile(sel.file, content: body);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "pull-requests: write {sel.file}");
+    }
     if (sel.issue == "") {
         std\print("pull-requests: wrote the dashboard to {sel.file}; --preview, so no issue was edited");
-        return;
+        return result\ok::<bool>(true);
     }
-    _ = capture("gh", args: ["issue", "edit", sel.issue, "--body-file", sel.file]);
+    final edited = capture("gh", args: ["issue", "edit", sel.issue, "--body-file", sel.file]);
+    if (edited.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
     std\print("pull-requests: wrote the dashboard to {sel.file} and to issue #{sel.issue}");
+    return result\ok::<bool>(true);
 }
 
 // DASH_PREVIEW and DASH_ISSUE are what a person is offered for a dashboard that names neither.
@@ -2584,10 +2876,18 @@ export fun unselected(argv: [str]) > bool {
 // wrote listed second.
 fun openLines() > result\Result::<{str: [str]}> {
     try {
-        final me = capture("gh", args: ["api", "user", "--jq", ".login"]).trim();
+        final login = capture("gh", args: ["api", "user", "--jq", ".login"]);
+        if (login.error -> err) {
+            return result\Result::<{str: [str]}>{ error = err };
+        }
+        final me = login.value!.trim();
         final all = mut [<str>];
         final mine = mut [<str>];
-        foreach (p in openPulls()) {
+        final opened = openPulls();
+        if (opened.error -> err) {
+            return result\Result::<{str: [str]}>{ error = err };
+        }
+        foreach (p in opened.value!) {
             final line = "{p.number} {p.title}";
             all.append(line);
             if (p.author == me) { mine.append(line); }
@@ -2602,8 +2902,12 @@ fun openLines() > result\Result::<{str: [str]}> {
 fun openIssues() > result\Result::<[str]> {
     try {
         final lines = mut [<str>];
-        foreach (i in serialize\jsonDecode(capture("gh", args: ["issue", "list", "--state", "open", "--limit", "50",
-            "--json", "number,title"])).listValue()) {
+        final fetched = capture("gh", args: ["issue", "list", "--state", "open", "--limit", "50",
+            "--json", "number,title"]);
+        if (fetched.error -> err) {
+            return result\Result::<[str]>{ error = err };
+        }
+        foreach (i in serialize\jsonDecode(fetched.value!).listValue()) {
             lines.append("{i.q("number").integerValue()} {i.q("title").stringValue()}");
         }
         return result\ok::<[str]>(lines);
@@ -2666,15 +2970,20 @@ export fun main(args: [str]) > void !> any {
             if (!sure.value!) { throw "pull-requests: {step}: not confirmed, nothing done"; }
         }
     }
-    if (step == "status") {
-        status(parseSelector(step, argv: argv));
-    } else if (step == "apply") {
-        apply(parseSelector(step, argv: argv));
-    } else if (step == "dashboard") {
-        dashboard(parseSelector(step, argv: argv));
-    } else {
+    if (step != "status" and step != "apply" and step != "dashboard") {
         throw "pull-requests: unknown step \"{step}\"\n{usage}";
     }
+    final selector = parseSelector(step, argv: argv);
+    if (selector.error != null) { throw selector.error!.message; }
+    var done = result\ok::<bool>(true);
+    if (step == "status") {
+        done = status(selector.value!);
+    } else if (step == "apply") {
+        done = apply(selector.value!);
+    } else {
+        done = dashboard(selector.value!);
+    }
+    if (done.error != null) { throw done.error!.message; }
 }
 
 fun green(name: str) > Check {
@@ -2810,7 +3119,7 @@ test "annotations keep failures that name a file" {
       {"path": "types/diagnostic.go", "start_line": 442, "annotation_level": "failure", "message": "File is not properly formatted (gofmt)"},
       {"path": ".github", "start_line": 29, "annotation_level": "notice", "message": "."}
     ]`;
-    final notes = parseAnnotations(body);
+    final notes = parseAnnotations(body).value!;
     assert\equal(notes.len(), want: 1, message: "one file annotation");
     assert\equal(notes[0].path, want: "types/diagnostic.go", message: "path");
 }
@@ -2823,7 +3132,7 @@ test "parseAnnotations keeps a drift gate's own throw despite its generic path" 
         + "first: MAGUS.md\"}, "
         + "\{\"path\": \".github\", \"start_line\": 3918, \"annotation_level\": \"failure\", "
         + "\"message\": \"Process completed with exit code 1.\"}]";
-    final notes = parseAnnotations(body);
+    final notes = parseAnnotations(body).value!;
     assert\equal(notes.len(), want: 1, message: "the runner's own noise stays out; the drift throw stays in");
     assert\equal(driftPaths(notes[0].message), want: ["MAGUS.md"], message: "the trailing file list");
 }
@@ -3028,18 +3337,13 @@ test "a status line carries the record and only the evidence it has" {
 }
 
 test "selectors take a repeated --pr, and apply alone takes --method" {
-    final sel = parseSelector("status", argv: ["--pr", "316", "--pr=327", "--author", "eli"]);
+    final sel = parseSelector("status", argv: ["--pr", "316", "--pr=327", "--author", "eli"]).value!;
     assert\equal(sel.prs, want: [316, 327], message: "both numbers");
     assert\equal(sel.author, want: "eli", message: "author");
-    assert\equal(parseSelector("apply", argv: ["--method", "rebase"]).method, want: "rebase", message: "method");
-    assert\equal(parseSelector("status", argv: [<str>]).method, want: "squash", message: "default method");
+    assert\equal(parseSelector("apply", argv: ["--method", "rebase"]).value!.method, want: "rebase", message: "method");
+    assert\equal(parseSelector("status", argv: [<str>]).value!.method, want: "squash", message: "default method");
     foreach (argv in [["--pr"], ["--pr", "x"], ["--pr", "0"], ["--pr", "3a"], ["--author", ""], ["--method", "squash"], ["316"], ["--extra"]]) {
-        var refused = false;
-        try {
-            _ = parseSelector("status", argv: argv);
-        } catch (e) {
-            refused = true;
-        }
+        final refused = parseSelector("status", argv: argv).error != null;
         assert\equal(refused, want: true, message: argv.join(" "));
     }
     // Each case is the step, then its flags.
@@ -3057,25 +3361,20 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
         ["dashboard", "--all", "--preview", "--out", "d.md", "--issue", "12"],
         ["dashboard", "--all", "--preview"],
     ]) {
-        var refused = false;
-        try {
-            _ = parseSelector(c[0], argv: c.sub(1));
-        } catch (e) {
-            refused = true;
-        }
+        final refused = parseSelector(c[0], argv: c.sub(1)).error != null;
         assert\equal(refused, want: true, message: c.join(" "));
     }
 }
 
 test "status and dashboard take --all; dashboard takes its page's flags" {
-    assert\equal(parseSelector("status", argv: ["--all"]).all, want: true, message: "status --all");
-    final d = parseSelector("dashboard", argv: ["--all", "--base", "trunk", "--out", "d.md", "--issue", "12", "--run-url", "u"]);
+    assert\equal(parseSelector("status", argv: ["--all"]).value!.all, want: true, message: "status --all");
+    final d = parseSelector("dashboard", argv: ["--all", "--base", "trunk", "--out", "d.md", "--issue", "12", "--run-url", "u"]).value!;
     assert\equal([d.base, d.file, d.issue, d.runUrl], want: ["trunk", "d.md", "12", "u"], message: "the page's flags");
     final preview = ["--all", "--preview", "--out", "d.md"];
-    assert\equal(parseSelector("dashboard", argv: preview).issue, want: "", message: "a preview edits no issue");
-    assert\equal(parseSelector("dashboard", argv: preview).base, want: "main", message: "the default base");
-    assert\equal(parseSelector("dashboard", argv: preview).console, want: diagramlink\defaultConsoleBase, message: "the default console");
-    assert\equal(parseSelector("dashboard", argv: preview + ["--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
+    assert\equal(parseSelector("dashboard", argv: preview).value!.issue, want: "", message: "a preview edits no issue");
+    assert\equal(parseSelector("dashboard", argv: preview).value!.base, want: "main", message: "the default base");
+    assert\equal(parseSelector("dashboard", argv: preview).value!.console, want: diagramlink\defaultConsoleBase, message: "the default console");
+    assert\equal(parseSelector("dashboard", argv: preview + ["--console-base", "https://c.test/"]).value!.console, want: "https://c.test/", message: "a console of one's own");
 }
 
 test "selection is the requested numbers or the author's pull requests" {
@@ -3113,10 +3412,10 @@ test "a job log's failing Go tests are read once each, subtests included" {
 
 test "main's baseline is its latest run that passed or failed, and its failed jobs" {
     final runs = `[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}, {"databaseId": 2, "conclusion": "failure", "url": "u2"}, {"databaseId": 1, "conclusion": "success", "url": "u1"}]`;
-    assert\equal(parseBaselineRun(runs)!.q("url").stringValue(), want: "u2", message: "a cancelled run judged nothing");
-    assert\equal(parseBaselineRun(`[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}]`), want: null, message: "none judged");
+    assert\equal(parseBaselineRun(runs).value!.q("url").stringValue(), want: "u2", message: "a cancelled run judged nothing");
+    assert\equal(parseBaselineRun(`[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}]`).value, want: null, message: "none judged");
     final jobs = `{"jobs": [{"name": "magus plan", "conclusion": "success"}, {"name": "magus shard 0: .", "conclusion": "failure"}, {"name": "magus advisor", "conclusion": "skipped"}, {"name": "magus shard 1: docs", "conclusion": "cancelled"}, {"name": "ci gate", "conclusion": "failure"}]}`;
-    assert\equal(parseFailingJobs(jobs), want: ["magus shard 0: .", "ci gate"], message: "failed jobs only");
+    assert\equal(parseFailingJobs(jobs).value!, want: ["magus shard 0: .", "ci gate"], message: "failed jobs only");
 }
 
 test "a check's run page is kept for the evidence" {
@@ -3208,23 +3507,35 @@ test "a red-inherited line names both runs, a red one the failures main does not
 
 final AT = "2026-09-26T20:00:00Z";
 
-fun has(page: str, want: str) > void !> any {
-    assert\equal(page.indexOf(want) != null, want: true, message: "{want} in:\n{page}");
+// has and lacks answer "" when the page holds, or lacks, want, and the failure text
+// otherwise, so a test's assert\equal shows the page.
+fun has(page: str, want: str) > str {
+    if (page.indexOf(want) != null) {
+        return "";
+    }
+    return "{want} in:\n{page}";
 }
 
-fun lacks(page: str, want: str) > void !> any {
-    assert\equal(page.indexOf(want) == null, want: true, message: "no {want} in:\n{page}");
+fun lacks(page: str, want: str) > str {
+    if (page.indexOf(want) == null) {
+        return "";
+    }
+    return "no {want} in:\n{page}";
 }
 
-// diagramIn decodes the graph a page links, and throws when it links none.
-fun diagramIn(page: str) > serialize\Boxed !> any {
+// diagramIn decodes the graph a page links, and fails when it links none.
+fun diagramIn(page: str) > result\Result::<serialize\Boxed> {
     final open = "[queue graph](";
     final at = page.indexOf(open);
     if (at == null) {
-        throw "no graph link in:\n{page}";
+        return result\fail::<serialize\Boxed>("no graph link in:\n{page}");
     }
     final rest = page.sub(at! + open.len());
-    return diagramlink\decodeDiagramLink(rest.sub(0, len: rest.indexOf(")")!));
+    try {
+        return result\ok::<serialize\Boxed>(diagramlink\decodeDiagramLink(rest.sub(0, len: rest.indexOf(")")!)));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed>(err, doing: "decode the graph link");
+    }
 }
 
 // nodeIds is the ids of the graph's nodes, in order.
@@ -3287,16 +3598,16 @@ fun fullBoard() > Board {
 }
 
 test "the page for a queue in every state matches its golden" {
-    assert\equal(renderDashboard(fullBoard()), want: fs\readFile("hack/testdata/queue-dashboard.md.golden"), message: "hack/testdata/queue-dashboard.md.golden");
+    assert\equal(renderDashboard(fullBoard()).value!, want: fs\readFile("hack/testdata/queue-dashboard.md.golden"), message: "hack/testdata/queue-dashboard.md.golden");
 }
 
 test "the page for an empty queue matches its golden" {
     final b = Board{ base = "main", at = AT, tip = "cba6465e8617a1b2", open = [<Pull>], pulls = [<Pull>],
         mainRun = MainRun{ state = "green", url = "https://github.com/o/r/actions/runs/70" } };
-    final page = renderDashboard(b);
+    final page = renderDashboard(b).value!;
     assert\equal(page, want: fs\readFile("hack/testdata/queue-dashboard-empty.md.golden"), message: "hack/testdata/queue-dashboard-empty.md.golden");
-    lacks(page, want: "#diagram-link=");
-    lacks(page, want: "###");
+    assert\equal(lacks(page, want: "#diagram-link="), want: "", message: "lacks");
+    assert\equal(lacks(page, want: "###"), want: "", message: "lacks");
     assert\equal(page.endsWith("\n" + DASHBOARD_MARKER + "\n"), want: true, message: "the marker closes the page");
 }
 
@@ -3328,7 +3639,7 @@ test "each row says where it stands, and for how long" {
     final b = fullBoard();
     final states = mut {<int: str>};
     foreach (x in rankedBoard(b)) {
-        states[x.placed.pull.number] = stateCell(x, b: b);
+        states[x.placed.pull.number] = stateCell(x, b: b).value!;
     }
     assert\equal(states[1], want: "validating, 8m", message: "in flight");
     assert\equal(states[2], want: "queued 1st, 1h", message: "first in line");
@@ -3340,7 +3651,7 @@ test "each row says where it stands, and for how long" {
 
     final pending = Pull{ number = 20, autoMerge = true, review = "CHANGES_REQUESTED", checks = [Check{ name = "t", conclusion = "PENDING" }] };
     final pb = board([pending], queue: [<Queued>]);
-    assert\equal(stateCell(rankedBoard(pb)[0], b: pb), want: "queued", message: "intent the queue has not listed");
+    assert\equal(stateCell(rankedBoard(pb)[0], b: pb).value!, want: "queued", message: "intent the queue has not listed");
 }
 
 test "places go to the rows the queue can merge, and a kicked-back row takes none" {
@@ -3359,11 +3670,11 @@ test "places go to the rows the queue can merge, and a kicked-back row takes non
 
 test "a board with nothing to rank says so in one line, and draws no table" {
     final drafts = board([Pull{ number = 1, draft = true }, Pull{ number = 2, review = "CHANGES_REQUESTED", checks = [green("t")] }], queue: [<Queued>]);
-    final page = renderDashboard(drafts);
-    has(page, want: "\nNothing to merge right now.\n");
-    lacks(page, want: "| # |");
-    has(page, want: "Drafts and forks (1)");
-    has(page, want: "1 more open");
+    final page = renderDashboard(drafts).value!;
+    assert\equal(has(page, want: "\nNothing to merge right now.\n"), want: "", message: "has");
+    assert\equal(lacks(page, want: "| # |"), want: "", message: "lacks");
+    assert\equal(has(page, want: "Drafts and forks (1)"), want: "", message: "has");
+    assert\equal(has(page, want: "1 more open"), want: "", message: "has");
 }
 
 test "the hint names the worst thing on the page, and only it" {
@@ -3371,17 +3682,17 @@ test "the hint names the worst thing on the page, and only it" {
     final red = "`main` is red, so a candidate can fail the gate for that alone.";
     final idle = "Changes are queued and none is validating";
     final join = "An approved, green pull request can join";
-    final empty = renderDashboard(board([<Pull>], queue: [<Queued>]));
+    final empty = renderDashboard(board([<Pull>], queue: [<Queued>])).value!;
     foreach (h in [kicked, red, idle, join]) {
-        lacks(empty, want: h);
+        assert\equal(lacks(empty, want: h), want: "", message: "lacks");
     }
     final redMain = Board{ base = "main", at = AT, open = [kickedBy(1, code: "KICK_RED")], pulls = [kickedBy(1, code: "KICK_RED")],
         mainRun = MainRun{ state = "red" } };
-    has(renderDashboard(redMain), want: kicked);
-    lacks(renderDashboard(redMain), want: red);
-    has(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }), want: red);
-    has(renderDashboard(board([Pull{ number = 2, autoMerge = true }], queue: [Queued{ id = 2 }])), want: idle);
-    has(renderDashboard(board([Pull{ number = 3, review = "APPROVED", checks = [green("t")] }], queue: [<Queued>])), want: join);
+    assert\equal(has(renderDashboard(redMain).value!, want: kicked), want: "", message: "has");
+    assert\equal(lacks(renderDashboard(redMain).value!, want: red), want: "", message: "lacks");
+    assert\equal(has(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }).value!, want: red), want: "", message: "has");
+    assert\equal(has(renderDashboard(board([Pull{ number = 2, autoMerge = true }], queue: [Queued{ id = 2 }])).value!, want: idle), want: "", message: "has");
+    assert\equal(has(renderDashboard(board([Pull{ number = 3, review = "APPROVED", checks = [green("t")] }], queue: [<Queued>])).value!, want: join), want: "", message: "has");
 }
 
 test "a partition of three links each behind the base" {
@@ -3393,16 +3704,16 @@ test "a partition of three links each behind the base" {
     final b = Board{ base = "main", at = AT, open = open, pulls = open,
         queue = [Queued{ id = 1 }, Queued{ id = 2 }, Queued{ id = 3 }],
         flights = {1: Flight{ url = "https://github.com/o/r/actions/runs/9/job/8", since = "2026-09-26T19:30:00Z" }} };
-    final page = renderDashboard(b);
-    has(page, want: "[queue graph](" + diagramlink\defaultConsoleBase + "graph/#diagram-link=");
-    final doc = diagramIn(page);
+    final page = renderDashboard(b).value!;
+    assert\equal(has(page, want: "[queue graph](" + diagramlink\defaultConsoleBase + "graph/#diagram-link="), want: "", message: "has");
+    final doc = diagramIn(page).value!;
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "Merge queue into main", message: "title");
     assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
     assert\equal(doc.q("nodes").listValue()[1].q("label").stringValue(), want: "#1 one", message: "a change's label");
     assert\equal(graphEdges(doc), want: ["base>pr1", "base>pr2", "base>pr3"], message: "each behind the base");
-    has(page, want: "| 1 | #1 one<br><sub>`a`</sub> | validating, 30m | green | - | merging: [run](https://github.com/o/r/actions/runs/9/job/8) |");
-    has(page, want: "| 3 | #3 three<br><sub>`c`</sub> | queued 2nd | running | - | wait: queued |");
+    assert\equal(has(page, want: "| 1 | #1 one<br><sub>`a`</sub> | validating, 30m | green | - | merging: [run](https://github.com/o/r/actions/runs/9/job/8) |"), want: "", message: "has");
+    assert\equal(has(page, want: "| 3 | #3 three<br><sub>`c`</sub> | queued 2nd | running | - | wait: queued |"), want: "", message: "has");
 }
 
 test "a stack links each member behind the one it is stacked on" {
@@ -3410,9 +3721,9 @@ test "a stack links each member behind the one it is stacked on" {
         Pull{ number = 10, head = "s1", title = "bottom" },
         Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
     ];
-    final page = renderDashboard(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
-    assert\equal(graphEdges(diagramIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
-    has(page, want: "| queued 2nd | running | - | wait: stacked on #10, which has not merged |");
+    final page = renderDashboard(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }])).value!;
+    assert\equal(graphEdges(diagramIn(page).value!), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
+    assert\equal(has(page, want: "| queued 2nd | running | - | wait: stacked on #10, which has not merged |"), want: "", message: "has");
 }
 
 test "an empty queue has no graph" {
@@ -3422,27 +3733,27 @@ test "an empty queue has no graph" {
 test "each kick code goes to the author, and a regeneration to a manual merge, as a node with no edge" {
     final open = [kickedBy(1, code: "KICK_CONFLICT"), kickedBy(2, code: "KICK_RED"), kickedBy(3, code: "KICK_REFUSED"),
         kickedBy(4, code: "KICK_REGENERATION"), Pull{ number = 5, head = "k5", title = "unexplained", labels = [KICKED] }];
-    final page = renderDashboard(board(open, queue: [<Queued>]));
-    has(page, want: "1 to merge by hand · 4 kicked back");
+    final page = renderDashboard(board(open, queue: [<Queued>])).value!;
+    assert\equal(has(page, want: "1 to merge by hand · 4 kicked back"), want: "", message: "has");
     foreach (code in ["KICK_CONFLICT", "KICK_RED", "KICK_REFUSED"]) {
-        has(page, want: "`{code}`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/");
+        assert\equal(has(page, want: "`{code}`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/"), want: "", message: "has");
     }
-    has(page, want: "- **#5** labeled {KICKED}, and no kick-back comment says why<br>by hand, once fixed: `gh pr merge 5 --auto --squash`");
-    final doc = diagramIn(page);
+    assert\equal(has(page, want: "- **#5** labeled {KICKED}, and no kick-back comment says why<br>by hand, once fixed: `gh pr merge 5 --auto --squash`"), want: "", message: "has");
+    final doc = diagramIn(page).value!;
     assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
     assert\equal(graphEdges(doc).len(), want: 0, message: "stacked on nothing");
-    final labeled = renderDashboard(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
-    has(labeled, want: "1 to merge by hand");
+    final labeled = renderDashboard(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>])).value!;
+    assert\equal(has(labeled, want: "1 to merge by hand"), want: "", message: "has");
 }
 
 test "a title cannot break a table, a comment or the graph" {
     final open = [Pull{ number = 30, head = "t", title = "caf\195\169 | \"quoted\" #1; <!-- magus-queue: start -->", autoMerge = true }];
-    final page = renderDashboard(board(open, queue: [Queued{ id = 30 }]));
-    has(page, want: "| 1 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | queued 1st | running | - | wait: queued |\n");
+    final page = renderDashboard(board(open, queue: [Queued{ id = 30 }])).value!;
+    assert\equal(has(page, want: "| 1 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | queued 1st | running | - | wait: queued |\n"), want: "", message: "has");
     final odd = Pull{ number = 31, head = "a|b", author = "x|y", title = "t", review = "APPROVED", checks = [green("t")] };
-    has(renderDashboard(board([odd], queue: [<Queued>])), want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |");
-    lacks(page, want: "<!-- magus-queue: start -->");
-    assert\equal(diagramIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
+    assert\equal(has(renderDashboard(board([odd], queue: [<Queued>])).value!, want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |"), want: "", message: "has");
+    assert\equal(lacks(page, want: "<!-- magus-queue: start -->"), want: "", message: "lacks");
+    assert\equal(diagramIn(page).value!.q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
 }
 
 test "the week's merges are counted by who merged them" {
@@ -3451,35 +3762,35 @@ test "the week's merges are counted by who merged them" {
         Merged{ number = 2, at = "2026-09-22T10:00:00Z", byQueue = false },
         Merged{ number = 1, at = "2026-09-10T10:00:00Z", byQueue = false },
     ] };
-    has(renderDashboard(b), want: "merged in 7 days: 1 by the queue, 1 past it");
+    assert\equal(has(renderDashboard(b).value!, want: "merged in 7 days: 1 by the queue, 1 past it"), want: "", message: "has");
 }
 
 test "the dashboard's reads parse into what it renders" {
     final ls = `{"schema":"mergequeue.changes/v1alpha1","base":"main","changes":[{"id":"4","head":"h4","base":"main","method":"squash","fork":false,"affected":[]},{"id":"5","head":"h5","base":"main","method":"squash","parent":"4","fork":false,"affected":[]}]}`;
-    final q = parseQueue(ls);
+    final q = parseQueue(ls).value!;
     assert\equal([q[0].id, q[1].id, q[1].parent ?? 0], want: [4, 5, 4], message: "queue order and parent");
     assert\equal(q[0].parent, want: null, message: "on the base");
-    assert\equal(parseQueue(`{"schema":"mergequeue.changes/v1alpha1","base":"main","changes":null}`).len(), want: 0, message: "an empty queue");
+    assert\equal(parseQueue(`{"schema":"mergequeue.changes/v1alpha1","base":"main","changes":null}`).value!.len(), want: 0, message: "an empty queue");
 
     final merged = parseMerged(`[{"number": 9, "mergedAt": "2026-09-26T10:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}]},
-        {"number": 8, "mergedAt": "2026-09-26T09:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "PENDING"}]}]`);
+        {"number": 8, "mergedAt": "2026-09-26T09:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "PENDING"}]}]`).value!;
     assert\equal([merged[0].byQueue, merged[1].byQueue], want: [true, false], message: "who merged");
 
-    final w = parseWait(`{"statuses": [{"context": "ci", "description": "x"}, {"context": "merge-queue", "description": "waiting: WAIT_CHECKS", "updated_at": "2026-09-26T19:00:00Z"}]}`);
+    final w = parseWait(`{"statuses": [{"context": "ci", "description": "x"}, {"context": "merge-queue", "description": "waiting: WAIT_CHECKS", "updated_at": "2026-09-26T19:00:00Z"}]}`).value;
     assert\equal([w!.description, w!.since], want: ["waiting: WAIT_CHECKS", "2026-09-26T19:00:00Z"], message: "the queue's status");
-    assert\equal(parseWait(`{"statuses": []}`), want: null, message: "none posted");
+    assert\equal(parseWait(`{"statuses": []}`).value, want: null, message: "none posted");
 
     final flights = parseFlights(`{"jobs": [{"name": "queue plan", "status": "completed", "url": "p"},
         {"name": "queue validate #4", "status": "in_progress", "url": "u4", "startedAt": "2026-09-26T19:30:00Z"},
-        {"name": "queue validate #5", "status": "completed", "url": "u5"}]}`);
+        {"name": "queue validate #5", "status": "completed", "url": "u5"}]}`).value!;
     assert\equal(flights.len(), want: 1, message: "the running validation only");
     assert\equal(flights[4]!.url, want: "u4", message: "by pull request");
 
-    final running = parseMainRun(`[{"status": "in_progress", "conclusion": "", "url": "r3"}, {"status": "completed", "conclusion": "success", "url": "r2"}]`);
+    final running = parseMainRun(`[{"status": "in_progress", "conclusion": "", "url": "r3"}, {"status": "completed", "conclusion": "success", "url": "r2"}]`).value;
     assert\equal([running!.state, running!.url], want: ["running", "r3"], message: "a run still going");
-    final red = parseMainRun(`[{"status": "completed", "conclusion": "cancelled", "url": "r3"}, {"status": "completed", "conclusion": "failure", "url": "r2"}]`);
+    final red = parseMainRun(`[{"status": "completed", "conclusion": "cancelled", "url": "r3"}, {"status": "completed", "conclusion": "failure", "url": "r2"}]`).value;
     assert\equal([red!.state, red!.url], want: ["red", "r2"], message: "a cancelled run judged nothing");
-    assert\equal(parseMainRun(`[]`), want: null, message: "no run");
+    assert\equal(parseMainRun(`[]`).value, want: null, message: "no run");
 }
 
 test "a kick-back comment gives its first report line and its requeue command" {
@@ -3493,9 +3804,9 @@ test "a kick-back comment gives its first report line and its requeue command" {
 test "a kicked-back stack says to fix it and requeue, and draws no box" {
     final bottom = Pull{ number = 40, head = "b1", labels = [KICKED], kick = Kick{ code = "KICK_RED" } };
     final top = Pull{ number = 41, head = "b2", base = "b1" };
-    final page = renderDashboard(board([bottom, top], queue: [<Queued>]));
-    has(page, want: "fix it, then requeue (see why)");
-    lacks(page, want: "- [ ]");
+    final page = renderDashboard(board([bottom, top], queue: [<Queued>])).value!;
+    assert\equal(has(page, want: "fix it, then requeue (see why)"), want: "", message: "has");
+    assert\equal(lacks(page, want: "- [ ]"), want: "", message: "lacks");
 }
 
 test "an inherited red names who broke the check on main and who fixes it" {
@@ -3514,9 +3825,9 @@ test "the dashboard says who broke main and which pull request to merge first" {
     final broke = regressions\Regression{ attribution = regressions\Attribution{ key = "ci gate", state = "introduced",
         shas = ["c2"], prs = [640], mergedAt = "2026-11-06T10:00:00Z" }, fixers = [655] };
     final page = renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" },
-        regressions = [broke] });
-    has(page, want: "red since #640 (ci gate); merge #655 first");
-    lacks(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }), want: "red since");
+        regressions = [broke] }).value!;
+    assert\equal(has(page, want: "red since #640 (ci gate); merge #655 first"), want: "", message: "has");
+    assert\equal(lacks(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }).value!, want: "red since"), want: "", message: "lacks");
 }
 
 test "a run built across the module boundary keeps its fields, so main's history reads" {
@@ -3528,8 +3839,8 @@ test "a run built across the module boundary keeps its fields, so main's history
 
 test "the dashboard says an unreadable main history is unknown, never an empty list" {
     final page = renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" },
-        regressionsUnread = "gh: HTTP 502" });
-    has(page, want: "which change broke it is unknown, the read failed: gh: HTTP 502");
+        regressionsUnread = "gh: HTTP 502" }).value!;
+    assert\equal(has(page, want: "which change broke it is unknown, the read failed: gh: HTTP 502"), want: "", message: "has");
 }
 
 test "a selector is any of --pr, --author or --all, attached or not" {
