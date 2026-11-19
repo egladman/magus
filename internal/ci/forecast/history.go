@@ -1053,7 +1053,7 @@ func (h *History) fold(path string, lines []historyLine) error {
 // setAside drops a history this magus does not read and says so: it is derived, so
 // the run rebuilds it from empty and the next write replaces the old entries.
 func (h *History) setAside(path, what string) error {
-	slog.Warn(fmt.Sprintf("forecast: history %q is %s, which this magus (%s) does not read; rebuilding it from empty and replacing it on the next write", path, what, HistoryVersion),
+	slog.WarnContext(context.Background(), fmt.Sprintf("history %q is %s, which this magus (%s) does not read; rebuilding it from empty and replacing it on the next write", path, what, HistoryVersion),
 		attr.Component("magus"))
 	*h = History{Version: HistoryVersion, Projects: make(map[string]map[string]Stats)}
 	return nil
