@@ -110,7 +110,9 @@ fun body(count: int, lines: [str], api: obj) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -123,16 +125,21 @@ fun main() > void !> any {
         throw "exported-api: the pull request's number, base and head sha must be set together";
     }
 
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("exported-api: silenced by label");
         return;
     }
 
     // Without a baseline every symbol's `change` is empty and `api` is null, so this reports
     // who can see the change and claims no bump.
-    final review = advice\review(base, head: head);
+    final reviewed = advice\review(base, head: head);
+    if (reviewed.error -> err) { throw err.message; }
+    final review = reviewed.value!;
     // What it actually read, before what it concluded. "nothing to say" and "nothing to read"
     // are different failures, and this advisor spent two pull requests looking like the first
     // while being the second: the changeset came back empty and the line below said only that
@@ -166,13 +173,15 @@ fun main() > void !> any {
     if (files == 0) {
         // Publish an EMPTY body rather than skipping: a section that simply stops appearing
         // leaves the previous push's finding frozen on the page, which reads as still true.
-        advice\publish(repo, pr: pr, name: section, title: "Exported API", body: "");
+        final none = advice\publish(repo, pr: pr, name: section, title: "Exported API", body: "");
+        if (none.error -> err) { throw err.message; }
         std\print("exported-api: no exported API changed");
         return;
     }
 
-    advice\publish(repo, pr: pr, name: section,
+    final posted = advice\publish(repo, pr: pr, name: section,
         title: "Exported API ({files})", body: body(files, lines: lines, api: review.api));
+    if (posted.error -> err) { throw err.message; }
     std\print("exported-api: advised on " + "{files}" + " files");
 }
 

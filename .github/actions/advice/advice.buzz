@@ -79,20 +79,24 @@ export object PullRequest {
 // eventPullRequest reads the pull request out of an Actions event payload. An event with
 // no pull_request (a push, a schedule) yields one with only repo set. Throws on a payload
 // that is not a JSON object, or whose pull_request has no number.
-export fun eventPullRequest(payload: str, repo: str) > PullRequest !> any {
-    final event = serialize\jsonDecode(payload);
-    if (event.map() == null) { throw "advice: the event payload is not a JSON object"; }
-    final pr = event.q(["pull_request"]);
-    if (pr.map() == null) { return PullRequest{repo = repo}; }
-    final number = pr.q(["number"]).integer();
-    if (number == null) { throw "advice: the event payload's pull_request has no number"; }
-    return PullRequest{
-        repo = repo,
-        number = "{number!}",
-        base = pr.q(["base", "ref"]).stringValue(),
-        headSha = pr.q(["head", "sha"]).stringValue(),
-        author = pr.q(["user", "login"]).stringValue(),
-    };
+export fun eventPullRequest(payload: str, repo: str) > result\Result::<PullRequest> {
+    try {
+        final event = serialize\jsonDecode(payload);
+        if (event.map() == null) { return result\fail::<PullRequest>("advice: the event payload is not a JSON object"); }
+        final pr = event.q(["pull_request"]);
+        if (pr.map() == null) { return result\ok::<PullRequest>(PullRequest{repo = repo}); }
+        final number = pr.q(["number"]).integer();
+        if (number == null) { return result\fail::<PullRequest>("advice: the event payload's pull_request has no number"); }
+        return result\ok::<PullRequest>(PullRequest{
+            repo = repo,
+            number = "{number!}",
+            base = pr.q(["base", "ref"]).stringValue(),
+            headSha = pr.q(["head", "sha"]).stringValue(),
+            author = pr.q(["user", "login"]).stringValue(),
+        });
+    } catch (err: any) {
+        return result\caught::<PullRequest>(err, doing: "advice: read the event payload");
+    }
 }
 
 // localPullRequest is the stand-in a local run advises on.
@@ -103,15 +107,19 @@ export fun localPullRequest(repo: str, base: str) > PullRequest {
 // pullRequest returns the pull request this run advises on: the local stand-in under
 // `magus diff`, otherwise the one in the event payload at GITHUB_EVENT_PATH. Throws when
 // neither is available.
-export fun pullRequest() > PullRequest !> any {
+export fun pullRequest() > result\Result::<PullRequest> {
     final repo = os\env("GITHUB_REPOSITORY") ?? "";
-    if (collecting()) { return localPullRequest(repo, base: os\env(base_env) ?? ""); }
+    if (collecting()) { return result\ok::<PullRequest>(localPullRequest(repo, base: os\env(base_env) ?? "")); }
     final path = os\env("GITHUB_EVENT_PATH") ?? "";
     if (path == "") {
-        throw "advice: GITHUB_EVENT_PATH is not set; the advisors read the pull request "
-            + "from the event payload the Actions runner writes there";
+        return result\fail::<PullRequest>("advice: GITHUB_EVENT_PATH is not set; the advisors read the pull request "
+            + "from the event payload the Actions runner writes there");
     }
-    return eventPullRequest(fs\readFile(path), repo: repo);
+    try {
+        return eventPullRequest(fs\readFile(path), repo: repo);
+    } catch (err: any) {
+        return result\caught::<PullRequest>(err, doing: "advice: read " + path);
+    }
 }
 
 // decodeInputs parses the action's inputs as the composite step passes them, toJSON of the
@@ -135,12 +143,12 @@ export fun decodeInputs(text: str) > result\Result::<{str: str}> {
 
 // input returns the named action input, or "" when it was not passed. Unset ADVICE_INPUTS
 // passes none, so an advisor run on its own falls back to its defaults.
-export fun input(name: str) > str !> any {
+export fun input(name: str) > result\Result::<str> {
     final decoded = decodeInputs(os\env("ADVICE_INPUTS") ?? "");
-    if (decoded.error != null) {
-        throw decoded.error!.message;
+    if (decoded.error -> err) {
+        return result\Result::<str>{ error = err };
     }
-    return decoded.value![name] ?? "";
+    return result\ok::<str>(decoded.value![name] ?? "");
 }
 
 // fetchBase brings refs/remotes/origin/<base> up to date before an advisor compares
@@ -160,16 +168,21 @@ export fun input(name: str) > str !> any {
 // actions/checkout does NOT configure on a pull_request - and it exits 0 either way. A
 // caller that cannot proceed without the ref passes true; the rest keep the bare form,
 // which is the command they have always run and the one CI still runs unchanged.
-export fun fetchBase(base: str, refspec: bool) > void !> str {
-    if (collecting()) { return; }
-    if (!refspec) {
-        _ = vcs\cmd(["fetch", "--no-tags", "origin", base], opts: vcs\CommandOptions{ dir = "." });
-        return;
+export fun fetchBase(base: str, refspec: bool) > result\Result::<bool> {
+    if (collecting()) { return result\ok::<bool>(true); }
+    try {
+        if (!refspec) {
+            _ = vcs\cmd(["fetch", "--no-tags", "origin", base], opts: vcs\CommandOptions{ dir = "." });
+            return result\ok::<bool>(true);
+        }
+        final fetched = vcs\cmd(["fetch", "--no-tags", "origin",
+            "+refs/heads/" + base + ":refs/remotes/origin/" + base],
+            opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
+        if (!fetched.ok) { return result\fail::<bool>("advice: git fetch " + base + ": " + fetched.stderr); }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "advice: git fetch " + base);
     }
-    final fetched = vcs\cmd(["fetch", "--no-tags", "origin",
-        "+refs/heads/" + base + ":refs/remotes/origin/" + base],
-        opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
-    if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
 }
 
 // diffRange is the revision argument an advisor's `git diff` takes, and it is the one place
@@ -189,17 +202,17 @@ export fun fetchBase(base: str, refspec: bool) > void !> str {
 // Untracked files stay outside both. `git diff` reports tracked paths, and unioning in
 // `ls-files --others` would change what the three name-only advisors count while doing
 // nothing for the three that parse a patch - a separate decision, per advisor.
-export fun diffRange(base: str, head: str) > str !> any {
-    if (!collecting()) { return "origin/" + base + "..." + head; }
-    final merged = vcs\cmd(["merge-base", "origin/" + base, head],
-        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
-    // A base this clone cannot resolve is ordinary locally - nothing ever fetched it - and
-    // the three-dot form is what to hand back, not an error. It then fails inside the
-    // advisor's own git call exactly as it always has, every caller already tolerates that
-    // failure, and `magus diff --impact` prints a BASE line saying the ref is missing. One
-    // failure, one place, one explanation.
-    if (!merged.ok) { return "origin/" + base + "..." + head; }
-    return merged.stdout.trim();
+export fun diffRange(base: str, head: str) > result\Result::<str> {
+    if (!collecting()) { return result\ok::<str>("origin/" + base + "..." + head); }
+    try {
+        final merged = vcs\cmd(["merge-base", "origin/" + base, head],
+            opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
+        // An unfetched base is ordinary locally; the git call fails later.
+        if (!merged.ok) { return result\ok::<str>("origin/" + base + "..." + head); }
+        return result\ok::<str>(merged.stdout.trim());
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "advice: find the merge base of " + base);
+    }
 }
 
 // reviewOpts says which changeset magus\change().diff reads, against what.
@@ -209,25 +222,25 @@ export fun diffRange(base: str, head: str) > str !> any {
 // Without it every symbol's `change` is empty and `api` is null.
 // minCohort and minShare are the conformance checks' silence gates.
 // They pass through as given; "" keeps the defaults.
-export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > magus\DiffOptions !> any {
+export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > result\Result::<magus\DiffOptions> {
     var cohort = 0;
     if (minCohort != "") {
         final parsed = std\parseInt(minCohort);
-        if (parsed == null) { throw "conformance-min-cohort is not an integer: {minCohort}"; }
+        if (parsed == null) { return result\fail::<magus\DiffOptions>("conformance-min-cohort is not an integer: {minCohort}"); }
         cohort = parsed!;
     }
     var share = 0.0;
     if (minShare != "") {
         final parsed = std\parseDouble(minShare);
-        if (parsed == null) { throw "conformance-min-share is not a number: {minShare}"; }
+        if (parsed == null) { return result\fail::<magus\DiffOptions>("conformance-min-share is not a number: {minShare}"); }
         share = parsed!;
     }
-    return magus\DiffOptions{
+    return result\ok::<magus\DiffOptions>(magus\DiffOptions{
         baseline = baseline,
         rev = if (local) "" else "origin/" + base + "..." + head,
         minCohort = cohort,
         minShare = share,
-    };
+    });
 }
 
 // review_env names a file holding the change's `magus diff -o json`, which `magus diff
@@ -238,11 +251,23 @@ final review_env = "ADVICE_REVIEW";
 // review is the change under advice, as magus\change().diff annotates it.
 // It is the saved review when the run wrote one.
 // Otherwise it is computed here from the baseline and conformance gate inputs.
-export fun review(base: str, head: str) > magus\Diff !> any {
+export fun review(base: str, head: str) > result\Result::<magus\Diff> {
     final saved = os\env(review_env) ?? "";
-    if (saved != "") { return magus\change().diff(opts: magus\DiffOptions{ from = saved }); }
-    return magus\change().diff(opts: reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
-        minCohort: input("conformance-min-cohort"), minShare: input("conformance-min-share")));
+    try {
+        if (saved != "") { return result\ok::<magus\Diff>(magus\change().diff(opts: magus\DiffOptions{ from = saved })); }
+        final baseline = input("baseline");
+        if (baseline.error -> err) { return result\Result::<magus\Diff>{ error = err }; }
+        final minCohort = input("conformance-min-cohort");
+        if (minCohort.error -> err) { return result\Result::<magus\Diff>{ error = err }; }
+        final minShare = input("conformance-min-share");
+        if (minShare.error -> err) { return result\Result::<magus\Diff>{ error = err }; }
+        final opts = reviewOpts(baseline: baseline.value!, base: base, head: head, local: collecting(),
+            minCohort: minCohort.value!, minShare: minShare.value!);
+        if (opts.error -> err) { return result\Result::<magus\Diff>{ error = err }; }
+        return result\ok::<magus\Diff>(magus\change().diff(opts: opts.value!));
+    } catch (err: any) {
+        return result\caught::<magus\Diff>(err, doing: "advice: read the review of " + base + "..." + head);
+    }
 }
 
 // addedTargets returns the target names a diff introduces, read from its added
@@ -270,10 +295,14 @@ export fun addedTargets(diff: str) > [str] {
 // Editing a target's body rewrites its `export fun` line, so the diff alone calls that
 // target added. On those grounds a comment about NEW targets once listed `preflight`,
 // which predated the pull request. Only the base tree settles it.
-export fun declaredAtBase(name: str, base: str) > bool !> any {
-    final res = vcs\cmd(["grep", "-q", "export fun " + name + "(",
-        "origin/" + base, "--", "*.buzz"], opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
-    return res.ok;
+export fun declaredAtBase(name: str, base: str) > result\Result::<bool> {
+    try {
+        final res = vcs\cmd(["grep", "-q", "export fun " + name + "(",
+            "origin/" + base, "--", "*.buzz"], opts: vcs\CommandOptions{ dir = ".", allowFailure = true });
+        return result\ok::<bool>(res.ok);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "advice: look for " + name + " at " + base);
+    }
 }
 
 export fun beginMarker(name: str) > str {
@@ -445,7 +474,8 @@ export object Stamp {
 
 // currentStamp reads the pull request's head and `magus version`'s commit.
 fun currentStamp() > Stamp {
-    final pr = pullRequest() catch PullRequest{};
+    final found = pullRequest();
+    final pr = found.value ?? PullRequest{};
     var advised = pr.headSha;
     if (advised == local_head) {
         advised = "";
@@ -535,12 +565,12 @@ fun withoutFooter(text: str) > str {
 
 test "on the forge the changeset is the RANGE, and locally it is the working tree" {
     final ci = reviewOpts(baseline: "/tmp/base.json", base: "main", head: "abc123", local: false,
-        minCohort: "", minShare: "");
+        minCohort: "", minShare: "").value!;
     std\assert(ci.rev == "origin/main...abc123", message: "a clean checkout has to be told the range");
     std\assert(ci.baseline == "/tmp/base.json", message: "and what to compare it against");
     std\assert(ci.minCohort == 0, message: "an unset gate keeps its default");
 
-    final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true, minCohort: "3", minShare: "0.9");
+    final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true, minCohort: "3", minShare: "0.9").value!;
     std\assert(here.rev == "", message: "the uncommitted edit is what a local reader is weighing");
     std\assert(here.baseline == "", message: "no baseline, no bump claimed");
     std\assert(here.minCohort == 3 and here.minShare == 0.9, message: "the gates reach magus\\change().diff as given");
@@ -737,34 +767,42 @@ export fun silences(labels: [str], name: str) > bool {
 }
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
-export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+export fun silenced(repo: str, pr: str, name: str) > result\Result::<bool> {
     // Labels live on a pull request. Local mode has none, and must not reach the forge
     // to find out, so nothing is silenced there. Muting a local advisor is a job for
     // whoever asked for the run, not for a label on a change that may not exist yet.
-    if (collecting()) { return false; }
-    final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
-        dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (!res.ok) { return false; }
-    var labels = mut [];
-    foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
-        labels.append(l.q("name").stringValue());
+    if (collecting()) { return result\ok::<bool>(false); }
+    try {
+        final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+            dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!res.ok) { return result\ok::<bool>(false); }
+        var labels = mut [];
+        foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
+            labels.append(l.q("name").stringValue());
+        }
+        return result\ok::<bool>(silences(labels, name: name));
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "advice: read the labels of " + repo + "#" + pr);
     }
-    return silences(labels, name: name);
 }
 
 // find returns the id of our comment on this PR, or "" when we have not commented yet.
 // Read through `gh api` and decoded here rather than filtered with a jq expression: the
 // marker is an HTML comment, and quoting it through a jq -r filter inside YAML inside
 // bash is three layers of escaping to get wrong.
-fun find(repo: str, pr: str) > str !> any {
-    final listed = proc\exec("gh", args: ["api", "--paginate",
-        "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: proc\ExecOptions{ quiet = true });
-    foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
-        if (c.q("body").stringValue().indexOf(comment_marker) != null) {
-            return "{c.q("id").integerValue()}";
+fun find(repo: str, pr: str) > result\Result::<str> {
+    try {
+        final listed = proc\exec("gh", args: ["api", "--paginate",
+            "repos/" + repo + "/issues/" + pr + "/comments"], dir: ".", opts: proc\ExecOptions{ quiet = true });
+        foreach (c in serialize\jsonDecode(listed.stdout).listValue()) {
+            if (c.q("body").stringValue().indexOf(comment_marker) != null) {
+                return result\ok::<str>("{c.q("id").integerValue()}");
+            }
         }
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "advice: list the comments of " + repo + "#" + pr);
     }
-    return "";
 }
 
 // sectionLine renders one section as the single JSON line the collect sink emits. Pure,
@@ -785,37 +823,43 @@ export fun sectionLine(name: str, title: str, body: str) > str {
 // section is emitted even when the body is EMPTY: a retraction says "this advisor looked
 // and found nothing", which is exactly what a reader of a local run wants to know, and it
 // is what lets the caller show a per-advisor verdict rather than a list of complaints.
-export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void !> any {
+export fun publish(repo: str, pr: str, name: str, title: str, body: str) > result\Result::<bool> {
     if (collecting()) {
         std\print(sectionLine(name, title: title, body: body));
-        return;
+        return result\ok::<bool>(true);
     }
     // Neither a pull request to write to nor a sink to write to. Reaching gh from here
     // would build `repos//issues//comments` and fail on the far side, blaming GitHub for
     // a missing local variable, so say which of the two modes is missing its input.
     if (repo == "" or pr == "") {
-        throw "advice: nowhere to publish \"" + name + "\". For a pull request, run it from "
+        return result\fail::<bool>("advice: nowhere to publish \"" + name + "\". For a pull request, run it from "
             + "an event carrying one: GITHUB_REPOSITORY names the repository and the payload "
             + "at GITHUB_EVENT_PATH the pull request. A local run is "
             + "driven by magus diff, which sets " + mode_env + "=" + mode_local + " and "
-            + "reads each section back as one JSON line instead of posting it.";
+            + "reads each section back as one JSON line instead of posting it.");
     }
-    final id = find(repo, pr: pr);
+    final found = find(repo, pr: pr);
+    if (found.error -> err) { return result\Result::<bool>{ error = err }; }
+    final id = found.value!;
     var current = "";
-    if (id != "") {
-        final got = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
-            dir: ".", opts: proc\ExecOptions{ quiet = true });
-        current = serialize\jsonDecode(got.stdout).q("body").stringValue();
+    try {
+        if (id != "") {
+            final got = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/comments/" + id],
+                dir: ".", opts: proc\ExecOptions{ quiet = true });
+            current = serialize\jsonDecode(got.stdout).q("body").stringValue();
+        }
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "advice: read comment " + id);
     }
     var composed = compose(current, name: name, title: title, body: body);
     if (composed == "") {
         // No comment yet, and nothing to open one about. A pull request magus found
         // nothing on carries no trace of magus.
-        if (id == "") { return; }
+        if (id == "") { return result\ok::<bool>(true); }
         // This one carried findings before, so the thread stays and records their end.
         composed = resolved();
     }
-    if (withoutFooter(composed) == withoutFooter(current)) { return; }
+    if (withoutFooter(composed) == withoutFooter(current)) { return result\ok::<bool>(true); }
 
     // The body goes through a JSON file, never an -f flag: it is markdown with newlines,
     // backticks, and quotes, and every one of those is a shell-quoting hazard.
@@ -824,15 +868,20 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     // other's payload and one posted the other's body, and on a reused or self-hosted
     // runner a predictable name is a pre-creation target for content that is then
     // POSTed to the repo under the workflow's token.
-    final payload = fs\tempFile("magus-advice-payload");
-    fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
-    if (id == "") {
-        _ = proc\exec("gh", args: ["api", "--method", "POST",
-            "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: proc\ExecOptions{});
-        return;
+    try {
+        final payload = fs\tempFile("magus-advice-payload");
+        fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
+        if (id == "") {
+            _ = proc\exec("gh", args: ["api", "--method", "POST",
+                "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: proc\ExecOptions{});
+            return result\ok::<bool>(true);
+        }
+        _ = proc\exec("gh", args: ["api", "--method", "PATCH",
+            "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: proc\ExecOptions{});
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "advice: post the " + name + " section to " + repo + "#" + pr);
     }
-    _ = proc\exec("gh", args: ["api", "--method", "PATCH",
-        "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: proc\ExecOptions{});
 }
 
 test "compose opens with what this is before any finding" {
@@ -1064,7 +1113,7 @@ test "eventPullRequest reads a pull_request event" {
         "head": {"sha": "abc123", "ref": "topic", "repo": {"full_name": "o/r"}},
         "user": {"login": "someone"},
     }});
-    final pr = eventPullRequest(payload, repo: "o/r");
+    final pr = eventPullRequest(payload, repo: "o/r").value!;
     assert\equal(pr.repo, want: "o/r", message: "the repository is the runner's");
     assert\equal(pr.number, want: "42", message: "the number, as text");
     assert\equal(pr.base, want: "main", message: "the base branch");
@@ -1073,18 +1122,18 @@ test "eventPullRequest reads a pull_request event" {
 }
 
 test "an event with no pull request advises on nothing" {
-    final pr = eventPullRequest(serialize\jsonEncode({"ref": "refs/heads/main"}), repo: "o/r");
+    final pr = eventPullRequest(serialize\jsonEncode({"ref": "refs/heads/main"}), repo: "o/r").value!;
     assert\equal(pr.number, want: "", message: "a push carries no pull request");
     assert\equal(pr.base, want: "", message: "so every advisor's guard reads it as none");
     assert\equal(pr.headSha, want: "", message: "all three empty together");
 }
 
 test "eventPullRequest refuses a payload it cannot read" {
-    final notObject = eventPullRequest("[]", repo: "o/r") catch PullRequest{number = "refused"};
-    assert\equal(notObject.number, want: "refused", message: "a payload that is not an object");
+    final notObject = eventPullRequest("[]", repo: "o/r");
+    std\assert(notObject.error != null, message: "a payload that is not an object");
     final noNumber = eventPullRequest(serialize\jsonEncode({"pull_request": {"base": {"ref": "main"}}}),
-        repo: "o/r") catch PullRequest{number = "refused"};
-    assert\equal(noNumber.number, want: "refused", message: "a pull request with no number");
+        repo: "o/r");
+    std\assert(noNumber.error != null, message: "a pull request with no number");
 }
 
 test "decodeInputs reads the inputs context" {
@@ -1108,7 +1157,7 @@ test "CI diffs the pull request's commits" {
     // reachable from here - collecting() reads os\env and os\with_env does not touch this
     // process's own environment - so the merge-base half is pinned in Go instead, by
     // TestLocalModeDiffsTheWorkingTree.
-    assert\equal(diffRange("main", head: "abc123"), want: "origin/main...abc123",
+    assert\equal(diffRange("main", head: "abc123").value!, want: "origin/main...abc123",
         message: "three-dot: what a reviewer of those commits reads");
 }
 

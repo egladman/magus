@@ -4,6 +4,7 @@ import "encoding/json";
 import "encoding/yaml";
 import "strings";
 import "advice";
+import "result";
 import "std";
 import "assert";
 
@@ -63,45 +64,58 @@ fun parseEvents(on: any?) > [str] {
     return events;
 }
 
-export fun parseWorkflow(path: str, text: str) > Workflow !> any {
-    final doc = asMap(yaml\parse(text));
-    final jobs = mut [<Job>];
-    foreach (id, body in asMap(doc["jobs"])) {
-        final job = asMap(body);
-        final steps = mut [<Step>];
-        foreach (s in asList(job["steps"])) {
-            final step = asMap(s);
-            steps.append(Step{uses = asStr(step["uses"]), ref = asStr(asMap(step["with"])["ref"]), run = asStr(step["run"])});
+export fun parseWorkflow(path: str, text: str) > result\Result::<Workflow> {
+    try {
+        final doc = asMap(yaml\parse(text));
+        final jobs = mut [<Job>];
+        foreach (id, body in asMap(doc["jobs"])) {
+            final job = asMap(body);
+            final steps = mut [<Step>];
+            foreach (s in asList(job["steps"])) {
+                final step = asMap(s);
+                steps.append(Step{uses = asStr(step["uses"]), ref = asStr(asMap(step["with"])["ref"]), run = asStr(step["run"])});
+            }
+            jobs.append(Job{id = id, name = asStr(job["name"]), steps = steps});
         }
-        jobs.append(Job{id = id, name = asStr(job["name"]), steps = steps});
+        _ = jobs.sort(fun (a: Job, b: Job) > bool => strings\compare(a.id, b: b.id) < 0);
+        return result\ok::<Workflow>(Workflow{path = path, name = asStr(doc["name"]), events = parseEvents(doc["on"]), jobs = jobs});
+    } catch (err: any) {
+        return result\caught::<Workflow>(err, doing: "trusted-script-moved: parse " + path);
     }
-    _ = jobs.sort(fun (a: Job, b: Job) > bool => strings\compare(a.id, b: b.id) < 0);
-    return Workflow{path = path, name = asStr(doc["name"]), events = parseEvents(doc["on"]), jobs = jobs};
 }
 
 fun isWorkflowFile(name: str) > bool { return name.endsWith(".yml") or name.endsWith(".yaml"); }
 
-export fun parseChangedFiles(payload: str) > [ChangedFile] !> any {
-    final moves = mut [<ChangedFile>];
-    foreach (entry in asList(json\parse(payload))) {
-        final f = asMap(entry);
-        final file = ChangedFile{filename = asStr(f["filename"]), previousFilename = asStr(f["previous_filename"]), status = asStr(f["status"])};
-        if (file.status == "renamed" or file.status == "removed") { moves.append(file); }
+export fun parseChangedFiles(payload: str) > result\Result::<[ChangedFile]> {
+    try {
+        final moves = mut [<ChangedFile>];
+        foreach (entry in asList(json\parse(payload))) {
+            final f = asMap(entry);
+            final file = ChangedFile{filename = asStr(f["filename"]), previousFilename = asStr(f["previous_filename"]), status = asStr(f["status"])};
+            if (file.status == "renamed" or file.status == "removed") { moves.append(file); }
+        }
+        return result\ok::<[ChangedFile]>(moves);
+    } catch (err: any) {
+        return result\caught::<[ChangedFile]>(err, doing: "trusted-script-moved: read the changed files");
     }
-    return moves;
 }
 
-export fun parseRepository(payload: str) > Repository !> any {
-    final repo = asMap(asMap(asMap(json\parse(payload))["data"])["repository"]);
-    final workflows = mut [<Workflow>];
-    foreach (entry in asList(asMap(repo["object"])["entries"])) {
-        final e = asMap(entry);
-        final name = asStr(e["name"]);
-        if (!isWorkflowFile(name)) { continue; }
-        final path = workflows_dir + "/" + name;
-        workflows.append(parseWorkflow(path, text: asStr(asMap(e["object"])["text"])) catch Workflow{path = path});
+export fun parseRepository(payload: str) > result\Result::<Repository> {
+    try {
+        final repo = asMap(asMap(asMap(json\parse(payload))["data"])["repository"]);
+        final workflows = mut [<Workflow>];
+        foreach (entry in asList(asMap(repo["object"])["entries"])) {
+            final e = asMap(entry);
+            final name = asStr(e["name"]);
+            if (!isWorkflowFile(name)) { continue; }
+            final path = workflows_dir + "/" + name;
+            final parsed = parseWorkflow(path, text: asStr(asMap(e["object"])["text"]));
+            workflows.append(parsed.value ?? Workflow{path = path});
+        }
+        return result\ok::<Repository>(Repository{defaultBranch = asStr(asMap(repo["defaultBranchRef"])["name"]), workflows = workflows});
+    } catch (err: any) {
+        return result\caught::<Repository>(err, doing: "trusted-script-moved: read the base repository");
     }
-    return Repository{defaultBranch = asStr(asMap(repo["defaultBranchRef"])["name"]), workflows = workflows};
 }
 
 // A job that checks out the default branch runs that branch's scripts, not the pull request's.
@@ -226,42 +240,67 @@ final base_query = `query($owner: String!, $name: String!, $expr: String!) {
   }
 }`;
 
-fun gh(args: [str]) > str !> any {
-    return proc\exec("gh", args: args, dir: ".", opts: proc\ExecOptions{ quiet = true }).stdout;
+fun gh(args: [str]) > result\Result::<str> {
+    try {
+        return result\ok::<str>(proc\exec("gh", args: args, dir: ".", opts: proc\ExecOptions{ quiet = true }).stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "trusted-script-moved: gh " + args[0]);
+    }
 }
 
-fun headWorkflows() > [Workflow] !> any {
+fun headWorkflows() > result\Result::<[Workflow]> {
     final workflows = mut [<Workflow>];
-    foreach (p in fs\glob(workflows_dir + "/*")) {
-        if (!isWorkflowFile(p.value)) { continue; }
-        workflows.append(parseWorkflow(p.value, text: fs\readFile(p.value)) catch Workflow{path = p.value});
+    try {
+        foreach (p in fs\glob(workflows_dir + "/*")) {
+            if (!isWorkflowFile(p.value)) { continue; }
+            final parsed = parseWorkflow(p.value, text: fs\readFile(p.value));
+            workflows.append(parsed.value ?? Workflow{path = p.value});
+        }
+        return result\ok::<[Workflow]>(workflows);
+    } catch (err: any) {
+        return result\caught::<[Workflow]>(err, doing: "trusted-script-moved: read the head workflows");
     }
-    return workflows;
 }
 
 fun main() > void !> any {
     if (advice\collecting()) { return; }
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     if (pull.repo == "" or pull.number == "" or pull.base == "") {
         std\print("trusted-script-moved: no pull request to advise on");
         return;
     }
-    if (advice\silenced(pull.repo, pr: pull.number, name: section)) {
-        advice\publish(pull.repo, pr: pull.number, name: section, title: "", body: "");
+    final silenced = advice\silenced(pull.repo, pr: pull.number, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
+        final retracted = advice\publish(pull.repo, pr: pull.number, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("trusted-script-moved: silenced by label");
         return;
     }
-    final moves = parseChangedFiles(gh(["api", "--paginate", "repos/" + pull.repo + "/pulls/" + pull.number + "/files"]));
+    final filesJson = gh(["api", "--paginate", "repos/" + pull.repo + "/pulls/" + pull.number + "/files"]);
+    if (filesJson.error -> err) { throw err.message; }
+    final parsedMoves = parseChangedFiles(filesJson.value!);
+    if (parsedMoves.error -> err) { throw err.message; }
+    final moves = parsedMoves.value!;
     var found = [<Finding>];
     var defaultBranch = "";
     if (moves.len() > 0) {
         final owner = pull.repo.split("/");
-        final base = parseRepository(gh(["api", "graphql", "-f", "query=" + base_query, "-f", "owner=" + owner[0],
-            "-f", "name=" + owner[1], "-f", "expr=" + pull.base + ":" + workflows_dir]));
+        final baseJson = gh(["api", "graphql", "-f", "query=" + base_query, "-f", "owner=" + owner[0],
+            "-f", "name=" + owner[1], "-f", "expr=" + pull.base + ":" + workflows_dir]);
+        if (baseJson.error -> err) { throw err.message; }
+        final parsedBase = parseRepository(baseJson.value!);
+        if (parsedBase.error -> err) { throw err.message; }
+        final base = parsedBase.value!;
         defaultBranch = base.defaultBranch;
-        found = findings(moves, base: base.workflows, head: headWorkflows(), defaultBranch: defaultBranch);
+        final heads = headWorkflows();
+        if (heads.error -> err) { throw err.message; }
+        found = findings(moves, base: base.workflows, head: heads.value!, defaultBranch: defaultBranch);
     }
-    advice\publish(pull.repo, pr: pull.number, name: section, title: title(found), body: body(found, defaultBranch: defaultBranch));
+    final posted = advice\publish(pull.repo, pr: pull.number, name: section, title: title(found), body: body(found, defaultBranch: defaultBranch));
+    if (posted.error -> err) { throw err.message; }
     std\print("trusted-script-moved: {found.len()} finding(s) over {moves.len()} rename(s) and removal(s)");
 }
 
@@ -371,7 +410,7 @@ jobs:
     name: queue advice
     steps:
       - uses: actions/checkout@3d3c42e5
-`);
+`).value!;
     assert\equal(w.name, want: "Queue advice", message: "name");
     std\assert(w.events.indexOf("pull_request_review") != null, message: "events");
     final trusted = trustedJobs(w, defaultBranch: "main");
@@ -383,14 +422,14 @@ jobs:
 test "the gh payloads decode to moves and the base's workflows" {
     final moves = parseChangedFiles(`[{"filename": "hack/ci/labels.buzz", "previous_filename": "hack/labels.buzz", "status": "renamed"},
         {"filename": "hack/bench.sh", "previous_filename": null, "status": "removed"},
-        {"filename": "go.mod", "status": "modified"}]`);
+        {"filename": "go.mod", "status": "modified"}]`).value!;
     assert\equal(moves.len(), want: 2, message: "renames and removals only");
     assert\equal(movedFrom(moves[0]), want: "hack/labels.buzz", message: "a rename moves its previous name");
     assert\equal(movedFrom(moves[1]), want: "hack/bench.sh", message: "a removal moves its name");
     final repo = parseRepository(`{"data": {"repository": {"defaultBranchRef": {"name": "trunk"}, "object": {"entries": [
         {"name": "README.md", "object": {"text": "x"}},
         {"name": "ci.yml", "object": {"text": "on: workflow_dispatch\njobs:\n  a:\n    steps: []\n"}},
-        {"name": "broken.yaml", "object": {"text": "jobs: [\n"}}]}}}}`);
+        {"name": "broken.yaml", "object": {"text": "jobs: [\n"}}]}}}}`).value!;
     assert\equal(repo.defaultBranch, want: "trunk", message: "default branch");
     assert\equal(repo.workflows.len(), want: 2, message: "workflow files only, a broken one kept empty");
     assert\equal(repo.workflows[0].path, want: ".github/workflows/ci.yml", message: "path");
@@ -516,10 +555,10 @@ jobs:
     final base = parseRepository(json\stringify({"data": {"repository": {
         "defaultBranchRef": {"name": "main"},
         "object": {"entries": [{"name": "queue-advice.yaml", "object": {"text": queueAdviceAtBase}}]},
-    }}}));
+    }}})).value!;
     final head = parseWorkflow(".github/workflows/queue-advice.yaml",
-        text: queueAdviceAtBase.split("hack/pull-requests.buzz").join("hack/ci/pull-requests.buzz"));
-    final found = findings(parseChangedFiles(files), base: base.workflows, head: [head], defaultBranch: base.defaultBranch);
+        text: queueAdviceAtBase.split("hack/pull-requests.buzz").join("hack/ci/pull-requests.buzz")).value!;
+    final found = findings(parseChangedFiles(files).value!, base: base.workflows, head: [head], defaultBranch: base.defaultBranch);
     assert\equal(title(found), want: "A trusted job runs a script this moves", message: "title");
     assert\equal(body(found, defaultBranch: base.defaultBranch),
         want: "This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, which the "

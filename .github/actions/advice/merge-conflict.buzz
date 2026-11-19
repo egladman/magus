@@ -9,6 +9,7 @@
 import "vcs";
 import "advice";
 import "magus";
+import "result";
 import "std";
 
 final section = "merge-conflicts";
@@ -27,21 +28,23 @@ final section = "merge-conflicts";
 // head is passed explicitly rather than read as HEAD because actions/checkout resolves a
 // pull_request event to the ephemeral merge commit, which is base already merged with
 // head - comparing that against base would find nothing.
-fun conflicted(base: str, head: str) > [str] !> str {
+fun conflicted(base: str, head: str) > result\Result::<[str]> {
     // An explicit refspec, because a bare `git fetch origin <base>` writes FETCH_HEAD and
     // only updates refs/remotes/origin/<base> when remote.origin.fetch already covers it -
     // which actions/checkout does NOT configure on a pull_request. It exits 0 either way, so
     // without this the merge-tree below runs against a ref that does not exist.
-    advice\fetchBase(base, refspec: true);
+    final fetched = advice\fetchBase(base, refspec: true);
+    if (fetched.error -> err) { return result\Result::<[str]>{ error = err }; }
 
     // core.quotePath would C-quote a non-ASCII path ("gen/caf\303\251.json", quotes and all),
     // and that string reaches describe.file, matches no output glob, and gets reported to the
     // author as their file.
+    try {
     final res = vcs\cmd(["-c", "core.quotePath=false", "merge-tree",
         "--write-tree", "--name-only", "--no-messages", "origin/" + base, head],
         opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
-    if (res.code == 0) { return mut [<str>]; }
-    if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
+    if (res.code == 0) { return result\ok::<[str]>(mut [<str>]); }
+    if (res.code != 1) { return result\fail::<[str]>("merge-conflict-advice: git merge-tree: " + res.stderr); }
 
     // Exit 1 means "merged with conflicts" AND "could not resolve a ref" - measured on git
     // 2.55.0, where an unresolvable ref exits 1 with empty stdout. Reading that as a clean
@@ -49,10 +52,13 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // were still there, so an empty answer on exit 1 is a failure to answer.
     final paths = conflictPaths(res.stdout);
     if (paths.len() == 0) {
-        throw "merge-conflict-advice: git merge-tree reported conflicts but named none, so it "
-            + "could not compare origin/" + base + " with " + head + ": " + res.stderr;
+        return result\fail::<[str]>("merge-conflict-advice: git merge-tree reported conflicts but named none, so it "
+            + "could not compare origin/" + base + " with " + head + ": " + res.stderr);
     }
-    return paths;
+    return result\ok::<[str]>(paths);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "merge-conflict-advice: git merge-tree");
+    }
 }
 
 // conflictPaths reads `git merge-tree --write-tree --name-only` output: the first line
@@ -74,13 +80,17 @@ fun conflictPaths(text: str) > [str] {
 // magus\describe.file returns the report as a TYPED value, so `f.role` and `f.path` are
 // checked when this file compiles. Walking `-o json` with q("role").stringValue() would
 // turn a mistyped key into a null at run time on a CI job nobody is watching.
-fun generated(paths: [str]) > [str] !> any {
+fun generated(paths: [str]) > result\Result::<[str]> {
     final found = mut [<str>];
-    if (paths.len() == 0) { return found; }
-    foreach (f in magus\describe.file(paths).files) {
-        if (f.role == "output") { found.append(f.path); }
+    if (paths.len() == 0) { return result\ok::<[str]>(found); }
+    try {
+        foreach (f in magus\describe.file(paths).files) {
+            if (f.role == "output") { found.append(f.path); }
+        }
+        return result\ok::<[str]>(found);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "merge-conflict-advice: classify the conflicted paths");
     }
-    return found;
 }
 
 // authored keeps the conflicted paths magus does not generate, in the order git reported
@@ -143,7 +153,9 @@ fun conflictBody(base: str, files: [str], mine: [str]) > str {
 }
 
 fun main() > void !> str {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -159,25 +171,34 @@ fun main() > void !> str {
         throw "merge-conflict-advice: the pull request's number, base and head sha must be set together";
     }
 
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("merge-conflicts: silenced by label");
         return;
     }
 
-    final all = conflicted(base, head: head);
-    final files = generated(all);
+    final listed = conflicted(base, head: head);
+    if (listed.error -> err) { throw err.message; }
+    final all = listed.value!;
+    final classified = generated(all);
+    if (classified.error -> err) { throw err.message; }
+    final files = classified.value!;
     if (files.len() == 0) {
         // Retract: conflicts that have been resolved must not leave a section behind
         // claiming they are still there.
-        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: "");
+        final none = advice\publish(repo, pr: pr, name: section, title: "Merge conflicts in generated files", body: "");
+        if (none.error -> err) { throw err.message; }
         std\print("no generated files conflict with " + base);
         return;
     }
 
-    advice\publish(repo, pr: pr, name: section, title: conflictTitle(files.len()),
+    final posted = advice\publish(repo, pr: pr, name: section, title: conflictTitle(files.len()),
         body: conflictBody(base, files: files, mine: authored(all, generated: files)));
+    if (posted.error -> err) { throw err.message; }
     std\print("advised on PR " + pr + ": " + files.join(", "));
 }
 

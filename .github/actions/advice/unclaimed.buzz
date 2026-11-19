@@ -10,6 +10,7 @@
 import "vcs";
 import "advice";
 import "magus";
+import "result";
 import "std";
 
 final section = "unclaimed";
@@ -17,15 +18,22 @@ final section = "unclaimed";
 // changed lists the files the pull request leaves in the tree. Deletions are filtered out:
 // a file that no longer exists seeds no project and cannot be declared, so listing it is a
 // finding nobody can act on.
-fun changed(base: str, head: str) > [str] !> any {
-    advice\fetchBase(base, refspec: false);
-    final res = vcs\cmd(["diff", "--name-only", "--diff-filter=d", advice\diffRange(base, head: head)],
-        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
-    var paths = mut [];
-    foreach (line in res.stdout.split("\n")) {
-        if (line != "") { paths.append(line); }
+fun changed(base: str, head: str) > result\Result::<[str]> {
+    final fetched = advice\fetchBase(base, refspec: false);
+    if (fetched.error -> err) { return result\Result::<[str]>{ error = err }; }
+    final range = advice\diffRange(base, head: head);
+    if (range.error -> err) { return result\Result::<[str]>{ error = err }; }
+    try {
+        final res = vcs\cmd(["diff", "--name-only", "--diff-filter=d", range.value!],
+            opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
+        var paths = mut [<str>];
+        foreach (line in res.stdout.split("\n")) {
+            if (line != "") { paths.append(line); }
+        }
+        return result\ok::<[str]>(paths);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "unclaimed: list the changed files");
     }
-    return paths;
 }
 
 fun body(files: [str], total: int) > str {
@@ -48,7 +56,9 @@ fun body(files: [str], total: int) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final base = pull.base;
@@ -61,16 +71,22 @@ fun main() > void !> any {
         throw "unclaimed: the pull request's number, base and head sha must be set together";
     }
 
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("unclaimed: silenced by label");
         return;
     }
 
-    final paths = changed(base, head: head);
+    final listed = changed(base, head: head);
+    if (listed.error -> err) { throw err.message; }
+    final paths = listed.value!;
     if (paths.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
+        final empty = advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
+        if (empty.error -> err) { throw err.message; }
         return;
     }
     var found = mut [];
@@ -78,12 +94,14 @@ fun main() > void !> any {
         if (f.role == "unclaimed") { found.append(f.path); }
     }
     if (found.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
+        final none = advice\publish(repo, pr: pr, name: section, title: "Files no project claims", body: "");
+        if (none.error -> err) { throw err.message; }
         std\print("unclaimed: every changed file is claimed");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, title: "Files no project claims ({found.len()})",
+    final posted = advice\publish(repo, pr: pr, name: section, title: "Files no project claims ({found.len()})",
         body: body(found, total: paths.len()));
+    if (posted.error -> err) { throw err.message; }
     std\print("unclaimed: advised on " + found.join(", "));
 }
 

@@ -9,6 +9,7 @@
 // the whole pipeline is one command they can run before pushing.
 import "proc";
 import "advice";
+import "result";
 import "serialize";
 import "std";
 
@@ -17,12 +18,16 @@ final section = "first-contribution";
 // isFirst reports whether this author has no merged pull request here yet. The search
 // API answers it in one call; counting commits would miss a contributor whose work was
 // squashed under a different address.
-fun isFirst(repo: str, author: str) > bool !> any {
+fun isFirst(repo: str, author: str) > result\Result::<bool> {
     final query = "repo:" + repo + "+author:" + author + "+is:pr+is:merged";
-    final res = proc\exec("gh", args: ["api", "search/issues?q=" + query],
-        dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    if (!res.ok) { return false; }
-    return serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0;
+    try {
+        final res = proc\exec("gh", args: ["api", "search/issues?q=" + query],
+            dir: ".", opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!res.ok) { return result\ok::<bool>(false); }
+        return result\ok::<bool>(serialize\jsonDecode(res.stdout).q("total_count").integerValue() == 0);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "first-contribution: search merged pull requests by " + author);
+    }
 }
 
 // welcome is the orientation text. Pure, so what a newcomer is told is reviewable and
@@ -41,7 +46,9 @@ export fun welcome(author: str) > str {
 }
 
 fun main() > void !> any {
-    final pull = advice\pullRequest();
+    final pulled = advice\pullRequest();
+    if (pulled.error -> err) { throw err.message; }
+    final pull = pulled.value!;
     final repo = pull.repo;
     final pr = pull.number;
     final author = pull.author;
@@ -49,21 +56,28 @@ fun main() > void !> any {
         std\print("first-contribution: no PR context; nothing to advise");
         return;
     }
-    if (advice\silenced(repo, pr: pr, name: section)) {
+    final silenced = advice\silenced(repo, pr: pr, name: section);
+    if (silenced.error -> err) { throw err.message; }
+    if (silenced.value!) {
         // Retract rather than leave the last finding frozen on the page.
-        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("first-contribution: silenced by label");
         return;
     }
 
-    if (!isFirst(repo, author: author)) {
+    final first = isFirst(repo, author: author);
+    if (first.error -> err) { throw err.message; }
+    if (!first.value!) {
         // Retract: once they have merged something they are not new, and a welcome that
         // outlives its welcome is just noise.
-        advice\publish(repo, pr: pr, name: section, title: "Welcome", body: "");
+        final retracted = advice\publish(repo, pr: pr, name: section, title: "Welcome", body: "");
+        if (retracted.error -> err) { throw err.message; }
         std\print("first-contribution: not a first contribution");
         return;
     }
-    advice\publish(repo, pr: pr, name: section, title: "Welcome", body: welcome(author));
+    final welcomed = advice\publish(repo, pr: pr, name: section, title: "Welcome", body: welcome(author));
+    if (welcomed.error -> err) { throw err.message; }
     std\print("first-contribution: welcomed " + author);
 }
 

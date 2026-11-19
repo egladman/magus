@@ -8,6 +8,7 @@
 import "fs";
 import "magus";
 import "os";
+import "result";
 import "std";
 
 // outcome renders the summary for one CI result. Pure, so the wording and the branch for
@@ -54,22 +55,26 @@ fun env(name: str) > str { return os\env(name) ?? ""; }
 // rather than git, so it is about the thing the reader is looking at, and it answers the
 // one question a red or green run raises - is this result trustworthy, or does this target
 // flap? Silent when nothing is flagged, matching every advisor in ../advice.
-fun volatilitySection() > str !> any {
+fun volatilitySection() > result\Result::<str> {
     // One typed read of the loaded workspace. This used to shell out twice - once for
     // `-o name` to decide whether to render anything, and again for `-o text` to get the
     // prose - and both answers are fields on the same Volatility metric.
-    final report = magus\workspace().volatility();
-    final flagged = mut [<str>];
-    foreach (t in report.targets) {
-        if (t.volatile) {
-            flagged.append("{t.project}:{t.target}  score {t.score}  pass {t.pass}  fail {t.fail}");
+    try {
+        final report = magus\workspace().volatility();
+        final flagged = mut [<str>];
+        foreach (t in report.targets) {
+            if (t.volatile) {
+                flagged.append("{t.project}:{t.target}  score {t.score}  pass {t.pass}  fail {t.fail}");
+            }
         }
+        if (flagged.len() == 0) { return result\ok::<str>(""); }
+        return result\ok::<str>("\n## Volatile targets\n\n"
+            + "These targets' pass/fail records flap, so a result from one of them is weak "
+            + "evidence either way. Stabilize them before trusting a red run.\n\n"
+            + "```\n" + flagged.join("\n") + "\n```\n");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "ci-outcome: read the volatility metric");
     }
-    if (flagged.len() == 0) { return ""; }
-    return "\n## Volatile targets\n\n"
-        + "These targets' pass/fail records flap, so a result from one of them is weak "
-        + "evidence either way. Stabilize them before trusting a red run.\n\n"
-        + "```\n" + flagged.join("\n") + "\n```\n";
 }
 
 fun main() > void !> any {
@@ -79,7 +84,11 @@ fun main() > void !> any {
         return;
     }
     var text = outcome(env("CI_RESULT"), shards: env("SHARD_COUNT"));
-    text = text + volatilitySection();
+    final section = volatilitySection();
+    if (section.error -> err) {
+        throw err.message;
+    }
+    text = text + section.value!;
     fs\appendFile(path, text);
     std\print("ci-outcome: summarized " + env("CI_RESULT"));
 }
