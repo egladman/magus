@@ -41,11 +41,11 @@ What exists on main at `d29cea148`:
 
 The mod draws three figures. It computes none of them.
 
-| Layer                                          | Owns                                                                          | Language             |
-| ---------------------------------------------- | ----------------------------------------------------------------------------- | -------------------- |
-| core                                           | the data: job rows, the run journal, the query record; the figure library     | Go                   |
+| Layer                                          | Owns                                                                          | Language              |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- | --------------------- |
+| core                                           | the data: job rows, the run journal, the query record; the figure library     | Go                    |
 | figure scripts, in the `claude-code-mod` spell | which boxes, edges, zones and states each view draws                          | Buzz, `magus/diagram` |
-| mod                                            | noticing the call, running the script, placing the SVG, the terminal fallback | TSX                  |
+| mod                                            | noticing the call, running the script, placing the SVG, the terminal fallback | TSX                   |
 
 ### The workspace owns the figures
 
@@ -96,7 +96,7 @@ carries.
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
 | journal `cache.plan` as `KIND_PLAN` and `cache.step` as `KIND_STEP` (`v1alpha1`, additive)             | a run figure needs the planned targets, their edges and when each started | proposed                                 |
 | a `parsed` field on the query record: each filter's field, operator and value, and the free terms      | the parser stays the one in Go; a script never splits a query string      | proposed                                 |
-| a running state in libs/diagram that animates (a SMIL pulse on the box)                                 | every figure, console included, gets the same running mark                | proposed                                 |
+| a running state in libs/diagram that animates (a SMIL pulse on the box)                                | every figure, console included, gets the same running mark                | proposed                                 |
 | every MCP tool call journals an invocation with its command and the tool call's id, as a CLI call does | the mod finds a call's invocation the same way for both doors             | proposed (not yet checked for each tool) |
 
 ### What the mod adds

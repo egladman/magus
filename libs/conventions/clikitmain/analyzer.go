@@ -158,7 +158,6 @@ func exists(root, file, list string) error {
 	return nil
 }
 
-
 func run(pass *analysis.Pass, l loaded) {
 	if pass.Pkg.Name() != "main" {
 		return
