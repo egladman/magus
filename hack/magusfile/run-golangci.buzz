@@ -112,7 +112,7 @@ export fun lintLib(dir: str, fix: bool) > void !> any {
 
 fun libArgs(dir: str) > [str] {
     final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-    return ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testpairing,testpair" + errorStrings];
+    return ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testpairing,testpair,clikitmain" + errorStrings];
 }
 
 // packagesOf groups the Go files among files by the module holding them, "." or one of

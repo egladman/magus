@@ -11,6 +11,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `hostvocab`     | a host's tool name (`"Read"`, `"Bash"`) as a string literal in guard code                                                                                                                   |
 | `ruletext`      | guard rule text (`"magus workspace:"`) in the guard's CLI half                                                                                                                              |
 | `accessorclone` | an exported accessor returning its own slice or map instead of `slices.Clone`, `maps.Clone` or an iterator; today's cases sit in the module's `analyzers.yaml` baseline, which only shrinks |
+| `clikitmain`    | a main package that parses its command line by hand: a `flag` definition or parse, or a read of `os.Args`; today's cases sit in `analyzers.yaml`, which only shrinks                        |
 | `asciistrings`  | a typographic glyph in a string literal of a listed user-facing file                                                                                                                        |
 | `benchbeside`   | an `// optimization:` comment or a `Cache`/`Memo` type in a package whose tests hold no benchmark                                                                                           |
 | `closedswitch`  | a switch over a named type with declared constants that misses a member or keeps a default arm                                                                                              |
@@ -52,8 +53,8 @@ origin once.
 
 golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in
 each module under `libs/`, on the same config, with only `filenames`,
-`hostagnostic`, `namewords`, `stutter`, `testifylint`, `testpairing` and
-`testpair` enabled, plus `errmsg` outside gopherbuzz: the rules that hold in
+`hostagnostic`, `namewords`, `stutter`, `testifylint`, `testpairing`,
+`testpair` and `clikitmain` enabled, plus `errmsg` outside gopherbuzz: the rules that hold in
 every module. The rest name root-module paths.
 
 `filenames` reads beyond its package on purpose: its vocabulary is every Go file
