@@ -549,7 +549,7 @@ func (s *Store) migrate(ctx context.Context, storePath string, _ apiversion.APIV
 	if err != nil {
 		return refuse(err)
 	}
-	due := found < len(s.migrations) || migrate.Numbered(header)
+	due := found < len(s.migrations) || st.Numbered(header)
 	if due {
 		if err := s.fence(); err != nil {
 			return err
@@ -560,7 +560,7 @@ func (s *Store) migrate(ctx context.Context, storePath string, _ apiversion.APIV
 			return err
 		}
 	}
-	if err := s.refuseOffBase(ctx, storePath, storeAt(header, found, s.migrations), due, last); err != nil {
+	if err := s.refuseOffBase(ctx, storePath, storeAt(st, header, found), due, last); err != nil {
 		return err
 	}
 	if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
@@ -666,8 +666,8 @@ func headerWriter(header migrate.Entry) storeWriter {
 }
 
 // beforeWrite runs inside every rewrite of the job store before it writes: it refuses a
-// binary stale against the checkout, stamps this binary as the store's writer, then runs
-// the retention pass.
+// binary stale against the checkout, stamps this binary as the store's writer and the
+// migration count an older magus reads, then runs the retention pass.
 func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) error {
 	if err := s.fence(); err != nil {
 		return err
@@ -677,6 +677,8 @@ func (s *Store) beforeWrite(ctx context.Context, f *job.Rows, now time.Time) err
 		return fmt.Errorf("job: stamping the writer: %w", err)
 	}
 	*f = f.WithMember(writerMember, raw)
+	// compat: see migrate.Store.Count.
+	*f = f.WithMember(migrate.Store{Migrations: s.migrations}.Count())
 	return s.retainDue(ctx, f, now)
 }
 
@@ -785,17 +787,17 @@ func (e *offBaseMigrationError) Error() string {
 		e.Path, e.Found, self, e.Known, e.Why, base, e.Last.named(), base)
 }
 
-// storeAt names how far a store whose header is header, found migrations along
-// migrations, has migrated.
-func storeAt(header migrate.Entry, found int, migrations []migrate.Migration) string {
+// storeAt names how far a store whose header is header, found of st's migrations along,
+// has migrated.
+func storeAt(st migrate.Store, header migrate.Entry, found int) string {
 	switch {
-	// compat(until: the next release): see migrate.Numbered.
-	case migrate.Numbered(header):
+	// compat: see migrate.Store.Count.
+	case st.Numbered(header):
 		return fmt.Sprintf("migration %d", found)
 	case found == 0:
 		return "no api_version"
 	}
-	return string(migrations[found-1].To)
+	return string(st.Migrations[found-1].To)
 }
 
 // refuseOffBase refuses rewriting the file at path, at found as [storeAt] names it, when

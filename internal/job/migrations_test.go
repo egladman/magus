@@ -24,7 +24,7 @@ import (
 
 // numberedHeaderSuite pins the reading of a header that counts its migrations.
 //
-// compat(until: the next release): see migrate.Numbered.
+// compat: see migrate.Store.Count.
 type numberedHeaderSuite struct {
 	suite.Suite
 }
@@ -44,9 +44,26 @@ func (s *numberedHeaderSuite) TestACurrentCountBecomesTheStoreVersion() {
 	s.Require().Len(f.Jobs, 1)
 	header := storedLines(s.T(), path)[0]
 	s.Equal(string(currentStoreVersion()), header["api_version"])
-	s.NotContains(header, "migration", "the count is gone once the header names its version")
-	s.Contains(notices.String(), fmt.Sprintf("from %s to %s (1 entries); the header's \"migration\" member became its \"api_version\"",
+	s.InDelta(len(jobMigrations()), header["migration"], 0, "the count agrees with the version")
+	s.Contains(notices.String(), fmt.Sprintf("from %s to %s (1 entries); read the header's \"migration\" count as its \"api_version\"",
 		currentStoreVersion(), currentStoreVersion()))
+}
+
+// A magus built before store versions reads a header by its count alone, so a store this
+// build writes must read to it as through every migration, or it would replay them all.
+func (s *numberedHeaderSuite) TestAStoreThisBuildWritesCountsEveryMigration() {
+	st := tempStore(s.T(), s.T().TempDir())
+	seed(s.T(), st, lease("a"))
+	path, err := st.Path()
+	s.Require().NoError(err)
+
+	header := storedLines(s.T(), path)[0]
+
+	s.Equal(string(currentStoreVersion()), header["api_version"])
+	s.InDelta(len(jobMigrations()), header["migration"], 0, "an older magus finds no migration due")
+	f, err := st.Read(s.T().Context())
+	s.Require().NoError(err)
+	s.Len(f.Jobs, 1, "and this build reads it by its version, migrating nothing")
 }
 
 type modelTierSourceJobSuite struct {
@@ -285,13 +302,13 @@ func (s *regroupSuite) read(path string) string {
 // batch.magus group, its api version under the camelCase key it had then, and its
 // version counted as headers of that time counted it.
 //
-// compat(until: the next release): see migrate.Numbered.
+// compat: see migrate.Store.Count.
 func (s *regroupSuite) before() {
 	group := job.APIVersion.Group() + "/"
 	at := slices.IndexFunc(jobMigrations(), func(m migrate.Migration) bool { return m.Name == groupsMoved })
 	s.rewrite(s.jobs, group, batchMagusGroup+"/")
 	s.rewrite(s.jobs, `"api_version":`, `"apiVersion":`)
-	s.rewrite(s.jobs, `"kind":"JobList"`, fmt.Sprintf(`"kind":"JobList","migration":%d`, at))
+	s.rewrite(s.jobs, fmt.Sprintf(`"migration":%d`, len(jobMigrations())), fmt.Sprintf(`"migration":%d`, at))
 	s.rewrite(s.attempts, group, batchMagusGroup+"/")
 	s.rewrite(s.attempts, `"api_version":`, `"apiVersion":`)
 }
@@ -826,7 +843,7 @@ func (s *snakeStoreSuite) SetupTest() {
 // planted is a store at root holding the camel lines, at the migration before keysSnaked,
 // counted as headers of that time counted it.
 //
-// compat(until: the next release): see migrate.Numbered.
+// compat: see migrate.Store.Count.
 func (s *snakeStoreSuite) planted() (st *Store, jobs, attempts string) {
 	st = tempStore(s.T(), s.repo.Root())
 	st.notices = &bytes.Buffer{}
@@ -858,7 +875,7 @@ func (s *snakeStoreSuite) TestTheStoreReadsAfterItsLinesAreRespelled() {
 	s.Require().Len(lines, 2)
 	s.Equal(string(currentStoreVersion()), lines[0]["api_version"])
 	s.NotContains(lines[0], "apiVersion")
-	s.NotContains(lines[0], "migration")
+	s.InDelta(len(jobMigrations()), lines[0]["migration"], 0, "the count an older magus reads rides beside the version")
 	s.Equal(map[string]any{"x.example/dependsOn": "keepMe"}, lines[1]["metadata"].(map[string]any)["annotations"])
 
 	tries, err := st.Attempts(ctx)

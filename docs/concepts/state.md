@@ -26,7 +26,7 @@ same way.
 The version lives in the store's own header line, as its `api_version`:
 
 ```jsonl
-{"api_version":"safetyscissors.job/v1alpha2","kind":"JobList"}
+{"api_version":"safetyscissors.job/v1alpha2","kind":"JobList","migration":2}
 {"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"docs-index"},"spec":{"agent":{"instructions":"index the docs","worker":{"type":"resumed"}}}}
 ```
 
@@ -71,10 +71,13 @@ When magus opens a store:
 
 Migrations only go up. To go back, run the magus that wrote the store.
 
-A header written before store versions were api versions counts its migrations
-in a `migration` member instead. Until the next release, magus reads that count
-as the version of the migration it counts to, and the next migration rewrites
-the header with its `api_version` and without the count.
+A magus built before store versions were api versions reads only the header's
+`migration` member, a count of the migrations applied. Until the next release,
+every write stamps that count beside the `api_version`, so such a magus finds
+the store current and replays nothing. magus reads the count only when it does
+not match the `api_version`, as in a header that older magus wrote. It then
+reads the count as the version of the migration it counts to, and the next
+write gives the header its `api_version`.
 
 A magus built from another contract than its checkout carries never writes the
 job store at all: every write is refused with MGS1021, naming the relink.

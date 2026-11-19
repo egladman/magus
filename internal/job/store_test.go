@@ -796,7 +796,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	commit, _ := buildinfo.Commit()
 
 	assert.Equal(t, []map[string]any{{
-		"api_version": string(currentStoreVersion()), "kind": "JobList",
+		"api_version": string(currentStoreVersion()), "kind": "JobList", "migration": float64(len(jobMigrations())),
 		"plan": "p1", "retained": float64(1_700_000_000), "writer": map[string]any{"version": buildinfo.UnknownVersion, "commit": commit},
 	}}, storedLines(t, path), "a clear leaves the header's members alone, and the store's own retention and writer stamps ride in it")
 }

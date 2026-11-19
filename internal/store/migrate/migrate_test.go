@@ -63,7 +63,7 @@ func (s *migrateSuite) TestUpOneVersion() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.Equal(result{Store: "thing store", Path: st.Path, To: thing(1), Entries: 3}, res)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"plan\":\"p\"}\n{\"id\":\"a\",\"run\":1}\n{\"id\":\"b\"}\n{\"id\":\"a\",\"run\":2}\n", s.contents(st),
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"migration\":1,\"plan\":\"p\"}\n{\"id\":\"a\",\"run\":1}\n{\"id\":\"b\"}\n{\"id\":\"a\",\"run\":2}\n", s.contents(st),
 		"every line is migrated, superseded ones included, and the header carries the version")
 	s.Equal(fmt.Sprintf("migrated thing store %s from unversioned to magus.thing/v1alpha1 (3 entries)", st.Path), res.String())
 }
@@ -75,10 +75,10 @@ func (s *migrateSuite) TestUpSeveralVersionsInOrder() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.Equal(result{Store: "thing store", Path: st.Path, From: thing(1), To: thing(3), Entries: 1}, res)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha3\"}\n{\"id\":\"a\",\"pass\":1}\n", s.contents(st), "only the migrations past v1alpha1 ran, in order")
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha3\",\"migration\":3}\n{\"id\":\"a\",\"pass\":1}\n", s.contents(st), "only the migrations past v1alpha1 ran, in order")
 }
 
-// compat(until: the next release): see [numberedMember].
+// compat: see [Store.Count].
 func (s *migrateSuite) TestANumberedHeaderReadsAsTheVersionItCounts() {
 	st := s.store("{\"migration\":1,\"plan\":\"p\"}\n{\"id\":\"a\",\"run\":1}\n",
 		renameMember(1, "attempt", "run"), renameMember(2, "run", "try"))
@@ -86,11 +86,32 @@ func (s *migrateSuite) TestANumberedHeaderReadsAsTheVersionItCounts() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.Equal(result{Store: "thing store", Path: st.Path, From: thing(1), To: thing(2), Entries: 1, Numbered: true}, res)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha2\",\"plan\":\"p\"}\n{\"id\":\"a\",\"try\":1}\n", s.contents(st))
-	s.Contains(res.String(), `; the header's "migration" member became its "api_version"`)
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha2\",\"migration\":2,\"plan\":\"p\"}\n{\"id\":\"a\",\"try\":1}\n", s.contents(st))
+	s.Contains(res.String(), `; read the header's "migration" count as its "api_version"`)
 }
 
-// compat(until: the next release): see [numberedMember].
+// compat: see [Store.Count].
+func (s *migrateSuite) TestACountThatAgreesWithTheVersionReadsByTheVersion() {
+	st := s.store("{\"api_version\":\"magus.thing/v1alpha1\",\"migration\":1}\n{\"id\":\"a\",\"run\":1}\n",
+		renameMember(1, "attempt", "run"), renameMember(2, "run", "try"))
+
+	res, err := st.Apply()
+	s.Require().NoError(err)
+	s.Equal(result{Store: "thing store", Path: st.Path, From: thing(1), To: thing(2), Entries: 1}, res)
+}
+
+// compat: see [Store.Count].
+func (s *migrateSuite) TestACurrentHeaderCarryingItsCountIsLeftAlone() {
+	body := "{\"api_version\":\"magus.thing/v1alpha2\",\"migration\":2}\n{\"id\":\"a\",\"try\":1}\n"
+	st := s.store(body, renameMember(1, "attempt", "run"), renameMember(2, "run", "try"))
+
+	res, err := st.Apply()
+	s.Require().NoError(err)
+	s.False(res.Migrated())
+	s.Equal(body, s.contents(st))
+}
+
+// compat: see [Store.Count].
 func (s *migrateSuite) TestACurrentNumberedHeaderIsRewrittenWithItsVersion() {
 	st := s.store("{\"api_version\":\"magus.other/v1\",\"migration\":2}\n{\"id\":\"a\",\"try\":1}\n",
 		renameMember(1, "attempt", "run"), renameMember(2, "run", "try"))
@@ -98,10 +119,10 @@ func (s *migrateSuite) TestACurrentNumberedHeaderIsRewrittenWithItsVersion() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.True(res.Migrated(), "the numbered header is respelled even though no migration ran")
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha2\"}\n{\"id\":\"a\",\"try\":1}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha2\",\"migration\":2}\n{\"id\":\"a\",\"try\":1}\n", s.contents(st))
 }
 
-// compat(until: the next release): see [numberedMember].
+// compat: see [Store.Count].
 func (s *migrateSuite) TestANumberedHeaderPastEveryMigrationIsRefused() {
 	body := "{\"migration\":3}\n{\"id\":\"a\"}\n"
 	st := s.store(body, renameMember(1, "attempt", "run"))
@@ -122,7 +143,7 @@ func (s *migrateSuite) TestAHeaderRewriteRunsBeforeTheVersionIsSet() {
 
 	_, err := st.Apply()
 	s.Require().NoError(err)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"book\":\"p\"}\n{\"book\":1,\"id\":\"a\"}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"book\":\"p\",\"migration\":1}\n{\"book\":1,\"id\":\"a\"}\n", s.contents(st))
 }
 
 func (s *migrateSuite) TestAFailingHeaderRewriteLeavesTheFile() {
@@ -153,7 +174,7 @@ func (s *migrateSuite) TestTheStampRunsAfterTheMigrationsAndBeforeTheVersion() {
 
 	_, err := st.Apply()
 	s.Require().NoError(err)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"book\":\"p\",\"writer\":\"new\"}\n{\"id\":\"a\"}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"book\":\"p\",\"migration\":1,\"writer\":\"new\"}\n{\"id\":\"a\"}\n", s.contents(st))
 }
 
 func (s *migrateSuite) TestAFailingStampLeavesTheFile() {
@@ -191,7 +212,7 @@ func (s *migrateSuite) TestAddsAHeaderToAFileWithoutOne() {
 
 	_, err := st.Apply()
 	s.Require().NoError(err)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\"}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"migration\":1}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
 }
 
 func (s *migrateSuite) TestAHeaderInAnotherGroupIsUnversioned() {
@@ -200,7 +221,7 @@ func (s *migrateSuite) TestAHeaderInAnotherGroupIsUnversioned() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.Empty(res.From, "a version no migration's group holds was written before the first migration")
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\"}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"migration\":1}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
 }
 
 func (s *migrateSuite) TestAlreadyCurrentIsLeftAlone() {
@@ -303,6 +324,6 @@ func (s *migrateSuite) TestAnUnfinishedLastLineIsDroppedAndSaid() {
 	res, err := st.Apply()
 	s.Require().NoError(err)
 	s.True(res.Unfinished)
-	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\"}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
+	s.Equal("{\"api_version\":\"magus.thing/v1alpha1\",\"migration\":1}\n{\"id\":\"a\",\"run\":1}\n", s.contents(st))
 	s.Contains(res.String(), "; dropped a last line no writer finished")
 }

@@ -16,19 +16,52 @@ import (
 const versionMember = "api_version"
 
 // numberedMember is the header member a store recorded its version in before versions
-// were api versions: how many migrations had been applied to it.
+// were api versions: how many migrations had been applied to it. A header whose count
+// agrees with its api_version is read by the api_version alone; see [Store.Numbered].
 //
-// compat(until: the next release): [Store.At] reads it as the version of the migration it
-// counts to, and [Store.Apply] rewrites the header without it.
+// compat: see [Store.Count].
 const numberedMember = "migration"
 
-// Numbered reports whether header counts its migrations rather than naming its version.
-// [Store.Apply] rewrites such a header even when no migration is due.
+// Count is the header member and value a writer stamps beside the api_version: how many
+// migrations s holds. A magus built before store versions reads a header without it as at
+// migration 0 and replays every migration over current entries; with it, that magus finds
+// the store current.
 //
-// compat(until: the next release): see [numberedMember].
-func Numbered(header Entry) bool {
-	_, ok := header[numberedMember]
-	return ok
+// compat(until: the next release): every writer of the header stamps it.
+func (s Store) Count() (member string, raw codec.RawMessage) {
+	return numberedMember, codec.RawMessage(strconv.Itoa(len(s.Migrations)))
+}
+
+// Numbered reports whether header counts its migrations where its api_version does not
+// name the version that count reaches: a header written before store versions were api
+// versions. [Store.Apply] rewrites such a header even when no migration is due.
+//
+// compat: see [Store.Count].
+func (s Store) Numbered(header Entry) bool {
+	_, numbered, _ := s.counted(header)
+	return numbered
+}
+
+// counted is how many migrations header counts and whether that count, rather than its
+// api_version, says where the store stands.
+//
+// compat: see [Store.Count].
+func (s Store) counted(header Entry) (int, bool, error) {
+	raw, ok := header[numberedMember]
+	if !ok {
+		return 0, false, nil
+	}
+	at, versionErr := s.versionAt(header)
+	if _, newer := errors.AsType[*NewerError](versionErr); newer {
+		return 0, false, nil
+	}
+	n, err := s.numbered(raw)
+	if err != nil {
+		return 0, true, err
+	}
+	// A version this build cannot place leaves the count to say where the store stands.
+	agrees := versionErr == nil && at == n
+	return n, !agrees, nil
 }
 
 // Entry is one stored line as its JSON members, before the entry type decodes it.
@@ -114,14 +147,21 @@ func (e *unknownVersionError) Error() string {
 // A header naming the To of a migration is at that migration. One naming no api_version,
 // or one in a group no migration converts to, was written before the store's first
 // migration and is at none. A version newer than [Store.Version] in its group is a
-// [*NewerError], and any other a [*unknownVersionError].
+// [*NewerError], and any other a [*unknownVersionError]. A header [Store.Numbered] reports
+// is at the migration its count reaches.
 func (s Store) At(header Entry) (int, error) {
 	if err := s.checkMigrations(); err != nil {
 		return 0, err
 	}
-	if raw, ok := header[numberedMember]; ok {
-		return s.numbered(raw)
+	if n, numbered, err := s.counted(header); numbered || err != nil {
+		return n, err
 	}
+	return s.versionAt(header)
+}
+
+// versionAt is how many of s's migrations a header's api_version alone says the store has
+// been through; see [Store.At].
+func (s Store) versionAt(header Entry) (int, error) {
 	raw, ok := header[versionMember]
 	if !ok {
 		return 0, nil
@@ -152,7 +192,7 @@ func (s Store) At(header Entry) (int, error) {
 
 // numbered is how many migrations the numbered header member raw counts.
 //
-// compat(until: the next release): see [numberedMember].
+// compat: see [Store.Count].
 func (s Store) numbered(raw codec.RawMessage) (int, error) {
 	var n int
 	if err := codec.Unmarshal(raw, &n); err != nil {
@@ -198,7 +238,7 @@ type result struct {
 	// Numbered says the header counted its migrations, which the rewrite respelled as
 	// its api_version.
 	//
-	// compat(until: the next release): see [numberedMember].
+	// compat: see [Store.Count].
 	Numbered bool
 	// Unfinished says the file ended in a line no writer finished, which the rewrite dropped.
 	Unfinished bool
@@ -210,7 +250,7 @@ func (r result) Migrated() bool { return r.From != r.To || r.Numbered }
 func (r result) String() string {
 	s := fmt.Sprintf("migrated %s %s from %s to %s (%d entries)", r.Store, r.Path, cmp.Or(string(r.From), "unversioned"), r.To, r.Entries)
 	if r.Numbered {
-		s += fmt.Sprintf("; the header's %q member became its %q", numberedMember, versionMember)
+		s += fmt.Sprintf("; read the header's %q count as its %q", numberedMember, versionMember)
 	}
 	if r.Unfinished {
 		s += "; dropped a last line no writer finished"
@@ -223,8 +263,8 @@ func (r result) String() string {
 //
 // A file at the current version, or absent, is left alone. An older one is rewritten
 // through a temporary file renamed over it, the header first and carrying the new
-// version, then every entry in file order; a failing migration or write leaves the file
-// as it was. A newer one is a [*NewerError], and one at a version no migration converts
+// version and [Store.Count], then every entry in file order; a failing migration or
+// write leaves the file as it was. A newer one is a [*NewerError], and one at a version no migration converts
 // to an [*unknownVersionError].
 func (s Store) Apply() (result, error) {
 	res := result{Store: s.Name, Path: s.Path, To: s.Version()}
@@ -243,7 +283,7 @@ func (s Store) Apply() (result, error) {
 	if at > 0 {
 		res.From = s.Migrations[at-1].To
 	}
-	res.Numbered = Numbered(header)
+	res.Numbered = s.Numbered(header)
 	if len(read.Lines) == 0 {
 		res.To, res.Numbered = res.From, false
 	}
@@ -266,7 +306,8 @@ func (s Store) Apply() (result, error) {
 			return res, fmt.Errorf("%s: %s: stamping the header: %w", s.Name, s.Path, err)
 		}
 	}
-	delete(header, numberedMember)
+	member, count := s.Count()
+	header[member] = count
 	if header[versionMember], err = codec.Marshal(res.To); err != nil {
 		return res, fmt.Errorf("%s: %s: %w", s.Name, s.Path, err)
 	}
