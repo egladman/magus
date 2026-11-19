@@ -31,13 +31,13 @@ func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
 	rows := []job.Job{{ID: "a"}}
 	passes := int64(2 + codec.CompactSlack + 1)
 	for at := range passes {
-		s.writeRecordsSwept(at, rows)
+		s.writeRecordsSwept(t.Context(), at, rows)
 	}
 	read, err := codec.ReadLines(filepath.Join(filepath.Dir(path), recordsSweptFile))
 	require.NoError(t, err)
 	assert.Len(t, read.Lines, 1, "the pass that made the log due rewrote it")
-	assert.True(t, s.recordsSwept(passes-1, rows))
-	assert.False(t, s.recordsSwept(passes-1, nil), "a row the last pass saw has gone")
+	assert.True(t, s.recordsSwept(t.Context(), passes-1, rows))
+	assert.False(t, s.recordsSwept(t.Context(), passes-1, nil), "a row the last pass saw has gone")
 }
 
 // TestMain isolates the environment: lease markers live under XDG_STATE_HOME, and the
