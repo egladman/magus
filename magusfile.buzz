@@ -2801,7 +2801,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "mise.toml", "magus.yaml", "hack/lint/sdk-exports.yaml", "analyzers.yaml",
                     // each project's own analyzers.yaml: a root glob stops at a nested project.
                     "console/analyzers.yaml", "libs/diagram/analyzers.yaml", "libs/gopherbuzz/analyzers.yaml", "libs/kustomize/analyzers.yaml",
-                    "libs/ssg/analyzers.yaml", "libs/train/analyzers.yaml",
+                    "libs/proofread/analyzers.yaml", "libs/ssg/analyzers.yaml", "libs/train/analyzers.yaml",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", ".gitignore",
                     "types/diagnostic.go",
