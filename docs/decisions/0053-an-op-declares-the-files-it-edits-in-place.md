@@ -1,7 +1,7 @@
 ---
 title: "ADR 0053: an op declares the files it edits in place"
 order: 53
-description: A spell op that rewrites files in place names them in an `edits` list on its Command. When the op is the step (`magus run go-fmt:rw`, `go::go-fmt:rw`), the globs key the step and exempt those files from MGS4007, as `ctx.writesFiles(..., editsExistingSource: true)` does for a target. A magusfile target that composes the op inherits nothing and keeps declaring its own writes. The check variant still fails on drift.
+description: "A spell op that rewrites files in place names them in an `edits` list on its Command. When the op is the step (`magus run go-fmt:rw`, `go::go-fmt:rw`), the globs key the step and exempt those files from MGS4007, as `ctx.writesFiles(..., editsExistingSource: true)` does for a target. A magusfile target that composes the op inherits nothing and keeps declaring its own writes. The check variant still fails on drift."
 tags: [adr, decision, spells, charms, cache, MGS4007, formatter]
 status: accepted
 date: 2026-11-19
