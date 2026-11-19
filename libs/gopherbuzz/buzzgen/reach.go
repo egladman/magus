@@ -28,6 +28,8 @@ func (d Direction) flip() Direction {
 		return Outbound
 	case Outbound:
 		return Inbound
+	case Mirrored:
+		return Mirrored
 	}
 	return Mirrored
 }

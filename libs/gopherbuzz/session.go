@@ -523,6 +523,8 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		return vmpackage.Null, errFiberOver
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
+	case vmpackage.FiberSuspended:
+		// runs below
 	}
 	fibVM := fib.VM()
 	fibVM.SetContext(s.within(ctx))
@@ -563,6 +565,8 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		return fib.Return(), fib.Error()
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
+	case vmpackage.FiberSuspended:
+		// runs below
 	}
 	fibVM := fib.VM()
 	fibVM.SetContext(s.within(ctx))
@@ -1708,9 +1712,10 @@ func importUsageIsReliable(outcome ImportOutcome, alias string) bool {
 		return true
 	case ImportFile:
 		return alias != "" && alias != "_"
-	default:
+	case ImportBound, ImportDecls, ImportNotFound:
 		return false
 	}
+	return false
 }
 
 // resolveImport resolves one import statement, binding whatever it names into the

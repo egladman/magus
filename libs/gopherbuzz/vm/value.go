@@ -656,9 +656,10 @@ func (v Value) buzzKind() string {
 		return "ud"
 	case tagType:
 		return "type"
-	default:
+	case tagObjDecl, tagCell:
 		return "unknown"
 	}
+	return "unknown"
 }
 
 // String returns the Buzz string representation of v.
@@ -770,9 +771,10 @@ func (v Value) stringPath(path []Value) string {
 			return "<fib:suspended>"
 		case fibRunning:
 			return "<fib:running>"
-		default:
+		case fibDone:
 			return "<fib:done>"
 		}
+		return "<fib:done>"
 	case tagPat:
 		return v.asPat().src
 	case tagUD:
@@ -781,9 +783,10 @@ func (v Value) stringPath(path []Value) string {
 		// Printed as written in source, angle brackets included, so a failing
 		// assertion shows `<[any]>` rather than a bare type name.
 		return fmt.Sprintf("<%s>", v.asType().name)
-	default:
+	case tagIterState, tagObjDecl, tagCell:
 		return "<unknown>"
 	}
+	return "<unknown>"
 }
 
 // pathHasIdentity reports whether v (a list, map, or object) is already on

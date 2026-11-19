@@ -108,9 +108,8 @@ func (p CompilePhase) String() string {
 		return "check"
 	case PhaseCompile:
 		return "compile"
-	default:
-		return "unknown"
 	}
+	return "unknown"
 }
 
 // ImportOutcome classifies how a Session resolved one import statement.
@@ -140,9 +139,8 @@ func (o ImportOutcome) String() string {
 		return "file"
 	case ImportNotFound:
 		return "not-found"
-	default:
-		return "unknown"
 	}
+	return "unknown"
 }
 
 // compileObservers is the list AddCompileObserver builds when more than one
