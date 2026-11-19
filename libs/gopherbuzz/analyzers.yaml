@@ -1,0 +1,25 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+no-throw:
+  # construct: {file: count}
+  baseline:
+    buzz-error-signature:
+      benchmarks/upstream/programs/trycatch.buzz: 1
+      magusfile.buzz: 2
+      std/ext_assert.buzz: 14
+
+# An engineered zone: see the root analyzers.yaml for the shape.
+zones:
+  - path: "**"
+    reason: spec
+    evidence:
+      - conformance_test.go
+      - README.md#upstream-parity
+      - benchmarks/upstream/upstream_test.go
+      - benchmarks/comparison/comparison_test.go
+    # magus.yaml's knowledge.conformance.exclude and the .golangci.yml path
+    # exclusion still hold this until a rule reads the zone.
+    budgets:
+      conformance: excluded

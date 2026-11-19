@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -16,11 +15,8 @@ import (
 // //nolint name all use the registered name.
 func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
-	if err := os.WriteFile("analyzers.yaml", []byte("accessorclone: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	for name, settings := range map[string]any{
-		"accessorclone": map[string]any{"module": "example.com/m", "policy": "analyzers.yaml"},
+		"accessorclone": map[string]any{"module": "example.com/m"},
 		"asciistrings": map[string]any{"module": "", "files": []any{"types/*.go"}},
 		"benchbeside":  map[string]any{"module": "example.com/m"},
 		"blankerror":   map[string]any{"base": "origin/main"},

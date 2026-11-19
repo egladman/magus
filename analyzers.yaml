@@ -1,6 +1,8 @@
-# This repository's analyzer policy, typed by a person. magus ships the
-# analyzers; what they excuse here is this repository's call and never part of
-# the binary or magus.yaml.
+# The root project's analyzer policy, typed by a person. Each project root
+# holds its own analyzers.yaml, and an analyzer reads only the file of the
+# project that owns the path it judges: a nested project never falls back to
+# this one, and a project with none gets the strict defaults. Paths are
+# relative to the project root.
 #
 # One top-level key per analyzer, plus zones:
 #   settings  the analyzer's knobs
@@ -11,7 +13,7 @@
 
 accessorclone:
   settings:
-    hint: "do not add a baseline entry or a //nolint: only a person types one into hack/lint/analyzers.yaml"
+    hint: "do not add a baseline entry or a //nolint: only a person types one into analyzers.yaml"
   # file: [Recv.Name or Name]
   baseline:
     internal/interactive/difftui/model.go: [Model.Rows]
@@ -44,39 +46,7 @@ no-throw:
     throw:
       benchmarks/large-monorepo/enrich/platform/config/index.mjs: 1
       benchmarks/large-monorepo/enrich/platform/http/index.mjs: 1
-      console/scripts/stamp-build.mjs: 3
-      console/src/apps/diff/agent-dom.test.ts: 1
-      console/src/apps/diff/demo-dom.test.ts: 1
-      console/src/apps/diff/outline-dom.test.ts: 3
-      console/src/apps/diff/reading-dom.test.ts: 1
-      console/src/apps/diff/review-dom.test.ts: 1
-      console/src/desktop/pulse.test.ts: 7
-      console/src/lib/token-exchange.test.ts: 1
-      docs/guides/integrations/agents/opencode-plugin.test.ts: 1
       hack/docs/screenshot.mjs: 1
-    async-no-result:
-      console/scripts/app-stubs.mjs: 1
-      console/src/apps/dashboard/plan/jobs.ts: 2
-      console/src/apps/dashboard/plan/run.ts: 1
-      console/src/apps/dashboard/tiles/attentionQueue.ts: 2
-      console/src/apps/diff/agent.ts: 1
-      console/src/apps/diff/session.ts: 6
-      console/src/apps/diff/thread-copy.ts: 1
-      console/src/apps/graph/main.ts: 1
-      console/src/apps/logs/fragment.ts: 2
-      console/src/apps/logs/runtree.ts: 4
-      console/src/apps/logs/share.ts: 1
-      console/src/apps/tools/transport.ts: 1
-      console/src/desktop/badges.ts: 1
-      console/src/desktop/pulse.ts: 1
-      console/src/lib/server.ts: 3
-      console/src/lib/sw.ts: 1
-      console/src/lib/token-exchange.ts: 1
-      console/src/render/clipboard.ts: 1
-      docs/guides/integrations/agents/claude-code/mod/hooks/bin.ts: 1
-      docs/guides/integrations/agents/claude-code/mod/hooks/json-view.tsx: 1
-      docs/guides/integrations/agents/claude-code/mod/hooks/register.tsx: 1
-      docs/guides/integrations/agents/claude-code/mod/hooks/ui.ts: 1
     buzz-error-signature:
       .github/actions/advice/advice.buzz: 11
       .github/actions/advice/advise.buzz: 2
@@ -91,88 +61,6 @@ no-throw:
       .github/actions/ci-outcome/ci-outcome.buzz: 1
       benchmarks/install/bench.buzz: 8
       benchmarks/large-monorepo/queue-local.buzz: 2
-      console/magusfile.buzz: 3
-      docs/engine/blog.buzz: 5
-      docs/engine/discovery.buzz: 2
-      docs/engine/feeds.buzz: 2
-      docs/engine/gates.buzz: 19
-      docs/engine/meta.buzz: 3
-      docs/engine/nav.buzz: 7
-      docs/engine/page.buzz: 8
-      docs/engine/pwa.buzz: 2
-      docs/engine/search.buzz: 2
-      docs/engine/types.buzz: 13
-      docs/guides/integrations/agents/lib/bindings.buzz: 3
-      docs/guides/integrations/agents/lib/embed.buzz: 1
-      docs/guides/integrations/agents/lib/hook.buzz: 2
-      docs/guides/integrations/agents/magus-command.buzz: 1
-      docs/guides/integrations/agents/magus-path.buzz: 1
-      docs/guides/integrations/agents/magus-reclaim-disk.buzz: 1
-      docs/guides/integrations/agents/magusfile.buzz: 1
-      docs/lib/adr.buzz: 1
-      docs/lib/crosscheck.buzz: 2
-      docs/lib/design.buzz: 1
-      docs/lib/dictionary.buzz: 3
-      docs/magusfile.buzz: 3
-      docs/render.buzz: 7
-      docs/site/development.buzz: 4
-      docs/site/diagrams/agent-integration.buzz: 1
-      docs/site/diagrams/agent-orchestration.buzz: 1
-      docs/site/diagrams/all.buzz: 7
-      docs/site/diagrams/bindings-generate.buzz: 1
-      docs/site/diagrams/bootstrap.buzz: 1
-      docs/site/diagrams/buzz-compile.buzz: 1
-      docs/site/diagrams/buzz-engine.buzz: 1
-      docs/site/diagrams/buzz-run.buzz: 1
-      docs/site/diagrams/buzz-stages.buzz: 3
-      docs/site/diagrams/cache-internals.buzz: 1
-      docs/site/diagrams/cache-trust.buzz: 1
-      docs/site/diagrams/ci-cd-split.buzz: 1
-      docs/site/diagrams/ci-pipeline.buzz: 1
-      docs/site/diagrams/ci-providers.buzz: 1
-      docs/site/diagrams/commit-generated.buzz: 1
-      docs/site/diagrams/config-load.buzz: 1
-      docs/site/diagrams/diagram-pipeline.buzz: 1
-      docs/site/diagrams/doctor.buzz: 1
-      docs/site/diagrams/dogfood.buzz: 1
-      docs/site/diagrams/dry-run.buzz: 1
-      docs/site/diagrams/guard-internals.buzz: 1
-      docs/site/diagrams/guard-path.buzz: 1
-      docs/site/diagrams/harness-integrations.buzz: 1
-      docs/site/diagrams/harness-pyramid.buzz: 2
-      docs/site/diagrams/image-build.buzz: 1
-      docs/site/diagrams/inputs-outputs.buzz: 1
-      docs/site/diagrams/job-records.buzz: 1
-      docs/site/diagrams/knowledge-graph.buzz: 1
-      docs/site/diagrams/kustomize-architecture.buzz: 1
-      docs/site/diagrams/language-service.buzz: 1
-      docs/site/diagrams/lease-loop.buzz: 1
-      docs/site/diagrams/mandate.buzz: 2
-      docs/site/diagrams/merge-queue-risk.buzz: 1
-      docs/site/diagrams/merge-queue-workflows.buzz: 1
-      docs/site/diagrams/oci-assembly.buzz: 1
-      docs/site/diagrams/packages.buzz: 3
-      docs/site/diagrams/project-reference.buzz: 1
-      docs/site/diagrams/sandbox.buzz: 1
-      docs/site/diagrams/server-http.buzz: 1
-      docs/site/diagrams/server-jobs.buzz: 1
-      docs/site/diagrams/server-share.buzz: 1
-      docs/site/diagrams/server-socket.buzz: 1
-      docs/site/diagrams/service.buzz: 1
-      docs/site/diagrams/sessions.buzz: 1
-      docs/site/diagrams/symbol-index.buzz: 1
-      docs/site/diagrams/target-order.buzz: 1
-      docs/site/diagrams/types.buzz: 1
-      docs/site/diagrams/vcs.buzz: 1
-      docs/site/diagrams/volatility.buzz: 1
-      docs/site/diagrams/workspace-load.buzz: 1
-      docs/site/download.buzz: 1
-      docs/site/landing.buzz: 2
-      docs/site/public.buzz: 2
-      docs/site/sections.buzz: 1
-      docs/site/tags.buzz: 2
-      docs/site/tour.buzz: 5
-      docs/tour/23-charm-axes.buzz: 2
       evals/buzz/grade.buzz: 1
       evals/buzz/solutions/ports.buzz: 1
       hack/bench/time-startup.buzz: 7
@@ -245,15 +133,6 @@ no-throw:
       hack/retro/trace.buzz: 10
       hack/retro/trace_test.buzz: 1
       internal/queue/provider/github.buzz: 63
-      libs/figure/figure.buzz: 7
-      libs/gopherbuzz/benchmarks/upstream/programs/trycatch.buzz: 1
-      libs/gopherbuzz/magusfile.buzz: 2
-      libs/gopherbuzz/std/ext_assert.buzz: 14
-      libs/kustomize/kustomize.buzz: 6
-      libs/ssg/csp.buzz: 4
-      libs/ssg/date.buzz: 3
-      libs/ssg/paths.buzz: 2
-      libs/train/magusfile.buzz: 1
       magusfile.buzz: 44
       spells/aws/s3-cache/spell.buzz: 4
       spells/endoflife-date/spell.buzz: 1
@@ -277,24 +156,13 @@ no-throw:
       std/lib/lcov.buzz: 2
       std/lib/reclaimdisk.buzz: 20
 
-# An engineered zone: a path whose complexity a measurement licenses. reason is
-# spec, performance or security; evidence names the files that license it;
-# budgets are the anchors the zone holds in place of the strict ones, stated
-# below today's outliers. An item already past its anchor may not grow, in a
-# zone or out of one. A path with no zone gets the strict budgets. No rule
-# reads zones yet: the size and growth rules will.
+# An engineered zone: a path in this project whose complexity a measurement
+# licenses. reason is spec, performance or security; evidence names the files
+# that license it; budgets are the anchors the zone holds in place of the
+# strict ones, stated below today's outliers. An item already past its anchor
+# may not grow, in a zone or out of one. A path with no zone gets the strict
+# budgets. No rule reads zones yet: the size and growth rules will.
 zones:
-  - path: libs/gopherbuzz/**
-    reason: spec
-    evidence:
-      - libs/gopherbuzz/conformance_test.go
-      - libs/gopherbuzz/README.md#upstream-parity
-      - libs/gopherbuzz/benchmarks/upstream/upstream_test.go
-      - libs/gopherbuzz/benchmarks/comparison/comparison_test.go
-    # magus.yaml's knowledge.conformance.exclude and the .golangci.yml path
-    # exclusion still hold this until a rule reads the zone.
-    budgets:
-      conformance: excluded
   - path: internal/guard/**
     reason: security
     # Built by the guard-security-zone job; until those files exist the claim is

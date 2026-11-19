@@ -145,8 +145,9 @@ saying it, delete it here.
   `name<TAB>value`
   ([design](docs/design/principles/everything-is-a-file.md)).
 - A file a person adds to or edits is YAML, never JSON Lines. Analyzer settings,
-  baselines, exits and zones live in `hack/lint/analyzers.yaml`, one top-level key
-  per analyzer, never in the binary or `magus.yaml`
+  baselines, exits and zones live in each project root's own `analyzers.yaml`,
+  one top-level key per analyzer, never in the binary or `magus.yaml`. A project
+  reads no other project's file; none means strict.
   ([design](docs/design/principles/a-file-a-person-edits-is-yaml.md)).
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
