@@ -189,12 +189,11 @@ fun reusable(root: str, source: str) > result\Result::<Binary> {
         return result\fail::<Binary>("{bin} is not this worktree's build:\n  {source} cannot print its build stamp, so it predates go-build stamping one: {e.message}");
     }
     final stamped = stale\stampedInputs(printed.value!.trim());
-    var digest = "";
-    try {
-        digest = stale\goInputsDigest(root);
-    } catch (err: any) {
-        return result\caught::<Binary>(err, doing: "bootstrap-worktree: digest the Go build inputs of {root}");
+    final digested = stale\goInputsDigest(root);
+    if (digested.error -> e) {
+        return result\fail::<Binary>("bootstrap-worktree: digest the Go build inputs of {root}: {e.message}");
     }
+    final digest = digested.value!;
     final matched = checkReusable(stamped, digest: digest);
     if (matched.error -> e) {
         return result\fail::<Binary>("{bin} is not this worktree's build:\n  {e.message}");

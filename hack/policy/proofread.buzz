@@ -212,14 +212,18 @@ export fun table(files: [str]) > result\Result::<{str: any}> {
 
 // writeDecisions writes table(files) to a new temp file and returns its path, for
 // `proofread -decisions`. The caller removes it.
-export fun writeDecisions(files: [str]) > str !> any {
+export fun writeDecisions(files: [str]) > result\Result::<str> {
     final decisions = table(files);
     if (decisions.error != null) {
-        throw decisions.error!.message;
+        return result\Result::<str>{ error = decisions.error };
     }
-    final file = fs\tempFile("proofread-decisions");
-    fs\writeFile(file, content: json\stringify(decisions.value!));
-    return file;
+    try {
+        final file = fs\tempFile("proofread-decisions");
+        fs\writeFile(file, content: json\stringify(decisions.value!));
+        return result\ok::<str>(file);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "proofread: write the decisions file");
+    }
 }
 
 // decide is the decision this repository gives a finding of rule that a judge outside
@@ -239,7 +243,7 @@ test "a path exemption joins only a run whose files it matches" {
 }
 
 test "the decisions file is the table as JSON" {
-    final file = writeDecisions(["blog/p.md"]) catch "";
+    final file = writeDecisions(["blog/p.md"]).value ?? "";
     std\assert(file != "", message: "a file");
     final read: {str: any} = json\parse(fs\readFile(file) catch "\{}") catch {<str: any>};
     std\assert(read["rules"]?["tense"] == "deny", message: "{read}");

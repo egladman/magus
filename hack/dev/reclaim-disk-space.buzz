@@ -28,12 +28,12 @@ import "assert";
 
 fun trimCaches(fence: double) > result\Result::<str> {
     final said = mut [<str>];
-    try {
-        foreach (t in reclaim\trimDeclared(fence, deadline: 0.0)) {
-            said.append(reclaim\trimLine(t, fence: fence) ?? "{t.name} holds {reclaim\size(std\toInt(t.afterBytes / 1024))}, within its {t.trimMb} MiB budget");
-        }
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "reclaim-disk-space: trim the caches");
+    final trims = reclaim\trimDeclared(fence, deadline: 0.0);
+    if (trims.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    foreach (t in trims.value!) {
+        said.append(reclaim\trimLine(t, fence: fence) ?? "{t.name} holds {reclaim\size(std\toInt(t.afterBytes / 1024))}, within its {t.trimMb} MiB budget");
     }
     return result\ok::<str>(said.join("; "));
 }

@@ -217,7 +217,11 @@ fun checkAgainst(files: [Path], baseline: [str]) > result\Result::<[Finding]> {
     var table = "";
     try {
         bin = path\abs("{proofread\home}/{proofread\binary}");
-        table = decisions\writeDecisions([<str>]);
+        final written = decisions\writeDecisions([<str>]);
+        if (written.error != null) {
+            return result\Result::<[Finding]>{ error = written.error };
+        }
+        table = written.value!;
     } catch (err: any) {
         return result\caught::<[Finding]>(err);
     }
