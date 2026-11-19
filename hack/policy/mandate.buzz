@@ -12,6 +12,7 @@ namespace agentpolicy\mandate;
 import "std";
 import "fs";
 import "os";
+import "result";
 import "encoding/json";
 import "magus";
 import "magus/check";
@@ -79,7 +80,7 @@ export object Assessed {
 // assess is id's proven tier: measure's report on the change in the job's own checkout since
 // the checkpoint it was handed. A row measure cannot reach, or a measure that raises, is full,
 // and its evidence says which, so an unmeasured job never reads as a measured tier.
-export fun assess(id: str, jobs: [JobFacts], measure: fun (row: JobFacts) > TierReport !> any, count: fun (row: JobFacts) > {str: int} !> any) > Assessed {
+export fun assess(id: str, jobs: [JobFacts], measure: fun (row: JobFacts) > result\Result::<TierReport>, count: fun (row: JobFacts) > result\Result::<{str: int}>) > Assessed {
     final row = byId(jobs, id: id);
     if (row == null) {
         return Assessed{ tier = "full", evidence = ["{id}: full (no job row by that id, so nothing was measured)"] };
@@ -87,24 +88,21 @@ export fun assess(id: str, jobs: [JobFacts], measure: fun (row: JobFacts) > Tier
     if (row!.checkoutRoot == "" or row!.checkpoint == "") {
         return Assessed{ tier = "full", evidence = ["{id}: full (the row records no checkout or checkpoint to measure its change from)"] };
     }
-    var report = TierReport{};
-    try {
-        report = measure(row!);
-    } catch (e: any) {
-        return Assessed{ tier = "full", evidence = ["{id}: full (magus\\change().tier raised: {e})"] };
+    final reported = measure(row!);
+    if (reported.error -> err) {
+        return Assessed{ tier = "full", evidence = ["{id}: full (magus\\change().tier raised: {err.message})"] };
     }
-    var changed = {<str: int>};
-    try {
-        changed = count(row!);
-    } catch (e: any) {
-        changed = {<str: int>};
+    final report = reported.value!;
+    final counts = count(row!);
+    if (counts.error -> err) {
         final lines = mut [<str>];
         foreach (ev in report.evidence) {
             lines.append(evidenceLine(ev));
         }
-        lines.append("{id}: lines not counted ({e})");
+        lines.append("{id}: lines not counted ({err.message})");
         return Assessed{ tier = report.tier.value, evidence = lines };
     }
+    final changed = counts.value!;
     final lines = mut [<str>];
     var reviewable = 0;
     foreach (e in report.evidence) {
@@ -121,17 +119,25 @@ export fun assess(id: str, jobs: [JobFacts], measure: fun (row: JobFacts) > Tier
 
 // counted is assess's count outside a test: each path's changed lines in the
 // job's checkout since its checkpoint, added plus deleted.
-export fun counted(row: JobFacts) > {str: int} !> any {
+export fun counted(row: JobFacts) > result\Result::<{str: int}> {
     final lines = mut {<str: int>};
-    foreach (s in vcs\diffStat(row.checkpoint, dir: row.checkoutRoot)) {
-        lines[s.path] = s.added + s.deleted;
+    try {
+        foreach (s in vcs\diffStat(row.checkpoint, dir: row.checkoutRoot)) {
+            lines[s.path] = s.added + s.deleted;
+        }
+    } catch (err: any) {
+        return result\caught::<{str: int}>(err, doing: "mandate: count the lines changed in {row.checkoutRoot}");
     }
-    return lines;
+    return result\ok::<{str: int}>(lines);
 }
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
-export fun measured(row: JobFacts) > TierReport !> any {
-    return magus\change(row.checkpoint).tier("ci", opts: TierOptions{ checkout = row.checkoutRoot });
+export fun measured(row: JobFacts) > result\Result::<TierReport> {
+    try {
+        return result\ok::<TierReport>(magus\change(row.checkpoint).tier("ci", opts: TierOptions{ checkout = row.checkoutRoot }));
+    } catch (err: any) {
+        return result\caught::<TierReport>(err, doing: "mandate: measure the change in {row.checkoutRoot}");
+    }
 }
 
 // evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
@@ -243,8 +249,12 @@ export fun parseMandate(line: str) > Mandate? {
 }
 
 // encodeMandate is m as one mandate line, without its newline.
-export fun encodeMandate(m: Mandate) > str !> any {
-    return json\stringify({"action": m.action, "at": m.at, "until": m.endClock, "ends": m.ends, "tolerance": m.tolerance, "rows": m.rows, "budget": m.budget});
+export fun encodeMandate(m: Mandate) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({"action": m.action, "at": m.at, "until": m.endClock, "ends": m.ends, "tolerance": m.tolerance, "rows": m.rows, "budget": m.budget}));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "mandate: encode the mandate");
+    }
 }
 
 // lastMandate is the last mandate line in text, null when it holds none.
@@ -883,7 +893,7 @@ test "a mandate is in force from its issue until its end time, and a revoke line
 }
 
 test "a mandate round-trips through its line" {
-    final again = parseMandate(encodeMandate(issued) catch "");
+    final again = parseMandate(encodeMandate(issued).value ?? "");
     std\assert(again != null and again!.ends == 5000 and again!.rows.join(",") == "naming-lint,go-indexer" and again!.tolerance == "mechanical", message: "round trip");
 }
 
@@ -944,19 +954,19 @@ test "a settled job over the budget is held and names the split, one within it i
 test "a mandate line without a budget reads as the review budget, and one with it round-trips" {
     final old = parseMandate(`{"action":"issue","at":1,"until":"07:30","ends":2,"tolerance":"mechanical","rows":["a"]}`);
     std\assert(old!.budget == branchstack\reviewBudget, message: "older lines carry no budget");
-    final kept = parseMandate(encodeMandate(Mandate{ action = "issue", at = 1, tolerance = "mechanical", rows = ["a"], budget = 250 }) catch "");
+    final kept = parseMandate(encodeMandate(Mandate{ action = "issue", at = 1, tolerance = "mechanical", rows = ["a"], budget = 250 }).value ?? "");
     std\assert(kept!.budget == 250, message: "the budget survives its line");
 }
 
 test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
     final measured = [JobFacts{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, JobFacts{ id = "bare", state = magus\JobState.pass }];
     final asked = mut [<str>];
-    final mechanical = fun (row: JobFacts) > TierReport !> any {
+    final mechanical = fun (row: JobFacts) > result\Result::<TierReport> {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return TierReport{ tier = magus\check\Tier.mechanical, evidence = [magus\check\TierEvidence{ path = "x.go", tier = magus\check\Tier.mechanical, class = "comment", why = "comments only" }] };
+        return result\ok::<TierReport>(TierReport{ tier = magus\check\Tier.mechanical, evidence = [magus\check\TierEvidence{ path = "x.go", tier = magus\check\Tier.mechanical, class = "comment", why = "comments only" }] });
     };
-    final none = fun (row: JobFacts) > {str: int} !> any {
-        return {"x.go": 7};
+    final none = fun (row: JobFacts) > result\Result::<{str: int}> {
+        return result\ok::<{str: int}>({"x.go": 7});
     };
     final got = assess("late", jobs: measured, measure: mechanical, count: none);
     std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");
@@ -964,8 +974,8 @@ test "a job's tier is measured in its checkout from its checkpoint, and anything
     std\assert(got.lines == 0, message: "a mechanical path's lines are not reviewable");
     std\assert(assess("bare", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no checkout recorded");
     std\assert(assess("gone", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no row");
-    final raises = fun (row: JobFacts) > TierReport !> any {
-        throw "no workspace";
+    final raises = fun (row: JobFacts) > result\Result::<TierReport> {
+        return result\fail::<TierReport>("no workspace");
     };
     final raised = assess("late", jobs: measured, measure: raises, count: none);
     std\assert(raised.tier == "full" and raised.evidence[0].indexOf("no workspace") != null, message: "a raise is full and says why");

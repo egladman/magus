@@ -8,6 +8,7 @@ import "std";
 import "fs";
 import "vcs";
 import "magus";
+import "result";
 import "./hack/policy/verdict" as verdict;
 
 export object Counter {
@@ -73,7 +74,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict? {
     final current = fun (path: str) > str? {
         return fs\readFile(fs\join(req.workspace, name: path)) catch null;
     };
-    final base = fun (path: str) > str? !> str {
+    final base = fun (path: str) > result\Result::<str?> {
         return baseText(req.workspace, rel: path);
     };
     return decide(edit, current: current, base: base);
@@ -82,7 +83,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict? {
 // decide denies an edit that changes a counter the branch already changed. A first bump, an
 // edit that leaves the value alone, and one back to the base value are allowed. null is no
 // opinion; an unreadable base advises, since the rule could not judge.
-export fun decide(edit: Edit, current: fun (path: str) > str?, base: fun (path: str) > str? !> str) > GuardVerdict? {
+export fun decide(edit: Edit, current: fun (path: str) > str?, base: fun (path: str) > result\Result::<str?>) > GuardVerdict? {
     final touched = counters.filter(fun (i: int, c: Counter) > bool => c.file == edit.rel
         and (edit.content != "" or edit.oldText.indexOf(c.declaration) != null or edit.newText.indexOf(c.declaration) != null));
     if (touched.len() == 0) {
@@ -99,12 +100,11 @@ export fun decide(edit: Edit, current: fun (path: str) > str?, base: fun (path: 
         if (proposedValue == branchValue) {
             continue;
         }
-        var baseValue = "";
-        try {
-            baseValue = valueOf(base(edit.rel) ?? "", declaration: c.declaration);
-        } catch (err: str) {
-            return magus\guard.advise("{c.name}: the merge base could not be read, so the once-per-branch bump check did not run: {err}");
+        final baseRead = base(edit.rel);
+        if (baseRead.error -> err) {
+            return magus\guard.advise("{c.name}: the merge base could not be read, so the once-per-branch bump check did not run: {err.message}");
         }
+        final baseValue = valueOf(baseRead.value ?? "", declaration: c.declaration);
         if (branchValue == baseValue or proposedValue == baseValue) {
             continue;
         }
@@ -149,21 +149,21 @@ fun shown(value: str) > str {
 
 // baseText is rel at the merge base of HEAD with vcs\base, null when the file did not exist
 // there. vcs has no file-at-revision method, so this is git's own `merge-base` and `show`.
-fun baseText(workspace: str, rel: str) > str? !> str {
+fun baseText(workspace: str, rel: str) > result\Result::<str?> {
     final ref = vcs\base(workspace) catch "";
     if (ref == "") {
-        throw "vcs\\base resolved no base ref";
+        return result\fail::<str?>("vcs\\base resolved no base ref");
     }
     final opts = vcs\CommandOptions{ quiet = true, allowFailure = true, dir = workspace };
     final mergeBase = vcs\cmd(["merge-base", ref, "HEAD"], opts: opts) catch null;
     if (mergeBase == null or mergeBase!.code != 0) {
-        throw "git merge-base {ref} HEAD failed";
+        return result\fail::<str?>("git merge-base {ref} HEAD failed");
     }
     final shown = vcs\cmd(["show", "{mergeBase!.stdout.trim()}:{rel}"], opts: opts) catch null;
     if (shown == null or shown!.code != 0) {
-        return null;
+        return result\ok::<str?>(null);
     }
-    return shown!.stdout;
+    return result\ok::<str?>(shown!.stdout);
 }
 
 fun fakeFiles(files: {str: str}) > fun (path: str) > str? {
@@ -172,9 +172,9 @@ fun fakeFiles(files: {str: str}) > fun (path: str) > str? {
     };
 }
 
-fun fakeBase(files: {str: str}) > fun (path: str) > str? !> str {
-    return fun (path: str) > str? !> str {
-        return files[path];
+fun fakeBase(files: {str: str}) > fun (path: str) > result\Result::<str?> {
+    return fun (path: str) > result\Result::<str?> {
+        return result\ok::<str?>(files[path]);
     };
 }
 
@@ -215,8 +215,8 @@ test "an edit back to the base value is allowed" {
 }
 
 test "an unrelated edit is never judged, and never reads the base" {
-    final base = fun (path: str) > str? !> str {
-        throw "the base was read";
+    final base = fun (path: str) > result\Result::<str?> {
+        return result\fail::<str?>("the base was read");
     };
     final other = Edit{ rel = counterFile, oldText = "func x() \{\}", newText = "func y() \{\}" };
     std\assert(decide(other, current: fakeFiles({counterFile: counterText("2")}), base: base) == null, message: "same file, other line");
@@ -236,8 +236,8 @@ test "a counter new on the branch is set once, then held" {
 }
 
 test "an unreadable base advises instead of judging" {
-    final base = fun (path: str) > str? !> str {
-        throw "no base";
+    final base = fun (path: str) > result\Result::<str?> {
+        return result\fail::<str?>("no base");
     };
     final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion types.APIVersion = 2", newText = "const GuardTemplateVersion types.APIVersion = 3" };
     final v = decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: base);

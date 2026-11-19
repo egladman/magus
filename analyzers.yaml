@@ -359,11 +359,8 @@ no-throw:
       hack/magusfile/ruledocs.buzz: 2
       hack/magusfile/run-golangci.buzz: 5
       hack/policy/guard.buzz: 2
-      hack/policy/mandate.buzz: 2
-      hack/policy/pr_workflow.buzz: 2
       hack/policy/proofread.buzz: 1
-      hack/policy/stale.buzz: 7
-      hack/policy/version-bumps.buzz: 2
+      hack/policy/stale.buzz: 2
       internal/queue/provider/github.buzz: 63
       magusfile.buzz: 44
       spells/aws/s3-cache/spell.buzz: 4
