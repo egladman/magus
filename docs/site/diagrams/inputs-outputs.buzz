@@ -1,10 +1,10 @@
 namespace inputsOutputs;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/packages" as packages;
 
-export fun inputsOutputsFigure() > figure\Figure !> any {
+export fun inputsOutputsDiagram() > diagram\Diagram !> any {
     // NestedDirs narrows a snapshot here, never the key.
     final cache = magus\graph().dir("internal/cache");
     final audit = magus\graph().dir("internal/audit");
@@ -12,11 +12,11 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
     final claims = magus\graph().dir("types");
     // The declarations are lines a person writes in a magusfile; the tool probe runs in the
     // root package, so the cache key's sub names it rather than a box of its own.
-    final reads = figure\external("readsFiles([\"**/*.go\"])", sub: "matches nested files too", tag: "root", look: figure\Look.plain);
-    final writes = figure\external("writesFiles([\"**/gen/*test/*.go\"])", sub: "the root's gen/ only", tag: "root", look: figure\Look.plain);
+    final reads = diagram\external("readsFiles([\"**/*.go\"])", sub: "matches nested files too", tag: "root", look: diagram\Look.plain);
+    final writes = diagram\external("writesFiles([\"**/gen/*test/*.go\"])", sub: "the root's gen/ only", tag: "root", look: diagram\Look.plain);
     // describe.go joins a cross-project input's owner to DependsOn.
-    final handle = figure\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: figure\Look.plain);
-    return figure\of("inputs-outputs",
+    final handle = diagram\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: diagram\Look.plain);
+    return diagram\of("inputs-outputs",
             title: "An output stops at a nested project; an input does not",
             eyebrow: "inputs and outputs",
             desc: "A target's input and output globs resolve from its own project. An input "
@@ -24,7 +24,7 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
                 + "An output glob claims a nested project's file only when rooted there, and a "
                 + "write that lands there anyway fails as MGS3001. A nested project reads the "
                 + "root's tree through workspace\\file.",
-            level: figure\Level.package)
+            level: diagram\Level.package)
         .actor(reads)
         .actor(writes)
         .actor(handle)
@@ -33,15 +33,15 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .box(claims, label: "Output claim", sub: "stops at a nested dir")
         .edgesFromGraph()
         .hideEdges([audit], dst: [claims],
-            why: "the audit reads the same claim rule; the figure draws it from the snapshot")
+            why: "the audit reads the same claim rule; the diagram draws it from the snapshot")
         .flowIn(reads, dst: cache, label: "src:")
-        .flowIn(handle, dst: cache, label: "+ depends_on", stroke: figure\Stroke.focal)
+        .flowIn(handle, dst: cache, label: "+ depends_on", stroke: diagram\Stroke.focal)
         .flowIn(writes, dst: cache, label: "snapshot")
-        .flowIn(writes, dst: audit, label: "stray write", stroke: figure\Stroke.optional)
+        .flowIn(writes, dst: audit, label: "stray write", stroke: diagram\Stroke.optional)
         .zone("root project .", actors: [reads, writes])
         .zone("a nested project", dirs: [audit], actors: [handle])
         .zone("the cache", dirs: [cache, claims])
-        .legend(figure\Look.focal, label: "what a hit is keyed on")
+        .legend(diagram\Look.focal, label: "what a hit is keyed on")
         .scope(packages\goPackages("internal/cache/**"))
         .scope(packages\goPackages("internal/audit/**"))
         .scope(packages\goPackages("types/**"))
@@ -49,5 +49,5 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
             why: "copies files in and out of the store; it reads no glob and keys nothing")
         .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
         .except(packages\dataTypes(),
-            why: "the closed string sets every package checks values against, and data-type packages the figure does not trace; no claim rule");
+            why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no claim rule");
 }

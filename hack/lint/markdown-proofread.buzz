@@ -535,7 +535,7 @@ test "headings are sentence case, with proper nouns, acronyms and identifiers al
     assert\equal(headingWord("## Charm vs Target: the boundary"), want: "Target", message: "title case");
     assert\equal(headingWord("## What this is NOT"), want: "NOT", message: "shouting");
     assert\equal(headingWord("## FAST PATH: start here"), want: "FAST", message: "a shouted first word");
-    assert\equal(headingWord("### The Graph's Figures mode"), want: "Graph", message: "possessive");
+    assert\equal(headingWord("### The Graph's Diagrams mode"), want: "Graph", message: "possessive");
     assert\equal(headingWord("## Using Buzz with GitHub Actions and the MCP server"), want: "", message: "allowed");
     assert\equal(headingWord("## Why `Target` stays `pkg.Name` in code"), want: "", message: "code span");
     assert\equal(headingWord("## Calls createLogger from macOS, see MGS1001, MAGUS_* and BENCHMARKS.md"), want: "", message: "identifiers");

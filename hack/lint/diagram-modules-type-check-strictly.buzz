@@ -1,13 +1,13 @@
-// figure-modules-type-check-strictly holds every docs figure module to `magus buzz --check`
+// diagram-modules-type-check-strictly holds every docs diagram module to `magus buzz --check`
 // in upstream-strict mode, and reports its warnings as well as its errors: --check exits 0
-// on a warning, so a BZZ3002 in a figure would otherwise ship. The check runs from docs/,
-// where a figure's `site/diagrams/...` imports resolve.
+// on a warning, so a BZZ3002 in a diagram would otherwise ship. The check runs from docs/,
+// where a diagram's `site/diagrams/...` imports resolve.
 //
-// The figure library itself may name magus record types but never call the host: a figure
+// The diagram library itself may name magus record types but never call the host: a diagram
 // hands it Dir, Layer and RefsResult records, so the library reads no workspace of its own.
 //
 // Tier 1, mechanical: the fix is what the checker names.
-namespace figurecheck;
+namespace diagramcheck;
 
 import "assert";
 import "magus";
@@ -15,26 +15,26 @@ import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-final FIGURES = "docs/site/diagrams/";
+final DIAGRAMS = "docs/site/diagrams/";
 
 // DIAGNOSTIC matches one line --check prints: an optional code, the file as passed, its
 // position and the message. Unanchored, because a raised magus\cmd prefixes the first one.
 final DIAGNOSTIC = std\pattern(`(\[BZZ\d+\] )?buzz: (\S+?\.buzz):(\d+):(\d+): (.*)`);
 
-final LIBRARY = "libs/figure/figure.buzz";
+final LIBRARY = "libs/diagram/diagram.buzz";
 
 // HOST_MEMBER matches a lowercase member of the magus module, which is a host function or
 // object; the record types it may name are capitalized. A string spelling one out escapes
 // the backslash, so it never matches.
 final HOST_MEMBER = std\pattern(`magus\\([a-z]\w*)`);
 
-final FIX = "Label every argument after the first (name: value) and clear the warning: a figure is pure Buzz, "
+final FIX = "Label every argument after the first (name: value) and clear the warning: a diagram is pure Buzz, "
     + "checked as `magus buzz --check` runs it from docs/.";
 
-// reads keys the figure module too: every figure imports it, so an edit there can change
+// reads keys the diagram module too: every diagram imports it, so an edit there can change
 // its verdict.
 export fun reads() > [str] {
-    return ["docs/site/diagrams/*.buzz", "libs/figure/figure.buzz"];
+    return ["docs/site/diagrams/*.buzz", "libs/diagram/diagram.buzz"];
 }
 
 // findings turns --check's output into one finding per diagnostic, taking the `see:` line
@@ -72,14 +72,14 @@ export fun hostCalls(src: str) > [Finding] {
         final m = HOST_MEMBER.match(line);
         if (m != null) {
             found.append(Finding{ path = LIBRARY, line = n,
-                message = "the figure library calls magus\\{m![1]}; it takes graph records, it never reads the workspace",
-                fix = "Take the Dir, Layer or RefsResult as a parameter and let the figure build it with magus\\graph().dir, magus\\graph().layer or magus\\graph().refs." });
+                message = "the diagram library calls magus\\{m![1]}; it takes graph records, it never reads the workspace",
+                fix = "Take the Dir, Layer or RefsResult as a parameter and let the diagram build it with magus\\graph().dir, magus\\graph().layer or magus\\graph().refs." });
         }
     }
     return found;
 }
 
-// check runs one --check over the figures, and holds the library to record types alone.
+// check runs one --check over the diagrams, and holds the library to record types alone.
 export fun check(files: [Path]) > [Finding] !> any {
     final argv = mut [<str>];
     argv.append("--check");
@@ -89,7 +89,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (f.value == LIBRARY) {
             foreach (found in hostCalls(support\read(f))) { library.append(found); }
         }
-        if (f.value.startsWith(FIGURES)) {
+        if (f.value.startsWith(DIAGRAMS)) {
             argv.append(f.value.sub("docs/".len()));
             base = f.base;
         }
@@ -108,7 +108,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     final found = findings(output);
     if (found.len() == 0 and raised != "") {
-        return [Finding{ path = FIGURES, message = "magus buzz --check failed without a diagnostic: " + raised,
+        return [Finding{ path = DIAGRAMS, message = "magus buzz --check failed without a diagnostic: " + raised,
             fix = "Run `magus buzz --check site/diagrams/<figure>.buzz` from docs/ and fix what it reports." }] + library;
     }
     return found + library;
@@ -130,7 +130,7 @@ test "findings reads each diagnostic, its code and its see line" {
     assert\equal(got[1].url, want: "https://example.test/BZZ3002.md", message: "see line");
 }
 
-test "a figure with an unlabeled argument or a warning is reported, a clean one is not" {
+test "a diagram with an unlabeled argument or a warning is reported, a clean one is not" {
     final lib = "fun add(a: int, b: int) > int \{\n    return a + b;\n}\n\n";
     final got = check(support\fixture({
         "magusfile.buzz": "import \"magus\";\nmagus\project(\{});\n",
@@ -150,7 +150,7 @@ test "a figure with an unlabeled argument or a warning is reported, a clean one 
         message: "the warning fails too");
 }
 
-test "the figure library may name magus record types but not call the host" {
+test "the diagram library may name magus record types but not call the host" {
     final src = "import \"magus\";\n"
         + "// magus\\graph().dir(\"internal/httpx\") in a comment is an example\n"
         + "fun path(d: magus\\Dir) > str \{ return d.path; }\n"
@@ -158,9 +158,9 @@ test "the figure library may name magus record types but not call the host" {
         + "fun refuse() > void !> str \{ throw \"takes a Dir from magus\\\\dir\"; }\n"
         + "fun reach() > [magus\\Dir] !> any \{ return magus\\graph().dirs(\"internal/**\"); }\n"
         + "fun log() > void !> any \{ magus\\log.info(\"x\"); }\n";
-    final got = check(support\fixture({"libs/figure/figure.buzz": src}));
+    final got = check(support\fixture({"libs/diagram/diagram.buzz": src}));
     final lines = mut [<int>];
     foreach (f in got) { lines.append(f.line); }
     assert\equal(lines, want: [6, 7], message: "the host calls, not the types, the comment or the string: {support\messages(got)}");
-    assert\equal(got[0].message, want: "the figure library calls magus\\graph; it takes graph records, it never reads the workspace", message: "names the member");
+    assert\equal(got[0].message, want: "the diagram library calls magus\\graph; it takes graph records, it never reads the workspace", message: "names the member");
 }

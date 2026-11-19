@@ -1,9 +1,9 @@
 namespace sandbox;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun sandboxFigure() > figure\Figure !> any {
+export fun sandboxDiagram() > diagram\Diagram !> any {
     final sandbox = magus\graph().dir("internal/sandbox");
     final env = magus\graph().dir("internal/sandbox/env");
     final fs = magus\graph().dir("libs/safetyscissors/sandbox/filesystem");
@@ -12,7 +12,7 @@ export fun sandboxFigure() > figure\Figure !> any {
     final interp = magus\graph().dir("internal/interp");
     final spawn = magus\graph().dir("internal/proc/spawn");
     final spell = magus\graph().dir("internal/spell");
-    return figure\of("sandbox",
+    return diagram\of("sandbox",
             title: "Every spell run gets one grant, narrowed by its job's write paths",
             eyebrow: "sandbox",
             desc: "A spell reaches the sandbox from two sides: the interpreter runs its Buzz in "
@@ -23,8 +23,8 @@ export fun sandboxFigure() > figure\Figure !> any {
         .box(sandbox, label: "Sandbox", sub: "one grant per run", focal: true)
         .box(fs, label: "Filesystem grant", sub: "landlock where the kernel has it")
         .box(env, label: "Environment", sub: "allowlist, no secrets")
-        .box(jobs, label: "Job store", sub: "write paths narrow the grant", look: figure\Look.store)
-        .box(recorder, label: "Recorder", sub: "the refusal and the denial kept", look: figure\Look.store)
+        .box(jobs, label: "Job store", sub: "write paths narrow the grant", look: diagram\Look.store)
+        .box(recorder, label: "Recorder", sub: "the refusal and the denial kept", look: diagram\Look.store)
         .box(interp, label: "Interpreter", sub: "Buzz, in process")
         .box(spawn, label: "Spawner", sub: "the tool's process")
         .box(spell, label: "Spells", sub: "ops that run")
@@ -32,11 +32,11 @@ export fun sandboxFigure() > figure\Figure !> any {
         .hideEdges([interp, spell], dst: [sandbox, spawn, fs],
             why: "both reach the sandbox through the interpreter's host bindings; one arrow per entry is enough")
         .hideEdges([spawn], dst: [recorder],
-            why: "the spawner records its own exit there; the denial this figure follows reaches the recorder through the sandbox")
+            why: "the spawner records its own exit there; the denial this diagram follows reaches the recorder through the sandbox")
         .markEdge(sandbox, dst: fs, label: "paths")
         .markEdge(sandbox, dst: env, label: "variables")
         .markEdge(sandbox, dst: jobs, label: "job")
-        .legend(figure\Look.focal, label: "the grant")
-        .legend(figure\Look.store, label: "records")
+        .legend(diagram\Look.focal, label: "the grant")
+        .legend(diagram\Look.store, label: "records")
         .scope([sandbox, env, fs]);
 }

@@ -35,12 +35,12 @@ import "magus/spell/markdown";
 magus\project({
     "tools": {"node": policy\node},
     "spells": [typescript, buzz],
-    // API docs read proto's descriptor, the render reads libs/figure and the figures
+    // API docs read proto's descriptor, the render reads libs/diagram and the diagrams
     // read libs/kustomize; without these edges the reads are unordered (MGS4004).
     // The catalog and reference generators compile the Go libs below into the binaries
     // they run, so each is named here instead of globbing its tree.
     // The rest are projects whose targets these targets ctx.needs (MGS1062).
-    "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/clikit",
+    "depends_on": ["../proto", "../libs/diagram", "../libs/kustomize", "../libs/clikit",
                    "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg", "../libs/text",
                    "../libs/gopherbuzz", "../libs/proofread", "../libs/textsearch",
                    "../libs/ssg", "./guides/integrations/agents"],
@@ -61,7 +61,7 @@ magus\project({
         "content-generate": {"skip_cache": "composes independently cached content families; every invocation must check their inputs", "integrates": "regenerates the docs pages"},
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
         "site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe", "integrates": "renders the docs site"},
-        "figure-engine-digest-generate": {"skip_cache": "reads the figure engine the running magus binary embeds, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
+        "diagram-engine-digest-generate": {"skip_cache": "reads the diagram engine the running magus binary embeds, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
         // The build-* targets stay cached: esbuild and the npm deps are pinned.
     },
 });
@@ -212,7 +212,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("internal/selfupdate/release-keys.json"), workspace\file("internal/textrank/weights.json"),
         workspace\file("libs/embed/testdata/probe.txt"), workspace\file("internal/agent/agents/**"),
         workspace\file("internal/agent/agents-section.md"), workspace\file("internal/agent/skills/**"),
-        workspace\file("libs/gopherbuzz/std/*.buzz"), workspace\file("libs/figure/figure.buzz"),
+        workspace\file("libs/gopherbuzz/std/*.buzz"), workspace\file("libs/diagram/diagram.buzz"),
         workspace\file("libs/proofread/internal/wordclass/gen/model.gz"),
         workspace\file("libs/proofread/internal/calibrate/cases/*.txtar"),
         workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-utils/**/*.go"),
@@ -361,7 +361,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "../libs/ssg/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
-        "assets/gen/diagram-*-page.svg", workspace\file("libs/figure/figure.buzz"),
+        "assets/gen/diagram-*-page.svg", workspace\file("libs/diagram/diagram.buzz"),
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
         workspace\file("assets/**"), workspace\file("releases/*.yaml")]);
     ctx.writesFiles(["gen/**", "active.urls.lock"]);
@@ -512,7 +512,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
-// diagrams-generate lays every figure out from the knowledge graph and fails when the
+// diagrams-generate lays every diagram out from the knowledge graph and fails when the
 // committed files move. It is a CI stage rather than a generate stage because it writes
 // docs assets. The files stay in docs because writing the root's assets/gen is MGS1012.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
@@ -520,16 +520,16 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
-    ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
-    // The kustomize figure draws only manifests kubeconform accepts.
+    ctx.needs(workspace\symbol_digest_generate, diagram_engine_digest_generate);
+    // The kustomize diagram draws only manifests kubeconform accepts.
     ctx.needs(kustomizeproject\lint);
-    ctx.readsFiles(["site/diagrams/*.buzz", "gen/figure-engine.sha256",
+    ctx.readsFiles(["site/diagrams/*.buzz", "gen/diagram-engine.sha256",
         workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"),
         kustomizeproject\file("*.buzz"), workspace\file("deploy/kustomize/**/*.yaml")]);
     ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
     final before = drift\hashes(GENERATED);
-    final findings = renderer\site_figures("assets/gen");
+    final findings = renderer\site_diagrams("assets/gen");
     if (findings.len() > 0) {
         foreach (msg in findings) { magus\log.error(msg); }
         throw "diagrams-generate: {findings.len()} finding(s); each names the call to change";
@@ -537,21 +537,21 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (ctx.hasCharm("rw")) { return; }
     final moved = drift\changedSince(before, GENERATED);
     if (moved.len() > 0) {
-        throw "diagrams-generate: the figures changed " + moved.join(", ")
+        throw "diagrams-generate: the diagrams changed " + moved.join(", ")
             + "; re-run `magus run diagrams-generate:rw docs` and commit" + drift\secondCause;
     }
 }
 
-// figure-engine-digest-generate writes the SHA-256 of the magus/figure source the running
-// binary embeds to gen/figure-engine.sha256. The figures render from that copy, not from
-// libs/figure/figure.buzz, so diagrams-generate keys on this file: an edit to figure.buzz
+// diagram-engine-digest-generate writes the SHA-256 of the magus/diagram source the running
+// binary embeds to gen/diagram-engine.sha256. The diagrams render from that copy, not from
+// libs/diagram/diagram.buzz, so diagrams-generate keys on this file: an edit to diagram.buzz
 // reaches the SVGs only once a rebuilt binary carries it.
-export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["gen/figure-engine.sha256"]);
+export fun diagram_engine_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen/diagram-engine.sha256"]);
     final body = magus\cmd("version",
-        args: ["--client", "-o", "template=\{\{.embedded.figure_sha256}}"],
+        args: ["--client", "-o", "template=\{\{.embedded.diagram_sha256}}"],
         opts: magus\CommandOptions{quiet = true}).stdout.trim() + "\n";
-    final path = fs\join("gen", "figure-engine.sha256");
+    final path = fs\join("gen", "diagram-engine.sha256");
     if (fs\exists(path) and fs\readFile(path) == body) { return; }
     fs\mkdirAll("gen");
     fs\writeFile(path, body);

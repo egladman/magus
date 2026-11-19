@@ -1,9 +1,9 @@
 namespace configLoad;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun configLoadFigure() > figure\Figure !> any {
+export fun configLoadDiagram() > diagram\Diagram !> any {
     final config = magus\graph().dir("internal/config");
     final gen = magus\graph().dir("internal/config/gen");
     final cfgen = magus\graph().dir("libs/clikit/generate");
@@ -12,8 +12,8 @@ export fun configLoadFigure() > figure\Figure !> any {
     final ward = magus\graph().dir("internal/ward");
     final stamp = magus\graph().dir("internal/stamp");
     final xdg = magus\graph().dir("libs/xdg");
-    final sources = figure\external("Config sources", sub: "magus.yaml, env, flags", look: figure\Look.input);
-    return figure\of("config-load",
+    final sources = diagram\external("Config sources", sub: "magus.yaml, env, flags", look: diagram\Look.input);
+    return diagram\of("config-load",
             title: "Every key has one declaration, and every source feeds the same load",
             eyebrow: "config",
             desc: "The load reads magus.yaml, the environment and the flags into one set of keys, "
@@ -23,7 +23,7 @@ export fun configLoadFigure() > figure\Figure !> any {
                 + "config key and the help cannot disagree.")
         .actor(sources)
         .box(config, label: "Config load", sub: "one set of keys", focal: true)
-        .box(gen, label: "Typed keys", sub: "generated accessors", look: figure\Look.store)
+        .box(gen, label: "Typed keys", sub: "generated accessors", look: diagram\Look.store)
         .box(cfgen, label: "Key generator", sub: "from the declaration")
         .box(httpx, label: "HTTP client", sub: "remote sources")
         .box(endpoint, label: "Endpoints", sub: "daemon addresses")
@@ -32,8 +32,8 @@ export fun configLoadFigure() > figure\Figure !> any {
         .box(xdg, label: "XDG paths", sub: "config, state, cache")
         .edgesFromGraph()
         .flowIn(sources, dst: config)
-        .legend(figure\Look.focal, label: "the load")
-        .legend(figure\Look.store, label: "generated output")
-        .legend(figure\Look.input, label: "where keys come from")
+        .legend(diagram\Look.focal, label: "the load")
+        .legend(diagram\Look.store, label: "generated output")
+        .legend(diagram\Look.input, label: "where keys come from")
         .scope([config, gen, cfgen]);
 }

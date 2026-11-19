@@ -1,34 +1,34 @@
 namespace serverSocket;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/packages" as packages;
 
-export fun serverSocketFigure() > figure\Figure !> any {
+export fun serverSocketDiagram() > diagram\Diagram !> any {
     final cli = magus\graph().dir("cmd/magus");
     final sock = magus\graph().dir("internal/proc");
     final server = magus\graph().dir("internal/server");
     final share = magus\graph().dir("internal/share");
-    final person = figure\person("You", sub: "run, status, query", tag: "shell");
+    final person = diagram\person("You", sub: "run, status, query", tag: "shell");
     // The HTTP entry is server-http's; the two share only the registries internal/server holds.
-    return figure\of("server-socket",
+    return diagram\of("server-socket",
             title: "A local command reaches the server over one private socket",
             eyebrow: "magus server",
             desc: "The magus CLI dispatches over a private unix domain socket to the server, "
                 + "which holds the concurrency pool, the workspace and run registries and the "
                 + "broker for shared services. Sharing a graph spawns a separate short-lived "
                 + "loopback server.",
-            level: figure\Level.package)
+            level: diagram\Level.package)
         .actor(person)
         .box(cli, label: "magus CLI", sub: "dispatches every command")
         .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
-        .box(server, label: "Server", sub: "pool, registries, broker", look: figure\Look.store)
+        .box(server, label: "Server", sub: "pool, registries, broker", look: diagram\Look.store)
         // Not --serve: it only picks the transport, so naming it alone would omit the command.
-        .box(share, label: "Loopback server", sub: "graph export --open", look: figure\Look.optional)
+        .box(share, label: "Loopback server", sub: "graph export --open", look: diagram\Look.optional)
         .edgesFromGraph()
         .flowIn(person, dst: cli)
-        .legend(figure\Look.store, label: "shared server state")
-        .legend(figure\Look.optional, label: "spawned on demand")
+        .legend(diagram\Look.store, label: "shared server state")
+        .legend(diagram\Look.optional, label: "spawned on demand")
         .scope(packages\goPackages("internal/proc/**"))
         .scope(packages\goPackages("internal/share/**"))
         .scope([server])

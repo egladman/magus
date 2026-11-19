@@ -39,9 +39,9 @@ import "hack/lint/closed-switches-name-every-member" as closedswitches;
 import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
 import "hack/lint/decisions-meet-their-evidence" as decisionsevidence;
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
-import "hack/lint/figure-imports-are-named" as figureimports;
+import "hack/lint/diagram-imports-are-named" as diagramimports;
 import "hack/lint/file-name-words-tell-siblings-apart" as filesiblings;
-import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
+import "hack/lint/diagram-modules-type-check-strictly" as diagramcheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/gate-pages-say-what-they-do-not-measure" as gatemeasures;
 import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
@@ -113,8 +113,8 @@ export fun rules() > [Rule] {
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
         Rule{ name = "prompts-stay-interactive", reads = promptsinteractive\reads(), check = promptsinteractive\check },
-        Rule{ name = "figure-imports-are-named", reads = figureimports\reads(), check = figureimports\check },
-        Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
+        Rule{ name = "diagram-imports-are-named", reads = diagramimports\reads(), check = diagramimports\check },
+        Rule{ name = "diagram-modules-type-check-strictly", reads = diagramcheck\reads(), check = diagramcheck\check },
         Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },
         Rule{ name = "diagnostic-codes-have-docs-pages", reads = codepages\reads(), check = codepages\check },
         Rule{ name = "testpairing-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
@@ -150,7 +150,7 @@ final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store
 final PRUNED_PATHS = {".claude/worktrees": true};
 
 // KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
-// figures import their observed halves, and the tool descriptions are judged from the MCP
+// diagrams import their observed halves, and the tool descriptions are judged from the MCP
 // registry magus generates.
 final KEPT_PATHS = {"docs/site/diagrams/gen": true, "internal/handler/mcp/gen": true};
 

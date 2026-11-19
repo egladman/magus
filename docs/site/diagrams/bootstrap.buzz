@@ -1,30 +1,30 @@
 namespace bootstrap;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-// bootstrapFigure draws the bootstrap as the process it is: commands a person runs and the
+// bootstrapDiagram draws the bootstrap as the process it is: commands a person runs and the
 // targets and rules they meet, one level, so no package box sits beside a step.
-export fun bootstrapFigure() > figure\Figure !> any {
-    final person = figure\person("Person or hook", sub: "shell or PreToolUse");
-    final cli = figure\step("magus on PATH", sub: "re-execs ./magus");
-    final rule = figure\step("Raw-tool rule", sub: "refuses a raw go build");
+export fun bootstrapDiagram() > diagram\Diagram !> any {
+    final person = diagram\person("Person or hook", sub: "shell or PreToolUse");
+    final cli = diagram\step("magus on PATH", sub: "re-execs ./magus");
+    final rule = diagram\step("Raw-tool rule", sub: "refuses a raw go build");
     // internal/guard/catalog.go advises this one command, with no ./magus or one that cannot load the tree.
-    final exempt = figure\step("go run ./cmd/magus", sub: "run go-build, alone", look: figure\Look.focal);
-    final target = figure\step("go-build", sub: "generate, link, stamp", tag: "target");
-    final spells = figure\step("Spell bytecode", sub: "spells-generate", look: figure\Look.store);
-    final stamp = figure\step("Build stamp", sub: "linked into ./magus", look: figure\Look.store);
+    final exempt = diagram\step("go run ./cmd/magus", sub: "run go-build, alone", look: diagram\Look.focal);
+    final target = diagram\step("go-build", sub: "generate, link, stamp", tag: "target");
+    final spells = diagram\step("Spell bytecode", sub: "spells-generate", look: diagram\Look.store);
+    final stamp = diagram\step("Build stamp", sub: "linked into ./magus", look: diagram\Look.store);
     // hack/policy/stale.buzz holds both the stamp comparison and the escape.
-    final stale = figure\step("Stale policy", sub: "stamp vs sources", look: figure\Look.input);
-    final escape = figure\step("Bootstrap again", sub: "over a stale ./magus");
-    return figure\of("bootstrap",
+    final stale = diagram\step("Stale policy", sub: "stamp vs sources", look: diagram\Look.input);
+    final escape = diagram\step("Bootstrap again", sub: "over a stale ./magus");
+    return diagram\of("bootstrap",
             title: "One go run, then magus builds magus",
             eyebrow: "bootstrap",
             desc: "With no ./magus, the guard's raw-tool rule lets exactly one go command through: "
                 + "go run ./cmd/magus run go-build, which regenerates the spell bytecode and links "
                 + "a stamp of its sources. The stale policy compares that stamp with the checkout "
                 + "and, when the binary can no longer load the tree, allows the same bootstrap again.",
-            direction: figure\Direction.down, level: figure\Level.process)
+            direction: diagram\Direction.down, level: diagram\Level.process)
         .flowAcross(person, dst: cli, label: "runs magus")
         .flowAcross(cli, dst: rule, label: "judges")
         .flowAcross(rule, dst: exempt, label: "no ./magus")
@@ -33,12 +33,12 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .flowAcross(target, dst: stamp, label: "-X link")
         .flowAcross(stale, dst: stamp, label: "reads")
         .flowAcross(stale, dst: escape, label: "decls moved")
-        .flowAcross(escape, dst: exempt, label: "run again", stroke: figure\Stroke.focal)
+        .flowAcross(escape, dst: exempt, label: "run again", stroke: diagram\Stroke.focal)
         .zone("no ./magus yet", actors: [rule, exempt])
         .zone("magus builds magus", actors: [target, spells, stamp])
         .zone("kept fresh", actors: [stale, escape])
-        .legend(figure\Look.focal, label: "the one go run")
-        .legend(figure\Look.store, label: "embedded in the binary")
-        .legend(figure\Look.input, label: "this repo's rules")
+        .legend(diagram\Look.focal, label: "the one go run")
+        .legend(diagram\Look.store, label: "embedded in the binary")
+        .legend(diagram\Look.input, label: "this repo's rules")
         .unscoped(why: "the bootstrap is the commands, targets and rules a fresh checkout meets in order; their packages are drawn in guard-internals and bindings-generate");
 }

@@ -29,7 +29,7 @@ final FIX = "Pair the test file instead: move its tests into the _test.go of the
 export fun reads() > [str] {
     return [".golangci.yml", "magusfile.buzz", "hack/magusfile/run-golangci.buzz", "**/*_test.go",
             "libs/conventions/**/*_test.go",
-            "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
+            "libs/diagnostics/**/*_test.go", "libs/diagram/**/*_test.go",
             "libs/gopherbuzz/**/*_test.go", "libs/proofread/**/*_test.go",
             "libs/testpairing/**/*_test.go", "libs/text/**/*_test.go", "libs/xdg/**/*_test.go", "libs/clikit/**/*_test.go",
             "libs/safetyscissors/**/*_test.go", "libs/secrets/**/*_test.go", "libs/codec/**/*_test.go"];

@@ -1,22 +1,22 @@
-namespace showsessionfigure;
+namespace showsessiondiagram;
 
 import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
 import "magus/agent";
-import "magus/figure";
+import "magus/diagram";
 import "magus/feedback";
 import "result";
 import "std";
-import "../../.github/actions/advice/figure-link" as figurelink;
+import "../../.github/actions/advice/diagram-link" as diagramlink;
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--all] [-o svg] [--theme light|dark] [--console <base>]";
+final USAGE = "usage: magus buzz hack/dev/show-session-diagram.buzz -- [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--all] [-o svg] [--theme light|dark] [--console <base>]";
 final HELP = "cost: reads every checkout's activity trail that changed inside the window and the job store; writes nothing\n{USAGE}\n"
     + "One session's agent hierarchy: a box per job, an edge per spawn (solid) and per declared dependency (dashed), zoned by state.\n"
-    + "Prints a summary and the console link that explores the tree in a browser; -o svg prints the figure instead, for you to redirect.\n"
+    + "Prints a summary and the console link that explores the tree in a browser; -o svg prints the diagram instead, for you to redirect.\n"
     + "--all draws every job created in the window, not only the ones the session's trail names and their parents and dependencies.";
 
 final STATES = [
@@ -25,8 +25,8 @@ final STATES = [
     ["no return or failed", "no_return", "fail"],
 ];
 
-// JobBox is one job as the figure draws it. Not Node or Tree: an object name a script
-// declares replaces magus/figure's private one of the same name inside the library.
+// JobBox is one job as the diagram draws it. Not Node or Tree: an object name a script
+// declares replaces magus/diagram's private one of the same name inside the library.
 export object JobBox {
     id: str,
     state: str,
@@ -154,33 +154,33 @@ fun boxSubtitle(n: JobBox) > str {
 // drawJobTree draws tr: the session focal, a box per job zoned by state, solid spawn edges and
 // dashed dependency edges. Nothing sets a coordinate; the zones, the direction and the two
 // strokes are the whole of its shape.
-export fun drawJobTree(tr: JobTree) > result\Result::<figure\Figure> {
+export fun drawJobTree(tr: JobTree) > result\Result::<diagram\Diagram> {
     try {
-        final root = figure\external(tr.root, sub: "the orchestrating session", look: figure\Look.focal);
-        final actors = mut {<str: figure\Actor>};
+        final root = diagram\external(tr.root, sub: "the orchestrating session", look: diagram\Look.focal);
+        final actors = mut {<str: diagram\Actor>};
         actors[tr.root] = root;
         foreach (n in tr.nodes) {
             final unfinished = n.state == "running" or n.state == "declared";
-            actors[n.id] = figure\external(n.id, sub: boxSubtitle(n), tag: n.state, look: if (unfinished) figure\Look.optional else figure\Look.plain);
+            actors[n.id] = diagram\external(n.id, sub: boxSubtitle(n), tag: n.state, look: if (unfinished) diagram\Look.optional else diagram\Look.plain);
         }
-        final f = figure\of("session-{shortSession(tr.session)}",
+        final f = diagram\of("session-{shortSession(tr.session)}",
                 title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs",
                 eyebrow: "session",
                 desc: "Every job the session's agents worked under, with the jobs they hang from. A solid edge is a spawn, a dashed one a declared dependency.",
-                direction: figure\Direction.across)
+                direction: diagram\Direction.across)
             .unscoped("a session's jobs are units of work, not directories")
             .actor(root);
         foreach (n in tr.nodes) {
             _ = f.actor(actors[n.id]!);
         }
         foreach (e in tr.spawns) {
-            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: figure\Stroke.plain);
+            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: diagram\Stroke.plain);
         }
         foreach (e in tr.depends) {
-            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
+            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: diagram\Stroke.optional);
         }
         foreach (z in STATES) {
-            final members = mut [<figure\Actor>];
+            final members = mut [<diagram\Actor>];
             foreach (n in tr.nodes) {
                 if (z.sub(1).indexOf(n.state) != null) {
                     members.append(actors[n.id]!);
@@ -190,27 +190,27 @@ export fun drawJobTree(tr: JobTree) > result\Result::<figure\Figure> {
                 _ = f.zone(z[0], actors: members);
             }
         }
-        return result\ok::<figure\Figure>(f.legend(figure\Look.focal, label: "the orchestrating session")
-            .legend(figure\Look.optional, label: "not finished"));
+        return result\ok::<diagram\Diagram>(f.legend(diagram\Look.focal, label: "the orchestrating session")
+            .legend(diagram\Look.optional, label: "not finished"));
     } catch (err: any) {
-        return result\caught::<figure\Figure>(err, doing: "show-session-figure: draw the job tree");
+        return result\caught::<diagram\Diagram>(err, doing: "show-session-diagram: draw the job tree");
     }
 }
 
 // link is the console URL that explores tr in a browser, "" when it is too long for one.
-// Spawn edges go solid and dependency edges dashed and labelled "after", as in the figure.
+// Spawn edges go solid and dependency edges dashed and labelled "after", as in the diagram.
 export fun link(tr: JobTree, base: str) > result\Result::<str> {
-    final nodes = mut [figurelink\FigureNode{ id = tr.root, label = tr.root, seed = true }];
+    final nodes = mut [diagramlink\DiagramNode{ id = tr.root, label = tr.root, seed = true }];
     foreach (n in tr.nodes) {
-        nodes.append(figurelink\FigureNode{ id = n.id, label = "{n.id} ({n.state})" });
+        nodes.append(diagramlink\DiagramNode{ id = n.id, label = "{n.id} ({n.state})" });
     }
     final edges = mut [<[str]>];
     foreach (e in tr.spawns) { edges.append(e); }
     foreach (e in tr.depends) { edges.append([e[0], e[1], "optional", "after"]); }
     try {
-        return result\ok::<str>(figurelink\figureLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges));
+        return result\ok::<str>(diagramlink\diagramLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges));
     } catch (err: any) {
-        return result\caught::<str>(err, doing: "show-session-figure: build the console link");
+        return result\caught::<str>(err, doing: "show-session-diagram: build the console link");
     }
 }
 
@@ -237,22 +237,22 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "show-session-figure: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "show-session-diagram: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final format = parsed.values["-o"] ?? "text";
     if (format != "text" and format != "svg") {
-        throw "show-session-figure: -o is svg, or omitted for the summary and link\n{USAGE}";
+        throw "show-session-diagram: -o is svg, or omitted for the summary and link\n{USAGE}";
     }
     final themeName = parsed.values["--theme"] ?? "light";
     if (themeName != "light" and themeName != "dark") {
-        throw "show-session-figure: --theme is light or dark, not {themeName}\n{USAGE}";
+        throw "show-session-diagram: --theme is light or dark, not {themeName}\n{USAGE}";
     }
     final t = magus\session(magus\feedback\ReadOptions{ session = parsed.values["--session"] ?? "", since = parsed.values["--since"] ?? "", @"until" = parsed.values["--until"] ?? "" }).trail();
     if (t.session == "") {
-        throw "show-session-figure: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
+        throw "show-session-diagram: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
     }
     final tr = tree(t, jobs: magus\workspace().jobs().jobs, all: parsed.values["--all"] != null, start: std\toInt(t.start / 1000));
-    final theme = if (themeName == "dark") figure\Theme.dark else figure\Theme.light;
+    final theme = if (themeName == "dark") diagram\Theme.dark else diagram\Theme.light;
     final text = rendered(tr, format: format, theme: theme, console: parsed.values["--console"] ?? "");
     if (text.error != null) {
         throw text.error!.message;
@@ -262,16 +262,16 @@ export fun main(args: [str]) > void !> any {
 
 // rendered is what the script prints: the SVG alone for -o svg, so a redirect places it,
 // else a one-line summary and the console link that explores the tree.
-export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str) > result\Result::<str> {
+export fun rendered(tr: JobTree, format: str, theme: diagram\Theme, console: str) > result\Result::<str> {
     if (format == "svg") {
         final drawn = drawJobTree(tr);
         if (drawn.error != null) {
             return result\Result::<str>{ error = drawn.error };
         }
         try {
-            return result\ok::<str>(figure\draw(drawn.value!, theme: theme));
+            return result\ok::<str>(diagram\draw(drawn.value!, theme: theme));
         } catch (err: any) {
-            return result\caught::<str>(err, doing: "show-session-figure: render the figure");
+            return result\caught::<str>(err, doing: "show-session-diagram: render the diagram");
         }
     }
     final url = link(tr, base: console);
@@ -279,7 +279,7 @@ export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str)
         return result\Result::<str>{ error = url.error };
     }
     return result\ok::<str>("read-only: {tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {tr.session}\n"
-        + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the figure"));
+        + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the diagram"));
 }
 
 // modelWord is the model a job requests: its tier, else its host model id.
@@ -290,12 +290,12 @@ fun modelWord(j: magus\Job) > str {
     return "";
 }
 
-// fixture builds the tree of hack/testdata/session-figure-jobs.json.
+// fixture builds the tree of hack/testdata/session-diagram-jobs.json.
 // It reads the feedback trail fixture beside it.
 // They are what magus\workspace().jobs() and magus\session().trail() return.
 fun fixture() > result\Result::<JobTree> {
     try {
-        final raw = json\parse(fs\readFile("hack/testdata/session-figure-jobs.json"));
+        final raw = json\parse(fs\readFile("hack/testdata/session-diagram-jobs.json"));
         final jobs = mut [<magus\Job>];
         foreach (j in raw["jobs"]) {
             final deps = mut [<str>];
@@ -322,7 +322,7 @@ fun fixture() > result\Result::<JobTree> {
         }
         return result\ok::<JobTree>(tree(magus\feedback\Report{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0));
     } catch (err: any) {
-        return result\caught::<JobTree>(err, doing: "show-session-figure: read the fixture");
+        return result\caught::<JobTree>(err, doing: "show-session-diagram: read the fixture");
     }
 }
 
@@ -336,19 +336,19 @@ test "the trail's leases select the jobs, with their parents and dependencies" {
 }
 
 test "-o svg prints the golden SVG and nothing else" {
-    assert\equal(rendered(fixture().value!, format: "svg", theme: figure\Theme.light, console: "").value!, want: fs\readFile("hack/testdata/session-figure.svg"), message: "svg");
+    assert\equal(rendered(fixture().value!, format: "svg", theme: diagram\Theme.light, console: "").value!, want: fs\readFile("hack/testdata/session-diagram.svg"), message: "svg");
 }
 
 test "without -o it prints a one-line summary and the console link" {
-    final lines = rendered(fixture().value!, format: "text", theme: figure\Theme.light, console: "https://example.test/console/").value!.split("\n");
+    final lines = rendered(fixture().value!, format: "text", theme: diagram\Theme.light, console: "https://example.test/console/").value!.split("\n");
     assert\equal(lines.len(), want: 2, message: "two lines");
     assert\equal(lines[0], want: "read-only: 4 jobs (3 passed or exited, 1 no return or failed), 4 spawn and 1 dependency edges, session s-fixture", message: "summary");
-    assert\equal(lines[1].startsWith("explore: https://example.test/console/graph/#figure="), want: true, message: lines[1]);
+    assert\equal(lines[1].startsWith("explore: https://example.test/console/graph/#diagram-link="), want: true, message: lines[1]);
 }
 
 test "the console link carries the tree and decodes to it" {
     final tr = fixture().value!;
-    final doc = figurelink\decodeFigureLink(link(tr, base: "https://example.test/console/").value!);
+    final doc = diagramlink\decodeDiagramLink(link(tr, base: "https://example.test/console/").value!);
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     final nodes = doc.q("nodes").listValue();
     assert\equal(nodes.len(), want: tr.nodes.len() + 1, message: "every job and the session");

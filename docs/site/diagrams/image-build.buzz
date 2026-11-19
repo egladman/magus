@@ -1,17 +1,17 @@
 namespace imageBuild;
 
-import "magus/figure";
+import "magus/diagram";
 
-export fun imageBuildFigure() > figure\Figure !> any {
-    final run = figure\step("magus run image-build", look: figure\Look.focal);
+export fun imageBuildDiagram() > diagram\Diagram !> any {
+    final run = diagram\step("magus run image-build", look: diagram\Look.focal);
     // Each diamond takes one connector per vertex, all the room a diamond has.
-    final cd = figure\step("cd?", look: figure\Look.decision);
-    final local = figure\step("Load locally", sub: "pushes nothing", look: figure\Look.plain);
-    final channel = figure\step("channel", look: figure\Look.decision);
-    final commit = figure\step("Commit", sub: "ghcr, tagged by hash", look: figure\Look.plain);
-    final unstable = figure\step("Prerelease", sub: "no floating tag", look: figure\Look.plain);
-    final stable = figure\step("Release", sub: "version and latest", look: figure\Look.plain);
-    return figure\of("image-build",
+    final cd = diagram\step("cd?", look: diagram\Look.decision);
+    final local = diagram\step("Load locally", sub: "pushes nothing", look: diagram\Look.plain);
+    final channel = diagram\step("channel", look: diagram\Look.decision);
+    final commit = diagram\step("Commit", sub: "ghcr, tagged by hash", look: diagram\Look.plain);
+    final unstable = diagram\step("Prerelease", sub: "no floating tag", look: diagram\Look.plain);
+    final stable = diagram\step("Release", sub: "version and latest", look: diagram\Look.plain);
+    return diagram\of("image-build",
             title: "A bare run pushes nothing; only the stable channel moves latest",
             eyebrow: "recommendations",
             desc: "Without the cd charm an image-build loads locally and pushes nothing. With "

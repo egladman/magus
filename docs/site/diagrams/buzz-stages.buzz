@@ -1,23 +1,23 @@
 namespace buzzStages;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/packages" as packages;
 
-// codeStage is a stage: a step inside dir, carried out by symbol. The figure checks the
+// codeStage is a stage: a step inside dir, carried out by symbol. The diagram checks the
 // symbol is defined directly in dir, so a stage cannot outlive the code it names.
-export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: figure\Look? = null) > figure\Actor !> any {
-    return figure\stage(dir, refs: magus\graph().refs(symbol), name: name, sub: sub, look: look);
+export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: diagram\Look? = null) > diagram\Actor !> any {
+    return diagram\stage(dir, refs: magus\graph().refs(symbol), name: name, sub: sub, look: look);
 }
 
-// gopherbuzzPackages is every Go package in the gopherbuzz tree. A figure scoped to it meets
+// gopherbuzzPackages is every Go package in the gopherbuzz tree. A diagram scoped to it meets
 // a new package as a finding until a box draws it or an except names it.
 export fun gopherbuzzPackages() > [magus\Dir] !> any {
     return packages\goPackages("libs/gopherbuzz/**");
 }
 
 // gopherbuzzAround is the gopherbuzz packages built on the pipeline rather than part of
-// it; a figure excepts them for AROUND_WHY.
+// it; a diagram excepts them for AROUND_WHY.
 export fun gopherbuzzAround() > [magus\Dir] !> any {
     return [
         magus\graph().dir("libs/gopherbuzz/benchmarks/comparison"),

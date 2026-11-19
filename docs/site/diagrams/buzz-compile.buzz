@@ -1,28 +1,28 @@
 namespace buzzCompile;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 import "site/diagrams/buzz-stages" as buzzStages;
 
-// buzzCompileFigure draws the steps inside the gopherbuzz root package. The lexer and the
+// buzzCompileDiagram draws the steps inside the gopherbuzz root package. The lexer and the
 // chunk passes live in token and vm, so they are named in the subs, not drawn beside the
-// steps: a Level.symbol figure draws inside one package.
-export fun buzzCompileFigure() > figure\Figure !> any {
+// steps: a Level.symbol diagram draws inside one package.
+export fun buzzCompileDiagram() > diagram\Diagram !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
-    final source = figure\external("Buzz source", sub: "a file or a snippet", look: figure\Look.input);
+    final source = diagram\external("Buzz source", sub: "a file or a snippet", look: diagram\Look.input);
     final parseCache = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/ParseCache#tokenize().", name: "Parse cache",
-        sub: "token.Tokenize on a miss", look: figure\Look.store);
+        sub: "token.Tokenize on a miss", look: diagram\Look.store);
     final parser = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/parseModedTracked().", name: "Parser",
         sub: "recursive descent, *ast.Program");
     final imports = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadFileImports().", name: "Import resolution",
-        sub: "runs each module first", look: figure\Look.focal);
+        sub: "runs each module first", look: diagram\Look.focal);
     final checker = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/checkWithPrelude().", name: "Checker",
         sub: "types.Type, BZZ codes");
     final compiler = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/CompileWith().", name: "Compiler",
         sub: "AST to *vm.Chunk");
     final store = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadCachedChunk().", name: "Bytecode store",
-        sub: ".bo plus its import closure", look: figure\Look.store);
-    return figure\of("buzz-compile",
+        sub: ".bo plus its import closure", look: diagram\Look.store);
+    return diagram\of("buzz-compile",
             title: "Imports run before the checker sees a name",
             eyebrow: "gopherbuzz",
             desc: "Inside the gopherbuzz root package, source passes the parse cache, the parser, "
@@ -30,7 +30,7 @@ export fun buzzCompileFigure() > figure\Figure !> any {
                 + "resolution runs every imported module through the same steps first, so its "
                 + "exports are bound before the checker looks names up. A fresh bytecode store "
                 + "skips every step.",
-            direction: figure\Direction.down, level: figure\Level.symbol)
+            direction: diagram\Direction.down, level: diagram\Level.symbol)
         .actor(source)
         .actor(parseCache)
         .actor(parser)
@@ -44,9 +44,9 @@ export fun buzzCompileFigure() > figure\Figure !> any {
         .flowAcross(imports, dst: checker, label: "exports bound")
         .flowAcross(checker, dst: compiler, label: "no errors")
         .flowAcross(compiler, dst: store, label: "saves")
-        .flowAcross(source, dst: store, label: "fresh hit", stroke: figure\Stroke.optional)
-        .legend(figure\Look.focal, label: "where an import runs")
-        .legend(figure\Look.store, label: "optional, set by the host")
-        .legend(figure\Look.input, label: "what a host hands in")
+        .flowAcross(source, dst: store, label: "fresh hit", stroke: diagram\Stroke.optional)
+        .legend(diagram\Look.focal, label: "where an import runs")
+        .legend(diagram\Look.store, label: "optional, set by the host")
+        .legend(diagram\Look.input, label: "what a host hands in")
         .scope([session]);
 }

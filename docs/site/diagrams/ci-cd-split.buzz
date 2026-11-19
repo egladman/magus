@@ -1,19 +1,19 @@
 namespace ciCdSplit;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun ciCdSplitFigure() > figure\Figure !> any {
+export fun ciCdSplitDiagram() > diagram\Diagram !> any {
     final ci = magus\graph().dir("internal/ci");
     final annotate = magus\graph().dir("internal/ci/annotate");
     final forecast = magus\graph().dir("internal/ci/forecast");
     final volatility = magus\graph().dir("internal/ci/volatility");
     final cache = magus\graph().dir("internal/cache");
-    final change = figure\external("A pull request", sub: "untrusted code", look: figure\Look.input);
-    final validate = figure\external("ci.yaml", sub: "validates, ships nothing", tag: "workflow", look: figure\Look.plain);
-    final ship = figure\external("cd.yaml", sub: "site and image of main", tag: "workflow", look: figure\Look.focal);
-    final release = figure\external("release.yaml", sub: "binaries on a v* tag", tag: "workflow", look: figure\Look.plain);
-    return figure\of("ci-cd-split",
+    final change = diagram\external("A pull request", sub: "untrusted code", look: diagram\Look.input);
+    final validate = diagram\external("ci.yaml", sub: "validates, ships nothing", tag: "workflow", look: diagram\Look.plain);
+    final ship = diagram\external("cd.yaml", sub: "site and image of main", tag: "workflow", look: diagram\Look.focal);
+    final release = diagram\external("release.yaml", sub: "binaries on a v* tag", tag: "workflow", look: diagram\Look.plain);
+    return diagram\of("ci-cd-split",
             title: "CI validates a change; CD ships what a merge produces",
             eyebrow: "ci",
             desc: "ci.yaml runs on a pull request: it sizes the shards, runs them, annotates the "
@@ -21,27 +21,27 @@ export fun ciCdSplitFigure() > figure\Figure !> any {
                 + "after a merge to main, renders the site and builds the image, and alone holds "
                 + "the key to the shared tier. Nothing running pull-request code holds a secret or "
                 + "write token.",
-            direction: figure\Direction.down)
+            direction: diagram\Direction.down)
         .actor(change)
         .actor(validate)
         .actor(ship)
         .actor(release)
         .box(ci, label: "Gate sizing", sub: "which shards run")
         .box(annotate, label: "Annotations", sub: "the result on the PR")
-        .group([forecast, volatility], label: "Forecast", sub: "cost and volatility", look: figure\Look.input)
-        .box(cache, label: "Remote cache", sub: "signed by main only", look: figure\Look.store)
+        .group([forecast, volatility], label: "Forecast", sub: "cost and volatility", look: diagram\Look.input)
+        .box(cache, label: "Remote cache", sub: "signed by main only", look: diagram\Look.store)
         .edgesFromGraph()
         .markEdge(ci, dst: forecast, label: "sizes by")
         .flowIn(change, dst: ci, label: "pull_request")
         .flowOut(ci, dst: validate, label: "shards")
         .flowAcross(validate, dst: ship, label: "profiles")
         .flowOut(cache, dst: validate, label: "read only")
-        .flowIn(ship, dst: cache, label: "sign + put", stroke: figure\Stroke.focal)
+        .flowIn(ship, dst: cache, label: "sign + put", stroke: diagram\Stroke.focal)
         .flowAcross(ship, dst: release, label: "v* tag")
         .zone("validates, no secret", dirs: [ci, annotate, forecast, volatility], actors: [change, validate])
         .zone("ships, holds the key", dirs: [cache], actors: [ship, release])
-        .legend(figure\Look.focal, label: "the one that ships")
-        .legend(figure\Look.input, label: "reads history")
-        .legend(figure\Look.store, label: "the shared store")
+        .legend(diagram\Look.focal, label: "the one that ships")
+        .legend(diagram\Look.input, label: "reads history")
+        .legend(diagram\Look.store, label: "the shared store")
         .scope([ci, annotate, forecast, volatility]);
 }

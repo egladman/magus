@@ -1,20 +1,20 @@
 namespace ociAssembly;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun ociAssemblyFigure() > figure\Figure !> any {
+export fun ociAssemblyDiagram() > diagram\Diagram !> any {
     final host = magus\graph().dir("std");
     final image = magus\graph().dir("libs/image");
     final oci = magus\graph().dir("libs/oci");
-    final files = figure\external("Built files", look: figure\Look.input);
-    final base = figure\external("Pinned base", sub: "optional, by digest", look: figure\Look.optional);
-    final registry = figure\external("Registry", look: figure\Look.store);
+    final files = diagram\external("Built files", look: diagram\Look.input);
+    final base = diagram\external("Pinned base", sub: "optional, by digest", look: diagram\Look.optional);
+    final registry = diagram\external("Registry", look: diagram\Look.store);
 
-    return figure\of("oci-assembly",
+    return diagram\of("oci-assembly",
             title: "Assembly stays on disk; only the registry client talks to a registry",
             eyebrow: "images",
-            direction: figure\Direction.down,
+            direction: diagram\Direction.down,
             desc: "Built files and an optional digest-pinned base reach libs/image through the "
                 + "image host module. libs/image assembles each layer, stages one layout per "
                 + "platform, combines the layouts into an index and attaches referrers, cloning "
@@ -30,9 +30,9 @@ export fun ociAssemblyFigure() > figure\Figure !> any {
         .flowIn(files, dst: host)
         .flowIn(base, dst: oci, label: "by digest")
         .flowOut(oci, dst: registry, label: "publish")
-        .legend(figure\Look.focal, label: "where layers are built")
-        .legend(figure\Look.input, label: "what magus built")
-        .legend(figure\Look.optional, label: "optional")
-        .legend(figure\Look.store, label: "outside magus")
+        .legend(diagram\Look.focal, label: "where layers are built")
+        .legend(diagram\Look.input, label: "what magus built")
+        .legend(diagram\Look.optional, label: "optional")
+        .legend(diagram\Look.store, label: "outside magus")
         .scope([image, oci]);
 }

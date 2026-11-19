@@ -8,7 +8,7 @@ import "holdout";
 
 // Every ref is a span, path:a-b: lines a..b, 1-based and inclusive, of the blob
 // sources.jsonl pins for path. A pair is holdout when either span sits in a holdout
-// file, or comes from an eval-fold figure.
+// file, or comes from an eval-fold diagram.
 export object Pair {
     source: str,
     query: str,
@@ -102,7 +102,7 @@ fun goDocDecl(m: Miner) > void {
 final buzzDeclKinds = {"Function": true, "Object": true, "Enum": true};
 
 // Buzz decls come from the SCIP index where it reaches and from the graph's function
-// nodes where it does not (libs/figure, gopherbuzz std); both carry the doc.
+// nodes where it does not (libs/diagram, gopherbuzz std); both carry the doc.
 fun buzzDocDecl(m: Miner) > void {
     final ends: mut {str: int} = mut {};
     final docs: mut {str: str} = mut {};
@@ -488,9 +488,9 @@ fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void {
     }
 }
 
-fun figureApi(m: Miner) > void {
-    final path = "libs/figure/figure.buzz";
-    final page = "docs/reference/buzz/figure.md";
+fun diagramApi(m: Miner) > void {
+    final path = "libs/diagram/diagram.buzz";
+    final page = "docs/reference/buzz/diagram.md";
     final functions = sources\nodes("function");
     if (functions.error -> e) {
         m.c.faults.append(e.message);
@@ -503,7 +503,7 @@ fun figureApi(m: Miner) > void {
         final line = sources\spanLine(n.source);
         final top = sources\commentAbove(m.c, path: path, line: line);
         final decl = span(path, a: if (top == 0) line else top, b: sources\blockEnd(m.c, path: path, line: line));
-        m.add("figure-api", query: sources\sectionSpan(m.c, path: page, label: n.label, level: 3), doc: decl, held: false);
+        m.add("diagram-api", query: sources\sectionSpan(m.c, path: page, label: n.label, level: 3), doc: decl, held: false);
     }
 }
 
@@ -532,15 +532,15 @@ fun attrValues(svg: str, attr: str) > [str] {
     return sources\uniqueSorted(found);
 }
 
-// figures reads each drawn figure's claim off its light SVG: the title, the desc, the
+// diagrams reads each drawn diagram's claim off its light SVG: the title, the desc, the
 // dirs its boxes anchor (kept only when the graph holds that dir) and the docs
 // sections a <!--diagram:ID--> marker embeds it in.
-export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
+export fun diagrams(c: sources\Snapshot) > result\Result::<[{str: any}]> {
     final dirNodes = sources\nodes("dir");
     if (dirNodes.error -> e) {
         return result\Result::<[{str: any}]>{ error = e };
     }
-    final svgs = sources\figureSvgs(c.root);
+    final svgs = sources\diagramSvgs(c.root);
     if (svgs.error -> e) {
         return result\Result::<[{str: any}]>{ error = e };
     }
@@ -576,7 +576,7 @@ export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
     final found: mut [{str: any}] = mut [];
     foreach (p in svgs.value!) {
         final base = fs\basename(p);
-        final id = sources\figureId(p);
+        final id = sources\diagramId(p);
         var svg = "";
         try {
             svg = fs\readFile(p);
@@ -598,7 +598,7 @@ export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
         var builder = "";
         final script = "docs/site/diagrams/{id}.buzz";
         foreach (s in c.symbolsByFile[script] ?? []) {
-            if (builder == "" and s.attrs["symbol_kind"] == "Function" and (s.attrs["signature"] ?? "").indexOf("> figure\\Figure") != null) {
+            if (builder == "" and s.attrs["symbol_kind"] == "Function" and (s.attrs["signature"] ?? "").indexOf("> diagram\\Diagram") != null) {
                 builder = span(script, a: sources\spanLine(s.source), b: defEnd(c, s: s));
             }
         }
@@ -611,15 +611,15 @@ export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
             "nodes": anchors,
             "externals": externals,
             "sections": sources\uniqueSorted(markers[id] ?? []),
-            "fold": holdout\figureFold(id),
+            "fold": holdout\diagramFold(id),
         });
     }
     return result\ok::<[{str: any}]>(found);
 }
 
-// A figure's builder function (its title, desc and the dirs it draws) against each
+// A diagram's builder function (its title, desc and the dirs it draws) against each
 // docs section that embeds it and each drawn dir's Go package doc.
-fun figurePairs(m: Miner, figs: [{str: any}]) > void {
+fun diagramPairs(m: Miner, figs: [{str: any}]) > void {
     final packageDocs: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
         if (s.attrs["language"] != "go" or s.attrs["symbol_kind"] != "Package") {
@@ -642,14 +642,14 @@ fun figurePairs(m: Miner, figs: [{str: any}]) > void {
         if (builder == "") {
             continue;
         }
-        final held = holdout\figureFold(id) == 0;
+        final held = holdout\diagramFold(id) == 0;
         final sections: [str] = f["sections"];
         foreach (s in sections) {
-            m.add("figure", query: builder, doc: s, held: held);
+            m.add("diagram", query: builder, doc: s, held: held);
         }
         final nodes: [str] = f["nodes"];
         foreach (d in nodes) {
-            m.add("figure", query: builder, doc: packageDocs[d] ?? "", held: held);
+            m.add("diagram", query: builder, doc: packageDocs[d] ?? "", held: held);
         }
     }
 }
@@ -667,8 +667,8 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > result\
     gopherbuzzTests(m);
     spellOps(m);
     buzzScipRefs(m, refs: refs);
-    figureApi(m);
-    figurePairs(m, figs: figs);
+    diagramApi(m);
+    diagramPairs(m, figs: figs);
     final sorted = m.pairs.cloneMutable();
     _ = sorted.sort(fun (a: Pair, b: Pair) > bool {
         if (a.source != b.source) {

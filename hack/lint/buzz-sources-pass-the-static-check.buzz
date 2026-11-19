@@ -7,7 +7,7 @@
 // docs/, where its `lib/...` and `engine/...` imports resolve, except docs/magusfile.buzz.
 //
 // A BZZ2001 for an import of magus/spell/*, project/*, mergequeue or opencode is ignored: the host binds
-// those at load, so --check cannot resolve them. Skipped: testdata, the docs figures (the figure
+// those at load, so --check cannot resolve them. Skipped: testdata, the docs diagrams (the diagram
 // rule owns them), internal/spell/gen and the FFI demo.
 //
 // Tier 1, mechanical: the fix is what the checker names.
@@ -181,7 +181,7 @@ test "mode follows the path" {
     assert\isTrue(!embedded("libs/gopherbuzz/x.buzz"), message: "libs is strict");
     assert\isTrue(!embedded("evals/x.buzz"), message: "evals is strict");
     assert\isTrue(skipped("internal/x/testdata/a.buzz"), message: "testdata");
-    assert\isTrue(skipped("docs/site/diagrams/a.buzz"), message: "figures");
+    assert\isTrue(skipped("docs/site/diagrams/a.buzz"), message: "diagrams");
     assert\isTrue(skipped("libs/gopherbuzz/examples/ffi/a.buzz"), message: "ffi demo");
     assert\isTrue(!skipped("docs/lib/text.buzz"), message: "docs library");
 }

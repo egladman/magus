@@ -79,7 +79,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Mines gen/: the sources (tracked files, the pinned downloads, the forced vocabulary,
-// the figures), the holdout files and the training pairs, all read off the tracked
+// the diagrams), the holdout files and the training pairs, all read off the tracked
 // tree and the knowledge graph. symbol-index.json keys the cache on the symbol index.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\symbol_digest_generate);
@@ -102,11 +102,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     if (held.error -> e) {
         throw e.message;
     }
-    final figs = pairs\figures(c);
+    final figs = pairs\diagrams(c);
     if (figs.error -> e) {
         throw e.message;
     }
-    final files = sources\write(c, figures: figs.value!, target: fs\join("embed/gen", name: "sources.jsonl"));
+    final files = sources\write(c, diagrams: figs.value!, target: fs\join("embed/gen", name: "sources.jsonl"));
     if (files.error -> e) {
         throw e.message;
     }
@@ -124,7 +124,7 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
-// figures, and CoRNStack rows), decontaminated against the eval sets embed bench reads
+// diagrams, and CoRNStack rows), decontaminated against the eval sets embed bench reads
 // from the cache root's bench/ (testdata/retrieval has no queries.jsonl, so judged-queries
 // is left out), and the forced tokens under the cache root's training/, then
 // the vocabulary's token texts beside them and its counts to gen/vocab.jsonl, which convert

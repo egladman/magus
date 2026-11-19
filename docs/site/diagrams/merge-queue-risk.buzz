@@ -1,27 +1,27 @@
 namespace mergeQueueRisk;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun mergeQueueRiskFigure() > figure\Figure !> any {
+export fun mergeQueueRiskDiagram() > diagram\Diagram !> any {
     final provider = magus\graph().dir("internal/queue/provider");
     final queueDir = magus\graph().dir("internal/queue");
     final risk = magus\graph().dir("internal/risk");
     final nested: [magus\Dir] = magus\graph().dirs("internal/queue/*");
-    final queue = figure\without(nested + [queueDir], drop: [provider]);
-    final flows = figure\external("Queue workflows", sub: "queue-intent, queue, queue-apply");
-    final low = figure\external("low risk?", look: figure\Look.decision);
-    final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
-    final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
+    final queue = diagram\without(nested + [queueDir], drop: [provider]);
+    final flows = diagram\external("Queue workflows", sub: "queue-intent, queue, queue-apply");
+    final low = diagram\external("low risk?", look: diagram\Look.decision);
+    final gate = diagram\external("Gate the projects", sub: "every one when unbounded", look: diagram\Look.plain);
+    final verdict = diagram\external("Verdict", sub: "green, red or kicked back", look: diagram\Look.plain);
     // No gate-sizing tier table: this repository's queue gate, hack/ci/merge-queue.buzz, runs
     // no sizing.
-    return figure\of("merge-queue-risk",
+    return diagram\of("merge-queue-risk",
             title: "The queue settles a low-risk conflict and kicks code back",
             eyebrow: "merge queue",
             desc: "For a conflicted file the queue asks the classifier which class the edit is "
                 + "and settles only a low-risk one, kicking code back, then gates the projects "
                 + "the change reaches, or every project when that set is no proof.",
-            direction: figure\Direction.down, level: figure\Level.package)
+            direction: diagram\Direction.down, level: diagram\Level.package)
         .actor(flows)
         .box(provider, label: "Forge provider", sub: "github.buzz on a Buzz VM")
         .group(queue, label: "Queue engine", sub: "plan, validate, apply; asks the SDK")
@@ -33,15 +33,15 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
         .markEdge(provider, dst: queueDir, label: "changes")
         .markEdge(queueDir, dst: risk, label: "a conflict")
         .flowIn(flows, dst: provider, label: "merge intent")
-        .flowOut(risk, dst: low, label: "the class", stroke: figure\Stroke.focal)
+        .flowOut(risk, dst: low, label: "the class", stroke: diagram\Stroke.focal)
         .flowOut(queueDir, dst: gate, label: "no conflict")
         .flowAcross(low, dst: gate, label: "yes: settled")
         .flowAcross(low, dst: verdict, label: "no: kick back")
         .flowAcross(gate, dst: verdict, label: "exit status")
         .flowAcross(verdict, dst: flows, label: "apply")
         .zone("the workspace", dirs: [risk])
-        .legend(figure\Look.focal, label: "reads what an edit is")
-        .legend(figure\Look.external, label: "outside magus")
-        .legend(figure\Look.decision, label: "the queue decides")
+        .legend(diagram\Look.focal, label: "reads what an edit is")
+        .legend(diagram\Look.external, label: "outside magus")
+        .legend(diagram\Look.decision, label: "the queue decides")
         .scope(queue + [provider, risk]);
 }

@@ -1,9 +1,9 @@
 namespace jobRecords;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun jobRecordsFigure() > figure\Figure !> any {
+export fun jobRecordsDiagram() > diagram\Diagram !> any {
     final jobs = magus\graph().dir("internal/job");
     final migrate = magus\graph().dir("internal/store/migrate");
     final describe = magus\graph().dir("internal/describe");
@@ -13,7 +13,7 @@ export fun jobRecordsFigure() > figure\Figure !> any {
     final recorder = magus\graph().dir("internal/recorder");
     final guard = magus\graph().dir("internal/guard");
     final sandbox = magus\graph().dir("internal/sandbox");
-    return figure\of("job-records",
+    return diagram\of("job-records",
             title: "A job row is one record, and four packages read it",
             eyebrow: "job",
             desc: "The job store keeps one row per job in a JSON Lines file: its goal, checkpoint, "
@@ -25,8 +25,8 @@ export fun jobRecordsFigure() > figure\Figure !> any {
         .box(describe, label: "describe job", sub: "the spec an agent reads")
         .box(forecast, label: "Check forecast", sub: "what verifies the row")
         .box(queue, label: "Queue records", sub: "a landed job")
-        .box(sessions, label: "Session record", sub: "who held the lease", look: figure\Look.store)
-        .box(recorder, label: "Activity log", sub: "what it did", look: figure\Look.store)
+        .box(sessions, label: "Session record", sub: "who held the lease", look: diagram\Look.store)
+        .box(recorder, label: "Activity log", sub: "what it did", look: diagram\Look.store)
         .box(guard, label: "Guard", sub: "judges against the row")
         .box(sandbox, label: "Sandbox", sub: "write grant from the row")
         .edgesFromGraph()
@@ -34,7 +34,7 @@ export fun jobRecordsFigure() > figure\Figure !> any {
             why: "they read the same records the store reads; the row is the one thing drawn")
         .markEdge(guard, dst: jobs, label: "lease")
         .markEdge(sandbox, dst: jobs, label: "write grant")
-        .legend(figure\Look.focal, label: "the record")
-        .legend(figure\Look.store, label: "append-only")
+        .legend(diagram\Look.focal, label: "the record")
+        .legend(diagram\Look.store, label: "append-only")
         .scope([jobs, migrate, describe, forecast, queue, sessions, recorder]);
 }

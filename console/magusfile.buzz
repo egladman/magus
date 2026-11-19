@@ -155,7 +155,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
-    // The Graph's Figures runtime control loads gen/wasm/.
+    // The Graph's Diagrams runtime control loads gen/wasm/.
     ctx.needs(docs\build_playground);
     ctx.writesFiles([
         "gen/console.js", "gen/theme.js",

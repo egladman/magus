@@ -1,17 +1,17 @@
 namespace projectReference;
 
-import "magus/figure";
+import "magus/diagram";
 
-export fun projectReferenceFigure() > figure\Figure !> any {
-    final url = figure\step("workspace://pkg/api", look: figure\Look.plain);
-    final rel = figure\step("pkg/api", look: figure\Look.plain);
-    final dot = figure\step("./pkg/api", look: figure\Look.plain);
-    final root = figure\step("workspace://", sub: "the root alias", look: figure\Look.plain);
-    final parse = figure\step("parse", tag: "step", look: figure\Look.plain);
-    final ref = figure\step("One reference", sub: "path: pkg/api", look: figure\Look.focal);
-    final human = figure\step("Human output", sub: "pkg/api", look: figure\Look.plain);
-    final machine = figure\step("Machine output", sub: "workspace://pkg/api", look: figure\Look.plain);
-    return figure\of("project-reference",
+export fun projectReferenceDiagram() > diagram\Diagram !> any {
+    final url = diagram\step("workspace://pkg/api", look: diagram\Look.plain);
+    final rel = diagram\step("pkg/api", look: diagram\Look.plain);
+    final dot = diagram\step("./pkg/api", look: diagram\Look.plain);
+    final root = diagram\step("workspace://", sub: "the root alias", look: diagram\Look.plain);
+    final parse = diagram\step("parse", tag: "step", look: diagram\Look.plain);
+    final ref = diagram\step("One reference", sub: "path: pkg/api", look: diagram\Look.focal);
+    final human = diagram\step("Human output", sub: "pkg/api", look: diagram\Look.plain);
+    final machine = diagram\step("Machine output", sub: "workspace://pkg/api", look: diagram\Look.plain);
+    return diagram\of("project-reference",
             title: "Four spellings in, one reference out",
             eyebrow: "agents",
             desc: "magus accepts a workspace URL, a workspace-relative path, a dot-relative "
@@ -29,6 +29,6 @@ export fun projectReferenceFigure() > figure\Figure !> any {
         .flowAcross(ref, dst: human, label: "printed")
         .flowAcross(ref, dst: machine, label: "-o json")
         .zone("accepted as input, interchangeable", actors: [url, rel, dot, root])
-        .legend(figure\Look.focal, label: "one canonical form")
+        .legend(diagram\Look.focal, label: "one canonical form")
         .unscoped(why: "an input and output contract, drawn with no directory to hold a scope to");
 }

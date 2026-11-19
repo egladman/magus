@@ -1,9 +1,9 @@
 namespace serverShare;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun serverShareFigure() > figure\Figure !> any {
+export fun serverShareDiagram() > diagram\Diagram !> any {
     final server = magus\graph().dir("internal/server");
     final lan = magus\graph().dir("internal/share");
     final handlers = magus\graph().layer("handler").dirs;
@@ -17,10 +17,10 @@ export fun serverShareFigure() > figure\Figure !> any {
         magus\graph().dir("internal/handler/metrics"),
     ];
     final interceptor = magus\graph().dir("internal/handler/activityrpc");
-    final withheld = figure\without(handlers, drop: [served, interceptor] + connectReads);
-    final dash = figure\external("Console", sub: "dashboard", tag: "pwa", look: figure\Look.plain);
-    final phone = figure\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");
-    return figure\of("server-share",
+    final withheld = diagram\without(handlers, drop: [served, interceptor] + connectReads);
+    final dash = diagram\external("Console", sub: "dashboard", tag: "pwa", look: diagram\Look.plain);
+    final phone = diagram\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");
+    return diagram\of("server-share",
             title: "The only listener a second machine can reach",
             eyebrow: "magus server",
             desc: "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
@@ -32,19 +32,19 @@ export fun serverShareFigure() > figure\Figure !> any {
         .box(server, label: "/api/v1/share", sub: "loopback + bearer", tag: "route")
         .box(lan, label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", focal: true)
         .actor(phone)
-        .box(served, label: "Shared read routes", sub: "events, history metrics, outputs, output", look: figure\Look.store)
-        .group(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, history metrics", look: figure\Look.store)
-        .group(withheld, label: "Never on a share", sub: "every other handler: graph, diff, plan, job, /mcp", look: figure\Look.optional)
+        .box(served, label: "Shared read routes", sub: "events, history metrics, outputs, output", look: diagram\Look.store)
+        .group(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, history metrics", look: diagram\Look.store)
+        .group(withheld, label: "Never on a share", sub: "every other handler: graph, diff, plan, job, /mcp", look: diagram\Look.optional)
         .edgesFromGraph()
         .hideEdges([server], dst: withheld,
             why: "the server mounts them on loopback only; drawn, they would read as served on a share")
         .markEdge(server, dst: lan, label: "mints token")
         .markEdge(server, dst: served, label: "mounts")
         .flowIn(dash, dst: server, label: "share")
-        .flowIn(phone, dst: lan, label: "read-only", stroke: figure\Stroke.focal)
-        .legend(figure\Look.focal, label: "reachable off-machine")
-        .legend(figure\Look.store, label: "served on a share")
-        .legend(figure\Look.optional, label: "loopback only")
+        .flowIn(phone, dst: lan, label: "read-only", stroke: diagram\Stroke.focal)
+        .legend(diagram\Look.focal, label: "reachable off-machine")
+        .legend(diagram\Look.store, label: "served on a share")
+        .legend(diagram\Look.optional, label: "loopback only")
         .scope([lan] + handlers)
         .except([interceptor],
             why: "the audit interceptor around Connect services, not a route");

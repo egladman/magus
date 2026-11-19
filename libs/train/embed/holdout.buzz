@@ -30,22 +30,22 @@ export fun isHoldout(group: str) > bool {
     return bucket(group) < 2;
 }
 
-// figureFold deals a figure into one of 3 folds by sha256 of its id; fold 0 evaluates.
-export fun figureFold(id: str) > int {
+// diagramFold deals a diagram into one of 3 folds by sha256 of its id; fold 0 evaluates.
+export fun diagramFold(id: str) > int {
     return prefixValue(crypto\sha256Hex(id)) % 3;
 }
 
 // groupKey is the group a file starts in before links merge groups. Most start in their
 // directory, which is their Go package, so foo.go and foo_test.go share one. A changelog
 // fragment and a generated Markdown page start alone, because their directory holds
-// unrelated pages; the link to their source merges them into its group. A figure's
-// builder starts in its figure's group.
-export fun groupKey(path: str, generated: bool, figures: {str: bool}) > str {
+// unrelated pages; the link to their source merges them into its group. A diagram's
+// builder starts in its diagram's group.
+export fun groupKey(path: str, generated: bool, diagrams: {str: bool}) > str {
     final base = fs\basename(path);
     if (path.startsWith("docs/site/diagrams/") and base.endsWith(".buzz")) {
         final id = base.sub(0, len: base.len() - 5);
-        if (figures[id] != null) {
-            return "figure:{id}";
+        if (diagrams[id] != null) {
+            return "diagram:{id}";
         }
     }
     if (path.startsWith("changes/") or base == "CHANGELOG.md" or (generated and base.endsWith(".md"))) {
@@ -87,13 +87,13 @@ export object Split {
 }
 
 // deal groups paths, merges each link's two files into one group, and sides each group.
-// A group holding a figure builder takes that figure's fold, held out when any of its
-// figures is in fold 0; every other group is sided by its bucket.
-export fun deal(paths: [str], generated: {str: bool}, figures: {str: bool}, links: [[str]]) > Split {
+// A group holding a diagram builder takes that diagram's fold, held out when any of its
+// diagrams is in fold 0; every other group is sided by its bucket.
+export fun deal(paths: [str], generated: {str: bool}, diagrams: {str: bool}, links: [[str]]) > Split {
     final g = mut Groups{parent = mut {}};
     final keys: mut {str: str} = mut {};
     foreach (p in paths) {
-        keys[p] = groupKey(p, generated: generated[p] ?? false, figures: figures);
+        keys[p] = groupKey(p, generated: generated[p] ?? false, diagrams: diagrams);
     }
     foreach (l in links) {
         if (keys[l[0]] -> a) {
@@ -103,17 +103,17 @@ export fun deal(paths: [str], generated: {str: bool}, figures: {str: bool}, link
         }
     }
     final group: mut {str: str} = mut {};
-    final figureSide: mut {str: bool} = mut {};
+    final diagramSide: mut {str: bool} = mut {};
     foreach (p, k in keys) {
         final name = g.find(k);
         group[p] = name;
-        if (k.startsWith("figure:")) {
-            figureSide[name] = (figureSide[name] ?? false) or figureFold(k.sub(7, len: k.len() - 7)) == 0;
+        if (k.startsWith("diagram:")) {
+            diagramSide[name] = (diagramSide[name] ?? false) or diagramFold(k.sub(7, len: k.len() - 7)) == 0;
         }
     }
     final held: mut {str: bool} = mut {};
     foreach (p, name in group) {
-        held[name] = figureSide[name] ?? isHoldout(name);
+        held[name] = diagramSide[name] ?? isHoldout(name);
         dealt[p] = name;
         dealtHeld[name] = held[name] ?? false;
     }
@@ -169,13 +169,13 @@ test "a test file, a generated page and a skill's files share their source's gro
         ["docs/reference/buzz/crypto.md", "std/crypto.go"],
         ["docs/reference/skills/magus-multi-agent.md", "internal/agent/skills/magus-multi-agent/SKILL.md"],
     ];
-    final s = deal(paths, generated: generated, figures: {"bootstrap": true}, links: links);
+    final s = deal(paths, generated: generated, diagrams: {"bootstrap": true}, links: links);
     std\assert(s.group["std/crypto_test.go"] == s.group["std/crypto.go"], message: "test file");
     std\assert(s.group["docs/reference/buzz/crypto.md"] == s.group["std/crypto.go"], message: "generated page");
     std\assert(s.group["docs/reference/buzz/vcs.md"] == "file:docs/reference/buzz/vcs.md", message: "an unlinked page stays alone");
     std\assert(s.group["docs/reference/skills/magus-multi-agent.md"] == s.group["internal/agent/skills/magus-multi-agent/reference.md"], message: "skill page and reference");
-    std\assert(s.group["docs/site/diagrams/bootstrap.buzz"] == "figure:bootstrap", message: "figure builder");
-    std\assert(s.held["figure:bootstrap"] == (figureFold("bootstrap") == 0), message: "builder takes its figure's fold");
+    std\assert(s.group["docs/site/diagrams/bootstrap.buzz"] == "diagram:bootstrap", message: "diagram builder");
+    std\assert(s.held["diagram:bootstrap"] == (diagramFold("bootstrap") == 0), message: "builder takes its diagram's fold");
     std\assert(s.group["docs/site/diagrams/all.buzz"] == "dir:docs/site/diagrams", message: "a helper is no builder");
     foreach (p, name in s.group) {
         std\assert(s.held[name] != null, message: "{p} has a side");

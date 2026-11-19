@@ -1,9 +1,9 @@
 namespace bindingsGenerate;
 
 import "magus";
-import "magus/figure";
+import "magus/diagram";
 
-export fun bindingsGenerateFigure() > figure\Figure !> any {
+export fun bindingsGenerateDiagram() > diagram\Diagram !> any {
     final utils = magus\graph().dir("cmd/magus-utils");
     final emit = magus\graph().dir("internal/generate/emit");
     final godecl = magus\graph().dir("internal/generate/godecl");
@@ -12,7 +12,7 @@ export fun bindingsGenerateFigure() > figure\Figure !> any {
     final gen = magus\graph().dir("internal/interp/bindings/gen");
     final bindings = magus\graph().dir("internal/interp/bindings");
     final config = magus\graph().dir("internal/config");
-    return figure\of("bindings-generate",
+    return diagram\of("bindings-generate",
             title: "Go types become Buzz mirrors at build time, never at run time",
             eyebrow: "generate",
             desc: "magus-utils reads Go declarations with godecl and the config keys with the "
@@ -26,12 +26,12 @@ export fun bindingsGenerateFigure() > figure\Figure !> any {
         .box(cfgen, label: "Config generator", sub: "keys to Buzz")
         .box(emit, label: "Emitter", sub: "description to Buzz", focal: true)
         .box(buzzgen, label: "buzzgen", sub: "writes the declarations")
-        .box(gen, label: "Generated mirrors", sub: "committed, never edited", look: figure\Look.store)
+        .box(gen, label: "Generated mirrors", sub: "committed, never edited", look: diagram\Look.store)
         .box(bindings, label: "Host bindings", sub: "import the mirrors")
         .edgesFromGraph()
         .hideEdges([utils], dst: [config, buzzgen],
             why: "the command drives the generators; their own edges are drawn")
-        .legend(figure\Look.focal, label: "the one emitter")
-        .legend(figure\Look.store, label: "generated output")
+        .legend(diagram\Look.focal, label: "the one emitter")
+        .legend(diagram\Look.store, label: "generated output")
         .scope([utils, emit, godecl, cfgen, gen]);
 }
