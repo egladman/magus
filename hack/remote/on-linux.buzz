@@ -25,6 +25,7 @@ import "magus";
 import "os";
 import "path";
 import "proc";
+import "result";
 import "serialize";
 import "sort";
 import "std";
@@ -118,18 +119,18 @@ fun isName(s: str) > bool {
 
 // parse reads the options sudo-style: they come first, and the first word that is not one
 // of them, or a bare `--`, starts the command, which is kept verbatim.
-export fun parse(args: [str]) > Options !> str {
+export fun parse(args: [str]) > result\Result::<Options> {
     var parsed = flags\FlagParse{ values = {<str: str>}, lists = {<str: [str]>}, positionals = [<str>], unknown = [<str>] };
     try {
         parsed = flags\parse(args, switches: ["-h", "--help", "--keep", "--ls"], valued: ["--image", "--delete"],
             repeated: ["--env"]);
     } catch (e: {str: str}) {
-        throw (e["message"] ?? "{e}").replace("flags.parse: ", with: "");
+        return result\fail::<Options>((e["message"] ?? "{e}").replace("flags.parse: ", with: ""));
     }
-    if (parsed.unknown.len() > 0) { throw "unknown option {parsed.unknown[0]}"; }
+    if (parsed.unknown.len() > 0) { return result\fail::<Options>("unknown option {parsed.unknown[0]}"); }
     final envs = mut [<str>];
     foreach (v in parsed.lists["--env"] ?? [<str>]) {
-        if (!isName(v)) { throw "--env takes a variable NAME, not {v}: its value crosses from this host's environment"; }
+        if (!isName(v)) { return result\fail::<Options>("--env takes a variable NAME, not {v}: its value crosses from this host's environment"); }
         if (envs.indexOf(v) == null) { envs.append(v); }
     }
     final image = parsed.values["--image"] ?? "";
@@ -139,27 +140,31 @@ export fun parse(args: [str]) > Options !> str {
     final help = parsed.values["-h"] != null or parsed.values["--help"] != null;
     final command = parsed.positionals;
     final opts = Options{envs = envs, image = image, keep = keep, ls = ls, delete = del, help = help, command = command};
-    if (help) { return opts; }
+    if (help) { return result\ok::<Options>(opts); }
     if (ls or del != "") {
-        if (ls and del != "") { throw "--ls and --delete are two requests; pass one"; }
+        if (ls and del != "") { return result\fail::<Options>("--ls and --delete are two requests; pass one"); }
         if (command.len() > 0 or envs.len() > 0 or image != "" or keep) {
             final which = if (ls) "--ls" else "--delete";
-            throw "{which} stands alone: it takes no command and no other option";
+            return result\fail::<Options>("{which} stands alone: it takes no command and no other option");
         }
-        return opts;
+        return result\ok::<Options>(opts);
     }
-    if (command.len() == 0) { throw "no command to run"; }
-    return opts;
+    if (command.len() == 0) { return result\fail::<Options>("no command to run"); }
+    return result\ok::<Options>(opts);
 }
 
 // miseEnv is mise.toml's [env] without its directives (`_.path` and the rest), which only
 // mise reads.
-export fun miseEnv(mise: str) > {str: str} !> any {
-    final vars = mut {<str: str>};
-    foreach (k, v in serialize\Boxed.init(toml\parse(mise)).q(["env"]).mapValue()) {
-        if (!k.startsWith("_") and v.string() != null) { vars[k] = v.stringValue(); }
+export fun miseEnv(mise: str) > result\Result::<{str: str}> {
+    try {
+        final vars = mut {<str: str>};
+        foreach (k, v in serialize\Boxed.init(toml\parse(mise)).q(["env"]).mapValue()) {
+            if (!k.startsWith("_") and v.string() != null) { vars[k] = v.stringValue(); }
+        }
+        return result\ok::<{str: str}>(vars);
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err, doing: "reading the [env] of mise.toml");
     }
-    return vars;
 }
 
 fun floor(arch: str) > {str: str} {
@@ -316,30 +321,38 @@ export fun effect(p: Plan, podman: str, kernel: str, digest: str, tree: str, mac
 
 // buildMagus cross-compiles this tree through the root's release-build target and writes
 // the binary from its static archive into the store, returning "" or why it could not.
-fun buildMagus(p: Plan) > str !> any {
-    final res = magus\run(["release-build", ".", "--", "linux", p.arch], opts: magus\CommandOptions{ root = p.root, quiet = true, allowFailure = true });
-    if (!res.ok) { return "release-build failed: {res.stderr}"; }
-    // dist/ keeps every version's archive, so the one just written is the newest.
-    var newest = "";
-    var at = -1.0;
-    foreach (a in fs\glob("{p.root}/dist/magus_*_linux_{p.arch}_static.tar.gz")) {
-        final t = fs\stat(a.value).mtime;
-        if (t > at) {
-            newest = a.value;
-            at = t;
+fun buildMagus(p: Plan) > result\Result::<str> {
+    try {
+        final res = magus\run(["release-build", ".", "--", "linux", p.arch], opts: magus\CommandOptions{ root = p.root, quiet = true, allowFailure = true });
+        if (!res.ok) { return result\ok::<str>("release-build failed: {res.stderr}"); }
+        // dist/ keeps every version's archive, so the one just written is the newest.
+        var newest = "";
+        var at = -1.0;
+        foreach (a in fs\glob("{p.root}/dist/magus_*_linux_{p.arch}_static.tar.gz")) {
+            final t = fs\stat(a.value).mtime;
+            if (t > at) {
+                newest = a.value;
+                at = t;
+            }
         }
+        if (newest == "") { return result\ok::<str>("release-build left no linux/{p.arch} archive in dist/"); }
+        return placeMagus(p, content: archive\readFile(newest, name: "magus"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "building magus for linux/{p.arch}");
     }
-    if (newest == "") { return "release-build left no linux/{p.arch} archive in dist/"; }
-    return placeMagus(p, content: archive\readFile(newest, name: "magus"));
 }
 
 // placeMagus writes the binary the container runs as `magus` into the mounted store.
-fun placeMagus(p: Plan, content: str = "", source: str = "") > str !> any {
-    final bin = "{store(p)}/on-linux/magus";
-    fs\writeFile("{bin}.next", content: if (source != "") fs\readFile(source) else content);
-    fs\chmod("{bin}.next", mode: 493);
-    fs\rename("{bin}.next", dst: bin);
-    return "";
+fun placeMagus(p: Plan, content: str = "", source: str = "") > result\Result::<str> {
+    try {
+        final bin = "{store(p)}/on-linux/magus";
+        fs\writeFile("{bin}.next", content: if (source != "") fs\readFile(source) else content);
+        fs\chmod("{bin}.next", mode: 493);
+        fs\rename("{bin}.next", dst: bin);
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "placing magus in the store");
+    }
 }
 
 fun refuse(code: int, message: str) > int {
@@ -347,16 +360,24 @@ fun refuse(code: int, message: str) > int {
     return code;
 }
 
-fun podman(args: [str]) > ExecResult !> any {
-    return proc\exec("podman", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+fun podman(args: [str]) > result\Result::<ExecResult> {
+    try {
+        return result\ok::<ExecResult>(proc\exec("podman", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true }));
+    } catch (err: any) {
+        return result\caught::<ExecResult>(err, doing: "podman {args.join(" ")}");
+    }
 }
 
 // anyRunning reads `podman machine list --format json`.
-export fun anyRunning(machines: str) > bool !> any {
-    foreach (m in serialize\jsonDecode(machines).listValue()) {
-        if (m.q(["Running"]).booleanValue()) { return true; }
+export fun anyRunning(machines: str) > result\Result::<bool> {
+    try {
+        foreach (m in serialize\jsonDecode(machines).listValue()) {
+            if (m.q(["Running"]).booleanValue()) { return result\ok::<bool>(true); }
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "reading the podman machine list");
     }
-    return false;
 }
 
 // wedged is the refusal for a machine listed running that podman cannot reach.
@@ -367,37 +388,50 @@ export fun wedged(stderr: str) > str {
 
 // reach returns "" when podman can be asked to run containers, else the refusal carrying the
 // command that fixes it. A stopped machine is not a refusal: hold starts it.
-fun reach(hostOS: str) > str !> any {
+fun reach(hostOS: str) > result\Result::<str> {
     try {
         _ = proc\which("podman");
     } catch (e) {
-        if (hostOS == "darwin") { return "podman is not installed; run `brew install podman`"; }
-        return "podman is not installed; install it from your distribution (https://podman.io/docs/installation)";
+        if (hostOS == "darwin") { return result\ok::<str>("podman is not installed; run `brew install podman`"); }
+        return result\ok::<str>("podman is not installed; install it from your distribution (https://podman.io/docs/installation)");
     }
-    if (hostOS != "linux") {
-        final machines = podman(["machine", "list", "--format", "json"]);
-        if (!machines.ok) { return ""; }
-        if (serialize\jsonDecode(machines.stdout).listValue().len() == 0) {
-            return "podman has no machine to run Linux in; run `podman machine init --now`";
+    try {
+        if (hostOS != "linux") {
+            final machines = podman(["machine", "list", "--format", "json"]);
+            if (machines.error != null) { return result\fail::<str>(machines.error!.message); }
+            if (!machines.value!.ok) { return result\ok::<str>(""); }
+            if (serialize\jsonDecode(machines.value!.stdout).listValue().len() == 0) {
+                return result\ok::<str>("podman has no machine to run Linux in; run `podman machine init --now`");
+            }
+            final running = anyRunning(machines.value!.stdout);
+            if (running.error != null) { return result\fail::<str>(running.error!.message); }
+            if (running.value!) {
+                final probe = podman(["info"]);
+                if (probe.error != null) { return result\fail::<str>(probe.error!.message); }
+                if (!probe.value!.ok) { return result\ok::<str>(wedged(probe.value!.stderr)); }
+            }
+            return result\ok::<str>("");
         }
-        if (anyRunning(machines.stdout)) {
-            final probe = podman(["info"]);
-            if (!probe.ok) { return wedged(probe.stderr); }
-        }
-        return "";
+        final info = podman(["info", "--format", "json"]);
+        if (info.error != null) { return result\fail::<str>(info.error!.message); }
+        if (info.value!.ok) { return result\ok::<str>(""); }
+        return result\ok::<str>("podman cannot run containers: {info.value!.stderr}");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "asking podman for its machines");
     }
-    final info = podman(["info", "--format", "json"]);
-    if (info.ok) { return ""; }
-    return "podman cannot run containers: {info.stderr}";
 }
 
 // hold takes the podman machine as a broker service for as long as this script runs, and
 // returns the note the first line carries. Linux runs containers without a machine, so
 // there is nothing to hold and the note is "".
-fun hold(hostOS: str) > str !> any {
-    if (hostOS == "linux") { return ""; }
-    final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
-    return machineNote(lease.owned, brokered: lease.brokered, idle: lease.idle);
+fun hold(hostOS: str) > result\Result::<str> {
+    if (hostOS == "linux") { return result\ok::<str>(""); }
+    try {
+        final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
+        return result\ok::<str>(machineNote(lease.owned, brokered: lease.brokered, idle: lease.idle));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "holding the podman machine");
+    }
 }
 
 export fun machineNote(owned: bool, brokered: bool, idle: str) > str {
@@ -411,118 +445,139 @@ export fun lsArgv() > [str] {
         "--format", "\{\{.ID}}\t\{\{.RunningFor}}\t\{\{index .Labels \"magus.command\"}}"];
 }
 
-fun ls() > int !> any {
-    final res = podman(lsArgv());
-    if (!res.ok) { return refuse(RELAY_FAILED, message: "podman ps failed: {res.stderr}"); }
+fun ls() > result\Result::<int> {
+    final listed = podman(lsArgv());
+    if (listed.error != null) { return result\fail::<int>(listed.error!.message); }
+    final res = listed.value!;
+    if (!res.ok) { return result\ok::<int>(refuse(RELAY_FAILED, message: "podman ps failed: {res.stderr}")); }
     std\print("ID\tAGE\tCOMMAND");
     if (res.stdout != "") { std\print(res.stdout); }
-    return 0;
+    return result\ok::<int>(0);
 }
 
-fun delete(id: str) > int !> any {
-    final res = podman(["container", "inspect", "--format", "\{\{index .Config.Labels \"{USE_LABEL}\"}}", id]);
-    if (!res.ok) { return refuse(REFUSED, message: "there is no container {id}"); }
-    if (res.stdout != USE) { return refuse(REFUSED, message: "{id} was not created by on-linux, so it is not this script's to remove"); }
-    return proc\exec("podman", args: ["rm", id], opts: proc\ExecOptions{ allowFailure = true }).code;
+fun delete(id: str) > result\Result::<int> {
+    final inspected = podman(["container", "inspect", "--format", "\{\{index .Config.Labels \"{USE_LABEL}\"}}", id]);
+    if (inspected.error != null) { return result\fail::<int>(inspected.error!.message); }
+    final res = inspected.value!;
+    if (!res.ok) { return result\ok::<int>(refuse(REFUSED, message: "there is no container {id}")); }
+    if (res.stdout != USE) { return result\ok::<int>(refuse(REFUSED, message: "{id} was not created by on-linux, so it is not this script's to remove")); }
+    try {
+        return result\ok::<int>(proc\exec("podman", args: ["rm", id], opts: proc\ExecOptions{ allowFailure = true }).code);
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "podman rm {id}");
+    }
 }
 
 // run builds this tree's magus for the container unless binary names one already built.
-fun run(o: Options, hostOS: str, hostArch: str, binary: str = "") > int !> any {
-    final root = vcs\root();
-    final cwd = path\abs(".");
-    if (!under(cwd, dir: root)) {
-        return refuse(REFUSED, message: "{cwd} is outside the checkout {root}, and only the checkout is mounted");
-    }
-    var gitCommon = "";
-    if (vcs\name() == "git") {
-        final common = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts: vcs\CommandOptions{ quiet = true }).stdout;
-        if (!under(common, dir: root)) { gitCommon = common; }
-    }
-    final mise = fs\readFile("{root}/mise.toml");
-    final p = mut Plan{
-        name = "on-linux-{uuid\randomHex(6)}",
-        arch = hostArch,
-        root = root,
-        cwd = cwd,
-        gitCommon = gitCommon,
-        image = if (o.image != "") o.image else DEFAULT_IMAGE,
-        command = o.command,
-        envNames = o.envs,
-        miseEnv = miseEnv(mise),
-        keep = o.keep,
-        rootless = true,
-        user = "",
-        overlayMagus = fs\isFile("{root}/magus"),
-    };
-    final host: {str: str} = env\list();
-    final bad = checkEnv(p, host: host);
-    if (bad != "") { return refuse(REFUSED, message: bad); }
-
-    final unreachable = reach(hostOS);
-    if (unreachable != "") { return refuse(RELAY_FAILED, message: unreachable); }
-    var machine = "";
+fun run(o: Options, hostOS: str, hostArch: str, binary: str = "") > result\Result::<int> {
     try {
-        machine = hold(hostOS);
-    } catch (e: {str: str}) {
-        return refuse(RELAY_FAILED, message: "the podman machine did not come up: {e["message"] ?? ""}");
-    }
-    final info = serialize\jsonDecode(podman(["info", "--format", "json"]).stdout);
-    final kernel = info.q(["host", "kernel"]).stringValue();
-    if (!hasLandlock(kernel)) {
-        final fix = if (hostOS == "linux") "boot a Linux 5.13 or later kernel" else "run `podman machine os upgrade`";
-        return refuse(RELAY_FAILED, message: "kernel {kernel} predates landlock (5.13); {fix}");
-    }
-    p.rootless = info.q(["host", "security", "rootless"]).booleanValue();
-    if (p.rootless) {
-        final uid = info.q(["host", "idMappings", "uidmap"]).listValue()[0].q(["host_id"]).integerValue();
-        final gid = info.q(["host", "idMappings", "gidmap"]).listValue()[0].q(["host_id"]).integerValue();
-        p.user = "{uid}:{gid}";
-    }
+        final root = vcs\root();
+        final cwd = path\abs(".");
+        if (!under(cwd, dir: root)) {
+            return result\ok::<int>(refuse(REFUSED, message: "{cwd} is outside the checkout {root}, and only the checkout is mounted"));
+        }
+        var gitCommon = "";
+        if (vcs\name() == "git") {
+            final common = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-common-dir"], opts: vcs\CommandOptions{ quiet = true }).stdout;
+            if (!under(common, dir: root)) { gitCommon = common; }
+        }
+        final mise = fs\readFile("{root}/mise.toml");
+        final miseVars = miseEnv(mise);
+        if (miseVars.error != null) { return result\fail::<int>(miseVars.error!.message); }
+        final p = mut Plan{
+            name = "on-linux-{uuid\randomHex(6)}",
+            arch = hostArch,
+            root = root,
+            cwd = cwd,
+            gitCommon = gitCommon,
+            image = if (o.image != "") o.image else DEFAULT_IMAGE,
+            command = o.command,
+            envNames = o.envs,
+            miseEnv = miseVars.value!,
+            keep = o.keep,
+            rootless = true,
+            user = "",
+            overlayMagus = fs\isFile("{root}/magus"),
+        };
+        final host: {str: str} = env\list();
+        final bad = checkEnv(p, host: host);
+        if (bad != "") { return result\ok::<int>(refuse(REFUSED, message: bad)); }
 
-    var digest = "";
-    final inspect = podman(["image", "inspect", "--format", "\{\{.Architecture}} \{\{.Digest}}", p.image]);
-    if (inspect.ok) {
-        final fields = inspect.stdout.split(" ");
-        if (fields.len() == 2 and fields[0] == p.arch) { digest = fields[1]; }
-    }
-    if (!podman(["volume", "exists", volume(p.arch)]).ok) {
-        final made = podman(["volume", "create", "--label", "{USE_LABEL}={USE}", volume(p.arch)]);
-        if (!made.ok) { return refuse(RELAY_FAILED, message: "podman volume create failed: {made.stderr}"); }
-    }
-    fs\mkdirAll("{store(p)}/on-linux/run");
-    final unbuilt = if (binary == "") buildMagus(p) else placeMagus(p, source: binary);
-    if (unbuilt != "") { return refuse(RELAY_FAILED, message: "building magus for linux/{p.arch} failed, so nothing ran: {unbuilt}"); }
+        final reached = reach(hostOS);
+        if (reached.error != null) { return result\fail::<int>(reached.error!.message); }
+        if (reached.value! != "") { return result\ok::<int>(refuse(RELAY_FAILED, message: reached.value!)); }
+        final held = hold(hostOS);
+        if (held.error != null) {
+            return result\ok::<int>(refuse(RELAY_FAILED, message: "the podman machine did not come up: {held.error!.message}"));
+        }
+        final machine = held.value!;
+        final asked = podman(["info", "--format", "json"]);
+        if (asked.error != null) { return result\fail::<int>(asked.error!.message); }
+        final info = serialize\jsonDecode(asked.value!.stdout);
+        final kernel = info.q(["host", "kernel"]).stringValue();
+        if (!hasLandlock(kernel)) {
+            final fix = if (hostOS == "linux") "boot a Linux 5.13 or later kernel" else "run `podman machine os upgrade`";
+            return result\ok::<int>(refuse(RELAY_FAILED, message: "kernel {kernel} predates landlock (5.13); {fix}"));
+        }
+        p.rootless = info.q(["host", "security", "rootless"]).booleanValue();
+        if (p.rootless) {
+            final uid = info.q(["host", "idMappings", "uidmap"]).listValue()[0].q(["host_id"]).integerValue();
+            final gid = info.q(["host", "idMappings", "gidmap"]).listValue()[0].q(["host_id"]).integerValue();
+            p.user = "{uid}:{gid}";
+        }
 
-    final head = vcs\commit().short;
-    final tree = if (vcs\isDirty()) "{head}-dirty" else head;
-    log\info(effect(p, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree, machine: machine));
-    final left = leftBehind(p, hostNames: host.keys());
-    if (left.len() > 0) {
-        log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
-    }
+        var digest = "";
+        final inspect = podman(["image", "inspect", "--format", "\{\{.Architecture}} \{\{.Digest}}", p.image]);
+        if (inspect.error != null) { return result\fail::<int>(inspect.error!.message); }
+        if (inspect.value!.ok) {
+            final fields = inspect.value!.stdout.split(" ");
+            if (fields.len() == 2 and fields[0] == p.arch) { digest = fields[1]; }
+        }
+        final exists = podman(["volume", "exists", volume(p.arch)]);
+        if (exists.error != null) { return result\fail::<int>(exists.error!.message); }
+        if (!exists.value!.ok) {
+            final made = podman(["volume", "create", "--label", "{USE_LABEL}={USE}", volume(p.arch)]);
+            if (made.error != null) { return result\fail::<int>(made.error!.message); }
+            if (!made.value!.ok) { return result\ok::<int>(refuse(RELAY_FAILED, message: "podman volume create failed: {made.value!.stderr}")); }
+        }
+        fs\mkdirAll("{store(p)}/on-linux/run");
+        final built = if (binary == "") buildMagus(p) else placeMagus(p, source: binary);
+        if (built.error != null) { return result\fail::<int>(built.error!.message); }
+        final unbuilt = built.value!;
+        if (unbuilt != "") { return result\ok::<int>(refuse(RELAY_FAILED, message: "building magus for linux/{p.arch} failed, so nothing ran: {unbuilt}")); }
 
-    final res = proc\exec("podman", args: runArgv(p), opts: proc\ExecOptions{ allowFailure = true });
-    final marker = markers(p)[0];
-    final started = fs\exists(marker);
-    if (started) { fs\remove(marker); }
-    final code = exitStatus(res.code, started: started);
-    if (!started and code == RELAY_FAILED) {
-        log\error("on-linux: the command never started (podman exited {res.code})");
+        final head = vcs\commit().short;
+        final tree = if (vcs\isDirty()) "{head}-dirty" else head;
+        log\info(effect(p, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree, machine: machine));
+        final left = leftBehind(p, hostNames: host.keys());
+        if (left.len() > 0) {
+            log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
+        }
+
+        final res = proc\exec("podman", args: runArgv(p), opts: proc\ExecOptions{ allowFailure = true });
+        final marker = markers(p)[0];
+        final started = fs\exists(marker);
+        if (started) { fs\remove(marker); }
+        final code = exitStatus(res.code, started: started);
+        if (!started and code == RELAY_FAILED) {
+            log\error("on-linux: the command never started (podman exited {res.code})");
+        }
+        if (p.keep) {
+            log\info("on-linux: kept {p.name}; `magus buzz hack/remote/on-linux.buzz -- --delete {p.name}` removes it");
+        }
+        return result\ok::<int>(code);
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "running the command in a Linux container");
     }
-    if (p.keep) {
-        log\info("on-linux: kept {p.name}; `magus buzz hack/remote/on-linux.buzz -- --delete {p.name}` removes it");
-    }
-    return code;
 }
 
 export fun main(args: [str]) > void !> any {
-    var o = Options{envs = [<str>], command = [<str>]};
-    try {
-        o = parse(args);
-    } catch (e: str) {
-        log\error("on-linux: {e}\n{USAGE}");
+    final parsed = parse(args);
+    if (parsed.error != null) {
+        log\error("on-linux: {parsed.error!.message}\n{USAGE}");
         os\exit(REFUSED);
     }
+    final o = parsed.value!;
     if (o.help) {
         std\print(HELP);
         return;
@@ -530,23 +585,26 @@ export fun main(args: [str]) > void !> any {
     final host = os\platform();
     var code = 0;
     if (o.ls or o.delete != "") {
-        var unreachable = reach(host[0]);
+        final reached = reach(host[0]);
+        if (reached.error != null) { throw reached.error!.message; }
+        var unreachable = reached.value!;
         if (unreachable == "") {
-            try {
-                _ = hold(host[0]);
-            } catch (e: {str: str}) {
-                unreachable = "the podman machine did not come up: {e["message"] ?? ""}";
+            final held = hold(host[0]);
+            if (held.error != null) {
+                unreachable = "the podman machine did not come up: {held.error!.message}";
             }
         }
         if (unreachable != "") {
             code = refuse(RELAY_FAILED, message: unreachable);
-        } else if (o.ls) {
-            code = ls();
         } else {
-            code = delete(o.delete);
+            final done = if (o.ls) ls() else delete(o.delete);
+            if (done.error != null) { throw done.error!.message; }
+            code = done.value!;
         }
     } else {
-        code = run(o, hostOS: host[0], hostArch: host[1]);
+        final ran = run(o, hostOS: host[0], hostArch: host[1]);
+        if (ran.error != null) { throw ran.error!.message; }
+        code = ran.value!;
     }
     if (code != 0) { os\exit(code); }
 }
@@ -570,21 +628,21 @@ fun fixture() > mut Plan {
 }
 
 test "parse takes the options first and the rest as the command, verbatim" {
-    final o = parse(["--env", "NO_COLOR", "--keep", "magus", "run", "test", "--keep", "--env", "X", "--"]);
+    final o = parse(["--env", "NO_COLOR", "--keep", "magus", "run", "test", "--keep", "--env", "X", "--"]).value!;
     assert\equal(o.envs, want: ["NO_COLOR"], message: "envs");
     assert\equal(o.keep, want: true, message: "keep");
     assert\equal(o.command, want: ["magus", "run", "test", "--keep", "--env", "X", "--"], message: "the command keeps its own flags");
 }
 
 test "parse ends the options at a bare --" {
-    final o = parse(["--image", "alpine", "--", "--ls", "-x"]);
+    final o = parse(["--image", "alpine", "--", "--ls", "-x"]).value!;
     assert\equal(o.image, want: "alpine", message: "image");
     assert\equal(o.ls, want: false, message: "--ls after -- is the command's");
     assert\equal(o.command, want: ["--ls", "-x"], message: "command");
 }
 
 test "parse passes a command that starts with a word" {
-    final o = parse(["bash"]);
+    final o = parse(["bash"]).value!;
     assert\equal(o.command, want: ["bash"], message: "command");
 }
 
@@ -599,25 +657,20 @@ test "parse refuses what it cannot run" {
         "--ls and --delete are two requests; pass one": ["--ls", "--delete", "x"],
     };
     foreach (want, args in cases) {
-        var got = "";
-        try {
-            _ = parse(args);
-        } catch (e: str) {
-            got = e;
-        }
-        assert\equal(got, want: want, message: "{args}");
+        final got = parse(args);
+        assert\equal(got.error?.message ?? "", want: want, message: "{args}");
     }
 }
 
 test "parse reads --ls and --delete alone" {
-    assert\equal(parse(["--ls"]).ls, want: true, message: "ls");
-    assert\equal(parse(["--delete", "on-linux-1"]).delete, want: "on-linux-1", message: "delete");
-    assert\equal(parse(["--help", "whatever"]).help, want: true, message: "help wins");
+    assert\equal(parse(["--ls"]).value!.ls, want: true, message: "ls");
+    assert\equal(parse(["--delete", "on-linux-1"]).value!.delete, want: "on-linux-1", message: "delete");
+    assert\equal(parse(["--help", "whatever"]).value!.help, want: true, message: "help wins");
 }
 
 test "the environment comes from mise.toml" {
     final mise = fs\readFile("hack/testdata/on-linux/mise.toml");
-    assert\equal(miseEnv(mise), want: {"GOEXPERIMENT": "jsonv2"}, message: "[env] without mise's directives");
+    assert\equal(miseEnv(mise).value!, want: {"GOEXPERIMENT": "jsonv2"}, message: "[env] without mise's directives");
 }
 
 test "mounts: checkout and git common dir read-only, store over .magus, magus overlaid" {
@@ -724,8 +777,8 @@ test "the machine note says whether magus started the machine and when it stops"
 }
 
 test "anyRunning reads the machine list's Running field" {
-    assert\equal(anyRunning(`[{"Name": "a", "Running": false}, {"Name": "b", "Running": true}]`), want: true, message: "one running");
-    assert\equal(anyRunning(`[{"Name": "a", "Running": false}]`), want: false, message: "none running");
+    assert\equal(anyRunning(`[{"Name": "a", "Running": false}, {"Name": "b", "Running": true}]`).value!, want: true, message: "one running");
+    assert\equal(anyRunning(`[{"Name": "a", "Running": false}]`).value!, want: false, message: "none running");
 }
 
 test "a wedged machine's refusal carries the probe's words and the restart" {
@@ -737,12 +790,15 @@ test "a wedged machine's refusal carries the probe's words and the restart" {
 test "live: a command's exit status crosses unchanged" {
     final host = os\platform();
     final why = reach(host[0]);
-    if (why != "") {
-        assert\skip(why);
+    if (why.error != null) {
+        assert\skip(why.error!.message);
+    }
+    if (why.value! != "") {
+        assert\skip(why.value!);
     }
     // A stub stands in for magus: building one is a nested magus run, which a test under
     // buzz-test cannot start, and `sh -c` never calls it.
     final stub = "{fs\tempDir("on-linux-stub-")}/magus";
     fs\writeFile(stub, content: "#!/bin/sh\nexit 70\n");
-    assert\equal(run(parse(["sh", "-c", "uname -s | grep -qx Linux && exit 3"]), hostOS: host[0], hostArch: host[1], binary: stub), want: 3, message: "exit status");
+    assert\equal(run(parse(["sh", "-c", "uname -s | grep -qx Linux && exit 3"]).value!, hostOS: host[0], hostArch: host[1], binary: stub).value!, want: 3, message: "exit status");
 }

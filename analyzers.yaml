@@ -405,8 +405,6 @@ no-throw:
       hack/policy/proofread.buzz: 1
       hack/policy/stale.buzz: 7
       hack/policy/version-bumps.buzz: 2
-      hack/remote/on-actions.buzz: 16
-      hack/remote/on-linux.buzz: 10
       hack/retro/denials.buzz: 4
       hack/retro/denials_test.buzz: 1
       hack/retro/rule-precision.buzz: 17
