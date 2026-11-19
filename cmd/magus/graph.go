@@ -976,20 +976,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	var df *flaggen.GraphDiffFlags
 	pos, err := commandParse("graph diff", args, func(fs *flag.FlagSet) {
 		df = flaggen.BindGraphDiff(fs)
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph diff <baseline.json> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus graph diff --rev <revision> [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDiffDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The positional argument is a whole-graph export produced earlier with")
-			fmt.Fprintf(os.Stderr, "`%s`; the current working-tree graph is diffed against it.\n", hint.GraphExport.With("-o", "json"))
-			fmt.Fprintln(os.Stderr, "Symbol shards in the baseline are matched automatically; pass --global if it was global.")
-			fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
-			fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { graphDiffUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -1046,8 +1033,24 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 		return err
 	case outputName:
 		return emitNames(os.Stdout, knowledge.DiffNames(diff))
+	case outputText:
 	}
 	return knowledge.DiffText(os.Stdout, diff)
+}
+
+func graphDiffUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus graph diff <baseline.json> [flags]")
+	fmt.Fprintln(os.Stderr, "       magus graph diff --rev <revision> [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeGraphDiffDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "The positional argument is a whole-graph export produced earlier with")
+	fmt.Fprintf(os.Stderr, "`%s`; the current working-tree graph is diffed against it.\n", hint.GraphExport.With("-o", "json"))
+	fmt.Fprintln(os.Stderr, "Symbol shards in the baseline are matched automatically; pass --global if it was global.")
+	fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
+	fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
 }
 
 // diffBaseline resolves the base graph to diff against: either a git revision (--rev,

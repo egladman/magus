@@ -118,6 +118,32 @@ func Run(ctx context.Context, opts Options) error {
 // transcript above.
 const wheelRows = 3
 
+// applyRune reports whether the reader quit and whether the cursor moved.
+func applyRune(m *Model, r rune, sync Sync) (quit, moved bool) {
+	switch r {
+	case 'q':
+		return true, false
+	case ']':
+		moved = m.nextHunk()
+	case '[':
+		moved = m.previousHunk()
+	case '}':
+		moved = m.nextFile()
+	case '{':
+		moved = m.previousFile()
+	case 'v':
+		if change, ok := m.toggleViewed(); ok && sync != nil {
+			sync.SetViewed(change.Digest, change.On)
+		}
+	case '.':
+		m.toggleGenerated()
+	case 'n':
+		// What is new to this reader: no receipt covers it.
+		m.toggleSettled()
+	}
+	return false, moved
+}
+
 // apply folds one event into the model and tells the session what moved. It reports whether the
 // reader asked to leave.
 func apply(m *Model, ev termkit.Event, sync Sync) (quit bool) {
@@ -135,36 +161,20 @@ func apply(m *Model, ev termkit.Event, sync Sync) (quit bool) {
 			m.scroll(-wheelRows)
 		case termkit.MouseWheelDown:
 			m.scroll(wheelRows)
+		case termkit.MouseLeft, termkit.MouseMiddle, termkit.MouseNone, termkit.MouseRight:
 		}
 		return false
 	}
 	moved := false
 	switch ev.Key {
 	case termkit.KeyRune:
-		switch ev.Rune {
-		case 'q':
+		var quit bool
+		if quit, moved = applyRune(m, ev.Rune, sync); quit {
 			return true
-		case ']':
-			moved = m.nextHunk()
-		case '[':
-			moved = m.previousHunk()
-		case '}':
-			moved = m.nextFile()
-		case '{':
-			moved = m.previousFile()
-		case 'v':
-			if change, ok := m.toggleViewed(); ok && sync != nil {
-				sync.SetViewed(change.Digest, change.On)
-			}
-		case '.':
-			m.toggleGenerated()
-		case 'n':
-			// n for what is NEW to this reader: the files a receipt does not already cover at
-			// their current content. Folded by default, so the second pass opens on the work.
-			m.toggleSettled()
 		}
 	case termkit.KeyCtrlC, termkit.KeyCtrlD:
 		return true
+	case termkit.KeyBackspace, termkit.KeyCtrlU, termkit.KeyLeft, termkit.KeyRight, termkit.KeyTab, termkit.KeyUnknown:
 	case termkit.KeyEscape:
 		m.toggleOverview()
 	case termkit.KeyEnter:

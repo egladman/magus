@@ -127,6 +127,7 @@ func rowText(r Row, color bool) string {
 		return termkit.Colorize(r.Text, sgrHunkHead)
 	case RowLine:
 		return lineText(r)
+	case RowBlank, RowComment, RowFact, RowFold, RowSuggestion:
 	}
 	return r.Text
 }

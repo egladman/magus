@@ -140,20 +140,22 @@ func describeUsage() {
 		"`magus graph` for the dependency DAG and the knowledge graph (export, stats).")
 }
 
+func describeGraphUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus describe graph [flags] [project...]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.TargetGraphDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "A trailing list of project paths scopes the graph to those projects")
+	fmt.Fprintln(os.Stderr, "(cross-project edges to projects left out are dropped); default is all.")
+	fmt.Fprintln(os.Stderr, "A scoped -o markdown index leaves out the workspace-wide routing tables.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
 func describeGraph(ctx context.Context, root string, args []string) error {
 	pos, err := commandParse("describe graph", args, func(fs *flag.FlagSet) {
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe graph [flags] [project...]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.TargetGraphDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "A trailing list of project paths scopes the graph to those projects")
-			fmt.Fprintln(os.Stderr, "(cross-project edges to projects left out are dropped); default is all.")
-			fmt.Fprintln(os.Stderr, "A scoped -o markdown index leaves out the workspace-wide routing tables.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { describeGraphUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -226,6 +228,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			routing = &r
 		}
 		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, indexes, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
+	case outputText:
 	}
 
 	// text / wide
@@ -569,28 +572,19 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	// script gating on `--against` behaves identically whichever renderer it picked.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		if err := emitFormatted(opts, reports); err != nil {
-			return err
-		}
-		if mismatched {
-			return exit.Reported(exit.Failure)
-		}
-		return nil
+		err = emitFormatted(opts, reports)
 	case outputName:
 		names := make([]string, 0, len(reports))
 		for _, r := range reports {
 			names = append(names, r.Ref)
 		}
-		if err := emitNames(os.Stdout, names); err != nil {
-			return err
-		}
-		if mismatched {
-			return exit.Reported(exit.Failure)
-		}
-		return nil
+		err = emitNames(os.Stdout, names)
+	case outputText:
+		cache.WriteTargetCacheReports(os.Stdout, reports)
 	}
-
-	cache.WriteTargetCacheReports(os.Stdout, reports)
+	if err != nil {
+		return err
+	}
 	// --against is a comparison a script should be able to gate on, so a mismatch
 	// exits non-zero (the report above is the explanation, already printed).
 	if mismatched {
@@ -632,18 +626,20 @@ func describeTargets(ctx context.Context, root string) error {
 	return nil
 }
 
+func describeProjectsUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.ProjectDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
 func describeProjects(ctx context.Context, root string, args []string) error {
 	var pf *flaggen.DescribeProjectsFlags
 	pos, err := commandParse("describe projects", args, func(fs *flag.FlagSet) {
 		pf = flaggen.BindDescribeProjects(fs)
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe project[s] [<path>] [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.ProjectDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { describeProjectsUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -682,6 +678,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				names = append(names, p.Path)
 			}
 			return emitNames(os.Stdout, names)
+		case outputText:
 		}
 
 		// text / wide
@@ -711,6 +708,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			names = append(names, p.Path)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 
 	// text / wide

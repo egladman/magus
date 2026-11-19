@@ -34,6 +34,23 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func runUsage(fs *flag.FlagSet, rawTarget, targetName, spellFilter string) {
+	fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project... | --all] [-- <extra args>]\n", rawTarget)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintf(os.Stderr, "Run target %s for the selected projects.\n", targetName)
+	if spellFilter != "" {
+		fmt.Fprintf(os.Stderr, "Spell filter: only the %q spell runs.\n", spellFilter)
+	}
+	fmt.Fprint(os.Stderr, runHelp)
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+const runHelp = `With no project args: all projects (or cwd-scoped if inside one).
+Extra args after -- are forwarded to spells that honor them.
+
+`
+
 // runTarget dispatches `magus run <target> [projects...]`.
 func runTarget(ctx context.Context, root string, _ runConfig, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -106,19 +123,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 				break
 			}
 		}
-		fs.Usage = func() {
-			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project... | --all] [-- <extra args>]\n", rawTarget)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "Run target %s for the selected projects.\n", targetName)
-			if spellFilter != "" {
-				fmt.Fprintf(os.Stderr, "Spell filter: only the %q spell runs.\n", spellFilter)
-			}
-			fmt.Fprintln(os.Stderr, "With no project args: all projects (or cwd-scoped if inside one).")
-			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { runUsage(fs, rawTarget, targetName, spellFilter) }
 	})
 	if err != nil {
 		return err
@@ -479,6 +484,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), statuses, nil)
 	case outputName:
 		return emitProjectNames(m, targets)
+	case outputJSONL, outputText:
 	}
 	return nil
 }

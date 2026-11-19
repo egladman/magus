@@ -306,25 +306,8 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 		}
 		return emitFormatted(opts, rev)
 	case outputName:
-		// Left alone under --impact: -o name is the shape a shell loop reads, and one
-		// non-path line in it would break every one of them.
-		shown := make([]difftypes.File, 0, len(rev.Files))
-		for _, f := range rev.Files {
-			if f.Generated() && !rf.Generated {
-				continue
-			}
-			shown = append(shown, f)
-		}
-		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
-		// every unread hunk rather than every file that holds one.
-		if rev.Unread != nil {
-			return emitNames(os.Stdout, review.HunkNames(difftypes.Diff{Files: shown}))
-		}
-		paths := make([]string, 0, len(shown))
-		for _, f := range shown {
-			paths = append(paths, f.Path)
-		}
-		return emitNames(os.Stdout, paths)
+		return emitNames(os.Stdout, diffNames(rev, rf.Generated))
+	case outputText:
 	}
 	if rev.Unread != nil {
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
@@ -358,6 +341,25 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 func warnUnreadUnknown(ctx context.Context, u difftypes.Unread, source string, loadErr error) {
 	slog.WarnContext(ctx, review.UnreadLine(u, source),
 		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
+}
+
+// diffNames is what -o name prints; --impact leaves it alone.
+func diffNames(rev difftypes.Diff, generated bool) []string {
+	shown := make([]difftypes.File, 0, len(rev.Files))
+	for _, f := range rev.Files {
+		if f.Generated() && !generated {
+			continue
+		}
+		shown = append(shown, f)
+	}
+	if rev.Unread != nil {
+		return review.HunkNames(difftypes.Diff{Files: shown})
+	}
+	paths := make([]string, 0, len(shown))
+	for _, f := range shown {
+		paths = append(paths, f.Path)
+	}
+	return paths
 }
 
 // threadPrint is what printThread reads one thread from. The patch, the changeset annotation

@@ -23,22 +23,6 @@ exhaustive-switch:
   # Functions that may still hold a switch over a closed set that misses a member or keeps a default
   # arm. A count may only shrink; a function holding fewer switches than its row fails.
   baseline:
-    - {path: cmd/magus-configdocs/main.go, symbol: kindLabel}
-    - {path: cmd/magus-utils/module_decls.go, symbol: buzzArgType}
-    - {path: cmd/magus-utils/module_decls.go, symbol: buzzDefault}
-    - {path: cmd/magus-utils/module_decls.go, symbol: buzzZero}
-    - {path: cmd/magus/affected.go, symbol: affected}
-    - {path: cmd/magus/checkpoint.go, symbol: checkpointCommand}
-    - {path: cmd/magus/clean.go, symbol: cleanCommand}
-    - {path: cmd/magus/describe.go, symbol: describeGraph}
-    - {path: cmd/magus/describe.go, symbol: describeProjects, count: 2}
-    - {path: cmd/magus/describe.go, symbol: describeTargetCache}
-    - {path: cmd/magus/diff.go, symbol: renderDiff}
-    - {path: cmd/magus/graph.go, symbol: graphDiff}
-    - {path: cmd/magus/list.go, symbol: lsProjects}
-    - {path: cmd/magus/list.go, symbol: lsTargets}
-    - {path: cmd/magus/run.go, symbol: runTarget}
-    - {path: cmd/magus/session.go, symbol: invocationList}
     - {path: internal/guard/adoption.go, symbol: classifyCommandLine}
     - {path: internal/guard/apply_patch.go, symbol: judgePatchRest}
     - {path: internal/guard/copy_write.go, symbol: judgeCopyWrites}
@@ -73,9 +57,6 @@ exhaustive-switch:
     - {path: internal/guard/step.go, symbol: stepRuleJudgment}
     - {path: internal/guard/workspace_shell.go, symbol: matchWorkspaceShell}
     - {path: internal/guard/write.go, symbol: sayUnchecked}
-    - {path: internal/interactive/difftui/render.go, symbol: rowText}
-    - {path: internal/interactive/difftui/run.go, symbol: apply, count: 2}
-    - {path: internal/selfupdate/keyring.go, symbol: parseKeyring}
   # Switches a person accepted, each with the reason it stays.
   exits: []
 

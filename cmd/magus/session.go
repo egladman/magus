@@ -150,7 +150,12 @@ func invocationList(ctx context.Context, root string, args []string) error {
 			names = append(names, s.Invocation)
 		}
 		return emitNames(os.Stdout, names)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, invocationListRecord(ctx, root, dir, summaries, fold))
+}
+
+func invocationListRecord(ctx context.Context, root, dir string, summaries []session.Summary, fold session.Fold) map[string]any {
 	out := map[string]any{
 		"invocations": summaries,
 		"checkpoints": sessions.LatestCheckpoints(fold),
@@ -159,12 +164,10 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		"store":       dir,
 	}
 	if clock := promptCacheForCheckout(ctx, root, time.Now()); len(clock.Providers) > 0 {
-		// The prose the text view prints around these numbers stays out of the
-		// structured shape: a caller parsing this wants the instants, and phrasing
-		// them is the renderer's job.
+		// The text view's prose stays out of the structured shape.
 		out["prompt_cache"] = clock
 	}
-	return emitFormatted(opts, out)
+	return out
 }
 
 // localOrigin is this process's OS account, entering through e.

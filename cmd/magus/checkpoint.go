@@ -87,14 +87,36 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		c.Tree, _ = vcs.Checkpoint(ctx, wsRoot, res, false)
 	}
 
-	dir, err := sessions.Dir(wsRoot)
+	stored, recorded, err := recordCheckpoint(ctx, wsRoot, c)
 	if err != nil {
 		return err
+	}
+
+	switch opts.Format {
+	case outputText:
+		fmt.Fprintln(out, sessions.CheckpointRecordedLine(stored, recorded))
+		return nil
+	case outputName:
+		return emitNames(os.Stdout, []string{stored.Tree.Revision})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
+	}
+	// recorded travels with the record: a wrapper reading the structured form has no
+	// other way to tell a new checkpoint from one identical to the last.
+	return writeFormatted(out, opts, struct {
+		sessions.Checkpoint
+		Recorded bool `json:"recorded"`
+	}{Checkpoint: stored, Recorded: recorded})
+}
+
+func recordCheckpoint(ctx context.Context, wsRoot string, c sessions.Checkpoint) (sessions.Checkpoint, bool, error) {
+	dir, err := sessions.Dir(wsRoot)
+	if err != nil {
+		return sessions.Checkpoint{}, false, err
 	}
 	spawn := recorder.SpawnFromEnv()
 	lease, leaseFrom, err := guard.CheckoutLease(ctx, wsRoot, jobPlace)
 	if err != nil {
-		return fmt.Errorf("magus session checkpoint: %w", err)
+		return sessions.Checkpoint{}, false, fmt.Errorf("magus session checkpoint: %w", err)
 	}
 	origin := recorder.LocalOrigin(ctx)
 	origin.Host, origin.Session = c.Host, c.HostSession
@@ -109,22 +131,9 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		Spawner:   spawn.Spawner,
 	})
 	if err != nil {
-		return fmt.Errorf("magus session checkpoint: %w", err)
+		return sessions.Checkpoint{}, false, fmt.Errorf("magus session checkpoint: %w", err)
 	}
-
-	switch opts.Format {
-	case outputText:
-		fmt.Fprintln(out, sessions.CheckpointRecordedLine(stored, recorded))
-		return nil
-	case outputName:
-		return emitNames(os.Stdout, []string{stored.Tree.Revision})
-	}
-	// recorded travels with the record: a wrapper reading the structured form has no
-	// other way to tell a new checkpoint from one identical to the last.
-	return writeFormatted(out, opts, struct {
-		sessions.Checkpoint
-		Recorded bool `json:"recorded"`
-	}{Checkpoint: stored, Recorded: recorded})
+	return stored, recorded, nil
 }
 
 func checkpointUsage(w io.Writer) {

@@ -441,34 +441,41 @@ func optionalDefault(m std.Method, i int) (string, error) {
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
 func buzzArgType(t std.TypeTag) (string, error) {
+	if name := buzzTypeName(t); name != "" {
+		return name, nil
+	}
+	return "", fmt.Errorf("no Buzz annotation for type tag %d", t)
+}
+
+func buzzTypeName(t std.TypeTag) string {
 	switch t {
 	case std.TypeString:
-		return "str", nil
+		return "str"
 	case std.TypeInt, std.TypeIndex:
-		return "int", nil
+		return "int"
 	case std.TypeFloat:
-		return "double", nil
+		return "double"
 	case std.TypeBool:
-		return "bool", nil
+		return "bool"
 	case std.TypeStringSlice:
-		return "[str]", nil
+		return "[str]"
 	case std.TypeFloatSlice:
-		return "[double]", nil
+		return "[double]"
 	case std.TypeByteSlice:
-		return "[int]", nil
+		return "[int]"
 	case std.TypeStringSliceSlice:
-		return "[[str]]", nil
+		return "[[str]]"
 	case std.TypeStringMapMap:
-		return "{str: {str: str}}", nil
+		return "{str: {str: str}}"
 	case std.TypeStringMap:
-		return "{str: str}", nil
+		return "{str: str}"
 	case std.TypeAnyMap:
-		return "{str: any}", nil
+		return "{str: any}"
 	case std.TypeAny:
-		return "any", nil
-	default:
-		return "", fmt.Errorf("no Buzz annotation for type tag %d", t)
+		return "any"
+	case std.TypeInvalid:
 	}
+	return ""
 }
 
 // buzzDefault renders the default an optional parameter declares, so a caller may
@@ -508,26 +515,38 @@ func buzzDefault(a std.Arg) (string, error) {
 		}
 		return strconv.FormatBool(v), nil
 	case std.TypeInt, std.TypeIndex:
-		switch v := a.Default.(type) {
-		case int:
-			return strconv.Itoa(v), nil
-		case int64:
-			return strconv.FormatInt(v, 10), nil
-		default:
-			return "", mismatch()
+		if lit, ok := intLiteral(a.Default); ok {
+			return lit, nil
 		}
+		return "", mismatch()
 	case std.TypeFloat:
-		switch v := a.Default.(type) {
-		case float64:
-			return strconv.FormatFloat(v, 'f', -1, 64), nil
-		case int: // an integral default on a double parameter is not a mismatch
-			return strconv.FormatFloat(float64(v), 'f', -1, 64), nil
-		default:
-			return "", mismatch()
+		if lit, ok := floatLiteral(a.Default); ok {
+			return lit, nil
 		}
-	default:
-		return "", fmt.Errorf("no Buzz literal for a default on type tag %d", a.Type)
+		return "", mismatch()
+	case std.TypeAny, std.TypeAnyMap, std.TypeByteSlice, std.TypeFloatSlice, std.TypeInvalid, std.TypeStringMap, std.TypeStringMapMap, std.TypeStringSlice, std.TypeStringSliceSlice:
 	}
+	return "", fmt.Errorf("no Buzz literal for a default on type tag %d", a.Type)
+}
+
+func intLiteral(v any) (string, bool) {
+	switch n := v.(type) {
+	case int:
+		return strconv.Itoa(n), true
+	case int64:
+		return strconv.FormatInt(n, 10), true
+	}
+	return "", false
+}
+
+func floatLiteral(v any) (string, bool) {
+	switch n := v.(type) {
+	case float64:
+		return strconv.FormatFloat(n, 'f', -1, 64), true
+	case int:
+		return strconv.FormatFloat(float64(n), 'f', -1, 64), true
+	}
+	return "", false
 }
 
 // buzzZero is the default for an optional parameter that declares none.
@@ -548,8 +567,13 @@ func buzzZero(t std.TypeTag) (string, error) {
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.
 		return "null", nil
+	case std.TypeAnyMap, std.TypeByteSlice, std.TypeFloatSlice, std.TypeInvalid, std.TypeStringMap, std.TypeStringMapMap, std.TypeStringSlice, std.TypeStringSliceSlice:
 	}
-	// A list or map zero is its annotation as an empty literal.
+	return buzzEmptyLiteral(t)
+}
+
+// buzzEmptyLiteral is a list or map zero: its annotation as an empty literal.
+func buzzEmptyLiteral(t std.TypeTag) (string, error) {
 	typ, err := buzzArgType(t)
 	if err != nil || (typ[0] != '[' && typ[0] != '{') {
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)

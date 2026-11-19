@@ -66,6 +66,23 @@ func ls(ctx context.Context, root string, args []string) error {
 	return lsProjects(ctx, root)
 }
 
+// lsTargetNames is the runnable spelling of each target, deduped across the
+// selection: the list you pipe into `magus run <name>`.
+func lsTargetNames(out describe.LsTargetsOutput) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, p := range out.Projects {
+		for _, t := range p.Targets {
+			if !seen[t.Name] {
+				seen[t.Name] = true
+				names = append(names, t.Name)
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 func lsProjects(ctx context.Context, root string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -120,22 +137,15 @@ func lsProjects(ctx context.Context, root string) error {
 			names = append(names, p.Path)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
+	printLsProjects(out)
+	return nil
+}
 
-	// ls ENUMERATES; describe EXPLAINS one thing in full. That split is the whole
-	// design here, and it decides what this loop prints.
-	//
-	// A reader runs `magus ls` to see what is here and what they can run, so the
-	// line carries the project, its toolchain, and its targets. Declared sources
-	// and outputs are cache machinery: real, but not what anyone opens a listing
-	// for, and this repo's root project alone declares 15 source globs, which
-	// buried the targets underneath them. They are not lost: `magus describe
-	// project <path>` is the full record and always was, and `magus where` gives
-	// the absolute path. Printing them here duplicated dedicated commands and made
-	// the boundary between the verbs mush.
-	//
-	// -o json is deliberately NOT trimmed. A human is choosing what to read next;
-	// a program asked for the record.
+// printLsProjects lists each project with its toolchain and targets.
+// Sources and outputs are cache machinery; `describe project` carries them.
+func printLsProjects(out describe.LsOutput) {
 	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
 	for _, p := range out.Projects {
 		label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
@@ -152,13 +162,9 @@ func lsProjects(ctx context.Context, root string) error {
 		}
 		fmt.Println()
 	}
-	// Name the neighbors once, so the boundary between the verbs is discoverable
-	// from the command itself rather than only from the docs. Rendered through
-	// hint's command registry (not hand-written) so a subcommand rename cannot leave a hint here
-	// pointing at a command that no longer exists; the drift test walks these.
+	// The neighbors come from hint's registry, so a rename cannot strand them.
 	fmt.Printf("what a target does:   %s\n", hint.LsTargets.With("<project>"))
 	fmt.Printf("one project in full:  %s\n", hint.DescribeProject.With("<project>"))
-	return nil
 }
 
 // lsTargets answers "what can I run here". Nothing else did: `describe targets` is
@@ -213,20 +219,8 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
-		// The runnable spelling, deduped across the selection: this is the list you
-		// pipe into `magus run <name>`, so it carries names and nothing else.
-		seen := map[string]bool{}
-		var names []string
-		for _, p := range out.Projects {
-			for _, t := range p.Targets {
-				if !seen[t.Name] {
-					seen[t.Name] = true
-					names = append(names, t.Name)
-				}
-			}
-		}
-		slices.Sort(names)
-		return emitNames(os.Stdout, names)
+		return emitNames(os.Stdout, lsTargetNames(out))
+	case outputText:
 	}
 
 	for _, p := range out.Projects {
