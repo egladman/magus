@@ -4,6 +4,7 @@
 namespace search;
 
 import "fs";
+import "result";
 import "io";
 import "std";
 import "encoding/url" as urlcodec;
@@ -19,30 +20,55 @@ import "engine/page" as _;
 // renderSyntaxRow renders one Search Syntax entry: a clickable example that runs itself
 // (search.js intercepts the ?q= link) beside a plain-language description. The query is
 // url-encoded for the href and entity-escaped for its <code> display.
-fun renderSyntaxRow(q: str, desc: str) > str !> any {
-    return template\render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
-`, {"qEnc": urlcodec\encode(q), "q": q, "desc": desc});
+fun renderSyntaxRow(q: str, desc: str) > result\Result::<str> {
+    try {
+        return result\ok::<str>(template\render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
+`, {"qEnc": urlcodec\encode(q), "q": q, "desc": desc}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 
-export fun renderSearchPage(site: Site) > void !> any {
-    final root = rootPrefix("search/index.md", site);
-    // Always-open syntax reference: on the dedicated page the query language is first-class,
-    // not a disclosure to hunt for. Each example is a real ?q= link, so it works without JS
-    // and doubles as teach-by-doing once search.js runs it in place. Rows are pre-rendered
-    // <dt>/<dd> (renderSyntaxRow does the urlEncode); results come first in the DOM so a
-    // narrow-screen collapse stacks them above the reference.
-    final rows = renderSyntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
-        + renderSyntaxRow("-tag:spell", "Exclude pages with a tag.")
-        + renderSyntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
-        + renderSyntaxRow("title:install", "Scope a term to one field: title, description, or text.")
-        + renderSyntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
-        + renderSyntaxRow("cache -go", "Require a word; drop another with a leading minus.")
-        + renderSyntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
-        + renderSyntaxRow("tag:(cache OR build)", "Group several values for one field.")
-        + renderSyntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
-        + renderSyntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.");
-    final body = template\render(`<h1>Search</h1>
+export fun renderSearchPage(site: Site) > result\Result::<bool> {
+    try {
+        final root = rootPrefix("search/index.md", site);
+        // Always-open syntax reference: on the dedicated page the query language is first-class,
+        // not a disclosure to hunt for. Each example is a real ?q= link, so it works without JS
+        // and doubles as teach-by-doing once search.js runs it in place. Rows are pre-rendered
+        // <dt>/<dd> (renderSyntaxRow does the urlEncode); results come first in the DOM so a
+        // narrow-screen collapse stacks them above the reference.
+        final r1 = renderSyntaxRow("tag:build", "Pages carrying the exact tag \"build\".");
+        if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r2 = renderSyntaxRow("-tag:spell", "Exclude pages with a tag.");
+        if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r3 = renderSyntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.");
+        if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r4 = renderSyntaxRow("title:install", "Scope a term to one field: title, description, or text.");
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r5 = renderSyntaxRow("\"exact phrase\"", "Match words that appear together, in order.");
+        if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r6 = renderSyntaxRow("cache -go", "Require a word; drop another with a leading minus.");
+        if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r7 = renderSyntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.");
+        if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r8 = renderSyntaxRow("tag:(cache OR build)", "Group several values for one field.");
+        if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r9 = renderSyntaxRow("title:mag*", "Wildcards: * stands for any run of characters.");
+        if (r9.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r10 = renderSyntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.");
+        if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final rows = r1.value!
+            + r2.value!
+            + r3.value!
+            + r4.value!
+            + r5.value!
+            + r6.value!
+            + r7.value!
+            + r8.value!
+            + r9.value!
+            + r10.value!;
+        final body = template\render(`<h1>Search</h1>
 <div id="search-page">
   <div class="search-page-inputwrap">
     <input id="search-page-input" class="search-input" type="text" placeholder="Search docs... (try tag:cache)" autocomplete="off" spellcheck="false" aria-label="Search the documentation" aria-controls="search-page-results">
@@ -66,12 +92,18 @@ export fun renderSearchPage(site: Site) > void !> any {
   <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
 </div>
 `, {"root": root, "gh": site.inputs.config.repoURL, "rows": rows});
-    final title = "Search";
-    final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
-    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], "", site);
-    fs\mkdirAll(site.inputs.outDir + "/search");
-    final of = io\File.open(site.inputs.outDir + "/search/index.html", io\FileMode.write);
-    of.write(doc);
-    of.close();
-    std\print("  search page -> " + site.inputs.outDir + "/search/index.html");
+        final title = "Search";
+        final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
+        final r11 = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], "", site);
+        if (r11.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r11.value!;
+        fs\mkdirAll(site.inputs.outDir + "/search");
+        final of = io\File.open(site.inputs.outDir + "/search/index.html", io\FileMode.write);
+        of.write(doc);
+        of.close();
+        std\print("  search page -> " + site.inputs.outDir + "/search/index.html");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }

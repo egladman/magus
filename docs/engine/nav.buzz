@@ -5,6 +5,7 @@
 namespace nav;
 
 import "assert";
+import "result";
 import "io";
 import "markdown";
 import "template";
@@ -39,106 +40,114 @@ import "../libs/ssg/date" as _;
 // Neither hit means the page is genuinely new (nothing has committed it yet), and the
 // honest answer there is to say nothing: attributing it to HEAD claims the page
 // changed in a commit that never touched it, which is both false and the drift bug.
-export fun renderCommitFooter(path: str, site: Site) > str !> any {
-    var rec = site.inputs.metaCommits[site.inputs.metaPrefix + path];
-    if (rec == null) {
-        rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.outDir + "/" + path];
-    }
-    if (rec == null) { return ""; }
-    final parts = rec.split("|");
-    final cFull = parts[0];
-    final cShort = parts[1];
-    final cStamp = parts[2];
-    // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
-    // typography sets the muted look, no custom classes. One inline line (no newlines).
-    var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
-        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.inputs.config.repoURL, "full": cFull, "short": cShort});
+export fun renderCommitFooter(path: str, site: Site) > result\Result::<str> {
+    try {
+        var rec = site.inputs.metaCommits[site.inputs.metaPrefix + path];
+        if (rec == null) {
+            rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.outDir + "/" + path];
+        }
+        if (rec == null) { return result\ok::<str>(""); }
+        final parts = rec.split("|");
+        final cFull = parts[0];
+        final cShort = parts[1];
+        final cStamp = parts[2];
+        // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
+        // typography sets the muted look, no custom classes. One inline line (no newlines).
+        var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
+            {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.inputs.config.repoURL, "full": cFull, "short": cShort});
 
-    // <details> disclosure of the EARLIER commits (the latest is named above, so it is
-    // skipped to avoid a double reference). Semantic markup only. Gated on a real history
-    // entry; synthesized or single-commit pages show nothing extra.
-    final histKey = site.inputs.metaPrefix + path;
-    final hist = site.inputs.metaHistory[histKey];
-    if (hist != null and hist.len() > 0) {
-        var earlier: mut [{str: any}] = mut [<{str: any}>];
-        foreach (row in hist) {
-            final histParts = row.split("|");
-            if (histParts.len() >= 3 and histParts[0] != cFull) {
-                final histRec = mut {<str: any>};
-                histRec["full"] = histParts[0];
-                histRec["short"] = histParts[1];
-                histRec["stampAttr"] = histParts[2];
-                histRec["stampDisplay"] = formatISOShort(histParts[2]);
-                var rowSubj = "";
-                if (histParts.len() >= 4) { rowSubj = histParts[3]; }
-                histRec["subj"] = rowSubj;
-                earlier.append(histRec);
+        // <details> disclosure of the EARLIER commits (the latest is named above, so it is
+        // skipped to avoid a double reference). Semantic markup only. Gated on a real history
+        // entry; synthesized or single-commit pages show nothing extra.
+        final histKey = site.inputs.metaPrefix + path;
+        final hist = site.inputs.metaHistory[histKey];
+        if (hist != null and hist.len() > 0) {
+            var earlier: mut [{str: any}] = mut [<{str: any}>];
+            foreach (row in hist) {
+                final histParts = row.split("|");
+                if (histParts.len() >= 3 and histParts[0] != cFull) {
+                    final histRec = mut {<str: any>};
+                    histRec["full"] = histParts[0];
+                    histRec["short"] = histParts[1];
+                    histRec["stampAttr"] = histParts[2];
+                    histRec["stampDisplay"] = formatISOShort(histParts[2]);
+                    var rowSubj = "";
+                    if (histParts.len() >= 4) { rowSubj = histParts[3]; }
+                    histRec["subj"] = rowSubj;
+                    earlier.append(histRec);
+                }
+            }
+            if (earlier.len() > 0) {
+                line = line + template\render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
+                    {"count": earlier.len(), "earlier": earlier, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch, "histKey": histKey});
             }
         }
-        if (earlier.len() > 0) {
-            line = line + template\render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
-                {"count": earlier.len(), "earlier": earlier, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch, "histKey": histKey});
-        }
+        return result\ok::<str>(line);
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return line;
 }
 
 // renderTocList builds the "On this page" block from a page's h2/h3 headings (goldmark
 // puts each on its own line with a slug id); h3s nest under their h2. Returns "" below
 // three headings - too little for a sidebar. Returns just the title + list; renderPage()
 // wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.
-export fun renderTocList(content: str) > str !> any {
-    final lines = content.split("\n");
-    var nHead = 0;
-    foreach (line in lines) {
-        if (line.startsWith("<h2 id=\"") or line.startsWith("<h3 id=\"")) { nHead = nHead + 1; }
-    }
-    if (nHead < 3) { return ""; }
+export fun renderTocList(content: str) > result\Result::<str> {
+    try {
+        final lines = content.split("\n");
+        var nHead = 0;
+        foreach (line in lines) {
+            if (line.startsWith("<h2 id=\"") or line.startsWith("<h3 id=\"")) { nHead = nHead + 1; }
+        }
+        if (nHead < 3) { return result\ok::<str>(""); }
 
-    final items = mut [<TocItem>];
-    foreach (line in lines) {
-        var lvl = 0;
-        if (line.startsWith("<h2 id=\"")) { lvl = 2; }
-        if (line.startsWith("<h3 id=\"")) { lvl = 3; }
-        if (lvl != 0) {
-            final after = line.sub(8);                 // past `<hN id="`
-            final q = after.indexOf("\"");
-            final gt = line.indexOf(">");
-            if (q != null) {
-                if (gt != null) {
-                    final id = after.sub(0, q);
-                    final inner = line.sub(gt + 1);
-                    final end = inner.indexOf("</h");
-                    var label = inner;
-                    if (end != null) { label = inner.sub(0, end); }
-                    // TOC entries are plain text: drop inline <code>/<strong>/<em> so
-                    // nothing in the sidebar looks bold, italic, or code-styled.
-                    final plain = stripTags(label);
-                    // plain is escaped already: the link shows
-                    // it as markup, the title decoded.
-                    final link = element("a", attrs: [attr("href", value: "#" + id),
-                        attr("title", value: decodeEntities(plain))], children: [markup(plain)]);
-                    final last = items.len() - 1;
-                    if (lvl == 3 and last >= 0 and items[last].section) {
-                        items[last].subs.append(element("li", attrs: [<Attr>], children: [link]));
-                    } else {
-                        items.append(mut TocItem{ link = link, section = lvl == 2, subs = mut [<Node>] });
+        final items = mut [<TocItem>];
+        foreach (line in lines) {
+            var lvl = 0;
+            if (line.startsWith("<h2 id=\"")) { lvl = 2; }
+            if (line.startsWith("<h3 id=\"")) { lvl = 3; }
+            if (lvl != 0) {
+                final after = line.sub(8);                 // past `<hN id="`
+                final q = after.indexOf("\"");
+                final gt = line.indexOf(">");
+                if (q != null) {
+                    if (gt != null) {
+                        final id = after.sub(0, q);
+                        final inner = line.sub(gt + 1);
+                        final end = inner.indexOf("</h");
+                        var label = inner;
+                        if (end != null) { label = inner.sub(0, end); }
+                        // TOC entries are plain text: drop inline <code>/<strong>/<em> so
+                        // nothing in the sidebar looks bold, italic, or code-styled.
+                        final plain = stripTags(label);
+                        // plain is escaped already: the link shows
+                        // it as markup, the title decoded.
+                        final link = element("a", attrs: [attr("href", value: "#" + id),
+                            attr("title", value: decodeEntities(plain))], children: [markup(plain)]);
+                        final last = items.len() - 1;
+                        if (lvl == 3 and last >= 0 and items[last].section) {
+                            items[last].subs.append(element("li", attrs: [<Attr>], children: [link]));
+                        } else {
+                            items.append(mut TocItem{ link = link, section = lvl == 2, subs = mut [<Node>] });
+                        }
                     }
                 }
             }
         }
-    }
-    final top = mut [<Node>];
-    foreach (item in items) {
-        final children = mut [item.link];
-        if (item.subs.len() > 0) {
-            children.append(element("ul", attrs: [<Attr>], children: item.subs));
+        final top = mut [<Node>];
+        foreach (item in items) {
+            final children = mut [item.link];
+            if (item.subs.len() > 0) {
+                children.append(element("ul", attrs: [<Attr>], children: item.subs));
+            }
+            top.append(element("li", attrs: [<Attr>], children: children));
         }
-        top.append(element("li", attrs: [<Attr>], children: children));
-    }
-    return template\render(`        <p class="toc-title">On this page</p>
+        return result\ok::<str>(template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
-`, {"ul": render(element("ul", attrs: [<Attr>], children: top))});
+`, {"ul": render(element("ul", attrs: [<Attr>], children: top))}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // TocItem is one top-level table-of-contents entry: an h2 with the h3s
@@ -155,40 +164,44 @@ object TocItem {
 // read; docs, playground, 404, and offline get the theme row alone. console-settings.js
 // opens/closes the panel and persists poll/host; theme.js drives #theme-cycle (it owns the
 // pre-paint theme set()). Both scripts no-op when their controls are absent.
-export fun renderSettingsPanel(showConsole: bool) > str !> any {
-    var rows = "";
-    if (showConsole) {
-        rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
+export fun renderSettingsPanel(showConsole: bool) > result\Result::<str> {
+    try {
+        var rows = "";
+        if (showConsole) {
+            rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
           <label class="settings-row"><span>Server host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
 `;
-    }
-    // "Saved locally" rather than "in this browser": these apps install as a PWA, so
-    // browser framing reads wrong. Changing a console pref raises a "reload to apply" toast
-    // (console-settings.js), so the note stays short and identical on every app.
-    final note = "Saved locally.";
-    // Reading preferences, on every app. Checkboxes rather than the theme's cycle
-    // button: each is a plain two-state opt-out, where a cycle would hide half its states
-    // behind a click. theme.js seeds and persists them (and applies both pre-paint).
-    //
-    // These are what make this a panel rather than a lone toggle: motion is an
-    // accessibility control the OS can only answer for every site at once, and the
-    // glossary highlight is the site's most opinionated visual choice.
-    final reading = `          <div class="settings-row"><label for="settings-motion">Reduce motion</label><input id="settings-motion" type="checkbox" role="switch"></div>
+        }
+        // "Saved locally" rather than "in this browser": these apps install as a PWA, so
+        // browser framing reads wrong. Changing a console pref raises a "reload to apply" toast
+        // (console-settings.js), so the note stays short and identical on every app.
+        final note = "Saved locally.";
+        // Reading preferences, on every app. Checkboxes rather than the theme's cycle
+        // button: each is a plain two-state opt-out, where a cycle would hide half its states
+        // behind a click. theme.js seeds and persists them (and applies both pre-paint).
+        //
+        // These are what make this a panel rather than a lone toggle: motion is an
+        // accessibility control the OS can only answer for every site at once, and the
+        // glossary highlight is the site's most opinionated visual choice.
+        final reading = `          <div class="settings-row"><label for="settings-motion">Reduce motion</label><input id="settings-motion" type="checkbox" role="switch"></div>
           <div class="settings-row"><label for="settings-glossary">Glossary highlights</label><input id="settings-glossary" type="checkbox" role="switch" checked></div>
 `;
-    // Reports rather than configures: the offline claim on the landing page is checkable
-    // here instead of asserted. offline-status.js fills it; without JS or a service worker
-    // the row stays hidden rather than lying about the cache.
-    final status = `          <div class="settings-row settings-status" id="settings-offline" hidden><span>Offline</span><span class="settings-status-value" id="settings-offline-value"></span></div>
+        // Reports rather than configures: the offline claim on the landing page is checkable
+        // here instead of asserted. offline-status.js fills it; without JS or a service worker
+        // the row stays hidden rather than lying about the cache.
+        final status = `          <div class="settings-row settings-status" id="settings-offline" hidden><span>Offline</span><span class="settings-status-value" id="settings-offline-value"></span></div>
 `;
-    final tmpl = `        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        final tmpl = `        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
           <h2 class="settings-title">Settings</h2>
           <p class="settings-note">{{note}}</p>
 {{{rows}}}{{{reading}}}          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
 {{{status}}}        
         </div>`;
-    return template\render(tmpl, {"note": note, "rows": rows, "reading": reading, "status": status});
+        return result\ok::<str>(template\render(tmpl, {"note": note, "rows": rows, "reading": reading, "status": status}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // renderSiteNav renders the shared top bar (brand + section links + settings gear). One
@@ -197,20 +210,21 @@ export fun renderSettingsPanel(showConsole: bool) > str !> any {
 // the Reference drawer trigger only where the page ships #ref-drawer + ref-drawer.js and
 // loads console.css (which sizes the icon button): the docs and playground. The 404 and
 // offline pages have no reference content, so they pass false to omit the button.
-export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > str !> any {
-    // On mobile the section links collapse behind a menu button - a plain Pico .outline
-    // <button>, NOT a <details> (whose accordion styling fights us), so nav.js toggles the
-    // dropdown and it inherits the button look. Brand + theme toggle stay outside, always
-    // shown. The toggle icon swaps hamburger -> X when open (CSS keys off .nav-open); both
-    // glyphs ship, one shows at a time. The "Menu" caption and closing hint are mobile-only
-    // (aria-hidden on desktop). Home is an explicit link because the brand mark's accessible
-    // name is just "magus". A backtick raw string holds the Mustache verbatim.
-    //
-    // The brand mark is INLINE SVG, not the old <picture>/hat.webp/hat.png trio. It is the same
-    // hat the app icons use, and fill="currentColor" is the point: the mark takes the wordmark's
-    // own color, so it can never disagree with it, never fail a theme, and needs no second file
-    // or media query. It also inherits hover and focus color, which the raster could not.
-    final tmpl = `  <header class="site-header">
+export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > result\Result::<str> {
+    try {
+        // On mobile the section links collapse behind a menu button - a plain Pico .outline
+        // <button>, NOT a <details> (whose accordion styling fights us), so nav.js toggles the
+        // dropdown and it inherits the button look. Brand + theme toggle stay outside, always
+        // shown. The toggle icon swaps hamburger -> X when open (CSS keys off .nav-open); both
+        // glyphs ship, one shows at a time. The "Menu" caption and closing hint are mobile-only
+        // (aria-hidden on desktop). Home is an explicit link because the brand mark's accessible
+        // name is just "magus". A backtick raw string holds the Mustache verbatim.
+        //
+        // The brand mark is INLINE SVG, not the old <picture>/hat.webp/hat.png trio. It is the same
+        // hat the app icons use, and fill="currentColor" is the point: the mark takes the wordmark's
+        // own color, so it can never disagree with it, never fail a theme, and needs no second file
+        // or media query. It also inherits hover and focus color, which the raster could not.
+        final tmpl = `  <header class="site-header">
     <nav class="container">
       <ul><li><a href="{{root}}index.html" class="contrast"><strong>{{title}}<span class="brand-dot">.</span></strong></a></li></ul>
       <div class="nav-right">
@@ -228,34 +242,39 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     </nav>
   </header>
 `;
-    // The nav is data-driven from Config: each entry's href is root + suffix (depth-relative)
-    // and the active section is the one whose key matches `active`. A blank entry (the
-    // console, the only off-docs link) opens in a new tab, with the arrow off that flag.
-    // A GROUP renders as a Pico details.dropdown - native disclosure, so it is keyboard
-    // reachable and needs no JavaScript, which is the same reason the rest of this bar is
-    // classless Pico. Its summary is NOT a link: the group label names a category, and making
-    // it navigable too would give one control two meanings.
-    //
-    // A group counts as current when any CHILD is the active section, so the bar still shows
-    // where you are once a section is one level down. That is the thing grouping most easily
-    // loses, and it is why the flag is computed here rather than left to the template.
-    final links = mut [<{str: any}>];
-    foreach (nl in cfg.navLinks) {
-        if (nl.children.len() > 0) {
-            final kids = mut [<{str: any}>];
-            var anyCurrent = false;
-            foreach (c in nl.children) {
-                final isCur = active == c.key;
-                if (isCur) { anyCurrent = true; }
-                kids.append({"href": root + c.suffix, "label": c.label, "current": isCur});
+        // The nav is data-driven from Config: each entry's href is root + suffix (depth-relative)
+        // and the active section is the one whose key matches `active`. A blank entry (the
+        // console, the only off-docs link) opens in a new tab, with the arrow off that flag.
+        // A GROUP renders as a Pico details.dropdown - native disclosure, so it is keyboard
+        // reachable and needs no JavaScript, which is the same reason the rest of this bar is
+        // classless Pico. Its summary is NOT a link: the group label names a category, and making
+        // it navigable too would give one control two meanings.
+        //
+        // A group counts as current when any CHILD is the active section, so the bar still shows
+        // where you are once a section is one level down. That is the thing grouping most easily
+        // loses, and it is why the flag is computed here rather than left to the template.
+        final links = mut [<{str: any}>];
+        foreach (nl in cfg.navLinks) {
+            if (nl.children.len() > 0) {
+                final kids = mut [<{str: any}>];
+                var anyCurrent = false;
+                foreach (c in nl.children) {
+                    final isCur = active == c.key;
+                    if (isCur) { anyCurrent = true; }
+                    kids.append({"href": root + c.suffix, "label": c.label, "current": isCur});
+                }
+                links.append({"group": true, "label": nl.label, "children": kids, "current": anyCurrent});
+            } else {
+                links.append({"group": false, "href": root + nl.suffix, "label": nl.label,
+                              "current": active == nl.key, "blank": nl.blank});
             }
-            links.append({"group": true, "label": nl.label, "children": kids, "current": anyCurrent});
-        } else {
-            links.append({"group": false, "href": root + nl.suffix, "label": nl.label,
-                          "current": active == nl.key, "blank": nl.blank});
         }
+        final r1 = renderSettingsPanel(false);
+        if (r1.error -> failed) { return result\Result::<str>{ error = failed }; }
+        return result\ok::<str>(template\render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": r1.value!}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return template\render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
 // renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the
@@ -387,38 +406,39 @@ export fun conventionAnchorsIn(html: str) > {str: bool} {
 // so the first page rendered gets the same treatment as the last. A page with no terms
 // falls back to the full glossary rather than an empty drawer - "nothing here" reads as
 // broken, and on a page with no shared vocabulary the whole glossary is the honest answer.
-export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > str !> any {
-    loadReferenceContent(site);
-    var glossary = _refGlossary;
-    final joined = site.inputs.pageTerms[canonUrl];
-    if (joined != null and joined! != "") {
-        var keep: mut {str: bool} = mut {};
-        foreach (a in joined!.split("||")) { keep[a] = true; }
-        final scoped = keepGlossarySections(_refGlossary, keep);
-        if (scoped != "") { glossary = scoped; }
-    }
-    // split().join(), not while(indexOf) replace(): this runs on every page, and the
-    // loop form copies the whole embedded drawer once per marker - each copy a
-    // distinct string the VM interns forever (see cleanBody in lib/html.buzz).
-    glossary = glossary.split("%%ROOT%%").join(root);
+export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > result\Result::<str> {
+    try {
+        loadReferenceContent(site);
+        var glossary = _refGlossary;
+        final joined = site.inputs.pageTerms[canonUrl];
+        if (joined != null and joined! != "") {
+            var keep: mut {str: bool} = mut {};
+            foreach (a in joined!.split("||")) { keep[a] = true; }
+            final scoped = keepGlossarySections(_refGlossary, keep);
+            if (scoped != "") { glossary = scoped; }
+        }
+        // split().join(), not while(indexOf) replace(): this runs on every page, and the
+        // loop form copies the whole embedded drawer once per marker - each copy a
+        // distinct string the VM interns forever (see cleanBody in lib/html.buzz).
+        glossary = glossary.split("%%ROOT%%").join(root);
 
-    // Same scoping, same reason - and here the saving is larger, because the conventions
-    // page is one document rather than 47 short entries. Inlined whole it was 15.6 KB on
-    // every one of the site's pages, about a fifth of an average page, to answer a question
-    // at most three of its sections could be asked. A page links at most the three markers
-    // injectConventionHints places, so the drawer carries those and nothing else.
-    //
-    // A page with no markers gets a pointer instead of the whole document. That differs from
-    // the glossary's fallback above, which shows everything: an unfamiliar WORD can appear on
-    // a page the linker did not tag, so the full list is still a useful answer there. A
-    // convention you are not looking at is not.
-    var conventions = keepConventionSections(_refConventions, conventionAnchorsIn(content));
-    if (conventions == "") {
-        conventions = "<p>This page uses none of the site's convention markers. The full set is on the "
-            + "<a href=\"%%ROOT%%conventions/\">conventions page</a>.</p>";
-    }
-    conventions = conventions.split("%%ROOT%%").join(root);
-    final tmpl = `  <details class="ref-section" open>
+        // Same scoping, same reason - and here the saving is larger, because the conventions
+        // page is one document rather than 47 short entries. Inlined whole it was 15.6 KB on
+        // every one of the site's pages, about a fifth of an average page, to answer a question
+        // at most three of its sections could be asked. A page links at most the three markers
+        // injectConventionHints places, so the drawer carries those and nothing else.
+        //
+        // A page with no markers gets a pointer instead of the whole document. That differs from
+        // the glossary's fallback above, which shows everything: an unfamiliar WORD can appear on
+        // a page the linker did not tag, so the full list is still a useful answer there. A
+        // convention you are not looking at is not.
+        var conventions = keepConventionSections(_refConventions, conventionAnchorsIn(content));
+        if (conventions == "") {
+            conventions = "<p>This page uses none of the site's convention markers. The full set is on the "
+                + "<a href=\"%%ROOT%%conventions/\">conventions page</a>.</p>";
+        }
+        conventions = conventions.split("%%ROOT%%").join(root);
+        final tmpl = `  <details class="ref-section" open>
     <summary>Glossary</summary>
     <div class="disclosure-body ref-embed">{{{glossary}}}</div>
   </details>
@@ -437,25 +457,32 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
     </div>
   </aside>
 `;
-    return template\render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
+        return result\ok::<str>(template\render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // renderSiteFooter renders the shared one-line attribution footer: root-relative site links
 // (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The
 // License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root,
 // so the site links resolve at any depth.
-export fun renderSiteFooter(root: str, site: Site) > str !> any {
-    // Clusters spread across the footer's width: this site's pages, the browser apps, and
-    // the project/external links. The app entry is the Console (single entry point, matching
-    // the header); dashboard/graph/logs/activity are its tabs. Backtick raw string holds the
-    // Mustache verbatim (double-quoted "{{x}}" would collide with Buzz's {expr}).
-    final tmpl = `  <footer class="site-footer container">
+export fun renderSiteFooter(root: str, site: Site) > result\Result::<str> {
+    try {
+        // Clusters spread across the footer's width: this site's pages, the browser apps, and
+        // the project/external links. The app entry is the Console (single entry point, matching
+        // the header); dashboard/graph/logs/activity are its tabs. Backtick raw string holds the
+        // Mustache verbatim (double-quoted "{{x}}" would collide with Buzz's {expr}).
+        final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
     <small class="footer-group"><a href="{{root}}console/">Console</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
-    return template\render(tmpl, {"root": root, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch});
+        return result\ok::<str>(template\render(tmpl, {"root": root, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch}));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 
@@ -467,30 +494,34 @@ export fun renderSiteFooter(root: str, site: Site) > str !> any {
 // Takes root (the relative-depth prefix) like every other chrome renderer, because the
 // optional second link points at a post on this site. The release link stays an absolute
 // GitHub URL, so the bar needed no depth until the post link existed.
-export fun renderAnnouncementBar(root: str, site: Site) > str !> any {
-    final latest = site.latestStable();
-    if (latest == null) { return ""; }
-    final ver = latest!.version;
-    // data-released lets the client expire the bar; the decision cannot be made here.
-    // Comparing against "today" at build time would change the emitted HTML every day
-    // and fail the drift gate on a tree nobody touched. Client-side also means a site
-    // built once and served for months still stops announcing a stale release.
-    final released = latest!.date;
-    final tmpl = `  <div id="announcement-bar" data-version="{{ver}}" data-released="{{released}}">
+export fun renderAnnouncementBar(root: str, site: Site) > result\Result::<str> {
+    try {
+        final latest = site.latestStable();
+        if (latest == null) { return result\ok::<str>(""); }
+        final ver = latest!.version;
+        // data-released lets the client expire the bar; the decision cannot be made here.
+        // Comparing against "today" at build time would change the emitted HTML every day
+        // and fail the drift gate on a tree nobody touched. Client-side also means a site
+        // built once and served for months still stops announcing a stale release.
+        final released = latest!.date;
+        final tmpl = `  <div id="announcement-bar" data-version="{{ver}}" data-released="{{released}}">
     <div class="container">
       <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a>{{#hasPost}} &middot; <a href="{{root}}{{post}}">Read the post</a>{{/hasPost}}</span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
 `;
-    return template\render(tmpl, {
-        "ver": ver,
-        "released": released,
-        "gh": site.inputs.config.repoURL,
-        "root": root,
-        "post": site.inputs.releaseBlogURL,
-        "hasPost": site.inputs.releaseBlogURL != "",
-    });
+        return result\ok::<str>(template\render(tmpl, {
+            "ver": ver,
+            "released": released,
+            "gh": site.inputs.config.repoURL,
+            "root": root,
+            "post": site.inputs.releaseBlogURL,
+            "hasPost": site.inputs.releaseBlogURL != "",
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 test "conventionAnchorsIn reads the anchors the injected hints point at" {

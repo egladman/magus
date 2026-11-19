@@ -6,6 +6,7 @@
 namespace blog;
 
 import "markdown";
+import "result";
 import "fs";
 import "io";
 import "std";
@@ -35,16 +36,20 @@ import "site/diagrams/all" as diagrams;
 // predicate was copied across four walks (walkBlog, the hasBlogPosts precompute,
 // renderBlogPager, the landing's recentPosts) and the draft test lived in exactly one of
 // them, so the front door already hid a draft the blog index went on listing.
-export fun isPublishablePost(site: Site, name: str) > bool !> any {
-    if (name.endsWith(".md") == false or name == "index.md" or name.startsWith("_")) {
-        return false;
+export fun isPublishablePost(site: Site, name: str) > result\Result::<bool> {
+    try {
+        if (name.endsWith(".md") == false or name == "index.md" or name.startsWith("_")) {
+            return result\ok::<bool>(false);
+        }
+        final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        if (fm.q("draft").booleanValue()) { return result\ok::<bool>(false); }
+        return result\ok::<bool>(isFuturePost(fm.q("date").stringValue(), site.inputs.metaStamp) == false);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
-    final md = f.readAll();
-    f.close();
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    if (fm.q("draft").booleanValue()) { return false; }
-    return isFuturePost(fm.q("date").stringValue(), site.inputs.metaStamp) == false;
 }
 
 // findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names
@@ -56,24 +61,31 @@ export fun isPublishablePost(site: Site, name: str) > bool !> any {
 // schema, so an optional docs-only field has no business there. It also means a post can be
 // written and merged ahead of the tag it names, and starts announcing itself the moment
 // that tag exists.
-export fun findReleasePost(site: Site) > void !> any {
-    // Cleared up front, like loadReleases does with site.releases: `serve` re-renders into
-    // a Site that already ran, and a post that stops claiming the release must stop linking.
-    site.inputs.releaseBlogURL = "";
-    final latest = site.latestStable();
-    if (latest == null) { return; }
-    final ver = latest!.version;
-    final dir = fs\join(site.inputs.root, site.inputs.blog);
-    if (fs\isDir(dir) == false) { return; }
-    foreach (name in fs\listDir(dir)) {
-        if (isPublishablePost(site, name) == false) { continue; }
-        final f = io\File.open(dir + "/" + name, io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        if (serialize\jsonDecode(markdown\frontmatter(md)).q("release").stringValue() == ver) {
-            site.inputs.releaseBlogURL = site.inputs.blog + "/" + blogURLPath(name) + "/";
-            return;
+export fun findReleasePost(site: Site) > result\Result::<bool> {
+    try {
+        // Cleared up front, like loadReleases does with site.releases: `serve` re-renders into
+        // a Site that already ran, and a post that stops claiming the release must stop linking.
+        site.inputs.releaseBlogURL = "";
+        final latest = site.latestStable();
+        if (latest == null) { return result\ok::<bool>(true); }
+        final ver = latest!.version;
+        final dir = fs\join(site.inputs.root, site.inputs.blog);
+        if (fs\isDir(dir) == false) { return result\ok::<bool>(true); }
+        foreach (name in fs\listDir(dir)) {
+            final r12 = isPublishablePost(site, name);
+            if (r12.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            if (r12.value! == false) { continue; }
+            final f = io\File.open(dir + "/" + name, io\FileMode.read);
+            final md = f.readAll();
+            f.close();
+            if (serialize\jsonDecode(markdown\frontmatter(md)).q("release").stringValue() == ver) {
+                site.inputs.releaseBlogURL = site.inputs.blog + "/" + blogURLPath(name) + "/";
+                return result\ok::<bool>(true);
+            }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -81,175 +93,202 @@ export fun findReleasePost(site: Site) > void !> any {
 // basename (e.g. "2026-07-01-hello-blog.md"); the URL is date-scoped blog/YYYY/MM/DD/slug/
 // (via blogURLPath), so permalinks sort by date and never collide across years. Post
 // metadata is captured into site.blogPosts for the index page.
-export fun renderBlogPost(base: str, site: Site) > void !> any {
-    final rel = site.inputs.blog + "/" + base;
-    final f = io\File.open(site.inputs.root + "/" + rel, io\FileMode.read);
-    final md = f.readAll();
-    f.close();
+export fun renderBlogPost(base: str, site: Site) > result\Result::<bool> {
+    try {
+        final rel = site.inputs.blog + "/" + base;
+        final f = io\File.open(site.inputs.root + "/" + rel, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
 
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    var title = fm.q("title").stringValue();
-    if (title == "") { title = deriveTitle(md, base); }
-    final date = fm.q("date").stringValue();
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        var title = fm.q("title").stringValue();
+        if (title == "") { title = deriveTitle(md, base); }
+        final date = fm.q("date").stringValue();
 
-    // Frontmatter `date` is the byline; the filename's YYYY-MM-DD- prefix is the canonical
-    // URL scope. Require them to agree so the permalink and the printed date can't drift; a
-    // missing or mismatched prefix is a hard error, not a silent divergence.
-    final dateDir = blogDateDirectory(base);
-    if (date != "") {
-        // Frontmatter dates decode as full RFC3339; take the calendar day and re-slash it to
-        // compare against the filename's "YYYY/MM/DD" scope. (str.replace is first-match only,
-        // so build by split.)
-        final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
-        var fmDir = "";
-        if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
-        if (dateDir == null) {
-            throw "blog: " + rel + " has frontmatter date " + date
-                + " but the filename lacks a matching YYYY-MM-DD- prefix";
+        // Frontmatter `date` is the byline; the filename's YYYY-MM-DD- prefix is the canonical
+        // URL scope. Require them to agree so the permalink and the printed date can't drift; a
+        // missing or mismatched prefix is a hard error, not a silent divergence.
+        final dateDir = blogDateDirectory(base);
+        if (date != "") {
+            // Frontmatter dates decode as full RFC3339; take the calendar day and re-slash it to
+            // compare against the filename's "YYYY/MM/DD" scope. (str.replace is first-match only,
+            // so build by split.)
+            final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
+            var fmDir = "";
+            if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
+            if (dateDir == null) {
+                return result\fail::<bool>("blog: " + rel + " has frontmatter date " + date
+                    + " but the filename lacks a matching YYYY-MM-DD- prefix");
+            }
+            if (dateDir != fmDir) {
+                return result\fail::<bool>("blog: " + rel + " frontmatter date " + date
+                    + " disagrees with the filename date prefix");
+            }
         }
-        if (dateDir != fmDir) {
-            throw "blog: " + rel + " frontmatter date " + date
-                + " disagrees with the filename date prefix";
+
+        final slug = blogSlug(base);
+        final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
+        final url = site.inputs.blog + "/" + urlPath + "/";
+        // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
+        // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
+        // cross-references (../../documentation/) resolve at the post's real depth.
+        final r5 = drillHrefs(site.inputs.blog + "/" + urlPath, site: site);
+        if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r4 = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath),
+            hrefs: r5.value!);
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final html = r4.value!;
+
+        var desc = fm.q("description").stringValue();
+        if (desc == "") { desc = deriveDescription(html); }
+        if (desc == "") { desc = site.inputs.config.description; }
+
+        // Dateline: a byline under the post's H1 - date, author, and a permalink to the canonical
+        // URL. Inside the <article> after the title, so it reads as post metadata, not page
+        // chrome. Guarded on an H1 and a date; a title-less or undated post skips it.
+        var article = html;
+        final h1End = html.indexOf("</h1>");
+        if (h1End != null and date != "") {
+            final author = fm.q("author").stringValue();
+            var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
+                + "\">" + blogDate(date) + "</time>";
+            if (author != "") { meta = meta + " &middot; " + author; }
+            meta = meta + " &middot; <a href=\"" + site.inputs.config.baseURL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+            final cut = h1End + 5;   // length of "</h1>"
+            article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
         }
+
+        // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
+        final r6 = renderBlogPager(base, site);
+        if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final pager = r6.value!;
+
+        final r8 = parseTags(md);
+        if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r9 = generatedFrom(md);
+        if (r9.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r7 = renderPage(title, desc, article, rel, pager, url, readingTime(md), r8.value!, r9.value!, site);
+        if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r7.value!;
+        makeOutputDir(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath, rel, url);
+        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath + "/index.html", io\FileMode.write);
+        of.write(doc);
+        of.close();
+        fs\writeFile(fs\join(site.inputs.outDir, site.inputs.blog, urlPath, "index.md"), md);
+
+        final r10 = site.addRecord(url, title, desc, md);
+        if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
+
+        final r11 = parseTags(md);
+        if (r11.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        site.blogPosts.append(BlogPost{
+            base = base, slug = slug, urlPath = urlPath, title = title,
+            date = date, description = desc, url = url, tags = r11.value!.join("||"),
+        });
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-
-    final slug = blogSlug(base);
-    final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
-    final url = site.inputs.blog + "/" + urlPath + "/";
-    // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
-    // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
-    // cross-references (../../documentation/) resolve at the post's real depth.
-    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath),
-        hrefs: drillHrefs(site.inputs.blog + "/" + urlPath, site: site));
-
-    var desc = fm.q("description").stringValue();
-    if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = site.inputs.config.description; }
-
-    // Dateline: a byline under the post's H1 - date, author, and a permalink to the canonical
-    // URL. Inside the <article> after the title, so it reads as post metadata, not page
-    // chrome. Guarded on an H1 and a date; a title-less or undated post skips it.
-    var article = html;
-    final h1End = html.indexOf("</h1>");
-    if (h1End != null and date != "") {
-        final author = fm.q("author").stringValue();
-        var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
-            + "\">" + blogDate(date) + "</time>";
-        if (author != "") { meta = meta + " &middot; " + author; }
-        meta = meta + " &middot; <a href=\"" + site.inputs.config.baseURL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
-        final cut = h1End + 5;   // length of "</h1>"
-        article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
-    }
-
-    // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
-    final pager = renderBlogPager(base, site);
-
-    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), generatedFrom(md), site);
-    makeOutputDir(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath, rel, url);
-    final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath + "/index.html", io\FileMode.write);
-    of.write(doc);
-    of.close();
-    fs\writeFile(fs\join(site.inputs.outDir, site.inputs.blog, urlPath, "index.md"), md);
-
-    site.addRecord(url, title, desc, md);
-    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
-
-    site.blogPosts.append(BlogPost{
-        base = base, slug = slug, urlPath = urlPath, title = title,
-        date = date, description = desc, url = url, tags = parseTags(md).join("||"),
-    });
 }
 
 
 // renderBlogPager renders the prev/next links between posts, ordered by date newest-first
 // so "prev" is newer and "next" is older (timeline intuition). Falls back to filename order
 // when a post lacks a date.
-fun renderBlogPager(base: str, site: Site) > str !> any {
-    // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
-    // during the walk). Newest first.
-    var posts: mut [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
-        if (isPublishablePost(site, name)) {
-            final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
-            final md = f.readAll();
-            f.close();
-            final fm = serialize\jsonDecode(markdown\frontmatter(md));
-            var t = fm.q("title").stringValue();
-            if (t == "") { t = deriveTitle(md, name); }
-            posts.append(BlogPost{ base = name, date = fm.q("date").stringValue(), title = t });
+fun renderBlogPager(base: str, site: Site) > result\Result::<str> {
+    try {
+        // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
+        // during the walk). Newest first.
+        var posts: mut [BlogPost] = mut [<BlogPost>];
+        foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
+            final r3 = isPublishablePost(site, name);
+            if (r3.error -> failed) { return result\Result::<str>{ error = failed }; }
+            if (r3.value!) {
+                final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
+                final md = f.readAll();
+                f.close();
+                final fm = serialize\jsonDecode(markdown\frontmatter(md));
+                var t = fm.q("title").stringValue();
+                if (t == "") { t = deriveTitle(md, name); }
+                posts.append(BlogPost{ base = name, date = fm.q("date").stringValue(), title = t });
+            }
         }
-    }
-    if (posts.len() < 2) { return ""; }
-    // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
-    // posts share a date.
-    final ordered = posts.sort(fun (a: BlogPost, b: BlogPost) > bool {
-        if (a.date != b.date) { return strLess(b.date, a.date); }
-        return strLess(a.base, b.base);
-    });
+        if (posts.len() < 2) { return result\ok::<str>(""); }
+        // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
+        // posts share a date.
+        final ordered = posts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+            if (a.date != b.date) { return strLess(b.date, a.date); }
+            return strLess(a.base, b.base);
+        });
 
-    var pos = -1;
-    var i = 0;
-    while (i < ordered.len()) {
-        if (ordered[i].base == base) { pos = i; }
-        i = i + 1;
-    }
-    if (pos < 0) { return ""; }
+        var pos = -1;
+        var i = 0;
+        while (i < ordered.len()) {
+            if (ordered[i].base == base) { pos = i; }
+            i = i + 1;
+        }
+        if (pos < 0) { return result\ok::<str>(""); }
 
-    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link isn't a flat
-    // "../<slug>/": relativePath walks from this post's dir to the target and writes the
-    // minimal climb, correct across any shared date prefix.
-    final fromDir = site.inputs.blog + "/" + blogURLPath(base);
-    var body = "";
-    // Previous = newer post (earlier in ordered), Next = older post (later).
-    if (pos > 0) {
-        final prev = ordered[pos - 1];
-        final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(prev.base) + "/");
-        body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
-            + "<span class=\"page-nav-dir\">Newer</span>"
-            + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
+        // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link isn't a flat
+        // "../<slug>/": relativePath walks from this post's dir to the target and writes the
+        // minimal climb, correct across any shared date prefix.
+        final fromDir = site.inputs.blog + "/" + blogURLPath(base);
+        var body = "";
+        // Previous = newer post (earlier in ordered), Next = older post (later).
+        if (pos > 0) {
+            final prev = ordered[pos - 1];
+            final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(prev.base) + "/");
+            body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
+                + "<span class=\"page-nav-dir\">Newer</span>"
+                + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
+        }
+        if (pos < ordered.len() - 1) {
+            final nxt = ordered[pos + 1];
+            final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(nxt.base) + "/");
+            body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
+                + "<span class=\"page-nav-dir\">Older</span>"
+                + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
+        }
+        if (body == "") { return result\ok::<str>(""); }
+        return result\ok::<str>("    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    if (pos < ordered.len() - 1) {
-        final nxt = ordered[pos + 1];
-        final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(nxt.base) + "/");
-        body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
-            + "<span class=\"page-nav-dir\">Older</span>"
-            + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
-    }
-    if (body == "") { return ""; }
-    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
 }
 
 
 // renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected
 // posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under
 // renderPage(), so it inherits nav/breadcrumb/footer.
-export fun renderBlogIndex(site: Site) > void !> any {
-    // Newest first, tiebreak by base for determinism.
-    final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
-        if (a.date != b.date) { return strLess(b.date, a.date); }
-        return strLess(a.base, b.base);
-    });
+export fun renderBlogIndex(site: Site) > result\Result::<bool> {
+    try {
+        // Newest first, tiebreak by base for determinism.
+        final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+            if (a.date != b.date) { return strLess(b.date, a.date); }
+            return strLess(a.base, b.base);
+        });
 
-    // View-model per post; date/description are optional (gated by hasDate/hasDesc).
-    var posts: mut [{str: any}] = mut [<{str: any}>];
-    foreach (p in sorted) {
-        final rec = mut {<str: any>};
-        rec["urlPath"] = p.urlPath;
-        rec["title"] = p.title;
-        rec["hasDate"] = p.date != "";
-        if (p.date != "") {
-            rec["dateAttr"] = blogDateAttr(p.date);
-            rec["dateDisplay"] = blogDate(p.date);
+        // View-model per post; date/description are optional (gated by hasDate/hasDesc).
+        var posts: mut [{str: any}] = mut [<{str: any}>];
+        foreach (p in sorted) {
+            final rec = mut {<str: any>};
+            rec["urlPath"] = p.urlPath;
+            rec["title"] = p.title;
+            rec["hasDate"] = p.date != "";
+            if (p.date != "") {
+                rec["dateAttr"] = blogDateAttr(p.date);
+                rec["dateDisplay"] = blogDate(p.date);
+            }
+            rec["hasDesc"] = p.description != "";
+            rec["description"] = p.description;
+            posts.append(rec);
         }
-        rec["hasDesc"] = p.description != "";
-        rec["description"] = p.description;
-        posts.append(rec);
-    }
-    // Same card component the home page uses for "Recent writing", so the two read as
-    // one system rather than a styled front door and a bare <ul> behind it. The date
-    // takes .landing-card-mark, the slot the home page's 01/02/03 numerals sit in - it
-    // is the small muted monospace label, and a date is exactly that.
-    final body = template\render(`<h1>Blog</h1>
+        // Same card component the home page uses for "Recent writing", so the two read as
+        // one system rather than a styled front door and a bare <ul> behind it. The date
+        // takes .landing-card-mark, the slot the home page's 01/02/03 numerals sit in - it
+        // is the small muted monospace label, and a date is exactly that.
+        final body = template\render(`<h1>Blog</h1>
 <p class="landing-section-lede">Why things are the way they are, at more length than a documentation page should go to.</p>
 {{#hasPosts}}
 <div class="landing-cards landing-cards-compact">
@@ -263,27 +302,34 @@ export fun renderBlogIndex(site: Site) > void !> any {
 {{/hasPosts}}
 `, {"hasPosts": sorted.len() > 0, "posts": posts});
 
-    final title = "Blog";
-    final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
-    final url = site.inputs.blog + "/";
-    // srcRel is a blog/index.md marker (no source file) so renderPage() picks the "blog"
-    // nav key and roots the breadcrumb. Alias its commit-footer key to the newest post's
-    // commit so "Last updated" is a stable snapshot, not HEAD - which would drift every
-    // commit and break the drift gate.
-    if (sorted.len() > 0) {
-        final rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/" + sorted[0].base];
-        if (rec != null) { site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/index.md"] = rec; }
+        final title = "Blog";
+        final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
+        final url = site.inputs.blog + "/";
+        // srcRel is a blog/index.md marker (no source file) so renderPage() picks the "blog"
+        // nav key and roots the breadcrumb. Alias its commit-footer key to the newest post's
+        // commit so "Last updated" is a stable snapshot, not HEAD - which would drift every
+        // commit and break the drift gate.
+        if (sorted.len() > 0) {
+            final rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/" + sorted[0].base];
+            if (rec != null) { site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/index.md"] = rec; }
+        }
+        final r1 = renderPage(title, desc, body, site.inputs.blog + "/index.md", "", url, "", mut [], "", site);
+        if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r1.value!;
+        fs\mkdirAll(fs\join(site.inputs.outDir, site.inputs.blog));
+        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/index.html", io\FileMode.write);
+        of.write(doc);
+        of.close();
+        // A real page, so it belongs in the search index and sitemap. No frontmatter
+        // tags/description; the resolved desc above rides through.
+        site.pageUrls[url] = true;
+        // Build a fake mini record so addRecord's shape stays consistent.
+        final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
+        final r2 = site.addRecord(url, title, desc, recStub);
+        if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        std\print("  blog index -> " + site.inputs.outDir + "/" + site.inputs.blog + "/index.html");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    final doc = renderPage(title, desc, body, site.inputs.blog + "/index.md", "", url, "", mut [], "", site);
-    fs\mkdirAll(fs\join(site.inputs.outDir, site.inputs.blog));
-    final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/index.html", io\FileMode.write);
-    of.write(doc);
-    of.close();
-    // A real page, so it belongs in the search index and sitemap. No frontmatter
-    // tags/description; the resolved desc above rides through.
-    site.pageUrls[url] = true;
-    // Build a fake mini record so addRecord's shape stays consistent.
-    final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
-    site.addRecord(url, title, desc, recStub);
-    std\print("  blog index -> " + site.inputs.outDir + "/" + site.inputs.blog + "/index.html");
 }

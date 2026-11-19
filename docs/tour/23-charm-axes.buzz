@@ -23,6 +23,7 @@
 // with `run publish:cd,stable,unstable`.
 
 import "magus";
+import "result";
 import "semver";
 
 magus\project({});
@@ -35,10 +36,15 @@ fun version() > str { return "1.4.0-rc.2"; }
 // Two charms that answer one question are a mistake worth REPORTING, not resolving. WS is
 // this workspace's own code prefix - magus refuses the MGS prefix, which is its closed
 // catalog, so a workspace diagnostic can never render as though magus documented it.
-fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
-    if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
-        magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b + "` charms both answer "
-            + question + " - name one");
+fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > result\Result::<bool> {
+    try {
+        if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
+            magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b + "` charms both answer "
+                + question + " - name one");
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -48,25 +54,30 @@ fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str
 // field. That is why naming both needs no special case beyond the guard above - a version
 // either carries a prerelease component or it does not, so one of the two assertions would
 // fail on its own anyway.
-fun channel(ctx: magus\Context) > str !> any {
-    exclusiveCharms(ctx, a: "stable", b: "unstable", code: "WS1002",
-        question: "which channel to publish to");
+fun channel(ctx: magus\Context) > result\Result::<str> {
+    try {
+        final r2 = exclusiveCharms(ctx, a: "stable", b: "unstable", code: "WS1002",
+            question: "which channel to publish to");
+        if (r2.error -> failed) { return result\Result::<str>{ error = failed }; }
 
-    final wantStable = ctx.hasCharm("stable");
-    final wantUnstable = ctx.hasCharm("unstable");
-    if (!wantStable and !wantUnstable) { return "commit"; }
+        final wantStable = ctx.hasCharm("stable");
+        final wantUnstable = ctx.hasCharm("unstable");
+        if (!wantStable and !wantUnstable) { return result\ok::<str>("commit"); }
 
-    final pre = semver\parse(version()).prerelease;
-    if (wantStable and pre != "") {
-        magus\raise(magus\diagnosticCode("WS1003"), message: "`" + version() + "` carries the prerelease `" + pre
-            + "`, so it cannot go to the stable channel - that is the one a moving tag follows");
+        final pre = semver\parse(version()).prerelease;
+        if (wantStable and pre != "") {
+            magus\raise(magus\diagnosticCode("WS1003"), message: "`" + version() + "` carries the prerelease `" + pre
+                + "`, so it cannot go to the stable channel - that is the one a moving tag follows");
+        }
+        if (wantUnstable and pre == "") {
+            magus\raise(magus\diagnosticCode("WS1004"), message: "`" + version()
+                + "` is a stable version, so `unstable` would file it under the wrong channel");
+        }
+        if (wantStable) { return result\ok::<str>("stable"); }
+        return result\ok::<str>("unstable");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    if (wantUnstable and pre == "") {
-        magus\raise(magus\diagnosticCode("WS1004"), message: "`" + version()
-            + "` is a stable version, so `unstable` would file it under the wrong channel");
-    }
-    if (wantStable) { return "stable"; }
-    return "unstable";
 }
 
 // TWO axes, one charm each, and neither answers the other's question:
@@ -82,7 +93,9 @@ export fun publish(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("publish: built " + version() + ", pushed nothing (add the cd charm to deliver)");
         return;
     }
-    final ch = channel(ctx);
+    final r1 = channel(ctx);
+    if (r1.error -> failed) { magus\raise(magus\diagnosticCode(failed.code), message: failed.message); }
+    final ch = r1.value!;
     if (ch == "commit") {
         magus\log.info("publish: " + version() + " -> commit channel, tagged by hash, one registry");
         return;

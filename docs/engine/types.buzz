@@ -474,18 +474,25 @@ export object Site {
     // alias pass catches a redirect shadowing a real page). Also records the index.html in
     // writtenPaths (root's url is bare "index.html", every other ends in "/") so
     // pruneStaleOutputs knows the page is current.
-    fun addRecord(url: str, title: str, desc: str, md: str) > void !> any {
-        this.pageUrls[url] = true;
-        var filePath = url;
-        if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
-        this.writtenPaths[filePath] = true;
-        final rec = mut {<str: any>};
-        rec["url"] = url;
-        rec["title"] = title;
-        rec["text"] = cleanBody(markdown\stripFrontmatter(md));
-        rec["tags"] = parseTags(md);
-        if (desc != "") { rec["description"] = desc; }
-        this.searchRecords.append(serialize\jsonEncode(serialize\Boxed.init(rec)));
+    fun addRecord(url: str, title: str, desc: str, md: str) > result\Result::<bool> {
+        try {
+            this.pageUrls[url] = true;
+            var filePath = url;
+            if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
+            this.writtenPaths[filePath] = true;
+            final rec = mut {<str: any>};
+            rec["url"] = url;
+            rec["title"] = title;
+            rec["text"] = cleanBody(markdown\stripFrontmatter(md));
+            final r10 = parseTags(md);
+            if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            rec["tags"] = r10.value!;
+            if (desc != "") { rec["description"] = desc; }
+            this.searchRecords.append(serialize\jsonEncode(serialize\Boxed.init(rec)));
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
+        }
     }
 
     // collectAlias records that the clean old path `alias` should redirect to
@@ -506,73 +513,103 @@ export object Site {
     // writeAliases writes one redirect stub per collected alias (after the walk, so
     // every real page URL is known for the collision guard). It throws if an alias
     // would shadow a real generated page.
-    fun writeAliases() > void !> any {
-        foreach (a in this.aliasTarget.keys()) {
-            if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
-                throw "alias \"" + a + "\" collides with a real page at the same path";
+    fun writeAliases() > result\Result::<bool> {
+        try {
+            foreach (a in this.aliasTarget.keys()) {
+                if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
+                    return result\fail::<bool>("alias \"" + a + "\" collides with a real page at the same path");
+                }
+                makeOutputDir(this.inputs.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
+                final rel = relativePath(a, this.aliasTarget[a]);
+                final csp = cspForRedirectStub(redirectScript(rel));
+                fs\writeFile(fs\join(this.inputs.outDir, a, "index.html"), aliasStub(rel, csp));
+                this.writtenPaths[a + "/index.html"] = true;
             }
-            makeOutputDir(this.inputs.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
-            final rel = relativePath(a, this.aliasTarget[a]);
-            final csp = cspForRedirectStub(redirectScript(rel));
-            fs\writeFile(fs\join(this.inputs.outDir, a, "index.html"), aliasStub(rel, csp));
-            this.writtenPaths[a + "/index.html"] = true;
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
         }
     }
 
     // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
     // (the relatedness/breadcrumb set). rel is the path under docs/.
-    fun collectDocPage(rel: str) > void !> any {
-        final f = io\File.open(this.inputs.root + "/" + this.inputs.docs + "/" + rel, io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        final fm = serialize\jsonDecode(markdown\frontmatter(md));
-        var title = fm.q("title").stringValue();
-        var untitled = false;
-        if (title == "") {
-            final heading = firstHeading(md);
-            untitled = heading == null;
-            title = heading ?? rel;
+    fun collectDocPage(rel: str) > result\Result::<bool> {
+        try {
+            final f = io\File.open(this.inputs.root + "/" + this.inputs.docs + "/" + rel, io\FileMode.read);
+            final md = f.readAll();
+            f.close();
+            final fm = serialize\jsonDecode(markdown\frontmatter(md));
+            var title = fm.q("title").stringValue();
+            var untitled = false;
+            if (title == "") {
+                final heading = firstHeading(md);
+                untitled = heading == null;
+                title = heading ?? rel;
+            }
+            var order = 0;
+            final n = fm.q("order").integer();
+            if (n -> o) {
+                if (o > 0) { order = o; }
+            }
+            final desc = fm.q("description").stringValue();
+            final url = cleanURL(rel, this.inputs.blog);
+            // Join tags with "||" (never present in a tag) so the record stays flat;
+            // newDocIndex splits it back out.
+            final tagParts = mut [<str>];
+            final r7 = parseTags(md);
+            if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            foreach (t in r7.value!) { tagParts.append(t); }
+            final joined = tagParts.join("||");
+            final r8 = pageType(md);
+            if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            final r9 = generatedFrom(md);
+            if (r9.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            this.docPages.append(DocPage{
+                url = url,
+                title = title,
+                desc = desc,
+                tags = joined,
+                section = firstPathSegment(url),
+                overview = r8.value! == "overview",
+                srcRel = this.inputs.docs + "/" + rel,
+                generatedFrom = r9.value!,
+                order = order,
+                untitled = untitled,
+            });
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
         }
-        var order = 0;
-        final n = fm.q("order").integer();
-        if (n -> o) {
-            if (o > 0) { order = o; }
-        }
-        final desc = fm.q("description").stringValue();
-        final url = cleanURL(rel, this.inputs.blog);
-        // Join tags with "||" (never present in a tag) so the record stays flat;
-        // newDocIndex splits it back out.
-        final tagParts = mut [<str>];
-        foreach (t in parseTags(md)) { tagParts.append(t); }
-        final joined = tagParts.join("||");
-        this.docPages.append(DocPage{
-            url = url,
-            title = title,
-            desc = desc,
-            tags = joined,
-            section = firstPathSegment(url),
-            overview = pageType(md) == "overview",
-            srcRel = this.inputs.docs + "/" + rel,
-            generatedFrom = generatedFrom(md),
-            order = order,
-            untitled = untitled,
-        });
     }
 
     // docSourcePaths lists the markdown sources under docs/, relative to it.
-    fun docSourcePaths() > [str] !> any {
-        final sources = docSources(
-            this.inputs.root + "/" + this.inputs.docs,
-            generatorDirs: this.inputs.config.generatorDirs,
-            generatorFiles: this.inputs.config.generatorFiles,
-        );
-        if (sources.error -> e) { throw e; }
-        return sources.value!;
+    fun docSourcePaths() > result\Result::<[str]> {
+        try {
+            final sources = docSources(
+                this.inputs.root + "/" + this.inputs.docs,
+                generatorDirs: this.inputs.config.generatorDirs,
+                generatorFiles: this.inputs.config.generatorFiles,
+            );
+            if (sources.error -> e) { return result\Result::<[str]>{ error = e }; }
+            return result\ok::<[str]>(sources.value!);
+        } catch (err: any) {
+            return result\caught::<[str]>(err);
+        }
     }
 
     // collectDocPages fills docPages before any page renders.
-    fun collectDocPages() > void !> any {
-        foreach (rel in this.docSourcePaths()) { this.collectDocPage(rel); }
+    fun collectDocPages() > result\Result::<bool> {
+        try {
+            final r5 = this.docSourcePaths();
+            if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            foreach (rel in r5.value!) {
+                final r6 = this.collectDocPage(rel);
+                if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            }
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
+        }
     }
 
     // renderBreadcrumb builds the breadcrumb <nav> for one page. Blog, search, tour,
@@ -582,105 +619,111 @@ export object Site {
     //
     // The page at gen's root has nowhere to climb to and is never asked for one - see the
     // caller in renderPage, which gates on the empty canonical URL.
-    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str !> any {
-        // Each branch below builds its own crumb <li>s; this template wraps whichever list.
-        // li injects raw - it is assembled markup, not a value to escape.
-        final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
+    fun renderBreadcrumb(srcRel: str, title: str, root: str) > result\Result::<str> {
+        try {
+            // Each branch below builds its own crumb <li>s; this template wraps whichever list.
+            // li injects raw - it is assembled markup, not a value to escape.
+            final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
       <ul>{{{li}}}</ul>
     </nav>
 `;
-        var rel = srcRel;
-        if (rel.startsWith(this.inputs.docs + "/")) { rel = rel.sub((this.inputs.docs + "/").len()); }
-        final segsRaw = rel.split("/");
+            var rel = srcRel;
+            if (rel.startsWith(this.inputs.docs + "/")) { rel = rel.sub((this.inputs.docs + "/").len()); }
+            final segsRaw = rel.split("/");
 
-        var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
+            var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
 
-        // Blog pages have their own root: Home / Blog / <post> (the blog index itself
-        // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
-        // the listing page.
-        if (srcRel == this.inputs.blog + "/index.md") {
-            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
-        }
-        // The search page is a top-level tool page: Home / Search (no Documentation
-        // root, it does not hang off the documentation index).
-        if (srcRel == "search/index.md") {
-            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
-        }
-        // The tour page is a top-level onboarding page: Home / Tour.
-        if (srcRel == "tour/index.md") {
-            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
-        }
-        if (srcRel.startsWith(this.inputs.blog + "/")) {
-            li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
-                + "<li aria-current=\"page\">" + title + "</li>";
-            return template\render(bcTmpl, {"li": li});
-        }
-        // The /public/ autoindex tree also skips the Documentation root; each level
-        // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
-        // link in its own body, so the breadcrumb stays flat).
-        if (srcRel.startsWith("public/")) {
-            li = li + "<li aria-current=\"page\">" + title + "</li>";
-            return template\render(bcTmpl, {"li": li});
-        }
-
-        // /development/ contributor page. Home / Development for the landing (which is
-        // README.md - see renderRoot); Home / Development / <page> for a direct child
-        // (Contributing, Projects, or a per-project target catalog). Its own root, not the
-        // documentation index.
-        if (srcRel.startsWith("development/") or srcRel == "README.md") {
-            if (srcRel == "README.md") {
-                li = li + "<li aria-current=\"page\">Development</li>";
-            } else {
-                li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
+            // Blog pages have their own root: Home / Blog / <post> (the blog index itself
+            // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
+            // the listing page.
+            if (srcRel == this.inputs.blog + "/index.md") {
+                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"}));
+            }
+            // The search page is a top-level tool page: Home / Search (no Documentation
+            // root, it does not hang off the documentation index).
+            if (srcRel == "search/index.md") {
+                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"}));
+            }
+            // The tour page is a top-level onboarding page: Home / Tour.
+            if (srcRel == "tour/index.md") {
+                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"}));
+            }
+            if (srcRel.startsWith(this.inputs.blog + "/")) {
+                li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
                     + "<li aria-current=\"page\">" + title + "</li>";
+                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
             }
-            return template\render(bcTmpl, {"li": li});
-        }
-
-        // The documentation index roots every docs trail; on that page itself it is
-        // the current leaf rather than a link back to where you already are.
-        if (rel == "documentation.md") {
-            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"});
-        }
-        li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
-
-        // The docs tree carries no "gen" path segment, so the source segments map
-        // straight to breadcrumb crumbs (a manpage trail reads Documentation / Manpage
-        // / <cmd>, matching its URL).
-        final segs = segsRaw;
-        final base = segs[segs.len() - 1];
-
-        final landing = (base == "index.md" or base == "README.md");
-        var dirCount = segs.len() - 1;                              // directory segments before the file
-        if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
-
-        // Each intermediate crumb reads as the exact title of the page it links to (looked
-        // up in docPages by URL), not a capped URL segment. A crumb links when a real page
-        // owns that URL - an in-dir index (codes/race/README.md) or a sibling-file landing
-        // (targets.md next to targets/); segments with no page (bare "codes/") fall back to a
-        // capitalized label.
-        final crumbs = mut [<str>];
-        crumbs.append(li);
-        final accParts = mut [<str>];
-        var i = 0;
-        while (i < dirCount) {
-            final seg = segs[i];
-            accParts.append(seg);
-            final acc = accParts.join("/");
-            final label = capitalizeFirst(seg);
-            final t = this.lookupTitle(acc + "/");
-            if (t != "") {
-                crumbs.append("<li><a href=\"" + root + acc + "/\">" + t + "</a></li>");
-            } else {
-                crumbs.append("<li>" + label + "</li>");
+            // The /public/ autoindex tree also skips the Documentation root; each level
+            // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
+            // link in its own body, so the breadcrumb stays flat).
+            if (srcRel.startsWith("public/")) {
+                li = li + "<li aria-current=\"page\">" + title + "</li>";
+                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
             }
-            i = i + 1;
-        }
-        li = crumbs.join("");
 
-        // The leaf is the current page's own title, matching how the intermediate crumbs read.
-        li = li + "<li aria-current=\"page\">" + title + "</li>";
-        return template\render(bcTmpl, {"li": li});
+            // /development/ contributor page. Home / Development for the landing (which is
+            // README.md - see renderRoot); Home / Development / <page> for a direct child
+            // (Contributing, Projects, or a per-project target catalog). Its own root, not the
+            // documentation index.
+            if (srcRel.startsWith("development/") or srcRel == "README.md") {
+                if (srcRel == "README.md") {
+                    li = li + "<li aria-current=\"page\">Development</li>";
+                } else {
+                    li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
+                        + "<li aria-current=\"page\">" + title + "</li>";
+                }
+                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+            }
+
+            // The documentation index roots every docs trail; on that page itself it is
+            // the current leaf rather than a link back to where you already are.
+            if (rel == "documentation.md") {
+                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"}));
+            }
+            li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
+
+            // The docs tree carries no "gen" path segment, so the source segments map
+            // straight to breadcrumb crumbs (a manpage trail reads Documentation / Manpage
+            // / <cmd>, matching its URL).
+            final segs = segsRaw;
+            final base = segs[segs.len() - 1];
+
+            final landing = (base == "index.md" or base == "README.md");
+            var dirCount = segs.len() - 1;                              // directory segments before the file
+            if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
+
+            // Each intermediate crumb reads as the exact title of the page it links to (looked
+            // up in docPages by URL), not a capped URL segment. A crumb links when a real page
+            // owns that URL - an in-dir index (codes/race/README.md) or a sibling-file landing
+            // (targets.md next to targets/); segments with no page (bare "codes/") fall back to a
+            // capitalized label.
+            final crumbs = mut [<str>];
+            crumbs.append(li);
+            final accParts = mut [<str>];
+            var i = 0;
+            while (i < dirCount) {
+                final seg = segs[i];
+                accParts.append(seg);
+                final acc = accParts.join("/");
+                final label = capitalizeFirst(seg);
+                final r4 = this.lookupTitle(acc + "/");
+                if (r4.error -> failed) { return result\Result::<str>{ error = failed }; }
+                final t = r4.value!;
+                if (t != "") {
+                    crumbs.append("<li><a href=\"" + root + acc + "/\">" + t + "</a></li>");
+                } else {
+                    crumbs.append("<li>" + label + "</li>");
+                }
+                i = i + 1;
+            }
+            li = crumbs.join("");
+
+            // The leaf is the current page's own title, matching how the intermediate crumbs read.
+            li = li + "<li aria-current=\"page\">" + title + "</li>";
+            return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // renderRelated builds the "Related" card grid for the page whose source is
@@ -691,87 +734,88 @@ export object Site {
     // documentation index +1) as the tiebreaker. It leads with the nearest-ancestor
     // overview. Up to four cards; ties (same term overlap AND same tag signal) broken by
     // URL for stability.
-    fun renderRelated(srcRel: str, root: str) > str !> any {
-        final built = this.builtDocIndex();
-        if (built.error -> e) { throw e; }
-        final idx = built.value!;
-        final at = idx.bySrcRel[srcRel];
-        if (at == null) { return ""; }
-        final cur = this.docPages[at!];
-        if (cur.overview) { return ""; }
-        final curUrl = cur.url;
-        final curSection = cur.section;
+    fun renderRelated(srcRel: str, root: str) > result\Result::<str> {
+        try {
+            final built = this.builtDocIndex();
+            if (built.error -> e) { return result\Result::<str>{ error = e }; }
+            final idx = built.value!;
+            final at = idx.bySrcRel[srcRel];
+            if (at == null) { return result\ok::<str>(""); }
+            final cur = this.docPages[at!];
+            if (cur.overview) { return result\ok::<str>(""); }
+            final curUrl = cur.url;
+            final curSection = cur.section;
 
-        // picks is the final ordered card list; used dedups by URL (a page never links
-        // to itself or lists the same neighbor twice).
-        var picks: mut [{str: any}] = mut [<{str: any}>];
-        var used: mut {str: bool} = mut {};
-        used[curUrl] = true;
+            // picks is the final ordered card list; used dedups by URL (a page never links
+            // to itself or lists the same neighbor twice).
+            var picks: mut [{str: any}] = mut [<{str: any}>];
+            var used: mut {str: bool} = mut {};
+            used[curUrl] = true;
 
-        // Stage 1: lead with the nearest-ancestor overview - the overview page whose
-        // URL is the longest prefix of this page's URL.
-        var leadUrl = "";
-        var leadTitle = "";
-        var leadDesc = "";
-        foreach (j in idx.overviews) {
-            final p = this.docPages[j];
-            if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > leadUrl.len()) {
-                leadUrl = p.url;
-                leadTitle = p.title;
-                leadDesc = p.desc;
+            // Stage 1: lead with the nearest-ancestor overview - the overview page whose
+            // URL is the longest prefix of this page's URL.
+            var leadUrl = "";
+            var leadTitle = "";
+            var leadDesc = "";
+            foreach (j in idx.overviews) {
+                final p = this.docPages[j];
+                if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > leadUrl.len()) {
+                    leadUrl = p.url;
+                    leadTitle = p.title;
+                    leadDesc = p.desc;
+                }
             }
-        }
-        if (leadUrl != "") {
-            picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc, "hasDesc": leadDesc != ""});
-            used[leadUrl] = true;
-        }
-
-        // Stage 2: count shared tags and terms through the index, visiting only
-        // pages that share one. Section, overview and documentation pages score
-        // regardless.
-        final tagHits = mut {<int: int>};
-        final termHits = mut {<int: int>};
-        countShared(cur.tags, byKey: idx.byTag, hits: tagHits);
-        countShared(this.inputs.pageTerms[curUrl] ?? "", byKey: idx.byTerm, hits: termHits);
-        final reached = mut {<int: bool>};
-        foreach (j in tagHits.keys()) { reached[j] = true; }
-        foreach (j in termHits.keys()) { reached[j] = true; }
-        if (curSection != "") {
-            final sectionPages = idx.bySection[curSection];
-            if (sectionPages -> ps) { foreach (j in ps) { reached[j] = true; } }
-        }
-        foreach (j in idx.overviews) { reached[j] = true; }
-        foreach (j in idx.documentation) { reached[j] = true; }
-
-        // The best cards, best first: up to four in all, the lead included.
-        // outranks orders every pair, so the visiting order does not matter.
-        final want = 4 - picks.len();
-        final best = mut [<relatedRank>];
-        foreach (j in reached.keys()) {
-            final p = this.docPages[j];
-            final termOverlap = termHits[j] ?? 0;
-            var tagSignal = 3 * (tagHits[j] ?? 0);
-            if (used[p.url] != null) { continue; }
-            if (curSection != "" and p.section == curSection) { tagSignal = tagSignal + 4; }
-            if (p.overview) { tagSignal = tagSignal + 3; }
-            if (p.srcRel == this.inputs.docs + "/documentation.md") { tagSignal = tagSignal + 1; }
-            if (termOverlap == 0 and tagSignal == 0) { continue; }
-            final rank = relatedRank{ page = j, url = p.url, terms = termOverlap, tags = tagSignal };
-            var pos = best.len();
-            while (pos > 0 and outranks(rank, b: best[pos - 1])) { pos = pos - 1; }
-            if (pos < want) {
-                best.insert(pos, value: rank);
-                if (best.len() > want) { _ = best.pop(); }
+            if (leadUrl != "") {
+                picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc, "hasDesc": leadDesc != ""});
+                used[leadUrl] = true;
             }
-        }
-        foreach (r in best) {
-            final p = this.docPages[r.page];
-            picks.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
-        }
 
-        if (picks.len() == 0) { return ""; }
+            // Stage 2: count shared tags and terms through the index, visiting only
+            // pages that share one. Section, overview and documentation pages score
+            // regardless.
+            final tagHits = mut {<int: int>};
+            final termHits = mut {<int: int>};
+            countShared(cur.tags, byKey: idx.byTag, hits: tagHits);
+            countShared(this.inputs.pageTerms[curUrl] ?? "", byKey: idx.byTerm, hits: termHits);
+            final reached = mut {<int: bool>};
+            foreach (j in tagHits.keys()) { reached[j] = true; }
+            foreach (j in termHits.keys()) { reached[j] = true; }
+            if (curSection != "") {
+                final sectionPages = idx.bySection[curSection];
+                if (sectionPages -> ps) { foreach (j in ps) { reached[j] = true; } }
+            }
+            foreach (j in idx.overviews) { reached[j] = true; }
+            foreach (j in idx.documentation) { reached[j] = true; }
 
-        return template\render(`  <section class="related container" aria-labelledby="related-heading">
+            // The best cards, best first: up to four in all, the lead included.
+            // outranks orders every pair, so the visiting order does not matter.
+            final want = 4 - picks.len();
+            final best = mut [<relatedRank>];
+            foreach (j in reached.keys()) {
+                final p = this.docPages[j];
+                final termOverlap = termHits[j] ?? 0;
+                var tagSignal = 3 * (tagHits[j] ?? 0);
+                if (used[p.url] != null) { continue; }
+                if (curSection != "" and p.section == curSection) { tagSignal = tagSignal + 4; }
+                if (p.overview) { tagSignal = tagSignal + 3; }
+                if (p.srcRel == this.inputs.docs + "/documentation.md") { tagSignal = tagSignal + 1; }
+                if (termOverlap == 0 and tagSignal == 0) { continue; }
+                final rank = relatedRank{ page = j, url = p.url, terms = termOverlap, tags = tagSignal };
+                var pos = best.len();
+                while (pos > 0 and outranks(rank, b: best[pos - 1])) { pos = pos - 1; }
+                if (pos < want) {
+                    best.insert(pos, value: rank);
+                    if (best.len() > want) { _ = best.pop(); }
+                }
+            }
+            foreach (r in best) {
+                final p = this.docPages[r.page];
+                picks.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
+            }
+
+            if (picks.len() == 0) { return result\ok::<str>(""); }
+
+            return result\ok::<str>(template\render(`  <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
 {{#picks}}
@@ -779,7 +823,10 @@ export object Site {
 {{/picks}}
     </div>
   </section>
-`, {"root": root, "picks": picks});
+`, {"root": root, "picks": picks}));
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // renderSectionNav builds the "In this section" list: the direct children of this page's
@@ -790,61 +837,65 @@ export object Site {
     // page, it falls back to listing its OWN direct children (a non-overview parent like
     // concepts/targets/ still gets a down-axis). "" when the page is a leaf with no children.
     // curUrl is the page's clean URL; root is its gen-root-relative prefix.
-    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str !> any {
-        if (curUrl == "") { return ""; }
-        // The section root: this page if it is itself an overview, else the longest
-        // overview-URL prefix of this page's URL (the nearest-ancestor overview).
-        final built = this.builtDocIndex();
-        if (built.error -> e) { throw e; }
-        final idx = built.value!;
-        var selfOverview = false;
-        foreach (j in idx.overviews) {
-            if (this.docPages[j].srcRel == srcRel) { selfOverview = true; break; }
-        }
-        var rootUrl = "";
-        if (selfOverview) {
-            rootUrl = curUrl;
-        } else {
+    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > result\Result::<str> {
+        try {
+            if (curUrl == "") { return result\ok::<str>(""); }
+            // The section root: this page if it is itself an overview, else the longest
+            // overview-URL prefix of this page's URL (the nearest-ancestor overview).
+            final built = this.builtDocIndex();
+            if (built.error -> e) { return result\Result::<str>{ error = e }; }
+            final idx = built.value!;
+            var selfOverview = false;
             foreach (j in idx.overviews) {
-                final p = this.docPages[j];
-                if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
-                    rootUrl = p.url;
+                if (this.docPages[j].srcRel == srcRel) { selfOverview = true; break; }
+            }
+            var rootUrl = "";
+            if (selfOverview) {
+                rootUrl = curUrl;
+            } else {
+                foreach (j in idx.overviews) {
+                    final p = this.docPages[j];
+                    if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
+                        rootUrl = p.url;
+                    }
                 }
             }
-        }
-        // No overview governs this page: if it is itself a parent (its clean URL prefixes
-        // other pages, e.g. concepts/targets/ over concepts/targets/ci/), still give a
-        // down-axis by listing its own direct children. A leaf falls through to the
-        // empty-kids guard below and renders nothing.
-        if (rootUrl == "") { rootUrl = curUrl; }
+            // No overview governs this page: if it is itself a parent (its clean URL prefixes
+            // other pages, e.g. concepts/targets/ over concepts/targets/ci/), still give a
+            // down-axis by listing its own direct children. A leaf falls through to the
+            // empty-kids guard below and renders nothing.
+            if (rootUrl == "") { rootUrl = curUrl; }
 
-        // Direct children: pages whose clean URL is exactly one path segment deeper than
-        // the section root (so a grandchild does not surface in a parent's list).
-        var kids: mut [{str: str}] = mut [<{str: str}>];
-        foreach (p in this.docPages) {
-            if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
-                final rest = p.url.sub(rootUrl.len());
-                if (splitPath(rest).len() == 1) {
-                    kids.append(mut {"url": p.url, "title": p.title});
+            // Direct children: pages whose clean URL is exactly one path segment deeper than
+            // the section root (so a grandchild does not surface in a parent's list).
+            var kids: mut [{str: str}] = mut [<{str: str}>];
+            foreach (p in this.docPages) {
+                if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
+                    final rest = p.url.sub(rootUrl.len());
+                    if (splitPath(rest).len() == 1) {
+                        kids.append(mut {"url": p.url, "title": p.title});
+                    }
                 }
             }
-        }
-        if (kids.len() == 0) { return ""; }
-        final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
+            if (kids.len() == 0) { return result\ok::<str>(""); }
+            final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
 
-        // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
-        // title attribute.
-        var picks: mut [{str: any}] = mut [<{str: any}>];
-        foreach (k in ordered) {
-            picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
-        }
-        return template\render(`        <p class="toc-title">In this section</p>
+            // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
+            // title attribute.
+            var picks: mut [{str: any}] = mut [<{str: any}>];
+            foreach (k in ordered) {
+                picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
+            }
+            return result\ok::<str>(template\render(`        <p class="toc-title">In this section</p>
         <ul class="section-nav">
 {{#picks}}
           <li><a href="{{root}}{{url}}"{{#current}} aria-current="page"{{/current}} title="{{title}}">{{title}}</a></li>
 {{/picks}}
         </ul>
-`, {"root": root, "picks": picks});
+`, {"root": root, "picks": picks}));
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // renderSubtree builds the "Everything here" list: EVERY page beneath this one,
@@ -859,54 +910,63 @@ export object Site {
     //
     // Depth is carried as an indent class rather than nested <ul>s, so the markup
     // stays one flat list a screen reader reads in order.
-    fun renderSubtree(curUrl: str, root: str) > str !> any {
-        if (curUrl == "") { return ""; }
+    fun renderSubtree(curUrl: str, root: str) > result\Result::<str> {
+        try {
+            if (curUrl == "") { return result\ok::<str>(""); }
 
-        // Every descendant, with its depth relative to this page.
-        var rows: mut [{str: any}] = mut [<{str: any}>];
-        var deepest = 0;
-        foreach (p in this.docPages) {
-            if (p.url == curUrl or p.url.startsWith(curUrl) == false) { continue; }
-            final depth = splitPath(p.url.sub(curUrl.len())).len();
-            if (depth > deepest) { deepest = depth; }
-            rows.append(mut {"url": p.url, "title": p.title, "depth": depth});
-        }
-        // One level deep only: renderSectionNav already covers it.
-        if (deepest < 2) { return ""; }
-        // Too big to be navigation. A sidebar list past this stops being a way to
-        // find a page and becomes a wall to scroll past - the site root, which
-        // prefixes every page there is, lands here. Such a branch wants a real
-        // section index page, not a sidebar dump.
-        if (rows.len() > maxSubtreeRows) { return ""; }
+            // Every descendant, with its depth relative to this page.
+            var rows: mut [{str: any}] = mut [<{str: any}>];
+            var deepest = 0;
+            foreach (p in this.docPages) {
+                if (p.url == curUrl or p.url.startsWith(curUrl) == false) { continue; }
+                final depth = splitPath(p.url.sub(curUrl.len())).len();
+                if (depth > deepest) { deepest = depth; }
+                rows.append(mut {"url": p.url, "title": p.title, "depth": depth});
+            }
+            // One level deep only: renderSectionNav already covers it.
+            if (deepest < 2) { return result\ok::<str>(""); }
+            // Too big to be navigation. A sidebar list past this stops being a way to
+            // find a page and becomes a wall to scroll past - the site root, which
+            // prefixes every page there is, lands here. Such a branch wants a real
+            // section index page, not a sidebar dump.
+            if (rows.len() > maxSubtreeRows) { return result\ok::<str>(""); }
 
-        final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("{a["url"]}", "{b["url"]}");
-        });
-        var picks: mut [{str: any}] = mut [<{str: any}>];
-        foreach (r in ordered) {
-            picks.append(mut {"url": r["url"], "title": r["title"], "depth": "{r["depth"]}"});
-        }
-        return template\render(`        <p class="toc-title">Everything here</p>
+            final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
+                return strLess("{a["url"]}", "{b["url"]}");
+            });
+            var picks: mut [{str: any}] = mut [<{str: any}>];
+            foreach (r in ordered) {
+                picks.append(mut {"url": r["url"], "title": r["title"], "depth": "{r["depth"]}"});
+            }
+            return result\ok::<str>(template\render(`        <p class="toc-title">Everything here</p>
         <ul class="subtree-nav">
 {{#picks}}
           <li class="subtree-d{{depth}}"><a href="{{root}}{{url}}" title="{{title}}">{{title}}</a></li>
 {{/picks}}
         </ul>
-`, {"root": root, "picks": picks});
+`, {"root": root, "picks": picks}));
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // collectGlossaryTerms reads each glossary/<slug>.md page's title and description into
     // the term set, pre-walk (like collectDocPages), so every page's render can auto-link the
     // vocabulary to the term's own page.
-    fun collectGlossaryTerms() > void !> any {
-        final terms = mut [<GlossaryTerm>];
-        foreach (p in fs\glob(this.inputs.root + "/" + this.inputs.docs + "/glossary/*.md")) {
-            final fm = serialize\jsonDecode(markdown\frontmatter(fs\readFile(p.value)));
-            final base = fs\basename(p.value);
-            terms.append(GlossaryTerm{ term = fm.q("title").stringValue(),
-                anchor = base.sub(0, len: base.len() - 3), def = fm.q("description").stringValue() });
+    fun collectGlossaryTerms() > result\Result::<bool> {
+        try {
+            final terms = mut [<GlossaryTerm>];
+            foreach (p in fs\glob(this.inputs.root + "/" + this.inputs.docs + "/glossary/*.md")) {
+                final fm = serialize\jsonDecode(markdown\frontmatter(fs\readFile(p.value)));
+                final base = fs\basename(p.value);
+                terms.append(GlossaryTerm{ term = fm.q("title").stringValue(),
+                    anchor = base.sub(0, len: base.len() - 3), def = fm.q("description").stringValue() });
+            }
+            this.inputs.glossaryTerms = sortLongestFirst(terms);
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
         }
-        this.inputs.glossaryTerms = sortLongestFirst(terms);
     }
 
     // collectConventions parses conventions.md into the convention set, pre-walk (like
@@ -945,11 +1005,15 @@ export object Site {
 
     // fileDescription reads a doc file's frontmatter `description` (the entity popover
     // summary), or "" if absent.
-    fun fileDescription(path: str) > str !> any {
-        final f = io\File.open(path, io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        return serialize\jsonDecode(markdown\frontmatter(md)).q("description").stringValue();
+    fun fileDescription(path: str) > result\Result::<str> {
+        try {
+            final f = io\File.open(path, io\FileMode.read);
+            final md = f.readAll();
+            f.close();
+            return result\ok::<str>(serialize\jsonDecode(markdown\frontmatter(md)).q("description").stringValue());
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // collectEntities catalogs every inline-code-linkable domain reference (pre-walk, like
@@ -957,127 +1021,142 @@ export object Site {
     // commands (reference/manpage/magus-<sub>.md -> "magus <sub>"). token = the string matched
     // in inline code, url = its clean page, summary = its frontmatter description. Sorted
     // longest-match-first so "magus affected ci" wins over "magus affected".
-    fun collectEntities() > void !> any {
-        final ents: mut [Entity] = mut [<Entity>];
+    fun collectEntities() > result\Result::<bool> {
+        try {
+            final ents: mut [Entity] = mut [<Entity>];
 
-        final codesBase = this.inputs.root + "/" + this.inputs.docs + "/reference/codes";
-        if (isDirectory(codesBase)) {
-            foreach (group in fs\listDir(codesBase)) {
-                final gdir = codesBase + "/" + group;
-                if (isDirectory(gdir) == false) { continue; }
-                foreach (name in fs\listDir(gdir)) {
-                    if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
-                    final code = name.sub(0, len: name.len() - 3);
-                    ents.append(Entity{
-                        token = code,
-                        kind = "code",
-                        url = "reference/codes/" + group + "/" + code + "/",
-                        summary = this.fileDescription(gdir + "/" + name),
-                    });
-                }
-            }
-        }
-
-        final manBase = this.inputs.root + "/" + this.inputs.docs + "/reference/manpage";
-        if (isDirectory(manBase)) {
-            foreach (name in fs\listDir(manBase)) {
-                if (name.startsWith("magus-") == false or name.endsWith(".md") == false) { continue; }
-                final base = name.sub(0, len: name.len() - 3);   // "magus-run"
-                final sub = base.sub(6);                          // "run"
-                if (sub == "") { continue; }
-                ents.append(Entity{
-                    token = "magus " + sub,
-                    kind = "command",
-                    url = "reference/manpage/" + base + "/",
-                    summary = this.fileDescription(manBase + "/" + name),
-                });
-                ents.append(Entity{
-                    token = sub,
-                    kind = "command",
-                    url = "reference/manpage/" + base + "/",
-                    summary = "magus " + sub + ": " + this.fileDescription(manBase + "/" + name),
-                });
-            }
-        }
-
-        // The filename is one token. Without it the linkers only knew "magusfile" and
-        // "buzz", so "magusfile.buzz" came out as two adjacent popovers over one word.
-        // sortEntitiesLongestFirst puts this ahead of both halves.
-        ents.append(Entity{ token = "magusfile.buzz", kind = "file", url = "concepts/targets/", summary = "The file that declares a project's targets and binds its spells." });
-        ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
-        ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
-        ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
-        ents.append(Entity{ token = "magus graph export --open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
-        // vcs has no manpage (nor do refs, clean, memory, buzz, agent, hook, notify), and
-        // the command tokens are derived from reference/manpage/magus-*.md, so the whole
-        // family was unlinkable. Registered against the guide that documents them, the
-        // way the knowledge verbs above are.
-        ents.append(Entity{ token = "magus vcs resolve", kind = "command", url = "guides/integrations/git/", summary = "Settle conflicted generated files by regenerating them." });
-        ents.append(Entity{ token = "magus vcs ls-files", kind = "command", url = "guides/integrations/git/", summary = "List the dirty paths a commit of the change wants; stage nothing." });
-        ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Path listing and conflict resolution that knows what is generated." });
-        ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
-        ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
-        ents.append(Entity{ token = "refs", kind = "command", url = "concepts/knowledge/", summary = "magus refs: find a symbol's definition and references." });
-        ents.append(Entity{ token = "graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "magus graph export --open: open a graph explorer." });
-
-        // Module methods: each reference/buzz/<mod>.md H3 is a method; token "mod\method"
-        // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
-        final buzzBase = this.inputs.root + "/" + this.inputs.docs + "/reference/buzz";
-        if (isDirectory(buzzBase)) {
-            foreach (name in fs\listDir(buzzBase)) {
-                if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
-                final mod = name.sub(0, len: name.len() - 3);
-                final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
-                final md = f.readAll();
-                f.close();
-                foreach (line in md.split("\n")) {
-                    if (line.startsWith("### ")) {
-                        final method = line.sub(4).trim();
+            final codesBase = this.inputs.root + "/" + this.inputs.docs + "/reference/codes";
+            if (isDirectory(codesBase)) {
+                foreach (group in fs\listDir(codesBase)) {
+                    final gdir = codesBase + "/" + group;
+                    if (isDirectory(gdir) == false) { continue; }
+                    foreach (name in fs\listDir(gdir)) {
+                        if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
+                        final code = name.sub(0, len: name.len() - 3);
+                        final r1 = this.fileDescription(gdir + "/" + name);
+                        if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
                         ents.append(Entity{
-                            token = mod + "\\" + method,
-                            kind = "method",
-                            url = "reference/buzz/" + mod + "/",
-                            anchor = glossarySlug(method),
-                            summary = "",
+                            token = code,
+                            kind = "code",
+                            url = "reference/codes/" + group + "/" + code + "/",
+                            summary = r1.value!,
                         });
                     }
                 }
             }
-        }
 
-        // Config keys: only the qualified (dotted) keys from reference/config.md's tables -
-        // e.g. `cache.remote.insecure`, never the bare generic section names (cache, ci, ...)
-        // which would collide with glossary terms and prose. Anchored to the key's H2 section.
-        final configPath = this.inputs.root + "/" + this.inputs.docs + "/reference/config.md";
-        if (fs\exists(configPath)) {
-            final f = io\File.open(configPath, io\FileMode.read);
-            final md = f.readAll();
-            f.close();
-            var section = "";
-            foreach (line in md.split("\n")) {
-                if (line.startsWith("## ")) {
-                    section = glossarySlug(line.sub(3).trim());
-                } else if (section != "") {
-                    final row = parseConfigRow(line);
-                    if (row.ok) {
-                        ents.append(Entity{ token = row.key, kind = "config", url = "reference/config/", anchor = section, summary = row.summary });
+            final manBase = this.inputs.root + "/" + this.inputs.docs + "/reference/manpage";
+            if (isDirectory(manBase)) {
+                foreach (name in fs\listDir(manBase)) {
+                    if (name.startsWith("magus-") == false or name.endsWith(".md") == false) { continue; }
+                    final base = name.sub(0, len: name.len() - 3);   // "magus-run"
+                    final sub = base.sub(6);                          // "run"
+                    if (sub == "") { continue; }
+                    final r2 = this.fileDescription(manBase + "/" + name);
+                    if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+                    ents.append(Entity{
+                        token = "magus " + sub,
+                        kind = "command",
+                        url = "reference/manpage/" + base + "/",
+                        summary = r2.value!,
+                    });
+                    final r3 = this.fileDescription(manBase + "/" + name);
+                    if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
+                    ents.append(Entity{
+                        token = sub,
+                        kind = "command",
+                        url = "reference/manpage/" + base + "/",
+                        summary = "magus " + sub + ": " + r3.value!,
+                    });
+                }
+            }
+
+            // The filename is one token. Without it the linkers only knew "magusfile" and
+            // "buzz", so "magusfile.buzz" came out as two adjacent popovers over one word.
+            // sortEntitiesLongestFirst puts this ahead of both halves.
+            ents.append(Entity{ token = "magusfile.buzz", kind = "file", url = "concepts/targets/", summary = "The file that declares a project's targets and binds its spells." });
+            ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
+            ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
+            ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
+            ents.append(Entity{ token = "magus graph export --open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
+            // vcs has no manpage (nor do refs, clean, memory, buzz, agent, hook, notify), and
+            // the command tokens are derived from reference/manpage/magus-*.md, so the whole
+            // family was unlinkable. Registered against the guide that documents them, the
+            // way the knowledge verbs above are.
+            ents.append(Entity{ token = "magus vcs resolve", kind = "command", url = "guides/integrations/git/", summary = "Settle conflicted generated files by regenerating them." });
+            ents.append(Entity{ token = "magus vcs ls-files", kind = "command", url = "guides/integrations/git/", summary = "List the dirty paths a commit of the change wants; stage nothing." });
+            ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Path listing and conflict resolution that knows what is generated." });
+            ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
+            ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
+            ents.append(Entity{ token = "refs", kind = "command", url = "concepts/knowledge/", summary = "magus refs: find a symbol's definition and references." });
+            ents.append(Entity{ token = "graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "magus graph export --open: open a graph explorer." });
+
+            // Module methods: each reference/buzz/<mod>.md H3 is a method; token "mod\method"
+            // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
+            final buzzBase = this.inputs.root + "/" + this.inputs.docs + "/reference/buzz";
+            if (isDirectory(buzzBase)) {
+                foreach (name in fs\listDir(buzzBase)) {
+                    if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
+                    final mod = name.sub(0, len: name.len() - 3);
+                    final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
+                    final md = f.readAll();
+                    f.close();
+                    foreach (line in md.split("\n")) {
+                        if (line.startsWith("### ")) {
+                            final method = line.sub(4).trim();
+                            ents.append(Entity{
+                                token = mod + "\\" + method,
+                                kind = "method",
+                                url = "reference/buzz/" + mod + "/",
+                                anchor = glossarySlug(method),
+                                summary = "",
+                            });
+                        }
                     }
                 }
             }
-        }
 
-        this.inputs.codeEntities = sortEntitiesLongestFirst(ents);
+            // Config keys: only the qualified (dotted) keys from reference/config.md's tables -
+            // e.g. `cache.remote.insecure`, never the bare generic section names (cache, ci, ...)
+            // which would collide with glossary terms and prose. Anchored to the key's H2 section.
+            final configPath = this.inputs.root + "/" + this.inputs.docs + "/reference/config.md";
+            if (fs\exists(configPath)) {
+                final f = io\File.open(configPath, io\FileMode.read);
+                final md = f.readAll();
+                f.close();
+                var section = "";
+                foreach (line in md.split("\n")) {
+                    if (line.startsWith("## ")) {
+                        section = glossarySlug(line.sub(3).trim());
+                    } else if (section != "") {
+                        final row = parseConfigRow(line);
+                        if (row.ok) {
+                            ents.append(Entity{ token = row.key, kind = "config", url = "reference/config/", anchor = section, summary = row.summary });
+                        }
+                    }
+                }
+            }
+
+            this.inputs.codeEntities = sortEntitiesLongestFirst(ents);
+            return result\ok::<bool>(true);
+        } catch (err: any) {
+            return result\caught::<bool>(err);
+        }
     }
 
     // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
     // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
     // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
-    fun lookupTitle(url: str) > str !> any {
-        final built = this.builtDocIndex();
-        if (built.error -> e) { throw e; }
-        final at = built.value!.byUrl[url];
-        if (at -> j) { return this.docPages[j].title; }
-        return "";
+    fun lookupTitle(url: str) > result\Result::<str> {
+        try {
+            final built = this.builtDocIndex();
+            if (built.error -> e) { return result\Result::<str>{ error = e }; }
+            final at = built.value!.byUrl[url];
+            if (at -> j) { return result\ok::<str>(this.docPages[j].title); }
+            return result\ok::<str>("");
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 
     // collectDocIndex indexes docPages and pageTerms. Run it once, after the
@@ -1109,7 +1188,8 @@ test "Site.collectAlias trims slashes and records every alias" {
 
 test "Site.addRecord marks the URL written and appends one search record" {
     final s = newSite();
-    s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
+    final added = s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
+    assert\equal(added.error == null, true, "addRecord succeeds");
     assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert\len(s.searchRecords, 1, "one search record appended");
 }
@@ -1139,7 +1219,7 @@ test "renderSectionNav lists an overview's direct children and marks the current
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
 
     s.collectDocIndex();
-    final got = s.renderSectionNav("docs/spells/go.md", "spells/go/", "../../");
+    final got = s.renderSectionNav("docs/spells/go.md", "spells/go/", "../../").value!;
     assert\equal(got.indexOf("In this section") != null, true, "section label present");
     assert\equal(got.indexOf("href=\"../../spells/bash/\"") != null, true, "sibling bash listed");
     assert\equal(got.indexOf("aria-current=\"page\" title=\"go\"") != null, true, "current page marked");
@@ -1152,7 +1232,7 @@ test "renderSectionNav returns empty for a childless page with no overview ances
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
     s.collectDocIndex();
-    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav for a leaf with no children");
+    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../").value!, "", "no section nav for a leaf with no children");
 }
 
 test "renderSectionNav lists a non-overview parent's own direct children" {
@@ -1162,7 +1242,7 @@ test "renderSectionNav lists a non-overview parent's own direct children" {
     s.docPages.append(DocPage{ url = "targets/ci/", title = "CI", srcRel = "docs/targets/ci.md", section = "targets" });
     s.docPages.append(DocPage{ url = "targets/ci/deep/", title = "Deep", srcRel = "docs/targets/ci/deep.md", section = "targets" });
     s.collectDocIndex();
-    final got = s.renderSectionNav("docs/targets.md", "targets/", "../");
+    final got = s.renderSectionNav("docs/targets.md", "targets/", "../").value!;
     assert\equal(got.indexOf("In this section") != null, true, "child list present for a non-overview parent");
     assert\equal(got.indexOf("href=\"../targets/ci/\"") != null, true, "direct child listed");
     assert\equal(got.indexOf("targets/ci/deep/") != null, false, "a grandchild is not a direct child");
@@ -1182,7 +1262,7 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
         "concepts/tagsy/": "",
     };
     s.collectDocIndex();
-    final got = s.renderRelated("docs/concepts/cache.md", "../../");
+    final got = s.renderRelated("docs/concepts/cache.md", "../../").value!;
     final iDeps = got.indexOf("concepts/deps/");
     final iTagsy = got.indexOf("concepts/tagsy/");
     assert\equal(iDeps != null and iTagsy != null, true, "both neighbors listed");
@@ -1219,7 +1299,7 @@ test "renderSubtree lists the whole branch, nested by depth" {
     s.docPages.append(DocPage{ url = "concepts/targets/ci/", title = "CI", srcRel = "docs/concepts/targets/ci.md", section = "concepts" });
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", section = "guides" });
 
-    final got = s.renderSubtree("concepts/", "../");
+    final got = s.renderSubtree("concepts/", "../").value!;
     assert\equal(got.indexOf("Everything here") != null, true, "subtree label present");
     assert\equal(got.indexOf("subtree-d1") != null, true, "a direct child is depth 1");
     assert\equal(got.indexOf("subtree-d2") != null, true, "a grandchild is depth 2 - the whole point");
@@ -1232,8 +1312,8 @@ test "renderSubtree stays quiet when it would repeat the section list" {
     // Only direct children: renderSectionNav already shows exactly this.
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", overview = true, section = "guides" });
     s.docPages.append(DocPage{ url = "guides/mcp/", title = "MCP", srcRel = "docs/guides/mcp.md", section = "guides" });
-    assert\equal(s.renderSubtree("guides/", "../"), "", "one level deep adds nothing over In this section");
-    assert\equal(s.renderSubtree("", "../"), "", "no url, no subtree");
+    assert\equal(s.renderSubtree("guides/", "../").value!, "", "one level deep adds nothing over In this section");
+    assert\equal(s.renderSubtree("", "../").value!, "", "no url, no subtree");
 }
 
 test "renderSubtree refuses to become a wall of links" {
@@ -1244,6 +1324,6 @@ test "renderSubtree refuses to become a wall of links" {
     for (var i = 0; i < maxSubtreeRows + 1; i = i + 1) {
         s.docPages.append(DocPage{ url = "all/p" + i + "/", title = "P" + i, srcRel = "docs/all/p.md", section = "all" });
     }
-    assert\equal(s.renderSubtree("all/", "../"), "",
+    assert\equal(s.renderSubtree("all/", "../").value!, "",
         "a branch too big for a sidebar wants a section index page, not a dump");
 }

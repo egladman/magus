@@ -5,6 +5,7 @@
 namespace discovery;
 
 import "fs";
+import "result";
 import "assert";
 import "engine/types" as _;
 import "../libs/ssg/text" as _;
@@ -14,22 +15,27 @@ import "../libs/ssg/feed" as _;
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
 // Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
-export fun writeSEOFiles(site: Site) > void !> any {
-    if (site.inputs.config.baseURL == "") { return; }
-    var urls: mut [str] = mut [<str>];
-    foreach (u in site.pageUrls.keys()) { urls.append(u); }
-    final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    final body = mut [<str>];
-    body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
-    foreach (u in sorted) {
-        var loc = u;
-        if (loc == "index.html") { loc = ""; }
-        body.append("  <url>" + xmlElement("loc", site.inputs.config.baseURL + loc) + "</url>\n");
+export fun writeSEOFiles(site: Site) > result\Result::<bool> {
+    try {
+        if (site.inputs.config.baseURL == "") { return result\ok::<bool>(true); }
+        var urls: mut [str] = mut [<str>];
+        foreach (u in site.pageUrls.keys()) { urls.append(u); }
+        final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        final body = mut [<str>];
+        body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        foreach (u in sorted) {
+            var loc = u;
+            if (loc == "index.html") { loc = ""; }
+            body.append("  <url>" + xmlElement("loc", site.inputs.config.baseURL + loc) + "</url>\n");
+        }
+        body.append("</urlset>\n");
+        fs\writeFile(site.inputs.outDir + "/sitemap.xml", body.join(""));
+        fs\writeFile(site.inputs.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.inputs.config.baseURL + "sitemap.xml\n");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    body.append("</urlset>\n");
-    fs\writeFile(site.inputs.outDir + "/sitemap.xml", body.join(""));
-    fs\writeFile(site.inputs.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.inputs.config.baseURL + "sitemap.xml\n");
 }
 
 
@@ -61,13 +67,18 @@ fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
 
 // writeLLMsIndex writes gen/llms.txt from the collected docPages. Links are absolute
 // under baseURL when set (so an external agent can follow them), else root-relative.
-export fun writeLLMsIndex(site: Site) > void !> any {
-    var base = "/";
-    if (site.inputs.config.baseURL != "") {
-        base = site.inputs.config.baseURL;
-        if (base.endsWith("/") == false) { base = base + "/"; }
+export fun writeLLMsIndex(site: Site) > result\Result::<bool> {
+    try {
+        var base = "/";
+        if (site.inputs.config.baseURL != "") {
+            base = site.inputs.config.baseURL;
+            if (base.endsWith("/") == false) { base = base + "/"; }
+        }
+        fs\writeFile(site.inputs.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.inputs.config.title));
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    fs\writeFile(site.inputs.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.inputs.config.title));
 }
 
 

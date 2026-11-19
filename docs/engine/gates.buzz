@@ -12,6 +12,7 @@
 namespace gates;
 
 import "fs";
+import "result";
 import "encoding/json";
 import "magus";
 import "io";
@@ -39,35 +40,54 @@ import "lib/crosscheck" as _;
 //
 // A tree with no VCS at all (a release tarball) renders with no provenance; a VCS that
 // is present and fails throws.
-export fun loadMeta(site: Site) > void !> any {
-    if (site.inputs.metaLoaded) { return; }
-    site.inputs.metaBranch = "HEAD";
-    if (vcs\name() != "") {
-        site.inputs.metaPrefix = sitePrefix(site);
-        final head = vcs\commit();
-        site.inputs.metaFull = head.id;
-        site.inputs.metaShort = head.short;
-        site.inputs.metaStamp = utcStamp(head.date);
-        site.inputs.metaCommits = buildCommits(site);
+export fun loadMeta(site: Site) > result\Result::<bool> {
+    try {
+        if (site.inputs.metaLoaded) { return result\ok::<bool>(true); }
+        site.inputs.metaBranch = "HEAD";
+        if (vcs\name() != "") {
+            final r22 = sitePrefix(site);
+            if (r22.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            site.inputs.metaPrefix = r22.value!;
+            final head = vcs\commit();
+            site.inputs.metaFull = head.id;
+            site.inputs.metaShort = head.short;
+            final r23 = utcStamp(head.date);
+            if (r23.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            site.inputs.metaStamp = r23.value!;
+            final r24 = buildCommits(site);
+            if (r24.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            site.inputs.metaCommits = r24.value!;
+        }
+        site.inputs.metaLoaded = true;
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    site.inputs.metaLoaded = true;
 }
 
 // sitePrefix is site.root relative to the repository root, "" at the root and slash-
 // terminated below it: the prefix every repo-relative path the history reports carries.
-fun sitePrefix(site: Site) > str !> any {
-    final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.inputs.root));
-    if (fromRoot == ".") { return ""; }
-    if (fromRoot == ".." or fromRoot.startsWith("../")) {
-        throw "site root " + site.inputs.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)";
+fun sitePrefix(site: Site) > result\Result::<str> {
+    try {
+        final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.inputs.root));
+        if (fromRoot == ".") { return result\ok::<str>(""); }
+        if (fromRoot == ".." or fromRoot.startsWith("../")) {
+            return result\fail::<str>("site root " + site.inputs.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)");
+        }
+        return result\ok::<str>(fromRoot + "/");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return fromRoot + "/";
 }
 
 // utcStamp renders a commit's RFC 3339 date in UTC. The date carries the committer's own
 // offset, and a stamp that followed it would change bytes with whoever committed.
-fun utcStamp(date: str) > str !> any {
-    return time\format("2006-01-02T15:04:05Z", time\parse("2006-01-02T15:04:05Z07:00", date));
+fun utcStamp(date: str) > result\Result::<str> {
+    try {
+        return result\ok::<str>(time\format("2006-01-02T15:04:05Z", time\parse("2006-01-02T15:04:05Z07:00", date)));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // axisReport lists pages reachable by fewer than three KINDS of route - tree, sequence, topic.
@@ -78,93 +98,112 @@ fun utcStamp(date: str) > str !> any {
 // that fails the build the moment someone adds a page - before they have tagged it - trains
 // people to reach for an escape hatch. Print the shortfall, let it be burned down, and promote
 // it to a throw once the number is at zero and staying there.
-export fun axisReport(site: Site) > void !> any {
-    var thin: mut [str] = mut [<str>];
-    foreach (p in site.docPages) {
-        final n = site.pageAxes[p.url];
-        if (n == null) { continue; }
-        if (n! < 3) { thin.append(p.url + " (" + "{n!}" + ")"); }
+export fun axisReport(site: Site) > result\Result::<bool> {
+    try {
+        var thin: mut [str] = mut [<str>];
+        foreach (p in site.docPages) {
+            final n = site.pageAxes[p.url];
+            if (n == null) { continue; }
+            if (n! < 3) { thin.append(p.url + " (" + "{n!}" + ")"); }
+        }
+        if (thin.len() == 0) { return result\ok::<bool>(true); }
+        final ordered = thin.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        std\print("  link axes: {ordered.len()} page(s) reachable by fewer than 3 kinds of route (tree, sequence, topic)");
+        var shown = 0;
+        foreach (u in ordered) {
+            if (shown >= 10) { break; }
+            std\print("    " + u);
+            shown = shown + 1;
+        }
+        if (ordered.len() > 10) { std\print("    ... and {ordered.len() - 10} more"); }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    if (thin.len() == 0) { return; }
-    final ordered = thin.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    std\print("  link axes: {ordered.len()} page(s) reachable by fewer than 3 kinds of route (tree, sequence, topic)");
-    var shown = 0;
-    foreach (u in ordered) {
-        if (shown >= 10) { break; }
-        std\print("    " + u);
-        shown = shown + 1;
-    }
-    if (ordered.len() > 10) { std\print("    ... and {ordered.len() - 10} more"); }
 }
 
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
-export fun assetIntegrityCheck(site: Site) > void !> any {
-    final files: mut [str] = mut [<str>];
-    walkGen("", files, site);
-    foreach (f in files) {
-        if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
-            // Non-textual asset: nothing to scan for refs.
-        } else {
-            final fh = io\File.open(site.inputs.outDir + "/" + f, io\FileMode.read);
-            final html = fh.readAll();
-            fh.close();
-            final parts = f.split("/");
-            var pageDir = "";
-            if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
-            foreach (target in scanReferencesInHTML(html, pageDir)) {
-                if (checkPathExists(target, site) == false) {
-                    throw "asset integrity: " + f + " references missing " + target;
+export fun assetIntegrityCheck(site: Site) > result\Result::<bool> {
+    try {
+        final files: mut [str] = mut [<str>];
+        final r20 = walkGen("", files, site);
+        if (r20.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        foreach (f in files) {
+            if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
+                // Non-textual asset: nothing to scan for refs.
+            } else {
+                final fh = io\File.open(site.inputs.outDir + "/" + f, io\FileMode.read);
+                final html = fh.readAll();
+                fh.close();
+                final parts = f.split("/");
+                var pageDir = "";
+                if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
+                foreach (target in scanReferencesInHTML(html, pageDir)) {
+                    final r21 = checkPathExists(target, site);
+                    if (r21.error -> failed) { return result\Result::<bool>{ error = failed }; }
+                    if (r21.value! == false) {
+                        return result\fail::<bool>("asset integrity: " + f + " references missing " + target);
+                    }
                 }
             }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
 // orphanCheck proves every docs page is reachable by BFS from the nav roots, so a
 // page with no inbound link fails the build instead of shipping unreachable.
-export fun orphanCheck(site: Site) > void !> any {
-    // Every written page, keyed the way pageKey() yields, so BFS can tell a page
-    // link from an asset link.
-    final files: mut [str] = mut [<str>];
-    walkGen("", files, site);
-    var isPage: mut {str: bool} = mut {};
-    foreach (f in files) {
-        if (f == "index.html") { isPage[""] = true; }
-        else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
-    }
+export fun orphanCheck(site: Site) > result\Result::<bool> {
+    try {
+        // Every written page, keyed the way pageKey() yields, so BFS can tell a page
+        // link from an asset link.
+        final files: mut [str] = mut [<str>];
+        final r19 = walkGen("", files, site);
+        if (r19.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        var isPage: mut {str: bool} = mut {};
+        foreach (f in files) {
+            if (f == "index.html") { isPage[""] = true; }
+            else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
+        }
 
-    var visited: mut {str: bool} = mut {};
-    var queue: mut [str] = mut [<str>];
-    foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
-        if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
-    }
-    var head = 0;
-    while (head < queue.len()) {
-        final key = queue[head];
-        head = head + 1;
-        var path = site.inputs.outDir + "/index.html";
-        if (key != "") { path = site.inputs.outDir + "/" + key + "/index.html"; }
-        final fh = io\File.open(path, io\FileMode.read);
-        final html = fh.readAll();
-        fh.close();
-        foreach (ref in scanReferencesInHTML(html, key)) {
-            final k = pageKey(ref);
-            if (isPage[k] != null and visited[k] == null) {
-                visited[k] = true;
-                queue.append(k);
+        var visited: mut {str: bool} = mut {};
+        var queue: mut [str] = mut [<str>];
+        foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
+            if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
+        }
+        var head = 0;
+        while (head < queue.len()) {
+            final key = queue[head];
+            head = head + 1;
+            var path = site.inputs.outDir + "/index.html";
+            if (key != "") { path = site.inputs.outDir + "/" + key + "/index.html"; }
+            final fh = io\File.open(path, io\FileMode.read);
+            final html = fh.readAll();
+            fh.close();
+            foreach (ref in scanReferencesInHTML(html, key)) {
+                final k = pageKey(ref);
+                if (isPage[k] != null and visited[k] == null) {
+                    visited[k] = true;
+                    queue.append(k);
+                }
             }
         }
-    }
 
-    var orphans: mut [str] = mut [<str>];
-    foreach (p in site.docPages) {
-        var dk = p.url;
-        if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
-        if (visited[dk] == null) { orphans.append(p.url); }
-    }
-    if (orphans.len() > 0) {
-        throw "orphaned pages: {orphans.len()} docs renderPage(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", ");
+        var orphans: mut [str] = mut [<str>];
+        foreach (p in site.docPages) {
+            var dk = p.url;
+            if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
+            if (visited[dk] == null) { orphans.append(p.url); }
+        }
+        if (orphans.len() > 0) {
+            return result\fail::<bool>("orphaned pages: {orphans.len()} docs renderPage(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", "));
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -181,26 +220,32 @@ final HISTORY_MAX = 8;
 //   - metaHistory: path -> up to HISTORY_MAX "full|short|stamp|subject" entries, newest-
 //     first; drives the collapsed history panel.
 // metaCommits also keys the releases directory itself, for the pages the manifests feed.
-export fun buildCommits(site: Site) > mut {str: str} !> any {
-    var m: mut {str: str} = mut {};
-    site.inputs.metaHistory = mut {};
-    var sources: mut [str] = mut [<str>];
-    final releases = site.inputs.metaPrefix + "releases";
-    foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.inputs.metaPrefix + p); }
-    foreach (c in vcs\history(0, paths: sources, firstParent: true)) {
-        final header = c.id + "|" + c.short + "|" + utcStamp(c.date);
-        foreach (file in c.files) {
-            if (m[releases] == null and file.startsWith(releases + "/")) { m[releases] = header; }
-            if (m[file] == null) { m[file] = header; }
-            var hist = site.inputs.metaHistory[file];
-            if (hist == null) { hist = mut [<str>]; }
-            if (hist.len() < HISTORY_MAX) {
-                hist.append(header + "|" + c.subject);
+export fun buildCommits(site: Site) > result\Result::<mut {str: str}> {
+    try {
+        var m: mut {str: str} = mut {};
+        site.inputs.metaHistory = mut {};
+        var sources: mut [str] = mut [<str>];
+        final releases = site.inputs.metaPrefix + "releases";
+        foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.inputs.metaPrefix + p); }
+        foreach (c in vcs\history(0, paths: sources, firstParent: true)) {
+            final r18 = utcStamp(c.date);
+            if (r18.error -> failed) { return result\Result::<mut {str: str}>{ error = failed }; }
+            final header = c.id + "|" + c.short + "|" + r18.value!;
+            foreach (file in c.files) {
+                if (m[releases] == null and file.startsWith(releases + "/")) { m[releases] = header; }
+                if (m[file] == null) { m[file] = header; }
+                var hist = site.inputs.metaHistory[file];
+                if (hist == null) { hist = mut [<str>]; }
+                if (hist.len() < HISTORY_MAX) {
+                    hist.append(header + "|" + c.subject);
+                }
+                site.inputs.metaHistory[file] = hist;
             }
-            site.inputs.metaHistory[file] = hist;
         }
+        return result\ok::<mut {str: str}>(m);
+    } catch (err: any) {
+        return result\caught::<mut {str: str}>(err);
     }
-    return m;
 }
 
 // checkPathExists returns true when target (gen-root-relative, no leading slash)
@@ -212,19 +257,23 @@ export fun buildCommits(site: Site) > mut {str: str} !> any {
 // of fork+exec pairs is what put the render's kernel time at more than twice its user
 // time - the gate that proves the site has no dangling link cost more than rendering the
 // site did.
-export fun checkPathExists(target: str, site: Site) > bool !> any {
-    // Empty target = gen/'s root, always the index.html landing. This shows up
-    // when a page links to "../" (Parent Directory in an autoindex root) and the
-    // resolver pops back to the root.
-    if (target == "") { return fs\isFile(site.inputs.outDir + "/index.html"); }
-    if (fs\isFile(fs\join(site.inputs.outDir, target))) { return true; }
-    if (fs\isDir(fs\join(site.inputs.outDir, target))) {
-        return fs\isFile(fs\join(site.inputs.outDir, target, "index.html"));
+export fun checkPathExists(target: str, site: Site) > result\Result::<bool> {
+    try {
+        // Empty target = gen/'s root, always the index.html landing. This shows up
+        // when a page links to "../" (Parent Directory in an autoindex root) and the
+        // resolver pops back to the root.
+        if (target == "") { return result\ok::<bool>(fs\isFile(site.inputs.outDir + "/index.html")); }
+        if (fs\isFile(fs\join(site.inputs.outDir, target))) { return result\ok::<bool>(true); }
+        if (fs\isDir(fs\join(site.inputs.outDir, target))) {
+            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, target, "index.html")));
+        }
+        if (target.endsWith("/")) {
+            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, target + "index.html")));
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    if (target.endsWith("/")) {
-        return fs\isFile(fs\join(site.inputs.outDir, target + "index.html"));
-    }
-    return false;
 }
 
 // scanReferencesInHTML pulls every href="..." and src="..." out of html, skipping
@@ -283,17 +332,23 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 
 // walkGen recursively enumerates every written file under gen/ so the integrity check
 // reads each once.
-export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
-    var dir = site.inputs.outDir;
-    if (rel != "") { dir = site.inputs.outDir + "/" + rel; }
-    foreach (name in fs\listDir(dir)) {
-        var childRel = name;
-        if (rel != "") { childRel = rel + "/" + name; }
-        if (fs\isDir(fs\join(site.inputs.outDir, childRel))) {
-            walkGen(childRel, acc, site);
-        } else {
-            acc.append(childRel);
+export fun walkGen(rel: str, acc: mut [str], site: Site) > result\Result::<bool> {
+    try {
+        var dir = site.inputs.outDir;
+        if (rel != "") { dir = site.inputs.outDir + "/" + rel; }
+        foreach (name in fs\listDir(dir)) {
+            var childRel = name;
+            if (rel != "") { childRel = rel + "/" + name; }
+            if (fs\isDir(fs\join(site.inputs.outDir, childRel))) {
+                final r17 = walkGen(childRel, acc, site);
+                if (r17.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            } else {
+                acc.append(childRel);
+            }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -303,51 +358,57 @@ export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
 // every "<dir>/index.html" not in writtenPaths and not in alwaysKeep, delete the whole
 // directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so
 // neither trips on a stale page's dangling reference to content removed with it.
-export fun pruneStaleOutputs(site: Site) > void !> any {
-    // Outputs never eligible for pruning: paths a normal render always rewrites regardless
-    // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
-    // render never touches (build-playground / build-playground-editor refresh it out of
-    // band).
-    final alwaysKeep: mut {str: bool} = mut {
-        "index.html": true, "index.md": true, "404.html": true,
-        // The tracked files that live inside the output tree. gen/install is the POSIX
-        // sh installer; public/release/index.json and its Ed25519 signature are the
-        // release manifest `magus self update` reads, written by `magus-utils
-        // release-index` at tag time because only a tag build holds the signing key.
-        // Nothing here writes any of the three, so this list is also where you find them.
-        "install": true,
-        "public/release/index.json": true, "public/release/index.json.sig": true,
-        "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
-        "service-worker.js": true, "search-index.json": true, "site-manifest.sha256": true,
-        "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
-        "search/index.html": true,
-        "playground/index.html": true, "playground/buzz.wasm": true,
-        "playground/wasm_exec.js": true, "playground/editor.js": true,
-        // /console/ is owned by the standalone console/ project (copied in at deploy). The
-        // docs render only emits a redirect stub there via the reference/console alias, which
-        // writeAliases already registers in writtenPaths - so no alwaysKeep entry needed.
-    };
-    final acc: mut [str] = mut [<str>];
-    walkGen("", acc, site);
-    final staleDirs: mut {str: bool} = mut {};
-    foreach (path in acc) {
-        if (alwaysKeep[path] != null) { continue; }
-        if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
-        if (path.endsWith("/index.html") == false) { continue; }   // only page-shaped files drive pruning
-        if (site.writtenPaths[path] != null) { continue; }
-        staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
-    }
-    foreach (dir in staleDirs.keys()) {
-        // Pruning keys off a missing index.html but deletes the whole directory, so a
-        // directory holding produced NON-page outputs must survive its page going away.
-        // /public/atom/ (the Atom feeds) is exactly that: real files, no page of its own.
-        var produced = false;
-        foreach (w in site.writtenPaths.keys()) {
-            if (w.startsWith(dir + "/")) { produced = true; }
+export fun pruneStaleOutputs(site: Site) > result\Result::<bool> {
+    try {
+        // Outputs never eligible for pruning: paths a normal render always rewrites regardless
+        // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
+        // render never touches (build-playground / build-playground-editor refresh it out of
+        // band).
+        final alwaysKeep: mut {str: bool} = mut {
+            "index.html": true, "index.md": true, "404.html": true,
+            // The tracked files that live inside the output tree. gen/install is the POSIX
+            // sh installer; public/release/index.json and its Ed25519 signature are the
+            // release manifest `magus self update` reads, written by `magus-utils
+            // release-index` at tag time because only a tag build holds the signing key.
+            // Nothing here writes any of the three, so this list is also where you find them.
+            "install": true,
+            "public/release/index.json": true, "public/release/index.json.sig": true,
+            "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
+            "service-worker.js": true, "search-index.json": true, "site-manifest.sha256": true,
+            "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
+            "search/index.html": true,
+            "playground/index.html": true, "playground/buzz.wasm": true,
+            "playground/wasm_exec.js": true, "playground/editor.js": true,
+            // /console/ is owned by the standalone console/ project (copied in at deploy). The
+            // docs render only emits a redirect stub there via the reference/console alias, which
+            // writeAliases already registers in writtenPaths - so no alwaysKeep entry needed.
+        };
+        final acc: mut [str] = mut [<str>];
+        final r16 = walkGen("", acc, site);
+        if (r16.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final staleDirs: mut {str: bool} = mut {};
+        foreach (path in acc) {
+            if (alwaysKeep[path] != null) { continue; }
+            if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
+            if (path.endsWith("/index.html") == false) { continue; }   // only page-shaped files drive pruning
+            if (site.writtenPaths[path] != null) { continue; }
+            staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
         }
-        if (produced) { continue; }
-        std\print("  pruning stale " + dir + "/ (no longer produced)");
-        fs\removeAll(fs\join(site.inputs.outDir, dir));
+        foreach (dir in staleDirs.keys()) {
+            // Pruning keys off a missing index.html but deletes the whole directory, so a
+            // directory holding produced NON-page outputs must survive its page going away.
+            // /public/atom/ (the Atom feeds) is exactly that: real files, no page of its own.
+            var produced = false;
+            foreach (w in site.writtenPaths.keys()) {
+                if (w.startsWith(dir + "/")) { produced = true; }
+            }
+            if (produced) { continue; }
+            std\print("  pruning stale " + dir + "/ (no longer produced)");
+            fs\removeAll(fs\join(site.inputs.outDir, dir));
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -355,16 +416,22 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
 // sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/,
 // repo-relative, sorted. Called from site_publish, not site_render, so the fast render
 // path skips the hashing. Excludes its own output path (a file cannot hash itself).
-export fun writeSiteManifest(site: Site) > void !> any {
-    final acc: mut [str] = mut [<str>];
-    walkGen("", acc, site);
-    final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    final body = mut [<str>];
-    foreach (rel in sorted) {
-        if (rel == "site-manifest.sha256") { continue; }
-        body.append(fileSha256(site.inputs.outDir + "/" + rel) + "  " + rel + "\n");
+export fun writeSiteManifest(site: Site) > result\Result::<bool> {
+    try {
+        final acc: mut [str] = mut [<str>];
+        final r15 = walkGen("", acc, site);
+        if (r15.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        final body = mut [<str>];
+        foreach (rel in sorted) {
+            if (rel == "site-manifest.sha256") { continue; }
+            body.append(fileSha256(site.inputs.outDir + "/" + rel) + "  " + rel + "\n");
+        }
+        fs\writeFile(site.inputs.outDir + "/site-manifest.sha256", body.join(""));
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    fs\writeFile(site.inputs.outDir + "/site-manifest.sha256", body.join(""));
 }
 
 // pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
@@ -388,17 +455,21 @@ final RETIRED_URLS = "retired.urls.lock";
 
 // readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
-export fun readURLSet(path: str) > {str: bool} !> any {
-    var set: mut {str: bool} = mut {};
-    if (fs\isFile(path) == false) { return set; }
-    final f = io\File.open(path, io\FileMode.read);
-    final content = f.readAll();
-    f.close();
-    foreach (line in content.split("\n")) {
-        final t = line.trim();
-        if (t != "" and t.startsWith("#") == false) { set[t] = true; }
+export fun readURLSet(path: str) > result\Result::<{str: bool}> {
+    try {
+        var set: mut {str: bool} = mut {};
+        if (fs\isFile(path) == false) { return result\ok::<{str: bool}>(set); }
+        final f = io\File.open(path, io\FileMode.read);
+        final content = f.readAll();
+        f.close();
+        foreach (line in content.split("\n")) {
+            final t = line.trim();
+            if (t != "" and t.startsWith("#") == false) { set[t] = true; }
+        }
+        return result\ok::<{str: bool}>(set);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err);
     }
-    return set;
 }
 
 // abandonedLinkCheck is the parity gate: every URL the site has shipped before
@@ -407,18 +478,30 @@ export fun readURLSet(path: str) > {str: bool} !> any {
 // purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
 // URL resolving) or list it in retired.urls.lock. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
-export fun abandonedLinkCheck(site: Site) > void !> any {
-    final locked = readURLSet(URL_LOCK);
-    final retired = readURLSet(RETIRED_URLS);
-    var abandoned: mut [str] = mut [<str>];
-    foreach (url in locked.keys()) {
-        if (retired[url] == null and checkPathExists(url, site) == false) {
-            abandoned.append(url);
+export fun abandonedLinkCheck(site: Site) > result\Result::<bool> {
+    try {
+        final r12 = readURLSet(URL_LOCK);
+        if (r12.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final locked = r12.value!;
+        final r13 = readURLSet(RETIRED_URLS);
+        if (r13.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final retired = r13.value!;
+        var abandoned: mut [str] = mut [<str>];
+        foreach (url in locked.keys()) {
+            if (retired[url] != null) { continue; }
+            final r14 = checkPathExists(url, site);
+            if (r14.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            if (r14.value! == false) {
+                abandoned.append(url);
+            }
         }
-    }
-    if (abandoned.len() > 0) {
-        final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired.urls.lock: " + sorted.join(", ");
+        if (abandoned.len() > 0) {
+            final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+            return result\fail::<bool>("abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired.urls.lock: " + sorted.join(", "));
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -426,16 +509,23 @@ export fun abandonedLinkCheck(site: Site) > void !> any {
 // only adds - a URL that drops out of the build stays in the ledger so the gate
 // keeps demanding a redirect or an explicit retirement for it. Called under the rw
 // charm so a plain (checking) render never mutates the tree.
-export fun updateUrlLock(site: Site) > void !> any {
-    final set: mut {str: bool} = mut {};
-    foreach (known in readURLSet(URL_LOCK).keys()) { set[known] = true; }
-    foreach (u in site.pageUrls.keys()) { set[u] = true; }
-    var lines: mut [str] = mut [<str>];
-    foreach (u in set.keys()) { lines.append(u); }
-    final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    final body = mut [<str>];
-    foreach (u in sorted) { body.append(u + "\n"); }
-    fs\writeFile(URL_LOCK, body.join(""));
+export fun updateUrlLock(site: Site) > result\Result::<bool> {
+    try {
+        final set: mut {str: bool} = mut {};
+        final r11 = readURLSet(URL_LOCK);
+        if (r11.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        foreach (known in r11.value!.keys()) { set[known] = true; }
+        foreach (u in site.pageUrls.keys()) { set[u] = true; }
+        var lines: mut [str] = mut [<str>];
+        foreach (u in set.keys()) { lines.append(u); }
+        final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        final body = mut [<str>];
+        foreach (u in sorted) { body.append(u + "\n"); }
+        fs\writeFile(URL_LOCK, body.join(""));
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // LINT_SKIP_DIRS never hold prose this lint has an opinion about: build output, installed
@@ -452,18 +542,24 @@ fun lintSkipDir(name: str) > bool {
 
 // collectMarkdown appends every .md file under dir (recursively) to acc, as a path relative
 // to the walk root.
-fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
-    var dir = base;
-    if (rel != "") { dir = base + "/" + rel; }
-    foreach (name in fs\listDir(dir)) {
-        var childRel = name;
-        if (rel != "") { childRel = rel + "/" + name; }
-        if (isDirectory(dir + "/" + name)) {
-            if (lintSkipDir(name)) { continue; }
-            collectMarkdown(base, childRel, acc);
-        } else {
-            if (name.endsWith(".md")) { acc.append(childRel); }
+fun collectMarkdown(base: str, rel: str, acc: mut [str]) > result\Result::<bool> {
+    try {
+        var dir = base;
+        if (rel != "") { dir = base + "/" + rel; }
+        foreach (name in fs\listDir(dir)) {
+            var childRel = name;
+            if (rel != "") { childRel = rel + "/" + name; }
+            if (isDirectory(dir + "/" + name)) {
+                if (lintSkipDir(name)) { continue; }
+                final r10 = collectMarkdown(base, childRel, acc);
+                if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            } else {
+                if (name.endsWith(".md")) { acc.append(childRel); }
+            }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -473,22 +569,26 @@ fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
 //
 // Ignored means ignored AND untracked: check-ignore without --no-index leaves a
 // force-added page in. A VCS other than git, or none, filters nothing.
-fun dropIgnored(base: str, rels: [str]) > [str] !> any {
-    if (vcs\name() != "git" or rels.len() == 0) { return rels; }
-    final probe = vcs\cmd(["check-ignore", "--"] + rels, vcs\CommandOptions{dir = base, quiet = true, allowFailure = true});
-    // Exit 1 is "nothing ignored"; anything above it is a failed probe, not an answer.
-    if (probe.code > 1) {
-        throw "git check-ignore failed in " + base + ": " + probe.stderr;
+fun dropIgnored(base: str, rels: [str]) > result\Result::<[str]> {
+    try {
+        if (vcs\name() != "git" or rels.len() == 0) { return result\ok::<[str]>(rels); }
+        final probe = vcs\cmd(["check-ignore", "--"] + rels, vcs\CommandOptions{dir = base, quiet = true, allowFailure = true});
+        // Exit 1 is "nothing ignored"; anything above it is a failed probe, not an answer.
+        if (probe.code > 1) {
+            return result\fail::<[str]>("git check-ignore failed in " + base + ": " + probe.stderr);
+        }
+        final ignored = mut {<str: bool>};
+        foreach (line in probe.stdout.split("\n")) {
+            ignored[line.trim()] = true;
+        }
+        final kept: mut [str] = mut [<str>];
+        foreach (rel in rels) {
+            if (!ignored.hasKey(rel)) { kept.append(rel); }
+        }
+        return result\ok::<[str]>(kept);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    final ignored = mut {<str: bool>};
-    foreach (line in probe.stdout.split("\n")) {
-        ignored[line.trim()] = true;
-    }
-    final kept: mut [str] = mut [<str>];
-    foreach (rel in rels) {
-        if (!ignored.hasKey(rel)) { kept.append(rel); }
-    }
-    return kept;
 }
 
 test "dropIgnored skips ignored untracked pages and keeps tracked and force-added ones" {
@@ -499,17 +599,22 @@ test "dropIgnored skips ignored untracked pages and keeps tracked and force-adde
     fs\writeFile(repo + "/forced.md", "x\n");
     fs\writeFile(repo + "/tracked.md", "x\n");
     _ = vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], vcs\CommandOptions{dir = repo, quiet = true});
-    final kept = dropIgnored(repo, ["forced.md", "rendered.md", "tracked.md"]);
+    final kept = dropIgnored(repo, ["forced.md", "rendered.md", "tracked.md"]).value!;
     fs\removeAll(repo);
     assert\equal(kept.join(","), "forced.md,tracked.md", "only the ignored untracked page is dropped");
 }
 
 // conventionPages lists the pages the conventions lint judges under base: every .md the
 // walk finds, less what git ignores.
-fun conventionPages(base: str) > [str] !> any {
-    final found: mut [str] = mut [<str>];
-    collectMarkdown(base, "", found);
-    return dropIgnored(base, found);
+fun conventionPages(base: str) > result\Result::<[str]> {
+    try {
+        final found: mut [str] = mut [<str>];
+        final r9 = collectMarkdown(base, "", found);
+        if (r9.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+        return dropIgnored(base, found);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
+    }
 }
 
 test "conventionPages lists a tracked page and not a stale ignored render" {
@@ -519,7 +624,7 @@ test "conventionPages lists a tracked page and not a stale ignored render" {
     fs\mkdirAll(repo + "/docs/guides");
     fs\writeFile(repo + "/docs/changelog.md", "See [gone](migrating/gone.md).\n");
     fs\writeFile(repo + "/docs/guides/tracked.md", "See [gone](migrating/gone.md).\n");
-    final pages = conventionPages(repo + "/docs");
+    final pages = conventionPages(repo + "/docs").value!;
     fs\removeAll(repo);
     assert\equal(pages.join(","), "guides/tracked.md", "the ignored render is not judged");
 }
@@ -536,8 +641,12 @@ test "pagesIn keeps every page with no files and only the named ones with some" 
 }
 
 // pathExists is the one filesystem question the conventions lint asks.
-fun pathExists(p: str) > bool !> any {
-    return fs\exists(p);
+fun pathExists(p: str) > result\Result::<bool> {
+    try {
+        return result\ok::<bool>(fs\exists(p));
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // conventionsCheck holds every doc page to the conventions page it ships. It runs from
@@ -558,54 +667,67 @@ fun pathExists(p: str) > bool !> any {
 //
 // files, relative to docs, narrows the check to those pages. A page's
 // run does not answer for the root prose or the crosscheck.
-export fun conventionsCheck(root: str, docs: str, files: [str]) > void !> any {
-    final sorted = pagesIn(conventionPages(root + "/" + docs), files: files).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+export fun conventionsCheck(root: str, docs: str, files: [str]) > result\Result::<bool> {
+    try {
+        final r4 = conventionPages(root + "/" + docs);
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final sorted = pagesIn(r4.value!, files: files).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
-    final violations: mut [str] = mut [<str>];
-    var checked = 0;
+        final violations: mut [str] = mut [<str>];
+        var checked = 0;
 
-    // The docs pages, addressed as docs/<rel> so a finding names a path you can open.
-    foreach (rel in sorted) {
-        checked = checked + 1;
-        collectFindings(root, file: docs + "/" + rel, abs: root + "/" + docs + "/" + rel,
-            violations: violations);
-    }
-    // The repo-root prose, where a stale path does the most damage: it is the first thing a
-    // newcomer reads, and a backticked path in a sentence is invisible to every markdown
-    // linter, because it is not a link.
-    if (files.len() == 0) {
-        foreach (name in ["README.md", "CONTRIBUTING.md"]) {
-            if (pathExists(root + "/" + name)) {
-                checked = checked + 1;
-                collectFindings(root, file: name, abs: root + "/" + name,
-                    violations: violations);
+        // The docs pages, addressed as docs/<rel> so a finding names a path you can open.
+        foreach (rel in sorted) {
+            checked = checked + 1;
+            final r5 = collectFindings(root, file: docs + "/" + rel, abs: root + "/" + docs + "/" + rel,
+                violations: violations);
+            if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        }
+        // The repo-root prose, where a stale path does the most damage: it is the first thing a
+        // newcomer reads, and a backticked path in a sentence is invisible to every markdown
+        // linter, because it is not a link.
+        if (files.len() == 0) {
+            foreach (name in ["README.md", "CONTRIBUTING.md"]) {
+                final r6 = pathExists(root + "/" + name);
+                if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+                if (r6.value!) {
+                    checked = checked + 1;
+                    final r7 = collectFindings(root, file: name, abs: root + "/" + name,
+                        violations: violations);
+                    if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+                }
             }
         }
-    }
 
-    var cross = [<str>];
-    if (files.len() == 0) {
-        cross = crosscheckFindings(root, docs: docs, pages: sorted);
-    }
+        var cross = [<str>];
+        if (files.len() == 0) {
+            final r8 = crosscheckFindings(root, docs: docs, pages: sorted);
+            if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            cross = r8.value!;
+        }
 
-    if (violations.len() > 0 or cross.len() > 0) {
-        var message = "";
-        if (violations.len() > 0) {
-            final body = mut [<str>];
-            foreach (v in violations) { body.append("\n  " + v); }
-            message = "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
-                + body.join("") + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+        if (violations.len() > 0 or cross.len() > 0) {
+            var message = "";
+            if (violations.len() > 0) {
+                final body = mut [<str>];
+                foreach (v in violations) { body.append("\n  " + v); }
+                message = "conventions: {violations.len()} violation(s) of docs/conventions.md across {checked} file(s):"
+                    + body.join("") + "\n\nEach rule is documented on that page. Fix the prose, not the lint.";
+            }
+            if (cross.len() > 0) {
+                final body = mut [<str>];
+                foreach (v in cross) { body.append("\n  " + v); }
+                if (message != "") { message = message + "\n\n"; }
+                message = message + "crosscheck: {cross.len()} disagreement(s) between a page and what it documents:"
+                    + body.join("") + "\n\nEach line names both halves; fix whichever is wrong.";
+            }
+            return result\fail::<bool>(message);
         }
-        if (cross.len() > 0) {
-            final body = mut [<str>];
-            foreach (v in cross) { body.append("\n  " + v); }
-            if (message != "") { message = message + "\n\n"; }
-            message = message + "crosscheck: {cross.len()} disagreement(s) between a page and what it documents:"
-                + body.join("") + "\n\nEach line names both halves; fix whichever is wrong.";
-        }
-        throw message;
+        std\print("conventions: {checked} files checked, no violations");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    std\print("conventions: {checked} files checked, no violations");
 }
 
 // ENVIRONMENT_SKIP_SEGMENTS are the doc trees the environment-detection rule does not
@@ -631,92 +753,107 @@ fun formatFindings(found: [ConventionFinding], into: mut [str]) > void {
 // crosscheckFindings runs lib/crosscheck over the tree. It checks every page
 // for what it must never carry. It holds the agent, verify and Go SDK guides
 // and the changelog fragments to the files they document.
-fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
-    final found: mut [str] = mut [<str>];
-    foreach (rel in pages) {
-        final file = docs + "/" + rel;
-        final md = fs\readFile(root + "/" + file);
-        formatFindings(bearerFindings(file, md: md), into: found);
-        if (environmentRuleApplies(rel)) {
-            formatFindings(environmentFindings(file, md: md), into: found);
+fun crosscheckFindings(root: str, docs: str, pages: [str]) > result\Result::<[str]> {
+    try {
+        final found: mut [str] = mut [<str>];
+        foreach (rel in pages) {
+            final file = docs + "/" + rel;
+            final md = fs\readFile(root + "/" + file);
+            formatFindings(bearerFindings(file, md: md), into: found);
+            if (environmentRuleApplies(rel)) {
+                formatFindings(environmentFindings(file, md: md), into: found);
+            }
         }
-    }
-    // The fragments are the next release's changelog, written by hand, so they are held
-    // to the rule the pages are. The rendered changelog page is exempt as generated.
-    foreach (frag in fs\glob(root + "/changes/unreleased/*.md")) {
-        final file = "changes/unreleased/" + fs\basename(frag.value);
-        formatFindings(environmentFindings(file, md: fs\readFile(frag.value)), into: found);
-    }
+        // The fragments are the next release's changelog, written by hand, so they are held
+        // to the rule the pages are. The rendered changelog page is exempt as generated.
+        foreach (frag in fs\glob(root + "/changes/unreleased/*.md")) {
+            final file = "changes/unreleased/" + fs\basename(frag.value);
+            formatFindings(environmentFindings(file, md: fs\readFile(frag.value)), into: found);
+        }
 
-    final agentsRel = docs + "/guides/integrations/agents";
-    final agentsDir = root + "/" + agentsRel;
-    final templates = mut {<str: str>};
-    final adapters = mut {<str: str>};
-    foreach (name, page in TEMPLATE_PAGES) {
-        final body = fs\readFile(agentsDir + "/" + name);
-        templates[name] = body;
-        if (name.startsWith("magus-session-load-")) { adapters[name] = body; }
-        foreach (f in embedFindings(name, body: body, page: agentsRel + "/" + page,
-                doc: fs\readFile(agentsDir + "/" + page))) {
+        final agentsRel = docs + "/guides/integrations/agents";
+        final agentsDir = root + "/" + agentsRel;
+        final templates = mut {<str: str>};
+        final adapters = mut {<str: str>};
+        foreach (name, page in TEMPLATE_PAGES) {
+            final body = fs\readFile(agentsDir + "/" + name);
+            templates[name] = body;
+            if (name.startsWith("magus-session-load-")) { adapters[name] = body; }
+            foreach (f in embedFindings(name, body: body, page: agentsRel + "/" + page,
+                    doc: fs\readFile(agentsDir + "/" + page))) {
+                found.append(f);
+            }
+        }
+        // OpenCode is installed from its harness assets, not copied from this guide.
+        templates["opencode"] = fs\readFile(root + "/spells/harness/opencode/spell.buzz");
+        final guide = docs + "/guides/integrations/agents.md";
+        foreach (f in guardParityFindings(templates, guide: fs\readFile(root + "/" + guide), guideFile: guide)) {
             found.append(f);
         }
-    }
-    // OpenCode is installed from its harness assets, not copied from this guide.
-    templates["opencode"] = fs\readFile(root + "/spells/harness/opencode/spell.buzz");
-    final guide = docs + "/guides/integrations/agents.md";
-    foreach (f in guardParityFindings(templates, guide: fs\readFile(root + "/" + guide), guideFile: guide)) {
-        found.append(f);
-    }
-    final sessionGuide = agentsRel + "/session-load.md";
-    foreach (f in sessionParityFindings(adapters, guide: fs\readFile(root + "/" + sessionGuide), guideFile: sessionGuide)) {
-        found.append(f);
-    }
-    final hostPage = agentsRel + "/claude-code.md";
-    foreach (f in rehydrateWiringFindings(hostPage, doc: fs\readFile(root + "/" + hostPage))) {
-        found.append(f);
-    }
-    // Grade canonical wiring, never a developer's merged personal installation.
-    final hooks = mut {<str: any>};
-foreach (block in magus\describe.harness("claude-code").wired) {
-    if (block.key.startsWith("hooks.")) { hooks[block.key.sub(6)] = block.entries; }
-}
-    final configs = {"claude-code.md": json\stringify({"hooks": hooks}),
-        "codex.md": fs\readFile(agentsDir + "/codex-hooks.json")};
-    foreach (page, config in configs) {
-        foreach (f in hostWiringFindings(config, configFile: page,
-                page: agentsRel + "/" + page, doc: fs\readFile(agentsDir + "/" + page))) {
+        final sessionGuide = agentsRel + "/session-load.md";
+        foreach (f in sessionParityFindings(adapters, guide: fs\readFile(root + "/" + sessionGuide), guideFile: sessionGuide)) {
             found.append(f);
         }
-    }
-    foreach (page in fs\glob(agentsDir + "/*.md")) {
-        final file = agentsRel + "/" + fs\basename(page.value);
-        formatFindings(magusLookupFindings(file, md: fs\readFile(page.value)), into: found);
-    }
+        final hostPage = agentsRel + "/claude-code.md";
+        foreach (f in rehydrateWiringFindings(hostPage, doc: fs\readFile(root + "/" + hostPage))) {
+            found.append(f);
+        }
+        // Grade canonical wiring, never a developer's merged personal installation.
+        final hooks = mut {<str: any>};
+        foreach (block in magus\describe.harness("claude-code").wired) {
+            if (block.key.startsWith("hooks.")) { hooks[block.key.sub(6)] = block.entries; }
+        }
+        final configs = {"claude-code.md": json\stringify({"hooks": hooks}),
+            "codex.md": fs\readFile(agentsDir + "/codex-hooks.json")};
+        foreach (page, config in configs) {
+            final r2 = hostWiringFindings(config, configFile: page,
+                    page: agentsRel + "/" + page, doc: fs\readFile(agentsDir + "/" + page));
+            if (r2.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+            foreach (f in r2.value!) {
+                found.append(f);
+            }
+        }
+        foreach (page in fs\glob(agentsDir + "/*.md")) {
+            final file = agentsRel + "/" + fs\basename(page.value);
+            formatFindings(magusLookupFindings(file, md: fs\readFile(page.value)), into: found);
+        }
 
-    final verify = docs + "/guides/setup/verify.md";
-    foreach (f in releaseKeyFindings(fs\readFile(root + "/internal/selfupdate/release-keys.json"),
-            guideFile: verify, guide: fs\readFile(root + "/" + verify))) {
-        found.append(f);
-    }
+        final verify = docs + "/guides/setup/verify.md";
+        final r3 = releaseKeyFindings(fs\readFile(root + "/internal/selfupdate/release-keys.json"),
+                guideFile: verify, guide: fs\readFile(root + "/" + verify));
+        if (r3.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+        foreach (f in r3.value!) {
+            found.append(f);
+        }
 
-    final sdk = docs + "/guides/go-sdk.md";
-    foreach (f in exampleFindings(sdk, guide: fs\readFile(root + "/" + sdk),
-            examplesFile: "example_test.go", examples: fs\readFile(root + "/example_test.go"))) {
-        found.append(f);
+        final sdk = docs + "/guides/go-sdk.md";
+        foreach (f in exampleFindings(sdk, guide: fs\readFile(root + "/" + sdk),
+                examplesFile: "example_test.go", examples: fs\readFile(root + "/example_test.go"))) {
+            found.append(f);
+        }
+        return result\ok::<[str]>(found);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return found;
 }
 
 // collectFindings runs both halves over one file into the single tier that throws.
-fun collectFindings(root: str, file: str, abs: str, violations: mut [str]) > void !> any {
-    final md = fs\readFile(abs);
-    foreach (f in lintMarkdown(file, md)) {
-        violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
-    }
-    if (pathCheckApplies(file) == false) { return; }
-    foreach (f in pathReferences(file, md)) {
-        if (pathExists(root + "/" + f.path) == false) {
+fun collectFindings(root: str, file: str, abs: str, violations: mut [str]) > result\Result::<bool> {
+    try {
+        final md = fs\readFile(abs);
+        foreach (f in lintMarkdown(file, md)) {
             violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
         }
+        if (pathCheckApplies(file) == false) { return result\ok::<bool>(true); }
+        foreach (f in pathReferences(file, md)) {
+            final r1 = pathExists(root + "/" + f.path);
+            if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            if (r1.value! == false) {
+                violations.append(f.file + ":" + "{f.line}" + ": [" + f.rule + "] " + f.message);
+            }
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }

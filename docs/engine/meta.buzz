@@ -5,6 +5,7 @@
 namespace meta;
 
 import "markdown";
+import "result";
 import "serialize";
 import "../libs/ssg/text" as _;
 import "../libs/ssg/dom" as _;
@@ -27,34 +28,46 @@ export fun firstHeading(md: str) > str? {
 
 // parseTags reads the frontmatter `tags:` list as [str] (empty when absent). The one
 // extraction point, so rendered chips and the search index draw from the same source.
-export fun parseTags(md: str) > [str] !> any {
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
+export fun parseTags(md: str) > result\Result::<[str]> {
     final tags: mut [str] = mut [];
-    foreach (t in fm.q("tags").listValue()) {
-        final tag = t.stringValue();
-        // A "magus" tag narrows nothing (it is the whole project), so drop it site-wide -
-        // never a chip, never in the search index.
-        if (tag.lower() != "magus") { tags.append(tag); }
+    try {
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        foreach (t in fm.q("tags").listValue()) {
+            final tag = t.stringValue();
+            // A "magus" tag narrows nothing (it is the whole project), so drop it site-wide -
+            // never a chip, never in the search index.
+            if (tag.lower() != "magus") { tags.append(tag); }
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return tags;
+    return result\ok::<[str]>(tags);
 }
 
 // generatedFrom reads the frontmatter `generated_from:` value (empty when absent, which
 // means the page is hand-written). A repo-relative path or comma-joined glob list names
 // the source directly; a value ending in "/" is an in-site path to the section overview
 // that carries the real source link(s) instead - see internal/docs.Frontmatter.
-export fun generatedFrom(md: str) > str !> any {
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    return fm.q("generated_from").stringValue();
+export fun generatedFrom(md: str) > result\Result::<str> {
+    try {
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        return result\ok::<str>(fm.q("generated_from").stringValue());
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // pageType reads the frontmatter `page_type:` marker (empty when absent). The value that
 // matters is "overview": a landing/index page that orients and routes to others. Related
 // ranking favors these hubs and the reachability gate trusts them as roots, so declaring
 // the type in frontmatter beats guessing it from a URL shape.
-export fun pageType(md: str) > str !> any {
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    return fm.q("page_type").stringValue();
+export fun pageType(md: str) > result\Result::<str> {
+    try {
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        return result\ok::<str>(fm.q("page_type").stringValue());
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 // readingTime estimates minutes-to-read by weighting content by type, not raw word count:

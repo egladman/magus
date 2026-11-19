@@ -1,4 +1,5 @@
 import "magus";
+import "result";
 import "../hack/magusfile/toolchain-policy" as policy;
 import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/drift" as drift;
@@ -89,11 +90,15 @@ export fun glossary_index_generate(ctx: magus\Context, args: [str]) > void !> an
     ctx.writesFiles(["glossary.md"], editsExistingSource: true);
     final pages = mut [<dictionary\TermPage>];
     foreach (p in fs\glob("glossary/*.md")) {
-        pages.append(dictionary\termPage(p.value, md: fs\readFile(p.value)));
+        final r15 = dictionary\termPage(p.value, md: fs\readFile(p.value));
+        if (r15.error -> failed) { throw failed.message; }
+        pages.append(r15.value!);
     }
     final block = dictionary\glossaryIndex(pages);
-    fs\writeFile("glossary.md", content: dictionary\replaceBlock(fs\readFile("glossary.md"),
-        begin: dictionary\INDEX_BEGIN, end: dictionary\INDEX_END, block: block));
+    final r16 = dictionary\replaceBlock(fs\readFile("glossary.md"),
+        begin: dictionary\INDEX_BEGIN, end: dictionary\INDEX_END, block: block);
+    if (r16.error -> failed) { throw failed.message; }
+    fs\writeFile("glossary.md", content: r16.value!);
 }
 
 // glossary-usage-generate writes each term page's Used in block from the knowledge graph: the
@@ -112,8 +117,14 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
     final stale = mut [<str>];
     foreach (p in fs\glob("glossary/*.md")) {
         final md = fs\readFile(p.value);
-        final block = termUsage(dictionary\termPage(p.value, md: md).title);
-        final next = dictionary\replaceBlock(md, begin: dictionary\USAGE_BEGIN, end: dictionary\USAGE_END, block: block);
+        final r13 = dictionary\termPage(p.value, md: md);
+        if (r13.error -> failed) { throw failed.message; }
+        final r12 = termUsage(r13.value!.title);
+        if (r12.error -> failed) { throw failed.message; }
+        final block = r12.value!;
+        final r14 = dictionary\replaceBlock(md, begin: dictionary\USAGE_BEGIN, end: dictionary\USAGE_END, block: block);
+        if (r14.error -> failed) { throw failed.message; }
+        final next = r14.value!;
         if (next == md) { continue; }
         if (ctx.hasCharm("rw")) {
             fs\writeFile(p.value, content: next);
@@ -132,51 +143,55 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
 // up to five code types named for it.
 // termUsage takes every section whose heading names the term and sorts by path before
 // capping, so the list depends on the tree alone and never on how a search ranked it.
-fun termUsage(title: str) > str !> any {
-    final candidates = mut [<dictionary\UsageDoc>];
-    foreach (m in magus\graph().query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
-        if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
-        if (m.label.lower().indexOf(title.lower()) == null) { continue; }
-        candidates.append(dictionary\docFromID(m.id, label: m.label));
-    }
-    _ = candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
-    final docs = mut [<dictionary\UsageDoc>];
-    final pages = mut {<str: bool>};
-    final dirs = mut {<str: int>};
-    foreach (d in candidates) {
-        if (docs.len() >= 6) { break; }
-        final dir = fs\dirname(d.file);
-        if (pages[d.file] != null or (dirs[dir] ?? 0) >= 2) { continue; }
-        pages[d.file] = true;
-        dirs[dir] = (dirs[dir] ?? 0) + 1;
-        docs.append(d);
-    }
-    final symbols = mut [<dictionary\UsageSymbol>];
-    final names = mut {<str: bool>};
-    final found = magus\graph().query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
-    if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
-        var buildable = 0;
-        foreach (gap in found.answer.gaps) {
-            if (gap.unindexable) {
-                continue;
+fun termUsage(title: str) > result\Result::<str> {
+    try {
+        final candidates = mut [<dictionary\UsageDoc>];
+        foreach (m in magus\graph().query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
+            if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
+            if (m.label.lower().indexOf(title.lower()) == null) { continue; }
+            candidates.append(dictionary\docFromID(m.id, label: m.label));
+        }
+        _ = candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
+        final docs = mut [<dictionary\UsageDoc>];
+        final pages = mut {<str: bool>};
+        final dirs = mut {<str: int>};
+        foreach (d in candidates) {
+            if (docs.len() >= 6) { break; }
+            final dir = fs\dirname(d.file);
+            if (pages[d.file] != null or (dirs[dir] ?? 0) >= 2) { continue; }
+            pages[d.file] = true;
+            dirs[dir] = (dirs[dir] ?? 0) + 1;
+            docs.append(d);
+        }
+        final symbols = mut [<dictionary\UsageSymbol>];
+        final names = mut {<str: bool>};
+        final found = magus\graph().query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
+        if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
+            var buildable = 0;
+            foreach (gap in found.answer.gaps) {
+                if (gap.unindexable) {
+                    continue;
+                }
+                buildable += 1;
             }
-            buildable += 1;
+            if (buildable > 0 or found.answer.staleIndexes.len() > 0) {
+                return result\fail::<str>("glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`");
+            }
         }
-        if (buildable > 0 or found.answer.staleIndexes.len() > 0) {
-            throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+        final ids = mut [<str>];
+        foreach (m in found.matches) { ids.append(m.id); }
+        _ = ids.sort(fun (a: str, b: str) > bool => a < b);
+        foreach (id in ids) {
+            if (symbols.len() >= 5) { break; }
+            final s = dictionary\symbolFromID(id, term: title);
+            if (s.name == "" or names[s.name] != null) { continue; }
+            names[s.name] = true;
+            symbols.append(s);
         }
+        return result\ok::<str>(dictionary\usageBlock(docs, symbols: symbols));
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    final ids = mut [<str>];
-    foreach (m in found.matches) { ids.append(m.id); }
-    _ = ids.sort(fun (a: str, b: str) > bool => a < b);
-    foreach (id in ids) {
-        if (symbols.len() >= 5) { break; }
-        final s = dictionary\symbolFromID(id, term: title);
-        if (s.name == "" or names[s.name] != null) { continue; }
-        names[s.name] = true;
-        symbols.append(s);
-    }
-    return dictionary\usageBlock(docs, symbols: symbols);
 }
 
 // content-generate composes independently cached families with disjoint outputs.
@@ -194,7 +209,9 @@ export fun design_index_generate(ctx: magus\Context, args: [str]) > void !> any 
             pages.append(design\designPage(p.value, md: fs\readFile(p.value)));
         }
     }
-    fs\writeFile("design.md", content: design\replaceIndex(fs\readFile("design.md"), block: design\designIndex(pages)));
+    final r11 = design\replaceIndex(fs\readFile("design.md"), block: design\designIndex(pages));
+    if (r11.error -> failed) { throw failed.message; }
+    fs\writeFile("design.md", content: r11.value!);
 }
 
 // Reference, CLI, agent and example pages share the host runtime and generated bindings.
@@ -238,10 +255,14 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     ruledocs\write("reference/rules", rules: magus\describe.rule());
-    pruneContentPageCopies(["reference/config.md"]);
-    pruneGeneratedPageCopies("reference/manpage/*.md");
-    pruneGeneratedPageCopies("reference/skills/*.md");
-    pruneGeneratedPageCopies("reference/rules/*.md");
+    final r7 = pruneContentPageCopies(["reference/config.md"]);
+    if (r7.error -> failed) { throw failed.message; }
+    final r8 = pruneGeneratedPageCopies("reference/manpage/*.md");
+    if (r8.error -> failed) { throw failed.message; }
+    final r9 = pruneGeneratedPageCopies("reference/skills/*.md");
+    if (r9.error -> failed) { throw failed.message; }
+    final r10 = pruneGeneratedPageCopies("reference/rules/*.md");
+    if (r10.error -> failed) { throw failed.message; }
 }
 
 // API pages consume the descriptor with its comments, not the generated Go client.
@@ -263,7 +284,8 @@ export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> an
     ctx.writesFiles(["reference/proofread/*.md"]);
     ruledocs\writeProofread("reference/proofread",
         raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".").stdout);
-    pruneGeneratedPageCopies("reference/proofread/*.md");
+    final r6 = pruneGeneratedPageCopies("reference/proofread/*.md");
+    if (r6.error -> failed) { throw failed.message; }
 }
 
 // Published measurements do not depend on the Go generators or their toolchain.
@@ -292,37 +314,48 @@ export fun benchmark_docs_generate(ctx: magus\Context, args: [str]) > void !> an
         + "description: magus timed against make on one fixture with hyperfine, stamped with the date, hardware and tool versions. Generated from the committed results.\n"
         + "tags: [benchmarks, performance, measurement]\n---\n\n"
         + fs\readFile("../benchmarks/BENCHMARKS.md"));
-    pruneContentPageCopies(contentPages);
+    final r5 = pruneContentPageCopies(contentPages);
+    if (r5.error -> failed) { throw failed.message; }
 }
 
 // Removes macOS-style "name 3.md" copies, and only byte-identical ones: these pages mix
 // authored and generated text, so a differing copy may be someone's work.
-fun pruneContentPageCopies(canonicals: [str]) > void !> any {
-    foreach (canonical in canonicals) {
-        if (fs\exists(canonical) == false) { continue; }
-        final stem = canonical.sub(0, canonical.len() - ".md".len());
-        final body = fs\readFile(canonical);
-        foreach (candidate in fs\glob(stem + " *.md")) {
-            final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
-            if (isDecimalCopySuffix(suffix) and fs\readFile(candidate.value) == body) {
-                fs\remove(candidate.value);
+fun pruneContentPageCopies(canonicals: [str]) > result\Result::<bool> {
+    try {
+        foreach (canonical in canonicals) {
+            if (fs\exists(canonical) == false) { continue; }
+            final stem = canonical.sub(0, canonical.len() - ".md".len());
+            final body = fs\readFile(canonical);
+            foreach (candidate in fs\glob(stem + " *.md")) {
+                final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
+                if (isDecimalCopySuffix(suffix) and fs\readFile(candidate.value) == body) {
+                    fs\remove(candidate.value);
+                }
             }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
 // Matches copies by name alone: every page in these directories is generated.
-fun pruneGeneratedPageCopies(pattern: str) > void !> any {
-    final pages = fs\glob(pattern);
-    foreach (canonical in pages) {
-        final stem = canonical.value.sub(0, canonical.value.len() - ".md".len());
-        foreach (candidate in pages) {
-            if (candidate.value.startsWith(stem + " ") == false) { continue; }
-            final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
-            if (isDecimalCopySuffix(suffix)) {
-                fs\remove(candidate.value);
+fun pruneGeneratedPageCopies(pattern: str) > result\Result::<bool> {
+    try {
+        final pages = fs\glob(pattern);
+        foreach (canonical in pages) {
+            final stem = canonical.value.sub(0, canonical.value.len() - ".md".len());
+            foreach (candidate in pages) {
+                if (candidate.value.startsWith(stem + " ") == false) { continue; }
+                final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
+                if (isDecimalCopySuffix(suffix)) {
+                    fs\remove(candidate.value);
+                }
             }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -365,9 +398,10 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("README.md"), workspace\file("CONTRIBUTING.md"), workspace\file("blog/**"),
         workspace\file("assets/**"), workspace\file("releases/*.yaml")]);
     ctx.writesFiles(["gen/**", "active.urls.lock"]);
-    renderer\site_publish(ROOT, DOCS, BLOG, OUT,
+    final r4 = renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\describe.graph(), magus\graph().projectGraph(),
         ctx.hasCharm("rw"));
+    if (r4.error -> failed) { throw failed.message; }
 }
 
 // Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry
@@ -434,7 +468,8 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("spells/harness/claude-code/*.buzz"), workspace\file("spells/harness/opencode/spell.buzz"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
         workspace\file("spells/harness/opencode/plugins/magus.js"), workspace\file("example_test.go")]);
-    renderer\site_conventions(ROOT, docs: DOCS, files: args);
+    final r3 = renderer\site_conventions(ROOT, docs: DOCS, files: args);
+    if (r3.error -> failed) { throw failed.message; }
 }
 // lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
@@ -529,7 +564,9 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
     final before = drift\hashes(GENERATED);
-    final findings = renderer\site_diagrams("assets/gen");
+    final r2 = renderer\site_diagrams("assets/gen");
+    if (r2.error -> failed) { throw failed.message; }
+    final findings = r2.value!;
     if (findings.len() > 0) {
         foreach (msg in findings) { magus\log.error(msg); }
         throw "diagrams-generate: {findings.len()} finding(s); each names the call to change";
@@ -582,6 +619,8 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // has none; the changelog page is uncommitted for the same reason.
     // It bundles src/ too, and a cached build-* target runs no install.
     ctx.needs(install, build_hljs, build_playground_editor, build_playground, changelog_page);
-    _ = renderer\site_render(ROOT, DOCS, BLOG, OUT,
+    final r1 = renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\describe.graph(), magus\graph().projectGraph());
+    if (r1.error -> failed) { throw failed.message; }
+    _ = r1.value!;
 }

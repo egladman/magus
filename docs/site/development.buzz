@@ -4,6 +4,7 @@
 namespace development;
 
 import "magus";
+import "result";
 import "markdown";
 import "fs";
 import "io";
@@ -63,20 +64,25 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // The landing is README.md - the repository's front door renders at /development/, not at
 // gen's root (see renderRoot). It is the section overview, and it is registered whether or
 // not the workspace reported any projects, because renderRoot writes that page regardless.
-export fun collectDevelopmentPages(site: Site) > void !> any {
-    registerDevPage("Development", DEVELOPMENT_DESC, "development/", "README.md", site);
-    if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
-        registerDevPage("Contributing", CONTRIBUTING_DESC,
-            "development/contributing/", "development/contributing/_index.md", site);
-    }
-    if (site.inputs.targets.projects.len() == 0) { return; }
-    registerDevPage("Projects", PROJECTS_DESC,
-        "development/projects/", "development/projects/_index.md", site);
-    foreach (proj in site.inputs.targets.projects) {
-        final name = projectLabel(proj.path);
-        final slug = slugifyProject(name);
-        registerDevPage(name + " targets", projectPageDesc(name),
-            "development/" + slug + "/", "development/" + slug + "/_index.md", site);
+export fun collectDevelopmentPages(site: Site) > result\Result::<bool> {
+    try {
+        registerDevPage("Development", DEVELOPMENT_DESC, "development/", "README.md", site);
+        if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
+            registerDevPage("Contributing", CONTRIBUTING_DESC,
+                "development/contributing/", "development/contributing/_index.md", site);
+        }
+        if (site.inputs.targets.projects.len() == 0) { return result\ok::<bool>(true); }
+        registerDevPage("Projects", PROJECTS_DESC,
+            "development/projects/", "development/projects/_index.md", site);
+        foreach (proj in site.inputs.targets.projects) {
+            final name = projectLabel(proj.path);
+            final slug = slugifyProject(name);
+            registerDevPage(name + " targets", projectPageDesc(name),
+                "development/" + slug + "/", "development/" + slug + "/_index.md", site);
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -84,14 +90,24 @@ export fun collectDevelopmentPages(site: Site) > void !> any {
 // shared renderPage() pipeline (nav, TOC, theme, search index). url ends in "/";
 // srcRel uses the "<dir>/_index.md" marker so rootPrefix/renderBreadcrumb derive the
 // right depth and trail. collectDevelopmentPages has already registered it.
-fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void !> any {
-    final html = renderContentHTML(markdown\toHtml(md), "", "");
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], generatedFrom(md), site);
-    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
-    fs\mkdirAll(dir);
-    fs\writeFile(dir + "/index.html", doc);
-    site.addRecord(url, title, desc, md);
-    site.pageUrls[url] = true;
+fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > result\Result::<bool> {
+    try {
+        final html = renderContentHTML(markdown\toHtml(md), "", "");
+        final r7 = generatedFrom(md);
+        if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r6 = renderPage(title, desc, html, srcRel, "", url, "", mut [], r7.value!, site);
+        if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r6.value!;
+        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        fs\mkdirAll(dir);
+        fs\writeFile(dir + "/index.html", doc);
+        final r8 = site.addRecord(url, title, desc, md);
+        if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        site.pageUrls[url] = true;
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 
@@ -100,13 +116,21 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // strips the trailing slash off relative links - so card hrefs like "../magus/" stay
 // slash-terminated and resolve without a directory redirect. searchText is the plain
 // text to index, since the HTML carries no useful prose.
-fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void !> any {
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], "", site);
-    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
-    fs\mkdirAll(dir);
-    fs\writeFile(dir + "/index.html", doc);
-    site.addRecord(url, title, desc, searchText);
-    site.pageUrls[url] = true;
+fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > result\Result::<bool> {
+    try {
+        final r4 = renderPage(title, desc, html, srcRel, "", url, "", mut [], "", site);
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r4.value!;
+        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        fs\mkdirAll(dir);
+        fs\writeFile(dir + "/index.html", doc);
+        final r5 = site.addRecord(url, title, desc, searchText);
+        if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        site.pageUrls[url] = true;
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 
@@ -252,72 +276,80 @@ fun projectCatalog(proj: magus\TargetGraphProject) > str {
 // generator that writes a committed MAGUS.md. Projects that keep one therefore render
 // identical content (the drift gate holds them equal), and the four with none are no
 // longer invisible. MAGUS.md stays committed for the offline and agent read paths.
-export fun renderDevelopment(site: Site) > void !> any {
-    // CONTRIBUTING.md (repo root) as its own page under /development/. Written whether or
-    // not the workspace reported projects - it is prose about the repository, not about
-    // the graph, and collectDevelopmentPages registers it on the same condition.
-    if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
-        final cf = io\File.open(site.inputs.root + "/CONTRIBUTING.md", io\FileMode.read);
-        final contributingMd = cf.readAll();
-        cf.close();
-        renderDevelopmentPage("Contributing", CONTRIBUTING_DESC,
-            contributingMd, "development/contributing/", "development/contributing/_index.md", site);
-    }
-
-    final projects = site.inputs.targets.projects;
-    if (projects.len() == 0) { return; }
-
-    foreach (proj in projects) {
-        final name = projectLabel(proj.path);
-        final slug = slugifyProject(name);
-        final md = projectCatalog(proj);
-        renderDevelopmentPage(name + " targets", projectPageDesc(name),
-            md, "development/" + slug + "/", "development/" + slug + "/_index.md", site);
-        // Redirect the old nested URL to the flattened one so inbound links survive.
-        site.collectAlias("development/projects/" + slug, "development/" + slug + "/");
-    }
-
-    // Project cards (Related-card look), one per project. Raw HTML with slash-terminated
-    // hrefs so each links straight to the project page. They sit on /development/projects/,
-    // and the project pages are its SIBLINGS rather than its children, so each href climbs
-    // one level (UP) before naming the slug.
-    final projectCards = mut [<str>];
-    foreach (proj in projects) {
-        final name = projectLabel(proj.path);
-        // The card subtitle carries the project's real shape - which toolchains it
-        // binds - so a reader can tell a Go library from the docs site without
-        // opening it. Falls back to the generic line for a project with no spells.
-        var desc = "target catalog";
-        final n = proj.nodes;
-        if (n.len() > 0) {
-            desc = "{n.len()} targets";
+export fun renderDevelopment(site: Site) > result\Result::<bool> {
+    try {
+        // CONTRIBUTING.md (repo root) as its own page under /development/. Written whether or
+        // not the workspace reported projects - it is prose about the repository, not about
+        // the graph, and collectDevelopmentPages registers it on the same condition.
+        if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
+            final cf = io\File.open(site.inputs.root + "/CONTRIBUTING.md", io\FileMode.read);
+            final contributingMd = cf.readAll();
+            cf.close();
+            final r1 = renderDevelopmentPage("Contributing", CONTRIBUTING_DESC,
+                contributingMd, "development/contributing/", "development/contributing/_index.md", site);
+            if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         }
-        projectCards.append("        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
-            + "<span class=\"related-card-title\">" + htmlcodec\escape(name) + "</span>"
-            + "<span class=\"related-card-desc\">" + htmlcodec\escape(desc) + "</span></a>\n");
-    }
 
-    // The project-level view, rendered through the markdown pipeline for its table and
-    // then spliced into the raw page. renderContentHTML is
-    // skipped for the same reason the page is raw at all: its link rewrite would strip the
-    // trailing slash off every project href here.
-    final depsMd = workspaceDependencies(site.inputs.graph);
-    var depsSection = "";
-    if (depsMd != "") {
-        depsSection = wrapTables(markdown\toHtml(depsMd));
-    }
+        final projects = site.inputs.targets.projects;
+        if (projects.len() == 0) { return result\ok::<bool>(true); }
 
-    // The projects index answers one question - what is in this workspace and what does
-    // touching it reach - and nothing else. Raw HTML (skips the markdown pipeline) so the
-    // card hrefs keep their trailing slash.
-    final devHtml = template\render(`<h1 id="projects">Projects</h1>
+        foreach (proj in projects) {
+            final name = projectLabel(proj.path);
+            final slug = slugifyProject(name);
+            final md = projectCatalog(proj);
+            final r2 = renderDevelopmentPage(name + " targets", projectPageDesc(name),
+                md, "development/" + slug + "/", "development/" + slug + "/_index.md", site);
+            if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            // Redirect the old nested URL to the flattened one so inbound links survive.
+            site.collectAlias("development/projects/" + slug, "development/" + slug + "/");
+        }
+
+        // Project cards (Related-card look), one per project. Raw HTML with slash-terminated
+        // hrefs so each links straight to the project page. They sit on /development/projects/,
+        // and the project pages are its SIBLINGS rather than its children, so each href climbs
+        // one level (UP) before naming the slug.
+        final projectCards = mut [<str>];
+        foreach (proj in projects) {
+            final name = projectLabel(proj.path);
+            // The card subtitle carries the project's real shape - which toolchains it
+            // binds - so a reader can tell a Go library from the docs site without
+            // opening it. Falls back to the generic line for a project with no spells.
+            var desc = "target catalog";
+            final n = proj.nodes;
+            if (n.len() > 0) {
+                desc = "{n.len()} targets";
+            }
+            projectCards.append("        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
+                + "<span class=\"related-card-title\">" + htmlcodec\escape(name) + "</span>"
+                + "<span class=\"related-card-desc\">" + htmlcodec\escape(desc) + "</span></a>\n");
+        }
+
+        // The project-level view, rendered through the markdown pipeline for its table and
+        // then spliced into the raw page. renderContentHTML is
+        // skipped for the same reason the page is raw at all: its link rewrite would strip the
+        // trailing slash off every project href here.
+        final depsMd = workspaceDependencies(site.inputs.graph);
+        var depsSection = "";
+        if (depsMd != "") {
+            depsSection = wrapTables(markdown\toHtml(depsMd));
+        }
+
+        // The projects index answers one question - what is in this workspace and what does
+        // touching it reach - and nothing else. Raw HTML (skips the markdown pipeline) so the
+        // card hrefs keep their trailing slash.
+        final devHtml = template\render(`<h1 id="projects">Projects</h1>
 <p>magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too. Below is every project in it, drawn from the workspace's own graph rather than written by hand.</p>
 <h2 id="project-graphs">Project graphs</h2>
 <p>One card per magus project in this repository, each linking to that project's runnable targets - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming and search.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
 {{{depsSection}}}`, {"projectCards": projectCards.join(""), "depsSection": depsSection});
-    renderDevelopmentPageRaw("Projects", PROJECTS_DESC,
-        devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius",
-        "development/projects/", "development/projects/_index.md", site);
+        final r3 = renderDevelopmentPageRaw("Projects", PROJECTS_DESC,
+            devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius",
+            "development/projects/", "development/projects/_index.md", site);
+        if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
