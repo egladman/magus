@@ -357,22 +357,22 @@ func MagusPrecedents(ctx context.Context, languages []string) (types.Holds, erro
 	}, nil
 }
 
-// ceilingWorkspace is the part of *magus.Magus that judges a change against its base revision.
-type ceilingWorkspace interface {
-	ConformanceCeilings(ctx context.Context, c types.Ceiling, head types.Conformance) (types.Conformance, error)
+// baseWorkspace is the part of *magus.Magus that measures a change's base revision.
+type baseWorkspace interface {
+	ConformanceBase(ctx context.Context, base string) (types.ConformanceBase, error)
 	MeasureConformanceBase(ctx context.Context, base string) (string, error)
 }
 
 // MagusConformanceBase backs magus\change(base).mergeBase().
 // It measures the merge base under this workspace's configuration.
-// It keeps the measure for Change.conformance and returns the commit.
+// It keeps the measure for Change.conformanceBase and returns the commit.
 // Run it from a target, so the indexing is declared work.
 func MagusConformanceBase(ctx context.Context, base string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return "", errorNoWorkspace("conformanceBase")
 	}
-	cw, ok := ws.(ceilingWorkspace)
+	cw, ok := ws.(baseWorkspace)
 	if !ok {
 		return "", errors.New("magus\\change().mergeBase: this workspace cannot measure a base revision")
 	}
@@ -383,19 +383,29 @@ func MagusConformanceBase(ctx context.Context, base string) (string, error) {
 	return commit, nil
 }
 
+// MagusKeptConformanceBase backs magus\change(base).conformanceBase(): the
+// measure mergeBase kept of base, with the files changed since it.
+func MagusKeptConformanceBase(ctx context.Context, base string) (types.ConformanceBase, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.ConformanceBase{}, errorNoWorkspace("conformanceBase")
+	}
+	cw, ok := ws.(baseWorkspace)
+	if !ok {
+		return types.ConformanceBase{}, errors.New("magus\\change().conformanceBase: this workspace cannot measure a base revision")
+	}
+	out, err := cw.ConformanceBase(ctx, base)
+	if err != nil {
+		return types.ConformanceBase{}, fmt.Errorf("magus\\change().conformanceBase: %w", err)
+	}
+	return out, nil
+}
+
 // MagusConformance backs magus\change().conformance over the symbol indexes.
 // Each index's freshness is judged as judgedGraph describes.
-// Generated files are never counted. With a base it adds the ceilings checks crossed since
-// it (ConformanceCeilings). It writes nothing in the workspace. The answer is a
+// Generated files are never counted. It writes nothing in the workspace. The answer is a
 // Conformance with an indexes list, as a map.
-func MagusConformance(ctx context.Context, checks []string, base string) (types.ConformanceReport, error) {
-	c := types.Ceiling{Base: base}
-	for _, m := range checks {
-		c.Checks = append(c.Checks, types.ConformanceMetric(m))
-	}
-	if err := c.Validate(); err != nil {
-		return types.ConformanceReport{}, fmt.Errorf("magus\\Change.conformance: %w", err)
-	}
+func MagusConformance(ctx context.Context) (types.ConformanceReport, error) {
 	ig, err := judgedGraph(ctx, "Change.conformance", nil)
 	if err != nil {
 		return types.ConformanceReport{}, err
@@ -407,26 +417,7 @@ func MagusConformance(ctx context.Context, checks []string, base string) (types.
 	opts.Generated = ig.generated
 	out := ig.kg.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
-	if out, err = withCeilings(ctx, ig.ws, c, out); err != nil {
-		return types.ConformanceReport{}, err
-	}
 	return types.ConformanceReport{Conformance: out, Indexes: ig.indexes}, nil
-}
-
-// withCeilings adds the ceilings c crossed since its base; no base adds none.
-func withCeilings(ctx context.Context, ws any, c types.Ceiling, out types.Conformance) (types.Conformance, error) {
-	if c.Base == "" {
-		return out, nil
-	}
-	cw, ok := ws.(ceilingWorkspace)
-	if !ok {
-		return out, errors.New("magus\\Change.conformance: this workspace cannot measure a base revision")
-	}
-	out, err := cw.ConformanceCeilings(ctx, c, out)
-	if err != nil {
-		return out, fmt.Errorf("magus\\Change.conformance: %w", err)
-	}
-	return out, nil
 }
 
 // MagusSymbols backs magus\graph().symbols: every declaration with its doc.

@@ -2799,20 +2799,6 @@ func ObjectConformanceDistribution(v types.ConformanceDistribution, enums ffi.En
 	return out
 }
 
-func ObjectConformanceCeiling(v types.ConformanceCeiling, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
-	out.MapSet("file", vm.StringValue(v.File))
-	out.MapSet("base", vm.IntValue(int64(v.Base)))
-	out.MapSet("head", vm.IntValue(int64(v.Head)))
-	itemsViolations := make([]vm.Value, len(v.Violations))
-	for indexViolations := range v.Violations {
-		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
-	}
-	out.MapSet("violations", vm.ListValue(itemsViolations))
-	return out
-}
-
 func ObjectConformanceUnmeasured(v types.ConformanceUnmeasured) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("file", vm.StringValue(v.File))
@@ -2847,12 +2833,6 @@ func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.
 	out.MapSet("distributions", vm.ListValue(itemsDistributions))
 	out.MapSet("excluded", vm.IntValue(int64(v.Conformance.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Conformance.Answer, enums))
-	out.MapSet("base", vm.StringValue(v.Conformance.Base))
-	itemsCeilings := make([]vm.Value, len(v.Conformance.Ceilings))
-	for indexCeilings := range v.Conformance.Ceilings {
-		itemsCeilings[indexCeilings] = ObjectConformanceCeiling(v.Conformance.Ceilings[indexCeilings], enums)
-	}
-	out.MapSet("ceilings", vm.ListValue(itemsCeilings))
 	itemsUnmeasured := make([]vm.Value, len(v.Conformance.Unmeasured))
 	for indexUnmeasured := range v.Conformance.Unmeasured {
 		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Conformance.Unmeasured[indexUnmeasured])
@@ -2868,6 +2848,32 @@ func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.
 		itemsIndexes[indexIndexes] = ObjectSymbolIndexStatus(v.Indexes[indexIndexes], enums)
 	}
 	out.MapSet("indexes", vm.ListValue(itemsIndexes))
+	return out
+}
+
+func ObjectConformanceBase(v types.ConformanceBase, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("commit", vm.StringValue(v.Commit))
+	itemsDistributions := make([]vm.Value, len(v.Distributions))
+	for indexDistributions := range v.Distributions {
+		itemsDistributions[indexDistributions] = ObjectConformanceDistribution(v.Distributions[indexDistributions], enums)
+	}
+	out.MapSet("distributions", vm.ListValue(itemsDistributions))
+	itemsPackages := make([]vm.Value, len(v.Packages))
+	for indexPackages := range v.Packages {
+		itemsPackages[indexPackages] = ObjectConformancePackage(v.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
+	itemsTouched := make([]vm.Value, len(v.Touched))
+	for indexTouched := range v.Touched {
+		itemsTouched[indexTouched] = vm.StringValue(v.Touched[indexTouched])
+	}
+	out.MapSet("touched", vm.ListValue(itemsTouched))
+	itemsUnmeasured := make([]vm.Value, len(v.Unmeasured))
+	for indexUnmeasured := range v.Unmeasured {
+		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])
+	}
+	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
 	return out
 }
 
@@ -3724,12 +3730,6 @@ func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
 	out.MapSet("distributions", vm.ListValue(itemsDistributions))
 	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
-	out.MapSet("base", vm.StringValue(v.Base))
-	itemsCeilings := make([]vm.Value, len(v.Ceilings))
-	for indexCeilings := range v.Ceilings {
-		itemsCeilings[indexCeilings] = ObjectConformanceCeiling(v.Ceilings[indexCeilings], enums)
-	}
-	out.MapSet("ceilings", vm.ListValue(itemsCeilings))
 	itemsUnmeasured := make([]vm.Value, len(v.Unmeasured))
 	for indexUnmeasured := range v.Unmeasured {
 		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])

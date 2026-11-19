@@ -772,18 +772,6 @@ func splitOptions() types.ConformanceOptions {
 	}}
 }
 
-// ceilings is what the split's head, with M's digest mDigest, is charged.
-func (s *ConformanceIdentitySuite) ceilings(mDigest string) []types.ConformanceCeiling {
-	o := splitOptions()
-	baseGraph := assembleLens(packageSplitSymbols(false, "dM"))
-	base := baseGraph.Conformance(o)
-	base.Packages = baseGraph.ConformancePackages(o)
-	head := assembleLens(packageSplitSymbols(true, mDigest)).Conformance(o)
-	touched := []string{"internal/w/w.go", "types/agent/t.go", "types/t.go"}
-	return types.ConformanceCeilings(base, head, touched,
-		[]types.ConformanceMetric{types.ConformanceImportedPackages, types.ConformanceFuncLines})
-}
-
 func (s *ConformanceIdentitySuite) TestAViolationCarriesItsBodyDigest() {
 	out := assembleLens(packageSplitSymbols(true, "dM")).Conformance(splitOptions())
 	s.Equal([]types.ConformanceItem{
@@ -816,17 +804,6 @@ func (s *ConformanceIdentitySuite) TestPackagesKeepImportsAndTopLevelDigests() {
 		{Dir: "types", Digests: []string{"dKeep", "dSet"}},
 	}, assembleLens(packageSplitSymbols(false, "dM")).ConformancePackages(splitOptions()),
 		"M is a member of Set, not a top-level declaration")
-}
-
-func (s *ConformanceIdentitySuite) TestASplitIntoANewPackageIsNotCharged() {
-	s.Empty(s.ceilings("dM"))
-}
-
-func (s *ConformanceIdentitySuite) TestAMoveWithAnEditedBodyIsCharged() {
-	got := s.ceilings("dM2")
-	s.Require().Len(got, 1)
-	s.Equal(types.ConformanceFuncLines, got[0].Key.Metric)
-	s.Equal("types/agent/t.go", got[0].File)
 }
 
 func (s *ConformanceIdentitySuite) TestACloneGroupCarriesItsMembersDigests() {

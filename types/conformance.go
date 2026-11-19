@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path"
 	"slices"
-	"strings"
 )
 
 // ConformanceMetric names one measured code distribution. Every metric but file-split is a
@@ -227,25 +225,33 @@ func compareConformanceKeys(a, b ConformanceKey) int {
 }
 
 // Conformance is the conformance lens: one row per key, and how many files Exclude hid,
-// so a widened exclusion stays visible. Base and Ceilings are set when the caller names a base
-// revision: Base is the commit it resolved to, and Ceilings are the touched files whose count of
-// a checked metric's violations rose past their count there. Unmeasured are the touched files
-// only an external indexer reads, which hold no ceiling, each with why.
+// so a widened exclusion stays visible.
 //
-// Packages is set only on a base measure, in directory order. It tells
-// an import of moved declarations from a new one.
+// Packages and Unmeasured are set only on a base measure. Packages, in
+// directory order, tells an import of moved declarations from a new one.
+// Unmeasured are the projects the base lacks, each with why.
 type Conformance struct {
 	Definition    string                    `json:"definition"           yaml:"definition"`
 	Distributions []ConformanceDistribution `json:"distributions"        yaml:"distributions"`
 	Excluded      int                       `json:"excluded"             yaml:"excluded"`
 	Answer        KnowledgeAnswer           `json:"answer"               yaml:"answer"`
-	Base          string                    `json:"base,omitempty"       yaml:"base,omitempty"`
-	Ceilings      []ConformanceCeiling      `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
 	Unmeasured    []ConformanceUnmeasured   `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
 	Packages      []ConformancePackage      `json:"packages,omitempty"   yaml:"packages,omitempty"`
 }
 
-// ConformanceUnmeasured is a touched file the base was not measured for: its language and why.
+// ConformanceBase is the measure a change is judged against: Commit's kept lens, under the
+// policy the head lens is measured with, and the files changed since it. Touched are the
+// changed files the base was measured for; Unmeasured are the changed files it was not, each
+// with why. It carries no verdict: comparing it with the head lens is the caller's.
+type ConformanceBase struct {
+	Commit        string                    `json:"commit"        yaml:"commit"`
+	Distributions []ConformanceDistribution `json:"distributions" yaml:"distributions"`
+	Packages      []ConformancePackage      `json:"packages"      yaml:"packages"`
+	Touched       []string                  `json:"touched"       yaml:"touched"`
+	Unmeasured    []ConformanceUnmeasured   `json:"unmeasured"    yaml:"unmeasured"`
+}
+
+// ConformanceUnmeasured is a file or project the base was not measured for: its language and why.
 type ConformanceUnmeasured struct {
 	// File is the project's directory when the project is new at head.
 	File     string `json:"file"     yaml:"file"`
@@ -267,194 +273,6 @@ type ConformanceDistribution struct {
 	Value      int               `json:"value"      yaml:"value"`
 	Propose    int               `json:"propose"    yaml:"propose"`
 	Violations []ConformanceItem `json:"violations" yaml:"violations"`
-}
-
-// Ceiling is what a caller asks beyond the configured policy when judging a change:
-// Checks are the metrics held to a conformance ceiling, and Base the revision a touched
-// file's count of their violations may not rise above. Neither is set to measure only.
-// ADR 0022: the lens answer is Conformance; this is the ceiling ask, not a second Conformance.
-type Ceiling struct {
-	Checks []ConformanceMetric `json:"checks" yaml:"checks"`
-	Base   string              `json:"base"   yaml:"base"`
-}
-
-// Validate refuses a Base with no Checks, which would compare nothing, and a check that
-// names no metric.
-func (c Ceiling) Validate() error {
-	var errs []error
-	if c.Base != "" && len(c.Checks) == 0 {
-		errs = append(errs, fmt.Errorf("base %s: name the checks held to a conformance ceiling", c.Base))
-	}
-	for _, m := range c.Checks {
-		if err := checkConformanceMetric(m); err != nil {
-			errs = append(errs, fmt.Errorf("checks: %w", err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// ConformanceCeiling is one touched file whose violations of Key rose past its count at the
-// base: Base and Head are the two counts, and Violations the head's items in the file.
-// Neither counts a violation that only moved.
-type ConformanceCeiling struct {
-	Key        ConformanceKey    `json:"key"        yaml:"key"`
-	File       string            `json:"file"       yaml:"file"`
-	Base       int               `json:"base"       yaml:"base"`
-	Head       int               `json:"head"       yaml:"head"`
-	Violations []ConformanceItem `json:"violations" yaml:"violations"`
-}
-
-// ConformanceCeilings is each file among touched whose count of violations of a key whose
-// metric is in checks is higher in head than in base, sorted by key, then file. A drop or a
-// file that holds as many as before passes. An item counts in every file it names: a clone
-// group in each member's file, and a imported-packages package in every file directly inside it.
-//
-// A violation follows its declaration, not its path. A head violation
-// whose digest equals a base violation's of the same metric only moved,
-// so neither side counts it. Nor does an imported-packages item count an
-// import movedImports finds in base.Packages.
-func ConformanceCeilings(base, head Conformance, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
-	before, after := unmatchedViolations(base, head, checks)
-	packages := make(map[string]ConformancePackage, len(base.Packages))
-	for _, p := range base.Packages {
-		packages[p.Dir] = p
-	}
-	var out []ConformanceCeiling
-	for _, row := range head.Distributions {
-		if !slices.Contains(checks, row.Key.Metric) {
-			continue
-		}
-		items := after[row.Key]
-		if row.Key.Metric == ConformanceImportedPackages {
-			items = slices.DeleteFunc(slices.Clone(items), func(it ConformanceItem) bool {
-				moved := movedImports(it, packages)
-				return moved > 0 && !row.Key.Metric.Past(it.Measure-moved, row.Value)
-			})
-		}
-		for _, file := range touched {
-			now := conformanceItemsIn(items, row.Key.Metric, file)
-			was := len(conformanceItemsIn(before[row.Key], row.Key.Metric, file))
-			if len(now) > was {
-				out = append(out, ConformanceCeiling{Key: row.Key, File: file, Base: was, Head: len(now), Violations: now})
-			}
-		}
-	}
-	slices.SortFunc(out, func(a, b ConformanceCeiling) int {
-		return cmp.Or(compareConformanceKeys(a.Key, b.Key), cmp.Compare(a.File, b.File))
-	})
-	return out
-}
-
-// unmatchedViolations is each key's violations of a checked metric, in
-// base and in head, less the pairs of one metric with equal digests. An
-// empty digest pairs with nothing. Equal IDs pair first, so a new copy
-// is what counts.
-func unmatchedViolations(base, head Conformance, checks []ConformanceMetric) (before, after map[ConformanceKey][]ConformanceItem) {
-	was, now := placeViolations(base, checks), placeViolations(head, checks)
-	byIdentity := map[violationIdentity][]*placedViolation{}
-	for _, b := range was {
-		if b.item.Digest != "" {
-			id := violationIdentity{b.key.Metric, b.item.Digest}
-			byIdentity[id] = append(byIdentity[id], b)
-		}
-	}
-	pairViolations(now, byIdentity, func(b, h *placedViolation) bool { return b.item.ID == h.item.ID })
-	pairViolations(now, byIdentity, func(*placedViolation, *placedViolation) bool { return true })
-	return unpairedViolations(was), unpairedViolations(now)
-}
-
-type placedViolation struct {
-	key    ConformanceKey
-	item   ConformanceItem
-	paired bool
-}
-
-type violationIdentity struct {
-	metric ConformanceMetric
-	digest string
-}
-
-func placeViolations(out Conformance, checks []ConformanceMetric) []*placedViolation {
-	var all []*placedViolation
-	for _, row := range out.Distributions {
-		if !slices.Contains(checks, row.Key.Metric) {
-			continue
-		}
-		for _, it := range row.Violations {
-			all = append(all, &placedViolation{key: row.Key, item: it})
-		}
-	}
-	return all
-}
-
-// pairViolations pairs each unpaired head violation with the first
-// unpaired base one of its identity that match accepts.
-func pairViolations(head []*placedViolation, base map[violationIdentity][]*placedViolation, match func(b, h *placedViolation) bool) {
-	for _, h := range head {
-		if h.paired || h.item.Digest == "" {
-			continue
-		}
-		for _, b := range base[violationIdentity{h.key.Metric, h.item.Digest}] {
-			if !b.paired && match(b, h) {
-				b.paired, h.paired = true, true
-				break
-			}
-		}
-	}
-}
-
-func unpairedViolations(all []*placedViolation) map[ConformanceKey][]ConformanceItem {
-	out := map[ConformanceKey][]ConformanceItem{}
-	for _, p := range all {
-		if !p.paired {
-			out[p.key] = append(out[p.key], p.item)
-		}
-	}
-	return out
-}
-
-// movedImports counts the imports of it, an imported-packages item, that
-// only follow moved declarations. Such an import is new since base. Each
-// declaration it reaches had its digest at base in a package the importer
-// already imported.
-func movedImports(it ConformanceItem, base map[string]ConformancePackage) int {
-	importer, ok := base[it.ID]
-	if !ok {
-		return 0
-	}
-	held := map[string]bool{}
-	for _, dir := range importer.Imports {
-		for _, d := range base[dir].Digests {
-			held[d] = true
-		}
-	}
-	n := 0
-	for _, imp := range it.Imports {
-		if len(imp.Digests) == 0 || slices.Contains(importer.Imports, imp.Dir) {
-			continue
-		}
-		if !slices.ContainsFunc(imp.Digests, func(d string) bool { return !held[d] }) {
-			n++
-		}
-	}
-	return n
-}
-
-// conformanceItemsIn is the items of metric m that name file.
-func conformanceItemsIn(items []ConformanceItem, m ConformanceMetric, file string) []ConformanceItem {
-	var out []ConformanceItem
-	for _, it := range items {
-		if slices.ContainsFunc(strings.Split(it.ID, ", "), func(member string) bool {
-			if m == ConformanceImportedPackages {
-				return member == path.Dir(file)
-			}
-			name, _, _ := strings.Cut(member, "#")
-			return name == file
-		}) {
-			out = append(out, it)
-		}
-	}
-	return out
 }
 
 // ImportAliases is how a workspace's packages are imported under other names. Indexed

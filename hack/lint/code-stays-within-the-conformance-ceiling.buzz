@@ -1,6 +1,7 @@
 // Tier 2, measured shape: a file the change touches may not hold more violations of a metric
-// the conformance ceiling policy checks than it held at the base revision; a drop is progress.
-// Tier 3, judgment: every other metric is advice.
+// the conformance ceiling policy checks than it held at the base revision, and an item already
+// past its anchor there may not grow; a drop is progress. Tier 3, judgment: every other metric
+// is advice. magus measures the head and the base; hack/magusfile/conformance-ceiling judges.
 namespace conformanceceilingrule;
 
 import "assert";
@@ -19,14 +20,16 @@ export fun reads() > [str] {
         "libs/clikit/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
 }
 
-// check fails each conformance ceiling the change crossed and an index the lens could not
-// vouch for, and prints the advice metrics' violations.
+// check fails each conformance ceiling the change crossed, each item past its anchor that
+// grew, and an index the lens could not vouch for, and prints the advice metrics' violations.
 export fun check(files: [Path]) > [Finding] !> any {
-    final report = magus\change(vcs\base()).conformance(ceiling\POLICY.checks);
-    foreach (line in advice(report)) {
+    final change = magus\change(vcs\base());
+    final report = change.conformance();
+    final base = change.conformanceBase();
+    foreach (line in advice(report, base: base)) {
         std\print(line);
     }
-    return judge(report);
+    return judge(report, base: base);
 }
 
 // indexFix is what makes an index current. An indexer that is not installed is fixed by
@@ -38,8 +41,8 @@ export fun indexFix(op: str, detail: str) > str {
     return "Rebuild it with `magus graph build`, then rerun lint.";
 }
 
-// judge is check's verdict over a magus\change(base).conformance report.
-export fun judge(report: magus\ConformanceReport) > [Finding] !> any {
+// judge is check's verdict over the head lens and the base measure.
+export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) > [Finding] !> any {
     final found = mut [<Finding>];
     final indexes = report.indexes;
     foreach (idx in indexes) {
@@ -62,19 +65,16 @@ export fun judge(report: magus\ConformanceReport) > [Finding] !> any {
         return found;
     }
 
-    final base: str = report.base;
-    final values = rowValues(report);
-    final ceilings = report.ceilings;
-    foreach (c in ceilings) {
-        final key = c.key;
-        final metric: str = key.metric.value;
-        final label = keyLabel(key);
-        final value = values[label] ?? 0;
+    final commit = short(base.commit);
+    final verdict = ceiling\POLICY.judge(base, head: report.distributions);
+    foreach (c in verdict.ceilings) {
+        final metric: str = c.key.metric.value;
+        final label = ceiling\keyLabel(c.key);
+        final value = c.value;
         final file: str = c.file;
         final was = c.base;
         final now = c.head;
-        final violations = c.violations;
-        foreach (v in violations) {
+        foreach (v in c.violations) {
             final at = position(v.source);
             final id: str = v.id;
             final measure = v.measure;
@@ -83,10 +83,23 @@ export fun judge(report: magus\ConformanceReport) > [Finding] !> any {
             final concept = if (rename == "") "" else ", name the concept: {rename}";
             final past = if (metric == "file-split") "with {home} at or under the floor of {value}" else "past the anchor of {value}";
             found.append(Finding{ path = if (at.path == "") file else at.path, line = at.line,
-                message = "{label}: {id} measures {measure}, {past}{concept}; {file} holds {now}, up from {was} at {short(base)}",
+                message = "{label}: {id} measures {measure}, {past}{concept}; {file} holds {now}, up from {was} at {commit}",
                 fix = fixFor(metric, value: value, item: Item{ file = at.path, home = home, measure = measure,
                     unshared = v.unshared, rename = rename }) });
         }
+    }
+    foreach (g in verdict.growth) {
+        final metric: str = g.key.metric.value;
+        final label = ceiling\keyLabel(g.key);
+        final at = position(g.item.source);
+        final id: str = g.item.id;
+        final measure = g.item.measure;
+        final was = g.was;
+        final value = g.value;
+        final direction = if (metric == "file-split") "down" else "up";
+        found.append(Finding{ path = at.path, line = at.line,
+            message = "{label}: {id} measures {measure}, {direction} from {was} at {commit}; it was past the anchor of {value} there, and an item past its anchor may not grow",
+            fix = growthFix(metric, value: value, was: was) });
     }
     return found;
 }
@@ -127,8 +140,17 @@ export fun fixFor(metric: str, value: int, item: Item) > str {
     return "Bring it under {value}, or the file back to its count at the base.";
 }
 
+// growthFix is how to clear an item that grew past value: back to was, its measure at the base,
+// is always enough, and an edit at its size or smaller passes.
+export fun growthFix(metric: str, value: int, was: int) > str {
+    if (metric == "file-split") {
+        return "Fold it into its root, or bring it back to {was} or past the floor of {value}.";
+    }
+    return "Shrink it back to {was} or under {value}: extract from it, or delete from it, rather than add to it.";
+}
+
 // advice is a line per violation of a metric the policy does not check.
-fun advice(report: magus\ConformanceReport) > [str] {
+fun advice(report: magus\ConformanceReport, base: magus\ConformanceBase) > [str] {
     final lines = mut [<str>];
     final rows = report.distributions;
     foreach (row in rows) {
@@ -136,7 +158,7 @@ fun advice(report: magus\ConformanceReport) > [str] {
         if (ceiling\POLICY.holds(key.metric.value)) {
             continue;
         }
-        final label = keyLabel(key);
+        final label = ceiling\keyLabel(key);
         final value = row.value;
         final violations = row.violations;
         foreach (v in violations) {
@@ -145,15 +167,15 @@ fun advice(report: magus\ConformanceReport) > [str] {
             lines.append("advice: {label}: {id} measures {v.measure} at {source}, past {value}");
         }
     }
-    foreach (line in unmeasured(report)) {
+    foreach (line in unmeasured(base)) {
         lines.append(line);
     }
     return lines;
 }
 
 // unmeasured is a line per touched file the base was not measured for, then their count.
-fun unmeasured(report: magus\ConformanceReport) > [str] {
-    final files = report.unmeasured;
+fun unmeasured(base: magus\ConformanceBase) > [str] {
+    final files = base.unmeasured;
     final lines = mut [<str>];
     foreach (u in files) {
         final file: str = u.file;
@@ -167,29 +189,8 @@ fun unmeasured(report: magus\ConformanceReport) > [str] {
     return lines;
 }
 
-// rowValues is each row's anchor under its label, for naming it beside a ceiling.
-fun rowValues(report: magus\ConformanceReport) > {str: int} {
-    final values = mut {<str: int>};
-    final rows = report.distributions;
-    foreach (row in rows) {
-        values[keyLabel(row.key)] = row.value;
-    }
-    return values;
-}
-
 fun short(commit: str) > str {
     return if (commit.len() > 12) commit.sub(0, len: 12) else commit;
-}
-
-// keyLabel names a row's metric, population and scope as a person reads them.
-fun keyLabel(key: magus\ConformanceKey) > str {
-    final metric: str = key.metric.value;
-    final population: str = key.population.value;
-    final scope: str = key.scope;
-    if (scope != "") {
-        return "{metric} {population} {scope}";
-    }
-    return "{metric} {population}";
 }
 
 // Position is an item's source split into a file and a line, 0 when the lens named none.
@@ -215,18 +216,22 @@ fun row(metric: magus\ConformanceMetric, value: int, violations: [magus\Conforma
     return magus\ConformanceDistribution{ key = magus\ConformanceKey{ metric = metric, population = magus\ConformancePopulation.source }, value = value, violations = violations };
 }
 
-fun violation(id: str, source: str, measure: int) > magus\ConformanceItem {
-    return magus\ConformanceItem{ id = id, source = source, measure = measure };
+fun violation(id: str, source: str, measure: int, digest: str = "") > magus\ConformanceItem {
+    return magus\ConformanceItem{ id = id, source = source, measure = measure, digest = digest };
 }
 
-fun report(rows: [magus\ConformanceDistribution], ceilings: [magus\ConformanceCeiling]) > magus\ConformanceReport {
-    return magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found }, base = "0123456789abcdef", distributions = rows, ceilings = ceilings };
+fun report(rows: [magus\ConformanceDistribution]) > magus\ConformanceReport {
+    return magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found }, distributions = rows };
+}
+
+fun measured(rows: [magus\ConformanceDistribution], touched: [str]) > magus\ConformanceBase {
+    return magus\ConformanceBase{ commit = "0123456789abcdef", distributions = rows, touched = touched };
 }
 
 test "a crossed ceiling fails at each violation in the file, naming both counts" {
     final v = violation("a.go#Long", source: "a.go:7", measure: 60);
-    final got = judge(report([row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])],
-        ceilings: [magus\ConformanceCeiling{ key = magus\ConformanceKey{ metric = magus\ConformanceMetric.funcLines, population = magus\ConformancePopulation.source }, file = "a.go", base = 0, head = 1, violations = [v] }]));
+    final got = judge(report([row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])]),
+        base: measured([<magus\ConformanceDistribution>], touched: ["a.go"]));
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].path, want: "a.go", message: "at the file");
     assert\equal(got[0].line, want: 7, message: "at the line");
@@ -234,31 +239,46 @@ test "a crossed ceiling fails at each violation in the file, naming both counts"
         message: "both counts and the base");
 }
 
-test "a violation no ceiling names passes" {
-    final v = violation("a.go#Long", source: "a.go:7", measure: 60);
-    assert\equal(judge(report([row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])], ceilings: [])).len(), want: 0,
-        message: "held at its base count");
+test "a violation held at its base count passes" {
+    final v = violation("a.go#Long", source: "a.go:7", measure: 60, digest: "d1");
+    final rows = [row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])];
+    assert\equal(judge(report(rows), base: measured(rows, touched: ["a.go"])).len(), want: 0, message: "held at its base count");
+}
+
+test "a function past its anchor that grew fails, naming both measures" {
+    final was = row(magus\ConformanceMetric.funcLines, value: 167, violations: [violation("internal/guard/judge.go#Judge", source: "internal/guard/judge.go:40", measure: 328, digest: "d1")]);
+    final now = row(magus\ConformanceMetric.funcLines, value: 167, violations: [violation("internal/guard/judge.go#Judge", source: "internal/guard/judge.go:40", measure: 957, digest: "d2")]);
+    final got = judge(report([now]), base: measured([was], touched: ["internal/guard/judge.go"]));
+    assert\equal(got.len(), want: 1, message: "one finding, and no ceiling: the file holds one, as before");
+    assert\equal(got[0].path, want: "internal/guard/judge.go", message: "at the file");
+    assert\equal(got[0].line, want: 40, message: "at the line");
+    assert\equal(got[0].message,
+        want: "func-lines source: internal/guard/judge.go#Judge measures 957, up from 328 at 0123456789ab; it was past the anchor of 167 there, and an item past its anchor may not grow",
+        message: "both measures and the anchor");
+    assert\equal(got[0].fix, want: "Shrink it back to 328 or under 167: extract from it, or delete from it, rather than add to it.", message: "the fix");
 }
 
 test "a stale index or an unknown answer fails instead of passing on what it lacks" {
     final stale = magus\ConformanceReport{ indexes = [magus\SymbolIndexStatus{ freshness = magus\SymbolIndexFreshness.outOfDate, language = "go", project = magus\ProjectRef{ path = "." }, op = "go-index" }],
         answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found } };
-    assert\equal(judge(stale).len(), want: 1, message: "stale index");
+    final none = measured([<magus\ConformanceDistribution>], touched: [<str>]);
+    assert\equal(judge(stale, base: none).len(), want: 1, message: "stale index");
     final unknown = magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.unknown } };
-    assert\equal(judge(unknown).len(), want: 1, message: "unknown answer");
+    assert\equal(judge(unknown, base: none).len(), want: 1, message: "unknown answer");
 }
 
 test "an advice metric is printed, never failed" {
-    final lines = advice(report([row(magus\ConformanceMetric.sharedReach, value: 7, violations: [violation("a.go#F", source: "a.go:3", measure: 9)])], ceilings: []));
+    final lines = advice(report([row(magus\ConformanceMetric.sharedReach, value: 7, violations: [violation("a.go#F", source: "a.go:3", measure: 9)])]),
+        base: measured([<magus\ConformanceDistribution>], touched: [<str>]));
     assert\equal(lines, want: ["advice: shared-reach source: a.go#F measures 9 at a.go:3, past 7"], message: "one line");
 }
 
 test "a touched file with no base measure is named and counted, never failed" {
-    final r = magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found },
-        unmeasured = [magus\ConformanceUnmeasured{ file = "console/a.ts", language = "typescript", reason = "no in-process index; ceiling not applied" }] };
-    assert\equal(unmeasured(r), want: ["unmeasured: console/a.ts (typescript): no in-process index; ceiling not applied",
+    final b = magus\ConformanceBase{ commit = "c", touched = [<str>],
+        unmeasured = [magus\ConformanceUnmeasured{ file = "console/a.ts", language = "typescript", reason = "no in-process index, so the base holds no measure" }] };
+    assert\equal(unmeasured(b), want: ["unmeasured: console/a.ts (typescript): no in-process index, so the base holds no measure",
         "unmeasured: 1 touched file(s) hold no conformance ceiling"], message: "named and counted");
-    assert\equal(judge(r).len(), want: 0, message: "no finding");
+    assert\equal(judge(report([<magus\ConformanceDistribution>]), base: b).len(), want: 0, message: "no finding");
 }
 
 test "a missing indexer is fixed by installing it, not by a rebuild" {

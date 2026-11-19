@@ -416,8 +416,12 @@ export object Change {
         return magus__Change__affected(this);
     }
 
-    fun conformance(checks: [str] = [<str>]) > ConformanceReport !> any {
-        return magus__Change__conformance(this, checks: checks);
+    fun conformance() > ConformanceReport !> any {
+        return magus__Change__conformance(this);
+    }
+
+    fun conformanceBase() > ConformanceBase !> any {
+        return magus__Change__conformanceBase(this);
     }
 
     fun mergeBase() > str !> any {
@@ -1954,14 +1958,6 @@ export object ConformanceDistribution {
     violations: [ConformanceItem] = [],
 }
 
-export object ConformanceCeiling {
-    key: ConformanceKey = ConformanceKey{},
-    file: str = "",
-    base: int = 0,
-    head: int = 0,
-    violations: [ConformanceItem] = [],
-}
-
 export object ConformanceUnmeasured {
     file: str = "",
     language: str = "",
@@ -1979,11 +1975,17 @@ export object ConformanceReport {
     distributions: [ConformanceDistribution] = [],
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
-    base: str = "",
-    ceilings: [ConformanceCeiling] = [],
     unmeasured: [ConformanceUnmeasured] = [],
     packages: [ConformancePackage] = [],
     indexes: [SymbolIndexStatus] = [],
+}
+
+export object ConformanceBase {
+    commit: str = "",
+    distributions: [ConformanceDistribution] = [],
+    packages: [ConformancePackage] = [],
+    touched: [str] = [],
+    unmeasured: [ConformanceUnmeasured] = [],
 }
 
 export object Node {
@@ -2753,7 +2755,8 @@ extern fun magus__Change__tier(recv: Change, target: str, opts: TierOptions? = n
 extern fun magus__Change__diff(recv: Change, opts: DiffOptions? = null) > Diff !> any;
 extern fun magus__Change__impact(recv: Change, opts: CommandOptions? = null) > Impact !> any;
 extern fun magus__Change__affected(recv: Change) > Affected !> any;
-extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
+extern fun magus__Change__conformance(recv: Change) > ConformanceReport !> any;
+extern fun magus__Change__conformanceBase(recv: Change) > ConformanceBase !> any;
 extern fun magus__Change__mergeBase(recv: Change) > str !> any;
 extern fun magus__Change__risk(recv: Change) > ChangeRisk !> any;
 extern fun magus__ChangeRiskFunction__charged(recv: ChangeRiskFunction, threshold: int) > bool;

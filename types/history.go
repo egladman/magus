@@ -65,9 +65,9 @@ const ConformanceDefinition = "Conformance measures how big and how coupled the 
 	"enforces, and the files, symbols or clone groups past it. Propose is the live percentile when it has " +
 	"fallen at least the configured step below the anchor on a large enough sample, and never otherwise: " +
 	"nothing here enforces a live percentile, since a threshold that follows the code loosens as the code " +
-	"grows. The lens proposes; a person configures the anchor, and nothing here edits it. Asked for a base " +
-	"revision, it adds the conformance ceilings a change crossed: each changed file whose count of a checked " +
-	"metric's violations rose past its count at the base. No count is stored. Generated and excluded files " +
+	"grows. The lens proposes; a person configures the anchor, and nothing here edits it. It judges no " +
+	"change: a base revision's measure is a second answer, and comparing the two is the caller's. No count " +
+	"is stored. Generated and excluded files " +
 	"belong to no population, and excluded counts the files the configured exclusions hid. An index that is " +
 	"missing or stale answers unknown, never a pass."
 

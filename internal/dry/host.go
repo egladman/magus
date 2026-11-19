@@ -497,10 +497,10 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// Empty for the reason precedents is.
 	m.MapSet("magus__Change__conformance", shaped("magus.conformance", map[string]vm.Value{
-		"definition": vm.StringValue(""), "distributions": empty, "stale": empty, "excluded": vm.IntValue(0),
-		"answer": vm.NewMap(), "indexes": empty, "base": vm.StringValue(""), "ceilings": empty, "unmeasured": empty,
+		"definition": vm.StringValue(""), "distributions": empty, "stale": empty, "excluded": vm.IntValue(0), "answer": vm.NewMap(), "indexes": empty,
 	}))
-	// A preview exports and indexes no base, so it names no commit.
+	// A preview exports and indexes no base, so it names no commit and touches nothing.
+	m.MapSet("magus__Change__conformanceBase", shaped("magus.conformanceBase", map[string]vm.Value{"commit": vm.StringValue(""), "distributions": empty, "packages": empty, "touched": empty, "unmeasured": empty}))
 	m.MapSet("magus__Change__mergeBase", function("magus.conformanceBase", func(context.Context, []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
 	}))
