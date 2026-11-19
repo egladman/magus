@@ -3,15 +3,18 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/train/embed/distill"
 	"github.com/egladman/magus/libs/train/embed/teacher"
@@ -22,17 +25,12 @@ const pcaSalt = "train.embed-pca/v1alpha1:"
 
 // vocabFlags are the flags vocab and train share: train rebuilds the vocabulary from
 // them and refuses a token run that embedded another.
+// trainOpts holds the flags of the one command a process runs; vocab and train share its vocabulary flags.
+var trainOpts trainFlags
+
 type vocabFlags struct {
 	texts, forced            string
 	minCount, maxBytes, size int
-}
-
-func (f *vocabFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.texts, "texts", "", "the training texts, JSON lines of {\"id\", \"text\"}, as embed-mine writes them under libs/train/embed/gen/")
-	fs.StringVar(&f.forced, "forced", "", "forced tokens, one per line; every token embed.Tokens yields from a line is kept")
-	fs.IntVar(&f.minCount, "min-count", 2, "a counted token below this count is left out")
-	fs.IntVar(&f.maxBytes, "max-bytes", 32, "a counted token longer than this is left out")
-	fs.IntVar(&f.size, "size", 29000, "vocabulary size, forced tokens included")
 }
 
 func (f *vocabFlags) build() (*distill.Vocab, error) {
@@ -50,13 +48,8 @@ func (f *vocabFlags) build() (*distill.Vocab, error) {
 
 // runVocab builds the vocabulary and writes it twice: as the texts file the token
 // teacher run embeds, and as the token counts convert reads.
-func runVocab(args []string) error {
-	fs := flag.NewFlagSet("vocab", flag.ExitOnError)
-	var vf vocabFlags
-	vf.register(fs)
-	out := fs.String("out", "", "where to write the token texts for `embed teacher -texts`")
-	vocabOut := fs.String("vocab", "", "where to write the vocabulary for `embed convert -vocab`")
-	_ = fs.Parse(args)
+func runVocab(vf *vocabFlags, outFlag, vocabFlag string) error {
+	out, vocabOut := &outFlag, &vocabFlag
 	if *out == "" || *vocabOut == "" {
 		return errors.New("-out and -vocab are required")
 	}
@@ -86,12 +79,8 @@ func runVocab(args []string) error {
 // the tokens and the training texts, fits PCA on a hash sample of the texts' targets,
 // starts the student from the projected token vectors with count SIF weights at the
 // least-squares scale, trains it, and writes the quantized table.
-func runTrain(args []string) error {
-	fs := flag.NewFlagSet("train", flag.ExitOnError)
-	var f trainFlags
-	f.register(fs)
-	_ = fs.Parse(args)
-	if err := f.check(fs); err != nil {
+func runTrain(f *trainFlags) error {
+	if err := f.check(); err != nil {
 		return err
 	}
 
@@ -152,45 +141,26 @@ type trainFlags struct {
 	vocab                                               vocabFlags
 	tokenRun, textsRun, pairs, root, pipeline, run, out string
 	dims, pcaSample                                     int
-	sif                                                 float64
+	sifText, seedText, lrText, lambdaText, tauText      string
+	sif, lr, lambda, tau                                float64
 	seed                                                uint64
 	epochs, mseBatch, pairBatch, patience, workers      int
-	lr, lambda, tau                                     float64
-}
-
-func (f *trainFlags) register(fs *flag.FlagSet) {
-	f.vocab.register(fs)
-	fs.StringVar(&f.tokenRun, "token-run", "", "the teacher run directory over `embed vocab`'s token texts")
-	fs.StringVar(&f.textsRun, "texts-run", "", "the teacher run directory over -texts")
-	fs.StringVar(&f.pairs, "pairs", "", "pairs JSON lines (libs/train/embed/gen/pairs.jsonl); required unless -lambda 0")
-	fs.StringVar(&f.root, "root", ".", "the tree pair refs resolve against, at the pinned commit")
-	fs.IntVar(&f.dims, "dims", 256, "table dims, a multiple of 64")
-	fs.IntVar(&f.pcaSample, "pca-sample", 131072, "text targets the PCA is fitted on, picked by hash")
-	fs.Float64Var(&f.sif, "sif", 1e-3, "SIF coefficient a in a/(a + p)")
-	fs.Uint64Var(&f.seed, "seed", 0, "the one seed every shuffle draws from")
-	fs.StringVar(&f.pipeline, "pipeline", "", "the commit the pipeline ran at")
-	fs.StringVar(&f.run, "run", "", "this run's id, recorded in the table and runs.jsonl")
-	fs.StringVar(&f.out, "out", "", "where to write the table")
-	def := distill.DefaultTrainOptions(256)
-	fs.IntVar(&f.epochs, "epochs", def.Epochs, "at most this many epochs")
-	fs.Float64Var(&f.lr, "lr", def.LearningRate, "Adam learning rate")
-	fs.Float64Var(&f.lambda, "lambda", def.Lambda, "weight of the MNRL term")
-	fs.Float64Var(&f.tau, "tau", def.Temperature, "MNRL temperature")
-	fs.IntVar(&f.mseBatch, "mse-batch", def.MSEBatch, "texts per MSE batch")
-	fs.IntVar(&f.pairBatch, "pair-batch", def.PairBatch, "pairs per MNRL batch")
-	fs.IntVar(&f.patience, "patience", def.Patience, "epochs without a held-out improvement before stopping")
-	fs.IntVar(&f.workers, "workers", min(def.Workers, runtime.NumCPU()), "goroutines for training")
 }
 
 // check refuses a run missing a flag the table's provenance names, and pairs without
+// an MNRL weight or the reverse. It reads the float and seed flags, which bind as text.
+// check refuses a run missing a flag the table's provenance names, and pairs without
 // an MNRL weight or the reverse.
-func (f *trainFlags) check(fs *flag.FlagSet) error {
-	set := map[string]bool{}
-	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
-	for _, name := range []string{"token-run", "texts-run", "seed", "pipeline", "run", "out"} {
-		if !set[name] {
-			return fmt.Errorf("-%s is required", name)
-		}
+func (f *trainFlags) check() error {
+	if err := f.required(); err != nil {
+		return err
+	}
+	var err error
+	if f.seed, err = strconv.ParseUint(f.seedText, 10, 64); err != nil {
+		return fmt.Errorf("-seed: %q is not a whole number", f.seedText)
+	}
+	if err = f.floats(); err != nil {
+		return err
 	}
 	if (f.pairs == "") != (f.lambda == 0) {
 		return errors.New("pass -pairs with a positive -lambda, or -lambda 0 with no -pairs")
@@ -198,6 +168,40 @@ func (f *trainFlags) check(fs *flag.FlagSet) error {
 	return nil
 }
 
+// required names the first flag the table's provenance needs that the run left empty.
+func (f *trainFlags) required() error {
+	for _, r := range []struct{ name, value string }{
+		{"token-run", f.tokenRun}, {"texts-run", f.textsRun}, {"seed", f.seedText},
+		{"pipeline", f.pipeline}, {"run", f.run}, {"out", f.out},
+	} {
+		if r.value == "" {
+			return fmt.Errorf("-%s is required", r.name)
+		}
+	}
+	return nil
+}
+
+// floats reads the flags that bind as text, since command.Flag binds no float.
+func (f *trainFlags) floats() error {
+	var err error
+	if f.sif, err = parseFloat("sif", f.sifText); err != nil {
+		return err
+	}
+	if f.lr, err = parseFloat("lr", f.lrText); err != nil {
+		return err
+	}
+	return f.weights()
+}
+
+// weights reads the MNRL flags that bind as text.
+func (f *trainFlags) weights() error {
+	var err error
+	if f.lambda, err = parseFloat("lambda", f.lambdaText); err != nil {
+		return err
+	}
+	f.tau, err = parseFloat("tau", f.tauText)
+	return err
+}
 func (f *trainFlags) trainOptions() distill.TrainOptions {
 	opts := distill.DefaultTrainOptions(f.dims)
 	opts.Seed, opts.Epochs, opts.LearningRate, opts.Lambda, opts.Temperature = f.seed, f.epochs, f.lr, f.lambda, f.tau
@@ -355,4 +359,62 @@ func readLines(path string) ([]string, error) {
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// vocabOpts holds the output flags of vocab.
+var vocabOpts struct{ out, vocab string }
+
+var vocabFlagList = []command.Flag{
+	{Name: "texts", Kind: command.String, Doc: "the training texts, JSON lines of {\"id\", \"text\"}, as embed-mine writes them under libs/train/embed/gen/", Target: &trainOpts.vocab.texts},
+	{Name: "forced", Kind: command.String, Doc: "forced tokens, one per line; every token embed.Tokens yields from a line is kept", Target: &trainOpts.vocab.forced},
+	{Name: "min-count", Kind: command.Int, Default: 2, Doc: "a counted token below this count is left out", Target: &trainOpts.vocab.minCount},
+	{Name: "max-bytes", Kind: command.Int, Default: 32, Doc: "a counted token longer than this is left out", Target: &trainOpts.vocab.maxBytes},
+	{Name: "size", Kind: command.Int, Default: 29000, Doc: "vocabulary size, forced tokens included", Target: &trainOpts.vocab.size},
+}
+
+var vocabCmd = command.Command{
+	Name:   "vocab",
+	Short:  "build the vocabulary; write its token texts for a teacher run and its counts for convert",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(vocabFlagList, []command.Flag{
+		{Name: "out", Kind: command.String, Doc: "where to write the token texts for `embed teacher -texts`", Target: &vocabOpts.out},
+		{Name: "vocab", Kind: command.String, Doc: "where to write the vocabulary for `embed convert -vocab`", Target: &vocabOpts.vocab},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error {
+		return runVocab(&trainOpts.vocab, vocabOpts.out, vocabOpts.vocab)
+	},
+}
+
+// trainDefaults are the optimizer settings the train flags default to.
+var trainDefaults = distill.DefaultTrainOptions(256)
+
+// floatText is the text a float flag declares as its default.
+func floatText(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+
+var trainCmd = command.Command{
+	Name:   "train",
+	Short:  "distill, train and quantize the table from finished teacher runs",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(vocabFlagList, []command.Flag{
+		{Name: "token-run", Kind: command.String, Doc: "the teacher run directory over `embed vocab`'s token texts; required", Target: &trainOpts.tokenRun},
+		{Name: "texts-run", Kind: command.String, Doc: "the teacher run directory over -texts; required", Target: &trainOpts.textsRun},
+		{Name: "pairs", Kind: command.String, Doc: "pairs JSON lines (libs/train/embed/gen/pairs.jsonl); required unless -lambda 0", Target: &trainOpts.pairs},
+		{Name: "root", Kind: command.String, Default: ".", Doc: "the tree pair refs resolve against, at the pinned commit", Target: &trainOpts.root},
+		{Name: "dims", Kind: command.Int, Default: 256, Doc: "table dims, a multiple of 64", Target: &trainOpts.dims},
+		{Name: "pca-sample", Kind: command.Int, Default: 131072, Doc: "text targets the PCA is fitted on, picked by hash", Target: &trainOpts.pcaSample},
+		{Name: "sif", Kind: command.String, Default: floatText(1e-3), Doc: "SIF coefficient a in a/(a + p)", Target: &trainOpts.sifText},
+		{Name: "seed", Kind: command.String, Doc: "the one seed every shuffle draws from; required", Target: &trainOpts.seedText},
+		{Name: "pipeline", Kind: command.String, Doc: "the commit the pipeline ran at; required", Target: &trainOpts.pipeline},
+		{Name: "run", Kind: command.String, Doc: "this run's id, recorded in the table and runs.jsonl; required", Target: &trainOpts.run},
+		{Name: "out", Kind: command.String, Doc: "where to write the table; required", Target: &trainOpts.out},
+		{Name: "epochs", Kind: command.Int, Default: trainDefaults.Epochs, Doc: "at most this many epochs", Target: &trainOpts.epochs},
+		{Name: "lr", Kind: command.String, Default: floatText(trainDefaults.LearningRate), Doc: "Adam learning rate", Target: &trainOpts.lrText},
+		{Name: "lambda", Kind: command.String, Default: floatText(trainDefaults.Lambda), Doc: "weight of the MNRL term", Target: &trainOpts.lambdaText},
+		{Name: "tau", Kind: command.String, Default: floatText(trainDefaults.Temperature), Doc: "MNRL temperature", Target: &trainOpts.tauText},
+		{Name: "mse-batch", Kind: command.Int, Default: trainDefaults.MSEBatch, Doc: "texts per MSE batch", Target: &trainOpts.mseBatch},
+		{Name: "pair-batch", Kind: command.Int, Default: trainDefaults.PairBatch, Doc: "pairs per MNRL batch", Target: &trainOpts.pairBatch},
+		{Name: "patience", Kind: command.Int, Default: trainDefaults.Patience, Doc: "epochs without a held-out improvement before stopping", Target: &trainOpts.patience},
+		{Name: "workers", Kind: command.Int, Default: min(trainDefaults.Workers, runtime.NumCPU()), Doc: "goroutines for training", Target: &trainOpts.workers},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error { return runTrain(&trainOpts) },
 }

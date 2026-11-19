@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/embed/rankeval"
 	"github.com/egladman/magus/libs/train/embed/teacher"
 )
@@ -56,15 +57,8 @@ const benchDepth = 100
 // card's prompt, the teacher as published, and prompt-less, the symmetric model the
 // student is distilled toward. Every text goes through resumable teacher shards under
 // the subset's teacher/, so a stopped run resumes at its last whole shard.
-func runBench(args []string) error {
-	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
-	var c common
-	c.register(fs)
-	subset := fs.String("subset", "", "a subset directory the external harness exported, holding queries.jsonl and corpus.jsonl")
-	shardSize := fs.Int("shard-size", 1024, "texts per teacher shard")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+func runBench(c *common, subsetFlag string, shardSizeFlag int) error {
+	subset, shardSize := &subsetFlag, &shardSizeFlag
 	if *subset == "" {
 		return errors.New("-subset is required")
 	}
@@ -250,4 +244,23 @@ func writeTexts(path string, texts []teacher.Text) error {
 		return nil
 	}
 	return writeAtomic(path, b.Bytes())
+}
+
+// benchOpts holds the flags of the one command a process runs.
+var benchOpts struct {
+	subset    string
+	shardSize int
+}
+
+var benchCmd = command.Command{
+	Name:   "bench",
+	Short:  "write CodeRankEmbed's runs over a subset the external benchmark exported",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "subset", Kind: command.String, Doc: "a subset directory the external harness exported, holding queries.jsonl and corpus.jsonl", Target: &benchOpts.subset},
+		{Name: "shard-size", Kind: command.Int, Default: 1024, Doc: "texts per teacher shard", Target: &benchOpts.shardSize},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error {
+		return runBench(&shared, benchOpts.subset, benchOpts.shardSize)
+	},
 }

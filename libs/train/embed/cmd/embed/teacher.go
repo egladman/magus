@@ -4,11 +4,11 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/train/embed/teacher"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/gobackend"
 	_ "github.com/gomlx/go-xla/compute/xla"
@@ -100,21 +100,6 @@ type common struct {
 	batch   int
 	bucket  int
 	maxLen  int
-}
-
-func (c *common) register(fs *flag.FlagSet) {
-	cache := ""
-	if dir, err := xdg.CacheDir(); err == nil {
-		cache = filepath.Join(dir, "magus-embed")
-	}
-	fs.StringVar(&c.inputs, "inputs", "embed/inputs.yaml", "the pinned inputs file")
-	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.yaml paths are relative to")
-	fs.StringVar(&c.model, "model", "", "the teacher: CodeRankEmbed or nomic-embed-text-v1.5")
-	fs.StringVar(&c.backend, "backend", "xla", "xla (PJRT CPU plugin) or go (pure Go, no cgo kernels)")
-	fs.IntVar(&c.threads, "threads", 6, "CPU threads for the backend and the Go runtime")
-	fs.IntVar(&c.batch, "batch", 16, "texts per executed batch")
-	fs.IntVar(&c.bucket, "bucket", 32, "padded lengths round up to a multiple of this")
-	fs.IntVar(&c.maxLen, "max-len", 512, "token cap, [CLS] and [SEP] included")
 }
 
 type loaded struct {
@@ -258,21 +243,13 @@ func untarGz(archive, dir string) error {
 	}
 }
 
-func runFetch(args []string) error {
-	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "usage: embed fetch [flags] [name-prefix ...]\n\nwith no prefix, fetches every input")
-		fs.PrintDefaults()
-	}
-	_ = fs.Parse(args)
+func runFetch(c *common, args []string) error {
 	inputs, err := readInputs(c.inputs)
 	if err != nil {
 		return err
 	}
 	for _, in := range inputs {
-		if fs.NArg() > 0 && !slices.ContainsFunc(fs.Args(), func(p string) bool { return strings.HasPrefix(in.Name, p) }) {
+		if len(args) > 0 && !slices.ContainsFunc(args, func(p string) bool { return strings.HasPrefix(in.Name, p) }) {
 			continue
 		}
 		if _, err := verify(c.cache, in); err == nil {
@@ -319,15 +296,13 @@ func download(cache string, in inputRecord) error {
 	return os.Rename(tmp.Name(), dst)
 }
 
-func runTeacher(args []string) error {
-	fs := flag.NewFlagSet("teacher", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	texts := fs.String("texts", "", "JSON lines of {\"id\", \"text\"} to embed")
-	out := fs.String("out", "", "run root; default <cache>/teacher")
-	shardSize := fs.Int("shard-size", 4096, "texts per shard")
-	maxShards := fs.Int("max-shards", 0, "stop after encoding this many new shards; 0 runs to the end")
-	_ = fs.Parse(args)
+type teacherOptions struct {
+	texts, out           string
+	shardSize, maxShards int
+}
+
+func runTeacher(c *common, o *teacherOptions) error {
+	texts, out, shardSize, maxShards := &o.texts, &o.out, &o.shardSize, &o.maxShards
 	if *texts == "" {
 		return fmt.Errorf("-texts is required")
 	}
@@ -388,15 +363,18 @@ type sampleRow struct {
 	Text   string `json:"text"`
 }
 
-func runParity(args []string) error {
-	fs := flag.NewFlagSet("teacher-parity", flag.ExitOnError)
-	var c common
-	c.register(fs)
-	dir := fs.String("dir", "", "parity directory with sample.jsonl, ref-<model>.f32, tokens-<model>.jsonl; default <cache>/parity")
-	passes := fs.Int("passes", 2, "encode passes; every pass after the first is timed without compiles")
-	minCos := fs.Float64("min-cos", 0.999, "the per-row cosine every row must reach")
-	limit := fs.Int("limit", 0, "use only the first N sample texts; 0 uses all")
-	_ = fs.Parse(args)
+type parityOptions struct {
+	dir, minCos   string
+	passes, limit int
+}
+
+func runParity(c *common, o *parityOptions) error {
+	dir, passes, limit := &o.dir, &o.passes, &o.limit
+	minCosValue, err := parseFloat("min-cos", o.minCos)
+	if err != nil {
+		return err
+	}
+	minCos := &minCosValue
 	if *dir == "" {
 		*dir = filepath.Join(c.cache, "parity")
 	}
@@ -548,4 +526,60 @@ func readF32(path string, rows, dim int) ([][]float32, error) {
 		}
 	}
 	return out, nil
+}
+
+var fetchCmd = command.Command{
+	Name:   "fetch",
+	Short:  "download the pinned inputs named in inputs.yaml and verify their sha256",
+	Usage:  "embed fetch [flags] [name-prefix ...]",
+	Long:   "With no prefix, fetches every input.",
+	Effect: command.EffectLocalWrite,
+	Flags:  commonFlags,
+	Run:    func(_ context.Context, inv command.Invocation) error { return runFetch(&shared, inv.Args) },
+}
+
+// teacherOpts holds the flags of the one command a process runs.
+var teacherOpts teacherOptions
+
+var teacherCmd = command.Command{
+	Name:   "teacher",
+	Short:  "embed a texts file with a teacher model into resumable, content-addressed shards",
+	Effect: command.EffectLocalWrite,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "texts", Kind: command.String, Doc: "JSON lines of {\"id\", \"text\"} to embed", Target: &teacherOpts.texts},
+		{Name: "out", Kind: command.String, Doc: "run root; default <cache>/teacher", Target: &teacherOpts.out},
+		{Name: "shard-size", Kind: command.Int, Default: 4096, Doc: "texts per shard", Target: &teacherOpts.shardSize},
+		{Name: "max-shards", Kind: command.Int, Default: 0, Doc: "stop after encoding this many new shards; 0 runs to the end", Target: &teacherOpts.maxShards},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error { return runTeacher(&shared, &teacherOpts) },
+}
+
+// parityOpts holds the flags of the one command a process runs.
+var parityOpts parityOptions
+
+var parityCmd = command.Command{
+	Name:   "teacher-parity",
+	Short:  "check the Go teacher against the reference vectors and report texts/s",
+	Effect: command.EffectRead,
+	Flags: slices.Concat(commonFlags, []command.Flag{
+		{Name: "dir", Kind: command.String, Doc: "parity directory with sample.jsonl, ref-<model>.f32, tokens-<model>.jsonl; default <cache>/parity", Target: &parityOpts.dir},
+		{Name: "passes", Kind: command.Int, Default: 2, Doc: "encode passes; every pass after the first is timed without compiles", Target: &parityOpts.passes},
+		{Name: "min-cos", Kind: command.String, Default: "0.999", Doc: "the per-row cosine every row must reach", Target: &parityOpts.minCos},
+		{Name: "limit", Kind: command.Int, Default: 0, Doc: "use only the first N sample texts; 0 uses all", Target: &parityOpts.limit},
+	}),
+	Run: func(_ context.Context, _ command.Invocation) error { return runParity(&shared, &parityOpts) },
+}
+
+// shared holds the flags every teacher command takes; only one command runs per process.
+var shared common
+
+var commonFlags = []command.Flag{
+	{Name: "inputs", Kind: command.String, Default: "embed/inputs.yaml", Doc: "the pinned inputs file", Target: &shared.inputs},
+	{Name: "cache", Kind: command.String, Default: cacheRoot(), Doc: "the cache root inputs.yaml paths are relative to", Target: &shared.cache},
+	{Name: "model", Kind: command.String, Doc: "the teacher: CodeRankEmbed or nomic-embed-text-v1.5", Target: &shared.model},
+	{Name: "backend", Kind: command.String, Default: "xla", Doc: "xla (PJRT CPU plugin) or go (pure Go, no cgo kernels)", Target: &shared.backend},
+	{Name: "threads", Kind: command.Int, Default: 6, Doc: "CPU threads for the backend and the Go runtime", Target: &shared.threads},
+	{Name: "batch", Kind: command.Int, Default: 16, Doc: "texts per executed batch", Target: &shared.batch},
+	{Name: "bucket", Kind: command.Int, Default: 32, Doc: "padded lengths round up to a multiple of this", Target: &shared.bucket},
+	{Name: "max-len", Kind: command.Int, Default: 512, Doc: "token cap, [CLS] and [SEP] included", Target: &shared.maxLen},
 }
