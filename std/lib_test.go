@@ -18,8 +18,8 @@ func TestDiagramRegistersAtItsImportPath(t *testing.T) {
 	for _, m := range methods {
 		names = append(names, m.Name)
 	}
-	assert.Equal(t, []string{"without", "external", "of", "draw", "drawLayout", "nodeFact"}, names,
-		"only the authoring API, draw, drawLayout and the stamp's node line are exported: Diagram.layout() hands a caller the exported Layout, and drawLayout paints it in each theme without a second layout; the layout functions and the renderer stay private")
+	assert.Equal(t, []string{"without", "person", "external", "step", "stage", "of", "draw", "drawLayout", "nodeFact", "drillLinks", "claims", "atlas"}, names,
+		"only the authoring API, draw, drawLayout and the stamp's node line, drillLinks, claims and atlas are exported: Diagram.layout() hands a caller the exported Layout, and drawLayout paints it in each theme without a second layout; the layout functions and the renderer stay private")
 }
 
 func TestDiskModulesRegisterWhereTheHookCanImportThem(t *testing.T) {

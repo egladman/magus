@@ -156,6 +156,7 @@ func TestImplCallbacksNamesOneAdapterPerType(t *testing.T) {
 	assert.Equal(t, []string{
 		"callbackReturnsAny",
 		"callbackStringBoolReturnsWalkStep",
+		"callbackStringReturnsAny",
 		"callbackStringReturnsBool",
 		"callbackStringSliceReturnsBool",
 		"callbackVoid",

@@ -1,6 +1,5 @@
 namespace bootstrap;
 
-import "magus";
 import "magus/diagram";
 
 // bootstrapDiagram draws the bootstrap as the process it is: commands a person runs and the
