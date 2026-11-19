@@ -1613,20 +1613,13 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 	marker := agent.GuardTemplateMarker
 
 	t.Run("current", func(t *testing.T) {
-		body := []byte(fmt.Sprintf("#!/bin/sh\n# %s %d\n", marker, agent.GuardTemplateVersion))
+		body := []byte(fmt.Sprintf("#!/bin/sh\n# %s %s\n", marker, agent.GuardTemplateVersion))
 		assert.Equal(t, "", guardTemplateMarkerProblem(body))
 	})
 
 	t.Run("ahead of this binary", func(t *testing.T) {
-		body := []byte(fmt.Sprintf("# %s %d\n", marker, agent.GuardTemplateVersion+1))
+		body := []byte(fmt.Sprintf("# %s magus.guard-template/v1alpha2\n", marker))
 		assert.Equal(t, "", guardTemplateMarkerProblem(body))
-	})
-
-	t.Run("behind", func(t *testing.T) {
-		body := []byte(fmt.Sprintf("# %s 1\n", marker))
-		got := guardTemplateMarkerProblem(body)
-		assert.Contains(t, got, "template version 1 is older than current version "+strconv.Itoa(agent.GuardTemplateVersion))
-		assert.Contains(t, got, "re-download it")
 	})
 
 	// A MISSING marker is a finding, not a pass: the marker postdates the templates,
@@ -1638,15 +1631,16 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 		assert.Contains(t, got, "predates template versioning")
 	})
 
-	// An unreadable version is treated as current rather than as a version-0 copy:
-	// the marker is there, so the file is not from before versioning.
-	t.Run("unparsable version", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s seven\n", marker))))
+	// A numeric marker is the form before api versions: refused, with the remedy.
+	t.Run("numeric version", func(t *testing.T) {
+		got := guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s 39\n", marker)))
+		assert.Contains(t, got, `template marker "39" is not an api version`)
+		assert.Contains(t, got, "re-download it")
 	})
 
 	// The marker on the last line, with no newline after it.
 	t.Run("marker at end of file", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s %d", marker, agent.GuardTemplateVersion))))
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte(fmt.Sprintf("# %s %s", marker, agent.GuardTemplateVersion))))
 	})
 }
 

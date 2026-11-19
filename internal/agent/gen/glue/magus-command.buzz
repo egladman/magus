@@ -121,13 +121,13 @@
 // Where no prompt can happen it renders as a deny, never a yes.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 39
-// magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model defer=none ask=model
-// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model defer=none ask=model
+// magus-guard-template: magus.guard-template/v1alpha1
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=claude-code input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=codex input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=claude-code input=mcp deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=codex input=mcp deny=model advise=model defer=none ask=model
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=claude-code input=path deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=codex input=path deny=model advise=model defer=none ask=model
 // The mcp and path rows are real: every host wires this file to every tool, so an
 // mcp__magus__* call and a file write reach it as whole events (see hook\wholeEvent), and
 // the same hookSpecificOutput reply it renders for a command carries a deny or an advise on

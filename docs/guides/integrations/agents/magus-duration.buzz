@@ -9,7 +9,7 @@
 // digest, and magus records the result as unobserved. HOST_AGENT_PATH names
 // the subagent, which tells a worker from its parent.
 //
-// magus-guard-template: 39
+// magus-guard-template: magus.guard-template/v1alpha1
 
 import "std";
 import "io";

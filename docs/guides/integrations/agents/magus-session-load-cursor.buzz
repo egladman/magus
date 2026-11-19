@@ -33,8 +33,8 @@
 // version, and the coverage line says so. A skill load is the Read of its SKILL.md.
 // A Task call may be recorded as CallDynamicTool{namespace: "cursor", toolName:
 // "Task", arguments}, and an MCP call as CallDynamicTool{namespace: <server>}.
-// magus-guard-template: 39
-// magus-session-coverage: schema=2 host=cursor commands=yes exit=none skills=yes hook-output=none spawn=yes session-id=yes model=none host-version=none
+// magus-guard-template: magus.guard-template/v1alpha1
+// magus-session-coverage: api_version=magus.session-coverage/v1alpha1 host=cursor commands=yes exit=none skills=yes hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a transcript this run cannot read is not a
 // reason to abandon the rest.

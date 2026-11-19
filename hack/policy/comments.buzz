@@ -1029,7 +1029,7 @@ test "a long Buzz doc comment is refused" {
 }
 
 test "a Buzz guard template marker meets no limit, and other prose beside it does" {
-    final marker = "// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model\nimport \"std\";\n";
+    final marker = "// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=cursor input=path deny=model advise=model defer=none ask=model\nimport \"std\";\n";
     std\assert(graded("a.buzz", after: marker).decision == magus\GuardDecision.defer, message: "a marker");
     final wide = "// magus-guard-note: " + "x".repeat(70) + "\nimport \"std\";\n";
     std\assert(graded("a.buzz", after: wide).reason.indexOf("columns wide") != null, message: "not a marker");

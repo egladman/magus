@@ -2251,11 +2251,15 @@ func guardTemplateMarkerProblem(body []byte) string {
 	if end := bytes.IndexByte(rest, '\n'); end != -1 {
 		rest = rest[:end]
 	}
-	version, err := strconv.Atoi(strings.TrimSpace(string(rest)))
-	if err != nil || version >= agent.GuardTemplateVersion {
+	version := types.APIVersion(strings.TrimSpace(string(rest)))
+	if !version.Valid() {
+		return fmt.Sprintf("template marker %q is not an api version, so it predates %s; re-download it: docs/guides/integrations/agents.md",
+			string(version), agent.GuardTemplateVersion)
+	}
+	if version.Compare(agent.GuardTemplateVersion) >= 0 {
 		return ""
 	}
-	return fmt.Sprintf("template version %d is older than current version %d; re-download it: docs/guides/integrations/agents.md",
+	return fmt.Sprintf("template version %s is older than current version %s; re-download it: docs/guides/integrations/agents.md",
 		version, agent.GuardTemplateVersion)
 }
 

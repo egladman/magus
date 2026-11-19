@@ -18,10 +18,8 @@ import (
 // the directory is claimed by the gates below the moment it exists.
 const sessionAdapterPrefix = "magus-session-load-"
 
-// sessionCoverageSchema is the schema= every adapter's coverage marker
-// names for SessionAPIVersion.
-// TODO: spell it as SessionAPIVersion once the marker lines are rewritten.
-const sessionCoverageSchema = "2"
+// sessionCoverageAPIVersion is the api_version= every adapter's coverage marker names.
+const sessionCoverageAPIVersion = "magus.session-coverage/v1alpha1"
 
 // sessionAdapters are the per-host extraction adapters. Every one of them must also
 // appear in hookTemplates, which is what gets it embedded and version-stamped;
@@ -101,10 +99,10 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 				require.True(t, split, "%s: coverage declaration field %q is not key=value", name, kv)
 				fields[key] = value
 			}
-			require.Equal(t, sessionCoverageSchema, fields["schema"],
-				"%s declares session schema %q; the contract is schema=%s for %s.\n"+
-					"A schema bump means every adapter must be updated and re-downloaded before it loads again.",
-				name, fields["schema"], sessionCoverageSchema, SessionAPIVersion)
+			require.Equal(t, sessionCoverageAPIVersion, fields["api_version"],
+				"%s declares session coverage api_version %q; the contract is api_version=%s for %s.\n"+
+					"A version bump means every adapter must be updated and re-downloaded before it loads again.",
+				name, fields["api_version"], sessionCoverageAPIVersion, SessionAPIVersion)
 			host := fields["host"]
 			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
 			require.Nil(t, cov[host],

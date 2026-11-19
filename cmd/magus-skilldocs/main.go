@@ -49,12 +49,9 @@ func main() {
 // assets lived beside the CLI and go:embed cannot reach across package directories. They live in
 // internal/agent now, so this imports them.
 //
-// The real KnowledgeSchemaVersion is threaded through, not zero. It used to be
-// zero on the grounds that it only feeds the install stamp and these pages did
-// not reproduce the stamp, but they do now (writeStampTable), and a page
-// claiming `knowledge-schema-version: 0` would be documenting a stamp no install
-// ever writes. A generated page showing a value that cannot occur is worse than
-// no page.
+// The real KnowledgeAPIVersion is threaded through, not a placeholder. It feeds the install
+// stamp and these pages reproduce the stamp (writeStampTable), so a page claiming a
+// `knowledge-api-version` no install ever writes would be worse than no page.
 func run(outDir string) error {
 	cat := agent.Default(types.KnowledgeAPIVersion)
 	defs, err := cat.EmbeddedSkills()

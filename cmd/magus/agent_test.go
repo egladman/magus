@@ -354,8 +354,8 @@ func TestCheckSkillStatusesStale(t *testing.T) {
 	const skillsDir = "harness-skills"
 	writeStatusHarness(t, skillsDir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, skillsDir, "magus-query"), 0o755))
-	// A footer stamped with an older skill version is stale.
-	stale := "---\nname: x\n---\nbody\n<!-- agent-skill-version: 0; knowledge-schema-version: 1 -->\n"
+	// A footer stamped with an older skill stamp format is stale.
+	stale := "---\nname: x\n---\nbody\n<!-- skill-stamp-format: magus.skill-stamp/v1alpha0; knowledge-api-version: magus.knowledge/v1alpha0 -->\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, skillsDir, "magus-query/SKILL.md"), []byte(stale), 0o644))
 	statuses := agentSkills.CheckStatuses(context.Background(), dir, "status-test")
 	require.Len(t, statuses, 1)

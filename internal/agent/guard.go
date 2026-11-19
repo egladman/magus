@@ -1,6 +1,9 @@
 package agent
 
-import "github.com/egladman/magus/libs/safetyscissors/verdict"
+import (
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types"
+)
 
 // The guard's wire contract: the vocabulary every host glue must handle, in
 // the one package that the CLI producing a verdict imports and the parity tests
@@ -26,7 +29,7 @@ const GuardAPIVersion = verdict.APIVersion
 // to record, not to hide.
 var guardInputs = []string{"command", "path", "mcp"}
 
-// GuardTemplateVersion is the revision of the hook templates a reader installs
+// GuardTemplateVersion is the api_version of the hook templates a reader installs
 // into their agent host.
 //
 // The templates are the one shipped artifact with no self-correcting path. An
@@ -47,221 +50,9 @@ var guardInputs = []string{"command", "path", "mcp"}
 // rewording. TestShippedTemplatesCarryTheCurrentVersion makes the bump total:
 // every template must be re-stamped or the build fails.
 //
-// 1, 5 and 6 have no entry, and the gap is recorded rather than left to be
-// rediscovered: 1 is the marker's own starting value and predates this log, and
-// nothing in the tree or its history says what 5 and 6 changed. Read them as
-// versions nobody documented rather than as versions that mean something here.
-//
-// 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
-// the attribution flag, which no released binary accepts (v0.3.0 predates it):
-// an older binary rejected it, the plugin's judge() got unparsable stdout, and
-// every verdict silently allowed. The sh templates already retried without
-// attribution on exactly this failure (magus-command.sh's guard()); the
-// plugin now does the same.
-//
-// 3: that flag is now --agent-name (was --host, which read as a network host)
-// and the templates' variable is __MAGUS_AGENT_NAME (was __MAGUS_HOST). A copy
-// still passing the old spelling degrades rather than breaks (the retry that
-// version 2 added drops attribution and keeps the verdict), so an unbumped
-// copy loses the activity trail's host label, not its guard.
-//
-// 4: two changes, neither released before this. The path template learned to render a
-// deny arm: it handled only advise, so a deny rendered EMPTY while magus exited 2, and
-// both scripts read empty-output-plus-nonzero as a broken guard and exit 0, which every
-// host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
-// binary does not fail when it lacks a rule, it reads the config key that ARMS the rule
-// as unknown and answers pass, so the guard enforces nothing at exit 0.
-//
-// 7: the advise arm is now suppressible. A host whose pre-tool-use hook REJECTS
-// the context key (treating it as an error and then failing OPEN) was not merely
-// ignoring an advisory, it was disarmed by one for that call. A copy that predates
-// this keeps sending it and keeps failing open, which no verdict anywhere reveals.
-// Suppression is opt-in per host (__MAGUS_NO_ADVISE), so the rendered response for a
-// host that keeps the arm is byte-identical to version 6. Which hosts need it is
-// recorded in their own guide pages, not here.
-//
-// 8: the templates find the binary by walking UP to the magusfile instead of testing
-// `./magus` in the process's own directory. A hook runs in the host's SESSION
-// directory, which is not always the workspace root, and every copy that predates
-// this silently judges with PATH's binary there (or, where PATH's copy cannot load
-// the workspace, does not judge at all). Version 4 established preferring the
-// workspace's binary; this is the half of it that was only true from the root.
-//
-// 9: the notice a template prints when the binary is found but cannot judge now names
-// the evidence (which binary path it resolved, that binary's version, and the error it
-// actually printed) instead of guessing. The wording it replaces blamed "too old for
-// session hook, or cannot load this workspace", and the second half is not a cause: the
-// deny rules need no workspace, so a reader who took the sentence at its word went looking
-// for a workspace problem that was never there. A copy that predates this keeps sending
-// them, which is why this bumps even though enforcement is unchanged.
-// 10: the two notices a template prints when the guard is not enforcing are held to one
-// firing per session, keyed on a TMPDIR marker rather than on magus, which is the thing
-// that is missing when they fire. Measured over recent sessions: 2,741 unavailable and 653
-// could-not-judge firings, 99% of them same-session repeats, and one session took 913. A
-// copy that predates this keeps sending all of them, and a reader who has learned to skip
-// the notice skips the one that mattered too.
-//
-// 11: the set grew its first template that RECORDS instead of judging, one that says where
-// the work stood when a session stopped, and every file was restamped to keep the bump
-// total. Nothing an installed copy already did changed. The line exists so the ledger has no
-// hole: a version nobody explained reads as one nobody understood.
-//
-// 12: an advise now reaches the MODEL wherever a host has any channel for one. Two of the
-// four wired hosts delivered advisories nowhere: one suppressed the context key on a claim
-// its vendor's current reference contradicts, and one sent it on a gating event that
-// carries a message only with a denial, so the advisory collapsed into a plain allow. A
-// copy that predates this enforces every deny and silently drops every explanation, and
-// nothing in a session reveals that half the contract stopped arriving. Two smaller
-// changes ride along. A write is judged before it lands wherever a pre-write event exists
-// (a deny on an after-the-write event is a warning, not a block). The brief a compacted
-// session is handed back renders as a JSON envelope on request, for a host that parses a
-// session-start hook's stdout as a reply rather than reading it as context.
-//
-// 13: the contract grew a third input, MCP tool calls, and magus-command.sh grew
-// HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
-// HOST_EVENT_PATH, only a tool name and a params object, so a host wiring MCP calls
-// forwards the whole event instead of reducing it to one jq extraction. A copy that
-// predates this has no HOST_EVENT_RAW arm at all, so a host that tries to wire an
-// mcp__magus__* matcher through it ships the literal string "null" as the command to
-// judge rather than the envelope the guard can at least recognize and pass through.
-//
-// 14: Cursor's self-contained guard now matches WebSearch/WebFetch and injects
-// workspace kind=link citations into additional_context so the next open-web
-// search is biased toward package/docs URLs this tree already depends on. A copy
-// that predates this lets WebSearch run unbound against the open web with no
-// pointer at the citation index.
-//
-// 15: the contract grew the decision `ask`, which the push gate returns for an ungated
-// push from a session no job lease binds. Every template learned to render it through
-// its host's own approval prompt: from the hook where the hook can ask, and elsewhere by
-// answering the approval request a prompt rule the harness writes raises. Every template
-// now refuses a decision it does not know instead of allowing it. A copy that predates
-// this renders an ask as NOTHING, which each host takes as allow: an ungated push goes out
-// with nobody asked.
-// 16: the Buzz ports take their two per-entry knobs off the wire instead of out of the
-// environment. A hook command is an argv the host splits itself, so a `VAR=value` prefix
-// only works where something re-joins and re-parses it. The ports now decide from the
-// event whether to forward the whole envelope (the field HOST_EVENT_PATH names is absent
-// on exactly the inputs whose payload is not one string). They read their `magus shell`
-// flags from the argv `magus buzz` forwards after `--`. The sh copies are unchanged and
-// keep their variables, because sh is what runs them. This bumps because the CONFIG and
-// the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and
-// a copy that predates it then selects `null` on every MCP call, spawn and skill load, so
-// those calls stop being judged with nothing anywhere saying so.
-//
-// 17: the command and path glue forward the host's subagent id (HOST_AGENT_PATH, default
-// agent_id) as `magus shell --agent`. Both select one field out of the envelope, so the id
-// never reached magus: a subagent's shell command or edit was graded as its parent's, under
-// the parent's lease rather than the job it was spawned for. A copy that predates this keeps
-// grading every subagent call that way, and nothing in a verdict says whose lease it used.
-//
-// 18: the host is named on the hook command, `--agent-name <host>`, rendered from the
-// harness spell's own mgs_getName(), and read from there ONLY. __MAGUS_AGENT_NAME is gone,
-// no template defaults to one host, and none infers a host from an event's shape.
-// Installed glue that names no host is refused with MGS3024 instead of answered in a
-// guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
-// config written for 17 sets the environment variable an 18 copy never reads, so every
-// call it makes is refused until the config is rewritten.
-//
-// 19: the POSIX sh templates are gone and every host wires the Buzz glue.
-// The rehydrate glue takes its two knobs on the argv (`-- --format json --rules <file>`)
-// instead of REHYDRATE_FORMAT and REHYDRATE_RULES, because a Buzz hook command is a plain
-// argv with no room for a variable prefix. This bumps because the CONFIG and the glue moved
-// together: under a config written for 19, an 18 copy reports the flags as unsupported and
-// prints plain text, which a host that drops plain text ignores without a word.
-//
-// 20: the observe, checkpoint and rehydrate glue run magus in the directory the event's
-// cwd names rather than their own, because a config written for 20 starts every hook in
-// the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
-// session's PATH that a shell line in the config used to.
-//
-// 21: magus-path.buzz accepts --observes-skill-loads, which a config written for 21 passes
-// on every judging entry, and magus-command.buzz records a message the person typed. Under that
-// config a 20 copy reports the flag as unsupported and every skill gate stands down.
-//
-// 22: the glue finds the workspace root by the nearest magus.yaml rather than the nearest
-// magusfile.buzz. magus-session.buzz reads the SessionStart event, puts the root above the
-// event's cwd on PATH instead of the directory -C names, and tells the session once when
-// the binary it resolves cannot load the tree. A copy still walking to the magusfile
-// resolves no ./magus from a project directory and judges with whatever PATH holds, which
-// is the binary that cannot load the tree. What that binary then does is its own: it
-// denies each call it cannot show is a read, instead of passing it.
-//
-// 23: magus-command.buzz accepts --foreground-default-ms and --foreground-max-ms, which a
-// config written for 23 passes on the shell-command entry, and forwards the call's own
-// background request and timeout off the event. Under that config a 22 copy reports both
-// flags as unsupported, and a leased worker's backgrounded magus run goes unrefused.
-//
-// 24: proofread-reply.buzz requires --agent-name and answers each host in its own shape.
-// Under a config written for 24, a 23 copy reports --agent-name as unsupported and answers
-// every host in one shape, which the others do not act on, so their findings are lost
-// without a word. cursor-hook.buzz answers beforeSubmitPrompt with a
-// continue reply and records the message through `magus shell --message`. Under a config
-// written for 24, a 23 copy prints nothing for beforeSubmitPrompt, which records no message.
-//
-// 25: cursor-hook.buzz accepts --observes-skill-loads, gates the shell on preToolUse and files
-// each verdict for the event after the call. magus-command.buzz answers PostToolUse and
-// SubagentStop in their own shapes, and magus-rehydrate.buzz answers SubagentStart.
-// proofread-reply.buzz answers one more host's replies. Under a config written for 25, a 24
-// copy reports --observes-skill-loads as unsupported, so a skill load goes unseen; and answers
-// another host's PostToolUse in the PreToolUse shape, which that host discards.
-//
-// 26: magus-command.buzz answers Stop and SubagentStop with a block or a system message, so
-// background tasks left running refuse a stop, and cursor-hook.buzz no longer rewrites the
-// shell command. Under a config written for 26, a 25 copy leaves those stops unanswered and
-// still prepends its stdin and quiet-output prefix to every Cursor command.
-//
-// 29: every tool reaches magus-command.buzz through one catch-all entry, which forwards the
-// whole event, and magus-command.buzz, cursor-hook.buzz and the plugin glue forward
-// --tool-rows, the directory the host's tool rows are installed in. Under a config written
-// for 29, a 28 copy reports --tool-rows as unsupported, so the guard knows no tool and
-// refuses every call whose input names no command or path.
-//
-// 30: magus-command.buzz, magus-path.buzz and cursor-hook.buzz accept --observes-skill-loads
-// in place of --reports-skills, which a config written for 30 passes on every judging entry.
-// Under that config a 29 copy reports the flag as unsupported and every skill gate stands
-// down.
-// 31: native shell calls may carry cmd and workdir. The shared command glue selects
-// that directory's binary, and the hook names its starting directory for handoff.
-//
-// 32: a harness hook command runs the checkout's own ./magus when it is executable
-// and PATH's magus otherwise, so a stale binary on PATH no longer judges a newer tree.
-//
-// 33: magus-command.buzz forwards --resumes-on-background-from on a stop, which a harness's
-// stop entries pass; a 32 copy reports it as unsupported and refuses every subagent stop
-// that leaves a background task running.
-//
-// 34: every glue takes one argument, --agent-name. magus shell finds the host's tool rows
-// by the host file install writes beside them, and reads its foreground limits, resume
-// release and skill-load capability from the limits file next to it, so the wiring drops
-// --observes-skill-loads, --foreground-default-ms, --foreground-max-ms, --tool-rows and
-// --resumes-on-background-from. A 34 copy under a 33 config reports each as unsupported
-// and judges without it; a 33 copy forwards them to a magus shell that no longer takes them.
-//
-// 35: cursor-hook.buzz reads the user's reading list from `magus config view`.
-// Its web hint names follow entries first and caveats with their why. It drops
-// skip entries and kind=link citations under them. A 34 copy ignores the list.
-// An ask is the host's own prompt, and a deny where no prompt can happen.
-// magus-command.buzz asks only under default, acceptEdits and auto.
-// cursor-hook.buzz renders an ask only on beforeShellExecution and
-// beforeMCPExecution. A 34 copy can let either run with no prompt.
-//
-// 37: the guard never answers yes. Its decisions are defer, advise, ask and deny, and the
-// envelope is safetyscissors.verdict/v1alpha1. magus-command.buzz, magus-path.buzz and
-// the plugin glue write no permission decision for a defer, so the host's own flow
-// decides, and cursor-hook.buzz answers a defer, and every gating event no guard judged,
-// with that host's ask. A 36 copy meets "defer" as an unknown decision and refuses every
-// call until it is re-installed.
-//
-// 38: magus-command.buzz sends a stop advise as systemMessage, which the
-// host shows and never continues the turn for. A 37 copy sends it as additionalContext,
-// and the host continues the turn to answer it.
-//
-// 39: `magus agent harness install` copies the hook glue into .magus/harness/hooks and
-// stamps each copy with its glue version and digest, and every host's hook lines run it
-// from there. A 38 line names docs/guides/integrations/agents, which only a checkout of
-// magus holds, so outside one every hook fails closed until it is re-installed.
-const GuardTemplateVersion = 39
+// The numeric revisions 1 to 39 ended at magus.guard-template/v1alpha1. A bump is the
+// next alpha: v1alpha2.
+const GuardTemplateVersion types.APIVersion = "magus.guard-template/v1alpha1"
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

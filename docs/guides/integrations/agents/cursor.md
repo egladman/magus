@@ -329,10 +329,10 @@ sources:
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 39
-// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model defer=none ask=model
-// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model defer=none ask=human
+// magus-guard-template: magus.guard-template/v1alpha1
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=cursor input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=cursor input=path deny=model advise=model defer=none ask=model
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=cursor input=mcp deny=model advise=model defer=none ask=human
 
 import "std";
 import "flags";

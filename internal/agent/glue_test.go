@@ -61,8 +61,8 @@ func (s *GlueSuite) TestAnEditedCopyIsDrift() {
 
 func (s *GlueSuite) TestAnOlderVersionNamesBoth() {
 	body := []byte("old\n")
-	s.write(gluePath, fmt.Appendf(append([]byte{}, body...), "%s glue-version: 1; glue-content: %s; do not edit, re-run to update\n", glueStampPrefix, glueDigest(body)))
-	s.Equal(fmt.Sprintf("hook glue %s is glue version 1, and this magus ships version %d; run `magus agent harness install`", gluePath, GuardTemplateVersion),
+	s.write(gluePath, fmt.Appendf(append([]byte{}, body...), "%s glue-version: magus.guard-template/v1alpha0; glue-content: %s; do not edit, re-run to update\n", glueStampPrefix, glueDigest(body)))
+	s.Equal(fmt.Sprintf("hook glue %s is glue version magus.guard-template/v1alpha0, and this magus ships version %s; run `magus agent harness install`", gluePath, GuardTemplateVersion),
 		glueProblem(s.root, s.asset))
 }
 

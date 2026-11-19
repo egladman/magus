@@ -818,7 +818,7 @@ var judgedInput = map[types.HookPoint]string{
 	types.HookPointMCP:   "mcp",
 }
 
-var coverageLine = regexp.MustCompile(`magus-guard-coverage: schema=\d+ host=(\S+) input=(\S+) deny=(\S+)`)
+var coverageLine = regexp.MustCompile(`magus-guard-coverage: api_version=\S+ host=(\S+) input=(\S+) deny=(\S+)`)
 
 func (s *AdapterConformanceSuite) TestEveryBoundJudgingPointDeclaresItsVerdictTransport() {
 	declared := map[string]bool{}

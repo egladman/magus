@@ -145,7 +145,7 @@ func TestEveryShippedTemplateIsRegistered(t *testing.T) {
 // claiming a version whose behavior they do not have, which is worse than no
 // marker at all: it would be a wrong answer rather than a missing one.
 func TestShippedTemplatesCarryTheCurrentVersion(t *testing.T) {
-	want := fmt.Sprintf("%s %d", GuardTemplateMarker, GuardTemplateVersion)
+	want := fmt.Sprintf("%s %s", GuardTemplateMarker, GuardTemplateVersion)
 	for _, name := range hookTemplates {
 		// codex-hooks.json is JSON: no comment syntax to carry a marker, and an
 		// invented key risks the host rejecting the config. It ships no logic of
@@ -167,9 +167,9 @@ func TestShippedTemplatesCarryTheCurrentVersion(t *testing.T) {
 // much of a verdict it can carry, on one guard input, for one or more hosts.
 const guardCoverageMarker = "magus-guard-coverage:"
 
-// guardCoverageSchema is the marker's own format version, apart from the verdict envelope's
-// GuardSchemaVersion.
-const guardCoverageSchema = "2"
+// guardCoverageAPIVersion is the marker's own format version, apart from the verdict envelope's
+// GuardAPIVersion.
+const guardCoverageAPIVersion = "magus.guard-coverage/v1alpha1"
 
 // guardStances are the answers a template may give for a decision: the model
 // sees it, only the person sees it, or it is not delivered at all. "none" is a
@@ -212,10 +212,10 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 				require.True(t, ok, "%s: coverage declaration field %q is not key=value", path, kv)
 				fields[key] = value
 			}
-			require.Equal(t, guardCoverageSchema, fields["schema"],
-				"%s declares coverage schema %q; the marker's schema is %s.\n"+
-					"A schema bump means every template's %s lines must be rewritten at once.",
-				path, fields["schema"], guardCoverageSchema, guardCoverageMarker)
+			require.Equal(t, guardCoverageAPIVersion, fields["api_version"],
+				"%s declares coverage api_version %q; the marker's is %s.\n"+
+					"A version bump means every template's %s lines must be rewritten at once.",
+				path, fields["api_version"], guardCoverageAPIVersion, guardCoverageMarker)
 			input := fields["input"]
 			require.Contains(t, GuardInputs(), input, "%s declares an unknown guard input %q", path, input)
 			require.NotEmpty(t, fields["host"], "%s: coverage declaration names no host", path)

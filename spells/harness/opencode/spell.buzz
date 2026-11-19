@@ -1,6 +1,6 @@
-// magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model defer=none ask=human
-// magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model defer=none ask=model
-// magus-guard-coverage: schema=2 host=opencode input=mcp deny=model advise=model defer=none ask=model
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=opencode input=command deny=model advise=model defer=none ask=human
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=opencode input=path deny=model advise=model defer=none ask=model
+// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=opencode input=mcp deny=model advise=model defer=none ask=model
 // Coverage belongs to the canonical harness; the guide no longer ships a plugin template.
 
 // OpenCode's harness installs the plugin and its complete runtime through the generic
