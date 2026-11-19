@@ -583,7 +583,7 @@ func readAllReclaimingRetired(ctx context.Context, dir string) (session.Fold, er
 	}
 	removed, rmErr := session.RemoveRetired(ctx, dir)
 	for _, path := range removed {
-		slog.Warn("removed a session file stamped with a group this build no longer reads", "path", path)
+		slog.WarnContext(ctx, "removed a session file stamped with a group this build no longer reads", "path", path)
 	}
 	if rmErr != nil {
 		return session.Fold{}, rmErr
