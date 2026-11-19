@@ -6,6 +6,7 @@ package magus
 // conventions.go.
 
 import (
+	"bytes"
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
@@ -150,6 +151,9 @@ func itoa(n int) string {
 const (
 	dogfoodedHookConfig = ".claude/settings.json"
 	hookTemplateDir     = "docs/guides/integrations/agents"
+	// installedHookDir is where `magus agent harness install` puts the glue a hook runs
+	// (#790): a copy of each template plus a stamp line, or a link to the template.
+	installedHookDir = ".magus/harness/hooks"
 )
 
 // hookEntry is one wiring in a host's hook config: an optional matcher and the
@@ -223,17 +227,29 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 				for _, control := range []string{";", "&&", "||", "|", ">", "$(", "#"} {
 					assert.NotContains(t, command, control, "the %s %q hook must be one plain magus command", event, entry.Matcher)
 				}
-				assert.Contains(t, h.Command, hookTemplateDir,
-					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
-						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
+				assert.Contains(t, h.Command, installedHookDir,
+					"the %s %q hook must invoke the installed glue under %s rather than inline its own copy, "+
+						"so dogfooding exercises the file readers download", event, entry.Matcher, installedHookDir)
 
 				// The referenced file must exist: a hook pointing at a moved or
 				// renamed template fails open silently, which is the failure mode
 				// this whole arrangement exists to remove.
+				// The installed copy must still begin with the template a reader
+				// downloads, so the glue cannot drift from the documented file.
 				for _, field := range strings.Fields(h.Command) {
-					if strings.HasPrefix(field, hookTemplateDir) {
-						assert.FileExists(t, field, "%s %q hook references a template that does not exist", event, entry.Matcher)
+					if !strings.HasPrefix(field, installedHookDir) {
+						continue
 					}
+					installed, err := os.ReadFile(field)
+					if !assert.NoError(t, err, "%s %q hook references glue that is not installed", event, entry.Matcher) {
+						continue
+					}
+					template, err := os.ReadFile(filepath.Join(hookTemplateDir, filepath.Base(field)))
+					if !assert.NoError(t, err, "%s %q hook runs glue with no template under %s", event, entry.Matcher, hookTemplateDir) {
+						continue
+					}
+					assert.True(t, bytes.HasPrefix(installed, template),
+						"%s %q hook glue %s has drifted from its template; re-run magus agent harness install", event, entry.Matcher, field)
 				}
 			}
 		}
