@@ -2,35 +2,40 @@ namespace guardInternals;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun guardInternalsDiagram() > diagram\Diagram !> any {
-    final guard = magus\graph().dir("internal/guard");
-    final catalog = magus\graph().dir("internal/guard/builtin");
-    final workspace = magus\graph().dir("internal/workspace");
-    final config = magus\graph().dir("internal/config");
-    final interp = magus\graph().dir("internal/interp");
-    final jobs = magus\graph().dir("internal/job");
-    final sessions = magus\graph().dir("internal/sessions");
-    final recorder = magus\graph().dir("internal/recorder");
-    final hint = magus\graph().dir("internal/hint");
-    return diagram\of("guard-internals",
-            title: "The guard reaches each verdict from rules and records it does not own",
-            eyebrow: "guard",
-            desc: "The catalog names every built-in rule and its grade, the workspace supplies the "
-                + "loaded policy, and the config says which rules are denied, advised or off. To "
-                + "judge a call the guard reads the job store and the session record, logs the "
-                + "judgment, and names the command to run instead through the hint package.")
-        .box(guard, label: "Guard", sub: "one verdict per call", focal: true)
-        .box(catalog, label: "Rule catalog", sub: "ids, grades")
-        .group([workspace, config], label: "Policy", sub: "loaded rules, grades")
-        .box(interp, label: "Interpreter", sub: "runs the Buzz rule")
-        .group([jobs, sessions, recorder], label: "Stores", sub: "lease, session, judgment", look: diagram\Look.store)
-        .box(hint, label: "Hints", sub: "next: breadcrumbs")
-        .edgesFromGraph()
-        .hideEdges([workspace, config, jobs, sessions, recorder, interp],
-            dst: [catalog, workspace, config, jobs, sessions, recorder, hint],
-            why: "the guard drives each of these; the edges between them serve other verbs")
-        .legend(diagram\Look.focal, label: "the verdict")
-        .legend(diagram\Look.store, label: "read or appended")
-        .scope([guard, catalog, workspace, config, interp, jobs, sessions, recorder, hint]);
+export fun guardInternalsDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final guard = magus\graph().dir("internal/guard");
+        final catalog = magus\graph().dir("internal/guard/builtin");
+        final workspace = magus\graph().dir("internal/workspace");
+        final config = magus\graph().dir("internal/config");
+        final interp = magus\graph().dir("internal/interp");
+        final jobs = magus\graph().dir("internal/job");
+        final sessions = magus\graph().dir("internal/sessions");
+        final recorder = magus\graph().dir("internal/recorder");
+        final hint = magus\graph().dir("internal/hint");
+        return result\ok::<diagram\Diagram>(diagram\of("guard-internals",
+                title: "The guard reaches each verdict from rules and records it does not own",
+                eyebrow: "guard",
+                desc: "The catalog names every built-in rule and its grade, the workspace supplies the "
+                    + "loaded policy, and the config says which rules are denied, advised or off. To "
+                    + "judge a call the guard reads the job store and the session record, logs the "
+                    + "judgment, and names the command to run instead through the hint package.")
+            .box(guard, label: "Guard", sub: "one verdict per call", focal: true)
+            .box(catalog, label: "Rule catalog", sub: "ids, grades")
+            .group([workspace, config], label: "Policy", sub: "loaded rules, grades")
+            .box(interp, label: "Interpreter", sub: "runs the Buzz rule")
+            .group([jobs, sessions, recorder], label: "Stores", sub: "lease, session, judgment", look: diagram\Look.store)
+            .box(hint, label: "Hints", sub: "next: breadcrumbs")
+            .edgesFromGraph()
+            .hideEdges([workspace, config, jobs, sessions, recorder, interp],
+                dst: [catalog, workspace, config, jobs, sessions, recorder, hint],
+                why: "the guard drives each of these; the edges between them serve other verbs")
+            .legend(diagram\Look.focal, label: "the verdict")
+            .legend(diagram\Look.store, label: "read or appended")
+            .scope([guard, catalog, workspace, config, interp, jobs, sessions, recorder, hint]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

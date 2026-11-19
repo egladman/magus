@@ -4,6 +4,7 @@
 //
 // Pure on purpose: the magusfile imports the spells and hands their lists in.
 import "magus/spell";
+import "result";
 import "std";
 
 // HookMatrix is one harness's two lists, as its spell returns them.
@@ -18,17 +19,17 @@ export final POINTS = [HookPoint.shell, HookPoint.edit, HookPoint.stop, HookPoin
     HookPoint.sessionStart, HookPoint.compact, HookPoint.mcp, HookPoint.attach];
 
 // cell is a harness's answer at point: the scripts bound there, or
-// "unsupported". A point with neither raises, as doctor fails it.
-export fun cell(h: HookMatrix, point: HookPoint) > str !> str {
+// "unsupported". A point with neither is an error, as doctor fails it.
+export fun cell(h: HookMatrix, point: HookPoint) > result\Result::<str> {
     final scripts = mut [<str>];
     foreach (hook in h.hooks) {
         if (hook.points.indexOf(point) != null and scripts.indexOf(hook.script) == null) { scripts.append(hook.script); }
     }
-    if (scripts.len() > 0) { return "`" + scripts.join(", ") + "`"; }
+    if (scripts.len() > 0) { return result\ok::<str>("`" + scripts.join(", ") + "`"); }
     foreach (row in h.unsupported) {
-        if (row.point == point) { return "unsupported"; }
+        if (row.point == point) { return result\ok::<str>("unsupported"); }
     }
-    throw "{h.id} binds no hook to {point.value} and gives no reason; fix its spell";
+    return result\fail::<str>("{h.id} binds no hook to {point.value} and gives no reason; fix its spell");
 }
 
 fun pad(text: str, width: int) > str {
@@ -43,14 +44,18 @@ fun row(cells: [str], widths: [int]) > str {
 
 // table renders the matrix with every column padded to its widest cell, the
 // shape dprint leaves alone.
-export fun table(harnesses: [HookMatrix]) > str !> str {
+export fun table(harnesses: [HookMatrix]) > result\Result::<str> {
     final rows = mut [<[str]>];
     final header = mut ["hook point"];
     foreach (h in harnesses) { header.append(h.id); }
     rows.append(header);
     foreach (point in POINTS) {
         final cells = mut ["`{point.value}`"];
-        foreach (h in harnesses) { cells.append(cell(h, point: point)); }
+        foreach (h in harnesses) {
+            final answer = cell(h, point: point);
+            if (answer.error -> failed) { return result\Result::<str>{ error = failed }; }
+            cells.append(answer.value!);
+        }
         rows.append(cells);
     }
     final widths = mut [<int>];
@@ -68,7 +73,7 @@ export fun table(harnesses: [HookMatrix]) > str !> str {
     foreach (i, cells in rows) {
         if (i > 0) { lines.append(row(cells, widths: widths)); }
     }
-    return lines.join("\n");
+    return result\ok::<str>(lines.join("\n"));
 }
 
 // linked wraps each https URL in reason in angle brackets, Markdown's form of
@@ -110,8 +115,10 @@ test "a URL in a reason is linked; its sentence punctuation stays outside" {
 }
 
 // page is the whole README.md.
-export fun page(harnesses: [HookMatrix]) > str !> str {
-    return "---\n"
+export fun page(harnesses: [HookMatrix]) > result\Result::<str> {
+    final matrix = table(harnesses);
+    if (matrix.error -> failed) { return result\Result::<str>{ error = failed }; }
+    return result\ok::<str>("---\n"
         + "title: Hook bindings\n"
         + "description: Which glue each agent host runs at each hook point, and why a host that runs none says so.\n"
         + "tags: [agents, hooks, guard]\n"
@@ -123,7 +130,7 @@ export fun page(harnesses: [HookMatrix]) > str !> str {
         + "there, or says the host cannot run one. An unsupported point cites the host's docs, or\n"
         + "says what nobody has verified yet. `magus doctor` fails `harness-hook-bindings` on a point\n"
         + "a harness leaves unanswered.\n\n"
-        + table(harnesses) + "\n\n"
+        + matrix.value! + "\n\n"
         + "## Unsupported points\n\n"
-        + reasons(harnesses) + "\n";
+        + reasons(harnesses) + "\n");
 }

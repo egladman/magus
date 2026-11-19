@@ -2,50 +2,55 @@ namespace agentIntegration;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun agentIntegrationDiagram() > diagram\Diagram !> any {
-    final install = magus\graph().dir("internal/agent");
-    final guard = magus\graph().dir("internal/guard");
-    final jobs = magus\graph().dir("internal/job");
-    final hint = magus\graph().dir("internal/hint");
-    final tools = magus\graph().dir("internal/handler/mcp");
-    final nested: [magus\Dir] = magus\graph().dirs("internal/handler/mcp/**");
-    final mcp = nested + [tools];
-    final spells = diagram\external("Harness spells", sub: "spells/harness: a hook entry per host", look: diagram\Look.plain);
-    final skills = diagram\external("Skills", sub: "embedded, stamped, AGENTS.md", look: diagram\Look.plain);
-    final host = diagram\external("Agent host", sub: "Claude Code, Codex, Cursor, OpenCode", tag: "client");
-    return diagram\of("agent-integration",
-            title: "Every call an agent host makes crosses the guard first",
-            eyebrow: "agents",
-            direction: diagram\Direction.down,
-            desc: "magus agent install writes the skills and the AGENTS.md block, and a harness "
-                + "spell prints the hook entry for the host's config. The host then runs the guard "
-                + "before every shell command, edit and MCP call, and only an allowed call runs. "
-                + "The guard reads the job store for the call's lease, and every reply names "
-                + "commands through internal/hint.")
-        .box(install, label: "Agent install", sub: "writes skills, AGENTS.md")
-        .actor(skills)
-        .actor(spells)
-        .actor(host)
-        .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
-        .box(jobs, label: "Job store", sub: "the lease a call acts as", look: diagram\Look.store)
-        .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
-        // Last: skills, guard denials and MCP replies all render through it.
-        .box(hint, label: "Hints", sub: "commands, next fields")
-        .edgesFromGraph()
-        .hideEdges([install], dst: [hint], why: "install writes the skills, which name commands; drawn from the skills")
-        .markEdge(guard, dst: hint, label: "denial hints")
-        .markEdge(tools, dst: hint, label: "next fields")
-        .markEdge(guard, dst: jobs, label: "lease")
-        .flowOut(install, dst: skills, label: "agent install")
-        .flowAcross(spells, dst: host, label: "hooks to merge")
-        .flowAcross(skills, dst: host, label: "read by")
-        .flowIn(host, dst: guard, label: "every call", stroke: diagram\Stroke.focal)
-        .flowIn(host, dst: tools, label: "if allowed")
-        .zone("installed before a session", dirs: [install], actors: [spells, skills])
-        .zone("on every call", dirs: mcp + [guard, jobs, hint])
-        .legend(diagram\Look.focal, label: "the gate")
-        .legend(diagram\Look.store, label: "the declared leases")
-        .legend(diagram\Look.external, label: "outside magus")
-        .scope(mcp + [install, guard, jobs, hint]);
+export fun agentIntegrationDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final install = magus\graph().dir("internal/agent");
+        final guard = magus\graph().dir("internal/guard");
+        final jobs = magus\graph().dir("internal/job");
+        final hint = magus\graph().dir("internal/hint");
+        final tools = magus\graph().dir("internal/handler/mcp");
+        final nested: [magus\Dir] = magus\graph().dirs("internal/handler/mcp/**");
+        final mcp = nested + [tools];
+        final spells = diagram\external("Harness spells", sub: "spells/harness: a hook entry per host", look: diagram\Look.plain);
+        final skills = diagram\external("Skills", sub: "embedded, stamped, AGENTS.md", look: diagram\Look.plain);
+        final host = diagram\external("Agent host", sub: "Claude Code, Codex, Cursor, OpenCode", tag: "client");
+        return result\ok::<diagram\Diagram>(diagram\of("agent-integration",
+                title: "Every call an agent host makes crosses the guard first",
+                eyebrow: "agents",
+                direction: diagram\Direction.down,
+                desc: "magus agent install writes the skills and the AGENTS.md block, and a harness "
+                    + "spell prints the hook entry for the host's config. The host then runs the guard "
+                    + "before every shell command, edit and MCP call, and only an allowed call runs. "
+                    + "The guard reads the job store for the call's lease, and every reply names "
+                    + "commands through internal/hint.")
+            .box(install, label: "Agent install", sub: "writes skills, AGENTS.md")
+            .actor(skills)
+            .actor(spells)
+            .actor(host)
+            .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
+            .box(jobs, label: "Job store", sub: "the lease a call acts as", look: diagram\Look.store)
+            .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
+            // Last: skills, guard denials and MCP replies all render through it.
+            .box(hint, label: "Hints", sub: "commands, next fields")
+            .edgesFromGraph()
+            .hideEdges([install], dst: [hint], why: "install writes the skills, which name commands; drawn from the skills")
+            .markEdge(guard, dst: hint, label: "denial hints")
+            .markEdge(tools, dst: hint, label: "next fields")
+            .markEdge(guard, dst: jobs, label: "lease")
+            .flowOut(install, dst: skills, label: "agent install")
+            .flowAcross(spells, dst: host, label: "hooks to merge")
+            .flowAcross(skills, dst: host, label: "read by")
+            .flowIn(host, dst: guard, label: "every call", stroke: diagram\Stroke.focal)
+            .flowIn(host, dst: tools, label: "if allowed")
+            .zone("installed before a session", dirs: [install], actors: [spells, skills])
+            .zone("on every call", dirs: mcp + [guard, jobs, hint])
+            .legend(diagram\Look.focal, label: "the gate")
+            .legend(diagram\Look.store, label: "the declared leases")
+            .legend(diagram\Look.external, label: "outside magus")
+            .scope(mcp + [install, guard, jobs, hint]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

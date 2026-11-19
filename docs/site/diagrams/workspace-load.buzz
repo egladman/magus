@@ -2,57 +2,62 @@ namespace workspaceLoad;
 
 import "magus";
 import "magus/diagram";
+import "result";
 import "site/diagrams/packages" as packages;
 
-export fun workspaceLoadDiagram() > diagram\Diagram !> any {
-    final discover = magus\graph().dir("project");
-    final interp = magus\graph().dir("internal/interp");
-    final extract = magus\graph().dir("internal/describe");
-    final model = magus\graph().dir("types");
-    final cache = magus\graph().dir("internal/cache");
-    final rootMf = diagram\external("Root magusfile", sub: "declares project .", look: diagram\Look.input);
-    final nestedMf = diagram\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: diagram\Look.input);
-    final seam = diagram\without(packages\goPackages("internal/interp/**"), drop: [interp]);
-    if (seam.error != null) {
-        throw seam.error!.message;
+export fun workspaceLoadDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final dataTypes = packages\dataTypes();
+        if (dataTypes.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        final discover = magus\graph().dir("project");
+        final interp = magus\graph().dir("internal/interp");
+        final extract = magus\graph().dir("internal/describe");
+        final model = magus\graph().dir("types");
+        final cache = magus\graph().dir("internal/cache");
+        final rootMf = diagram\external("Root magusfile", sub: "declares project .", look: diagram\Look.input);
+        final nestedMf = diagram\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: diagram\Look.input);
+        final seam = diagram\without(magus\graph().dirs("internal/interp/**", opts: magus\DirsOptions{ language = "go" }), drop: [interp]);
+        if (seam.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        return result\ok::<diagram\Diagram>(diagram\of("workspace-load",
+                title: "A target exists because a magusfile exported it",
+                eyebrow: "workspace",
+                desc: "Discovery registers one project per magusfile. Evaluating a magusfile turns "
+                    + "its exported functions into targets, and a static read of each target body "
+                    + "recovers its literal reads, writes and cross-project needs. The project model "
+                    + "that results is what the cache keys and what describe answers from.",
+                level: diagram\Level.package)
+            .actor(rootMf)
+            .actor(nestedMf)
+            .box(discover, label: "Projects", sub: "discovery, Where(cwd)")
+            .box(interp, label: "Evaluate", sub: "export fun is a target")
+            .box(extract, label: "Static read", sub: "literal reads, writes, needs")
+            .box(model, label: "Projects and targets", sub: "sources, outputs, depends_on", focal: true)
+            .box(cache, label: "Cache key", sub: "one step per target")
+            .edgesFromGraph()
+            .hideEdges([interp, cache], dst: [discover],
+                why: "they read project options and project paths; the model they fill is types")
+            .markEdge(interp, dst: model, label: "targets")
+            .markEdge(extract, dst: model, label: "footprints")
+            .flowIn(rootMf, dst: discover, label: "registers .")
+            .flowIn(nestedMf, dst: discover, label: "registers dir")
+            .zone("written by hand", actors: [rootMf, nestedMf])
+            .legend(diagram\Look.focal, label: "what every reader reads")
+            .legend(diagram\Look.input, label: "the only declarations")
+            .scope(magus\graph().dirs("project/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("internal/interp/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("internal/describe/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("types/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("internal/cache/**", opts: magus\DirsOptions{ language = "go" }))
+            .except([magus\graph().dir("project/impact")],
+                why: "the blast radius of a changeset, which affected reads after the load")
+            .except(seam.value!,
+                why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
+            .except(dataTypes.value!,
+                why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no part of the project model")
+            .except([magus\graph().dir("internal/cache/reflink"), magus\graph().dir("internal/cache/remotetest")],
+                why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
+            .except([magus\graph().dir("project/impact/gen/impacttest")], why: "generated test mocks"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
     }
-    return diagram\of("workspace-load",
-            title: "A target exists because a magusfile exported it",
-            eyebrow: "workspace",
-            desc: "Discovery registers one project per magusfile. Evaluating a magusfile turns "
-                + "its exported functions into targets, and a static read of each target body "
-                + "recovers its literal reads, writes and cross-project needs. The project model "
-                + "that results is what the cache keys and what describe answers from.",
-            level: diagram\Level.package)
-        .actor(rootMf)
-        .actor(nestedMf)
-        .box(discover, label: "Projects", sub: "discovery, Where(cwd)")
-        .box(interp, label: "Evaluate", sub: "export fun is a target")
-        .box(extract, label: "Static read", sub: "literal reads, writes, needs")
-        .box(model, label: "Projects and targets", sub: "sources, outputs, depends_on", focal: true)
-        .box(cache, label: "Cache key", sub: "one step per target")
-        .edgesFromGraph()
-        .hideEdges([interp, cache], dst: [discover],
-            why: "they read project options and project paths; the model they fill is types")
-        .markEdge(interp, dst: model, label: "targets")
-        .markEdge(extract, dst: model, label: "footprints")
-        .flowIn(rootMf, dst: discover, label: "registers .")
-        .flowIn(nestedMf, dst: discover, label: "registers dir")
-        .zone("written by hand", actors: [rootMf, nestedMf])
-        .legend(diagram\Look.focal, label: "what every reader reads")
-        .legend(diagram\Look.input, label: "the only declarations")
-        .scope(packages\goPackages("project/**"))
-        .scope(packages\goPackages("internal/interp/**"))
-        .scope(packages\goPackages("internal/describe/**"))
-        .scope(packages\goPackages("types/**"))
-        .scope(packages\goPackages("internal/cache/**"))
-        .except([magus\graph().dir("project/impact")],
-            why: "the blast radius of a changeset, which affected reads after the load")
-        .except(seam.value!,
-            why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
-        .except(packages\dataTypes(),
-            why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no part of the project model")
-        .except([magus\graph().dir("internal/cache/reflink"), magus\graph().dir("internal/cache/remotetest")],
-            why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
-        .except([magus\graph().dir("project/impact/gen/impacttest")], why: "generated test mocks");
 }

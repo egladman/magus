@@ -4,7 +4,7 @@ import type { RefView } from '../types'
 import { magusBin } from './bin'
 import { runsMagus } from './budget'
 import { structuredOf } from './json'
-import { explorer } from './json-view'
+import { explorerOrError } from './json-view'
 import { refArgs, refCommand, refLinks, refOf, refsIn, refStrings, stripAnsi } from './refs'
 import { fromPromise, isRecord } from './result'
 import { copyFix } from './ui'
@@ -43,7 +43,7 @@ async function show($: EngineInterface, ref: string): Promise<void> {
 
   const root = await fromPromise($.session.root())
   if (root.error) return settle($, { ...done, error: root.error.message })
-  const bin = await fromPromise(magusBin($, root.value))
+  const bin = await magusBin($, root.value)
   if (bin.error) return settle($, { ...done, error: bin.error.message })
 
   const argv = [bin.value.path, ...refArgs(ref)]
@@ -117,7 +117,7 @@ export function registerRefLinks(on: On): void {
         {view.text === '' ? null : s === null ? (
           <Code source={view.text} language="text" />
         ) : (
-          await explorer($, e, { id: `ref:${view.ref}`, s, text: view.text, stderr: '', isErrored: false })
+          await explorerOrError($, e, { id: `ref:${view.ref}`, s, text: view.text, stderr: '', isErrored: false })
         )}
         {view.omitted > 0 ? <Text dimColor>{view.omitted} more characters not shown.</Text> : null}
       </Box>

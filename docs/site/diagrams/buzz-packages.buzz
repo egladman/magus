@@ -2,31 +2,40 @@ namespace buzzPackages;
 
 import "magus";
 import "magus/diagram";
+import "result";
 import "site/diagrams/buzz-stages" as buzzStages;
 
 // buzzPackagesDiagram is the package overview of the gopherbuzz pipeline. Its root and vm
 // boxes drill into buzz-compile and buzz-run, which draw the steps inside each.
-export fun buzzPackagesDiagram() > diagram\Diagram !> any {
-    final session = magus\graph().dir("libs/gopherbuzz");
-    final lexer = magus\graph().dir("libs/gopherbuzz/token");
-    final tree = magus\graph().dir("libs/gopherbuzz/ast");
-    final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
-    final vm = magus\graph().dir("libs/gopherbuzz/vm");
-    return diagram\of("buzz-packages",
-            title: "The root package drives every step; vm runs what it compiles",
-            eyebrow: "gopherbuzz",
-            desc: "The gopherbuzz root package holds the session and every compile step. It reads "
-                + "tokens from token, builds trees from ast, checks them against types, and hands "
-                + "the chunk it compiles to vm, which runs it.",
-            level: diagram\Level.package)
-        .box(session, label: "Session", sub: "parse, import, check, compile", focal: true)
-        .box(lexer, label: "Lexer", sub: "token.Tokenize")
-        .box(tree, label: "Syntax tree", sub: "ast.Program")
-        .box(typeSystem, label: "Types", sub: "types.Type")
-        .box(vm, label: "VM", sub: "interpreter, baseline JIT")
-        .edgesFromGraph()
-        .scope(buzzStages\gopherbuzzPackages())
-        .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
-            why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled and run by these same packages")
-        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY);
+export fun buzzPackagesDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final around = buzzStages\gopherbuzzAround();
+        if (around.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        final gopherbuzz = buzzStages\gopherbuzzPackages();
+        if (gopherbuzz.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        final session = magus\graph().dir("libs/gopherbuzz");
+        final lexer = magus\graph().dir("libs/gopherbuzz/token");
+        final tree = magus\graph().dir("libs/gopherbuzz/ast");
+        final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
+        final vm = magus\graph().dir("libs/gopherbuzz/vm");
+        return result\ok::<diagram\Diagram>(diagram\of("buzz-packages",
+                title: "The root package drives every step; vm runs what it compiles",
+                eyebrow: "gopherbuzz",
+                desc: "The gopherbuzz root package holds the session and every compile step. It reads "
+                    + "tokens from token, builds trees from ast, checks them against types, and hands "
+                    + "the chunk it compiles to vm, which runs it.",
+                level: diagram\Level.package)
+            .box(session, label: "Session", sub: "parse, import, check, compile", focal: true)
+            .box(lexer, label: "Lexer", sub: "token.Tokenize")
+            .box(tree, label: "Syntax tree", sub: "ast.Program")
+            .box(typeSystem, label: "Types", sub: "types.Type")
+            .box(vm, label: "VM", sub: "interpreter, baseline JIT")
+            .edgesFromGraph()
+            .scope(gopherbuzz.value!)
+            .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
+                why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled and run by these same packages")
+            .except(around.value!, why: buzzStages\AROUND_WHY));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

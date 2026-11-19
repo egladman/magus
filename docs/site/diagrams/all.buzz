@@ -6,6 +6,7 @@ import "fs";
 import "encoding/json";
 import "magus";
 import "magus/diagram";
+import "result";
 import "site/diagrams/server-http" as serverHttp;
 import "site/diagrams/server-socket" as serverSocket;
 import "site/diagrams/server-jobs" as serverJobs;
@@ -70,10 +71,8 @@ final DRILL_HREF = "#diagram-\{id}";
 
 // allDiagrams builds every registered diagram. A typo in a directory or layer name raises
 // here, naming it.
-export fun allDiagrams() > [diagram\Diagram] !> any {
-    final lintersBoundary = linters\lintersBoundaryDiagram();
-    if (lintersBoundary.error -> err) { throw err.message; }
-    return [
+export fun allDiagrams() > result\Result::<[diagram\Diagram]> {
+    final built = [
         serverHttp\serverHttpDiagram(),
         serverSocket\serverSocketDiagram(),
         serverJobs\serverJobsDiagram(),
@@ -124,9 +123,15 @@ export fun allDiagrams() > [diagram\Diagram] !> any {
         service\serviceDiagram(),
         bindingsGenerate\bindingsGenerateDiagram(),
         doctor\doctorDiagram(),
-        linters\lintersLoopDiagram(),
-        lintersBoundary.value!,
+        result\ok::<diagram\Diagram>(linters\lintersLoopDiagram()),
+        linters\lintersBoundaryDiagram(),
     ];
+    final diagrams: mut [diagram\Diagram] = mut [<diagram\Diagram>];
+    foreach (b in built) {
+        if (b.error -> failed) { return result\Result::<[diagram\Diagram]>{ error = failed }; }
+        diagrams.append(b.value!);
+    }
+    return result\ok::<[diagram\Diagram]>(diagrams);
 }
 
 // DiagramRun is one diagram's outcome: its paints, or the findings that stopped it.
@@ -204,7 +209,7 @@ test "the stamp lands inside the svg element" {
 
 // receipt is the JSON beside a diagram's SVGs. It carries no symbol index digest: that moves
 // on every indexed edit anywhere, and the receipt must move only with its diagram.
-fun receipt(run: DiagramRun) > str !> any {
+fun receipt(run: DiagramRun) > result\Result::<str> {
     final record: {str: any} = {
         "diagram": run.id,
         "stamp": run.stamp,
@@ -213,14 +218,18 @@ fun receipt(run: DiagramRun) > str !> any {
         "undrilled": run.undrilled,
         "findings": run.findings,
     };
-    return json\stringify(record, indent: "  ") + "\n";
+    try {
+        return result\ok::<str>(json\stringify(record, indent: "  ") + "\n");
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
 test "a receipt counts the claims and records a finding" {
-    final a = receipt(DiagramRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 }) catch "";
+    final a = receipt(DiagramRun{ id = "x", stamp = "sha256:0", imports = 2, flow = 1 }).value ?? "";
     assert\isTrue(a.indexOf("\"imports\": 2") != null, message: "claims counted: {a}");
     assert\isTrue(a.indexOf("symbolIndex") == null, message: "no index digest: {a}");
-    final c = receipt(DiagramRun{ id = "x", findings = ["diagram \"x\": gone"] }) catch "";
+    final c = receipt(DiagramRun{ id = "x", findings = ["diagram \"x\": gone"] }).value ?? "";
     assert\isTrue(a != c, message: "a finding is a change");
 }
 
@@ -231,44 +240,71 @@ test "a receipt counts the claims and records a finding" {
 //
 // Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
 // carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
-export fun writeDiagrams(dir: str) > [str] !> any {
-    if (magus\graph().indexed == false) {
-        throw "diagrams-generate needs the symbol index, and magus\\graph() answered indexed=false; build it with `magus graph build`, then rerun";
-    }
-    fs\mkdirAll(dir);
-    final expected: mut {str: bool} = mut {<str: bool>};
-    final findings: mut [str] = mut [<str>];
-    final diagrams = allDiagrams();
-    final a = diagram\atlas(diagrams, column: COLUMN);
-    foreach (f in diagrams) {
-        final run = runDiagram(a, f: f);
-        foreach (msg in run.findings) { findings.append(msg); }
-        final base = dir + "/diagram-" + f.id;
-        if (run.findings.len() == 0) {
-            writeIfMoved(base + ".svg", content: run.dark);
-            writeIfMoved(base + "-light.svg", content: run.light);
-            writeIfMoved(base + "-page.svg", content: run.page);
+export fun writeDiagrams(dir: str) > result\Result::<[str]> {
+    try {
+        if (magus\graph().indexed == false) {
+            return result\fail::<[str]>("diagrams-generate needs the symbol index, and magus\\graph() answered indexed=false; build it with `magus graph build`, then rerun");
         }
-        writeIfMoved(base + ".json", content: receipt(run));
-        foreach (suffix in [".svg", "-light.svg", "-page.svg", ".json"]) { expected["diagram-" + f.id + suffix] = true; }
+        fs\mkdirAll(dir);
+        final expected: mut {str: bool} = mut {<str: bool>};
+        final findings: mut [str] = mut [<str>];
+        final built = allDiagrams();
+        if (built.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+        final diagrams = built.value!;
+        final a = diagram\atlas(diagrams, column: COLUMN);
+        foreach (f in diagrams) {
+            final run = runDiagram(a, f: f);
+            foreach (msg in run.findings) { findings.append(msg); }
+            final base = dir + "/diagram-" + f.id;
+            if (run.findings.len() == 0) {
+                final svgs = [
+                    writeIfMoved(base + ".svg", content: run.dark),
+                    writeIfMoved(base + "-light.svg", content: run.light),
+                    writeIfMoved(base + "-page.svg", content: run.page),
+                ];
+                foreach (written in svgs) {
+                    if (written.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+                }
+            }
+            final rec = receipt(run);
+            if (rec.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+            final wroteReceipt = writeIfMoved(base + ".json", content: rec.value!);
+            if (wroteReceipt.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+            foreach (suffix in [".svg", "-light.svg", "-page.svg", ".json"]) { expected["diagram-" + f.id + suffix] = true; }
+        }
+        final pruned = prune(dir, expected: expected);
+        if (pruned.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+        final unknown = unknownMarkers(diagrams);
+        if (unknown.error -> failed) { return result\Result::<[str]>{ error = failed }; }
+        foreach (msg in unknown.value!) { findings.append(msg); }
+        return result\ok::<[str]>(findings);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    prune(dir, expected: expected);
-    foreach (msg in unknownMarkers(diagrams)) { findings.append(msg); }
-    return findings;
 }
 
-fun writeIfMoved(path: str, content: str) > void !> any {
-    if (fs\exists(path) and fs\readFile(path) == content) { return; }
-    fs\writeFile(path, content: content);
+fun writeIfMoved(path: str, content: str) > result\Result::<bool> {
+    try {
+        if (fs\exists(path) and fs\readFile(path) == content) { return result\ok::<bool>(false); }
+        fs\writeFile(path, content: content);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // prune removes every diagram-* file in dir no registered diagram wrote: an obsolete id, or
 // a filesystem-de-collided copy, which the cache would otherwise replay into other checkouts.
-fun prune(dir: str, expected: {str: bool}) > void !> any {
-    foreach (glob in ["/diagram-*.svg", "/diagram-*.json"]) {
-        foreach (candidate in fs\glob(dir + glob)) {
-            if (expected[fs\basename(candidate.value)] == null) { fs\remove(candidate.value); }
+fun prune(dir: str, expected: {str: bool}) > result\Result::<bool> {
+    try {
+        foreach (glob in ["/diagram-*.svg", "/diagram-*.json"]) {
+            foreach (candidate in fs\glob(dir + glob)) {
+                if (expected[fs\basename(candidate.value)] == null) { fs\remove(candidate.value); }
+            }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
@@ -278,7 +314,8 @@ test "prune removes an obsolete owned file and leaves the rest" {
     fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", content: "stale copy");
     fs\writeFile(dir + "/diagram-gone.json", content: "stale receipt");
     fs\writeFile(dir + "/not-a-diagram.svg", content: "authored");
-    prune(dir, expected: {"diagram-ci-pipeline.svg": true});
+    final pruned = prune(dir, expected: {"diagram-ci-pipeline.svg": true});
+    assert\isTrue(pruned.error == null, message: "prune succeeds");
     assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), want: true, message: "current diagram remains");
     assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), want: false, message: "stale copy removed");
     assert\equal(fs\exists(dir + "/diagram-gone.json"), want: false, message: "stale receipt removed");
@@ -292,16 +329,20 @@ var rendered: {str: str}? = null;
 
 // pageSvgs is the committed page copy of each diagram, keyed by id. diagrams-generate wrote
 // them; a page render reads them rather than laying anything out.
-fun pageSvgs() > {str: str} !> any {
-    if (rendered != null) { return rendered!; }
+fun pageSvgs() > result\Result::<{str: str}> {
+    if (rendered != null) { return result\ok::<{str: str}>(rendered!); }
     final byId: mut {str: str} = mut {<str: str>};
-    foreach (file in fs\glob(PAIR_DIR + "/diagram-*-page.svg")) {
-        final name = fs\basename(file.value);
-        final id = name.sub("diagram-".len(), len: name.len() - "diagram-".len() - "-page.svg".len());
-        byId[id] = fs\readFile(file.value);
+    try {
+        foreach (file in fs\glob(PAIR_DIR + "/diagram-*-page.svg")) {
+            final name = fs\basename(file.value);
+            final id = name.sub("diagram-".len(), len: name.len() - "diagram-".len() - "-page.svg".len());
+            byId[id] = fs\readFile(file.value);
+        }
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err);
     }
     rendered = byId;
-    return byId;
+    return result\ok::<{str: str}>(byId);
 }
 
 // embeddedIn caches diagramPages' one possible result, for the reason rendered does.
@@ -309,27 +350,31 @@ var embeddedIn: {str: str}? = null;
 
 // diagramPages maps each diagram id to the first docs page, relative to the docs project,
 // that embeds it with `<!--diagram:id-->`. A drill-down link resolves against it.
-export fun diagramPages() > {str: str} !> any {
-    if (embeddedIn != null) { return embeddedIn!; }
+export fun diagramPages() > result\Result::<{str: str}> {
+    if (embeddedIn != null) { return result\ok::<{str: str}>(embeddedIn!); }
     final pages: mut [str] = mut [<str>];
-    fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep !> any {
-        final name = fs\basename(path);
-        if (isDir) {
-            if (path != "." and (name.startsWith(".") or name == "node_modules" or name == "gen")) { return fs\WalkStep.skipDir; }
-            return fs\WalkStep.next;
-        }
-        if (path.endsWith(".md")) { pages.append(path); }
-        return fs\WalkStep.next;
-    });
     final byId: mut {str: str} = mut {<str: str>};
-    foreach (page in pages.sort(fun (a: str, b: str) > bool => a < b)) {
-        final rel = if (page.startsWith("./")) page.sub(2) else page;
-        foreach (id in markedIds(fs\readFile(page))) {
-            if (byId[id] == null) { byId[id] = rel; }
+    try {
+        fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep {
+            final name = fs\basename(path);
+            if (isDir) {
+                if (path != "." and (name.startsWith(".") or name == "node_modules" or name == "gen")) { return fs\WalkStep.skipDir; }
+                return fs\WalkStep.next;
+            }
+            if (path.endsWith(".md")) { pages.append(path); }
+            return fs\WalkStep.next;
+        });
+        foreach (page in pages.sort(fun (a: str, b: str) > bool => a < b)) {
+            final rel = if (page.startsWith("./")) page.sub(2) else page;
+            foreach (id in markedIds(fs\readFile(page))) {
+                if (byId[id] == null) { byId[id] = rel; }
+            }
         }
+    } catch (err: any) {
+        return result\caught::<{str: str}>(err);
     }
     embeddedIn = byId;
-    return byId;
+    return result\ok::<{str: str}>(byId);
 }
 
 // markedIds is every id a page's `<!--diagram:id-->` markers name, in order.
@@ -354,11 +399,13 @@ test "a page's markers name its diagrams in order" {
 // each drill-down link at the page holding its diagram: hrefs maps a diagram id to that
 // link, relative to this page. Guarded on the page mentioning one first: a docs build
 // renders hundreds of pages that reference none.
-export fun inlinePageDiagrams(html: str, hrefs: {str: str} = {<str: str>}) > str !> any {
+export fun inlinePageDiagrams(html: str, hrefs: {str: str} = {<str: str>}) > result\Result::<str> {
     if (html.indexOf("<!--diagram:") == null and html.indexOf("diagram-") == null) {
-        return html;
+        return result\ok::<str>(html);
     }
-    return inlineDiagrams(html, svgById: pageSvgs(), hrefs: hrefs);
+    final svgs = pageSvgs();
+    if (svgs.error -> failed) { return result\Result::<str>{ error = failed }; }
+    return result\ok::<str>(inlineDiagrams(html, svgById: svgs.value!, hrefs: hrefs));
 }
 
 // inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
@@ -440,15 +487,19 @@ test "runDiagram counts the claims its diagram draws and records its level" {
 
 // unknownMarkers is the reverse check: a magus:diagram marker naming no diagram means a
 // diagram was renamed or dropped while the code still points at it.
-fun unknownMarkers(diagrams: [diagram\Diagram]) > [str] !> any {
+fun unknownMarkers(diagrams: [diagram\Diagram]) > result\Result::<[str]> {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (f in diagrams) { known[f.id] = true; }
-    final result: QueryResult = magus\graph().query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
-    foreach (n in result.nodes) {
-        marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });
+    try {
+        final found: QueryResult = magus\graph().query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
+        foreach (n in found.nodes) {
+            marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return unknownMarkerFindings(known, marked: marked);
+    return result\ok::<[str]>(unknownMarkerFindings(known, marked: marked));
 }
 
 // DiagramMarker is the part of a graph marker node the reverse check reads: source is

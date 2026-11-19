@@ -2,42 +2,45 @@ namespace serverHttp;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun serverHttpDiagram() > diagram\Diagram !> any {
-    final guard = magus\graph().dir("internal/httpx");
-    final mcp = magus\graph().dir("internal/handler/mcp");
-    final server = magus\graph().dir("internal/server");
-    final handlers = magus\graph().layer("handler").dirs;
-    final rest = diagram\without(handlers, drop: [mcp]);
-    if (rest.error != null) {
-        throw rest.error!.message;
+export fun serverHttpDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final guard = magus\graph().dir("internal/httpx");
+        final mcp = magus\graph().dir("internal/handler/mcp");
+        final server = magus\graph().dir("internal/server");
+        final handlers = magus\graph().layer("handler").dirs;
+        final cut = diagram\without(handlers, drop: [mcp]);
+        if (cut.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        final routes = cut.value!;
+        final agent = diagram\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: diagram\Look.plain);
+        final console = diagram\external("Console PWA", sub: "dashboard, review", tag: "client", look: diagram\Look.plain);
+        final probe = diagram\external("kubelet", sub: "scripts, probes", tag: "client");
+        return result\ok::<diagram\Diagram>(diagram\of("server-http",
+                title: "The HTTP routes, and the one route without a guard",
+                eyebrow: "magus server",
+                desc: "Agents and the console reach /mcp, the /api/v1 read views, the review and "
+                    + "plan routes and the typed Connect services through the DNS-rebind, "
+                    + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
+                    + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
+                    + "are loopback only. The health endpoints answer probes directly, with no "
+                    + "authentication.")
+            .actor(agent)
+            .actor(console)
+            .actor(probe)
+            .box(guard, label: "Guard", sub: "rebind + token + CORS", tag: "gate", focal: true)
+            .box(mcp, label: "/mcp", sub: "agent tools, SSE")
+            .group(routes, label: "Console routes", sub: "/api/v1 and Connect RPC")
+            .box(server, label: "Server", sub: "mounts routes, /livez /readyz", look: diagram\Look.external)
+            .edgesFromGraph()
+            .flowIn(agent, dst: guard)
+            .flowIn(console, dst: guard)
+            .flowIn(probe, dst: server, label: "unguarded", stroke: diagram\Stroke.focal)
+            .zone("through the guard", dirs: handlers + [guard], actors: [agent, console])
+            .legend(diagram\Look.focal, label: "authenticated")
+            .legend(diagram\Look.external, label: "open to any caller")
+            .scope(handlers + [guard, server]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
     }
-    final routes = rest.value!;
-    final agent = diagram\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: diagram\Look.plain);
-    final console = diagram\external("Console PWA", sub: "dashboard, review", tag: "client", look: diagram\Look.plain);
-    final probe = diagram\external("kubelet", sub: "scripts, probes", tag: "client");
-    return diagram\of("server-http",
-            title: "The HTTP routes, and the one route without a guard",
-            eyebrow: "magus server",
-            desc: "Agents and the console reach /mcp, the /api/v1 read views, the review and "
-                + "plan routes and the typed Connect services through the DNS-rebind, "
-                + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
-                + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
-                + "are loopback only. The health endpoints answer probes directly, with no "
-                + "authentication.")
-        .actor(agent)
-        .actor(console)
-        .actor(probe)
-        .box(guard, label: "Guard", sub: "rebind + token + CORS", tag: "gate", focal: true)
-        .box(mcp, label: "/mcp", sub: "agent tools, SSE")
-        .group(routes, label: "Console routes", sub: "/api/v1 and Connect RPC")
-        .box(server, label: "Server", sub: "mounts routes, /livez /readyz", look: diagram\Look.external)
-        .edgesFromGraph()
-        .flowIn(agent, dst: guard)
-        .flowIn(console, dst: guard)
-        .flowIn(probe, dst: server, label: "unguarded", stroke: diagram\Stroke.focal)
-        .zone("through the guard", dirs: handlers + [guard], actors: [agent, console])
-        .legend(diagram\Look.focal, label: "authenticated")
-        .legend(diagram\Look.external, label: "open to any caller")
-        .scope(handlers + [guard, server]);
 }

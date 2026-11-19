@@ -14,6 +14,7 @@
 namespace tags;
 
 import "fs";
+import "result";
 import "template";
 import "../libs/ssg/text" as _;
 import "../libs/ssg/urls" as _;
@@ -24,14 +25,22 @@ import "../libs/ssg/paths" as _;
 // writeTagPage renders one synthesized page and records it everywhere the site tracks output.
 // srcRel carries the "/_index.md" synthesized-page marker so renderPage knows there is no
 // source to view or edit, and so rootPrefix climbs the right number of levels.
-fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void !> any {
-    final doc = renderPage(title, desc, body, srcRel, "", url, "", mut [], "", site);
-    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
-    fs\mkdirAll(dir);
-    fs\writeFile(dir + "/index.html", doc);
-    site.addRecord(url, title, desc, searchText);
-    site.pageUrls[url] = true;
-    site.writtenPaths[url + "index.html"] = true;
+fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > result\Result::<bool> {
+    try {
+        final r3 = renderPage(title, desc, body, srcRel, "", url, "", mut [], "", site);
+        if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r3.value!;
+        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        fs\mkdirAll(dir);
+        fs\writeFile(dir + "/index.html", doc);
+        final r4 = site.addRecord(url, title, desc, searchText);
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        site.pageUrls[url] = true;
+        site.writtenPaths[url + "index.html"] = true;
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // collectTagIndex records which tag slugs will get a page, so a chip rendered during the walk
@@ -53,59 +62,60 @@ export fun collectTagIndex(site: Site) > void {
     }
 }
 
-export fun renderTagPages(site: Site) > void !> any {
-    // slug -> the display spelling. Last writer wins, which is fine: two tags that kebab to the
-    // same slug ARE the same topic, and either spelling names it. Restricted to the slugs
-    // collectTagIndex already promised a page for, so chips and pages cannot disagree.
-    var label: mut {str: str} = mut {<str: str>};
-    foreach (p in site.docPages) {
-        foreach (t in p.tags.split("||")) {
-            if (t == "") { continue; }
-            final slug = tagSlug(t);
-            if (slug != "" and site.tagPages[slug] != null) { label[slug] = t; }
-        }
-    }
-    if (label.size() == 0) { return; }
-
-    var slugs: mut [str] = mut [<str>];
-    foreach (s in label.keys()) { slugs.append(s); }
-    final orderedSlugs = slugs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-
-    var hubRows: mut [{str: any}] = mut [<{str: any}>];
-
-    foreach (slug in orderedSlugs) {
-        final name = label[slug]!;
-        // Second pass over docPages per tag rather than a slug->pages map built up front: docPages
-        // is a couple of hundred pages, and this keeps the grouping in one obvious place.
-        var cards: mut [{str: any}] = mut [<{str: any}>];
+export fun renderTagPages(site: Site) > result\Result::<bool> {
+    try {
+        // slug -> the display spelling. Last writer wins, which is fine: two tags that kebab to the
+        // same slug ARE the same topic, and either spelling names it. Restricted to the slugs
+        // collectTagIndex already promised a page for, so chips and pages cannot disagree.
+        var label: mut {str: str} = mut {<str: str>};
         foreach (p in site.docPages) {
-            var carries = false;
             foreach (t in p.tags.split("||")) {
-                if (t != "" and tagSlug(t) == slug) { carries = true; }
+                if (t == "") { continue; }
+                final slug = tagSlug(t);
+                if (slug != "" and site.tagPages[slug] != null) { label[slug] = t; }
             }
-            if (carries == false) { continue; }
-            cards.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
         }
-        foreach (b in site.blogPosts) {
-            var carries = false;
-            foreach (t in b.tags.split("||")) {
-                if (t != "" and tagSlug(t) == slug) { carries = true; }
+        if (label.size() == 0) { return result\ok::<bool>(true); }
+
+        var slugs: mut [str] = mut [<str>];
+        foreach (s in label.keys()) { slugs.append(s); }
+        final orderedSlugs = slugs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+        var hubRows: mut [{str: any}] = mut [<{str: any}>];
+
+        foreach (slug in orderedSlugs) {
+            final name = label[slug]!;
+            // Second pass over docPages per tag rather than a slug->pages map built up front: docPages
+            // is a couple of hundred pages, and this keeps the grouping in one obvious place.
+            var cards: mut [{str: any}] = mut [<{str: any}>];
+            foreach (p in site.docPages) {
+                var carries = false;
+                foreach (t in p.tags.split("||")) {
+                    if (t != "" and tagSlug(t) == slug) { carries = true; }
+                }
+                if (carries == false) { continue; }
+                cards.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
             }
-            if (carries == false) { continue; }
-            cards.append(mut {"url": b.url, "title": b.title, "desc": b.description, "hasDesc": b.description != ""});
-        }
-        if (cards.len() == 0) { continue; }
+            foreach (b in site.blogPosts) {
+                var carries = false;
+                foreach (t in b.tags.split("||")) {
+                    if (t != "" and tagSlug(t) == slug) { carries = true; }
+                }
+                if (carries == false) { continue; }
+                cards.append(mut {"url": b.url, "title": b.title, "desc": b.description, "hasDesc": b.description != ""});
+            }
+            if (cards.len() == 0) { continue; }
 
-        final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("{a["title"]}", "{b["title"]}");
-        });
+            final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
+                return strLess("{a["title"]}", "{b["title"]}");
+            });
 
-        final url = "tags/" + slug + "/";
-        final srcRel = "tags/" + slug + "/_index.md";
-        final title = "Tagged: " + name;
-        final desc = "Every page tagged \"" + name + "\".";
-        final root = rootPrefix(srcRel, site);
-        final body = template\render(`  <p>Every page tagged <strong>{{name}}</strong>. Tags cut across the directory tree, so these pages come from different sections.</p>
+            final url = "tags/" + slug + "/";
+            final srcRel = "tags/" + slug + "/_index.md";
+            final title = "Tagged: " + name;
+            final desc = "Every page tagged \"" + name + "\".";
+            final root = rootPrefix(srcRel, site);
+            final body = template\render(`  <p>Every page tagged <strong>{{name}}</strong>. Tags cut across the directory tree, so these pages come from different sections.</p>
   <div class="related-grid section-index-grid">
 {{#cards}}
     <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
@@ -114,15 +124,16 @@ export fun renderTagPages(site: Site) > void !> any {
   <p><a href="{{root}}tags/">All tags</a></p>
 `, {"name": name, "root": root, "cards": ordered});
 
-        writeTagPage(url, srcRel, title, desc, body, title + " " + desc, site);
-        hubRows.append(mut {"slug": slug, "name": name, "count": ordered.len()});
-    }
+            final r1 = writeTagPage(url, srcRel, title, desc, body, title + " " + desc, site);
+            if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            hubRows.append(mut {"slug": slug, "name": name, "count": ordered.len()});
+        }
 
-    if (hubRows.len() == 0) { return; }
+        if (hubRows.len() == 0) { return result\ok::<bool>(true); }
 
-    final hubSrcRel = "tags/_index.md";
-    final hubRoot = rootPrefix(hubSrcRel, site);
-    final hubBody = template\render(`  <p>Every topic in the documentation, with the number of pages carrying it. A tag is the one
+        final hubSrcRel = "tags/_index.md";
+        final hubRoot = rootPrefix(hubSrcRel, site);
+        final hubBody = template\render(`  <p>Every topic in the documentation, with the number of pages carrying it. A tag is the one
   route through these docs that ignores the directory tree.</p>
   <div class="post-tags" aria-label="All tags">
 {{#rows}}
@@ -131,7 +142,12 @@ export fun renderTagPages(site: Site) > void !> any {
   </div>
 `, {"root": hubRoot, "rows": hubRows});
 
-    writeTagPage("tags/", hubSrcRel, "Tags",
-        "Every documentation topic, with the pages carrying it. Tags cut across the section tree.",
-        hubBody, "Tags topics index", site);
+        final r2 = writeTagPage("tags/", hubSrcRel, "Tags",
+            "Every documentation topic, with the pages carrying it. Tags cut across the section tree.",
+            hubBody, "Tags topics index", site);
+        if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }

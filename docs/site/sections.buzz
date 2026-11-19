@@ -18,6 +18,7 @@
 namespace sections;
 
 import "fs";
+import "result";
 import "strings";
 import "template";
 import "engine/types" as _;
@@ -92,35 +93,43 @@ export fun collectSectionIndexes(site: Site) > void {
 // Only DIRECT children get cards. The full branch is already in the sidebar's
 // "Everything here" list, which this page now qualifies for, so repeating the
 // whole subtree in the body would say the same thing twice at different sizes.
-export fun renderSectionIndexes(site: Site) > void !> any {
-    foreach (p in site.docPages) {
-        if (p.srcRel.endsWith("/_index.md") == false) { continue; }
+export fun renderSectionIndexes(site: Site) > result\Result::<bool> {
+    try {
+        foreach (p in site.docPages) {
+            if (p.srcRel.endsWith("/_index.md") == false) { continue; }
 
-        var cards: mut [{str: any}] = mut [<{str: any}>];
-        foreach (c in site.docPages) {
-            if (c.url == p.url or c.url.startsWith(p.url) == false) { continue; }
-            if (splitPath(c.url.sub(p.url.len())).len() != 1) { continue; }
-            cards.append(mut {"url": c.url, "title": c.title, "desc": c.desc, "hasDesc": c.desc != ""});
-        }
-        if (cards.len() == 0) { continue; }
+            var cards: mut [{str: any}] = mut [<{str: any}>];
+            foreach (c in site.docPages) {
+                if (c.url == p.url or c.url.startsWith(p.url) == false) { continue; }
+                if (splitPath(c.url.sub(p.url.len())).len() != 1) { continue; }
+                cards.append(mut {"url": c.url, "title": c.title, "desc": c.desc, "hasDesc": c.desc != ""});
+            }
+            if (cards.len() == 0) { continue; }
 
-        final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("{a["title"]}", "{b["title"]}");
-        });
+            final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
+                return strLess("{a["title"]}", "{b["title"]}");
+            });
 
-        final root = rootPrefix(p.srcRel, site);
-        final body = template\render(`  <div class="related-grid section-index-grid">
+            final root = rootPrefix(p.srcRel, site);
+            final body = template\render(`  <div class="related-grid section-index-grid">
 {{#cards}}
     <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
 {{/cards}}
   </div>
 `, {"root": root, "cards": ordered});
 
-        final doc = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], "", site);
-        final dir = fs\join(site.inputs.outDir, p.url.sub(0, p.url.len() - 1));
-        fs\mkdirAll(dir);
-        fs\writeFile(dir + "/index.html", doc);
-        site.addRecord(p.url, p.title, p.desc, p.title + " " + p.desc);
-        site.pageUrls[p.url] = true;
+            final r1 = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], "", site);
+            if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            final doc = r1.value!;
+            final dir = fs\join(site.inputs.outDir, p.url.sub(0, p.url.len() - 1));
+            fs\mkdirAll(dir);
+            fs\writeFile(dir + "/index.html", doc);
+            final r2 = site.addRecord(p.url, p.title, p.desc, p.title + " " + p.desc);
+            if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            site.pageUrls[p.url] = true;
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }

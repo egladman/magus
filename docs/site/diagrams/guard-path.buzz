@@ -2,52 +2,57 @@ namespace guardPath;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun guardPathDiagram() > diagram\Diagram !> any {
-    final shell = magus\graph().dir("cmd/magus");
-    final guard = magus\graph().dir("internal/guard");
-    final catalog = magus\graph().dir("internal/guard/builtin");
-    final jobs = magus\graph().dir("internal/job");
-    final sessions = magus\graph().dir("internal/sessions");
-    final recorder = magus\graph().dir("internal/recorder");
-    final hook = diagram\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
-    final policy = diagram\external("Workspace rules", sub: "magus\\guard.command, can only add", look: diagram\Look.input);
-    final verdict = diagram\external("Verdict", sub: "deny, advise or pass, with next:", look: diagram\Look.focal);
-    return diagram\of("guard-path",
-            title: "One command judges every call, and says what to run instead",
-            eyebrow: "guard",
-            direction: diagram\Direction.down,
-            desc: "The host's PreToolUse hook pipes each event to magus shell. The built-in rules "
-                + "judge it first, reading the job store for the call's lease and the session "
-                + "record; the workspace's own rule sees only what they let through. Each judgment "
-                + "goes to the activity log, and a deny names the command to run instead.")
-        .actor(hook)
-        .box(shell, label: "magus shell", sub: "the guard with one door")
-        .box(guard, label: "Built-in rules", sub: "judged first, in order", focal: true)
-        .box(catalog, label: "Rule catalog", sub: "ids and grades")
-        .box(jobs, label: "Job store", sub: "leases, write paths", look: diagram\Look.store)
-        .box(sessions, label: "Session record", sub: "what this session did", look: diagram\Look.store)
-        .box(recorder, label: "Activity log", sub: "every judgment kept", look: diagram\Look.store)
-        .actor(policy)
-        .actor(verdict)
-        .edgesFromGraph()
-        .hideEdges([shell], dst: [catalog, jobs, sessions, recorder],
-            why: "the shell's own uses are other verbs; a call reaches them through the guard")
-        .hideEdges([jobs, sessions], dst: [sessions, recorder],
-            why: "the stores read each other for their own verbs; the guard's path reads each one directly")
-        .markEdge(shell, dst: guard, label: "judges")
-        .markEdge(guard, dst: catalog, label: "rules")
-        .markEdge(guard, dst: jobs, label: "lease")
-        .markEdge(guard, dst: sessions, label: "history")
-        .markEdge(guard, dst: recorder, label: "records")
-        .flowIn(hook, dst: shell, label: "argv + stdin")
-        .flowOut(guard, dst: policy, label: "let through")
-        .flowOut(guard, dst: verdict)
-        .flowAcross(policy, dst: verdict)
-        .flowAcross(verdict, dst: hook, label: "reply")
-        .legend(diagram\Look.focal, label: "what the agent reads")
-        .legend(diagram\Look.external, label: "the host's side")
-        .legend(diagram\Look.input, label: "this repo's rules")
-        .legend(diagram\Look.store, label: "append-only records")
-        .scope([shell, guard, catalog, jobs, sessions, recorder]);
+export fun guardPathDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final shell = magus\graph().dir("cmd/magus");
+        final guard = magus\graph().dir("internal/guard");
+        final catalog = magus\graph().dir("internal/guard/builtin");
+        final jobs = magus\graph().dir("internal/job");
+        final sessions = magus\graph().dir("internal/sessions");
+        final recorder = magus\graph().dir("internal/recorder");
+        final hook = diagram\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
+        final policy = diagram\external("Workspace rules", sub: "magus\\guard.command, can only add", look: diagram\Look.input);
+        final verdict = diagram\external("Verdict", sub: "deny, advise or pass, with next:", look: diagram\Look.focal);
+        return result\ok::<diagram\Diagram>(diagram\of("guard-path",
+                title: "One command judges every call, and says what to run instead",
+                eyebrow: "guard",
+                direction: diagram\Direction.down,
+                desc: "The host's PreToolUse hook pipes each event to magus shell. The built-in rules "
+                    + "judge it first, reading the job store for the call's lease and the session "
+                    + "record; the workspace's own rule sees only what they let through. Each judgment "
+                    + "goes to the activity log, and a deny names the command to run instead.")
+            .actor(hook)
+            .box(shell, label: "magus shell", sub: "the guard with one door")
+            .box(guard, label: "Built-in rules", sub: "judged first, in order", focal: true)
+            .box(catalog, label: "Rule catalog", sub: "ids and grades")
+            .box(jobs, label: "Job store", sub: "leases, write paths", look: diagram\Look.store)
+            .box(sessions, label: "Session record", sub: "what this session did", look: diagram\Look.store)
+            .box(recorder, label: "Activity log", sub: "every judgment kept", look: diagram\Look.store)
+            .actor(policy)
+            .actor(verdict)
+            .edgesFromGraph()
+            .hideEdges([shell], dst: [catalog, jobs, sessions, recorder],
+                why: "the shell's own uses are other verbs; a call reaches them through the guard")
+            .hideEdges([jobs, sessions], dst: [sessions, recorder],
+                why: "the stores read each other for their own verbs; the guard's path reads each one directly")
+            .markEdge(shell, dst: guard, label: "judges")
+            .markEdge(guard, dst: catalog, label: "rules")
+            .markEdge(guard, dst: jobs, label: "lease")
+            .markEdge(guard, dst: sessions, label: "history")
+            .markEdge(guard, dst: recorder, label: "records")
+            .flowIn(hook, dst: shell, label: "argv + stdin")
+            .flowOut(guard, dst: policy, label: "let through")
+            .flowOut(guard, dst: verdict)
+            .flowAcross(policy, dst: verdict)
+            .flowAcross(verdict, dst: hook, label: "reply")
+            .legend(diagram\Look.focal, label: "what the agent reads")
+            .legend(diagram\Look.external, label: "the host's side")
+            .legend(diagram\Look.input, label: "this repo's rules")
+            .legend(diagram\Look.store, label: "append-only records")
+            .scope([shell, guard, catalog, jobs, sessions, recorder]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

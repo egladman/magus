@@ -2,42 +2,46 @@ namespace serverSocket;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/packages" as packages;
+import "result";
 
-export fun serverSocketDiagram() > diagram\Diagram !> any {
-    final cli = magus\graph().dir("cmd/magus");
-    final sock = magus\graph().dir("internal/proc");
-    final server = magus\graph().dir("internal/server");
-    final share = magus\graph().dir("internal/share");
-    final person = diagram\person("You", sub: "run, status, query", tag: "shell");
-    // The HTTP entry is server-http's; the two share only the registries internal/server holds.
-    return diagram\of("server-socket",
-            title: "A local command reaches the server over one private socket",
-            eyebrow: "magus server",
-            desc: "The magus CLI dispatches over a private unix domain socket to the server, "
-                + "which holds the concurrency pool, the workspace and run registries and the "
-                + "broker for shared services. Sharing a graph spawns a separate short-lived "
-                + "loopback server.",
-            level: diagram\Level.package)
-        .actor(person)
-        .box(cli, label: "magus CLI", sub: "dispatches every command")
-        .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
-        .box(server, label: "Server", sub: "pool, registries, broker", look: diagram\Look.store)
-        // Not --serve: it only picks the transport, so naming it alone would omit the command.
-        .box(share, label: "Loopback server", sub: "graph export --open", look: diagram\Look.optional)
-        .edgesFromGraph()
-        .flowIn(person, dst: cli)
-        .legend(diagram\Look.store, label: "shared server state")
-        .legend(diagram\Look.optional, label: "spawned on demand")
-        .scope(packages\goPackages("internal/proc/**"))
-        .scope(packages\goPackages("internal/share/**"))
-        .scope([server])
-        .except([magus\graph().dir("internal/proc/endpoint")],
-            why: "parses the transport address a client dials, a value type the CLI and config share")
-        .except([magus\graph().dir("internal/proc/environ")],
-            why: "one run's environment for the env host module; nothing on the socket reads it")
-        .except([magus\graph().dir("internal/proc/spawn")],
-            why: "the subprocess helper spells run tools through, under the pool rather than at the socket")
-        .except([magus\graph().dir("internal/proc/sockdir")],
-            why: "picks the 0700 directory the socket lives in, which the box's sub names");
+export fun serverSocketDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final cli = magus\graph().dir("cmd/magus");
+        final sock = magus\graph().dir("internal/proc");
+        final server = magus\graph().dir("internal/server");
+        final share = magus\graph().dir("internal/share");
+        final person = diagram\person("You", sub: "run, status, query", tag: "shell");
+        // The HTTP entry is server-http's; the two share only the registries internal/server holds.
+        return result\ok::<diagram\Diagram>(diagram\of("server-socket",
+                title: "A local command reaches the server over one private socket",
+                eyebrow: "magus server",
+                desc: "The magus CLI dispatches over a private unix domain socket to the server, "
+                    + "which holds the concurrency pool, the workspace and run registries and the "
+                    + "broker for shared services. Sharing a graph spawns a separate short-lived "
+                    + "loopback server.",
+                level: diagram\Level.package)
+            .actor(person)
+            .box(cli, label: "magus CLI", sub: "dispatches every command")
+            .box(sock, label: "Unix socket", sub: "0700, internal/proc", tag: "ipc", focal: true)
+            .box(server, label: "Server", sub: "pool, registries, broker", look: diagram\Look.store)
+            // Not --serve: it only picks the transport, so naming it alone would omit the command.
+            .box(share, label: "Loopback server", sub: "graph export --open", look: diagram\Look.optional)
+            .edgesFromGraph()
+            .flowIn(person, dst: cli)
+            .legend(diagram\Look.store, label: "shared server state")
+            .legend(diagram\Look.optional, label: "spawned on demand")
+            .scope(magus\graph().dirs("internal/proc/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("internal/share/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope([server])
+            .except([magus\graph().dir("internal/proc/endpoint")],
+                why: "parses the transport address a client dials, a value type the CLI and config share")
+            .except([magus\graph().dir("internal/proc/environ")],
+                why: "one run's environment for the env host module; nothing on the socket reads it")
+            .except([magus\graph().dir("internal/proc/spawn")],
+                why: "the subprocess helper spells run tools through, under the pool rather than at the socket")
+            .except([magus\graph().dir("internal/proc/sockdir")],
+                why: "picks the 0700 directory the socket lives in, which the box's sub names"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

@@ -2,6 +2,7 @@ namespace dictionary;
 
 import "std";
 import "markdown";
+import "result";
 import "serialize";
 import "lib/glossary" as _;   // glossarySlug
 
@@ -79,6 +80,14 @@ export fun compact(term: str) > str {
     return parts.join("");
 }
 
+fun frontmatterOf(md: str) > result\Result::<serialize\Boxed> {
+    try {
+        return result\ok::<serialize\Boxed>(serialize\jsonDecode(markdown\frontmatter(md)));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed>(err);
+    }
+}
+
 fun tagsOf(fm: serialize\Boxed) > [str] {
     final tags = mut [<str>];
     foreach (t in fm.q("tags").listValue()) { tags.append(t.stringValue()); }
@@ -87,17 +96,21 @@ fun tagsOf(fm: serialize\Boxed) > [str] {
 
 // termPage reads the index entry for file from its front matter. A missing order sorts the
 // page last and an unknown group leaves it out of the index; termProblems reports both.
-export fun termPage(file: str, md: str) > TermPage !> any {
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    final tags = tagsOf(fm);
-    return TermPage{
-        file = file,
-        slug = slugOf(file),
-        group = if (tags.len() >= 2) tags[1] else "",
-        order = fm.q("order").integer() ?? 9999,
-        title = fm.q("title").stringValue(),
-        description = fm.q("description").stringValue(),
-    };
+export fun termPage(file: str, md: str) > result\Result::<TermPage> {
+    try {
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        final tags = tagsOf(fm);
+        return result\ok::<TermPage>(TermPage{
+            file = file,
+            slug = slugOf(file),
+            group = if (tags.len() >= 2) tags[1] else "",
+            order = fm.q("order").integer() ?? 9999,
+            title = fm.q("title").stringValue(),
+            description = fm.q("description").stringValue(),
+        });
+    } catch (err: any) {
+        return result\caught::<TermPage>(err);
+    }
 }
 
 fun isFence(t: str) > bool {
@@ -168,11 +181,15 @@ fun step(w: mut Walk, line: str, n: int, problems: mut [TermProblem]) > void {
 // termProblems holds a docs/glossary/<slug>.md page to the term page template in
 // docs/conventions.md, and returns nothing for any other page. lib/conventions already
 // checks the title, description and H1 every page shares.
-export fun termProblems(file: str, md: str) > [TermProblem] !> any {
+export fun termProblems(file: str, md: str) > result\Result::<[TermProblem]> {
     final problems: mut [TermProblem] = mut [<TermProblem>];
-    if (isTermPage(file) == false) { return problems; }
-    final page = termPage(file, md: md);
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
+    if (isTermPage(file) == false) { return result\ok::<[TermProblem]>(problems); }
+    final read = termPage(file, md: md);
+    if (read.error -> failed) { return result\Result::<[TermProblem]>{ error = failed }; }
+    final page = read.value!;
+    final decoded = frontmatterOf(md);
+    if (decoded.error -> failed) { return result\Result::<[TermProblem]>{ error = failed }; }
+    final fm = decoded.value!;
     final tags = tagsOf(fm);
     if (tags.len() < 2 or tags[0] != "glossary" or GROUPS.indexOf(tags[1]) == null) {
         problems.append(TermProblem{ line = 1, message = "`tags` must open with `glossary` and then one group: {GROUPS.join(", ")}" });
@@ -204,7 +221,7 @@ export fun termProblems(file: str, md: str) > [TermProblem] !> any {
             problems.append(TermProblem{ line = lines.len(), message = "no `## {s}`; every term page carries Example, Used in and See also" });
         }
     }
-    return problems;
+    return result\ok::<[TermProblem]>(problems);
 }
 
 // glossaryIndex renders the block glossary.md carries between INDEX_BEGIN and INDEX_END:
@@ -312,16 +329,16 @@ export fun usageBlock(docs: [UsageDoc], symbols: [UsageSymbol]) > str {
 
 // replaceBlock swaps the lines from begin to end in md for block, and raises when either
 // marker line is missing.
-export fun replaceBlock(md: str, begin: str, end: str, block: str) > str !> str {
+export fun replaceBlock(md: str, begin: str, end: str, block: str) > result\Result::<str> {
     final lines = md.split("\n");
     final b = lines.indexOf(begin);
     final e = lines.indexOf(end);
     if (b == null or e == null or e! < b!) {
-        throw "no `{begin}` ... `{end}` block to regenerate";
+        return result\fail::<str>("no `{begin}` ... `{end}` block to regenerate");
     }
     final before = lines.sub(0, len: b!);
     final after = lines.sub(e! + 1);
-    return before.join("\n") + (if (before.len() > 0) "\n" else "") + block + (if (after.len() > 0) "\n" + after.join("\n") else "");
+    return result\ok::<str>(before.join("\n") + (if (before.len() > 0) "\n" else "") + block + (if (after.len() > 0) "\n" + after.join("\n") else ""));
 }
 
 final GOOD_PAGE = "---\ntitle: Lease id\norder: 2\ndescription: The id a worker carries.\ntags: [glossary, sessions-and-leases]\n---\n\n"
@@ -330,7 +347,7 @@ final GOOD_PAGE = "---\ntitle: Lease id\norder: 2\ndescription: The id a worker 
     + "## See also\n\n- [Lease](lease.md)\n";
 
 fun messages(file: str, md: str) > [str] {
-    return (termProblems(file, md: md) catch [<TermProblem>]).map(fun (i: int, p: TermProblem) > str => p.message);
+    return (termProblems(file, md: md).value ?? [<TermProblem>]).map(fun (i: int, p: TermProblem) > str => p.message);
 }
 
 test "a page in the template has no problems" {
@@ -367,7 +384,7 @@ test "the index groups terms in order and keeps each term's old anchor" {
     final block = glossaryIndex(pages);
     std\assert(block.indexOf("## Core model\n\n### Workspace\n\nThe root. [Workspace in full](glossary/workspace.md).\n\n## Sessions and leases\n\n### Lease\n") != null, message: block);
     final md = "# Glossary\n\n{INDEX_BEGIN}\nstale\n{INDEX_END}\n";
-    final got = replaceBlock(md, begin: INDEX_BEGIN, end: INDEX_END, block: block) catch "";
+    final got = replaceBlock(md, begin: INDEX_BEGIN, end: INDEX_END, block: block).value ?? "";
     std\assert(got.indexOf("stale") == null and got.endsWith("{INDEX_END}\n"), message: got);
 }
 

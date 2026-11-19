@@ -10,6 +10,7 @@
 namespace landing;
 
 import "fs";
+import "result";
 import "io";
 import "markdown";
 import "serialize";
@@ -68,54 +69,53 @@ dry run: commands shown, not executed</span>
 //
 // fs.list returns sorted names and the files are date-prefixed (YYYY-MM-DD-slug.md),
 // so walking the list backwards is newest-first without parsing a date to sort on.
-fun recentPosts(site: Site) > str !> any {
-    final dir = site.inputs.root + "/" + site.inputs.blog;
-    if (isDirectory(dir) == false) { return ""; }
-    var names: mut [str] = mut [<str>];
-    foreach (name in fs\listDir(dir)) {
-        if (isPublishablePost(site, name)) {
-            names.append(name);
+fun recentPosts(site: Site) > result\Result::<str> {
+    try {
+        final dir = site.inputs.root + "/" + site.inputs.blog;
+        if (isDirectory(dir) == false) { return result\ok::<str>(""); }
+        var names: mut [str] = mut [<str>];
+        foreach (name in fs\listDir(dir)) {
+            final r3 = isPublishablePost(site, name);
+            if (r3.error -> failed) { return result\Result::<str>{ error = failed }; }
+            if (r3.value!) {
+                names.append(name);
+            }
         }
-    }
-    if (names.len() == 0) { return ""; }
+        if (names.len() == 0) { return result\ok::<str>(""); }
 
-    final cards = mut [<str>];
-    var shown = 0;
-    var i = names.len() - 1;
-    while (i >= 0 and shown < 3) {
-        final name = names[i];
-        i = i - 1;
-        final f = io\File.open(dir + "/" + name, io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        final fm = serialize\jsonDecode(markdown\frontmatter(md));
-        var title = fm.q("title").stringValue();
-        if (title == "") { title = deriveTitle(md, name); }
-        final desc = fm.q("description").stringValue();
-        final url = site.inputs.blog + "/" + blogURLPath(name) + "/";
-        cards.append("        <a class=\"landing-card\" href=\"" + url + "\">"
-            + "<span class=\"landing-card-title\">" + htmlcodec\escape(title) + "</span>"
-            + "<span class=\"landing-card-body\">" + htmlcodec\escape(desc) + "</span></a>\n");
-        shown = shown + 1;
+        final cards = mut [<str>];
+        var shown = 0;
+        var i = names.len() - 1;
+        while (i >= 0 and shown < 3) {
+            final name = names[i];
+            i = i - 1;
+            final f = io\File.open(dir + "/" + name, io\FileMode.read);
+            final md = f.readAll();
+            f.close();
+            final fm = serialize\jsonDecode(markdown\frontmatter(md));
+            var title = fm.q("title").stringValue();
+            if (title == "") { title = deriveTitle(md, name); }
+            final desc = fm.q("description").stringValue();
+            final url = site.inputs.blog + "/" + blogURLPath(name) + "/";
+            cards.append("        <a class=\"landing-card\" href=\"" + url + "\">"
+                + "<span class=\"landing-card-title\">" + htmlcodec\escape(title) + "</span>"
+                + "<span class=\"landing-card-body\">" + htmlcodec\escape(desc) + "</span></a>\n");
+            shown = shown + 1;
+        }
+        if (cards.len() == 0) { return result\ok::<str>(""); }
+        return result\ok::<str>("  <section class=\"landing-section\">\n"
+            + "    <h2 class=\"landing-h2\">Recent writing</h2>\n"
+            + "    <p class=\"landing-section-lede\">Why things are the way they are, at more length than a documentation page should go to.</p>\n"
+            + "    <div class=\"grid landing-cards landing-cards-compact\">\n" + cards.join("")
+            + "    </div>\n"
+            + "  </section>\n\n");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    if (cards.len() == 0) { return ""; }
-    return "  <section class=\"landing-section\">\n"
-        + "    <h2 class=\"landing-h2\">Recent writing</h2>\n"
-        + "    <p class=\"landing-section-lede\">Why things are the way they are, at more length than a documentation page should go to.</p>\n"
-        + "    <div class=\"grid landing-cards landing-cards-compact\">\n" + cards.join("")
-        + "    </div>\n"
-        + "  </section>\n\n";
 }
 
-// renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path
-// every "is this the home page" test in renderPage keys off; it maps to the empty clean
-// URL, so the chrome resolves at gen's root and no breadcrumb is drawn.
-//
-// Every link here is relative and points at a page this render also writes - the asset
-// gate proves that, and the orphan gate walks outward from exactly this page, so the four
-// sections below are what make the rest of the site reachable at all.
-export fun renderLanding(site: Site) > void !> any {
-    var html = template\render(`  <section class="landing-hero">
+// LANDING_TMPL is the front door's markup; renderLanding fills in the terminal session and the recent posts.
+final LANDING_TMPL = `  <section class="landing-hero">
     <div class="landing-intro">
       <h1 class="landing-title landing-rotator">
         <span class="landing-rotate">Made to be debuggable at 2am.</span>
@@ -552,27 +552,46 @@ std&#92;print(yaml);</code></pre>
     </div>
     <p class="landing-humans-body">Already working with an agent? <a href="guides/agents/">Pointing an agent at it</a> covers the structured output, the installed skills and the graph queries it can use, and what it deliberately does not get.</p>
   </section>
-`, {"session": TERMINAL_SESSION, "recent": recentPosts(site)});
+`;
 
-    // Same cross-linking the docs pages get: auto-link the first mention of each
-    // glossary term (definition baked into the popover) and link inline-code domain
-    // references to their reference pages. Root-relative, so "" is both this page's
-    // clean directory and the base relativePath resolves from.
-    html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath("", "glossary/")).html;
-    html = linkCodeEntities(html, site.inputs.codeEntities, "");
+// renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path
+// every "is this the home page" test in renderPage keys off; it maps to the empty clean
+// URL, so the chrome resolves at gen's root and no breadcrumb is drawn.
+//
+// Every link here is relative and points at a page this render also writes - the asset
+// gate proves that, and the orphan gate walks outward from exactly this page, so the four
+// sections below are what make the rest of the site reachable at all.
+export fun renderLanding(site: Site) > result\Result::<bool> {
+    try {
+        final recent = recentPosts(site);
+        if (recent.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        var html = template\render(LANDING_TMPL, {"session": TERMINAL_SESSION, "recent": recent.value!});
 
-    // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
-    // rather than "<title> - magus", so passing anything else here would only show up in
-    // the search result heading.
-    final title = "magus";
-    final desc = site.inputs.config.description;
-    final doc = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site);
-    fs\writeFile(site.inputs.outDir + "/index.html", doc);
-    // The plain-text body the search index carries. The HTML above is mostly layout, so
-    // indexing it verbatim would fill a result snippet with markup rather than the words
-    // someone would actually search for.
-    site.addRecord("index.html", title, desc,
-        "magus task orchestrator monorepo polyglot build test lint affected set "
-        + "content-addressed cache knowledge graph magusfile buzz typed targets spells "
-        + "single binary install setup tour playground");
+        // Same cross-linking the docs pages get: auto-link the first mention of each
+        // glossary term (definition baked into the popover) and link inline-code domain
+        // references to their reference pages. Root-relative, so "" is both this page's
+        // clean directory and the base relativePath resolves from.
+        html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath("", "glossary/")).html;
+        html = linkCodeEntities(html, site.inputs.codeEntities, "");
+
+        // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
+        // rather than "<title> - magus", so passing anything else here would only show up in
+        // the search result heading.
+        final title = "magus";
+        final desc = site.inputs.config.description;
+        final r1 = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site); if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r1.value!;
+        fs\writeFile(site.inputs.outDir + "/index.html", doc);
+        // The plain-text body the search index carries. The HTML above is mostly layout, so
+        // indexing it verbatim would fill a result snippet with markup rather than the words
+        // someone would actually search for.
+        final r2 = site.addRecord("index.html", title, desc,
+            "magus task orchestrator monorepo polyglot build test lint affected set "
+            + "content-addressed cache knowledge graph magusfile buzz typed targets spells "
+            + "single binary install setup tour playground");
+        if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }

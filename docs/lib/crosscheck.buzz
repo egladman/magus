@@ -6,6 +6,7 @@ namespace crosscheck;
 
 import "std";
 import "assert";
+import "result";
 import "serialize";
 import "encoding/hex";
 import "lib/conventions" as _;   // ConventionFinding
@@ -356,31 +357,35 @@ export fun sessionParityFindings(adapters: {str: str}, guide: str, guideFile: st
 // hostWiringFindings asks a host page to name every event its shipped hook config wires
 // and every glue template the config runs. A reader wires what the page says, so an event
 // the page never names guards this repository and nobody who copied from it.
-export fun hostWiringFindings(config: str, configFile: str, page: str, doc: str) > [str] !> any {
+export fun hostWiringFindings(config: str, configFile: str, page: str, doc: str) > result\Result::<[str]> {
     final found: mut [str] = mut [<str>];
-    final hooks = serialize\jsonDecode(config).q("hooks").mapValue();
-    if (hooks.size() == 0) { return ["{configFile}: wires no events at all"]; }
-    final stems = mut {<str: bool>};
-    foreach (event, entries in hooks) {
-        if (doc.indexOf(event) == null) {
-            found.append("{page}: never names {event}, which {configFile} wires; a reader copying from the page gets a quieter integration");
-        }
-        foreach (entry in entries.listValue()) {
-            foreach (h in entry.q("hooks").listValue()) {
-                final command = h.q("command").stringValue();
-                foreach (name, _ in TEMPLATE_PAGES) {
-                    if (command.indexOf(name) == null) { continue; }
-                    if (name.endsWith(".buzz")) { stems[name.sub(0, len: name.len() - 5)] = true; }
+    try {
+        final hooks = serialize\jsonDecode(config).q("hooks").mapValue();
+        if (hooks.size() == 0) { return result\ok::<[str]>(["{configFile}: wires no events at all"]); }
+        final stems = mut {<str: bool>};
+        foreach (event, entries in hooks) {
+            if (doc.indexOf(event) == null) {
+                found.append("{page}: never names {event}, which {configFile} wires; a reader copying from the page gets a quieter integration");
+            }
+            foreach (entry in entries.listValue()) {
+                foreach (h in entry.q("hooks").listValue()) {
+                    final command = h.q("command").stringValue();
+                    foreach (name, _ in TEMPLATE_PAGES) {
+                        if (command.indexOf(name) == null) { continue; }
+                        if (name.endsWith(".buzz")) { stems[name.sub(0, len: name.len() - 5)] = true; }
+                    }
                 }
             }
         }
-    }
-    foreach (stem, _ in stems) {
-        if (doc.indexOf(stem) == null) {
-            found.append("{page}: never names {stem}, which {configFile} runs");
+        foreach (stem, _ in stems) {
+            if (doc.indexOf(stem) == null) {
+                found.append("{page}: never names {stem}, which {configFile} runs");
+            }
         }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    return found;
+    return result\ok::<[str]>(found);
 }
 
 // rehydrateWiringFindings asks the host page to name the event the rehydrate hook runs
@@ -398,19 +403,23 @@ export fun rehydrateWiringFindings(page: str, doc: str) > [str] {
 
 // releaseKeyFindings asks the verify guide to publish the ACTIVE release key, base64 as
 // a reader pastes it. Keys that have signed nothing would be noise to resolve.
-export fun releaseKeyFindings(keyring: str, guideFile: str, guide: str) > [str] !> any {
+export fun releaseKeyFindings(keyring: str, guideFile: str, guide: str) > result\Result::<[str]> {
     final active: mut [str] = mut [<str>];
-    foreach (k in serialize\jsonDecode(keyring).q("keys").listValue()) {
-        if (k.q("state").stringValue() == "active") { active.append(k.q("key").stringValue()); }
+    try {
+        foreach (k in serialize\jsonDecode(keyring).q("keys").listValue()) {
+            if (k.q("state").stringValue() == "active") { active.append(k.q("key").stringValue()); }
+        }
+        if (active.len() != 1) {
+            return result\ok::<[str]>(["internal/selfupdate/release-keys.json holds {active.len()} active keys; want exactly one"]);
+        }
+        final published = hex\decode(active[0]).encodeBase64();
+        if (guide.indexOf(published) == null) {
+            return result\ok::<[str]>(["{guideFile}: does not publish the active release key {published}"]);
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
     }
-    if (active.len() != 1) {
-        return ["internal/selfupdate/release-keys.json holds {active.len()} active keys; want exactly one"];
-    }
-    final published = hex\decode(active[0]).encodeBase64();
-    if (guide.indexOf(published) == null) {
-        return ["{guideFile}: does not publish the active release key {published}"];
-    }
-    return [<str>];
+    return result\ok::<[str]>([<str>]);
 }
 
 test "bearerFindings flags a real token and leaves the placeholder alone" {
@@ -460,12 +469,12 @@ test "sessionParityFindings compares cells to declarations" {
 
 test "hostWiringFindings wants each wired event and template named" {
     final config = `{"hooks": {"Stop": [{"hooks": [{"command": "magus buzz -s magus-checkpoint.buzz"}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}]}}`;
-    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").len(), want: 0, message: "all named");
-    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").len(), want: 2, message: "Stop and its template unnamed");
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").value!.len(), want: 0, message: "all named");
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").value!.len(), want: 2, message: "Stop and its template unnamed");
 }
 
 test "releaseKeyFindings wants the active key in base64" {
     final ring = `{"keys": [{"state": "active", "key": "ffbb"}]}`;
-    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "key: /7s=").len(), want: 0, message: "published");
-    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "no key").len(), want: 1, message: "missing");
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "key: /7s=").value!.len(), want: 0, message: "published");
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "no key").value!.len(), want: 1, message: "missing");
 }

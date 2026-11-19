@@ -2,42 +2,47 @@ namespace mergeQueueWorkflows;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun mergeQueueWorkflowsDiagram() > diagram\Diagram !> any {
-    final provider = magus\graph().dir("internal/queue/provider");
-    final client = magus\graph().dir("internal/queue/client");
-    final engine = magus\graph().dir("internal/queue");
-    final types = magus\graph().dir("internal/queue/types");
-    final intent = diagram\external("queue-intent", sub: "records a merge intent", tag: "workflow", look: diagram\Look.input);
-    final queue = diagram\external("queue", sub: "plans, validates the batch", tag: "workflow", look: diagram\Look.plain);
-    final apply = diagram\external("queue-apply", sub: "merges what passed", tag: "workflow", look: diagram\Look.plain);
-    final gate = diagram\external("merge-queue.buzz", sub: "the repo's gate", look: diagram\Look.plain);
-    return diagram\of("merge-queue-workflows",
-            title: "Three workflows drive the queue, and one script gates it",
-            eyebrow: "merge queue",
-            desc: "queue-intent records a pull request's request to merge. queue plans the batch "
-                + "with the engine, asks the forge provider for the changes and runs the "
-                + "repository's gate script on the candidate. queue-apply merges what the gate "
-                + "passed. The workflows are YAML and the decisions are the engine's, so any forge "
-                + "with a provider runs the same queue.",
-            direction: diagram\Direction.down)
-        .actor(intent)
-        .actor(queue)
-        .actor(apply)
-        .box(engine, label: "Queue engine", sub: "plan, validate, apply", focal: true)
-        .box(provider, label: "Forge provider", sub: "github.buzz")
-        .box(client, label: "Queue client", sub: "asks the SDK")
-        .box(types, label: "Queue records", sub: "intent, candidate", look: diagram\Look.store)
-        .actor(gate)
-        .edgesFromGraph()
-        .hideEdges([engine], dst: [types], why: "every queue package uses the records; one arrow from the engine is enough")
-        .flowAcross(intent, dst: queue, label: "intent")
-        .flowIn(queue, dst: engine, label: "plan")
-        .flowOut(engine, dst: gate, label: "candidate")
-        .flowAcross(queue, dst: apply, label: "passed")
-        .flowIn(apply, dst: provider, label: "merge")
-        .legend(diagram\Look.focal, label: "the decisions")
-        .legend(diagram\Look.input, label: "starts the flow")
-        .legend(diagram\Look.store, label: "records")
-        .scope([engine, provider, client, types]);
+export fun mergeQueueWorkflowsDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final provider = magus\graph().dir("internal/queue/provider");
+        final client = magus\graph().dir("internal/queue/client");
+        final engine = magus\graph().dir("internal/queue");
+        final types = magus\graph().dir("internal/queue/types");
+        final intent = diagram\external("queue-intent", sub: "records a merge intent", tag: "workflow", look: diagram\Look.input);
+        final queue = diagram\external("queue", sub: "plans, validates the batch", tag: "workflow", look: diagram\Look.plain);
+        final apply = diagram\external("queue-apply", sub: "merges what passed", tag: "workflow", look: diagram\Look.plain);
+        final gate = diagram\external("merge-queue.buzz", sub: "the repo's gate", look: diagram\Look.plain);
+        return result\ok::<diagram\Diagram>(diagram\of("merge-queue-workflows",
+                title: "Three workflows drive the queue, and one script gates it",
+                eyebrow: "merge queue",
+                desc: "queue-intent records a pull request's request to merge. queue plans the batch "
+                    + "with the engine, asks the forge provider for the changes and runs the "
+                    + "repository's gate script on the candidate. queue-apply merges what the gate "
+                    + "passed. The workflows are YAML and the decisions are the engine's, so any forge "
+                    + "with a provider runs the same queue.",
+                direction: diagram\Direction.down)
+            .actor(intent)
+            .actor(queue)
+            .actor(apply)
+            .box(engine, label: "Queue engine", sub: "plan, validate, apply", focal: true)
+            .box(provider, label: "Forge provider", sub: "github.buzz")
+            .box(client, label: "Queue client", sub: "asks the SDK")
+            .box(types, label: "Queue records", sub: "intent, candidate", look: diagram\Look.store)
+            .actor(gate)
+            .edgesFromGraph()
+            .hideEdges([engine], dst: [types], why: "every queue package uses the records; one arrow from the engine is enough")
+            .flowAcross(intent, dst: queue, label: "intent")
+            .flowIn(queue, dst: engine, label: "plan")
+            .flowOut(engine, dst: gate, label: "candidate")
+            .flowAcross(queue, dst: apply, label: "passed")
+            .flowIn(apply, dst: provider, label: "merge")
+            .legend(diagram\Look.focal, label: "the decisions")
+            .legend(diagram\Look.input, label: "starts the flow")
+            .legend(diagram\Look.store, label: "records")
+            .scope([engine, provider, client, types]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

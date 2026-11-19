@@ -1,48 +1,53 @@
 namespace targetOrder;
 
 import "magus/diagram";
+import "result";
 
-export fun targetOrderDiagram() > diagram\Diagram !> any {
-    final install = diagram\step("install", sub: "fetch dependencies", look: diagram\Look.plain);
-    final generate = diagram\step("generate", sub: "committed output", look: diagram\Look.plain);
-    final format = diagram\step("format", sub: "rewrites source", look: diagram\Look.plain);
-    final lint = diagram\step("lint", sub: "reports, never writes", look: diagram\Look.plain);
-    final build = diagram\step("build", sub: "uncommitted artifacts", look: diagram\Look.plain);
-    final test = diagram\step("test", look: diagram\Look.plain);
-    final security = diagram\step("security", sub: "advisory data, uncached", look: diagram\Look.plain);
-    final ci = diagram\step("ci", sub: "MGS1001 when absent", look: diagram\Look.focal);
-    final cd = diagram\step("cd charm", sub: "ci:cd delivers", look: diagram\Look.optional);
-    return diagram\of("target-order",
-            title: "Only ci is required; the rest is an order",
-            eyebrow: "targets",
-            desc: "magus refuses a ci run when no project in scope declares ci. Every other "
-                + "step, and the order between them, is the convention this workspace follows "
-                + "so each verb means the same thing in every project.",
-            direction: diagram\Direction.down)
-        .actor(install)
-        .actor(generate)
-        .actor(format)
-        .actor(lint)
-        .actor(build)
-        .actor(test)
-        .actor(security)
-        .actor(ci)
-        .actor(cd)
-        // The root magusfile's ctx.needs calls, except install -> generate, which is docs': the
-        // root declares no install.
-        .flowAcross(install, dst: generate)
-        .flowAcross(generate, dst: format)
-        .flowAcross(generate, dst: security)
-        .flowAcross(format, dst: lint)
-        .flowAcross(format, dst: build)
-        .flowAcross(format, dst: test)
-        .flowAcross(lint, dst: ci)
-        .flowAcross(build, dst: ci)
-        .flowAcross(test, dst: ci)
-        .flowAcross(security, dst: ci)
-        .flowAcross(ci, dst: cd, stroke: diagram\Stroke.optional)
-        .legend(diagram\Look.focal, label: "enforced")
-        .legend(diagram\Look.plain, label: "recommended")
-        .legend(diagram\Look.optional, label: "opt-in, required by nothing")
-        .unscoped(why: "targets are conventions declared in a magusfile, not packages; nothing in the tree holds a scope");
+export fun targetOrderDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final install = diagram\step("install", sub: "fetch dependencies", look: diagram\Look.plain);
+        final generate = diagram\step("generate", sub: "committed output", look: diagram\Look.plain);
+        final format = diagram\step("format", sub: "rewrites source", look: diagram\Look.plain);
+        final lint = diagram\step("lint", sub: "reports, never writes", look: diagram\Look.plain);
+        final build = diagram\step("build", sub: "uncommitted artifacts", look: diagram\Look.plain);
+        final test = diagram\step("test", look: diagram\Look.plain);
+        final security = diagram\step("security", sub: "advisory data, uncached", look: diagram\Look.plain);
+        final ci = diagram\step("ci", sub: "MGS1001 when absent", look: diagram\Look.focal);
+        final cd = diagram\step("cd charm", sub: "ci:cd delivers", look: diagram\Look.optional);
+        return result\ok::<diagram\Diagram>(diagram\of("target-order",
+                title: "Only ci is required; the rest is an order",
+                eyebrow: "targets",
+                desc: "magus refuses a ci run when no project in scope declares ci. Every other "
+                    + "step, and the order between them, is the convention this workspace follows "
+                    + "so each verb means the same thing in every project.",
+                direction: diagram\Direction.down)
+            .actor(install)
+            .actor(generate)
+            .actor(format)
+            .actor(lint)
+            .actor(build)
+            .actor(test)
+            .actor(security)
+            .actor(ci)
+            .actor(cd)
+            // The root magusfile's ctx.needs calls, except install -> generate, which is docs': the
+            // root declares no install.
+            .flowAcross(install, dst: generate)
+            .flowAcross(generate, dst: format)
+            .flowAcross(generate, dst: security)
+            .flowAcross(format, dst: lint)
+            .flowAcross(format, dst: build)
+            .flowAcross(format, dst: test)
+            .flowAcross(lint, dst: ci)
+            .flowAcross(build, dst: ci)
+            .flowAcross(test, dst: ci)
+            .flowAcross(security, dst: ci)
+            .flowAcross(ci, dst: cd, stroke: diagram\Stroke.optional)
+            .legend(diagram\Look.focal, label: "enforced")
+            .legend(diagram\Look.plain, label: "recommended")
+            .legend(diagram\Look.optional, label: "opt-in, required by nothing")
+            .unscoped(why: "targets are conventions declared in a magusfile, not packages; nothing in the tree holds a scope"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

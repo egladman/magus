@@ -2,89 +2,91 @@ namespace diagramPipeline;
 
 import "magus";
 import "magus/diagram";
-import "site/diagrams/packages" as packages;
+import "result";
 
-export fun diagramPipelineDiagram() > diagram\Diagram !> any {
-    final module = magus\graph().dir("libs/diagram");
-    final host = magus\graph().dir("std");
-    final server = magus\graph().dir("internal/handler/diagram");
-    final jobs = magus\graph().dir("internal/job");
-    final source = diagram\external("Diagram source", sub: "records, sets, actors", tag: "buzz", look: diagram\Look.plain);
-    final files = diagram\external("SVGs + receipts", sub: "diagrams-generate", look: diagram\Look.store);
-    final site = diagram\external("Site render", sub: "inlines the page copy", look: diagram\Look.plain);
-    final console = diagram\external("Console view", sub: "static SVG, then wasm", look: diagram\Look.plain);
-    final otherServices = diagram\without(magus\graph().layer("handler").dirs, drop: [server]);
-    if (otherServices.error != null) {
-        throw otherServices.error!.message;
+export fun diagramPipelineDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final module = magus\graph().dir("libs/diagram");
+        final host = magus\graph().dir("std");
+        final server = magus\graph().dir("internal/handler/diagram");
+        final jobs = magus\graph().dir("internal/job");
+        final source = diagram\external("Diagram source", sub: "records, sets, actors", tag: "buzz", look: diagram\Look.plain);
+        final files = diagram\external("SVGs + receipts", sub: "diagrams-generate", look: diagram\Look.store);
+        final site = diagram\external("Site render", sub: "inlines the page copy", look: diagram\Look.plain);
+        final console = diagram\external("Console view", sub: "static SVG, then wasm", look: diagram\Look.plain);
+        final otherServices = diagram\without(magus\graph().layer("handler").dirs, drop: [server]);
+        if (otherServices.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        return result\ok::<diagram\Diagram>(diagram\of("diagram-pipeline",
+                title: "One library draws every diagram, here and in the console",
+                eyebrow: "diagrams",
+                direction: diagram\Direction.down,
+                desc: "A diagram in docs/site/diagrams builds its boxes from the knowledge graph's "
+                    + "records and draws the imports and declared calls between them. magus/diagram lays "
+                    + "it out and paints it; diagrams-generate writes the committed copies with a "
+                    + "receipt beside each. The server embeds the same module to draw the console's "
+                    + "live diagrams, and the job store draws its plan through it.")
+            .actor(source)
+            .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: diagram\Look.input)
+            .box(module, label: "magus/diagram", sub: "sets, layout, paint", focal: true)
+            .actor(files)
+            .actor(site)
+            .box(server, label: "/api/v1/diagrams", sub: "the module in-process")
+            .box(jobs, label: "Job plan diagram", sub: "draws rows with the same module")
+            .actor(console)
+            .edgesFromGraph()
+            .markEdge(host, dst: module, label: "embeds")
+            .flowIn(source, dst: host, label: "records")
+            .flowIn(source, dst: module, label: "imports")
+            .flowOut(module, dst: files, label: "paints")
+            .flowAcross(files, dst: site, label: "page copy")
+            .flowIn(console, dst: server, label: "GET")
+            .legend(diagram\Look.focal, label: "the one layout")
+            .legend(diagram\Look.input, label: "reads the knowledge graph")
+            .legend(diagram\Look.store, label: "committed output")
+            .scope(magus\graph().dirs("libs/*", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("libs/diagram/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("std/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().layer("handler").dirs)
+            .except([magus\graph().dir("libs/gopherbuzz")],
+                why: "the Buzz runtime every module runs on, diagrams included; drawn in buzz-engine")
+            .except([magus\graph().dir("libs/testpairing")],
+                why: "the Go analyzer for test layout; no diagram passes through it")
+            .except([magus\graph().dir("libs/proofread")],
+                why: "the prose linter; diagram layout does not use it")
+            .except([magus\graph().dir("libs/diagnostics")],
+                why: "the diagnostic-code framework; a diagram's findings are plain strings")
+            .except([magus\graph().dir("libs/testkit")], why: "fixtures for magus's Go tests")
+            .except([magus\graph().dir("libs/scipbuzz")],
+                why: "the Buzz symbol indexer; it feeds the knowledge graph, not a diagram")
+            .except([magus\graph().dir("libs/apiversion")],
+                why: "the apiVersion, kind and conditions envelope records carry; no diagram passes through it")
+            .except([magus\graph().dir("libs/proofread")],
+                why: "the prose judge; a diagram's text is not judged by it")
+            .except([magus\graph().dir("libs/codec")],
+                why: "the JSON encoding records carry on the type; no diagram passes through it")
+            .except([magus\graph().dir("libs/safetyscissors")],
+                why: "the job, lease and sandbox SDK; the job plan diagram draws through internal/job")
+            .except([magus\graph().dir("libs/secrets")],
+                why: "the secret store; no diagram passes through it")
+            .except([magus\graph().dir("libs/xdg")],
+                why: "the user config, state and cache directories; no diagram passes through them")
+            .except([magus\graph().dir("libs/embed")],
+                why: "the static embedding table and retrieval eval behind knowledge search; no diagram passes through it")
+            .except([magus\graph().dir("libs/image")],
+                why: "OCI layout assembly; no diagram passes through it")
+            .except([magus\graph().dir("libs/oci")],
+                why: "the registry client; no diagram passes through it")
+            .except([magus\graph().dir("libs/result")],
+                why: "the Buzz Result type embedded by go-build; no diagram passes through it")
+            .except([magus\graph().dir("libs/termkit")],
+                why: "the terminal UI library; no diagram passes through it")
+            .except(magus\graph().dirs("std/termkit/**", opts: magus\DirsOptions{ language = "go" }),
+                why: "the termkit host modules; a diagram source reads the graph through the magus module alone")
+            .except(magus\graph().dirs("std/encoding/**", opts: magus\DirsOptions{ language = "go" }),
+                why: "the encoding host modules; a diagram source reads the graph through the magus module alone")
+            .except(otherServices.value!,
+                why: "the console's other services; none embeds magus/diagram"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
     }
-    return diagram\of("diagram-pipeline",
-            title: "One library draws every diagram, here and in the console",
-            eyebrow: "diagrams",
-            direction: diagram\Direction.down,
-            desc: "A diagram in docs/site/diagrams builds its boxes from the knowledge graph's "
-                + "records and draws the imports and declared calls between them. magus/diagram lays "
-                + "it out and paints it; diagrams-generate writes the committed copies with a "
-                + "receipt beside each. The server embeds the same module to draw the console's "
-                + "live diagrams, and the job store draws its plan through it.")
-        .actor(source)
-        .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: diagram\Look.input)
-        .box(module, label: "magus/diagram", sub: "sets, layout, paint", focal: true)
-        .actor(files)
-        .actor(site)
-        .box(server, label: "/api/v1/diagrams", sub: "the module in-process")
-        .box(jobs, label: "Job plan diagram", sub: "draws rows with the same module")
-        .actor(console)
-        .edgesFromGraph()
-        .markEdge(host, dst: module, label: "embeds")
-        .flowIn(source, dst: host, label: "records")
-        .flowIn(source, dst: module, label: "imports")
-        .flowOut(module, dst: files, label: "paints")
-        .flowAcross(files, dst: site, label: "page copy")
-        .flowIn(console, dst: server, label: "GET")
-        .legend(diagram\Look.focal, label: "the one layout")
-        .legend(diagram\Look.input, label: "reads the knowledge graph")
-        .legend(diagram\Look.store, label: "committed output")
-        .scope(packages\goPackages("libs/*"))
-        .scope(packages\goPackages("libs/diagram/**"))
-        .scope(packages\goPackages("std/**"))
-        .scope(magus\graph().layer("handler").dirs)
-        .except([magus\graph().dir("libs/gopherbuzz")],
-            why: "the Buzz runtime every module runs on, diagrams included; drawn in buzz-engine")
-        .except([magus\graph().dir("libs/testpairing")],
-            why: "the Go analyzer for test layout; no diagram passes through it")
-        .except([magus\graph().dir("libs/proofread")],
-            why: "the prose linter; diagram layout does not use it")
-        .except([magus\graph().dir("libs/diagnostics")],
-            why: "the diagnostic-code framework; a diagram's findings are plain strings")
-        .except([magus\graph().dir("libs/testkit")], why: "fixtures for magus's Go tests")
-        .except([magus\graph().dir("libs/scipbuzz")],
-            why: "the Buzz symbol indexer; it feeds the knowledge graph, not a diagram")
-        .except([magus\graph().dir("libs/apiversion")],
-            why: "the apiVersion, kind and conditions envelope records carry; no diagram passes through it")
-        .except([magus\graph().dir("libs/proofread")],
-            why: "the prose judge; a diagram's text is not judged by it")
-        .except([magus\graph().dir("libs/codec")],
-            why: "the JSON encoding records carry on the type; no diagram passes through it")
-        .except([magus\graph().dir("libs/safetyscissors")],
-            why: "the job, lease and sandbox SDK; the job plan diagram draws through internal/job")
-        .except([magus\graph().dir("libs/secrets")],
-            why: "the secret store; no diagram passes through it")
-        .except([magus\graph().dir("libs/xdg")],
-            why: "the user config, state and cache directories; no diagram passes through them")
-        .except([magus\graph().dir("libs/embed")],
-            why: "the static embedding table and retrieval eval behind knowledge search; no diagram passes through it")
-        .except([magus\graph().dir("libs/image")],
-            why: "OCI layout assembly; no diagram passes through it")
-        .except([magus\graph().dir("libs/oci")],
-            why: "the registry client; no diagram passes through it")
-        .except([magus\graph().dir("libs/result")],
-            why: "the Buzz Result type embedded by go-build; no diagram passes through it")
-        .except([magus\graph().dir("libs/termkit")],
-            why: "the terminal UI library; no diagram passes through it")
-        .except(packages\goPackages("std/termkit/**"),
-            why: "the termkit host modules; a diagram source reads the graph through the magus module alone")
-        .except(packages\goPackages("std/encoding/**"),
-            why: "the encoding host modules; a diagram source reads the graph through the magus module alone")
-        .except(otherServices.value!,
-            why: "the console's other services; none embeds magus/diagram");
 }

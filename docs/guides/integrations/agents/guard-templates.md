@@ -263,6 +263,7 @@ import "env";
 import "fs";
 import "path";
 import "proc";
+import "result";
 import "lib/hook" as hook;
 
 // ADVISE_DEFAULT and the two ask arms are separate strings because a host may
@@ -477,16 +478,20 @@ object Guard {
 
 // Every flag rides in `extra`, so the unattributed retry drops them all: a binary too old
 // for one fails BOTH attempts otherwise.
-fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
+fun judge(guard: Guard, extra: [str]) > result\Result::<proc\ExecResult> {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
-        quiet = true,
-        allowFailure = true,
-        stdin = guard.payload,
-    });
+    try {
+        return result\ok::<proc\ExecResult>(proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+            quiet = true,
+            allowFailure = true,
+            stdin = guard.payload,
+        }));
+    } catch (err: any) {
+        return result\caught::<proc\ExecResult>(err);
+    }
 }
 
 // UNKNOWN_FLAG is how magus's flag parser refuses a flag it does not define.
@@ -813,13 +818,13 @@ fun ask(guard: Guard, attributed: [str], newest: [str]) > proc\ExecResult? {
         final newer = mut [<str>];
         foreach (word in attributed) { newer.append(word); }
         foreach (word in newest) { newer.append(word); }
-        result = judge(guard, extra: newer) catch null;
+        result = judge(guard, extra: newer).value;
     }
     if (newest.len() == 0 or rejectedFlag(result)) {
-        result = judge(guard, extra: attributed) catch null;
+        result = judge(guard, extra: attributed).value;
     }
     if (rejectedFlag(result)) {
-        result = judge(guard, extra: [<str>]) catch null;
+        result = judge(guard, extra: [<str>]).value;
     }
     return result;
 }
@@ -981,6 +986,7 @@ import "flags";
 import "encoding/json";
 import "env";
 import "proc";
+import "result";
 import "lib/hook" as hook;
 
 final ADVISE_DEFAULT = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}`;
@@ -1012,16 +1018,20 @@ object Guard {
     dir: str,
 }
 
-fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
+fun judge(guard: Guard, extra: [str]) > result\Result::<proc\ExecResult> {
     final args = mut ["shell", "--path"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
-        quiet = true,
-        allowFailure = true,
-        stdin = guard.payload,
-    });
+    try {
+        return result\ok::<proc\ExecResult>(proc\exec(guard.bin, args: args, dir: guard.dir, opts: proc\ExecOptions{
+            quiet = true,
+            allowFailure = true,
+            stdin = guard.payload,
+        }));
+    } catch (err: any) {
+        return result\caught::<proc\ExecResult>(err);
+    }
 }
 
 final UNKNOWN_FLAG = "flag provided but not defined";
@@ -1138,8 +1148,8 @@ fun main(args: [str]) > void {
     foreach (flag in rendersAsk) { attributed.append(flag); }
     final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd), ask: fun (candidate: str) > proc\ExecResult? {
         final asked = Guard{ bin = candidate, payload = payload, response = marked, dir = cwd };
-        final attempt = judge(asked, extra: attributed) catch null;
-        if (rejectedFlag(attempt)) { return judge(asked, extra: [<str>]) catch null; }
+        final attempt = judge(asked, extra: attributed).value;
+        if (rejectedFlag(attempt)) { return judge(asked, extra: [<str>]).value; }
         return attempt;
     });
     final result = judged.result;
@@ -3147,6 +3157,7 @@ import "os";
 import "fs";
 import "flags";
 import "proc";
+import "result";
 import "encoding/json";
 import "diskwatch";
 import "lib/hook" as hook;
@@ -3191,13 +3202,17 @@ fun tickSnippet() > str {
 }
 
 // pending says what the store holds that nobody was told, and marks it told.
-fun pending(store: str, now: double) > str? !> any {
-    final samples = diskwatch\read(store);
-    final said = diskwatch\pendingLine(samples, now: now);
-    if (said != null) {
-        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+fun pending(store: str, now: double) > result\Result::<str?> {
+    try {
+        final samples = diskwatch\read(store);
+        final said = diskwatch\pendingLine(samples, now: now);
+        if (said != null) {
+            diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+        }
+        return result\ok::<str?>(said);
+    } catch (err: any) {
+        return result\caught::<str?>(err);
     }
-    return said;
 }
 
 fun main(args: [str]) > void {
@@ -3230,8 +3245,13 @@ fun main(args: [str]) > void {
     }
 
     var said: str? = null;
+    final marked = pending(store, now: now);
+    if (marked.error -> failed) {
+        warn("disk sample failed: {failed.message}");
+        return;
+    }
+    said = marked.value ?? null;
     try {
-        said = pending(store, now: now);
         _ = proc\exec(bin, args: ["buzz", "-C", cwd, "-e", tickSnippet()], opts: proc\ExecOptions{ detach = true });
     } catch (e) {
         warn("disk sample failed: {e}");

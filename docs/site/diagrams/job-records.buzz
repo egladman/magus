@@ -2,39 +2,44 @@ namespace jobRecords;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun jobRecordsDiagram() > diagram\Diagram !> any {
-    final jobs = magus\graph().dir("internal/job");
-    final migrate = magus\graph().dir("internal/store/migrate");
-    final describe = magus\graph().dir("internal/describe");
-    final forecast = magus\graph().dir("internal/ci/forecast");
-    final queue = magus\graph().dir("internal/queue/types");
-    final sessions = magus\graph().dir("internal/sessions");
-    final recorder = magus\graph().dir("internal/recorder");
-    final guard = magus\graph().dir("internal/guard");
-    final sandbox = magus\graph().dir("internal/sandbox");
-    return diagram\of("job-records",
-            title: "A job row is one record, and four packages read it",
-            eyebrow: "job",
-            desc: "The job store keeps one row per job in a JSON Lines file: its goal, checkpoint, "
-                + "write paths and leases. describe renders the spec an agent reads, the forecast "
-                + "sizes the checks, and the queue types record a landed job. The guard judges "
-                + "calls against the row, and the sandbox narrows writes to it.")
-        .box(jobs, label: "Job store", sub: "rows and leases", focal: true)
-        .box(migrate, label: "Row migrations", sub: "old rows upgrade on read")
-        .box(describe, label: "describe job", sub: "the spec an agent reads")
-        .box(forecast, label: "Check forecast", sub: "what verifies the row")
-        .box(queue, label: "Queue records", sub: "a landed job")
-        .box(sessions, label: "Session record", sub: "who held the lease", look: diagram\Look.store)
-        .box(recorder, label: "Activity log", sub: "what it did", look: diagram\Look.store)
-        .box(guard, label: "Guard", sub: "judges against the row")
-        .box(sandbox, label: "Sandbox", sub: "write grant from the row")
-        .edgesFromGraph()
-        .hideEdges([guard, sandbox], dst: [sessions, recorder],
-            why: "they read the same records the store reads; the row is the one thing drawn")
-        .markEdge(guard, dst: jobs, label: "lease")
-        .markEdge(sandbox, dst: jobs, label: "write grant")
-        .legend(diagram\Look.focal, label: "the record")
-        .legend(diagram\Look.store, label: "append-only")
-        .scope([jobs, migrate, describe, forecast, queue, sessions, recorder]);
+export fun jobRecordsDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final jobs = magus\graph().dir("internal/job");
+        final migrate = magus\graph().dir("internal/store/migrate");
+        final describe = magus\graph().dir("internal/describe");
+        final forecast = magus\graph().dir("internal/ci/forecast");
+        final queue = magus\graph().dir("internal/queue/types");
+        final sessions = magus\graph().dir("internal/sessions");
+        final recorder = magus\graph().dir("internal/recorder");
+        final guard = magus\graph().dir("internal/guard");
+        final sandbox = magus\graph().dir("internal/sandbox");
+        return result\ok::<diagram\Diagram>(diagram\of("job-records",
+                title: "A job row is one record, and four packages read it",
+                eyebrow: "job",
+                desc: "The job store keeps one row per job in a JSON Lines file: its goal, checkpoint, "
+                    + "write paths and leases. describe renders the spec an agent reads, the forecast "
+                    + "sizes the checks, and the queue types record a landed job. The guard judges "
+                    + "calls against the row, and the sandbox narrows writes to it.")
+            .box(jobs, label: "Job store", sub: "rows and leases", focal: true)
+            .box(migrate, label: "Row migrations", sub: "old rows upgrade on read")
+            .box(describe, label: "describe job", sub: "the spec an agent reads")
+            .box(forecast, label: "Check forecast", sub: "what verifies the row")
+            .box(queue, label: "Queue records", sub: "a landed job")
+            .box(sessions, label: "Session record", sub: "who held the lease", look: diagram\Look.store)
+            .box(recorder, label: "Activity log", sub: "what it did", look: diagram\Look.store)
+            .box(guard, label: "Guard", sub: "judges against the row")
+            .box(sandbox, label: "Sandbox", sub: "write grant from the row")
+            .edgesFromGraph()
+            .hideEdges([guard, sandbox], dst: [sessions, recorder],
+                why: "they read the same records the store reads; the row is the one thing drawn")
+            .markEdge(guard, dst: jobs, label: "lease")
+            .markEdge(sandbox, dst: jobs, label: "write grant")
+            .legend(diagram\Look.focal, label: "the record")
+            .legend(diagram\Look.store, label: "append-only")
+            .scope([jobs, migrate, describe, forecast, queue, sessions, recorder]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

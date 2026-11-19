@@ -4,6 +4,7 @@
 namespace tour;
 
 import "fs";
+import "result";
 import "io";
 import "std";
 import "encoding/base64";
@@ -26,10 +27,11 @@ object TourStep {
 
     // renderCard renders this step's numbered <li>: code teaser, Open-in-Playground
     // deep link, and concept cross-link, all resolved against root.
-    fun renderCard(root: str, num: int) > str !> any {
-        final src = tourSrc(this.file);
-        // The cross-link is inline at the end of the description, not a separate line.
-        return template\render(`      <li class="tour-card" id="step-{{num}}">
+    fun renderCard(root: str, num: int) > result\Result::<str> {
+        try {
+            final src = tourSrc(this.file);
+            // The cross-link is inline at the end of the description, not a separate line.
+            return result\ok::<str>(template\render(`      <li class="tour-card" id="step-{{num}}">
         <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
         <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} <span class="xref-arrow" aria-hidden="true">&rarr;</span></a></p>
         <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
@@ -37,7 +39,10 @@ object TourStep {
           <a class="open-in-playground" href="{{playLink}}" target="_blank" rel="noopener" title="Open this snippet in the playground (new tab)" data-tooltip="Open in playground">Open in Playground <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a>
         </div>
       </li>
-`, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)});
+`, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)}));
+        } catch (err: any) {
+            return result\caught::<str>(err);
+        }
     }
 }
 
@@ -47,22 +52,29 @@ object TourStep {
 // playground is standalone (custom head, wasm, own scripts), so it skips renderPage();
 // templating just the nav keeps it in lockstep with every other page. Its bottom
 // chrome is the console status bar (in playground.html), not the docs footer.
-export fun renderPlayground(site: Site) > void !> any {
-    final f = io\File.open("playground.html", io\FileMode.read);
-    var html = f.readAll();
-    f.close();
-    // Ships at /playground/ (a directory index), so the nav climbs one level to root.
-    final outDir = "playground";
-    final root = climbFromDir(outDir);
-    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.inputs.config));
-    // Default CSP meta - site.csp, not site.cspBadges: the playground never
-    // loads an external image and holds the reader's own source, so it takes the
-    // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
-    // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
-    // this file is both the hash's source and its sink.
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.inputs.csp + "\">");
-    fs\mkdirAll(fs\join(site.inputs.outDir, outDir));
-    fs\writeFile(fs\join(site.inputs.outDir, outDir, "index.html"), html);
+export fun renderPlayground(site: Site) > result\Result::<bool> {
+    try {
+        final f = io\File.open("playground.html", io\FileMode.read);
+        var html = f.readAll();
+        f.close();
+        // Ships at /playground/ (a directory index), so the nav climbs one level to root.
+        final outDir = "playground";
+        final root = climbFromDir(outDir);
+        final r6 = renderSiteNav(root, "playground", true, site.inputs.config);
+        if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        html = html.replace("<!-- site-nav -->", r6.value!);
+        // Default CSP meta - site.csp, not site.cspBadges: the playground never
+        // loads an external image and holds the reader's own source, so it takes the
+        // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
+        // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
+        // this file is both the hash's source and its sink.
+        html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.inputs.csp + "\">");
+        fs\mkdirAll(fs\join(site.inputs.outDir, outDir));
+        fs\writeFile(fs\join(site.inputs.outDir, outDir, "index.html"), html);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 
@@ -112,35 +124,39 @@ fun playgroundLink(root: str, src: str) > str {
 // guards drop the provenance/edit chrome.
 // tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which
 // inverts each step's docSlug into a "see the demo" callout on the matching concept page).
-export fun tourSteps() > [TourStep] !> any {
-    final steps: mut [TourStep] = mut [<TourStep>];
-    // Discovered from the directory, not from a list kept here. A hand-maintained
-    // registry silently omitted steps 19 through 22 for as long as they existed: the
-    // files were on disk, linted and shipped in sources, and simply never appeared on
-    // the page. The same reasoning renderDevelopment gives for asking magus rather than
-    // scanning - the set has one source of truth, so read THAT.
-    //
-    // Filenames sort into curriculum order because they are numbered, which is also what
-    // lets a step reference "step 8" in its prose and stay right.
-    // glob returns Paths, and an immutable list that sort cannot mutate in place, so
-    // take the relative value of each into a list this can order.
-    final files: mut [str] = mut [<str>];
-    foreach (f in fs\glob("tour/*.buzz")) { files.append(f.value); }
-    final ordered = files.sort(fun (a: str, b: str) > bool { return a < b; });
-    foreach (f in ordered) {
-        // glob yields "tour/NN-name.buzz"; TourStep.file is the bare name, because
-        // tourSrc re-joins the directory and renderCard puts the name in the card.
-        final name = f.sub("tour/".len());
-        final src = fs\readFile(f);
-        steps.append(TourStep{
-            file = name,
-            title = tourMeta(src, "title"),
-            desc = tourMeta(src, "desc"),
-            docLabel = tourDocLabel(src),
-            docSlug = tourDocSlug(src),
-        });
+export fun tourSteps() > result\Result::<[TourStep]> {
+    try {
+        final steps: mut [TourStep] = mut [<TourStep>];
+        // Discovered from the directory, not from a list kept here. A hand-maintained
+        // registry silently omitted steps 19 through 22 for as long as they existed: the
+        // files were on disk, linted and shipped in sources, and simply never appeared on
+        // the page. The same reasoning renderDevelopment gives for asking magus rather than
+        // scanning - the set has one source of truth, so read THAT.
+        //
+        // Filenames sort into curriculum order because they are numbered, which is also what
+        // lets a step reference "step 8" in its prose and stay right.
+        // glob returns Paths, and an immutable list that sort cannot mutate in place, so
+        // take the relative value of each into a list this can order.
+        final files: mut [str] = mut [<str>];
+        foreach (f in fs\glob("tour/*.buzz")) { files.append(f.value); }
+        final ordered = files.sort(fun (a: str, b: str) > bool { return a < b; });
+        foreach (f in ordered) {
+            // glob yields "tour/NN-name.buzz"; TourStep.file is the bare name, because
+            // tourSrc re-joins the directory and renderCard puts the name in the card.
+            final name = f.sub("tour/".len());
+            final src = fs\readFile(f);
+            steps.append(TourStep{
+                file = name,
+                title = tourMeta(src, "title"),
+                desc = tourMeta(src, "desc"),
+                docLabel = tourDocLabel(src),
+                docSlug = tourDocSlug(src),
+            });
+        }
+        return result\ok::<[TourStep]>(steps);
+    } catch (err: any) {
+        return result\caught::<[TourStep]>(err);
     }
-    return steps;
 }
 
 // tourMeta reads one `// key: value` line from a step's header. The metadata lives in the
@@ -173,43 +189,62 @@ fun tourDocLabel(src: str) > str {
 // collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its
 // title + card anchor), pre-walk, so renderFile can inject a "see the demo" callout on the
 // matching concept page.
-export fun collectDemos(site: Site) > void !> any {
-    var n = 1;
-    foreach (step in tourSteps()) {
-        if (step.docSlug != "" and site.inputs.demoBySlug[step.docSlug] == null) {
-            site.inputs.demoBySlug[step.docSlug] = DemoLink{ title = step.title, anchor = "step-{n}" };
+export fun collectDemos(site: Site) > result\Result::<bool> {
+    try {
+        var n = 1;
+        final r5 = tourSteps();
+        if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        foreach (step in r5.value!) {
+            if (step.docSlug != "" and site.inputs.demoBySlug[step.docSlug] == null) {
+                site.inputs.demoBySlug[step.docSlug] = DemoLink{ title = step.title, anchor = "step-{n}" };
+            }
+            n = n + 1;
         }
-        n = n + 1;
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
 }
 
-export fun renderTourPage(site: Site) > void !> any {
-    final root = rootPrefix("tour/index.md", site);
-    final steps = tourSteps();
+export fun renderTourPage(site: Site) > result\Result::<bool> {
+    try {
+        final root = rootPrefix("tour/index.md", site);
+        final r1 = tourSteps();
+        if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final steps = r1.value!;
 
-    final cards = mut [<str>];
-    var n = 1;
-    foreach (step in steps) {
-        cards.append(step.renderCard(root, n));
-        n = n + 1;
-    }
+        final cards = mut [<str>];
+        var n = 1;
+        foreach (step in steps) {
+            final r2 = step.renderCard(root, n);
+            if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
+            cards.append(r2.value!);
+            n = n + 1;
+        }
 
-    final body = template\render(`<h1>Tour</h1>
+        final body = template\render(`<h1>Tour</h1>
 <p class="lede">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>
     <ol class="tour-grid">
 {{{cards}}}    </ol>
 `, {"cards": cards.join("")});
-    final title = "Tour";
-    final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
-    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], "", site);
-    fs\mkdirAll(site.inputs.outDir + "/tour");
-    final of = io\File.open(site.inputs.outDir + "/tour/index.html", io\FileMode.write);
-    of.write(doc);
-    of.close();
-    // addRecord uses the desc arg directly and parses this stub only for tags, so the
-    // stub is just a valid tags list (a description: line with colons would break the
-    // YAML). The body text seeds a few search terms.
-    site.addRecord("tour/", title, desc,
-        "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
-    std\print("  tour page -> " + site.inputs.outDir + "/tour/index.html");
+        final title = "Tour";
+        final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
+        final r3 = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], "", site);
+        if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final doc = r3.value!;
+        fs\mkdirAll(site.inputs.outDir + "/tour");
+        final of = io\File.open(site.inputs.outDir + "/tour/index.html", io\FileMode.write);
+        of.write(doc);
+        of.close();
+        // addRecord uses the desc arg directly and parses this stub only for tags, so the
+        // stub is just a valid tags list (a description: line with colons would break the
+        // YAML). The body text seeds a few search terms.
+        final r4 = site.addRecord("tour/", title, desc,
+            "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
+        if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        std\print("  tour page -> " + site.inputs.outDir + "/tour/index.html");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }

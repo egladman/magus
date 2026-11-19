@@ -2,35 +2,40 @@ namespace sessions;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun sessionsDiagram() > diagram\Diagram !> any {
-    final sessions = magus\graph().dir("internal/sessions");
-    final journal = magus\graph().dir("libs/safetyscissors/journal");
-    final recorder = magus\graph().dir("internal/recorder");
-    final agent = magus\graph().dir("internal/agent");
-    final attention = magus\graph().dir("internal/handler/attention");
-    final viewer = magus\graph().dir("internal/handler/viewer");
-    final guard = magus\graph().dir("internal/guard");
-    return diagram\of("sessions",
-            title: "A session record is written by the hook and read by four others",
-            eyebrow: "sessions",
-            desc: "Each agent host session gets one record: who started it, its checkout and what "
-                + "it did. The guard appends to it on every call, over the append-only journal. The "
-                + "recorder writes the activity log, the agent install reads the record to "
-                + "rehydrate a session, and the console's attention and viewer handlers show it to "
-                + "the person watching.")
-        .box(sessions, label: "Session record", sub: "one per host session", focal: true)
-        .box(journal, label: "Journal", sub: "append-only lines", look: diagram\Look.store)
-        .box(recorder, label: "Recorder", sub: "which session changed what")
-        .box(agent, label: "Agent install", sub: "rehydrate a lost session")
-        .box(guard, label: "Guard", sub: "appends on every call")
-        .box(attention, label: "Attention view", sub: "what needs a person")
-        .box(viewer, label: "Viewer", sub: "the shared read")
-        .edgesFromGraph()
-        .hideEdges([guard], dst: [agent, journal, recorder],
-            why: "the guard's other reads are drawn in guard-internals; here it only writes the record")
-        .hideEdges([viewer], dst: [journal], why: "the viewer reads the record, which holds the journal")
-        .legend(diagram\Look.focal, label: "the record")
-        .legend(diagram\Look.store, label: "append-only")
-        .scope([sessions, journal, recorder, agent, attention, viewer]);
+export fun sessionsDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final sessions = magus\graph().dir("internal/sessions");
+        final journal = magus\graph().dir("libs/safetyscissors/journal");
+        final recorder = magus\graph().dir("internal/recorder");
+        final agent = magus\graph().dir("internal/agent");
+        final attention = magus\graph().dir("internal/handler/attention");
+        final viewer = magus\graph().dir("internal/handler/viewer");
+        final guard = magus\graph().dir("internal/guard");
+        return result\ok::<diagram\Diagram>(diagram\of("sessions",
+                title: "A session record is written by the hook and read by four others",
+                eyebrow: "sessions",
+                desc: "Each agent host session gets one record: who started it, its checkout and what "
+                    + "it did. The guard appends to it on every call, over the append-only journal. The "
+                    + "recorder writes the activity log, the agent install reads the record to "
+                    + "rehydrate a session, and the console's attention and viewer handlers show it to "
+                    + "the person watching.")
+            .box(sessions, label: "Session record", sub: "one per host session", focal: true)
+            .box(journal, label: "Journal", sub: "append-only lines", look: diagram\Look.store)
+            .box(recorder, label: "Recorder", sub: "which session changed what")
+            .box(agent, label: "Agent install", sub: "rehydrate a lost session")
+            .box(guard, label: "Guard", sub: "appends on every call")
+            .box(attention, label: "Attention view", sub: "what needs a person")
+            .box(viewer, label: "Viewer", sub: "the shared read")
+            .edgesFromGraph()
+            .hideEdges([guard], dst: [agent, journal, recorder],
+                why: "the guard's other reads are drawn in guard-internals; here it only writes the record")
+            .hideEdges([viewer], dst: [journal], why: "the viewer reads the record, which holds the journal")
+            .legend(diagram\Look.focal, label: "the record")
+            .legend(diagram\Look.store, label: "append-only")
+            .scope([sessions, journal, recorder, agent, attention, viewer]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

@@ -4,6 +4,7 @@
 namespace pwa;
 
 import "fs";
+import "result";
 import "os";
 import "crypto";
 import "serialize";
@@ -17,54 +18,59 @@ import "engine/route" as _;
 // "install this site". scope/start_url match the deploy base so a nested install stays
 // inside /magus/. Gated on baseURL so the scope is well-defined; without it we'd default
 // to "/" and mis-scope.
-export fun writeManifest(site: Site) > void !> any {
-    if (site.inputs.config.baseURL == "") { return; }
-    final basePath = sitePathPrefix(site.inputs.config.baseURL);
-    // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
-    // (see gopherbuzz/testdata/54_raw_string.buzz).
-    // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
-    // Android/Windows install prompts; icon-512-maskable holds the mark inside the 80% safe
-    // circle for the crops a launcher applies.
-    //
-    // The docs and the console share ONE mark and differ only in hue - amber for the docs, the
-    // console's own spruce. See assets/icon.svg for why those values, and why both sit dark on
-    // a pale ground.
-    //
-    // background_color is the splash fill while the app boots, and the spec allows ONE value -
-    // no light/dark variant, unlike theme-color in the HTML head. It deliberately does NOT
-    // match the icon's pale ground: cream here would fire a white flash at every dark-scheme
-    // user on every launch, which costs more than the brief seam of a dark splash handing off
-    // to a pale icon.
-    final body = "\{\n"
-        + "  \"name\": \"" + site.inputs.config.title + "\",\n"
-        + "  \"short_name\": \"" + site.inputs.config.title + "\",\n"
-        + "  \"id\": \"" + basePath + "\",\n"
-        + "  \"lang\": \"en\",\n"
-        + "  \"description\": \"" + htmlcodec\escape(site.inputs.config.description) + "\",\n"
-        + "  \"start_url\": \"" + basePath + "\",\n"
-        + "  \"scope\": \"" + basePath + "\",\n"
-        + "  \"display\": \"standalone\",\n"
-        + "  \"categories\": [\"developer\", \"utilities\"],\n"
-        + "  \"background_color\": \"#2a2e34\",\n"
-        // theme_color tints the installed app's title/status bar. Match the dark canvas, not
-        // an accent: the identity is earthy, never blue, and a neutral dark frame reads in
-        // both schemes.
-        + "  \"theme_color\": \"#2a2e34\",\n"
-        + "  \"icons\": [\n"
-        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-192.png\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-512.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
-        + "  ],\n"
-        + "  \"shortcuts\": [\n"
-        + "    \{ \"name\": \"Console\", \"url\": \"" + basePath + "console/\" \},\n"
-        + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
-        + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
-        + "  ],\n"
-        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
-        + "\}\n";
-    fs\writeFile(site.inputs.outDir + "/manifest.webmanifest", body);
+export fun writeManifest(site: Site) > result\Result::<bool> {
+    try {
+        if (site.inputs.config.baseURL == "") { return result\ok::<bool>(true); }
+        final basePath = sitePathPrefix(site.inputs.config.baseURL);
+        // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
+        // (see gopherbuzz/testdata/54_raw_string.buzz).
+        // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
+        // Android/Windows install prompts; icon-512-maskable holds the mark inside the 80% safe
+        // circle for the crops a launcher applies.
+        //
+        // The docs and the console share ONE mark and differ only in hue - amber for the docs, the
+        // console's own spruce. See assets/icon.svg for why those values, and why both sit dark on
+        // a pale ground.
+        //
+        // background_color is the splash fill while the app boots, and the spec allows ONE value -
+        // no light/dark variant, unlike theme-color in the HTML head. It deliberately does NOT
+        // match the icon's pale ground: cream here would fire a white flash at every dark-scheme
+        // user on every launch, which costs more than the brief seam of a dark splash handing off
+        // to a pale icon.
+        final body = "\{\n"
+            + "  \"name\": \"" + site.inputs.config.title + "\",\n"
+            + "  \"short_name\": \"" + site.inputs.config.title + "\",\n"
+            + "  \"id\": \"" + basePath + "\",\n"
+            + "  \"lang\": \"en\",\n"
+            + "  \"description\": \"" + htmlcodec\escape(site.inputs.config.description) + "\",\n"
+            + "  \"start_url\": \"" + basePath + "\",\n"
+            + "  \"scope\": \"" + basePath + "\",\n"
+            + "  \"display\": \"standalone\",\n"
+            + "  \"categories\": [\"developer\", \"utilities\"],\n"
+            + "  \"background_color\": \"#2a2e34\",\n"
+            // theme_color tints the installed app's title/status bar. Match the dark canvas, not
+            // an accent: the identity is earthy, never blue, and a neutral dark frame reads in
+            // both schemes.
+            + "  \"theme_color\": \"#2a2e34\",\n"
+            + "  \"icons\": [\n"
+            + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+            + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+            + "    \{ \"src\": \"" + basePath + "assets/icon-192.png\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+            + "    \{ \"src\": \"" + basePath + "assets/icon-512.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+            + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
+            + "  ],\n"
+            + "  \"shortcuts\": [\n"
+            + "    \{ \"name\": \"Console\", \"url\": \"" + basePath + "console/\" \},\n"
+            + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
+            + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
+            + "  ],\n"
+            + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
+            + "\}\n";
+        fs\writeFile(site.inputs.outDir + "/manifest.webmanifest", body);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 
@@ -73,20 +79,25 @@ export fun writeManifest(site: Site) > void !> any {
 // digest of the precached assets' own digests, so it changes exactly when a cached asset
 // does (and is byte-stable otherwise) - and that byte change is the signal a browser uses
 // to fetch the new worker.
-export fun buildServiceWorker(site: Site) > void !> any {
-    if (site.inputs.config.baseURL == "") { return; }
-    final manifest = mut [<str>];
-    foreach (asset in site.inputs.config.precacheAssets) {
-        // a dir URL caches its index.html
-        final rel = if (asset.endsWith("/")) asset + "index.html" else asset;
-        final p = fs\join(site.inputs.outDir, rel);
-        if (fs\isFile(p)) {
-            manifest.append(rel + ":" + fileSha256(p) + "\n");
+export fun buildServiceWorker(site: Site) > result\Result::<bool> {
+    try {
+        if (site.inputs.config.baseURL == "") { return result\ok::<bool>(true); }
+        final manifest = mut [<str>];
+        foreach (asset in site.inputs.config.precacheAssets) {
+            // a dir URL caches its index.html
+            final rel = if (asset.endsWith("/")) asset + "index.html" else asset;
+            final p = fs\join(site.inputs.outDir, rel);
+            if (fs\isFile(p)) {
+                manifest.append(rel + ":" + fileSha256(p) + "\n");
+            }
         }
+        final version = site.inputs.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
+        _ = os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
+            "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
+            "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.inputs.config.precacheAssets),
+            "--outfile=" + site.inputs.outDir + "/service-worker.js"]);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    final version = site.inputs.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
-    _ = os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
-        "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
-        "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.inputs.config.precacheAssets),
-        "--outfile=" + site.inputs.outDir + "/service-worker.js"]);
 }

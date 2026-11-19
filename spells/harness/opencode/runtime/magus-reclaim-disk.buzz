@@ -30,6 +30,7 @@ import "os";
 import "fs";
 import "flags";
 import "proc";
+import "result";
 import "encoding/json";
 import "diskwatch";
 import "lib/hook" as hook;
@@ -74,13 +75,17 @@ fun tickSnippet() > str {
 }
 
 // pending says what the store holds that nobody was told, and marks it told.
-fun pending(store: str, now: double) > str? !> any {
-    final samples = diskwatch\read(store);
-    final said = diskwatch\pendingLine(samples, now: now);
-    if (said != null) {
-        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+fun pending(store: str, now: double) > result\Result::<str?> {
+    try {
+        final samples = diskwatch\read(store);
+        final said = diskwatch\pendingLine(samples, now: now);
+        if (said != null) {
+            diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+        }
+        return result\ok::<str?>(said);
+    } catch (err: any) {
+        return result\caught::<str?>(err);
     }
-    return said;
 }
 
 fun main(args: [str]) > void {
@@ -113,8 +118,13 @@ fun main(args: [str]) > void {
     }
 
     var said: str? = null;
+    final marked = pending(store, now: now);
+    if (marked.error -> failed) {
+        warn("disk sample failed: {failed.message}");
+        return;
+    }
+    said = marked.value ?? null;
     try {
-        said = pending(store, now: now);
         _ = proc\exec(bin, args: ["buzz", "-C", cwd, "-e", tickSnippet()], opts: proc\ExecOptions{ detach = true });
     } catch (e) {
         warn("disk sample failed: {e}");

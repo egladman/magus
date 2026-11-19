@@ -1,32 +1,33 @@
 namespace buzzStages;
 
 import "magus";
-import "magus/diagram";
-import "site/diagrams/packages" as packages;
-
-// codeStage is a stage: a step inside dir, carried out by symbol. The diagram checks the
-// symbol is defined directly in dir, so a stage cannot outlive the code it names.
-export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: diagram\Look? = null) > diagram\Actor !> any {
-    return diagram\stage(dir, refs: magus\graph().refs(symbol), name: name, sub: sub, look: look);
-}
+import "result";
 
 // gopherbuzzPackages is every Go package in the gopherbuzz tree. A diagram scoped to it meets
 // a new package as a finding until a box draws it or an except names it.
-export fun gopherbuzzPackages() > [magus\Dir] !> any {
-    return packages\goPackages("libs/gopherbuzz/**");
+export fun gopherbuzzPackages() > result\Result::<[magus\Dir]> {
+    try {
+        return result\ok::<[magus\Dir]>(magus\graph().dirs("libs/gopherbuzz/**", opts: magus\DirsOptions{ language = "go" }));
+    } catch (err: any) {
+        return result\caught::<[magus\Dir]>(err);
+    }
 }
 
 // gopherbuzzAround is the gopherbuzz packages built on the pipeline rather than part of
 // it; a diagram excepts them for AROUND_WHY.
-export fun gopherbuzzAround() > [magus\Dir] !> any {
-    return [
-        magus\graph().dir("libs/gopherbuzz/benchmarks/comparison"),
-        magus\graph().dir("libs/gopherbuzz/benchmarks/upstream"),
-        magus\graph().dir("libs/gopherbuzz/buzzgen"),
-        magus\graph().dir("libs/gopherbuzz/cmd/buzz"),
-        magus\graph().dir("libs/gopherbuzz/examples/ffi-c"),
-        magus\graph().dir("libs/gopherbuzz/wasm"),
-    ];
+export fun gopherbuzzAround() > result\Result::<[magus\Dir]> {
+    try {
+        return result\ok::<[magus\Dir]>([
+            magus\graph().dir("libs/gopherbuzz/benchmarks/comparison"),
+            magus\graph().dir("libs/gopherbuzz/benchmarks/upstream"),
+            magus\graph().dir("libs/gopherbuzz/buzzgen"),
+            magus\graph().dir("libs/gopherbuzz/cmd/buzz"),
+            magus\graph().dir("libs/gopherbuzz/examples/ffi-c"),
+            magus\graph().dir("libs/gopherbuzz/wasm"),
+        ]);
+    } catch (err: any) {
+        return result\caught::<[magus\Dir]>(err);
+    }
 }
 
 export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, two benchmarks and an example: built on the pipeline, not a stage of it";

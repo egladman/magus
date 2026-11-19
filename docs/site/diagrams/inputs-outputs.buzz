@@ -2,52 +2,59 @@ namespace inputsOutputs;
 
 import "magus";
 import "magus/diagram";
+import "result";
 import "site/diagrams/packages" as packages;
 
-export fun inputsOutputsDiagram() > diagram\Diagram !> any {
-    // NestedDirs narrows a snapshot here, never the key.
-    final cache = magus\graph().dir("internal/cache");
-    final audit = magus\graph().dir("internal/audit");
-    // types/workspace.go: a nested project owns its files.
-    final claims = magus\graph().dir("types");
-    // The declarations are lines a person writes in a magusfile; the tool probe runs in the
-    // root package, so the cache key's sub names it rather than a box of its own.
-    final reads = diagram\external("readsFiles([\"**/*.go\"])", sub: "matches nested files too", tag: "root", look: diagram\Look.plain);
-    final writes = diagram\external("writesFiles([\"**/gen/*test/*.go\"])", sub: "the root's gen/ only", tag: "root", look: diagram\Look.plain);
-    // describe.go joins a cross-project input's owner to DependsOn.
-    final handle = diagram\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: diagram\Look.plain);
-    return diagram\of("inputs-outputs",
-            title: "An output stops at a nested project; an input does not",
-            eyebrow: "inputs and outputs",
-            desc: "A target's input and output globs resolve from its own project. An input "
-                + "glob matches nested files too, so the root's **/*.go keys every nested Go file. "
-                + "An output glob claims a nested project's file only when rooted there, and a "
-                + "write that lands there anyway fails as MGS3001. A nested project reads the "
-                + "root's tree through workspace\\file.",
-            level: diagram\Level.package)
-        .actor(reads)
-        .actor(writes)
-        .actor(handle)
-        .box(audit, label: "Descendant audit", sub: "MGS3001 on a write inside")
-        .box(cache, label: "Cache key", sub: "files and tool versions", focal: true)
-        .box(claims, label: "Output claim", sub: "stops at a nested dir")
-        .edgesFromGraph()
-        .hideEdges([audit], dst: [claims],
-            why: "the audit reads the same claim rule; the diagram draws it from the snapshot")
-        .flowIn(reads, dst: cache, label: "src:")
-        .flowIn(handle, dst: cache, label: "+ depends_on", stroke: diagram\Stroke.focal)
-        .flowIn(writes, dst: cache, label: "snapshot")
-        .flowIn(writes, dst: audit, label: "stray write", stroke: diagram\Stroke.optional)
-        .zone("root project .", actors: [reads, writes])
-        .zone("a nested project", dirs: [audit], actors: [handle])
-        .zone("the cache", dirs: [cache, claims])
-        .legend(diagram\Look.focal, label: "what a hit is keyed on")
-        .scope(packages\goPackages("internal/cache/**"))
-        .scope(packages\goPackages("internal/audit/**"))
-        .scope(packages\goPackages("types/**"))
-        .except([magus\graph().dir("internal/cache/reflink")],
-            why: "copies files in and out of the store; it reads no glob and keys nothing")
-        .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
-        .except(packages\dataTypes(),
-            why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no claim rule");
+export fun inputsOutputsDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final dataTypes = packages\dataTypes();
+        if (dataTypes.error -> failed) { return result\Result::<diagram\Diagram>{ error = failed }; }
+        // NestedDirs narrows a snapshot here, never the key.
+        final cache = magus\graph().dir("internal/cache");
+        final audit = magus\graph().dir("internal/audit");
+        // types/workspace.go: a nested project owns its files.
+        final claims = magus\graph().dir("types");
+        // The declarations are lines a person writes in a magusfile; the tool probe runs in the
+        // root package, so the cache key's sub names it rather than a box of its own.
+        final reads = diagram\external("readsFiles([\"**/*.go\"])", sub: "matches nested files too", tag: "root", look: diagram\Look.plain);
+        final writes = diagram\external("writesFiles([\"**/gen/*test/*.go\"])", sub: "the root's gen/ only", tag: "root", look: diagram\Look.plain);
+        // describe.go joins a cross-project input's owner to DependsOn.
+        final handle = diagram\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: diagram\Look.plain);
+        return result\ok::<diagram\Diagram>(diagram\of("inputs-outputs",
+                title: "An output stops at a nested project; an input does not",
+                eyebrow: "inputs and outputs",
+                desc: "A target's input and output globs resolve from its own project. An input "
+                    + "glob matches nested files too, so the root's **/*.go keys every nested Go file. "
+                    + "An output glob claims a nested project's file only when rooted there, and a "
+                    + "write that lands there anyway fails as MGS3001. A nested project reads the "
+                    + "root's tree through workspace\\file.",
+                level: diagram\Level.package)
+            .actor(reads)
+            .actor(writes)
+            .actor(handle)
+            .box(audit, label: "Descendant audit", sub: "MGS3001 on a write inside")
+            .box(cache, label: "Cache key", sub: "files and tool versions", focal: true)
+            .box(claims, label: "Output claim", sub: "stops at a nested dir")
+            .edgesFromGraph()
+            .hideEdges([audit], dst: [claims],
+                why: "the audit reads the same claim rule; the diagram draws it from the snapshot")
+            .flowIn(reads, dst: cache, label: "src:")
+            .flowIn(handle, dst: cache, label: "+ depends_on", stroke: diagram\Stroke.focal)
+            .flowIn(writes, dst: cache, label: "snapshot")
+            .flowIn(writes, dst: audit, label: "stray write", stroke: diagram\Stroke.optional)
+            .zone("root project .", actors: [reads, writes])
+            .zone("a nested project", dirs: [audit], actors: [handle])
+            .zone("the cache", dirs: [cache, claims])
+            .legend(diagram\Look.focal, label: "what a hit is keyed on")
+            .scope(magus\graph().dirs("internal/cache/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("internal/audit/**", opts: magus\DirsOptions{ language = "go" }))
+            .scope(magus\graph().dirs("types/**", opts: magus\DirsOptions{ language = "go" }))
+            .except([magus\graph().dir("internal/cache/reflink")],
+                why: "copies files in and out of the store; it reads no glob and keys nothing")
+            .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
+            .except(dataTypes.value!,
+                why: "the closed string sets every package checks values against, and data-type packages the diagram does not trace; no claim rule"));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }

@@ -153,8 +153,10 @@ async function serverInfo($: EngineInterface, bin: string, root: string): Promis
   }
 }
 
-export async function probe($: EngineInterface, root: string): Promise<Probe | null> {
-  if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return null
+export async function probe($: EngineInterface, root: string): Promise<Result<Probe | null>> {
+  const hasMagusfile = await fromPromise($.fs.exists(`${root}/magusfile.buzz`))
+  if (hasMagusfile.error) return hasMagusfile
+  if (!hasMagusfile.value) return ok(null)
   let goMod = ''
   try {
     goMod = await $.fs.read(`${root}/go.mod`)
@@ -162,7 +164,9 @@ export async function probe($: EngineInterface, root: string): Promise<Probe | n
     // No go.mod, or one that will not read: either way not the magus source tree.
   }
   const isMagusSource = /^module github\.com\/egladman\/magus\s*$/m.test(goMod)
-  const hasLocalBinary = await $.fs.exists(`${root}/magus`)
+  const local = await fromPromise($.fs.exists(`${root}/magus`))
+  if (local.error) return local
+  const hasLocalBinary = local.value
 
   const which = await run($, ['/bin/sh', '-c', 'command -v magus'], root, 5_000)
   const pathBinary = which?.exitCode === 0 && which.stdout.trim() !== '' ? which.stdout.trim() : null
@@ -183,7 +187,7 @@ export async function probe($: EngineInterface, root: string): Promise<Probe | n
   }
 
   const server = bin === null ? null : await serverInfo($, bin, root)
-  return { isMagusSource, hasLocalBinary, pathBinary, binary, head, behind, server }
+  return ok({ isMagusSource, hasLocalBinary, pathBinary, binary, head, behind, server })
 }
 
 // Runs from a timer so the probes (a few seconds of subprocesses) outlive the dispatch.
@@ -201,7 +205,8 @@ async function checkHealth($: EngineInterface): Promise<void> {
 async function checkHealthOnce($: EngineInterface): Promise<void> {
   const p = await probe($, await $.session.root())
   healthAt = await $.clock.now()
-  const next: Report | null = p === null ? null : { issues: assess(p), checkedAt: healthAt }
+  if (p.error) $.ui.toast(`magus health probe failed: ${p.error.message}`)
+  const next: Report | null = p.error || p.value === null ? null : { issues: assess(p.value), checkedAt: healthAt }
   await $.state.set(REPORT, next)
   await refreshStatus($)
 }
@@ -222,7 +227,8 @@ async function readBudget($: EngineInterface): Promise<void> {
 async function readBudgetOnce($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
-  const r = await run($, [(await magusBin($, root)).path, '-s', 'server', 'status', '-o', 'json'], root)
+  const bin = await magusBin($, root)
+  const r = bin.error ? null : await run($, [bin.value.path, '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) {
     await $.state.set(BUDGET_ERROR, 'magus server status -o json did not run')
     await refreshStatus($)
@@ -390,8 +396,10 @@ async function definitionModel($: EngineInterface, type: string): Promise<string
 // honors server.address, which no client should resolve on its own.
 async function discover($: EngineInterface): Promise<string | null> {
   const root = await $.session.root()
+  const bin = await magusBin($, root)
+  if (bin.error) return null
   try {
-    const r = await $.process.run([(await magusBin($, root)).path, '-s', 'server', 'status', '-o', 'json'], {
+    const r = await $.process.run([bin.value.path, '-s', 'server', 'status', '-o', 'json'], {
       cwd: root,
       timeoutMs: 15_000,
     })

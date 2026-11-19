@@ -295,8 +295,8 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
     foreach (p in designProblems(file, md: md)) {
         found.append(ConventionFinding{ file = file, line = p.line, rule = "design-template", message = p.message });
     }
-    final terms = dictionary\termProblems(file, md: md)
-        catch [dictionary\TermProblem{ line = 1, message = "front matter does not parse; it must be YAML between `---` lines" }];
+    final read = dictionary\termProblems(file, md: md);
+    final terms = read.value ?? [dictionary\TermProblem{ line = 1, message = "front matter does not parse; it must be YAML between `---` lines" }];
     foreach (p in terms) {
         found.append(ConventionFinding{ file = file, line = p.line, rule = "glossary-term", message = p.message });
     }

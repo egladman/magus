@@ -3,7 +3,6 @@ namespace linters;
 import "magus";
 import "magus/diagram";
 import "result";
-import "site/diagrams/packages" as packages;
 
 // lintersLoopDiagram draws the lint loop as the process a change meets, one level: its steps
 // link to linters-boundary, which draws the packages behind them.
@@ -50,7 +49,7 @@ export fun lintersBoundaryDiagram() > result\Result::<diagram\Diagram> {
         final records = magus\graph().dir("types");
         final rules = diagram\external("hack/lint rules", sub: "Buzz, one file a rule");
         final ceiling = diagram\external("Ceiling policy", sub: "conformance-ceiling.buzz");
-        final conventions = packages\goPackages("libs/conventions/**");
+        final conventions = magus\graph().dirs("libs/conventions/**", opts: magus\DirsOptions{ language = "go" });
         final pairing = [magus\graph().dir("libs/testpairing"), magus\graph().dir("libs/testpairing/plugin")];
         final policy = diagram\external("analyzers.yaml", sub: "one per project", look: diagram\Look.input);
         final d = diagram\of("linters-boundary",

@@ -2,35 +2,40 @@ namespace typeRecords;
 
 import "magus";
 import "magus/diagram";
+import "result";
 
-export fun typesDiagram() > diagram\Diagram !> any {
-    final types = magus\graph().dir("types");
-    final enums = magus\graph().dir("types/enum");
-    final daemon = magus\graph().dir("types/daemon");
-    final diff = magus\graph().dir("types/diff");
-    final feedback = magus\graph().dir("types/feedback");
-    final image = magus\graph().dir("types/image");
-    final json = magus\graph().dir("libs/codec");
-    final diagnostics = magus\graph().dir("libs/diagnostics");
-    return diagram\of("types",
-            title: "The shared records sit at the bottom, and the groups lean on them",
-            eyebrow: "types",
-            desc: "types holds the records every other package passes around: targets, runs, "
-                + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come from "
-                + "libs/diagnostics. The daemon, diff, feedback and image groups split off records "
-                + "only some callers need, and each imports the base and the enums, never the other "
-                + "way.")
-        .box(types, label: "Records", sub: "targets, runs, findings, jobs", focal: true)
-        .box(enums, label: "Enums", sub: "method sets by hand")
-        .box(diagnostics, label: "Diagnostic codes", sub: "MGSxxxx")
-        .box(json, label: "JSON encoding", sub: "on the type")
-        .box(daemon, label: "Daemon records", sub: "server wire types")
-        .box(diff, label: "Diff records", sub: "changes between revisions")
-        .box(feedback, label: "Feedback records", sub: "guard reports and marks")
-        .box(image, label: "Image records", sub: "OCI specs")
-        .edgesFromGraph()
-        .hideEdges([daemon, diff], dst: [enums],
-            why: "each group imports the enums as well as the base; the diagram draws that once, from the base")
-        .legend(diagram\Look.focal, label: "the base every package imports")
-        .scope([types, enums, daemon, diff, feedback, image, diagnostics, json]);
+export fun typesDiagram() > result\Result::<diagram\Diagram> {
+    try {
+        final types = magus\graph().dir("types");
+        final enums = magus\graph().dir("types/enum");
+        final daemon = magus\graph().dir("types/daemon");
+        final diff = magus\graph().dir("types/diff");
+        final feedback = magus\graph().dir("types/feedback");
+        final image = magus\graph().dir("types/image");
+        final json = magus\graph().dir("libs/codec");
+        final diagnostics = magus\graph().dir("libs/diagnostics");
+        return result\ok::<diagram\Diagram>(diagram\of("types",
+                title: "The shared records sit at the bottom, and the groups lean on them",
+                eyebrow: "types",
+                desc: "types holds the records every other package passes around: targets, runs, "
+                    + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come from "
+                    + "libs/diagnostics. The daemon, diff, feedback and image groups split off records "
+                    + "only some callers need, and each imports the base and the enums, never the other "
+                    + "way.")
+            .box(types, label: "Records", sub: "targets, runs, findings, jobs", focal: true)
+            .box(enums, label: "Enums", sub: "method sets by hand")
+            .box(diagnostics, label: "Diagnostic codes", sub: "MGSxxxx")
+            .box(json, label: "JSON encoding", sub: "on the type")
+            .box(daemon, label: "Daemon records", sub: "server wire types")
+            .box(diff, label: "Diff records", sub: "changes between revisions")
+            .box(feedback, label: "Feedback records", sub: "guard reports and marks")
+            .box(image, label: "Image records", sub: "OCI specs")
+            .edgesFromGraph()
+            .hideEdges([daemon, diff], dst: [enums],
+                why: "each group imports the enums as well as the base; the diagram draws that once, from the base")
+            .legend(diagram\Look.focal, label: "the base every package imports")
+            .scope([types, enums, daemon, diff, feedback, image, diagnostics, json]));
+    } catch (err: any) {
+        return result\caught::<diagram\Diagram>(err);
+    }
 }
