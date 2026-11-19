@@ -128,7 +128,7 @@ async function read<T>(
     return { kind: "unreadable", detail: errMessage(e) };
   }
   if (!res.ok) {
-    const failure = readFailure(res.status, (await readRefusal(res))?.message ?? "", what);
+    const failure = readFailure(res.status, (await readRefusal(res)).value?.message ?? "", what);
     if (res.status === 401 || failure.kind === "unreadable")
       reportHttpStatus(opts.host, what, res.status);
     else reportFailure(SOURCE, failure.detail, "diagrams:" + failure.kind + ":" + url);

@@ -256,22 +256,22 @@ const envelopeBody = JSON.stringify({
 
 test("readRefusal takes the envelope's message, not the raw JSON", async () => {
   assert.deepEqual(await readRefusal(new Response(envelopeBody, { status: 400 })), {
-    message: 'MGS9007: unknown target "cli"',
+    value: { message: 'MGS9007: unknown target "cli"' },
   });
 });
 
 test("readRefusal shows a body that is not an envelope as text", async () => {
   assert.deepEqual(await readRefusal(new Response("  no pull request for this branch\n")), {
-    message: "no pull request for this branch",
+    value: { message: "no pull request for this branch" },
   });
   assert.deepEqual(await readRefusal(new Response('{"error":"the old string shape"}')), {
-    message: '{"error":"the old string shape"}',
+    value: { message: '{"error":"the old string shape"}' },
   });
 });
 
-test("readRefusal answers null for an empty or unreadable body", async () => {
-  assert.equal(await readRefusal(new Response("  ")), null);
+test("readRefusal answers null for an empty body and an error for an unreadable one", async () => {
+  assert.deepEqual(await readRefusal(new Response("  ")), { value: null });
   // platform double: Response.text
   const unreadable = { text: () => Promise.reject(new Error("aborted")) } as unknown as Response;
-  assert.equal(await readRefusal(unreadable), null);
+  assert.ok((await readRefusal(unreadable)).error);
 });

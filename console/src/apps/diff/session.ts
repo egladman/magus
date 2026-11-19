@@ -434,13 +434,38 @@ async function postSessionOp(
     }),
   );
   if (res.error || res.value.ok) return res;
-  const refusal = await readRefusal(res.value);
+  const refusal = (await readRefusal(res.value)).value;
   return fail(
     new MagusError({
       code: "",
       message: refusal?.message ?? `server answered ${res.value.status}`,
     }),
   );
+}
+
+// readReported is the one place the reads below that report their own failures meet fetch and
+// res.json. A failure raises its toast here, exactly once, and is also returned, so a caller falls
+// back without reporting it a second time. explain, when given, reads a refused status's body and
+// says whether it reported the refusal; when it did not, the bare status is reported.
+async function readReported<T>(
+  host: string,
+  what: string,
+  request: Promise<Response>,
+  explain?: (res: Response) => Promise<boolean>,
+): Promise<Result<T>> {
+  const sent = await fromPromise(request);
+  if (sent.error) {
+    reportFetchFailure(host, what, sent.error.cause ?? sent.error);
+    return sent;
+  }
+  const res = sent.value;
+  if (!res.ok) {
+    if (!explain || !(await explain(res))) reportHttpStatus(host, what, res.status);
+    return fail(new HttpError(res.status));
+  }
+  const body = await fromPromise<T>(res.json());
+  if (body.error) reportFetchFailure(host, what, body.error.cause ?? body.error);
+  return body;
 }
 
 // Fetches user-requested working-tree context for one hunk.
@@ -512,31 +537,25 @@ export type SessionOp =
 
 // mutate applies one op and returns the updated session.
 //
-// Failures RESOLVE to null rather than throwing. Every caller is a keypress handler, and a
-// review that threw because a cursor sync failed would take the whole app down over
+// A failure is reported here and returned as the error. Every caller is a keypress handler, and a
+// review that gave up because a cursor sync failed would take the whole app down over
 // bookkeeping the reader never asked for. The local view is already correct; the server copy
 // catching up is best-effort.
-export async function mutate(
+export function mutate(
   host: string,
   op: SessionOp,
   signal: AbortSignal,
-): Promise<DiffReview | null> {
-  try {
-    const res = await fetch(`http://${host}/api/v1/diff/session`, {
+): Promise<Result<DiffReview>> {
+  return readReported(
+    host,
+    "the review session",
+    fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify(op),
       signal,
-    });
-    if (!res.ok) {
-      reportHttpStatus(host, "the review session", res.status);
-      return null;
-    }
-    return (await res.json()) as DiffReview;
-  } catch (e) {
-    reportFetchFailure(host, "the review session", e);
-    return null;
-  }
+    }),
+  );
 }
 
 // fetchReview reads which review is open and the threads already on it.
@@ -544,24 +563,24 @@ export async function mutate(
 // Its own request, made AFTER the diff is on screen. This is the one call that leaves the
 // machine, and a reader must never wait on somebody else's forge to see their own changes.
 //
-// Failure resolves to a closed target rather than throwing, matching the server: the app
-// says the review could not be reached and stays a diff viewer, which is what it was before
-// any of this existed.
-export async function fetchReview(host: string, signal: AbortSignal): Promise<ReviewInfo> {
-  try {
-    const res = await fetch(`http://${host}/api/v1/diff/review`, {
-      headers: authHeaders(),
-      signal,
-    });
-    if (!res.ok) {
-      reportHttpStatus(host, "the open review", res.status);
-      return { id: "", reason: `server answered ${res.status}`, threads: [] };
-    }
-    return (await res.json()) as ReviewInfo;
-  } catch (e) {
-    reportFetchFailure(host, "the open review", e);
-    return { id: "", reason: "the server could not be reached", threads: [] };
-  }
+// A failure is reported and returned; closedReview turns it into a closed target, matching the
+// server: the app says the review could not be reached and stays a diff viewer, which is what it
+// was before any of this existed.
+export function fetchReview(host: string, signal: AbortSignal): Promise<Result<ReviewInfo>> {
+  return readReported(
+    host,
+    "the open review",
+    fetch(`http://${host}/api/v1/diff/review`, { headers: authHeaders(), signal }),
+  );
+}
+
+// closedReview is the closed target a failed fetchReview stands for.
+export function closedReview(error: Error): ReviewInfo {
+  const reason =
+    error instanceof HttpError
+      ? `server answered ${error.status}`
+      : "the server could not be reached";
+  return { id: "", reason, threads: [] };
 }
 
 // publish sends every unpublished draft as one review and returns the updated session.
@@ -612,36 +631,31 @@ export async function reply(
 // conversation's first comment (see rootOf in rows.ts).
 //
 // Reading it posts nothing and sends nothing anywhere. A refusal (no review open, no such
-// conversation) surfaces as a toast carrying the server's own words and resolves to null, so the
-// caller copies nothing.
+// conversation) surfaces as a toast carrying the server's own words and is returned as the error, so
+// the caller copies nothing.
 export async function fetchThreadText(
   host: string,
   root: string,
   signal: AbortSignal,
-): Promise<string | null> {
-  const what = "the thread";
-  try {
-    const q = new URLSearchParams({ id: root });
-    const res = await fetch(`http://${host}/api/v1/diff/thread?${q}`, {
-      headers: authHeaders(),
-      signal,
-    });
-    if (!res.ok) {
-      const refusal = res.status === 401 ? null : await readRefusal(res);
-      if (refusal) reportFailure("Review", refusal.message, `thread:${res.status}`, refusal.help);
-      else reportHttpStatus(host, what, res.status);
-      return null;
-    }
-    const body = (await res.json()) as { text?: unknown };
-    if (typeof body.text !== "string" || body.text === "") {
-      reportFailure("Review", "The server sent no text for this thread.", "thread:empty");
-      return null;
-    }
-    return body.text;
-  } catch (e) {
-    reportFetchFailure(host, what, e);
-    return null;
+): Promise<Result<string>> {
+  const q = new URLSearchParams({ id: root });
+  const body = await readReported<{ text?: unknown }>(
+    host,
+    "the thread",
+    fetch(`http://${host}/api/v1/diff/thread?${q}`, { headers: authHeaders(), signal }),
+    async (res) => {
+      const refusal = res.status === 401 ? null : (await readRefusal(res)).value;
+      if (!refusal) return false;
+      reportFailure("Review", refusal.message, `thread:${res.status}`, refusal.help);
+      return true;
+    },
+  );
+  if (body.error) return body;
+  if (typeof body.value.text !== "string" || body.value.text === "") {
+    reportFailure("Review", "The server sent no text for this thread.", "thread:empty");
+    return fail(new MagusError({ code: "", message: "the server sent no text for this thread" }));
   }
+  return ok(body.value.text);
 }
 
 // Reading is what the reading op answers: whether this review is marked as being read, since
@@ -659,30 +673,28 @@ export interface Reading {
 // typed by a person.
 //
 // A refusal (502 no review, 409 already merged) surfaces as a toast carrying the server's own
-// words and resolves to null, so the toggle can put itself back: the mark did not change.
-export async function setReading(
+// words and is returned as the error, so the toggle can put itself back: the mark did not change.
+export function setReading(
   host: string,
   on: boolean,
   signal: AbortSignal,
-): Promise<Reading | null> {
-  try {
-    const res = await fetch(`http://${host}/api/v1/diff/session`, {
+): Promise<Result<Reading>> {
+  return readReported(
+    host,
+    "the reading mark",
+    fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ op: "reading", on }),
       signal,
-    });
-    if (!res.ok) {
-      const refusal = res.status === 401 ? null : await readRefusal(res);
-      if (refusal) reportFailure("Review", refusal.message, `reading:${res.status}`, refusal.help);
-      else reportHttpStatus(host, "the reading mark", res.status);
-      return null;
-    }
-    return (await res.json()) as Reading;
-  } catch (e) {
-    reportFetchFailure(host, "the reading mark", e);
-    return null;
-  }
+    }),
+    async (res) => {
+      const refusal = res.status === 401 ? null : (await readRefusal(res)).value;
+      if (!refusal) return false;
+      reportFailure("Review", refusal.message, `reading:${res.status}`, refusal.help);
+      return true;
+    },
+  );
 }
 
 // BranchChange is one other line of work and the paths it changes, as of the reader's LAST FETCH.
@@ -725,70 +737,68 @@ export interface RunVerdict {
 // server refuses any target the magusfile does not declare for that project, which is what keeps
 // a browser-reachable button from being able to name arbitrary work.
 //
-// A transport failure reports "unknown" rather than "failed": the run did not fail, the question
-// did, and rendering those the same way puts a red mark on code nobody judged.
+// A transport failure is the error, and verdictOf reads it as "unknown" rather than "failed": the
+// run did not fail, the question did, and rendering those the same way puts a red mark on code
+// nobody judged.
 export async function runTarget(
   host: string,
   target: string,
   project: string,
   start: boolean,
   signal: AbortSignal,
-): Promise<RunVerdict> {
-  try {
-    const url = `http://${host}/api/v1/diff/run`;
-    const res = start
-      ? await fetch(url, {
-          method: "POST",
-          headers: { ...authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ target, project }),
-          signal,
-        })
-      : await fetch(
-          `${url}?target=${encodeURIComponent(target)}&project=${encodeURIComponent(project)}`,
-          { headers: authHeaders(), signal },
-        );
-    if (!res.ok) {
-      reportHttpStatus(host, "the run of " + target, res.status);
-      return { state: "unknown" };
-    }
-    const body = (await res.json()) as RunVerdict;
-    const state = body?.state;
-    if (state !== "running" && state !== "passed" && state !== "failed") {
-      return { state: "unknown", undeclared: body?.undeclared, available: body?.available };
-    }
-    return body;
-  } catch (e) {
-    reportFetchFailure(host, "the run of " + target, e);
-    return { state: "unknown" };
+): Promise<Result<RunVerdict>> {
+  const url = `http://${host}/api/v1/diff/run`;
+  const request = start
+    ? fetch(url, {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ target, project }),
+        signal,
+      })
+    : fetch(`${url}?target=${encodeURIComponent(target)}&project=${encodeURIComponent(project)}`, {
+        headers: authHeaders(),
+        signal,
+      });
+  const read = await readReported<RunVerdict>(host, "the run of " + target, request);
+  if (read.error) return read;
+  const body = read.value;
+  const state = body?.state;
+  if (state !== "running" && state !== "passed" && state !== "failed") {
+    return ok({ state: "unknown", undeclared: body?.undeclared, available: body?.available });
   }
+  return ok(body);
 }
 
+// verdictOf is the verdict a runTarget answer stands for: a failed question is "unknown".
+export function verdictOf(answer: Result<RunVerdict>): RunVerdict {
+  return answer.error ? { state: "unknown" } : answer.value;
+}
+
+export interface BranchList {
+  branches: BranchChange[];
+  unsupported: string;
+}
+
+// A failure is reported and returned; a caller that has no list shows no claim.
 export async function fetchBranches(
   host: string,
   signal: AbortSignal,
-): Promise<{ branches: BranchChange[]; unsupported: string }> {
-  try {
-    const res = await fetch(`http://${host}/api/v1/diff/branches`, {
-      headers: authHeaders(),
-      signal,
-    });
-    if (!res.ok) {
-      reportHttpStatus(host, "the branch list", res.status);
-      return { branches: [], unsupported: "" };
-    }
-    const body = (await res.json()) as { branches?: BranchChange[]; unsupported?: string };
-    const got = body.branches ?? [];
-    // Shape-checked, not just cast. `Paths []string` on the Go side has no omitempty, so a nil
-    // slice marshals to `null` - and iterating that throws inside a `void`-ed caller, where the
-    // rejection is swallowed and the feature simply never appears with nothing logged anywhere.
-    return {
-      branches: got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths)),
-      unsupported: typeof body.unsupported === "string" ? body.unsupported : "",
-    };
-  } catch (e) {
-    reportFetchFailure(host, "the branch list", e);
-    return { branches: [], unsupported: "" };
-  }
+): Promise<Result<BranchList>> {
+  const read = await readReported<{ branches?: BranchChange[]; unsupported?: string }>(
+    host,
+    "the branch list",
+    fetch(`http://${host}/api/v1/diff/branches`, { headers: authHeaders(), signal }),
+  );
+  if (read.error) return read;
+  const body = read.value;
+  const got = body.branches ?? [];
+  // Shape-checked, not just cast. `Paths []string` on the Go side has no omitempty, so a nil
+  // slice marshals to `null` - and iterating that throws inside a `void`-ed caller, where the
+  // rejection is swallowed and the feature simply never appears with nothing logged anywhere.
+  return ok({
+    branches: got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths)),
+    unsupported: typeof body.unsupported === "string" ? body.unsupported : "",
+  });
 }
 
 // HttpError carries the status so a caller can tell "no workspace yet" (503) from a real

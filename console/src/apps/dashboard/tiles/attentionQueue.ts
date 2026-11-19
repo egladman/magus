@@ -17,7 +17,9 @@ import {
   readRefusal,
   reportFetchFailure,
   reportHttpStatus,
+  ReadFailure,
 } from "../../../lib/server";
+import { fail, fromPromise, ok, type Result } from "../../../gen/magus/types";
 import { reportFailure } from "../../../lib/notifications";
 
 // ---- the wire shape --------------------------------------------------------
@@ -189,45 +191,64 @@ export type AttentionRead =
 // TELL the two apart - a 404 carrying no CORS headers surfaces to the browser as a network
 // error with no status at all - so the unreadable copy names the missing route as a possible
 // cause too rather than blaming the connection.
-export async function loadAttention(host: string, signal?: AbortSignal): Promise<AttentionRead> {
-  let res: Response;
-  try {
-    res = await fetch("http://" + host + "/api/v1/attention", {
+export type AttentionFailure = ReadFailure<"absent" | "unreadable">;
+
+export async function loadAttention(
+  host: string,
+  signal?: AbortSignal,
+): Promise<Result<{ requests: AttentionRequest[]; store: string }, AttentionFailure>> {
+  const sent = await fromPromise(
+    fetch("http://" + host + "/api/v1/attention", {
       headers: authHeaders(),
       cache: "no-store",
       ...(signal ? { signal } : {}),
-    });
-  } catch (e) {
-    reportFetchFailure(host, "the attention queue", e);
-    return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
+    }),
+  );
+  if (sent.error) {
+    const cause = sent.error.cause;
+    reportFetchFailure(host, "the attention queue", cause);
+    return fail(
+      new ReadFailure("unreadable", cause instanceof Error ? cause.message : String(cause)),
+    );
   }
-  if (res.status === 404 || res.status === 501) return { kind: "absent" };
+  const res = sent.value;
+  if (res.status === 404 || res.status === 501) return fail(new ReadFailure("absent", ""));
   if (!res.ok) {
     reportHttpStatus(host, "the attention queue", res.status);
-    return { kind: "unreadable", detail: "HTTP " + res.status };
+    return fail(new ReadFailure("unreadable", "HTTP " + res.status));
   }
-  try {
-    const body = await res.json();
-    return { kind: "ok", requests: parseRequests(body), store: parseStore(body) };
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
+  const read = await fromPromise(
+    res
+      .json()
+      .then((body: unknown) => ({ requests: parseRequests(body), store: parseStore(body) })),
+  );
+  if (read.error) {
+    const cause = read.error.cause;
+    const detail = cause instanceof Error ? cause.message : String(cause);
     reportFailure(
       "Server",
       "Could not read the attention queue: " + detail,
       "fetch:attention-queue-body",
     );
-    return { kind: "unreadable", detail };
+    return fail(new ReadFailure("unreadable", detail));
   }
+  return ok(read.value);
 }
 
-// DisposeResult separates a REFUSAL from a failure. The server refuses a disposal for three
+// attentionRead is the three-way reading of a loadAttention answer that the tile switches on.
+export function attentionRead(answer: Awaited<ReturnType<typeof loadAttention>>): AttentionRead {
+  if (!answer.error)
+    return { kind: "ok", requests: answer.value.requests, store: answer.value.store };
+  return answer.error.kind === "absent"
+    ? { kind: "absent" }
+    : { kind: "unreadable", detail: answer.error.message };
+}
+
+// DisposeFailure separates a REFUSAL from a failure. The server refuses a disposal for three
 // reasons a person can act on - the id names nothing, it names several, or somebody already
 // closed it - and each of those is the server working correctly. Reporting them as errors
 // would train a reader to retry the one thing that will never succeed.
-export type DisposeResult =
-  | { readonly kind: "ok" }
-  | { readonly kind: "refused"; readonly detail: string }
-  | { readonly kind: "unreadable"; readonly detail: string };
+export type DisposeFailure = ReadFailure<"refused" | "unreadable">;
 
 // disposeAttention closes one request. It is the console's half of a rule magus states
 // explicitly: an event whose whole meaning is "blocked on a person" stops meaning that the
@@ -239,24 +260,29 @@ export async function disposeAttention(
   id: string,
   reason: string,
   signal?: AbortSignal,
-): Promise<DisposeResult> {
-  let res: Response;
-  try {
-    res = await fetch("http://" + host + "/api/v1/attention", {
+): Promise<Result<null, DisposeFailure>> {
+  const sent = await fromPromise(
+    fetch("http://" + host + "/api/v1/attention", {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ id, reason }),
       cache: "no-store",
       ...(signal ? { signal } : {}),
-    });
-  } catch (e) {
-    return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
+    }),
+  );
+  if (sent.error) {
+    const cause = sent.error.cause;
+    return fail(
+      new ReadFailure("unreadable", cause instanceof Error ? cause.message : String(cause)),
+    );
   }
-  if (res.ok) return { kind: "ok" };
+  const res = sent.value;
+  if (res.ok) return ok(null);
   // The server's own sentence, which names the candidates on an ambiguous prefix and says who
   // closed an already-closed request. Replacing it with a status code would throw away the
   // only part a person can act on.
-  const detail = (await readRefusal(res))?.message ?? "HTTP " + res.status;
-  if (res.status >= 400 && res.status < 500) return { kind: "refused", detail };
-  return { kind: "unreadable", detail };
+  const detail = (await readRefusal(res)).value?.message ?? "HTTP " + res.status;
+  return fail(
+    new ReadFailure(res.status >= 400 && res.status < 500 ? "refused" : "unreadable", detail),
+  );
 }

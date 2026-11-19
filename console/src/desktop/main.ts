@@ -1764,7 +1764,8 @@ export function startConsole(
     // are built from p.workspaces, and both exist on a phone where the rail does not. Gating this
     // would leave a mobile tab unable to learn it has a workspace to choose.
     const generation = ++pollGeneration;
-    void fetchPulse(host).then((p) => {
+    void fetchPulse(host).then((read) => {
+      const p = read.value ?? null;
       // A slow answer can land after a switch to a demo app or to no host at all, both of which
       // clear these cells on the way past. Installing it then would paint a live pool reading over
       // synthetic data - the exact thing the branches above clear them to prevent.
@@ -1784,13 +1785,15 @@ export function startConsole(
     // where that is worth not doing. Read from the rendered width rather than re-testing the 48rem
     // breakpoint here, so CSS stays the one place that decides when the rail exists.
     if (sidebarHost && sidebarHost.getBoundingClientRect().width > 0) {
-      void fetchDiffCount(host).then((count) => {
+      void fetchDiffCount(host).then((read) => {
+        const count = read.value ?? null;
         railBadges.set(count == null ? {} : { diff: { count, noun: "changed files" } });
       });
     }
     const startedAt = Date.now();
-    fetchReadiness(host).then((report) => {
+    fetchReadiness(host).then((read) => {
       if (generation !== pollGeneration) return; // see the pulse above
+      const report = read.value ?? null;
       lastReadiness = { report, host, at: startedAt };
       applyReadiness();
       syncLauncherConnectPrompt(launcher, report ? null : { connection: "disconnected", host }, {
@@ -2013,7 +2016,7 @@ async function signInThenStart(
   statusHost: HTMLElement,
 ): Promise<void> {
   const code = consumeLinkCode();
-  if (code && (await redeemLinkCode(location.host, code)) === "failed")
+  if (code && (await redeemLinkCode(location.host, code)).error)
     reportFailure(
       "Console token",
       "This link was already used, has expired (a link works once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",

@@ -24,13 +24,13 @@ test("a count renders as itself until the cap, then as 'more'", () => {
 });
 
 test("a count passes straight through", async () => {
-  assert.equal(await fetchDiffCount(HOST, async () => ok(7)), 7);
+  assert.deepEqual(await fetchDiffCount(HOST, async () => ok(7)), ok(7));
 });
 
 // Zero is a real measurement and must survive the round trip - it is the RENDERER that decides an
 // empty count is not worth a mark, and it cannot decide that if the fetch flattens 0 to null.
 test("zero is a reading, not an absence", async () => {
-  assert.equal(await fetchDiffCount(HOST, async () => ok(0)), 0);
+  assert.deepEqual(await fetchDiffCount(HOST, async () => ok(0)), ok(0));
 });
 
 // A server without the diff route cannot grow one while it runs, so asking again every 15s for the
@@ -41,8 +41,8 @@ test("a server with no diff route is not asked twice", async () => {
     calls++;
     return fail(new RoutelessError("404"));
   };
-  assert.equal(await fetchDiffCount(HOST, routeless), null);
-  assert.equal(await fetchDiffCount(HOST, routeless), null);
+  assert.equal((await fetchDiffCount(HOST, routeless)).value ?? null, null);
+  assert.equal((await fetchDiffCount(HOST, routeless)).value ?? null, null);
   assert.equal(calls, 1, "the second poll should never have left the browser");
 });
 
@@ -57,12 +57,12 @@ test("an outage keeps being retried, and recovers", async () => {
   await fetchDiffCount(HOST, down);
   await fetchDiffCount(HOST, down);
   assert.equal(calls, 2);
-  assert.equal(await fetchDiffCount(HOST, async () => ok(4)), 4);
+  assert.deepEqual(await fetchDiffCount(HOST, async () => ok(4)), ok(4));
 });
 
 test("the latch does not spread to another server", async () => {
   await fetchDiffCount(HOST, async () => fail(new RoutelessError("404")));
-  assert.equal(await fetchDiffCount("127.0.0.1:9999", async () => ok(2)), 2);
+  assert.deepEqual(await fetchDiffCount("127.0.0.1:9999", async () => ok(2)), ok(2));
 });
 
 test("no host is no request", async () => {

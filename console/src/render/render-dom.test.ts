@@ -113,8 +113,8 @@ test("a copy that fails is a toast, not a label that flickers", async () => {
   try {
     const btn = document.createElement("button");
     btn.textContent = "Copy";
-    const ok = await copyText("x", { source: "Log Viewer", what: "the log", button: btn });
-    assert.equal(ok, false);
+    const copied = await copyText("x", { source: "Log Viewer", what: "the log", button: btn });
+    assert.ok(copied.error);
     assert.equal(btn.textContent, "Copy failed");
     const failure = notices.find((n) => n.kind === "error");
     assert.ok(failure, "the failure is raised");
@@ -137,13 +137,13 @@ test("a successful copy flashes the control and can confirm in a toast", async (
     const btn = document.createElement("button");
     btn.innerHTML =
       '<span class="pf-v6-c-button__icon">i</span><span class="console-render-btn__label">Copy</span>';
-    const ok = await copyText("hello", {
+    const copied = await copyText("hello", {
       source: "Log Viewer",
       what: "the log",
       button: btn,
       confirm: "Copied.",
     });
-    assert.equal(ok, true);
+    assert.equal(copied.error, undefined);
     assert.deepEqual(written, ["hello"]);
     assert.equal(text(btn.querySelector(".console-render-btn__label")), "Copied");
     assert.ok(btn.querySelector(".pf-v6-c-button__icon"), "the icon is not disturbed");

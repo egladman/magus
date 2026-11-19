@@ -1,13 +1,14 @@
 // agent.ts - the session panel behind a touch row: what the agent ran, the turns leading up to
 // its write, and a plain statement of every transcript part the server could not show.
 
-import { createClient, ConnectError } from "@connectrpc/connect";
+import { createClient } from "@connectrpc/connect";
 import {
   ViewerService,
   TurnRole,
   type SessionActivity,
   type SessionTurn,
 } from "@wire/viewer/v1alpha1/viewer_pb";
+import { fromPromise, type Result } from "../../gen/magus/types";
 import { createServerTransport, getLiveToken } from "../../lib/server";
 import { inlineAlert } from "../../ui/alert";
 import { h } from "../../desktop/view";
@@ -19,20 +20,22 @@ export type ActivityResult =
   // The showcase has no server, so the panel renders the touch alone and says why.
   | { readonly offline: string };
 
-export async function fetchSessionActivity(
+// fetchSessionActivity reads one session's activity. The toast for a failure is the transport's:
+// createServerTransport reports every failed call, so the error only has to reach the panel, which
+// says it beside the part it could not show (activityResult shapes it for the panel).
+export function fetchSessionActivity(
   host: string,
   session: string,
   path: string,
   signal: AbortSignal,
-): Promise<ActivityResult> {
-  try {
-    const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
-    return { activity: await client.getSessionActivity({ session, path }, { signal }) };
-  } catch (e) {
-    // The toast is the transport's: createServerTransport reports every failed call, so this
-    // only has to hand the reason to the panel, which says it beside the part it could not show.
-    return { failed: e instanceof ConnectError ? e.rawMessage : String(e) };
-  }
+): Promise<Result<SessionActivity>> {
+  const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
+  return fromPromise(client.getSessionActivity({ session, path }, { signal }));
+}
+
+// activityResult is the panel's reading of a fetchSessionActivity answer.
+export function activityResult(read: Result<SessionActivity>): ActivityResult {
+  return read.error ? { failed: read.error.message } : { activity: read.value };
 }
 
 const ROLE_NAMES: Record<TurnRole, string> = {

@@ -34,7 +34,7 @@ async function withStorage(seed: Record<string, string>, fn: () => Promise<void>
 
 // withFetch stubs fetch for one call site, recording what was sent.
 async function withFetch(
-  respond: (url: string, init?: RequestInit) => Response,
+  respond: (url: string, init?: RequestInit) => Response | Promise<Response>,
   fn: (calls: { url: string; body: string }[]) => Promise<void>,
 ): Promise<void> {
   const realFetch = globalThis.fetch;
@@ -60,7 +60,7 @@ test("a redeemed operator token is refused, not stored", async () => {
     await withFetch(
       () => new Response(JSON.stringify({ token: "mgo_operator" }), { status: 200 }),
       async () => {
-        assert.equal(await redeemLinkCode("127.0.0.1:7391", "mgx_code"), "failed");
+        assert.ok((await redeemLinkCode("127.0.0.1:7391", "mgx_code")).error);
         assert.equal(getLiveToken(), null);
       },
     );
@@ -79,7 +79,7 @@ test("a link code is redeemed once, in the body, for the token it stands for", a
         }),
       async (calls) => {
         const out = await redeemLinkCode("127.0.0.1:7391", "mgx_code");
-        assert.equal(out, "exchanged");
+        assert.equal(out.error, undefined);
         assert.equal(calls.length, 1);
         assert.equal(calls[0]?.url, "http://127.0.0.1:7391/api/v1/token/exchange");
         assert.deepEqual(JSON.parse(calls[0]?.body), { code: "mgx_code" });
@@ -94,14 +94,12 @@ test("a used or expired code, or a server that is down, stores nothing", async (
     () => new Response('{"error":{"code":401}}', { status: 401 }),
     () => new Response("not json", { status: 200 }),
     () => new Response('{"token":""}', { status: 200 }),
-    (): Response => {
-      // platform double: fetch
-      throw new TypeError("connection refused");
-    },
+    // platform double: fetch
+    () => Promise.reject(new TypeError("connection refused")),
   ]) {
     await withStorage({}, async () => {
       await withFetch(respond, async () => {
-        assert.equal(await redeemLinkCode("127.0.0.1:7391", "mgx_code"), "failed");
+        assert.ok((await redeemLinkCode("127.0.0.1:7391", "mgx_code")).error);
         assert.equal(getLiveToken(), null);
       });
     });

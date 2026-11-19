@@ -137,7 +137,7 @@ export function activate(host: HTMLElement): AppInstance {
     const generation = ++loadGeneration;
     let next: ToolsView | null = null;
     if (demo) next = demoToolsView(Date.now());
-    else if (server) next = await fetchToolsView(server, token);
+    else if (server) next = (await fetchToolsView(server, token)).value ?? null;
     // The tab closed, or a newer load (another address, a Retry) owns the page now.
     if (stale || generation !== loadGeneration) return;
     // A failed read keeps what is on screen: the next poll retries.

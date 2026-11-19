@@ -3,6 +3,7 @@ import {
   buildJobTree,
   jobClient,
   listJobs,
+  jobsRead,
   overviewLine,
   treeOrder,
   HOLDER_LABEL,
@@ -142,7 +143,7 @@ export function jobsTile(): Tile {
             "jobs:timeout",
           );
         }
-        render(read);
+        render(jobsRead(read));
       })
       .finally(() => {
         window.clearTimeout(timeout);

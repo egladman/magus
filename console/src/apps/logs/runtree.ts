@@ -9,6 +9,7 @@ import {
   type Output,
 } from "@wire/viewer/v1alpha1/viewer_pb";
 import { createServerTransport } from "../../lib/server";
+import { fromPromise, type Result } from "../../gen/magus/types";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer
 // that lists prior runs so a reader can find one WITHOUT a ref somebody printed on a terminal.
 // Two orderings of the same rows, switched in the panel header: "Runs" nests invocation ->
@@ -78,9 +79,9 @@ export interface RunBrowserState {
   unreachable: boolean;
 }
 
-// fetchRuns reads the server's run list. Resolves to [] on any failure (no server, auth, an old
-// server without the route) so the browser degrades to empty rather than throwing - the viewer's
-// other load paths never depend on it.
+// fetchRuns reads the server's run list. Any failure (no server, auth, an old server without the
+// route) is the error, and a caller degrades to an empty list - the viewer's other load paths never
+// depend on it.
 // The wire carries a Timestamp and a Duration; this viewer works in unix millis, which is the unit
 // the store records. Absent reads as 0, never NaN - a NaN reaching a comparator leaves the whole
 // list in an order nobody promised.
@@ -92,89 +93,82 @@ function durMillis(d: Duration | undefined): number {
   return d ? Number(d.seconds) * 1000 + d.nanos / 1e6 : 0;
 }
 
-export async function fetchRuns(host: string, token: string | null): Promise<RunSummary[]> {
-  try {
-    const client = createClient(ViewerService, createServerTransport(host, token));
-    const resp = await client.listOutputs({}, { signal: AbortSignal.timeout(4000) });
-    return resp.outputs.map((o) => ({
-      ref: o.ref,
-      project: o.project,
-      target: o.target,
-      inv: o.invocation,
-      failed: o.failed,
-      error: o.error,
-      timestamp_ms: tsMillis(o.createTime),
-      duration_ms: durMillis(o.duration),
-    }));
-  } catch {
-    // reported: by the server transport
-    return [];
-  }
+// The failure is reported by the server transport.
+export function fetchRuns(host: string, token: string | null): Promise<Result<RunSummary[]>> {
+  const client = createClient(ViewerService, createServerTransport(host, token));
+  return fromPromise(
+    client.listOutputs({}, { signal: AbortSignal.timeout(4000) }).then((resp) =>
+      resp.outputs.map((o) => ({
+        ref: o.ref,
+        project: o.project,
+        target: o.target,
+        inv: o.invocation,
+        failed: o.failed,
+        error: o.error,
+        timestamp_ms: tsMillis(o.createTime),
+        duration_ms: durMillis(o.duration),
+      })),
+    ),
+  );
 }
 
-// fetchRunOutput reads one run's verbatim captured output text (GET /api/v1/output?ref=). Returns null
-// on any failure, so a stale tree selection surfaces an honest "could not load" rather than a hang.
-export async function fetchRunOutput(
+// fetchRunOutput reads one run's verbatim captured output text (GET /api/v1/output?ref=). Any failure
+// is the error, so a stale tree selection surfaces an honest "could not load" rather than a hang.
+// The failure is reported by the server transport.
+export function fetchRunOutput(
   host: string,
   token: string | null,
   ref: string,
-): Promise<string | null> {
-  try {
-    const client = createClient(ViewerService, createServerTransport(host, token));
-    const resp = await client.getOutput({ name: ref }, { signal: AbortSignal.timeout(8000) });
-    // bytes, not string: a captured log is whatever the tool wrote, which is not guaranteed to be
-    // valid UTF-8. Decoded here because this viewer renders text.
-    return new TextDecoder().decode(resp.body);
-  } catch {
-    // reported: by the server transport
-    return null;
-  }
+): Promise<Result<string>> {
+  const client = createClient(ViewerService, createServerTransport(host, token));
+  return fromPromise(
+    client
+      .getOutput({ name: ref }, { signal: AbortSignal.timeout(8000) })
+      // bytes, not string: a captured log is whatever the tool wrote, which is not guaranteed to be
+      // valid UTF-8. Decoded here because this viewer renders text.
+      .then((resp) => new TextDecoder().decode(resp.body)),
+  );
 }
 
 // fetchRunLogs reads the server's INVOCATION feed - the retained run journals, newest first. Same
-// degradation as fetchRuns: [] on any failure, including a server too old to serve the route, so a
-// mixed-version pair falls back to the project ordering rather than showing an error.
-export async function fetchRunLogs(host: string, token: string | null): Promise<RunLog[]> {
-  try {
-    const client = createClient(ViewerService, createServerTransport(host, token));
-    const resp = await client.listInvocations({}, { signal: AbortSignal.timeout(4000) });
-    return resp.invocations.map((i) => ({
-      inv: i.id,
-      arguments: i.command?.arguments,
-      trigger: Trigger[i.command?.trigger ?? Trigger.UNSPECIFIED].toLowerCase(),
-      started_ms: tsMillis(i.startTime),
-      finished_ms: tsMillis(i.endTime),
-      status: Status[i.status].toLowerCase(),
-      magus_version: i.magusVersion,
-      size_bytes: Number(i.sizeBytes),
-    }));
-  } catch {
-    // reported: by the server transport
-    return [];
-  }
+// degradation as fetchRuns: any failure, including a server too old to serve the route, is the
+// error, and a caller falls back to the project ordering rather than showing it. The failure is
+// reported by the server transport.
+export function fetchRunLogs(host: string, token: string | null): Promise<Result<RunLog[]>> {
+  const client = createClient(ViewerService, createServerTransport(host, token));
+  return fromPromise(
+    client.listInvocations({}, { signal: AbortSignal.timeout(4000) }).then((resp) =>
+      resp.invocations.map((i) => ({
+        inv: i.id,
+        arguments: i.command?.arguments,
+        trigger: Trigger[i.command?.trigger ?? Trigger.UNSPECIFIED].toLowerCase(),
+        started_ms: tsMillis(i.startTime),
+        finished_ms: tsMillis(i.endTime),
+        status: Status[i.status].toLowerCase(),
+        magus_version: i.magusVersion,
+        size_bytes: Number(i.sizeBytes),
+      })),
+    ),
+  );
 }
 
 // fetchRunJournal reads one past run back as a magus.viewer.v1alpha1 Journal (binary protobuf) -
 // the SAME message a `#data=` link carries, which is what lets a browsed run render structurally
 // instead of through the text heuristic. Addressed by invocation id, or by an output ref (the
-// server resolves it to the run that produced it). null on any failure, including the 404 a run
-// whose journal has rotated away returns - the caller then falls back to the verbatim blob.
-export async function fetchRunJournal(
+// server resolves it to the run that produced it). Any failure is the error, including the 404 a run
+// whose journal has rotated away returns - the caller then falls back to the verbatim blob. The
+// failure is reported by the server transport.
+export function fetchRunJournal(
   host: string,
   token: string | null,
   q: { inv?: string; ref?: string },
-): Promise<Uint8Array | null> {
-  try {
-    const client = createClient(ViewerService, createServerTransport(host, token));
-    const journal = await client.getJournal(
-      { name: q.inv ?? q.ref ?? "" },
-      { signal: AbortSignal.timeout(8000) },
-    );
-    return toBinary(JournalSchema, journal);
-  } catch {
-    // reported: by the server transport
-    return null;
-  }
+): Promise<Result<Uint8Array>> {
+  const client = createClient(ViewerService, createServerTransport(host, token));
+  return fromPromise(
+    client
+      .getJournal({ name: q.inv ?? q.ref ?? "" }, { signal: AbortSignal.timeout(8000) })
+      .then((journal) => toBinary(JournalSchema, journal)),
+  );
 }
 
 // watchRuns keeps a run browser current without anyone pressing Refresh: it subscribes to the
@@ -1027,10 +1021,12 @@ export function initRunBrowser(deps: RunBrowserDeps): RunBrowserHandle {
       nextLogs = demoRunLogs(demoNow);
     } else if (deps.host) {
       // Both feeds at once: they are independent reads and the tree needs both to group by run.
-      [nextRuns, nextLogs] = await Promise.all([
+      const [runsRead, logsRead] = await Promise.all([
         fetchRuns(deps.host, deps.token),
         fetchRunLogs(deps.host, deps.token),
       ]);
+      nextRuns = runsRead.value ?? [];
+      nextLogs = logsRead.value ?? [];
       // The feeds read a refused connection as an empty list, so nothing answering at the address
       // is asked separately: "nothing kept yet" would send the reader to run a target.
       if (nextRuns.length === 0 && nextLogs.length === 0) {

@@ -207,10 +207,12 @@ export function activate(host: HTMLElement): AppInstance {
       nextRuns = demoRuns(demoNow);
       nextLogs = demoRunLogs(demoNow);
     } else if (host_) {
-      [nextRuns, nextLogs] = await Promise.all([
+      const [runsRead, logsRead] = await Promise.all([
         fetchRuns(host_, token),
         fetchRunLogs(host_, token),
       ]);
+      nextRuns = runsRead.value ?? [];
+      nextLogs = logsRead.value ?? [];
       if (nextRuns.length === 0 && nextLogs.length === 0) {
         nextUnreachable = (await probeServer(host_)).error !== undefined;
       }

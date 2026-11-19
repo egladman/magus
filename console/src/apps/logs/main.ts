@@ -300,7 +300,7 @@ async function openInvocation(
     setStatus("No server is connected. Set a server address in Settings.", true);
     return;
   }
-  const bytes = await fetchRunJournal(host, token, { inv });
+  const bytes = (await fetchRunJournal(host, token, { inv })).value;
   if (!bytes) {
     setStatus("Could not load " + label + ". Its journal may have aged out.", true);
     return;
@@ -365,13 +365,13 @@ async function openRunOutput(
   }
   setStatus("Loading " + ref + "...");
   if (host) {
-    const bytes = await fetchRunJournal(host, token, { ref });
+    const bytes = (await fetchRunJournal(host, token, { ref })).value;
     if (bytes && renderJournalBytes(bytes, ref, focus)) return;
   }
   // No journal: a stored blob is verbatim text with no per-step timing, so the waterfall the
   // previous selection may have left showing would plot nothing.
   state.timeline = false;
-  const text = await fetchRunOutput(host, token, ref);
+  const text = (await fetchRunOutput(host, token, ref)).value;
   if (text == null) {
     setStatus("Could not load " + ref + ". It may have aged out.", true);
     return;
@@ -525,11 +525,16 @@ async function loadFromURL(): Promise<void> {
   }
   if (params.data) {
     setStatus("Decoding the log...");
+    // #data= now carries a protobuf Journal (from `magus query ref --open`). Decode the
+    // bytes and parse; if it is not a valid Journal (a legacy text link), fall back to the
+    // text heuristic on the same gunzipped bytes.
+    const decoded = await decodeFragmentBytes(params.data);
+    if (decoded.error) {
+      setStatus("Could not decode the log: " + decoded.error.message + ".", true);
+      return;
+    }
     try {
-      // #data= now carries a protobuf Journal (from `magus query ref --open`). Decode the
-      // bytes and parse; if it is not a valid Journal (a legacy text link), fall back to the
-      // text heuristic on the same gunzipped bytes.
-      const bytes = await decodeFragmentBytes(params.data);
+      const bytes = decoded.value;
       let journal: Journal | null = null;
       try {
         const j = fromBinary(JournalSchema, bytes);
