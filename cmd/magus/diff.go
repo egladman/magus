@@ -408,6 +408,7 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 			}
 		}
 		return emitNames(os.Stdout, []string{rec.Path})
+	case outputText:
 	}
 	for _, line := range review.ThreadLines(rec) {
 		fmt.Println(line)

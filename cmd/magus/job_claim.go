@@ -58,7 +58,7 @@ func applyClaim(ctx context.Context, root string, records []jobtypes.Declaration
 			fmt.Printf("%s %s: + %s (%s): %s\n", verb, stored.ID, w.Path, w.Evidence, w.Proof)
 		}
 		return nil
-	default:
-		return emitFormatted(opts, stored)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, stored)
 }

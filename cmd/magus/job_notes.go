@@ -32,7 +32,7 @@ func forkDryRun(opts output.Options, v types.JobValidation) error {
 	case outputText:
 		job.RenderValidation(os.Stdout, v, true)
 		fmt.Println("dry run: nothing written; rerun without --dry-run to fork it")
-	default:
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 		err = emitFormatted(opts, v)
 	}
 	if err != nil {

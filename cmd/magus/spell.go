@@ -255,9 +255,9 @@ func emitPull(opts output.Options, res remotespell.PullResult) error {
 		return emitNames(os.Stdout, []string{res.Reference, res.Dir})
 	case outputName:
 		return emitNames(os.Stdout, []string{res.Reference})
-	default:
-		return emitFormatted(opts, res)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, res)
 }
 
 // spellLockResult is the -o json shape of lock: every pin magus.lock now holds.
@@ -388,9 +388,9 @@ func spellLs(ctx context.Context, root string, args []string) error {
 	switch opts.Format {
 	case outputText, outputName:
 		return emitNames(os.Stdout, tags)
-	default:
-		return emitFormatted(opts, spellLsResult{Repository: repo.String(), Tags: tags})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, spellLsResult{Repository: repo.String(), Tags: tags})
 }
 
 // shippedSpellsResult is the -o json shape of `spell ls magus/spell`.

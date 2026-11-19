@@ -48,9 +48,9 @@ func jobStop(ctx context.Context, args []string) error {
 	case outputText:
 		printJobStop(os.Stdout, stop)
 		return nil
-	default:
-		return emitFormatted(opts, stop)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, stop)
 }
 
 // printJobStop says what a job stop signaled, released and freed.

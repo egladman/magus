@@ -106,6 +106,7 @@ func runConfigView(cfg config.Config, args []string) error {
 		return emitFormatted(opts, cfg)
 	case outputName:
 		return emitNames(os.Stdout, config.KnownKeys())
+	case outputText:
 	}
 
 	// text / wide: human-readable layout.

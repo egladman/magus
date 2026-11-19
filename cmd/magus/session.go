@@ -428,6 +428,7 @@ func advisoriesCommand(root string, args []string) error {
 			names = append(names, a.ID)
 		}
 		return emitNames(os.Stdout, names)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
 	return emitFormatted(opts, sessions.AdvisoriesOutput{Advisories: shown, Store: dir})
 }
@@ -581,6 +582,7 @@ func sessionBriefCommand(ctx context.Context, root string) error {
 			return nil
 		}
 		return emitNames(os.Stdout, []string{payload.Revision})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
 	return emitFormatted(opts, payload)
 }

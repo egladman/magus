@@ -394,10 +394,10 @@ func lsJobs(root string, args []string) error {
 		job.PrintInflight(os.Stdout, joined, all)
 		pointAtConsole(context.Background(), "", false)
 		return nil
-	default:
-		joined.Changes = job.InflightScope(joined.Changes, all)
-		return emitFormatted(opts, joined)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	joined.Changes = job.InflightScope(joined.Changes, all)
+	return emitFormatted(opts, joined)
 }
 
 // describeJob is `magus describe job`: one job's terms, which is what a holder reads on
@@ -503,9 +503,9 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		job.PrintChange(os.Stdout, joined.Changes, row.ID)
 		pointAtConsole(ctx, row.ID, false)
 		return nil
-	default:
-		return emitFormatted(opts, job.DescribeOutput{Terms: brief, Postconditions: status})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, job.DescribeOutput{Terms: brief, Postconditions: status})
 }
 
 // checkoutBaseToken is the base this checkout is on, in the one form the store compares
@@ -962,19 +962,19 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		pointAtConsole(ctx, stored.ID, false)
 		return nil
-	default:
-		return emitFormatted(opts, job.ForkReport{
-			ForkOutput: job.ForkOutput{
-				Job:                  stored,
-				DeletionCandidates:   evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored),
-				ReferencedOutside:    referenced,
-				ReferencedOutsideGap: referencedGap,
-				ForegroundOverrun:    overrun,
-				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)),
-			},
-			DerivedClaims: derived,
-		})
+	case outputJSON, outputJSONL, outputName, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, job.ForkReport{
+		ForkOutput: job.ForkOutput{
+			Job:                  stored,
+			DeletionCandidates:   evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored),
+			ReferencedOutside:    referenced,
+			ReferencedOutsideGap: referencedGap,
+			ForegroundOverrun:    overrun,
+			ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)),
+		},
+		DerivedClaims: derived,
+	})
 }
 
 // forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
@@ -998,9 +998,9 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 		fmt.Println(job.EntryAdvice(stored, rel))
 		pointAtConsole(ctx, stored.ID, false)
 		return nil
-	default:
-		return emitFormatted(opts, stored)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, stored)
 }
 
 // jobExec takes a job in THIS checkout: it records the base this tree actually landed on
@@ -1104,9 +1104,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		fmt.Println(job.BaseAdvice(stored))
 		fmt.Printf("took %s in %s; read the spec with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
 		return nil
-	default:
-		return emitFormatted(opts, stored)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, stored)
 }
 
 // jobExecGrace is how long a command asked to stop at its deadline has before its group
@@ -1350,7 +1350,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, job.ExitedBindingNote, attr.Notice("note"))
 		}
 		job.RenderFiled(os.Stdout, stored)
-	default:
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 		err = emitFormatted(opts, stored)
 	}
 	// A row the result ended (a read-only one nothing else grades) gives its checkout back now.
@@ -1540,7 +1540,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		job.PrintStatus(os.Stdout, status)
 		pointAtConsole(ctx, status.Job, false)
 		told = os.Stdout
-	default:
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 		err = emitFormatted(opts, status)
 	}
 	err = errors.Join(err, endWorktrees(ctx, told, store))
@@ -1592,7 +1592,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 		}
 		fmt.Printf("integration: %s %s in %s; its state is unchanged\n", id, verdict, checkout)
 		job.RenderGates(os.Stdout, jobtypes.Status{Job: id, Gates: grade.Gates})
-	default:
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 		err = emitFormatted(opts, grade)
 	}
 	if err != nil || grade.Verified {
@@ -1825,9 +1825,9 @@ func jobPause(ctx context.Context, root, verb string, args []string) error {
 			}
 		}
 		return nil
-	default:
-		return emitFormatted(opts, rows)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, rows)
 }
 
 // jobDelete is `magus job rm <job>`: take one row out of the plan.
@@ -1893,9 +1893,9 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	case outputText:
 		fmt.Printf("removed %s (%s); the plan it was part of is archived beside it\n", dropped.ID, orDash(string(dropped.State)))
 		return nil
-	default:
-		return emitFormatted(opts, dropped)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, dropped)
 }
 
 // jobApply is `magus job apply`. Each record is a job's whole spec,
@@ -2137,12 +2137,12 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	case outputText:
 		job.PrintPruned(os.Stdout, ended, globalCfg.DryRun)
 		return endWorktrees(ctx, os.Stdout, store, endedIDs...)
-	default:
-		if ended == nil {
-			ended = []job.Ending{}
-		}
-		return emitFormatted(opts, job.PruneReport{Ended: ended, DryRun: globalCfg.DryRun})
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	if ended == nil {
+		ended = []job.Ending{}
+	}
+	return emitFormatted(opts, job.PruneReport{Ended: ended, DryRun: globalCfg.DryRun})
 }
 
 // outputsIn resolves a ref against the output store of the checkout at root. That

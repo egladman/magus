@@ -49,7 +49,7 @@ func jobPinOrAdvance(ctx context.Context, root, verb string, args []string) erro
 	case outputText:
 		job.PrintPinned(os.Stdout, verb, rows)
 		return nil
-	default:
-		return emitFormatted(opts, rows)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
+	return emitFormatted(opts, rows)
 }

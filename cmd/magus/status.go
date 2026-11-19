@@ -167,6 +167,7 @@ func printStatusWithSilent(w io.Writer, snapshot daemon.Snapshot, silent []guard
 		return emitFormatted(opts, report)
 	case outputName:
 		return emitNames(w, server.StatusNames(snapshot))
+	case outputText:
 	}
 	if err := writeStatus(w, snapshot, opts, 0, compact); err != nil {
 		return err
@@ -194,7 +195,7 @@ func writeStatus(w io.Writer, r daemon.Snapshot, opts output.Options, animFrame 
 		return emitFormatted(opts, r)
 	case outputName:
 		return emitNames(w, server.StatusNames(r))
-	default:
+	case outputText:
 		if compact {
 			server.PrintStatusCompact(w, r, time.Now())
 			return nil

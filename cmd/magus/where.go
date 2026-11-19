@@ -40,6 +40,7 @@ func emitWhere(wsRoot string, matches []interactive.WhereMatch) error {
 		})
 	case outputName:
 		return emitItemNames(os.Stdout, matches, func(m interactive.WhereMatch) string { return m.Path })
+	case outputText:
 	}
 	interactive.PrintWherePaths(os.Stdout, matches)
 	return nil

@@ -109,6 +109,7 @@ func attentionList(ctx context.Context, root string, args []string) error {
 			names = append(names, req.ID)
 		}
 		return emitNames(os.Stdout, names)
+	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
 	return emitFormatted(opts, attentionListOutput{Requests: requests, Store: dir})
 }

@@ -532,6 +532,7 @@ func describeCharm(c spells.Charm, args []string) string {
 			parts = append(parts, "moves an argument")
 		case "copy":
 			parts = append(parts, "copies an argument")
+		case spells.OpNone, spells.OpTest:
 		}
 	}
 	if len(parts) == 0 {

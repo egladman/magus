@@ -167,6 +167,9 @@ func (t Task) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("tag %q is neither %s nor %s", t.Tag, TagCapability, tagRegression))
 	}
+	if !t.Kind.known() {
+		errs = append(errs, fmt.Errorf("kind %q is not one of %s, %s, %s", t.Kind, TaskBugfix, TaskInterrogation, TaskRegeneration))
+	}
 	switch t.Kind {
 	case TaskBugfix:
 		need(t.Patch != "", "patch")
@@ -180,8 +183,6 @@ func (t Task) Validate() error {
 	case TaskRegeneration:
 		need(t.Patch != "", "patch")
 		need(len(t.Generated) > 0, "generated")
-	default:
-		errs = append(errs, fmt.Errorf("kind %q is not one of %s, %s, %s", t.Kind, TaskBugfix, TaskInterrogation, TaskRegeneration))
 	}
 	if t.SWEBench != nil {
 		need(t.SWEBench.Image != "", "swebench.image")
@@ -288,4 +289,13 @@ func git(ctx context.Context, dir string, args ...string) error {
 		return fmt.Errorf("git %s (%s): %w", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+// known reports whether k is one of the task kinds.
+func (k TaskKind) known() bool {
+	switch k {
+	case TaskBugfix, TaskInterrogation, TaskRegeneration:
+		return true
+	}
+	return false
 }

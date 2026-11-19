@@ -78,9 +78,9 @@ func mcpParamType(t std.TypeTag) (string, error) {
 		return "object", nil
 	case std.TypeStringSlice:
 		return "string_array", nil
-	default:
-		return "", fmt.Errorf("param type %s has no JSON schema scalar", t.GoType())
+	case std.TypeAny, std.TypeByteSlice, std.TypeFloatSlice, std.TypeIndex, std.TypeInvalid, std.TypeStringMap, std.TypeStringMapMap, std.TypeStringSliceSlice:
 	}
+	return "", fmt.Errorf("param type %s has no JSON schema scalar", t.GoType())
 }
 
 func renderMCPTools(tools []std.MCPTool, pkg string) ([]byte, error) {

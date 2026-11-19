@@ -620,9 +620,9 @@ func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIn
 		return &buzzindex.Indexer{Dir: dir, WorkspaceRoot: root}
 	case spells.SymbolFormatShellScript:
 		return &shindex.Indexer{Dir: dir, WorkspaceRoot: root}
-	default:
-		return nil
+	case spells.SymbolFormatNone, spells.SymbolFormatSCIP:
 	}
+	return nil
 }
 
 // indexBase writes b's index of tree to pack and reads its symbols back. A file the index

@@ -450,6 +450,7 @@ func writeGraphExport(opts output.Options, out types.KnowledgeGraphOutput) error
 			names = append(names, n.ID)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 	knowledge.WriteSummary(os.Stdout, out)
 	return nil
@@ -537,6 +538,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 			names = append(names, god.ID)
 		}
 		return emitNames(os.Stdout, names)
+	case outputText:
 	}
 	return knowledge.StatsText(os.Stdout, out)
 }
@@ -658,6 +660,7 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		return emitNames(os.Stdout, names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
+	case outputText:
 	}
 
 	// text and tree formats both render the ASCII dependency tree.
@@ -887,18 +890,20 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 			attr.Why("Open this yourself (the server is waiting):\n  "+openURL))
 	}
 
-	switch outcome := bs.WaitServed(ctx); outcome {
+	outcome := bs.WaitServed(ctx)
+	switch outcome {
 	case httpx.ServeCompleted:
 		slog.InfoContext(ctx, "graph loaded; loopback server stopped.", attr.Notice(""))
+		return nil
 	case httpx.ServeTimedOut:
 		slog.InfoContext(ctx, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.", attr.Notice(""))
+		return nil
 	case httpx.ServeCanceled:
 		slog.InfoContext(ctx, "\ncanceled; loopback server stopped.", attr.Notice(""))
-	default:
-		// A new ServeOutcome added upstream must not be swallowed as success: name it.
-		return fmt.Errorf("graph export --open --serve: unexpected serve outcome %v", outcome)
+		return nil
 	}
-	return nil
+	// A new ServeOutcome added upstream must not be swallowed as success: name it.
+	return fmt.Errorf("graph export --open --serve: unexpected serve outcome %v", outcome)
 }
 
 // graphOpenLive opens the Graph Explorer served BY the running server from its own

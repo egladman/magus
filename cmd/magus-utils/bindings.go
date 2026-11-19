@@ -554,7 +554,7 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
 		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d)\n", a.Name, idx)
-	default:
+	case std.TypeInvalid:
 		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
 	}
 }
@@ -719,9 +719,9 @@ func buzzValConv(t std.TypeTag, src string) string {
 		return fmt.Sprintf("ffi.AnyMapVal(%s)", src)
 	case std.TypeAny:
 		return fmt.Sprintf("ffi.AnyVal(%s)", src)
-	default:
-		panic(fmt.Sprintf("buzzValConv: unsupported type tag %s for value conversion", t.GoType()))
+	case std.TypeInvalid:
 	}
+	panic(fmt.Sprintf("buzzValConv: unsupported type tag %s for value conversion", t.GoType()))
 }
 
 // buzzValueEmitter writes concrete Go-to-VM encoders for boundary types. It is
