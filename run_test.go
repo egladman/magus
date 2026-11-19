@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -3004,10 +3005,11 @@ func ExampleMagus_Run() {
 
 // A graph build starts one sub-run per project, each loading the same history. The
 // verdict on a history a newer magus wrote is said once, and every wait still returns
-// the typed error.
+// the typed error. A numeric version is set aside rather than refused, so the test
+// writes a newer api_version.
 func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.jsonl")
-	require.NoError(t, os.WriteFile(path, []byte(`{"workspace":{"version":99}}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"workspace":{"api_version":"magus.forecast-history/v1alpha99"}}`+"\n"), 0o644))
 
 	var logs bytes.Buffer
 	prev := slog.Default()
@@ -3023,11 +3025,11 @@ func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 		var skew *forecast.UnsupportedVersionError
 		require.ErrorAs(t, err, &skew)
 		require.ErrorIs(t, err, types.StoreRecordsNewer)
-		assert.Equal(t, 99, skew.Have)
+		assert.Equal(t, apiversion.APIVersion("magus.forecast-history/v1alpha99"), skew.Have)
 	}
 	assert.Equal(t, 1, strings.Count(logs.String(), "run history is unreadable"))
 	assert.Contains(t, logs.String(), string(types.StoreRecordsNewer))
-	assert.Contains(t, logs.String(), "version 99")
+	assert.Contains(t, logs.String(), "magus.forecast-history/v1alpha99")
 	assert.Contains(t, logs.String(), "left alone")
 }
 
