@@ -8,7 +8,11 @@ export fun serverHttpDiagram() > diagram\Diagram !> any {
     final mcp = magus\graph().dir("internal/handler/mcp");
     final server = magus\graph().dir("internal/server");
     final handlers = magus\graph().layer("handler").dirs;
-    final routes = diagram\without(handlers, drop: [mcp]);
+    final rest = diagram\without(handlers, drop: [mcp]);
+    if (rest.error != null) {
+        throw rest.error!.message;
+    }
+    final routes = rest.value!;
     final agent = diagram\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: diagram\Look.plain);
     final console = diagram\external("Console PWA", sub: "dashboard, review", tag: "client", look: diagram\Look.plain);
     final probe = diagram\external("kubelet", sub: "scripts, probes", tag: "client");

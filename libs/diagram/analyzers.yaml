@@ -3,7 +3,4 @@
 # root analyzers.yaml describes the shape.
 
 no-throw:
-  # construct: {file: count}
-  baseline:
-    buzz-error-signature:
-      diagram.buzz: 3
+  baseline: {}

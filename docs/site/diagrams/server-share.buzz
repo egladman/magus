@@ -17,7 +17,11 @@ export fun serverShareDiagram() > diagram\Diagram !> any {
         magus\graph().dir("internal/handler/metrics"),
     ];
     final interceptor = magus\graph().dir("internal/handler/activityrpc");
-    final withheld = diagram\without(handlers, drop: [served, interceptor] + connectReads);
+    final kept = diagram\without(handlers, drop: [served, interceptor] + connectReads);
+    if (kept.error != null) {
+        throw kept.error!.message;
+    }
+    final withheld = kept.value!;
     final dash = diagram\external("Console", sub: "dashboard", tag: "pwa", look: diagram\Look.plain);
     final phone = diagram\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");
     return diagram\of("server-share",

@@ -19,5 +19,9 @@ export fun dataTypes() > [magus\Dir] !> any {
 // cmdTools is every command under cmd/ except the magus binary itself: docs generators,
 // codegen and the browser playground, each built by its own target.
 export fun cmdTools() > [magus\Dir] !> any {
-    return diagram\without(goPackages("cmd/*"), drop: [magus\graph().dir("cmd/magus")]);
+    final tools = diagram\without(goPackages("cmd/*"), drop: [magus\graph().dir("cmd/magus")]);
+    if (tools.error != null) {
+        throw tools.error!.message;
+    }
+    return tools.value!;
 }

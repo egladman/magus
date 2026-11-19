@@ -149,26 +149,33 @@ object DiagramRun {
 // Only the page copy links: the dark and light files are opened on their own. A finding is
 // returned, never raised, so its receipt can record it.
 fun runDiagram(a: diagram\Atlas, f: diagram\Diagram) > DiagramRun {
-    try {
-        final d = a.layout(f);
-        final lines: mut [str] = mut ["diagram {d.id}", "title {d.title}", "unscoped {d.unscoped}", "level {d.level.value}"];
-        foreach (n in d.nodes) { lines.append(diagram\nodeFact(n)); }
-        foreach (e in d.edges) { lines.append("edge {e.src} {e.dst} {e.claim.value} {e.kind} {e.label}"); }
-        foreach (s in d.scope) { lines.append("scope {s} {d.omits[s] ?? ""}"); }
-        final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
-        final counts = diagram\claims(d);
-        return DiagramRun{
-            id = f.id, stamp = stamp, level = d.level.value,
-            imports = counts["imports"] ?? 0, calls = counts["calls"] ?? 0, flow = counts["flow"] ?? 0,
-            undrilled = a.undrilled(f),
-            dark = stamped(diagram\drawLayout(d, theme: diagram\Theme.dark), id: f.id, stamp: stamp),
-            light = stamped(diagram\drawLayout(d, theme: diagram\Theme.light), id: f.id, stamp: stamp),
-            page = stamped(diagram\drawLayout(d, theme: diagram\Theme.page, drillHref: DRILL_HREF), id: f.id, stamp: stamp),
-        };
-    } catch (msg: str) {
-        return DiagramRun{ id = f.id, findings = msg.split("\n") };
+    final laid = a.layout(f);
+    if (laid.error -> e) {
+        return DiagramRun{ id = f.id, findings = e.message.split("\n") };
     }
-    return DiagramRun{ id = f.id };
+    final d = laid.value!;
+    final lines: mut [str] = mut ["diagram {d.id}", "title {d.title}", "unscoped {d.unscoped}", "level {d.level.value}"];
+    foreach (n in d.nodes) { lines.append(diagram\nodeFact(n)); }
+    foreach (e in d.edges) { lines.append("edge {e.src} {e.dst} {e.claim.value} {e.kind} {e.label}"); }
+    foreach (s in d.scope) { lines.append("scope {s} {d.omits[s] ?? ""}"); }
+    final stamp = "sha256:" + crypto\sha256Hex(lines.join("\n"));
+    final counts = diagram\claims(d);
+    final dark = diagram\drawLayout(d, theme: diagram\Theme.dark);
+    final light = diagram\drawLayout(d, theme: diagram\Theme.light);
+    final page = diagram\drawLayout(d, theme: diagram\Theme.page, drillHref: DRILL_HREF);
+    foreach (painted in [dark, light, page]) {
+        if (painted.error -> e) {
+            return DiagramRun{ id = f.id, findings = e.message.split("\n") };
+        }
+    }
+    return DiagramRun{
+        id = f.id, stamp = stamp, level = d.level.value,
+        imports = counts["imports"] ?? 0, calls = counts["calls"] ?? 0, flow = counts["flow"] ?? 0,
+        undrilled = a.undrilled(f),
+        dark = stamped(dark.value!, id: f.id, stamp: stamp),
+        light = stamped(light.value!, id: f.id, stamp: stamp),
+        page = stamped(page.value!, id: f.id, stamp: stamp),
+    };
 }
 
 // stamped puts the stamp in the SVG's metadata, so a reader of the file and a later run
