@@ -16,7 +16,7 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,21 +24,26 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
 func main() {
-	out := flag.String("out", "", "Directory to write the skill reference into (required)")
-	flag.Parse()
-	if *out == "" {
-		fmt.Fprintln(os.Stderr, "magus-skilldocs: -out is required")
-		os.Exit(2)
-	}
-	if err := run(*out); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-skilldocs: %v\n", err)
-		os.Exit(1)
-	}
+	var out string
+	command.Main(command.Command{
+		Name:  "magus-skilldocs",
+		Short: "Render the agent-skill reference from the embedded skills.",
+		Usage: "magus-skilldocs -out <dir>",
+		Flags: []command.Flag{{Name: "out", Kind: command.String, Doc: "Directory to write the skill reference into (required)", Target: &out}},
+		Run: func(context.Context, command.Invocation) error {
+			if out == "" {
+				return exit.Usagef("-out is required")
+			}
+			return run(out)
+		},
+	})
 }
 
 // run renders the pages from the SAME embedded catalog `magus agent install` writes, which is
