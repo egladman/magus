@@ -96,7 +96,9 @@ func (s *ParseSuite) TestOptionsStopAtTheScript() {
 	s.requireOpts(opts{args: []string{"x.buzz", "-c"}}, "x.buzz", "-c")
 }
 
-func (s *ParseSuite) TestDoubleDashEndsOptions() { s.requireOpts(opts{args: []string{"-c"}}, "--", "-c") }
+func (s *ParseSuite) TestDoubleDashEndsOptions() {
+	s.requireOpts(opts{args: []string{"-c"}}, "--", "-c")
+}
 
 func (s *ParseSuite) TestUnknownOption() {
 	_, err := s.parse("--bogus")
