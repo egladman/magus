@@ -8,10 +8,11 @@
 //         final guard = g.dir("internal/httpx");
 //         final mcp = g.dir("internal/handler/mcp");
 //         final rpc = diagram\without(g.layer("handler").dirs, drop: [mcp]);
+//         if (rpc.error != null) { throw rpc.error!.message; }
 //         return diagram\of("server-http")
 //             .box(guard, label: "Guard", focal: true)
 //             .box(mcp, label: "/mcp")
-//             .group(rpc, label: "Connect RPC")
+//             .group(rpc.value!, label: "Connect RPC")
 //             .edgesFromGraph();
 //     }
 //
@@ -6528,17 +6529,9 @@ export enum<str> Theme { page, light, dark }
 
 // without is dirs less drop, in the order dirs holds them.
 //
-// Raises naming a dir in drop that dirs does not hold, so a drop left behind by a rename
+// The error names a dir in drop that dirs does not hold, so a drop left behind by a rename
 // fails rather than hiding nothing.
-export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str { //nolint:no-throw // the exported call raises
-    final left = dropped(dirs, drop: drop);
-    if (left.error -> e) {
-        throw e.message; //nolint:no-throw // the exported call raises
-    }
-    return left.value!;
-}
-
-fun dropped(dirs: [magus\Dir], drop: [magus\Dir]) > result\Result::<[magus\Dir]> {
+export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > result\Result::<[magus\Dir]> {
     if (notDirs(dirs, call: "without") -> bad) {
         return result\fail::<[magus\Dir]>(bad);
     }
@@ -6983,20 +6976,16 @@ export fun draw(f: Diagram, theme: Theme, anchorHref: str = "") > result\Result:
 // drawLayout paints d, a Diagram's layout(), with theme, as draw
 // does. Painting one diagram in several themes lays it out once. drillHref is a URL
 // template: {id} takes the diagram a box drills down to, from an Atlas.
-export fun drawLayout(d: Layout, theme: Theme, anchorHref: str = "", drillHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
+export fun drawLayout(d: Layout, theme: Theme, anchorHref: str = "", drillHref: str = "") > result\Result::<str> {
     final named: str? = theme.value;
     if (named == null) {
-        throw "diagram {quote(d.id)}: drawLayout takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
+        return result\fail::<str>("diagram {quote(d.id)}: drawLayout takes theme: Theme.<case>, not a string");
     }
-    final svg = painted(d, theme: theme, anchorHref: anchorHref, drillHref: drillHref);
-    if (svg.error -> e) {
-        throw e.message; //nolint:no-throw // the exported call raises
-    }
-    return svg.value!;
+    return painted(d, theme: theme, anchorHref: anchorHref, drillHref: drillHref);
 }
 
-// painted is drawLayout without the raise: d painted with theme, a bare SVG for Theme.page
-// and one behind its XML declaration for a file a page cannot style.
+// painted is d painted with theme: a bare SVG for Theme.page and one behind its XML
+// declaration for a file a page cannot style.
 fun painted(d: Layout, theme: Theme, anchorHref: str, drillHref: str) > result\Result::<str> {
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
@@ -7062,18 +7051,18 @@ export object Atlas {
     // The widest a diagram may lay out, in SVG units; 0 sets no budget.
     column: int = 0,
 
-    // diagram lays f out as Diagram.layout() does, with each box's drill set, and raises
-    // every finding at once, a diagram past the column among them.
-    fun layout(f: Diagram) > Layout !> str { //nolint:no-throw // the exported call raises
+    // layout lays f out as Diagram.layout() does, with each box's drill set; the error
+    // holds every finding at once, a diagram past the column among them.
+    fun layout(f: Diagram) > result\Result::<Layout> {
         final laid = laidOut(f, drills: this.drills(f));
         if (laid.error -> e) {
-            throw e.message; //nolint:no-throw // the exported call raises
+            return result\fail::<Layout>(e.message);
         }
         final d = laid.value!;
         if (this.column > 0 and d.width > this.column) {
-            throw "diagram {quote(f.id)}: lays out {d.width} wide, past the column of {this.column}; set direction: Direction.down in of(), or split it"; //nolint:no-throw // the exported call raises
+            return result\fail::<Layout>("diagram {quote(f.id)}: lays out {d.width} wide, past the column of {this.column}; set direction: Direction.down in of(), or split it");
         }
-        return d;
+        return laid;
     }
 
     // drills maps the id of each box in f to the diagram one level down that draws it: a
@@ -8039,7 +8028,7 @@ fun handlers() > magus\Layer { return newLayer("handler", dirs: [mcpDir(), graph
 fun serverHttp(layer: magus\Layer) > result\Result::<mut Diagram> {
     final guard = guardDir();
     final mcp = mcpDir();
-    final rest = dropped(layer.dirs, drop: [mcp]);
+    final rest = without(layer.dirs, drop: [mcp]);
     if (rest.error -> e) {
         return result\fail::<mut Diagram>(e.message);
     }
@@ -8127,14 +8116,9 @@ test "a directory is drawn once" {
 }
 
 test "without refuses a stale drop" {
-    var gone = "";
-    try {
-        _ = without(handlers().dirs, drop: [guardDir()]);
-    } catch (e: str) {
-        gone = e;
-    }
-    assert\equal(gone, want: "without drops \"internal/httpx\", which dirs does not hold; take it out of drop:", message: "a stale drop");
-    final kept = without([jobDir(), mcpDir(), graphDir()], drop: [mcpDir()]) catch [<magus\Dir>];
+    final stale = without(handlers().dirs, drop: [guardDir()]);
+    assert\equal(stale.error?.message ?? "", want: "without drops \"internal/httpx\", which dirs does not hold; take it out of drop:", message: "a stale drop");
+    final kept = without([jobDir(), mcpDir(), graphDir()], drop: [mcpDir()]).value ?? [<magus\Dir>];
     assert\equal(kept.len(), want: 2, message: "one dropped");
     assert\equal(kept[0].path + "," + kept[1].path, want: "internal/handler/job,internal/handler/graph", message: "in the order dirs holds them");
 }
@@ -8276,7 +8260,7 @@ test "drawLayout paints a diagram's layout in the bytes draw paints" {
     assert\equal(failure(f), want: "", message: "the fixture lays out and paints");
     final d = f.layout().value ?? Layout{};
     foreach (theme in [Theme.dark, Theme.light, Theme.page]) {
-        assert\equal(drawLayout(d, theme: theme) catch "laid threw", want: draw(f, theme: theme).value ?? "drew threw", message: "theme {theme.value}");
+        assert\equal(drawLayout(d, theme: theme).value ?? "laid threw", want: draw(f, theme: theme).value ?? "drew threw", message: "theme {theme.value}");
     }
 }
 
@@ -8344,13 +8328,8 @@ test "a value that is not a record is refused where it enters" {
     assert\equal(failure(of("t").group([guardDir(), notDir], label: "g").unscoped(why: "x")),
         want: "diagram \"t\": group(\"g\") takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one\ndiagram \"t\": draws directories and declares unscoped(why:); drop the unscoped",
         message: "group");
-    var msg = "";
-    try {
-        _ = without([guardDir(), notDir], drop: [<magus\Dir>]);
-    } catch (e: str) {
-        msg = e;
-    }
-    assert\equal(msg, want: "without takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one", message: "without");
+    final bad = without([guardDir(), notDir], drop: [<magus\Dir>]);
+    assert\equal(bad.error?.message ?? "", want: "without takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one", message: "without");
 }
 
 test "a diagram past the box budget names the narrower scope" {
@@ -8464,14 +8443,14 @@ test "an atlas links a box to the diagram one level down" {
     final handlerDiagram = of("handlers", title: "Each handler mounts on the guard").box(mcpDir()).box(graphDir()).box(jobDir()).box(guardDir())
         .edgesFromGraph().scope(handlers().dirs + [guardDir()]);
     final a = atlas([overview, langStages(), routes, handlerDiagram]);
-    final d = a.layout(overview) catch Layout{};
+    final d = a.layout(overview).value ?? Layout{};
     assert\equal(lookupNode(d, id: "libs/lang").drill, want: "lang-stages", message: "the package box drills into its stages");
     assert\equal(lookupNode(d, id: "libs/lang/ast").drill, want: "", message: "nothing draws inside ast");
-    final svg = drawLayout(d, theme: Theme.light, drillHref: "#diagram-\{id}") catch "threw";
+    final svg = drawLayout(d, theme: Theme.light, drillHref: "#diagram-\{id}").value ?? "threw";
     std\assert(svg.indexOf("<a href=\"#diagram-lang-stages\" data-node=\"libs/lang\" data-anchor=\"libs/lang\" data-drill=\"lang-stages\">") != null, message: "painted as a link");
-    final plain = drawLayout(d, theme: Theme.light) catch "threw";
+    final plain = drawLayout(d, theme: Theme.light).value ?? "threw";
     std\assert(plain.indexOf("href=\"#diagram") == null and plain.indexOf("data-drill=\"lang-stages\"") != null, message: "no template, no link");
-    final r = a.layout(routes) catch Layout{};
+    final r = a.layout(routes).value ?? Layout{};
     assert\equal(lookupNode(r, id: "group:Connect RPC").drill, want: "handlers", message: "a group drills into the package diagram that boxes each of its directories");
     final lonely = of("lonely").group([guardDir(), langDir()], label: "odd").box(mcpDir()).edgesFromGraph();
     assert\equal(atlas([overview, lonely]).undrilled(lonely).join(","), want: "odd", message: "a group no diagram draws is listed");
@@ -8479,12 +8458,7 @@ test "an atlas links a box to the diagram one level down" {
 
 test "an atlas refuses a diagram wider than its column" {
     final a = atlas([serverHttp(handlers()).value ?? of("x")], column: 200);
-    var msg = "";
-    try {
-        _ = a.layout(a.diagrams[0]);
-    } catch (e: str) {
-        msg = e;
-    }
+    final msg = a.layout(a.diagrams[0]).error?.message ?? "";
     std\assert(msg.startsWith("diagram \"server-http\": lays out ") and msg.endsWith(" wide, past the column of 200; set direction: Direction.down in of(), or split it"), message: msg);
 }
 
