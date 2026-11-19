@@ -174,14 +174,13 @@ test("fetchSessionActivity asks the viewer service for one session and path", as
   );
   assert.ok(url.endsWith("/magus.viewer.v1alpha1.ViewerService/GetSessionActivity"));
   assert.deepEqual(sent, { session: "sess-1", path: "a.go" });
-  assert.ok("activity" in result && result.activity.wrote);
+  assert.ok(result.value?.wrote);
 });
 
 test("the showcase touch row renders Ran and its Session panel states reasoning is unavailable", async () => {
-  globalThis.fetch = (() => {
-    // platform double: fetch
-    throw new Error("demo mode must not reach the network");
-  }) as typeof fetch;
+  // platform double: fetch
+  globalThis.fetch = (() =>
+    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
   location.hash = "#demo";
   const dispose = activate(document.body);
   for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 0));

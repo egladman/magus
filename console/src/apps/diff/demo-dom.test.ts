@@ -19,10 +19,9 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   document.body.replaceChildren();
-  globalThis.fetch = (() => {
-    // platform double: fetch
-    throw new Error("demo mode must not reach the network");
-  }) as typeof fetch;
+  // platform double: fetch
+  globalThis.fetch = (() =>
+    Promise.reject(new Error("demo mode must not reach the network"))) as typeof fetch;
 });
 
 afterEach(() => {
