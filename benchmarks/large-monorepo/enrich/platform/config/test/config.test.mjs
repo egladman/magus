@@ -30,15 +30,14 @@ test('mergeConfig recurses into nested objects without mutating base', () => {
   assert.equal(base.tls.verify, true);
 });
 
-test('loadConfig throws ConfigError naming the missing key', () => {
-  assert.throws(
-    () => loadConfig({ host: null }, {}, ['host']),
-    (err) => err instanceof ConfigError && err.key === 'host',
-  );
+test('loadConfig returns a ConfigError naming the missing key', () => {
+  const { error } = loadConfig({ host: null }, {}, ['host']);
+  assert.ok(error instanceof ConfigError);
+  assert.equal(error.key, 'host');
 });
 
 test('loadConfig returns the resolved config', () => {
-  assert.deepEqual(loadConfig({ host: 'localhost', port: 80 }, { port: 8080 }, ['host']), {
+  assert.deepEqual(loadConfig({ host: 'localhost', port: 80 }, { port: 8080 }, ['host']).value, {
     host: 'localhost',
     port: 8080,
   });

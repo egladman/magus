@@ -62,18 +62,20 @@ async function pageSocket() {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/list`);
       const page = (await res.json()).find((t) => t.type === "page");
-      if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl;
+      if (page?.webSocketDebuggerUrl) return { value: page.webSocketDebuggerUrl };
     } catch {
       // devtools is not listening yet; that is the normal first few hundred ms
     }
     await sleep(100);
   }
-  throw new Error("screenshot: chrome devtools never came up");
+  return { error: new Error("screenshot: chrome devtools never came up") };
 }
 
 let ws;
 try {
-  ws = new WebSocket(await pageSocket());
+  const socket = await pageSocket();
+  if (socket.error) throw socket.error;
+  ws = new WebSocket(socket.value);
   await new Promise((resolve, reject) => {
     ws.onopen = resolve;
     ws.onerror = () => reject(new Error("screenshot: devtools socket refused"));

@@ -19,18 +19,18 @@ test('buildUrl percent-encodes keys and values', () => {
 });
 
 test('request resolves options over the defaults', () => {
-  const req = request('https://example.test/v1', { method: 'POST', retries: 2 });
+  const req = request('https://example.test/v1', { method: 'POST', retries: 2 }).value;
   assert.equal(req.method, 'POST');
   assert.equal(req.retries, 2);
   assert.equal(req.timeoutMs, 1000);
 });
 
 test('request keeps a zero timeout override', () => {
-  assert.equal(request('https://example.test/v1', { timeoutMs: 0 }).timeoutMs, 0);
+  assert.equal(request('https://example.test/v1', { timeoutMs: 0 }).value.timeoutMs, 0);
 });
 
 test('request rejects an empty base url', () => {
-  assert.throws(() => request(''), { name: 'ConfigError' });
+  assert.equal(request('').error.name, 'ConfigError');
 });
 
 test('HttpError carries the status', () => {

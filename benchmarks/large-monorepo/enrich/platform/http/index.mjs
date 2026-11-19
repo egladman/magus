@@ -22,20 +22,23 @@ export function buildUrl(base, query) {
 
 // Resolves options over the defaults and returns the request descriptor
 // { url, method, timeoutMs, retries, log }. Opens no socket: this package models the
-// request, and sending it is the caller's job. Throws ConfigError on an empty base.
+// request, and sending it is the caller's job. Returns { value: descriptor }, or
+// { error: ConfigError } on an empty base.
 export function request(base, options = {}) {
   if (typeof base !== 'string' || base.length === 0) {
-    throw new ConfigError('base url is required', 'base');
+    return { error: new ConfigError('base url is required', 'base') };
   }
   const resolved = mergeConfig(DEFAULTS, options);
   const logger = createLogger('http');
   const url = buildUrl(base, resolved.query);
   logger.log('info', 'request', { method: resolved.method, url });
   return {
-    url,
-    method: resolved.method,
-    timeoutMs: resolved.timeoutMs,
-    retries: resolved.retries,
-    log: logger.entries,
+    value: {
+      url,
+      method: resolved.method,
+      timeoutMs: resolved.timeoutMs,
+      retries: resolved.retries,
+      log: logger.entries,
+    },
   };
 }
