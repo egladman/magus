@@ -3,6 +3,9 @@ package opencode
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -230,4 +233,14 @@ func (s *runtimeSuite) TestInitializationFailsVisibly() {
 func (s *runtimeSuite) TestMissingNativeCapabilityFailsVisibly() {
 	_, err := openRuntime(context.Background(), "", nil)
 	s.ErrorContains(err, "missing native invocation")
+}
+
+func (s *runtimeSuite) TestGenerateLinePinsTheMiseGoToolchain() {
+	mise, err := os.ReadFile("../../../../mise.toml")
+	s.Require().NoError(err)
+	pinned := regexp.MustCompile(`(?m)^go = "([0-9.]+)"`).FindSubmatch(mise)
+	s.Require().NotNil(pinned, "mise.toml pins no go")
+	src, err := os.ReadFile("runtime.go")
+	s.Require().NoError(err)
+	s.Contains(string(src), fmt.Sprintf("//go:generate env GOTOOLCHAIN=go%s ", pinned[1]))
 }
