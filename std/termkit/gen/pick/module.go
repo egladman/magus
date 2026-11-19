@@ -29,12 +29,28 @@ var Module = std.Module{
 			Impl:    ImplOne,
 		},
 		{
+			Name:    "many",
+			Doc:     "Many blocks until the user marks one or more items and confirms, or aborts.",
+			Args:    []std.Arg{{Name: "p"}, {Name: "items"}, {Name: "opts"}, {Name: "marked"}},
+			Returns: []std.Ret{{}},
+			Raises:  true,
+			Impl:    ImplMany,
+		},
+		{
 			Name:    "render",
 			Doc:     "RenderPick returns the block a picker WOULD draw for the given state, without opening a terminal or running an input loop.",
 			Args:    []std.Arg{{Name: "p"}, {Name: "items"}, {Name: "opts"}, {Name: "filter"}, {Name: "cursor"}},
 			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    ImplRender,
+		},
+		{
+			Name:    "render_many",
+			Doc:     "RenderMany returns the block a multi-select WOULD draw with marked marked, the counterpart of [Render] for [Many].",
+			Args:    []std.Arg{{Name: "p"}, {Name: "items"}, {Name: "opts"}, {Name: "marked"}, {Name: "filter"}, {Name: "cursor"}},
+			Returns: []std.Ret{{}},
+			Raises:  true,
+			Impl:    ImplRenderMany,
 		},
 		{
 			Name:    "err_aborted",
@@ -94,6 +110,27 @@ func ImplOne(ctx context.Context, aP int, aItems []string, aOpts map[string]any)
 	return r0, nil
 }
 
+// ImplMany binds github.com/egladman/magus/libs/termkit/pick.Many.
+func ImplMany(ctx context.Context, aP int, aItems []string, aOpts map[string]any, aMarked any) (any, error) {
+	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
+	if err != nil {
+		return nil, fmt.Errorf("p: %w", err)
+	}
+	vOpts, err := DecodeOptions(aOpts)
+	if err != nil {
+		return nil, fmt.Errorf("opts: %w", err)
+	}
+	vMarked, err := convert.DecodeSlice(aMarked, func(x any) (int, error) { return convert.Int(x) })
+	if err != nil {
+		return nil, fmt.Errorf("marked: %w", err)
+	}
+	r0, err := lib.Many(ctx, os.Stdin, os.Stderr, vP, aItems, vOpts, vMarked)
+	if err != nil {
+		return nil, err
+	}
+	return convert.EncodeList(r0, func(x int) any { return x }), nil
+}
+
 // ImplRender binds github.com/egladman/magus/libs/termkit/pick.Render.
 func ImplRender(ctx context.Context, aP int, aItems []string, aOpts map[string]any, aFilter string, aCursor int) (string, error) {
 	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
@@ -105,6 +142,24 @@ func ImplRender(ctx context.Context, aP int, aItems []string, aOpts map[string]a
 		return "", fmt.Errorf("opts: %w", err)
 	}
 	r0 := lib.Render(os.Stderr, vP, aItems, vOpts, aFilter, aCursor)
+	return r0, nil
+}
+
+// ImplRenderMany binds github.com/egladman/magus/libs/termkit/pick.RenderMany.
+func ImplRenderMany(ctx context.Context, aP int, aItems []string, aOpts map[string]any, aMarked any, aFilter string, aCursor int) (string, error) {
+	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
+	if err != nil {
+		return "", fmt.Errorf("p: %w", err)
+	}
+	vOpts, err := DecodeOptions(aOpts)
+	if err != nil {
+		return "", fmt.Errorf("opts: %w", err)
+	}
+	vMarked, err := convert.DecodeSlice(aMarked, func(x any) (int, error) { return convert.Int(x) })
+	if err != nil {
+		return "", fmt.Errorf("marked: %w", err)
+	}
+	r0 := lib.RenderMany(os.Stderr, vP, aItems, vOpts, vMarked, aFilter, aCursor)
 	return r0, nil
 }
 

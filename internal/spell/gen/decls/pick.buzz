@@ -7,5 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export extern fun errAborted() > str;
+export extern fun many(p: int, items: [str], opts: {str: any}, marked: any) > any !> any;
 export extern fun one(p: int, items: [str], opts: {str: any}) > int !> any;
 export extern fun render(p: int, items: [str], opts: {str: any}, filter: str, cursor: int) > str !> any;
+export extern fun renderMany(p: int, items: [str], opts: {str: any}, marked: any, filter: str, cursor: int) > str !> any;

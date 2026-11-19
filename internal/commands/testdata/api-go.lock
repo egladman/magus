@@ -864,10 +864,13 @@ github.com/egladman/magus/std.TemplateRenderPartials func(_ context.Context, tmp
 github.com/egladman/magus/std.Term var Module
 github.com/egladman/magus/std.TermClearScreen func(_ context.Context) error
 github.com/egladman/magus/std.TermColorize func(_ context.Context, s string, style string) (string, error)
+github.com/egladman/magus/std.TermConfirm func(ctx context.Context, question string) (bool, error)
 github.com/egladman/magus/std.TermIsInteractive func(_ context.Context) (bool, error)
 github.com/egladman/magus/std.TermNotify func(ctx context.Context, message string, level string, ttlMs int) error
-github.com/egladman/magus/std.TermPick func(ctx context.Context, items []string, prompt string, initialFilter string, initial int, maxRows int) (int, error)
+github.com/egladman/magus/std.TermPick func(ctx context.Context, items []string, prompt string, initialFilter string, initial int, maxRows int, query func(ctx context.Context, filter string) (any, error)) (int, error)
+github.com/egladman/magus/std.TermPickMany func(ctx context.Context, items []string, prompt string, initialFilter string, marked []string, maxRows int) ([]string, error)
 github.com/egladman/magus/std.TermSize func(_ context.Context) (github.com/egladman/magus/types.TermSize, error)
+github.com/egladman/magus/std.TermSpin func(ctx context.Context, label string, run func(ctx context.Context) (any, error)) (any, error)
 github.com/egladman/magus/std.TermWantsColor func(_ context.Context) (bool, error)
 github.com/egladman/magus/std.Time var Module
 github.com/egladman/magus/std.TimeAdd func(_ context.Context, unixMillis float64, duration string) (float64, error)

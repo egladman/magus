@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestFilter_AND(t *testing.T) {
@@ -651,3 +652,121 @@ type countingTTY struct{ n int }
 
 func (c *countingTTY) Write(p []byte) (int, error) { c.n += len(p); return len(p), nil }
 func (*countingTTY) Fd() uintptr                   { return 2 }
+
+// ManySuite drives a multi-select session through the same event handler
+// [Many] reads from a terminal, so marking, filtering and confirming are
+// covered without raw mode or a pty.
+type ManySuite struct {
+	suite.Suite
+	buf termtest.Buffer
+	s   *session
+}
+
+func TestManySuite(t *testing.T) { suite.Run(t, new(ManySuite)) }
+
+func (m *ManySuite) SetupTest() {
+	m.buf = termtest.Buffer{}
+	m.s = newSession([]string{"alpha", "beta", "gamma"}, Options{Prompt: "branches"}, &m.buf, termtest.Terminal(80, 24))
+	m.Require().NoError(m.s.markAll(nil))
+	m.Require().NoError(m.s.refilter(context.Background()))
+}
+
+func (m *ManySuite) key(k termkit.Key) bool {
+	done, err := m.s.handle(context.Background(), termkit.Event{Kind: termkit.EventKey, Key: k})
+	m.Require().NoError(err)
+	return done
+}
+
+func (m *ManySuite) typed(r rune) {
+	_, err := m.s.handle(context.Background(), termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: r})
+	m.Require().NoError(err)
+}
+
+func (m *ManySuite) TestTabMarksAndMovesDown() {
+	m.False(m.key(termkit.KeyTab))
+	m.Equal(1, m.s.cursor, "tab moves on, so a run of tabs marks a run of rows")
+	m.False(m.key(termkit.KeyTab))
+	m.True(m.key(termkit.KeyEnter))
+	m.Equal([]int{0, 1}, m.s.markedIndices())
+}
+
+func (m *ManySuite) TestTabTwiceUnmarks() {
+	m.key(termkit.KeyTab)
+	m.key(termkit.KeyUp)
+	m.key(termkit.KeyTab)
+	m.Empty(m.s.markedIndices())
+}
+
+func (m *ManySuite) TestEnterWithNothingMarkedDoesNotEnd() {
+	m.False(m.key(termkit.KeyEnter), "the highlighted row is not taken for a choice")
+}
+
+func (m *ManySuite) TestAMarkSurvivesAChangeOfFilter() {
+	m.typed('g')
+	m.key(termkit.KeyTab)
+	m.key(termkit.KeyCtrlU)
+	m.Equal(3, len(m.s.matches), "clearing the filter shows every row again")
+	m.True(m.key(termkit.KeyEnter))
+	m.Equal([]int{2}, m.s.markedIndices(), "gamma stays marked after the filter that found it is gone")
+}
+
+func (m *ManySuite) TestEscapeAborts() {
+	done, err := m.s.handle(context.Background(), termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyEscape})
+	m.True(done)
+	m.ErrorIs(err, ErrAborted)
+}
+
+func (m *ManySuite) TestTheFrameShowsMarksAndTheirCount() {
+	m.Require().NoError(m.s.markAll([]int{1}))
+	m.s.draw()
+	out := termtest.StripANSI(m.buf.String())
+	m.Contains(out, "branches (1 of 3 marked): _")
+	m.Contains(out, "[ ] alpha")
+	m.Contains(out, "[x] beta")
+	m.Contains(out, "[tab] mark")
+}
+
+func (m *ManySuite) TestAClickMarksButNeverConfirms() {
+	m.s.promptRow, m.s.visible = 10, 3
+	click := termkit.Event{Kind: termkit.EventMouse, Press: true, Button: termkit.MouseLeft, Row: 8, Clicks: 2}
+	done, err := m.s.handle(context.Background(), click)
+	m.Require().NoError(err)
+	m.False(done, "a double click must not end a multi-select")
+	m.Equal([]int{1}, m.s.markedIndices())
+}
+
+func (m *ManySuite) TestMarkAllRefusesAnIndexOutsideTheItems() {
+	err := m.s.markAll([]int{3})
+	m.Require().Error(err)
+	m.Contains(err.Error(), "marked index 3")
+}
+
+func (m *ManySuite) TestManyRefusesALiveQuery() {
+	query := func(context.Context, string) ([]string, error) { return nil, nil }
+	_, err := Many(context.Background(), nil, &m.buf, termtest.Terminal(80, 24), []string{"a"}, Options{Query: query}, nil)
+	m.Require().Error(err)
+	m.Contains(err.Error(), "no live query")
+}
+
+func (m *ManySuite) TestManyRefusesAnEmptyList() {
+	_, err := Many(context.Background(), nil, &m.buf, termtest.Terminal(80, 24), nil, Options{}, nil)
+	m.Require().Error(err)
+	m.Contains(err.Error(), "no items")
+}
+
+func (m *ManySuite) TestRenderManyDrawsTheMarks() {
+	out := termtest.StripANSI(RenderMany(&m.buf, termtest.Terminal(80, 24), []string{"a", "b"}, Options{}, []int{0, 7}, "", 1))
+	m.Contains(out, "filter (1 of 2 marked): _")
+	m.Contains(out, "[x] a")
+	m.Contains(out, termkit.SelectMark+" [ ] b")
+}
+
+func (m *ManySuite) TestASinglePickStillEndsOnEnter() {
+	s := newSession([]string{"alpha", "beta"}, Options{}, &m.buf, termtest.Terminal(80, 24))
+	m.Require().NoError(s.refilter(context.Background()))
+	s.cursor = 1
+	done, err := s.handle(context.Background(), termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyEnter})
+	m.Require().NoError(err)
+	m.True(done)
+	m.Equal(1, s.chosen)
+}

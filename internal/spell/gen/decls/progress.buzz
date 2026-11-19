@@ -23,5 +23,8 @@ export extern fun lookup(name: str) > int !> any;
 export extern fun names() > [str];
 export extern fun rotation() > str;
 export extern fun span() > str;
+export extern fun spinLoader() > str;
+export extern fun spinnerStop(spinner: int) > void !> any;
+export extern fun startSpinner(p: int, label: str) > int !> any;
 export extern fun strip() > str;
 export extern fun text() > str;

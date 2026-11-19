@@ -12,6 +12,7 @@ import (
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
+	os "os"
 	time "time"
 )
 
@@ -74,6 +75,21 @@ var Module = std.Module{
 			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    ImplLookup,
+		},
+		{
+			Name:    "start_spinner",
+			Doc:     "StartSpinner starts a loader turning beside label on out and returns at once; the caller does its blocking work and then calls [Spinner.Stop].",
+			Args:    []std.Arg{{Name: "p"}, {Name: "label"}},
+			Returns: []std.Ret{{}},
+			Raises:  true,
+			Impl:    ImplStartSpinner,
+		},
+		{
+			Name:   "spinner_stop",
+			Doc:    "Stop erases the line and returns once nothing more will be written, so the caller's next write cannot interleave with a frame.",
+			Args:   []std.Arg{{Name: "spinner"}},
+			Raises: true,
+			Impl:   ImplSpinnerStop,
 		},
 		{
 			Name:    "loader_name",
@@ -157,11 +173,20 @@ var Module = std.Module{
 			Returns: []std.Ret{{}},
 			Impl:    ImplFallback,
 		},
+		{
+			Name:    "spin_loader",
+			Doc:     "SpinLoader is the loader a [Spinner] turns where the terminal can draw Unicode: the one magus's own run band turns by default, so a script's wait looks like magus's.",
+			Returns: []std.Ret{{}},
+			Impl:    ImplSpinLoader,
+		},
 	},
 }
 
 // LoaderHandles holds the Loader values a script refers to by handle.
 var LoaderHandles = convert.NewTable[lib.Loader]("Loader")
+
+// SpinnerHandles holds the Spinner values a script refers to by handle.
+var SpinnerHandles = convert.NewTable[*lib.Spinner]("Spinner")
 
 // ImplBar binds github.com/egladman/magus/libs/termkit/progress.Bar.
 func ImplBar(ctx context.Context, aDone int, aTotal int, aCols int, aTrack string) (map[string]any, error) {
@@ -232,6 +257,29 @@ func ImplLookup(ctx context.Context, aName string) (int, error) {
 	return LoaderHandles.Put(r0), nil
 }
 
+// ImplStartSpinner binds github.com/egladman/magus/libs/termkit/progress.StartSpinner.
+func ImplStartSpinner(ctx context.Context, aP int, aLabel string) (int, error) {
+	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
+	if err != nil {
+		return 0, fmt.Errorf("p: %w", err)
+	}
+	r0, err := lib.StartSpinner(os.Stderr, vP, aLabel)
+	if err != nil {
+		return 0, err
+	}
+	return SpinnerHandles.Put(r0), nil
+}
+
+// ImplSpinnerStop binds github.com/egladman/magus/libs/termkit/progress.Spinner.Stop.
+func ImplSpinnerStop(ctx context.Context, spinner int) error {
+	recv, err := SpinnerHandles.Get(spinner)
+	if err != nil {
+		return err
+	}
+	recv.Stop()
+	return nil
+}
+
 // ImplLoaderName reads the Name field of a Loader.
 func ImplLoaderName(ctx context.Context, loader int) (string, error) {
 	recv, err := LoaderHandles.Get(loader)
@@ -297,3 +345,6 @@ func ImplColumn(ctx context.Context) (string, error) { return string(lib.Column)
 
 // ImplFallback reads github.com/egladman/magus/libs/termkit/progress.Fallback.
 func ImplFallback(ctx context.Context) (string, error) { return lib.Fallback, nil }
+
+// ImplSpinLoader reads github.com/egladman/magus/libs/termkit/progress.SpinLoader.
+func ImplSpinLoader(ctx context.Context) (string, error) { return lib.SpinLoader, nil }

@@ -28,6 +28,10 @@ func plain(s string) string { return s }
 // cannot discover by looking: how to leave, and how to clear what they typed.
 const pickerHint = "[esc] cancel  [ctrl-u] clear"
 
+// manyHint is a multi-select's way out, and the two keys a single pick lacks:
+// Tab marks, and Enter only confirms what is marked.
+const manyHint = "[tab] mark  [enter] done  [esc] cancel  [ctrl-u] clear"
+
 // ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
 var ErrAborted = errors.New("picker: aborted")
 
@@ -73,21 +77,50 @@ func One(ctx context.Context, in *os.File, out io.Writer, p termkit.Probe, items
 	if len(items) == 0 && opts.Query == nil {
 		return -1, errors.New("picker: no items")
 	}
+	s := newSession(items, opts, out, p)
+	if err := s.run(ctx, in); err != nil {
+		return -1, err
+	}
+	return s.chosen, nil
+}
+
+// Many blocks until the user marks one or more items and confirms, or aborts.
+// On success it returns the marked indices into items, ascending. On abort it
+// returns nil and ErrAborted.
+//
+// Tab marks or unmarks the highlighted row and moves down; Enter confirms. A
+// mark survives a change of filter, so a reader can narrow to one group, mark
+// it, and narrow to the next. Enter with nothing marked does nothing rather
+// than taking the highlighted row: a multi-select that guessed would turn a
+// reader who had not yet marked anything into one who chose. marked are the
+// indices marked on first paint.
+//
+// opts.Query is refused: a live query replaces the list on every keystroke, so
+// an index marked under one filter would name a different item under the next.
+func Many(ctx context.Context, in *os.File, out io.Writer, p termkit.Probe, items []string, opts Options, marked []int) ([]int, error) {
+	if opts.Query != nil {
+		return nil, errors.New("picker: a multi-select takes no live query")
+	}
+	if len(items) == 0 {
+		return nil, errors.New("picker: no items")
+	}
+	s := newSession(items, opts, out, p)
+	if err := s.markAll(marked); err != nil {
+		return nil, err
+	}
+	if err := s.run(ctx, in); err != nil {
+		return nil, err
+	}
+	return s.markedIndices(), nil
+}
+
+// newSession is a session ready to draw: options defaulted, nothing filtered yet.
+// marked is nil for a single pick, which is what tells the two modes apart.
+func newSession(items []string, opts Options, out io.Writer, p termkit.Probe) *session {
 	if opts.MaxRows <= 0 {
 		opts.MaxRows = 10
 	}
-
-	// One input session for keys AND mouse. The picker used to decode keys
-	// itself, which meant two decoders in one package disagreeing about which
-	// control bytes exist: Ctrl-N and Ctrl-P were documented here and dropped
-	// on the floor, because they are below 0x20 and fell through to "printable".
-	input, err := termkit.OpenInput(in, out, p)
-	if err != nil {
-		return -1, fmt.Errorf("picker: %w", err)
-	}
-	defer func() { _ = input.Close() }()
-
-	s := &session{
+	return &session{
 		items:   items,
 		opts:    opts,
 		filter:  opts.InitialFilter,
@@ -96,12 +129,27 @@ func One(ctx context.Context, in *os.File, out io.Writer, p termkit.Probe, items
 		view:    termkit.NewInlineView(out, p),
 		mouseOK: true,
 	}
+}
+
+// run draws the picker and reads events until one ends it, leaving the answer in
+// s.chosen or s.marked.
+func (s *session) run(ctx context.Context, in *os.File) error {
+	// One input session for keys AND mouse. The picker used to decode keys
+	// itself, which meant two decoders in one package disagreeing about which
+	// control bytes exist: Ctrl-N and Ctrl-P were documented here and dropped
+	// on the floor, because they are below 0x20 and fell through to "printable".
+	input, err := termkit.OpenInput(in, s.out, s.probe)
+	if err != nil {
+		return fmt.Errorf("picker: %w", err)
+	}
+	defer func() { _ = input.Close() }()
+
 	s.queryRow = func() (int, bool) {
 		row, _, ok := input.CursorPosition()
 		return row, ok
 	}
 	if err := s.refilter(ctx); err != nil {
-		return -1, fmt.Errorf("picker: %w", err)
+		return fmt.Errorf("picker: %w", err)
 	}
 	s.cursor = s.findInitial()
 	s.draw()
@@ -114,84 +162,159 @@ func One(ctx context.Context, in *os.File, out io.Writer, p termkit.Probe, items
 			// stopped the run wants ctx.Err(), and reporting ErrAborted here
 			// would say the reader declined a choice they were never offered.
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return -1, ctxErr
+				return ctxErr
 			}
-			return -1, ErrAborted
+			return ErrAborted
 		}
-
-		if ev.Kind == termkit.EventMouse {
-			i, hit := s.matchAt(ev.Row)
-			if !hit {
-				// Off the list. Deliberately not a choice and not an abort: a
-				// stray click must never pick something, least of all something
-				// the pointer was not even over.
-				continue
-			}
-			if ev.Motion {
-				// Hovering moves the highlight, so what a click would take is
-				// never a guess.
-				s.hover(i)
-				continue
-			}
-			// Left button only, which also means the WHEEL is left alone. The
-			// wheel is how a reader scrolls their own transcript, and magus
-			// does not take it in any view: a picker that swallowed it
-			// would break scrollback for the seconds it is open, which is the
-			// behavior that makes other tools unusable inside tmux.
-			if !ev.Press || ev.Button != termkit.MouseLeft {
-				continue
-			}
-			s.cursor = i
-			if ev.Clicks == 2 {
-				return s.matches[s.cursor], nil
-			}
-			s.draw()
-			continue
+		done, err := s.handle(ctx, ev)
+		if err != nil || done {
+			return err
 		}
-
-		switch ev.Key {
-		case termkit.KeyEnter:
-			if len(s.matches) == 0 {
-				continue
-			}
-			return s.matches[s.cursor], nil
-		case termkit.KeyEscape, termkit.KeyCtrlC, termkit.KeyCtrlD:
-			return -1, ErrAborted
-		case termkit.KeyUp, termkit.KeyCtrlP:
-			if len(s.matches) > 0 {
-				s.cursor = (s.cursor - 1 + len(s.matches)) % len(s.matches)
-			}
-		case termkit.KeyDown, termkit.KeyCtrlN:
-			if len(s.matches) > 0 {
-				s.cursor = (s.cursor + 1) % len(s.matches)
-			}
-		case termkit.KeyBackspace:
-			if len(s.filter) > 0 {
-				// Strip one rune.
-				rs := []rune(s.filter)
-				s.filter = string(rs[:len(rs)-1])
-				if err := s.refilter(ctx); err != nil {
-					return -1, fmt.Errorf("picker: %w", err)
-				}
-				s.cursor = 0
-			}
-		case termkit.KeyCtrlU:
-			s.filter = ""
-			if err := s.refilter(ctx); err != nil {
-				return -1, fmt.Errorf("picker: %w", err)
-			}
-			s.cursor = 0
-		case termkit.KeyRune:
-			s.filter += string(ev.Rune)
-			if err := s.refilter(ctx); err != nil {
-				return -1, fmt.Errorf("picker: %w", err)
-			}
-			s.cursor = 0
-		default:
-			continue
-		}
-		s.draw()
 	}
+}
+
+// handle applies one event, reporting whether it ended the picker. An error is
+// an abort or a failed query.
+func (s *session) handle(ctx context.Context, ev termkit.Event) (bool, error) {
+	if ev.Kind == termkit.EventMouse {
+		return s.handleMouse(ev), nil
+	}
+	switch ev.Key {
+	case termkit.KeyEnter:
+		return s.confirm(), nil
+	case termkit.KeyEscape, termkit.KeyCtrlC, termkit.KeyCtrlD:
+		return true, ErrAborted
+	case termkit.KeyTab:
+		if s.marked == nil || len(s.matches) == 0 {
+			return false, nil
+		}
+		s.toggle(s.cursor)
+		s.cursor = (s.cursor + 1) % len(s.matches)
+	case termkit.KeyUp, termkit.KeyCtrlP:
+		if len(s.matches) > 0 {
+			s.cursor = (s.cursor - 1 + len(s.matches)) % len(s.matches)
+		}
+	case termkit.KeyDown, termkit.KeyCtrlN:
+		if len(s.matches) > 0 {
+			s.cursor = (s.cursor + 1) % len(s.matches)
+		}
+	case termkit.KeyBackspace:
+		if len(s.filter) == 0 {
+			return false, nil
+		}
+		// Strip one rune.
+		rs := []rune(s.filter)
+		if err := s.setFilter(ctx, string(rs[:len(rs)-1])); err != nil {
+			return true, err
+		}
+	case termkit.KeyCtrlU:
+		if err := s.setFilter(ctx, ""); err != nil {
+			return true, err
+		}
+	case termkit.KeyRune:
+		if err := s.setFilter(ctx, s.filter+string(ev.Rune)); err != nil {
+			return true, err
+		}
+	default:
+		return false, nil
+	}
+	s.draw()
+	return false, nil
+}
+
+// handleMouse applies a mouse event, reporting whether it ended the picker.
+func (s *session) handleMouse(ev termkit.Event) bool {
+	i, hit := s.matchAt(ev.Row)
+	if !hit {
+		// Off the list. Deliberately not a choice and not an abort: a
+		// stray click must never pick something, least of all something
+		// the pointer was not even over.
+		return false
+	}
+	if ev.Motion {
+		// Hovering moves the highlight, so what a click would take is
+		// never a guess.
+		s.hover(i)
+		return false
+	}
+	// Left button only, which also means the WHEEL is left alone. The
+	// wheel is how a reader scrolls their own transcript, and magus
+	// does not take it in any view: a picker that swallowed it
+	// would break scrollback for the seconds it is open, which is the
+	// behavior that makes other tools unusable inside tmux.
+	if !ev.Press || ev.Button != termkit.MouseLeft {
+		return false
+	}
+	s.cursor = i
+	if s.marked != nil {
+		// A click marks in a multi-select; only Enter confirms, so a double
+		// click cannot end it with a set the reader did not look over.
+		s.toggle(i)
+		s.draw()
+		return false
+	}
+	if ev.Clicks == 2 {
+		s.chosen = s.matches[s.cursor]
+		return true
+	}
+	s.draw()
+	return false
+}
+
+// confirm takes the answer Enter gives, reporting whether there is one.
+func (s *session) confirm() bool {
+	if s.marked != nil {
+		return len(s.marked) > 0
+	}
+	if len(s.matches) == 0 {
+		return false
+	}
+	s.chosen = s.matches[s.cursor]
+	return true
+}
+
+// setFilter replaces the filter text and refilters, moving the highlight to the
+// best match.
+func (s *session) setFilter(ctx context.Context, filter string) error {
+	s.filter = filter
+	if err := s.refilter(ctx); err != nil {
+		return fmt.Errorf("picker: %w", err)
+	}
+	s.cursor = 0
+	return nil
+}
+
+// toggle marks or unmarks the item drawn at match index i.
+func (s *session) toggle(i int) {
+	idx := s.matches[i]
+	if s.marked[idx] {
+		delete(s.marked, idx)
+		return
+	}
+	s.marked[idx] = true
+}
+
+// markAll starts a multi-select with indices marked, refusing one outside items.
+func (s *session) markAll(indices []int) error {
+	s.marked = make(map[int]bool, len(indices))
+	for _, idx := range indices {
+		if idx < 0 || idx >= len(s.items) {
+			return fmt.Errorf("picker: marked index %d is outside the %d items", idx, len(s.items))
+		}
+		s.marked[idx] = true
+	}
+	return nil
+}
+
+// markedIndices is the marked set, ascending.
+func (s *session) markedIndices() []int {
+	out := make([]int, 0, len(s.marked))
+	for idx := range s.items {
+		if s.marked[idx] {
+			out = append(out, idx)
+		}
+	}
+	return out
 }
 
 // RenderPick returns the block a picker WOULD draw for the given state, without
@@ -207,6 +330,28 @@ func Render(out io.Writer, p termkit.Probe, items []string, opts Options, filter
 		opts.MaxRows = 10
 	}
 	s := &session{items: items, opts: opts, filter: filter, out: out, probe: p}
+	return s.still(cursor)
+}
+
+// RenderMany returns the block a multi-select WOULD draw with marked marked, the
+// counterpart of [Render] for [Many]. An index outside items is ignored, since a
+// still picture has no caller to report it to.
+func RenderMany(out io.Writer, p termkit.Probe, items []string, opts Options, marked []int, filter string, cursor int) string {
+	if opts.MaxRows <= 0 {
+		opts.MaxRows = 10
+	}
+	opts.Query = nil
+	s := &session{items: items, opts: opts, filter: filter, out: out, probe: p, marked: map[int]bool{}}
+	for _, idx := range marked {
+		if idx >= 0 && idx < len(items) {
+			s.marked[idx] = true
+		}
+	}
+	return s.still(cursor)
+}
+
+// still is the one frame Render and RenderMany draw.
+func (s *session) still(cursor int) string {
 	// Background: this renders one frame for the docs and never loops, so there
 	// is nothing to cancel. A Query that fails here is reported as no matches,
 	// which is what a still picture of an empty result should show anyway.
@@ -226,6 +371,11 @@ type session struct {
 	out     io.Writer
 	probe   termkit.Probe
 	view    *termkit.InlineView
+	// chosen is a single pick's answer, an index into items.
+	chosen int
+	// marked is a multi-select's marked items, keyed by index into items. Nil
+	// for a single pick, which is what tells the two modes apart.
+	marked map[int]bool
 
 	// start and visible describe the window the last draw showed, so a click
 	// coordinate can be mapped back to the match it landed on.
@@ -342,6 +492,11 @@ func (s *session) frame() string {
 	if termkit.WantsColor(s.out, s.probe) {
 		dim = func(t string) string { return termkit.Colorize(t, termkit.SGRDim) }
 	}
+	hint := pickerHint
+	if s.marked != nil {
+		prompt = fmt.Sprintf("%s (%d of %d marked)", prompt, len(s.marked), len(s.items))
+		hint = manyHint
+	}
 	b.WriteString(cells.Clip(fmt.Sprintf("%s: %s_", prompt, s.filter), width))
 	b.WriteString("\n")
 	for i := start; i < end; i++ {
@@ -350,6 +505,13 @@ func (s *session) frame() string {
 		if i == s.cursor {
 			marker = termkit.SelectMark + " "
 		}
+		if s.marked != nil {
+			if s.marked[idx] {
+				marker += "[x] "
+			} else {
+				marker += "[ ] "
+			}
+		}
 		b.WriteString(cells.Clip(marker+s.items[idx], width))
 		b.WriteString("\n")
 	}
@@ -357,7 +519,7 @@ func (s *session) frame() string {
 		b.WriteString("  (no matches)\n")
 		s.visible = 1
 	}
-	b.WriteString(dim(cells.Clip(pickerHint, width)))
+	b.WriteString(dim(cells.Clip(hint, width)))
 	return b.String()
 }
 
