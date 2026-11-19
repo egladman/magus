@@ -156,6 +156,34 @@ copies like anything else.
 A terminal that refuses clipboard writes (some disable them) says so in a
 notification rather than failing the run, and **o** still works.
 
+## Prompts in your own scripts
+
+A Buzz script can ask the person running it through the `term` module:
+`term\pick` chooses one item, `term\pickMany` marks several (Tab marks, Enter
+confirms), `term\confirm` asks yes or no before a step that cannot be taken back,
+and `term\spin` turns a loader while a long call blocks. `term\pick` also takes a
+`query` that looks results up on every keystroke, for a search too large to list
+up front.
+
+A prompt is the interactive spelling of a flag, never a new behavior. Each one
+raises when standard input and standard error are not both terminals, and
+raises again when you cancel, so an agent or CI run that passes its flags never
+meets one, and nothing is chosen for you. A script asks only from its `main`,
+after a `term\isInteractive()` guard:
+
+```buzz
+if (term\isInteractive()) {
+    branches = term\pickMany(local, prompt: "branches to rebase");
+} else {
+    throw "--branches is required (no terminal to ask on)";
+}
+```
+
+This repository's scripts share that rule through `hack/lib/prompt.buzz`: the
+flag's value when it was passed, else a prompt, else a failure naming the flag.
+The lint `prompts-stay-interactive` keeps every prompt behind the guard, in a
+`main`, and out of any module a hook, a target or a bootstrap imports.
+
 ## When there is no terminal
 
 Nothing above happens on a pipe, in CI, or under a tool that captures output.
