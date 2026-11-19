@@ -42,16 +42,15 @@ One file for every project would hide which rules apply where.
 
 **Debt.** Person-edited JSON Lines found on 2026-11-18, owed a move to YAML:
 
-- `hack/lint/sdk-exports.jsonl`: a reason per exported name.
-- `proto/buf-breaking.deviations.jsonl`: a reason per accepted break.
+- `proto/buf-breaking.deviations.jsonl`: a reason per accepted break. It waits on the
+  `internal/guard` tests that name it.
 - `<project>/accepted.jsonl`, the per-change ledger
   [ADR 0021](../../decisions/0021-a-change-accepts-the-findings-it-causes.md)
   proposes: amend the proposal before it is built.
 
-Not yet judged: `libs/train/inputs.jsonl` and `libs/train/embed/inputs.jsonl`
-(pinned downloads), `testdata/retrieval/judgments.jsonl` (gold judgments) and
-`libs/proofread/testdata/kind-rules.jsonl` (a decision per rule and kind) may be
-edited by a person too.
+Judged machine-written, so JSON Lines stays right: `testdata/retrieval/judgments.jsonl`
+(harvested gold judgments) and `libs/proofread/testdata/kind-rules.jsonl` (a pin the
+kinds test regenerates with `KIND_PIN_UPDATE=1`).
 
 ## Enforced by
 

@@ -1,7 +1,6 @@
 package teacher
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,23 +11,27 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/xdg"
+	"gopkg.in/yaml.v3"
 )
 
 const potionTokenizer = "potion-code-16M-v2/tokenizer.json"
 
 // pinnedPotionTokenizer is where `embed fetch` writes potion's tokenizer.json: the cache
-// root joined with the path inputs.jsonl pins.
+// root joined with the path inputs.yaml pins.
 func pinnedPotionTokenizer(t *testing.T) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "inputs.jsonl"))
+	raw, err := os.ReadFile(filepath.Join("..", "inputs.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for line := range strings.Lines(string(raw)) {
-		var in struct{ Name, Path string }
-		if err := json.Unmarshal([]byte(line), &in); err != nil {
-			t.Fatal(err)
-		}
+	var pins []struct {
+		Name string `yaml:"name"`
+		Path string `yaml:"path"`
+	}
+	if err := yaml.Unmarshal(raw, &pins); err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range pins {
 		if in.Name == potionTokenizer {
 			dir, err := xdg.CacheDir()
 			if err != nil {
@@ -37,7 +40,7 @@ func pinnedPotionTokenizer(t *testing.T) string {
 			return filepath.Join(dir, "magus-embed", in.Path)
 		}
 	}
-	t.Fatalf("inputs.jsonl pins no %s", potionTokenizer)
+	t.Fatalf("inputs.yaml pins no %s", potionTokenizer)
 	return ""
 }
 

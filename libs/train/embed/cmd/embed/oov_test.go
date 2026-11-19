@@ -66,7 +66,7 @@ func TestOOVRecordAppendsThroughTheEvalWriter(t *testing.T) {
 }
 
 func TestOOVReposArePinnedByCommit(t *testing.T) {
-	inputs, err := readInputs(filepath.Join("..", "..", "inputs.jsonl"))
+	inputs, err := readInputs(filepath.Join("..", "..", "inputs.yaml"))
 	require.NoError(t, err)
 	for _, r := range oovRepos {
 		in, err := findInput(inputs, r.name)

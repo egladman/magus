@@ -20,7 +20,7 @@ import (
 )
 
 // oovRepo is a pinned repository whose source files the oov command tokenizes. name is
-// the inputs.jsonl row; the set in evals.jsonl is "oov-<language>-<repo>".
+// the inputs.yaml row; the set in evals.jsonl is "oov-<language>-<repo>".
 type oovRepo struct {
 	name     string
 	language string

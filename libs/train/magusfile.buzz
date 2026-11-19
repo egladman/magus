@@ -18,7 +18,7 @@ import "magus/spell/go";
 // (XDG_CACHE_HOME/magus-embed, else ~/.cache/magus-embed), which no cache entry records.
 magus\project({
     "spells": [go],
-    "sources": ["embed/inputs.jsonl", "inputs.jsonl", "config/*.yaml", "split.buzz", "gen/split.digest"],
+    "sources": ["embed/inputs.yaml", "inputs.yaml", "config/*.yaml", "split.buzz", "gen/split.digest"],
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
@@ -117,7 +117,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     std\print("source files {files.value!}; holdout files {held.value!}; pairs {mined.value!}");
 }
 
-// Downloads every input inputs.jsonl pins, verifying each sha256. Args after -- name
+// Downloads every input inputs.yaml pins, verifying each sha256. Args after -- name
 // input prefixes, e.g. `-- CodeRankEmbed/`.
 export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "fetch"] + args});
@@ -213,7 +213,7 @@ export fun bench(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Appends to libs/embed/evals.jsonl, for each pinned non-Go repo in inputs.jsonl, the share of
+// Appends to libs/embed/evals.jsonl, for each pinned non-Go repo in inputs.yaml, the share of
 // its source files' identifier tokens with no row in the shipped vocabulary. Fetches the tarballs
 // first; the converted table must be in the cache root (the convert target writes it). Args
 // after -- go to `embed oov`, e.g. `-- guava`.
@@ -259,7 +259,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test, security);
 }
 
-// Downloads the inputs inputs.jsonl pins into the cache root and verifies each sha256,
+// Downloads the inputs inputs.yaml pins into the cache root and verifies each sha256,
 // through `embed fetch`. A file already there is hashed, not fetched again. Args after
 // -- name input prefixes in place of stage S0's, e.g. `-- mellum2-12b-a2.5b-base/`.
 export fun models(ctx: magus\Context, args: [str]) > void !> any {
@@ -280,7 +280,7 @@ export fun models(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) {
         prefixes = args;
     }
-    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./embed/cmd/embed", "fetch", "-inputs", "inputs.jsonl", "-cache", cache] + prefixes});
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./embed/cmd/embed", "fetch", "-inputs", "inputs.yaml", "-cache", cache] + prefixes});
 }
 
 // Appends, per tokenizer, the tokens per byte of held-in hand-written Buzz, Go and TS

@@ -54,7 +54,7 @@ func (s System) Row(set, metric, run string) Row {
 }
 
 // ResolveSystem finds the pinned GGUF of a base by name (the directory under gguf/ in
-// inputs.jsonl) and checks it is in the cache root at its pinned size.
+// inputs.yaml) and checks it is in the cache root at its pinned size.
 func ResolveSystem(inputs []probe.Input, cache, name string, order fim.Order, context string) (System, error) {
 	var found []probe.Input
 	for _, in := range inputs {
@@ -63,7 +63,7 @@ func ResolveSystem(inputs []probe.Input, cache, name string, order fim.Order, co
 		}
 	}
 	if len(found) != 1 {
-		return System{}, fmt.Errorf("inputs.jsonl pins %d GGUFs under gguf/%s/, want one", len(found), name)
+		return System{}, fmt.Errorf("inputs.yaml pins %d GGUFs under gguf/%s/, want one", len(found), name)
 	}
 	if order != fim.PSM && order != fim.SPM {
 		return System{}, fmt.Errorf("prompt order %q is neither psm nor spm", order)

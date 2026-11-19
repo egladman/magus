@@ -1,0 +1,267 @@
+Advisory: "functional option that configures a Run, a Target or a Project declaration"
+AssessOptions: "option type taken by Open, Run, Plan or a declaration"
+BaseLastPassed: constant a caller compares against or pins
+BindingOption: "option type taken by Open, Run, Plan or a declaration"
+CacheKeyVersion: constant a caller compares against or pins
+CacheStats: value type a Run or query result returns to the caller
+CatalogFingerprint: "helper or hook the CLI, std or a test double needs from the root package"
+CharmsForCI: "helper or hook the CLI, std or a test double needs from the root package"
+CheckGrader: "Magus.CheckGrader returns it; the alias names internal/job's grader so no caller outside the module meets an internal type"
+ChoiceConflictError: "Open returns it when two magusfiles name different spells for one workspace-wide choice, and a caller matches it with errors.As"
+ChoiceConflictError.Error: the error method of the conflict Open returns
+CleanedOutputs: value type a Run or query result returns to the caller
+Command: value type a Run or query result returns to the caller
+ComposeGraph: entry point a Go program calls to load or inspect a workspace without the CLI
+ComposeOption: "option type taken by Open, Run, Plan or a declaration"
+ContextWithAuthority: "the revision a judgment with no job row reads the approved rules at (ADR 0045)"
+Drift: "helper or hook the CLI, std or a test double needs from the root package"
+DurationPredictor: "helper or hook the CLI, std or a test double needs from the root package"
+DurationPredictor.PredictDuration: duration prediction contract the planner calls
+Event: value type a Run or query result returns to the caller
+Event.MarshalJSON: JSON encoding of the event log line
+Event.UnmarshalJSON: JSON encoding of the event log line
+FindRoot: entry point a Go program calls to load or inspect a workspace without the CLI
+HumanOnly: "functional option that configures a Run, a Target or a Project declaration"
+IgnoreGlob: "functional option that configures a Run, a Target or a Project declaration"
+IgnoreLiteral: "functional option that configures a Run, a Target or a Project declaration"
+IgnoreRegex: "functional option that configures a Run, a Target or a Project declaration"
+IncludeArch: "functional option that configures a Run, a Target or a Project declaration"
+IncludeOS: "functional option that configures a Run, a Target or a Project declaration"
+Inspect: entry point a Go program calls to load or inspect a workspace without the CLI
+Invocation: value type a Run or query result returns to the caller
+LazyWorkspace: entry point a Go program calls to load or inspect a workspace without the CLI
+LazyWorkspace.ClassifyFiles: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.EvaluateProjects: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.EvaluateTarget: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.ListCharms: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.ListProjects: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.ListTargets: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.Magus: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.Opened: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.Root: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.TargetGraph: deferred workspace accessor the daemon and CLI call before the first load
+LazyWorkspace.Workspace: deferred workspace accessor the daemon and CLI call before the first load
+ListSpells: entry point a Go program calls to load or inspect a workspace without the CLI
+Magus: the loaded workspace handle every SDK call hangs off
+Magus.Affected: "graph, plan and statistics query behind a CLI verb"
+Magus.AffectedFromPaths: "graph, plan and statistics query behind a CLI verb"
+Magus.Affinity: "graph, plan and statistics query behind a CLI verb"
+Magus.All: workspace accessor the CLI or std calls on the loaded handle
+Magus.ApplySandbox: "cache, sandbox and lock state the CLI reports or manages"
+Magus.AssessChange: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.AssessRisk: "types.RiskAssessor, which std reaches magus\\risk.assess through, needs it exported"
+Magus.AutoResolvable: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.AutoResolve: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.AutoResolveGlobs: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.BeginInvocation: run entry point or invocation record the CLI drives
+Magus.BranchChanges: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.CacheDescription: "cache, sandbox and lock state the CLI reports or manages"
+Magus.CacheDir: "cache, sandbox and lock state the CLI reports or manages"
+Magus.CacheDiskBytes: "cache, sandbox and lock state the CLI reports or manages"
+Magus.CacheStats: "cache, sandbox and lock state the CLI reports or manages"
+Magus.CarvedOutputs: captured output lookup behind query output and the run ref
+Magus.ChangeRisk: "graph, plan and statistics query behind a CLI verb"
+Magus.CheckGrader: "std's job store door grades a declared check through it, since the guard lives above std"
+Magus.ClassifyEdit: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.ClassifyFiles: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.CleanCache: "cache, sandbox and lock state the CLI reports or manages"
+Magus.CleanOutputs: workspace accessor the CLI or std calls on the loaded handle
+Magus.Close: workspace accessor the CLI or std calls on the loaded handle
+Magus.ComputeTargetKey: "cache, sandbox and lock state the CLI reports or manages"
+Magus.ConcurrencyNudge: "graph, plan and statistics query behind a CLI verb"
+Magus.Conformance: "graph, plan and statistics query behind a CLI verb"
+Magus.ConformanceBase: "the conformance lens magus\\conformance reads through the std workspace interface"
+Magus.ConformanceOptions: "graph, plan and statistics query behind a CLI verb"
+Magus.Context: workspace accessor a Go program uses to call the graph doors in std without running a target
+Magus.ContextWithSecrets: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.CurrentRevision: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.Diff: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.DiffAgainst: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.DiffTUIEnabled: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.DiffWith: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.DiskReclaim: "cache, sandbox and lock state the CLI reports or manages"
+Magus.Duplication: "graph, plan and statistics query behind a CLI verb"
+Magus.EvaluateProjects: workspace accessor the CLI or std calls on the loaded handle
+Magus.EvaluateTarget: workspace accessor the CLI or std calls on the loaded handle
+Magus.ExpandAffected: "graph, plan and statistics query behind a CLI verb"
+Magus.ExpandAffectedSet: "graph, plan and statistics query behind a CLI verb"
+Magus.ExpandPath: "graph, plan and statistics query behind a CLI verb"
+Magus.ExportCache: "cache, sandbox and lock state the CLI reports or manages"
+Magus.ExportSCIP: "symbol index export as SCIP for code-intelligence tools, behind magus graph export -o scip"
+Magus.FileAt: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.FileDiskAttention: "cache, sandbox and lock state the CLI reports or manages"
+Magus.FindOutputProducer: captured output lookup behind query output and the run ref
+Magus.FreshenSymbolIndexes: symbol index query or refresh for refs and the conformance lens
+Magus.Get: workspace accessor the CLI or std calls on the loaded handle
+Magus.Graph: "graph, plan and statistics query behind a CLI verb"
+Magus.GroupingLens: "graph, plan and statistics query behind a CLI verb"
+Magus.HeldLocks: "cache, sandbox and lock state the CLI reports or manages"
+Magus.Hotspots: "graph, plan and statistics query behind a CLI verb"
+Magus.IdentifyRef: captured output lookup behind query output and the run ref
+Magus.ImportCache: "cache, sandbox and lock state the CLI reports or manages"
+Magus.InvocationByID: run entry point or invocation record the CLI drives
+Magus.InvocationEventsByID: run entry point or invocation record the CLI drives
+Magus.Judge: "guard verdict on any step an embedder's agent takes (ADR 0046)"
+Magus.JudgeCommand: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.JudgeWrite: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.KnowledgeGraphHealthy: "graph, plan and statistics query behind a CLI verb"
+Magus.LifecycleProvider: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.Lifecycles: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.ListCharms: workspace accessor the CLI or std calls on the loaded handle
+Magus.ListProjects: workspace accessor the CLI or std calls on the loaded handle
+Magus.ListTargets: workspace accessor the CLI or std calls on the loaded handle
+Magus.MachineClaims: "cache, sandbox and lock state the CLI reports or manages"
+Magus.MeasureConformanceBase: "the base measure magus\\conformanceBase runs through the std workspace interface"
+Magus.MetricsCollector: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.MetricsSnapshot: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.ModelTierLens: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.ModelTierMatrix: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.ModelTiers: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.Models: "std's job store resolves harness model aliases through it"
+Magus.OutputAttempts: captured output lookup behind query output and the run ref
+Magus.OutputByRef: captured output lookup behind query output and the run ref
+Magus.OutputByRefRemote: captured output lookup behind query output and the run ref
+Magus.OutputDescriptorByRef: captured output lookup behind query output and the run ref
+Magus.OutputKeyInputs: captured output lookup behind query output and the run ref
+Magus.OutputRecordByRef: captured output lookup behind query output and the run ref
+Magus.Ownership: "graph, plan and statistics query behind a CLI verb"
+Magus.PayloadByRef: captured output lookup behind query output and the run ref
+Magus.PipeWaits: "cache, sandbox and lock state the CLI reports or manages"
+Magus.Plan: "graph, plan and statistics query behind a CLI verb"
+Magus.ProjectTargets: workspace accessor the CLI or std calls on the loaded handle
+Magus.PruneCache: "cache, sandbox and lock state the CLI reports or manages"
+Magus.PruneRemoteCache: "cache, sandbox and lock state the CLI reports or manages"
+Magus.PublishOutput: captured output lookup behind query output and the run ref
+Magus.RangeDiff: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.RefMatchCommand: captured output lookup behind query output and the run ref
+Magus.RefreshSymbolIndexes: symbol index query or refresh for refs and the conformance lens
+Magus.Regions: "graph, plan and statistics query behind a CLI verb"
+Magus.ReindexSymbols: symbol index query or refresh for refs and the conformance lens
+Magus.ResolveProjects: workspace accessor the CLI or std calls on the loaded handle
+Magus.ResolveTargetOutputs: captured output lookup behind query output and the run ref
+Magus.RestoreSpellCaches: "cache, sandbox and lock state the CLI reports or manages"
+Magus.ReviewOrigin: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.RevisionCheckpoint: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.Root: workspace accessor the CLI or std calls on the loaded handle
+Magus.Run: run entry point or invocation record the CLI drives
+Magus.RunAffected: run entry point or invocation record the CLI drives
+Magus.RunCI: run entry point or invocation record the CLI drives
+Magus.RunGate: run entry point or invocation record the CLI drives
+Magus.SandboxMode: "cache, sandbox and lock state the CLI reports or manages"
+Magus.SaveSpellCaches: "cache, sandbox and lock state the CLI reports or manages"
+Magus.SecretProvider: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.SymbolFreshnessEnv: symbol index query or refresh for refs and the conformance lens
+Magus.SymbolGaps: symbol index query or refresh for refs and the conformance lens
+Magus.SymbolIndexStatus: symbol index query or refresh for refs and the conformance lens
+Magus.SymbolIndexStatusByStamp: symbol index query or refresh for refs and the conformance lens
+Magus.SymbolOccurrences: symbol index query or refresh for refs and the conformance lens
+Magus.SymbolsOccurrences: symbol index query or refresh for refs and the conformance lens
+Magus.TailLog: captured output lookup behind query output and the run ref
+Magus.TargetGraph: "graph, plan and statistics query behind a CLI verb"
+Magus.TargetSandboxes: "the merge queue hook and a nested magus share one source for every target's sandbox layer"
+Magus.Tools: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.Trend: "graph, plan and statistics query behind a CLI verb"
+Magus.Unreferenced: symbol index query or refresh for refs and the conformance lens
+Magus.VCSOptions: provider or configuration accessor the CLI and std read from the loaded workspace
+Magus.Volatility: "graph, plan and statistics query behind a CLI verb"
+Magus.WatchKnowledgeGraph: "graph, plan and statistics query behind a CLI verb"
+Magus.WatchSymbolIndexing: symbol index query or refresh for refs and the conformance lens
+Magus.Where: "graph, plan and statistics query behind a CLI verb"
+Magus.WorkingDiff: "version-control and change reading behind diff, describe file and the job checkpoint"
+Magus.Workspace: workspace accessor the CLI or std calls on the loaded handle
+Magus.WriteGuardIndex: guard verdicts and generated-file resolution for hooks and merge drivers
+Magus.WriteScriptsIndex: symbol index query or refresh for refs and the conformance lens
+MaybeLaunchSandbox: "helper or hook the CLI, std or a test double needs from the root package"
+MergeMarkers: "helper or hook the CLI, std or a test double needs from the root package"
+MetricsCollector: value type a Run or query result returns to the caller
+MetricsCollector.Collect: metrics sampling hook
+ModelRecord: "Magus.Models returns it; the alias names internal/agent/model's row so no caller outside the module meets an internal type"
+ModelRecord.Multiplier: the long-context surcharge field ModelRecord promotes from budget.Price
+NewLazyWorkspace: entry point a Go program calls to load or inspect a workspace without the CLI
+NewSink: value type a Run or query result returns to the caller
+NewWorkspaceRegistry: multi-workspace registry that lets one process serve several roots
+Open: entry point a Go program calls to load or inspect a workspace without the CLI
+Option: "option type taken by Open, Run, Plan or a declaration"
+OutputDescriptor: value type a Run or query result returns to the caller
+PlanOptions: "option type taken by Open, Run, Plan or a declaration"
+ProjectOption: "option type taken by Open, Run, Plan or a declaration"
+RecentSymbolRefreshFailures: "helper or hook the CLI, std or a test double needs from the root package"
+ResolveCacheDir: entry point a Go program calls to load or inspect a workspace without the CLI
+RetryOnVolatile: "functional option that configures a Run, a Target or a Project declaration"
+RunOption: "option type taken by Open, Run, Plan or a declaration"
+ShortRevision: "helper or hook the CLI, std or a test double needs from the root package"
+Sink: value type a Run or query result returns to the caller
+Sink.Close: console and structured emit call made by the CLI during a run
+Sink.EmitBase: console and structured emit call made by the CLI during a run
+Sink.EmitCache: console and structured emit call made by the CLI during a run
+Sink.EmitCharms: console and structured emit call made by the CLI during a run
+Sink.EmitDetach: console and structured emit call made by the CLI during a run
+Sink.EmitDiagnostic: console and structured emit call made by the CLI during a run
+Sink.EmitNotice: console and structured emit call made by the CLI during a run
+Sink.EmitScope: console and structured emit call made by the CLI during a run
+Sink.EmitShardTotal: console and structured emit call made by the CLI during a run
+Sink.GraphObserver: console and structured emit call made by the CLI during a run
+Sink.RecordValues: console and structured emit call made by the CLI during a run
+SinkOption: "option type taken by Open, Run, Plan or a declaration"
+SpawnRule: "helper or hook the CLI, std or a test double needs from the root package"
+SpellCache: value type a Run or query result returns to the caller
+StepRule: "an embedder's own rule over the steps Judge judges (ADR 0046)"
+SymbolOccurrenceRead: value type a Run or query result returns to the caller
+SymbolRefresh: value type a Run or query result returns to the caller
+SymbolRefreshBudget: constant a caller compares against or pins
+TargetHandler: "helper or hook the CLI, std or a test double needs from the root package"
+TargetLabel: "helper or hook the CLI, std or a test double needs from the root package"
+TargetOption: "option type taken by Open, Run, Plan or a declaration"
+UncommittedRepairs: "cmd/magus refuses a ci verdict whose repaired files are not committed; the check lives beside the run that records them"
+WithBaseRef: "functional option that configures a Run, a Target or a Project declaration"
+WithBroker: "functional option that configures a Run, a Target or a Project declaration"
+WithBrokerPolicy: "functional option that configures a Run, a Target or a Project declaration"
+WithCache: "functional option that configures a Run, a Target or a Project declaration"
+WithCacheBackend: "functional option that configures a Run, a Target or a Project declaration"
+WithCharms: "functional option that configures a Run, a Target or a Project declaration"
+WithCommandLine: "functional option that configures a Run, a Target or a Project declaration"
+WithComposeRoots: "functional option that configures a Run, a Target or a Project declaration"
+WithComposeSpell: "functional option that configures a Run, a Target or a Project declaration"
+WithConfigFile: "functional option that configures a Run, a Target or a Project declaration"
+WithDependsOn: "functional option that configures a Run, a Target or a Project declaration"
+WithDryRun: "functional option that configures a Run, a Target or a Project declaration"
+WithEnv: "functional option that configures a Run, a Target or a Project declaration"
+WithExtraArgs: "functional option that configures a Run, a Target or a Project declaration"
+WithGate: "functional option that configures a Run, a Target or a Project declaration"
+WithGraphHistory: "functional option that configures a Run, a Target or a Project declaration"
+WithGraphInput: "functional option that configures a Run, a Target or a Project declaration"
+WithJobReader: "functional option that brings an embedder's own rows to the lease rules (ADR 0045)"
+WithMetricsCollection: "functional option that configures a Run, a Target or a Project declaration"
+WithObserver: "functional option that configures a Run, a Target or a Project declaration"
+WithOutputs: "functional option that configures a Run, a Target or a Project declaration"
+WithRace: "functional option that configures a Run, a Target or a Project declaration"
+WithRaceReplay: "functional option that configures a Run, a Target or a Project declaration"
+WithSecrets: "a program embedding magus supplies the secret provider openers and options the workspace's resolver is built with"
+WithSession: "functional option that configures a Run, a Target or a Project declaration"
+WithSink: "functional option that configures a Run, a Target or a Project declaration"
+WithSinkFilter: "functional option that configures a Run, a Target or a Project declaration"
+WithSinkLevel: "functional option that configures a Run, a Target or a Project declaration"
+WithSinkRecords: "functional option that configures a Run, a Target or a Project declaration"
+WithSpawnRule: "functional option that configures a Run, a Target or a Project declaration"
+WithSpell: "functional option that configures a Run, a Target or a Project declaration"
+WithSpellFilter: "functional option that configures a Run, a Target or a Project declaration"
+WithStderr: "functional option that configures a Run, a Target or a Project declaration"
+WithStep: "functional option that configures a Run, a Target or a Project declaration"
+WithStepRule: "functional option that adds an embedder's rule to Judge (ADR 0046)"
+WithStepSpecs: "functional option that declares the step kinds Judge judges (ADR 0046)"
+WithTarget: "functional option that configures a Run, a Target or a Project declaration"
+WithTargetResults: "functional option that configures a Run; the SDK examples read each finished target through it"
+WithUpstream: "functional option that configures a Run, a Target or a Project declaration"
+WithVCSDriver: "functional option that configures a Run, a Target or a Project declaration"
+WithVersion: "functional option that configures a Run, a Target or a Project declaration"
+WithVolatilityRetry: "functional option that configures a Run, a Target or a Project declaration"
+WithWatchIgnore: "functional option that configures a Run, a Target or a Project declaration"
+WithWorkspaceRegistry: "functional option that configures a Run, a Target or a Project declaration"
+WithWorkspaceRegistryContext: "functional option that configures a Run, a Target or a Project declaration"
+WithWrite: "functional option that configures a Run, a Target or a Project declaration"
+WithoutWorkspaceProviders: "functional option that configures a Run, a Target or a Project declaration"
+WorkspaceLoadFailure: multi-workspace registry that lets one process serve several roots
+WorkspaceRegistry: multi-workspace registry that lets one process serve several roots
+WorkspaceRegistry.AddProvider: registration hook for providers and projects of a registry
+WorkspaceRegistry.RegisterProject: registration hook for providers and projects of a registry
+WorkspaceRegistryFromContext: multi-workspace registry that lets one process serve several roots

@@ -1,5 +1,5 @@
 // Command train runs the stage S0 probes of the local-models plan over the inputs
-// libs/train/inputs.jsonl pins, and appends one row per run to libs/train/runs.jsonl.
+// libs/train/inputs.yaml pins, and appends one row per run to libs/train/runs.jsonl.
 // It never serves a model: mlx_lm.lora, llama-bench and llama-server do the model work,
 // and this command measures them.
 package main
@@ -79,8 +79,8 @@ func (c *common) register(fs *flag.FlagSet) {
 	if dir, err := xdg.CacheDir(); err == nil {
 		cache = filepath.Join(dir, "magus")
 	}
-	fs.StringVar(&c.inputs, "inputs", "inputs.jsonl", "the pinned inputs file")
-	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.jsonl paths are relative to")
+	fs.StringVar(&c.inputs, "inputs", "inputs.yaml", "the pinned inputs file")
+	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.yaml paths are relative to")
 	fs.StringVar(&c.runs, "runs", "runs.jsonl", "the run log rows are appended to")
 	fs.StringVar(&c.sources, "sources", "embed/gen/sources.jsonl", "the dealt split of tracked files")
 	fs.StringVar(&c.root, "root", "../..", "the workspace root sources.jsonl paths are relative to")
@@ -470,7 +470,7 @@ func s3Tools(fs *flag.FlagSet, cfg *eval.Config) {
 
 // s3Models binds the flags that name what is served.
 func s3Models(fs *flag.FlagSet, cfg *eval.Config, defaultSystems string) {
-	fs.StringVar(&cfg.Systems, "systems", defaultSystems, "comma-separated base names under gguf/ in inputs.jsonl, each name[:psm|:spm]; the first is the reference the others' p-values pair against")
+	fs.StringVar(&cfg.Systems, "systems", defaultSystems, "comma-separated base names under gguf/ in inputs.yaml, each name[:psm|:spm]; the first is the reference the others' p-values pair against")
 	fs.StringVar(&cfg.Context, "context", "none", "the context provider in front of each base; none until stage S2 builds one, and any other name needs spans that carry context chunks")
 }
 
