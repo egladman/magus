@@ -2,13 +2,13 @@
 title: term module
 generated_from: reference/buzz/
 aliases: [modules/term]
-description: "Terminal interaction: capability probes, an interactive picker, and styled output."
+description: "Terminal interaction: capability probes, prompts (pick, pickMany, confirm), a spinner, and styled output."
 tags: [term, module, stdlib, magusfile]
 ---
 
 # term
 
-Terminal interaction: capability probes, an interactive picker, and styled output. Renders to stderr; pick raises rather than hanging when there is no terminal.
+Terminal interaction: capability probes, prompts (pick, pickMany, confirm), a spinner, and styled output. Renders to stderr; every prompt and the spinner raise rather than hanging when there is no terminal.
 
 > **Naming convention:** import the module under its bare name (`import "term"`), reach members with a backslash, and call methods in `camelCase`: `term\someMethod`.
 
@@ -71,17 +71,18 @@ Wrap s in the given style and close it again. Returns s UNCHANGED when the outpu
 
 ### pick
 
-Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.
+Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr. query, when given, replaces the filter with a live lookup: it is called with the filter text on first paint and after every keystroke and returns the strings to show, best first, so a picker can search something too large to list up front. items may then be empty, the index returned is into the list query returned last, and a query that raises ends the prompt with its error.
 
-**Signature:** `term\pick(items, [prompt], [initialFilter], [initial], [maxRows]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+**Signature:** `term\pick(items, [prompt], [initialFilter], [initial], [maxRows], [query]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
 
-| Parameter       | Type       | Optional | Description |
-| --------------- | ---------- | -------- | ----------- |
-| `items`         | `[]string` |          |             |
-| `prompt`        | `string`   | yes      |             |
-| `initialFilter` | `string`   | yes      |             |
-| `initial`       | `int`      | yes      |             |
-| `maxRows`       | `int`      | yes      |             |
+| Parameter       | Type                                                  | Optional | Description |
+| --------------- | ----------------------------------------------------- | -------- | ----------- |
+| `items`         | `[]string`                                            |          |             |
+| `prompt`        | `string`                                              | yes      |             |
+| `initialFilter` | `string`                                              | yes      |             |
+| `initial`       | `int`                                                 | yes      |             |
+| `maxRows`       | `int`                                                 | yes      |             |
+| `query`         | `func(context.Context, string) (interface {}, error)` | yes      |             |
 
 **Returns:** int
 
@@ -91,24 +92,106 @@ Prompt the reader to choose one of items and return its index. Type to filter (m
 import "std";
 import "term";
 
-// pick RAISES when there is no terminal, so an interactive step that also has to
-// run unattended guards on isInteractive and declares its own default. It raises
-// again when the reader aborts with ESC or Ctrl-C, which is why the call is
-// caught rather than merely guarded: a cancel is not a choice.
+// A prompt is the interactive spelling of a flag. The flag wins when it was
+// passed, and a person on a terminal who left it off is asked. With nothing to
+// ask on, or when the reader cancels with ESC or Ctrl-C (pick raises), nothing
+// is chosen: the run says which flag it needed.
 final projects = ["console", "docs", "libs/gopherbuzz"];
+final given: str? = null;
 
-fun choose() > str {
-    if (!term\isInteractive()) {
-        return projects[0];
-    }
+if (given -> project) {
+    std\print(project);
+} else if (!term\isInteractive()) {
+    std\print("--project is required (no terminal to ask on)");
+} else {
     try {
-        return projects[term\pick(projects, prompt: "project")];
+        final picked = projects[term\pick(projects, prompt: "project")];
+        std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
     } catch (e) {
-        return projects[0];
+        std\print("no project chosen: pass --project");
     }
 }
+```
 
-std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));
+### pickMany
+
+Prompt the reader to mark any number of items and return the marked ones, in the order items lists them. Type to filter as pick does; Tab marks or unmarks the highlighted row, and a mark survives a change of filter. Enter confirms, and does nothing while nothing is marked, so the highlighted row is never taken for a choice. marked lists the items marked on first paint. Items must be distinct, since the answer is the items themselves, and an entry of marked that is not one of items raises. RAISES when there is no terminal to prompt on - guard with is_interactive - and when the reader aborts with ESC, Ctrl-C or Ctrl-D. Renders to stderr.
+
+**Signature:** `term\pickMany(items, [prompt], [initialFilter], [marked], [maxRows]) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+
+| Parameter       | Type       | Optional | Description |
+| --------------- | ---------- | -------- | ----------- |
+| `items`         | `[]string` |          |             |
+| `prompt`        | `string`   | yes      |             |
+| `initialFilter` | `string`   | yes      |             |
+| `marked`        | `[]string` | yes      |             |
+| `maxRows`       | `int`      | yes      |             |
+
+**Returns:** []string
+
+### confirm
+
+Ask the reader a yes or no question and return true only for yes. Ask once per run, just before a step that cannot be taken back or that reaches outside the machine (a delete, a push, an opened pull request), and print what the step will do before asking: a confirm between read-only steps trains the reader to answer without reading. no is highlighted first, so Enter alone declines. RAISES when there is no terminal to ask on - guard with is_interactive, and let the flag that already says yes (--apply, --push) answer for an unattended run - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D. Renders to stderr.
+
+**Signature:** `term\confirm(question) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `question` | `string` |          |             |
+
+**Returns:** bool
+
+**Example:**
+
+```buzz
+import "std";
+import "term";
+
+// Ask once, right before the step that cannot be taken back, after printing
+// what it will do. The flag that already says yes answers for an unattended
+// run, and a cancel (confirm raises) is a no.
+final apply = false;
+std\print("would remove 3 worktrees, freeing 2.1 GiB");
+
+var proceed = apply;
+if (!apply and term\isInteractive()) {
+    proceed = term\confirm("remove 3 worktrees?") catch false;
+}
+if (!proceed) {
+    std\print("dry run: pass --apply to remove them");
+}
+```
+
+### spin
+
+Call run and return what it returns, while a loader turns beside label on standard error, so a person watching a long blocking step (a subprocess, a survey of the disk) can tell it from a hang. The loader is erased when run returns or raises, and run's raise is raised again unchanged. Anything run writes to standard error lands under the loader's line, so give it quiet work, such as a proc call whose output is captured. RAISES without calling run when there is no terminal to draw on - guard with is_interactive and call run directly for an unattended run.
+
+**Signature:** `term\spin(label, run) -> any` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `label`   | `string`                                      |          |             |
+| `run`     | `func(context.Context) (interface {}, error)` |          |             |
+
+**Returns:** any
+
+**Example:**
+
+```buzz
+import "proc";
+import "std";
+import "term";
+
+// A loader turns while the subprocess blocks and is erased when it returns.
+// proc captures the command's output, so nothing writes under the loader.
+final survey = fun () > any !> any => proc\exec("du", args: ["-sk", "."]).stdout;
+
+try {
+    final usage = if (term\isInteractive()) term\spin("surveying the disk", run: survey) else survey();
+    std\print("{usage}");
+} catch (e) {
+    std\print("du failed");
+}
 ```
 
 ### notify

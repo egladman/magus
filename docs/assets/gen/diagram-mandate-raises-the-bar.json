@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 3,
     "imports": 0
   },
   "figure": "mandate-raises-the-bar",
   "findings": [],
-  "stamp": "sha256:7609f5874b0dc4d0093d9b6d94b1beb2f0f192839f302a153d0d1900d8c092c8"
+  "level": "process",
+  "stamp": "sha256:41d454818a9df0721de71dde0771ad5b6ca0d7b5e167534be0f2a08fc2de2d2f",
+  "undrilled": []
 }

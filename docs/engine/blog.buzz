@@ -119,7 +119,8 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
     // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
     // cross-references (../../documentation/) resolve at the post's real depth.
-    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath));
+    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath),
+        hrefs: drillHrefs(site.inputs.blog + "/" + urlPath, site: site));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }

@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 6
   },
   "figure": "doctor",
   "findings": [],
-  "stamp": "sha256:b7074d5c2db7cf0c5a3d67b71579f14e074a379315576d11457307d2bbd0a723"
+  "level": "package",
+  "stamp": "sha256:6a03c43622e22cfbd81a4f3f0b2ee75d60a7095ea1d44db1e3f7bbcc125ee490",
+  "undrilled": []
 }

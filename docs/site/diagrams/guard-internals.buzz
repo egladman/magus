@@ -14,15 +14,12 @@ export fun guardInternalsFigure() > figure\Figure !> any {
     final recorder = magus\graph().dir("internal/recorder");
     final hint = magus\graph().dir("internal/hint");
     return figure\of("guard-internals",
-            title: "What the guard reads to reach one verdict",
+            title: "The guard reaches each verdict from rules and records it does not own",
             eyebrow: "guard",
-            desc: "The guard holds the rules and little else of its own. The catalog names every "
-                + "built-in rule and its grade, the workspace supplies the loaded policy, and the "
-                + "config says which rules are denied, advised or off. The interpreter runs the "
-                + "workspace's Buzz rule. To judge a call the guard reads the job store for the "
-                + "lease the call acts as and the session record for what the session already did. "
-                + "It writes each judgment to the activity log and names the command to run instead "
-                + "through the hint package.")
+            desc: "The catalog names every built-in rule and its grade, the workspace supplies the "
+                + "loaded policy, and the config says which rules are denied, advised or off. To "
+                + "judge a call the guard reads the job store and the session record, logs the "
+                + "judgment, and names the command to run instead through the hint package.")
         .box(guard, label: "Guard", sub: "one verdict per call", focal: true)
         .box(catalog, label: "Rule catalog", sub: "ids, grades")
         .group([workspace, config], label: "Policy", sub: "loaded rules, grades")

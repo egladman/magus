@@ -13,6 +13,8 @@ follows one program through it.
 
 ## Source to chunk
 
+<!--diagram:buzz-packages-->
+
 <!--diagram:buzz-compile-->
 
 `Session.Exec` drives the front end. Every step except the lexer and the chunk passes

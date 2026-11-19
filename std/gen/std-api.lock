@@ -207,10 +207,13 @@ template.render
 template.renderPartials
 term.clearScreen
 term.colorize
+term.confirm
 term.isInteractive
 term.notify
 term.pick
+term.pickMany
 term.size
+term.spin
 term.wantsColor
 time.add
 time.diff

@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 10
   },
   "figure": "sessions",
   "findings": [],
-  "stamp": "sha256:534e08c6264ce617870a5521c71e754380c8a0490eb9502eff9cf5635fee2903"
+  "level": "package",
+  "stamp": "sha256:fd56addc061a7490fcaf2f7d59d0d6d0a164620f318e0c74b240c3d059db68ca",
+  "undrilled": []
 }

@@ -3,11 +3,11 @@ namespace dogfood;
 import "magus/figure";
 
 export fun dogfoodFigure() > figure\Figure !> any {
-    final commit = figure\external("This commit", sub: "magusfile + Go source", look: figure\Look.plain);
-    final fromSource = figure\external("Built from source", sub: "setup-magus source-path", look: figure\Look.plain);
-    final gates = figure\external("Every gate", sub: "lint, build, test, ci", look: figure\Look.focal);
-    final pinned = figure\external("Last release", sub: "setup-magus git-ref");
-    final compat = figure\external("audit compat", sub: "red is a signal, not a stop", look: figure\Look.optional);
+    final commit = figure\step("This commit", sub: "magusfile + Go source", look: figure\Look.plain);
+    final fromSource = figure\step("Built from source", sub: "setup-magus source-path", look: figure\Look.plain);
+    final gates = figure\step("Every gate", sub: "lint, build, test, ci", look: figure\Look.focal);
+    final pinned = figure\step("Last release", sub: "setup-magus git-ref");
+    final compat = figure\step("audit compat", sub: "red is a signal, not a stop", look: figure\Look.optional);
     // Two tracks, not a build cycle: a cycle shows the bootstrap but not why one job pins the
     // last release.
     return figure\of("dogfood",

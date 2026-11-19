@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 4,
+    "imports": 1
   },
   "figure": "ci-providers",
   "findings": [],
-  "stamp": "sha256:db3753f8b8a0ad87afbb5b902e64ceb30bec659d9a4b2f911e42accdefccd4d8"
+  "level": "package",
+  "stamp": "sha256:4207003e30608ad51dc96f3acd7cd84752993edebdc065166117ebe1099d9798",
+  "undrilled": []
 }

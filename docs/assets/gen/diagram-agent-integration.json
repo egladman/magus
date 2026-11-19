@@ -1,10 +1,14 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 5,
+    "imports": 6
   },
   "figure": "agent-integration",
   "findings": [],
-  "stamp": "sha256:66769d7a450fb0417577b864f82af131a16855c1964ee50efc8ff136940b2050"
+  "level": "package",
+  "stamp": "sha256:f5322edb38d4f1b3451f2a7375c7e8f943267480a42c7654dd3845f6c64a1004",
+  "undrilled": [
+    "MCP tools"
+  ]
 }

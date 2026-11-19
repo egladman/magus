@@ -1,10 +1,14 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
-    "imports": 0
+    "flow": 3,
+    "imports": 4
   },
   "figure": "server-http",
   "findings": [],
-  "stamp": "sha256:059c1638f5e33aa97003fe1b585b62eded54fe2d7dbfe367eeb0b6b7381f4439"
+  "level": "package",
+  "stamp": "sha256:ecf3f740300cbc6d5e10f9b49f155ba1129ce0a59a39190ce13439abacdf91f0",
+  "undrilled": [
+    "Console routes"
+  ]
 }

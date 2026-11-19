@@ -25,12 +25,12 @@ export fun vcsFigure() > figure\Figure !> any {
     return figure\of("vcs",
             title: "One VCS interface answers git, Mercurial, Sapling and Jujutsu",
             eyebrow: "vcs",
-            desc: "The vcs package names the revision, the branch, the dirty digest and the "
-                + "changed files for whichever backend the checkout uses, so no other package "
-                + "runs a VCS command. Job leases and the cache key read the revision, the "
-                + "session and activity records stamp it, and the landing code reads the branch and "
-                + "the merge base. The package reads files through internal/file, identifies "
-                + "itself with the build stamp and keeps its state in the XDG directories.")
+            direction: figure\Direction.down,
+            desc: "The vcs package names the revision, the branch, the dirty digest and the changed "
+                + "files for whichever backend the checkout uses, so no other package runs a VCS "
+                + "command. Job leases and the cache key read the revision, the session and "
+                + "activity records stamp it, and the landing code reads the branch and the merge "
+                + "base.")
         .box(vcs, label: "VCS", sub: "revision, branch, dirty digest", focal: true)
         .box(file, label: "File helpers", sub: "reads and writes")
         .box(stamp, label: "Build stamp", sub: "who ran it")

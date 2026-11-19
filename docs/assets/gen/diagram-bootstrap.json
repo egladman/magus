@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 9,
     "imports": 0
   },
   "figure": "bootstrap",
   "findings": [],
-  "stamp": "sha256:146730085e6f9b416fae59ab5eb752eb15570144bfb54cebc7646e4c75edd9b1"
+  "level": "process",
+  "stamp": "sha256:b9b2d44fc8bf874ec50194daaff419d0fa5bf625f44536b8c86e68cdbdf9ab2f",
+  "undrilled": []
 }

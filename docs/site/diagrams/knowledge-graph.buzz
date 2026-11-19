@@ -6,35 +6,31 @@ import "site/diagrams/packages" as packages;
 
 export fun knowledgeGraphFigure() > figure\Figure !> any {
     final graph = magus\graph().dir("internal/graph/knowledge");
-    final verbs = magus\graph().dir(".");
     final cli = magus\graph().dir("cmd/magus");
     final mcp = magus\graph().dir("internal/handler/mcp");
-    final core = figure\external("Magusfiles + adapters", sub: "registry, Buzz, docs, dirs, links, owners", look: figure\Look.plain);
+    // The sources are files a person writes; the adapters that read them live in the graph box.
+    final core = figure\external("Magusfiles and docs", sub: "registry, Buzz, docs, dirs, owners", look: figure\Look.plain);
     final symbols = magus\graph().dirs("internal/symbols/**") + [magus\graph().dir("internal/symbols")];
     final vcs = figure\external("History", sub: "@vcs, from git", look: figure\Look.plain);
     final notes = figure\external("Notes", sub: "@notes shared + private", look: figure\Look.plain);
     return figure\of("knowledge-graph",
             title: "Every source writes a shard; every reader asks one graph",
             eyebrow: "knowledge graph",
-            desc: "magus graph build assembles a shard per source: the registry and one per "
-                + "project from the magusfiles, the file adapters for Buzz, docs, directories, "
-                + "citations and CODEOWNERS, a lazy symbol shard per project from a SCIP index, "
-                + "git history and notes. The store fingerprints each shard and rewrites only "
-                + "the ones whose content changed, then merges them into one graph. The CLI and "
-                + "the MCP tools read that graph through the same query, explain, refs and path.")
+            desc: "magus graph build assembles a shard per source: the magusfiles, Buzz, docs, "
+                + "directories and owners, a lazy symbol shard per project from a SCIP index, git "
+                + "history and notes. The store rewrites only the shards whose content changed and "
+                + "merges them into one graph, which the CLI and the MCP tools both read.",
+            level: figure\Level.package)
         .actor(core)
         .actor(vcs)
         .actor(notes)
         .group(symbols, label: "Symbol index", sub: "SCIP per language, lazy shards", look: figure\Look.input)
-        .box(graph, label: "One graph", sub: "fingerprint, sync, merge", focal: true)
-        .box(verbs, label: "The four verbs", sub: "query, explain, refs, path")
+        .box(graph, label: "One graph", sub: "query, explain, refs, path", focal: true)
         .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
         .box(mcp, label: "MCP client", sub: "magus\\graph().query and kin", tag: "reader")
         .edgesFromGraph()
-        .hideEdges([cli], dst: [graph, mcp],
-            why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
-        .hideEdges([verbs], dst: symbols,
-            why: "refs reads the symbol shards; drawn in symbol-index, where the shard is opened")
+        .hideEdges([cli], dst: [mcp],
+            why: "the CLI serves the MCP tools; both read the graph, which is the point")
         .flowIn(core, dst: graph)
         .flowIn(vcs, dst: graph)
         .flowIn(notes, dst: graph)

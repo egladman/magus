@@ -1,10 +1,12 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 0,
+    "flow": 7,
     "imports": 0
   },
   "figure": "buzz-compile",
   "findings": [],
-  "stamp": "sha256:9509259331357049694db86f6a0e64e818529f87e210d901e0807a3a8739e88b"
+  "level": "symbol",
+  "stamp": "sha256:15a3b7d681d732db2b3798ad6444c0a97b2daf0b84140c596b463210c5bde7bf",
+  "undrilled": []
 }

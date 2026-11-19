@@ -2,9 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 0
+    "imports": 6
   },
   "figure": "bindings-generate",
   "findings": [],
-  "stamp": "sha256:f5e068cc2613d1626b8204cc9f474b34222c47da8c4ade113d5c1efa30d6f24b"
+  "level": "package",
+  "stamp": "sha256:b48ceaa52babdfffe40429caac8d12bf57c2961772d7b0a997d2f11c34e7916b",
+  "undrilled": []
 }

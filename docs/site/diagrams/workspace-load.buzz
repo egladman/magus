@@ -10,21 +10,16 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
     final extract = magus\graph().dir("internal/describe");
     final model = magus\graph().dir("types");
     final cache = magus\graph().dir("internal/cache");
-    final root = magus\graph().dir(".");
     final rootMf = figure\external("Root magusfile", sub: "declares project .", look: figure\Look.input);
     final nestedMf = figure\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: figure\Look.input);
-    final steps = [discover, interp, extract, cache];
     return figure\of("workspace-load",
             title: "A target exists because a magusfile exported it",
             eyebrow: "workspace",
-            desc: "Discovery walks the tree from the root marker and registers one project per "
-                + "magusfile: the root's is project ., each nested one declares its own. Every "
-                + "magusfile is evaluated: its exported functions are its targets and "
-                + "magus\\project layers policy on. A static read of each target body recovers "
-                + "ctx.readsFiles, ctx.writesFiles and cross-project ctx.needs as literals. The "
-                + "project model that results is what the cache keys, what describe answers "
-                + "from, and what a command resolves its project against from the current "
-                + "directory.")
+            desc: "Discovery registers one project per magusfile. Evaluating a magusfile turns "
+                + "its exported functions into targets, and a static read of each target body "
+                + "recovers its literal reads, writes and cross-project needs. The project model "
+                + "that results is what the cache keys and what describe answers from.",
+            level: figure\Level.package)
         .actor(rootMf)
         .actor(nestedMf)
         .box(discover, label: "Projects", sub: "discovery, Where(cwd)")
@@ -32,10 +27,7 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .box(extract, label: "Static read", sub: "literal reads, writes, needs")
         .box(model, label: "Projects and targets", sub: "sources, outputs, depends_on", focal: true)
         .box(cache, label: "Cache key", sub: "one step per target")
-        .box(root, label: "magus describe", sub: "targets, claims, the graph")
         .edgesFromGraph()
-        .hideEdges([root], dst: steps,
-            why: "the root package runs the load; its calls into each step are the order, not the model")
         .hideEdges([interp, cache], dst: [discover],
             why: "they read project options and project paths; the model they fill is types")
         .markEdge(interp, dst: model, label: "targets")
