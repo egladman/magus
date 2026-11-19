@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -292,7 +293,13 @@ func descriptorPath(outPath string) string {
 	return strings.TrimSuffix(outPath, outExt) + descExt
 }
 
-// readDescriptor reads and decodes a <ref>.json descriptor.
+// errOldDescriptor means a descriptor was written by a magus whose key_version was
+// not yet a string. The file is a derived cache record, so a reader treats it as a
+// miss and says so, never as a store it cannot read.
+var errOldDescriptor = errors.New("output is from an older magus")
+
+// readDescriptor reads and decodes a <ref>.json descriptor. A descriptor from an
+// older magus is [errOldDescriptor].
 func readDescriptor(path string) (OutputDescriptor, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -300,6 +307,14 @@ func readDescriptor(path string) (OutputDescriptor, error) {
 	}
 	var m OutputDescriptor
 	if err := codec.Unmarshal(data, &m); err != nil {
+		var probe struct {
+			KeyVersion any `json:"key_version"`
+		}
+		if codec.Unmarshal(data, &probe) == nil {
+			if _, isString := probe.KeyVersion.(string); probe.KeyVersion != nil && !isString {
+				return OutputDescriptor{}, fmt.Errorf("%s: %w", filepath.Base(path), errOldDescriptor)
+			}
+		}
 		return OutputDescriptor{}, err
 	}
 	return m, nil
@@ -442,7 +457,8 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 // execution (the store holds keep-last-K per cache key), so a target's recent history is browsable.
 // The REPRO target is preserved verbatim (with any charm suffix) so a run's exact invocation stays
 // visible; the caller collapses to the bare name for grouping if it wants. An absent store
-// is empty; an unreadable store or malformed descriptor is an error.
+// is empty; an unreadable store or malformed descriptor is an error, but a descriptor from an
+// older magus is skipped with a warning.
 func (s *OutputStore) ListDescriptors() ([]OutputDescriptor, error) {
 	keys, err := os.ReadDir(s.outputsDir())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -470,6 +486,10 @@ func (s *OutputStore) ListDescriptors() ([]OutputDescriptor, error) {
 			}
 			d, err := readDescriptor(filepath.Join(dir, f.Name()))
 			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if errors.Is(err, errOldDescriptor) {
+				slog.WarnContext(context.Background(), "skipping an output descriptor", "descriptor", f.Name(), "reason", err)
 				continue
 			}
 			if err != nil {
