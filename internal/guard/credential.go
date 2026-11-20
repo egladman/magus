@@ -151,14 +151,14 @@ func tokenStateReaches(location location, candidate string) tokenReach {
 		}
 		abs = filepath.Join(dir, abs)
 	}
-	abs = realPath(abs)
+	abs = canonicalPath(abs)
 	if pattern != "" {
-		return globReach(abs, pattern, realPath(state), realPath(store))
+		return globReach(abs, pattern, canonicalPath(state), canonicalPath(store))
 	}
-	if abs == realPath(operator) || under(realPath(store), abs) {
+	if abs == canonicalPath(operator) || under(canonicalPath(store), abs) {
 		return tokenSecret
 	}
-	if abs == realPath(state) {
+	if abs == canonicalPath(state) {
 		return tokenDir
 	}
 	return tokenNone

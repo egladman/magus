@@ -2,7 +2,6 @@ package guard
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/hint"
@@ -16,7 +15,7 @@ func denyOwnBinaryWrite(lease, writePath string) writeGrade {
 	if lease == "" || !filepath.IsAbs(writePath) {
 		return writeGrade{}
 	}
-	for _, p := range []string{filepath.Clean(writePath), writeDestination(writePath)} {
+	for _, p := range []string{filepath.Clean(writePath), canonicalPath(writePath)} {
 		dir := filepath.Dir(p)
 		if filepath.Base(p) != "magus" || findMagusCheckout(dir) != dir {
 			continue
@@ -37,7 +36,7 @@ func denyMagusStateWrite(lease, writePath string) writeGrade {
 	if lease == "" || !filepath.IsAbs(writePath) {
 		return writeGrade{}
 	}
-	dest := writeDestination(writePath)
+	dest := canonicalPath(writePath)
 	if scratch, err := scratchCheckouts(); err == nil && within(dest, scratch) {
 		return writeGrade{}
 	}
@@ -74,25 +73,4 @@ func magusUserDirs() []magusUserDir {
 		}
 	}
 	return out
-}
-
-// writeDestination is the file a write to p lands in, symlinks resolved.
-// A dangling final link is followed too: writing through it creates its
-// target.
-func writeDestination(p string) string {
-	for range 40 {
-		info, err := os.Lstat(p)
-		if err != nil || info.Mode()&os.ModeSymlink == 0 {
-			break
-		}
-		link, err := os.Readlink(p)
-		if err != nil {
-			break
-		}
-		if !filepath.IsAbs(link) {
-			link = filepath.Join(filepath.Dir(p), link)
-		}
-		p = filepath.Clean(link)
-	}
-	return realPath(p)
 }

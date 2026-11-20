@@ -94,13 +94,7 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 	if !ok {
 		return "", nil
 	}
-	abs, err := filepath.Abs(targets[0])
-	if err != nil {
-		return "", nil
-	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
-	}
+	abs := canonicalPath(targets[0])
 	root, common, ok := gitCheckout(abs)
 	if !ok || common != hereCommon || root != abs {
 		return "", nil
@@ -127,11 +121,12 @@ func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []types.
 }
 
 // resolvePath reads p as the shell would after starting in dir.
+// It joins without cleaning, so a `..` stays for canonicalPath.
 func resolvePath(dir, p string) string {
-	if filepath.IsAbs(p) {
+	if filepath.IsAbs(p) || dir == "" {
 		return p
 	}
-	return filepath.Join(dir, p)
+	return dir + string(filepath.Separator) + p
 }
 
 // gitCheckout resolves dir to the checkout containing it: the working tree's root,
@@ -142,16 +137,10 @@ func resolvePath(dir, p string) string {
 // read. A dir that does not exist yet still resolves through its nearest existing
 // ancestor, which is what a cd into a not-yet-created subdirectory should mean.
 func gitCheckout(dir string) (root, common string, ok bool) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", "", false
-	}
 	// Both sides get symlinks resolved, so /var and /private/var (or a worktree
 	// reached through a symlinked parent) compare as one place rather than as two
 	// repositories that merely look alike.
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
-	}
+	abs := canonicalPath(dir)
 	for {
 		gitPath := filepath.Join(abs, ".git")
 		if info, err := os.Lstat(gitPath); err == nil {

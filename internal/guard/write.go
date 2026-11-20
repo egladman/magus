@@ -168,16 +168,13 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 			return ""
 		}
 	}
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(root, abs)
-	}
+	abs := resolvePath(root, path)
 	// Compare REAL paths. A host hands over whatever path its editor tool used, and on
 	// macOS /var is a symlink to /private/var, so a tmpdir-rooted workspace yields a
 	// declared store under one spelling and an incoming write under the other. Comparing
 	// them literally makes the rule silently pass: a deny that fails open is worse than
 	// no deny, because it looks enforced.
-	rel, err := filepath.Rel(realPath(dir), realPath(filepath.Clean(abs)))
+	rel, err := filepath.Rel(canonicalPath(dir), canonicalPath(abs))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
@@ -829,7 +826,7 @@ func holderLastCall(ctx context.Context, deps Dependencies, at location, owner j
 		return time.Time{}, false
 	}
 	cacheDir := at.cacheDir
-	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
+	if canonicalPath(owner.CheckoutRoot) != canonicalPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
 	var last time.Time
@@ -1046,7 +1043,7 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 	if lease == "" || !filepath.IsAbs(writePath) {
 		return writeGrade{}
 	}
-	other := findMagusCheckout(filepath.Dir(writeDestination(writePath)))
+	other := findMagusCheckout(filepath.Dir(canonicalPath(writePath)))
 	if other == "" || samePath(other, checkout) || scratchWorkspace(other, checkout) {
 		return writeGrade{}
 	}
@@ -1148,8 +1145,8 @@ func workspaceRelative(root, p string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	dest := writeDestination(abs)
-	rel, err := filepath.Rel(realPath(root), dest)
+	dest := canonicalPath(abs)
+	rel, err := filepath.Rel(canonicalPath(root), dest)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || nestedCheckout(root, dest) {
 		return "", false
 	}
@@ -1159,8 +1156,8 @@ func workspaceRelative(root, p string) (string, bool) {
 // nestedCheckout reports an abs under root that lies in another git checkout inside it: a
 // directory between abs and root holding a .git entry, as a linked worktree's root does.
 func nestedCheckout(root, abs string) bool {
-	top := realPath(root)
-	for d := filepath.Dir(realPath(abs)); d != top && strings.HasPrefix(d, top+string(filepath.Separator)); d = filepath.Dir(d) {
+	top := canonicalPath(root)
+	for d := filepath.Dir(canonicalPath(abs)); d != top && strings.HasPrefix(d, top+string(filepath.Separator)); d = filepath.Dir(d) {
 		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
 			return true
 		}
@@ -1356,14 +1353,8 @@ func workspaceRelativeFile(root, path string) (string, bool) {
 	if clean == "" || root == "" {
 		return "", false
 	}
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return "", false
-	}
-	if !filepath.IsAbs(clean) {
-		clean = filepath.Join(root, clean)
-	}
-	rel, err := filepath.Rel(realPath(root), realPath(clean))
+	root = canonicalPath(root)
+	rel, err := filepath.Rel(root, canonicalPath(resolvePath(root, clean)))
 	if err != nil {
 		return "", false
 	}
@@ -1452,14 +1443,10 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if err != nil {
 		return writeGrade{}
 	}
-	abs := writePath
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(root, abs)
-	}
-	real := realPath(filepath.Clean(abs))
+	real := canonicalPath(resolvePath(root, writePath))
 	target := ""
 	for _, candidate := range vcsOffSwitchTargets(root) {
-		if realPath(candidate) == real {
+		if canonicalPath(candidate) == real {
 			target = candidate
 			break
 		}

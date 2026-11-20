@@ -171,7 +171,7 @@ func primaryCacheDir(cacheDir string) (string, bool) {
 	if cacheDir == "" {
 		return "", false
 	}
-	real := realPath(cacheDir)
+	real := canonicalPath(cacheDir)
 	root, common, ok := gitCheckout(real)
 	if !ok || filepath.Base(common) != ".git" {
 		return "", false

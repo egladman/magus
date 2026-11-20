@@ -52,7 +52,7 @@ func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, 
 	if err != nil {
 		return narrowCoverage{unread: fmt.Sprintf("the output store is unread: %v", err)}
 	}
-	ev := newRunEvidence(res.VCS, realPath(root), realPath(at.workspace), ws, runs, commit)
+	ev := newRunEvidence(res.VCS, canonicalPath(root), canonicalPath(at.workspace), ws, runs, commit)
 	weigh, hostless := splitHostless(ev.root, changed)
 	n.hostless = hostless
 	if err := ev.readRevisions(ctx, weigh); err != nil {
