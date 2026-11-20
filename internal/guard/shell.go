@@ -1985,7 +1985,7 @@ var (
 	// Every host driving this guard has a structured editor tool that reads the file,
 	// applies an exact replacement, and reports what changed, which is the same operation
 	// without the portability trap or the blind write.
-	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
+	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*[iI]|--i(n(-(p(l(a(ce?)?)?)?)?)?)?(\s|=|$))`)
 
 	// sourceReadRe is the fallback when the argv parse fails: an unbounded dump of a
 	// source file. Keep the extension list in sync with sourceExt in parse.go.
@@ -2074,9 +2074,9 @@ var (
 	denyNotesAuthor    = "an agent may not author a note; if it belongs in the notes, say so and let the person run it."
 	denyNotesAuthorWhy = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read."
 
-	denySedInPlace    = "`sed -i` reads differently on GNU and macOS; use your editor tool."
-	denySedInPlaceWhy = fmt.Sprintf("Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `%s` gives column-precise sites.\n"+
-		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched.",
+	denySedInPlace    = "an in-place sed rewrites files blind; use your editor tool, or a Buzz script with the `edit` module (`edit.replace_all`)."
+	denySedInPlaceWhy = fmt.Sprintf("The editor tool and the `edit` module read the file first, plan the change and report what it did; the module writes every file or none. Whole-tree mechanical edit? `%s` gives column-precise sites.\n"+
+		"Every in-place spelling is refused, named files or not: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched.",
 		hint.Refs.With("<symbol>", "--occurrences"))
 
 	// boundedRunWait is the one wait an agent has for work it starts: a backgrounded run the
@@ -2886,8 +2886,14 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 	// A help request for a program documented never to run on one prints usage, so the
 	// destructive-command rules have nothing to guard.
 	grade := func(v ShellVerdict) (ShellVerdict, bool) { return held.ends(deps, v) }
+	// The parse does not track a cd, so after one only a plain
+	// relative path is proven narrower than the tree.
+	vcsScope := deps.scope
+	if changesDirectory(command, d) {
+		vcsScope.dir = ""
+	}
 	if parsed && !helpOnlyLine(command, d) {
-		if v, matched := gitGuard(cmds, grade); matched {
+		if v, matched := gitGuard(cmds, vcsScope, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
@@ -2897,7 +2903,7 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 		// fallback because clean, update, revert, goto, restore and abandon are ordinary English
 		// that a commit message or a skill body would carry, and matching prose is the
 		// false positive gitGuard's own doc says the AST exists to avoid.
-		if v, matched := nonGitVCSGuard(cmds, grade); matched {
+		if v, matched := nonGitVCSGuard(cmds, vcsScope, grade); matched {
 			if v.Deny != "" {
 				return v
 			}

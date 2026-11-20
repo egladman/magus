@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,5 +119,87 @@ func TestDescriptorDuplicationNamesNoWriteTarget(t *testing.T) {
 		assert.NotContains(t, got, "1", "writeTargetCandidates(%q)", line)
 		assert.NotContains(t, got, "2", "writeTargetCandidates(%q)", line)
 		assert.NotContains(t, got, "-", "writeTargetCandidates(%q)", line)
+	}
+}
+
+// destructiveSeeds are lines the VCS and rewrite rules deny on their own.
+var destructiveSeeds = []string{
+	"git stash", "git reset --hard", "git clean -fd", "git checkout -- .", "git restore .",
+	"git add -A", "hg purge", "jj abandon", "sed -i s/a/b/ f.txt",
+}
+
+// unknownLaunchers run their trailing argv and are on no guard list.
+// The last is invented: the class is closed only if tomorrow's
+// launcher is judged by what it launches.
+var unknownLaunchers = []string{
+	"watch -n1", "chronic", "flock /tmp/l", "unbuffer", "caffeinate -i", "ionice -c3",
+	"taskset 1", "retry --", "ssh host", "zzlaunch-7f3a --flag value",
+}
+
+// knownWrappers are peeled already. A stack of both kinds must still
+// reach the payload.
+var knownWrappers = []string{"", "nohup ", "env A=1 ", "timeout 5 ", "nice -n 5 "}
+
+func (s *BypassClassSuite) TestAnUnknownLauncherIsJudgedByWhatItLaunches() {
+	for _, seed := range destructiveSeeds {
+		s.denies(seed)
+		for _, launcher := range unknownLaunchers {
+			for _, outer := range knownWrappers {
+				for _, inner := range knownWrappers {
+					s.denies(fmt.Sprintf("%s%s %s%s", outer, launcher, inner, seed))
+				}
+			}
+		}
+	}
+}
+
+func (s *BypassClassSuite) TestALauncherOfHarmlessWorkAndProseNamingAGuardedProgramPass() {
+	for _, launcher := range unknownLaunchers {
+		s.passes(launcher + " ls -la")
+		s.passes(launcher + " git status")
+	}
+	for _, data := range []string{
+		"echo git stash", "printf '%s\\n' git reset --hard", "grep -rn git stash.txt",
+		"man git-stash", "which git", "cat git stash",
+	} {
+		s.passes(data)
+	}
+}
+
+// inPlaceSpellings are sed argvs that edit in place. They cover each
+// cluster with and without a suffix, each long prefix and BSD's -I.
+func inPlaceSpellings() []string {
+	var out []string
+	for _, cluster := range []string{"i", "ni", "in", "Ei", "nEi", "si", "zi", "ui", "I"} {
+		for _, suffix := range []string{"", ".bak", "bak", "~"} {
+			if strings.HasSuffix(cluster, "i") || cluster == "I" {
+				out = append(out, fmt.Sprintf("-%s%s", cluster, suffix))
+			}
+		}
+		out = append(out, "-"+cluster)
+	}
+	out = append(out, "-i ''", "-n -i", "-E -i.bak")
+	for _, p := range prefixes("in-place") {
+		out = append(out, p, p+"=.orig")
+	}
+	return out
+}
+
+func (s *BypassClassSuite) TestEveryInPlaceSedSpellingDenies() {
+	for _, flags := range inPlaceSpellings() {
+		for _, files := range []string{"f.txt", "one.go two.go", "**/*.go"} {
+			s.denies(fmt.Sprintf("sed %s s/a/b/ %s", flags, files))
+			s.denies(fmt.Sprintf("sed %s -e s/a/b/ %s", flags, files))
+		}
+	}
+}
+
+func (s *BypassClassSuite) TestSedThatPrintsPasses() {
+	for _, line := range []string{
+		"sed -n 1p f.txt", "sed s/a/b/ f.txt", "sed -E s/a/b/ f.txt", "cat f | sed s/x/y/",
+		"sed -ei f.txt", "sed --expression=s/in-place/x/ f.txt", "sed -f in-place.sed f.txt",
+		"sed --expression i f.txt",
+	} {
+		s.passes(line)
 	}
 }

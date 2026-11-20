@@ -76,7 +76,7 @@ func isHardReset(c hint.Invocation) bool {
 	if g.sub != "reset" || !slices.Contains(g.rest, "--hard") || len(g.dirs) > 0 || g.opaque || g.configured || slices.Contains(g.rest, "--") {
 		return false
 	}
-	return positionals(g.rest) == 1
+	return len(positionals(g.rest)) == 1
 }
 
 // cleanUnboundCheckout reports dir inside a git checkout with nothing modified, staged or

@@ -400,23 +400,6 @@ func (s pendingSet) covers(p string) bool {
 	return slices.ContainsFunc(s.dirs, func(dir string) bool { return strings.HasPrefix(p, dir) })
 }
 
-// canonicalPath resolves the symlinks in the deepest existing directory above p, leaving
-// the rest alone so a deleted file, or one in a directory not created yet, still has a
-// name comparable with the same path reached another way.
-func canonicalPath(p string) string {
-	p = filepath.Clean(p)
-	rest := filepath.Base(p)
-	for dir := filepath.Dir(p); ; dir = filepath.Dir(dir) {
-		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-			return filepath.Join(resolved, rest)
-		}
-		if parent := filepath.Dir(dir); parent == dir {
-			return p
-		}
-		rest = filepath.Join(filepath.Base(dir), rest)
-	}
-}
-
 // ReadFile returns the approved content of an absolute path inside the workspace, and an
 // error when the approved state has no such file.
 func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {

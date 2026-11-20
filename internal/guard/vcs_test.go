@@ -423,3 +423,53 @@ func (s *checkpointAdviceSuite) TestReadOnlyLeaseIsNotAdvisedToCheckpoint() {
 func (s *checkpointAdviceSuite) TestWriterLeaseIsAdvisedToCheckpoint() {
 	s.Equal(string(advisoryCheckpointState), s.judgeRevisionRead(narrowLease()).Rule)
 }
+
+// prefixes are every abbreviation parse-options accepts for --long.
+func prefixes(long string) []string {
+	var out []string
+	for n := 1; n <= len(long); n++ {
+		out = append(out, "--"+long[:n])
+	}
+	return out
+}
+
+// discardingOptions are argvs whose option, not their path set,
+// discards uncommitted work or stages all of it. %s is the option.
+var discardingOptions = map[string][]string{
+	"git reset %s":                        prefixes("hard"),
+	"git reset %s HEAD~1":                 prefixes("hard"),
+	"git checkout %s main":                append(prefixes("force"), "-f", "-qf"),
+	"git checkout -B main origin/main %s": append(prefixes("force"), "-f"),
+	"git switch %s main":                  append(append(prefixes("discard-changes"), prefixes("force")...), "-f"),
+	"git read-tree -u %s HEAD":            prefixes("reset"),
+	"git commit %s -m wip":                append(prefixes("all"), "-a", "-va"),
+	"git commit %s wip":                   {"-am", "-vam"},
+	"git add %s":                          append(append(prefixes("all"), prefixes("update")...), "-A", "-Av", "-vu"),
+	"git clean -d %s":                     prefixes("force"),
+	"git commit %s -m wip -- docs/x.md":   prefixes("no-verify")[3:],
+}
+
+func (s *BypassClassSuite) TestADiscardingOptionDeniesUnderEverySpelling() {
+	for site, spellings := range discardingOptions {
+		for _, spelling := range spellings {
+			s.denies(fmt.Sprintf(site, spelling))
+		}
+	}
+	for _, line := range []string{"git commit .", "git commit -m wip -- .", "git commit -m wip :/"} {
+		s.denies(line)
+	}
+}
+
+func (s *BypassClassSuite) TestTheOptionsBesideADiscardingOnePass() {
+	for _, line := range []string{
+		"git reset --soft HEAD~1", "git reset HEAD -- docs/x.md", "git checkout main",
+		"git checkout -b f", "git checkout -B f origin/main", "git switch main", "git switch -c f",
+		"git switch --detach main", "git switch -cf", "git read-tree HEAD", "git read-tree -m -u HEAD",
+		"git commit -m wip", "git commit -ma", "git commit -m 'fix: x .'", "git commit --amend --no-edit",
+		"git commit --allow-empty -m wip", "git commit -F -", "git commit --author 'A <a@b>' -m wip",
+		"git commit -m wip -- docs/x.md", "git add -p docs/x.md", "git add --chmod=+x docs/x.sh",
+		"git clean -n", "git clean --dry-run -d",
+	} {
+		s.passes(line)
+	}
+}

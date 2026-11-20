@@ -485,7 +485,7 @@ func workerVCSMovesRefs(c hint.Invocation) bool {
 		case "switch", "checkout", "restore", "stash", "add", "rm", "mv":
 			return true
 		case "branch":
-			return positionals(rest) > 0 && !anyFlag(rest, "alrv", "--list", "--all", "--remotes",
+			return len(positionals(rest)) > 0 && !anyFlag(rest, "alrv", "--list", "--all", "--remotes",
 				"--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--show-current")
 		}
 	case "hg", "sl":
@@ -494,7 +494,7 @@ func workerVCSMovesRefs(c hint.Invocation) bool {
 			"rename", "mv", "move", "copy", "cp", "shelve", "unshelve":
 			return true
 		case "bookmark", "book", "branch":
-			return positionals(rest) > 0 && !anyFlag(rest, "l", "--list")
+			return len(positionals(rest)) > 0 && !anyFlag(rest, "l", "--list")
 		}
 	case "jj":
 		switch sub {
@@ -710,7 +710,7 @@ func workerMayRunGit(sub string, rest []string) bool {
 	case "reflog":
 		return len(rest) == 0 || firstWordIs(rest, "show") || strings.HasPrefix(rest[0], "-")
 	case "symbolic-ref":
-		return !anyFlag(rest, "d", "--delete") && positionals(rest) <= 1
+		return !anyFlag(rest, "d", "--delete") && len(positionals(rest)) <= 1
 	case "worktree":
 		return firstWordIs(rest, "list")
 	case "submodule":
@@ -825,12 +825,13 @@ func firstWordIs(args []string, words ...string) bool {
 	return len(args) > 0 && slices.Contains(words, args[0])
 }
 
-func positionals(args []string) int {
-	n := 0
+// positionals are the non-flag arguments of args.
+func positionals(args []string) []string {
+	var out []string
 	for _, a := range args {
 		if a != "--" && !strings.HasPrefix(a, "-") {
-			n++
+			out = append(out, a)
 		}
 	}
-	return n
+	return out
 }

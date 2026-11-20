@@ -49,6 +49,8 @@ const unresolved = "\x00"
 
 // placePath is where the shell opens p, a word as placeableWord renders it, from the directory
 // cwd: a leading `~` is the home's, an absolute path is itself, and a relative one is cwd's.
+// The place is placedPath's: the file the kernel opens.
+//
 // It is false when the line does not determine the place: a word built from an expansion,
 // a `~user`, a `~` with the home unknown, or a relative path with cwd unknown.
 func placePath(p, cwd, home string) (string, bool) {
@@ -59,15 +61,15 @@ func placePath(p, cwd, home string) (string, bool) {
 		if home == "" {
 			return "", false
 		}
-		return filepath.Clean(home + p[1:]), true
+		return placedPath(home + p[1:]), true
 	case strings.HasPrefix(p, "~"):
 		return "", false
 	case filepath.IsAbs(p):
-		return filepath.Clean(p), true
+		return placedPath(p), true
 	case cwd == "":
 		return "", false
 	}
-	return filepath.Join(cwd, p), true
+	return placedPath(resolvePath(cwd, p)), true
 }
 
 // placeableWord renders w for placePath: the text the shell passes, with an unquoted leading `~`

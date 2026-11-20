@@ -581,7 +581,7 @@ func inPlaceRewrites(c hint.Invocation, heredoc string) ([]string, bool) {
 		return nil, false
 	}
 	switch {
-	case name == "sed" && hasFlag(c.Args, 'i', "in-place"):
+	case name == "sed" && sedEditsInPlace(c.Args):
 		files := sedEditedFiles(c.Args)
 		return files, len(files) > 0
 	case name == "awk":

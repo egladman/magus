@@ -295,7 +295,7 @@ func TestStoreVerdictReachesThePrimaryCheckout(t *testing.T) {
 
 	primary, ok := primaryCacheDir(cacheDir)
 	require.True(t, ok)
-	assert.Equal(t, filepath.Join(realPath(r.main), ".magus"), primary)
+	assert.Equal(t, filepath.Join(canonicalPath(r.main), ".magus"), primary)
 
 	ref := storeVerdict(withSecrets(t.Context()), cacheDir, "denied: a verdict")
 	require.NotEmpty(t, ref)

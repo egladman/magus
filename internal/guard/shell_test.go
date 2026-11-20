@@ -1130,6 +1130,29 @@ func TestGuardAdversarial(t *testing.T) {
 		{"stage everything", "git add -A"},
 		{"stage dot", "git add ."},
 		{"stash behind a wrapper", "bash -c 'git stash'"},
+
+		// One example of each class BypassClassSuite closes.
+		{"unknown launcher", "watch -n1 git stash"},
+		{"stash push of the whole tree", "git stash push -- ."},
+		{"restore of the root pathspec", "git restore :/"},
+		{"checkout of a glob", "git checkout HEAD -- '*'"},
+		{"stage a glob", "git add *"},
+		{"stage the root pathspec", "git add :/"},
+		{"sed in place with a suffix", "sed -i.bak s/a/b/ f.txt"},
+		{"sed in place by an abbreviated long option", "sed --in-pl s/a/b/ f.txt"},
+		{"reset by an abbreviated --hard", "git reset --har"},
+		{"reset by a shorter --hard", "git reset --ha HEAD"},
+		{"forced checkout", "git checkout -f"},
+		{"forced checkout by the long option", "git checkout --force main"},
+		{"forced branch reset", "git checkout -B main origin/main -f"},
+		{"switch discarding changes", "git switch --discard-changes main"},
+		{"read-tree resetting the tree", "git read-tree -u --reset HEAD"},
+		{"commit staging all, clustered", "git commit -am wip"},
+		{"commit staging all", "git commit -a -m wip"},
+		{"commit of the whole tree", "git commit -m wip -- ."},
+		{"stage all, clustered", "git add -Av"},
+		{"clean by an abbreviated --force", "git clean -d --forc"},
+		{"hooks off by an abbreviated --no-verify", "git commit --no-verif -m wip"},
 	}
 	for _, tt := range denied {
 		t.Run("deny/"+tt.name, func(t *testing.T) {
@@ -1195,6 +1218,22 @@ func TestGuardAdversarial(t *testing.T) {
 		// A scoped clean flag-less invocation is a dry run.
 		{"clean -n", "git clean -n"},
 		{"reset without --hard", "git reset HEAD~1"},
+		// The siblings of the closed classes.
+		{"unknown launcher of harmless work", "watch -n1 git status"},
+		{"stash push of named paths", "git stash push -- docs/x.md"},
+		{"restore of a named path", "git restore docs/x.md"},
+		{"checkout of a glob under a directory", "git checkout HEAD -- 'docs/*'"},
+		{"stage a named path", "git add docs/x.md"},
+		{"sed to stdout", "sed -n 1p f.txt"},
+		{"soft reset", "git reset --soft HEAD~1"},
+		{"branch reset without force", "git checkout -B main origin/main"},
+		{"switch to a branch", "git switch main"},
+		{"switch detached", "git switch --detach main"},
+		{"read-tree merging", "git read-tree -m -u HEAD"},
+		{"commit of the index", "git commit -m wip"},
+		{"commit whose message is a", "git commit -ma"},
+		{"commit of a named path", "git commit -m wip -- docs/x.md"},
+		{"stage a patch", "git add -p docs/x.md"},
 	}
 	for _, tt := range allowed {
 		t.Run("allow/"+tt.name, func(t *testing.T) {
@@ -1235,6 +1274,10 @@ func TestGuardKnownHoles(t *testing.T) {
 		{
 			"make target that shells out", "make test",
 			"the steps are in a Makefile; only the make invocation is visible",
+		},
+		{
+			"subcommand read from stdin", "xargs -I{} git {} <<<stash",
+			"xargs builds the argv from its input at runtime, so the subcommand has no literal value on the line",
 		},
 	}
 	for _, tt := range holes {
@@ -1646,25 +1689,24 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 	}
-	// A sed that NAMES its files is a targeted edit and is allowed. This reverses the
-	// blanket refusal that stood here: the alternative it pointed at, `refs --occurrences`,
-	// answers for SYMBOLS, so a rename of an environment variable or a filename was denied
-	// with nothing offered that could do it. An unambiguous suffix plus literal paths is a
-	// change a reader can check before it runs, which is the whole distinction.
+	// A sed that NAMES its files is refused too, ruled 2026-11-18.
 	for _, cmd := range []string{
 		"sed -i.bak s/a/b/ f",
 		"sed --in-place=.bak s/a/b/ f",
+		"sed --in-place s/a/b/ f",
 		"sed -i.bak -e s/a/b/ one.go two.go",
 		"sed -i.bak -f prog.sed one.go",
 	} {
 		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "a sed naming its files is targeted, not blind: %q", cmd)
+		assert.Equal(t, denyRuleSedInPlace, v.Rule.Name, "a sed naming its files still rewrites them blind: %q", cmd)
 	}
 	for _, cmd := range []string{
 		"sed -n '1,5p' f.go",
 		"sed 's/a/b/' in.txt",
 		"cat f | sed -e 's/a/b/'",
 		"echo x | sed s/x/y/",
+		"sed -ei f.txt",
+		"sed --expression=s/in-place/x/ f.txt",
 	} {
 		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
 	}

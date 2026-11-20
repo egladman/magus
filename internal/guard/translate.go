@@ -1023,8 +1023,13 @@ func globRegexp(glob string) string {
 // resolvedRoot is the workspace root with symlinks resolved, so it compares with a path
 // reached through /private on macOS.
 func resolvedRoot(root string) (string, bool) {
-	r, err := filepath.EvalSymlinks(root)
-	return r, err == nil
+	if root == "" {
+		return "", false
+	}
+	if _, err := os.Lstat(root); err != nil {
+		return "", false
+	}
+	return canonicalPath(root), true
 }
 
 // workspacePath resolves a search operand against the call's directory, and reports false
@@ -1033,11 +1038,11 @@ func workspacePath(root, dir, p string) (abs, rel string, ok bool) {
 	if p == "" || strings.HasPrefix(p, "~") || strings.HasPrefix(p, unresolved) || strings.ContainsAny(p, "*?[") {
 		return "", "", false
 	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(dir, p)
+	if p = resolvePath(dir, p); !filepath.IsAbs(p) {
+		return "", "", false
 	}
-	abs, err := filepath.EvalSymlinks(p)
-	if err != nil {
+	abs = canonicalPath(p)
+	if _, err := os.Stat(abs); err != nil {
 		return "", "", false
 	}
 	r, err := filepath.Rel(root, abs)

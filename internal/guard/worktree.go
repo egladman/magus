@@ -724,19 +724,6 @@ func jobRowsAt(ctx context.Context, at location) ([]job.Job, error) {
 	return leaseRows(ctx, at)
 }
 
-// realPath resolves symlinks through the nearest existing ancestor, so a directory that
-// is gone still compares equal to its registration.
-func realPath(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	parent := filepath.Dir(p)
-	if parent == p {
-		return p
-	}
-	return filepath.Join(realPath(parent), filepath.Base(p))
-}
-
 // samePath reports whether a and b name one place. Strings are compared after symlinks
 // resolve, then the files by device and inode: EvalSymlinks keeps a case variant on a
 // case-insensitive filesystem and a macOS firmlink spelling (/System/Volumes/Data/Users)
@@ -745,7 +732,7 @@ func samePath(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	ra, rb := realPath(a), realPath(b)
+	ra, rb := canonicalPath(a), canonicalPath(b)
 	if ra == rb {
 		return true
 	}
@@ -760,7 +747,7 @@ func samePath(a, b string) bool {
 // within reports whether p is root or lies under it, by the same two tests as samePath.
 // A part of p that does not exist yet lies wherever its nearest existing ancestor does.
 func within(p, root string) bool {
-	rp, rr := realPath(p), realPath(root)
+	rp, rr := canonicalPath(p), canonicalPath(root)
 	if rel, err := filepath.Rel(rr, rp); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return true
 	}

@@ -2618,8 +2618,8 @@ func TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias(t *testing.T) {
 	} else {
 		t.Log("the filesystem is case-sensitive, so a case variant names another place")
 	}
-	if data := "/System/Volumes/Data" + realPath(r.main); sameDir(data, r.main) {
-		aliases["firmlink"] = func(p string) string { return "/System/Volumes/Data" + realPath(p) }
+	if data := "/System/Volumes/Data" + canonicalPath(r.main); sameDir(data, r.main) {
+		aliases["firmlink"] = func(p string) string { return "/System/Volumes/Data" + canonicalPath(p) }
 	}
 	for name, alias := range aliases {
 		main, sub := alias(r.main), filepath.Join(alias(wt), "sub")

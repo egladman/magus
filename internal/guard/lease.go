@@ -3600,11 +3600,7 @@ func initRefusal(row jobtypes.Job, inv hint.Invocation, site vcsSite, unlocated 
 		}
 		dest = resolvePath(site.dir, operand)
 	}
-	dest, err := filepath.Abs(dest)
-	if err != nil {
-		return refuse("Where it creates the repository cannot be read.")
-	}
-	dirs = append(dirs, dest)
+	dirs = append(dirs, canonicalPath(dest))
 	if site.gitDir != "" {
 		dirs = append(dirs, site.gitDir)
 	}
@@ -3764,7 +3760,7 @@ func siteCheckout(ctx context.Context, opts types.VCSOptions, backend string, si
 // gitdir file. False for any other directory, such as a bare repository, which has no
 // checkout to be the worker's.
 func gitDirCheckout(gitDir string) (string, bool) {
-	gitDir = realPath(gitDir)
+	gitDir = canonicalPath(gitDir)
 	if filepath.Base(gitDir) == ".git" {
 		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
 			return filepath.Dir(gitDir), true

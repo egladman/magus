@@ -1260,24 +1260,21 @@ func notesPath(p string, at location) bool {
 	if !ok {
 		return !within(p, at.workspace)
 	}
-	// realPath, so a file in a directory not created yet resolves its symlinks through the
-	// nearest one that exists, as the workspace's did. A directory a search names is its
-	// own checkout's, not its parent's.
-	dir := filepath.Dir(p)
-	if info, err := os.Stat(p); err == nil && info.IsDir() {
-		dir = p
+	// Resolved before Dir, as the workspace was. A directory a search
+	// names is its own checkout's, not its parent's.
+	real := canonicalPath(p)
+	dir := filepath.Dir(real)
+	if info, err := os.Stat(real); err == nil && info.IsDir() {
+		dir = real
 	}
-	_, pathCommon, ok := gitCheckout(realPath(dir))
+	_, pathCommon, ok := gitCheckout(dir)
 	return !ok || pathCommon != common
 }
 
 // integrating reports a checkout, the one holding p, that is midway through a merge or a
 // cherry-pick: an edit there may be the resolution of a conflict.
 func integrating(p string, at location) bool {
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(cmp.Or(at.dir, at.workspace), p)
-	}
-	root, _, ok := gitCheckout(realPath(filepath.Dir(p)))
+	root, _, ok := gitCheckout(filepath.Dir(canonicalPath(resolvePath(cmp.Or(at.dir, at.workspace), p))))
 	if !ok {
 		return false
 	}

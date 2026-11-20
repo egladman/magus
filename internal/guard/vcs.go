@@ -3,6 +3,7 @@ package guard
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -91,7 +92,7 @@ func hooksOff(args []string, g gitCommand) bool {
 		if a == "--" {
 			return false
 		}
-		if a == "--no-verify" {
+		if len(a) > len("--no-") && abbreviates(a, "--no-verify") {
 			return true
 		}
 		if g.sub != "commit" || len(a) < 2 || a[0] != '-' || a[1] == '-' {
@@ -109,12 +110,14 @@ func hooksOff(args []string, g gitCommand) bool {
 	return false
 }
 
-// gitDeny is the deny one git invocation earns, if any.
-func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
+// gitDeny is the deny one git invocation earns, if any. s places its
+// path operands; with a zero s only a plain relative path is narrower.
+func gitDeny(c hint.Invocation, s workspaceScope) (ShellVerdict, bool) {
 	if c.Name != "git" {
 		return ShellVerdict{}, false
 	}
 	g := parseGit(c.Args)
+	s.dir = gitWorkDir(s.dir, g)
 	if g.alias != "" {
 		return denyInlineAlias("git", g.alias), true
 	}
@@ -122,6 +125,9 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 		return ShellVerdict{Deny: denyHooksOff, Why: denyHooksOffWhy, Rule: denyRule{Name: denyRuleHooksOff, Arg: g.sub}}, true
 	}
 	sub, rest := g.sub, g.rest
+	if op, ok := discardsWorkingTree(sub, rest); ok {
+		return denyWholeTree(op), true
+	}
 	switch sub {
 	case "stash":
 		// Reading a stash is safe. RESTORING one is not, which this rule used to
@@ -146,8 +152,9 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 		// bootstrap deadlock (shelve the one hunk an old binary rejects, build,
 		// restore), which this rule was denying, putting that answer out of reach.
 		// A bare `git stash push` names nothing and stashes everything, so it stays
-		// denied.
-		if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
+		// denied. So does a path set not proven narrower than the
+		// tree: `-- .` shelves everything.
+		if len(rest) > 1 && rest[0] == "push" && namesNarrowerPaths(rest, s) {
 			return ShellVerdict{}, false
 		}
 		if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
@@ -156,14 +163,10 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 		return denyWholeTree("git stash"), true
 	// `git worktree remove` is judged in internal/guard/worktree.go, which reads the
 	// worktree and the job store.
-	case "reset":
-		if slices.Contains(rest, "--hard") {
-			return denyWholeTree("git reset --hard"), true
-		}
 	case "checkout":
 		// Whole-tree first: it is the broader reason, and one rule owning `-- .`
 		// keeps the message the same whichever revision precedes the pathspec.
-		if isWholeTreePathspec(rest) {
+		if isWholeTreePathspec(rest, s) {
 			return denyWholeTree("git checkout ."), true
 		}
 		if side := mergeSideRef(rest); side != "" {
@@ -173,7 +176,7 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 			}, true
 		}
 	case "restore":
-		if isWholeTreePathspec(rest) {
+		if isWholeTreePathspec(rest, s) {
 			return denyWholeTree("git restore ."), true
 		}
 		if side := mergeSideRef(rest); side != "" {
@@ -191,7 +194,11 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 		// form reached second (`git restore -- x && git add -A`) lost its deny to
 		// whichever advisory the first command earned, which is the ordering the
 		// two-pass split exists to prevent.
-		if slices.ContainsFunc(rest, isStageAllOperand) {
+		if slices.ContainsFunc(rest, isStageAllOperand) || stagesAll(rest, s) {
+			return ShellVerdict{Deny: denyStageAll, Why: denyStageAllWhy, Rule: denyRule{Name: denyRuleStageAll}}, true
+		}
+	case "commit":
+		if commitsAll(rest, s) {
 			return ShellVerdict{Deny: denyStageAll, Why: denyStageAllWhy, Rule: denyRule{Name: denyRuleStageAll}}, true
 		}
 	}
@@ -208,9 +215,9 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 // as the safe direction; with an AST it is not a trade at all, since a quoted
 // word structurally cannot be a command, and `cd /repo && git stash` still
 // matches however it is reached.
-func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
+func gitGuard(cmds []hint.Invocation, s workspaceScope, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if v, ok := gitDeny(c); ok {
+		if v, ok := gitDeny(c, s); ok {
 			if v, ok := grade(v); ok {
 				return v, true
 			}
@@ -353,6 +360,21 @@ func parseGit(args []string) gitCommand {
 		}
 	}
 	return g
+}
+
+// gitWorkDir is dir moved by each -C of g in turn. It is "" when that
+// cannot be read, as with --git-dir or --work-tree.
+func gitWorkDir(dir string, g gitCommand) string {
+	if g.opaque {
+		return ""
+	}
+	for _, d := range g.dirs {
+		if dir == "" && !filepath.IsAbs(d) {
+			return ""
+		}
+		dir = resolvePath(dir, d)
+	}
+	return dir
 }
 
 // definesAlias reports a config key that can make a git word run another command: an
@@ -597,15 +619,6 @@ func gitGuardFallback(command string, grade func(ShellVerdict) (ShellVerdict, bo
 	return ShellVerdict{}, false
 }
 
-// isWholeTreePathspec reports the `.` pathspec forms, with or without the `--`
-// separator, and nothing narrower.
-//
-// Not every operand is a pathspec, which is what the earlier "first non-flag word"
-// reading missed: `git checkout HEAD -- .` names a tree-ish first and `git restore
-// --source HEAD .` passes one as a flag value, so both compared a REVISION against "."
-// and fell through to the advisory. Everything after `--` is a pathspec by definition;
-// without the separator a bare `.` is one wherever it sits, since no revision is spelled
-// that way.
 // mergeSideRefs are the pseudo-refs that name ONE SIDE of an operation in progress.
 // MERGE_HEAD is the incoming side, ORIG_HEAD the position before it started, and
 // CHERRY_PICK_HEAD and REVERT_HEAD are the same shape for their own operations.
@@ -654,11 +667,18 @@ func denyMergeSideCheckout(ref string) string {
 		"copy it aside before doing anything else.", ref, hint.VCSResolve.String())
 }
 
-func isWholeTreePathspec(args []string) bool {
-	if i := slices.Index(args, "--"); i >= 0 {
-		args = args[i+1:]
-	}
-	return slices.Contains(args, ".")
+// isWholeTreePathspec reports a checkout or restore with an operand
+// not proven narrower than the tree. Every non-flag word is read; a
+// revision reads as a plain name, so it never makes a line whole-tree.
+func isWholeTreePathspec(args []string, s workspaceScope) bool {
+	return coversRoot(pathOperands(args), s)
+}
+
+// namesNarrowerPaths reports a `--` and at least one path after it,
+// each proven narrower than the tree.
+func namesNarrowerPaths(args []string, s workspaceScope) bool {
+	i := slices.Index(args, "--")
+	return i >= 0 && i+1 < len(args) && !coversRoot(args[i+1:], s)
 }
 
 // stagesListedPaths reports a `git add` reading its paths from a pathspec file on a line
@@ -678,6 +698,117 @@ func isStageAllOperand(a string) bool {
 	return a == "-A" || a == "--all" || a == "-u" || a == "--update" || a == "."
 }
 
+// gitOptions is a verb's argv as parse-options reads it. A long
+// option counts under any prefix (`--har` is `--hard`). An ambiguous
+// prefix counts as each option it could name: git refuses it anyway.
+type gitOptions struct {
+	longs    []string
+	shorts   string
+	operands []string
+}
+
+// gitVerbSyntax lists a verb's options that take a value, so the
+// value is read as neither an option nor a path.
+type gitVerbSyntax struct {
+	valuedShort, optionalShort string
+	valuedLong                 []string
+}
+
+var (
+	gitCommitSyntax = gitVerbSyntax{
+		valuedShort: commitValueFlags, optionalShort: "Su",
+		valuedLong: []string{"message", "file", "reuse-message", "reedit-message", "template", "author",
+			"date", "fixup", "squash", "cleanup", "trailer", "pathspec-from-file"},
+	}
+	gitCheckoutSyntax = gitVerbSyntax{valuedShort: "bB", valuedLong: []string{"orphan", "pathspec-from-file"}}
+	gitSwitchSyntax   = gitVerbSyntax{valuedShort: "cC", valuedLong: []string{"create", "force-create", "orphan"}}
+	gitReadTreeSyntax = gitVerbSyntax{valuedLong: []string{"prefix", "index-output", "exclude-per-directory"}}
+	gitResetSyntax    = gitVerbSyntax{valuedLong: []string{"pathspec-from-file"}}
+	gitAddSyntax      = gitVerbSyntax{valuedLong: []string{"pathspec-from-file"}}
+)
+
+func readGitOptions(args []string, syn gitVerbSyntax) gitOptions {
+	var o gitOptions
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			o.operands = append(o.operands, args[i+1:]...)
+			return o
+		case strings.HasPrefix(a, "--"):
+			name, _, joined := strings.Cut(a[2:], "=")
+			o.longs = append(o.longs, name)
+			if !joined && slices.ContainsFunc(syn.valuedLong, func(l string) bool { return strings.HasPrefix(l, name) }) {
+				i++
+			}
+		case len(a) > 1 && a[0] == '-':
+			for j, r := range a[1:] {
+				o.shorts += string(r)
+				if strings.ContainsRune(syn.optionalShort, r) {
+					break
+				}
+				if strings.ContainsRune(syn.valuedShort, r) {
+					if j == len(a)-2 {
+						i++
+					}
+					break
+				}
+			}
+		default:
+			o.operands = append(o.operands, a)
+		}
+	}
+	return o
+}
+
+// sets reports the long option, or the short letter when not 0.
+func (o gitOptions) sets(short rune, long string) bool {
+	if short != 0 && strings.ContainsRune(o.shorts, short) {
+		return true
+	}
+	return long != "" && slices.ContainsFunc(o.longs, func(name string) bool { return abbreviates(name, long) })
+}
+
+// stagesAll reports a `git add` of everything: -A, -u, or a path
+// set not proven narrower than the tree.
+func stagesAll(rest []string, s workspaceScope) bool {
+	o := readGitOptions(rest, gitAddSyntax)
+	return o.sets('A', "all") || o.sets('u', "update") || o.sets(0, "no-ignore-removal") || coversRoot(o.operands, s)
+}
+
+// commitsAll reports a `git commit` that stages as it commits: -a,
+// or a path set not proven narrower than the tree (`git commit .`).
+func commitsAll(rest []string, s workspaceScope) bool {
+	o := readGitOptions(rest, gitCommitSyntax)
+	return o.sets('a', "all") || coversRoot(o.operands, s)
+}
+
+// discardsWorkingTree names a verb whose options overwrite
+// uncommitted work whatever paths it names.
+func discardsWorkingTree(sub string, rest []string) (string, bool) {
+	switch sub {
+	case "checkout":
+		if readGitOptions(rest, gitCheckoutSyntax).sets('f', "force") {
+			return "git checkout --force", true
+		}
+	case "switch":
+		o := readGitOptions(rest, gitSwitchSyntax)
+		if o.sets('f', "force") || o.sets(0, "discard-changes") {
+			return "git switch --discard-changes", true
+		}
+	case "read-tree":
+		o := readGitOptions(rest, gitReadTreeSyntax)
+		if o.sets('u', "") && o.sets(0, "reset") {
+			return "git read-tree -u --reset", true
+		}
+	case "reset":
+		if readGitOptions(rest, gitResetSyntax).sets(0, "hard") {
+			return "git reset --hard", true
+		}
+	}
+	return "", false
+}
+
 // isDeletingClean reports whether a `git clean` would actually delete.
 //
 // Read as short-flag CLUSTERS rather than as any word containing one of fdxX, which
@@ -691,7 +822,7 @@ func isDeletingClean(args []string) bool {
 		case a == "--dry-run":
 			return false
 		case strings.HasPrefix(a, "--"):
-			deletes = deletes || a == "--force"
+			deletes = deletes || abbreviates(a[2:], "force")
 		case strings.HasPrefix(a, "-"):
 			cluster := a[1:]
 			if strings.Contains(cluster, "n") {
@@ -727,9 +858,9 @@ func isDeletingClean(args []string) bool {
 // touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
 //
 // grade is the line's grading, as gitGuard takes it.
-func nonGitVCSGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
+func nonGitVCSGuard(cmds []hint.Invocation, s workspaceScope, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if v, ok := nonGitDeny(c); ok {
+		if v, ok := nonGitDeny(c, s); ok {
 			if v, ok := grade(v); ok {
 				return v, true
 			}
@@ -739,7 +870,8 @@ func nonGitVCSGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdi
 }
 
 // nonGitDeny is the deny one hg, sl or jj invocation earns, if any.
-func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
+// s is gitDeny's.
+func nonGitDeny(c hint.Invocation, s workspaceScope) (ShellVerdict, bool) {
 	if _, ok := vcsGlobals[c.Name]; !ok {
 		return ShellVerdict{}, false
 	}
@@ -749,7 +881,7 @@ func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	}
 	sub, rest := v.sub, v.rest
 	if c.Name == "jj" {
-		return jjRule(c.Name, sub, rest)
+		return jjRule(c.Name, sub, rest, s)
 	}
 	if c.Name != "hg" && c.Name != "sl" {
 		return ShellVerdict{}, false
@@ -760,7 +892,7 @@ func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
 	case "purge", "clean":
 		return denyWholeTree(fmt.Sprintf("%s %s", c.Name, sub)), true
 	case "revert":
-		if hasAnyFlag(rest, "--all", "-a") {
+		if hasAnyFlag(rest, "--all", "-a") || coversRoot(positionals(rest), s) {
 			return denyWholeTree(c.Name + " revert --all"), true
 		}
 	// `-C`/`--clean` discards uncommitted changes on the way to another revision,
@@ -775,15 +907,15 @@ func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
 
 // jjRule is the Jujutsu arm. Its verbs share no spelling with the others, so it reads as
 // its own switch rather than another arm of one that would then be a lookup table.
-func jjRule(prog, sub string, rest []string) (ShellVerdict, bool) {
+func jjRule(prog, sub string, rest []string, s workspaceScope) (ShellVerdict, bool) {
 	switch sub {
 	// Abandons the changes in a revision, defaulting to the working copy.
 	case "abandon":
 		return denyWholeTree(prog + " abandon"), true
-	// With paths it is the scoped restore the git rules also allow; with none it discards
-	// every change in the working copy.
+	// With paths it is a scoped restore. With none, or a path set not
+	// proven narrower, it discards the whole working copy.
 	case "restore":
-		if !hasPositional(rest) {
+		if ps := positionals(rest); len(ps) == 0 || coversRoot(ps, s) {
 			return denyWholeTree(prog + " restore"), true
 		}
 	// Denied outright, where git's removal is judged: the jj driver reports no workspace
