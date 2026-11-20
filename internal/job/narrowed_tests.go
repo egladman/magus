@@ -126,7 +126,7 @@ func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths
 		Code: types.JobCheckUnrunnable,
 		Message: fmt.Sprintf("%s `%s` leaves out tests defined in the packages of its write paths,"+
 			" so a break they would catch passes unchecked: %s", named, CheckCommand(check), strings.Join(packages, " and ")),
-		Fix: strings.Join(fixes, " and "),
+		Hint: strings.Join(fixes, " and "),
 	}, true
 }
 

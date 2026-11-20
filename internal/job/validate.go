@@ -164,7 +164,7 @@ func droppedProblems(prev, merged job.Job) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code: types.JobRecordInvalid, Field: field, Subject: subject,
 			Message: fmt.Sprintf("this record would erase %s's %s", prev.ID, field),
-			Fix: fmt.Sprintf("send the %s the job holds, or name the erasure: {\"code\":%q,\"subject\":%q,\"reason\":%q}",
+			Hint: fmt.Sprintf("send the %s the job holds, or name the erasure: {\"code\":%q,\"subject\":%q,\"reason\":%q}",
 				field, types.JobRecordInvalid, subject, reason),
 		})
 	}
@@ -665,7 +665,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
 				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(check), project),
-				Fix:     "name one of its projects: " + listNames(paths),
+				Hint:     "name one of its projects: " + listNames(paths),
 			})
 			continue
 		}
@@ -701,7 +701,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
 				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(check), spell, project),
-				Fix:     "name a spell it binds: " + listNames(p.Spells),
+				Hint:     "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
 		}
@@ -712,7 +712,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
 			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(check), name, project),
-			Fix:     "name one of its targets: " + listNames(slices.Compact(targets)),
+			Hint:     "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
 	return ps, unchecked
@@ -736,7 +736,7 @@ func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: o.Output,
 			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
-			Fix: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
+			Hint: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
 			Deviation: &job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: "the root regenerates it"},
 		})
@@ -758,14 +758,14 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "postconditions", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a postcondition runs it", subject, g.Source),
-			Fix: fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
+			Hint: fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				postcondition, types.GateNotRun, subject),
 			Postcondition: &g.Postcondition,
 		}
 		if g.Target != lintTarget && owner.runs != "" {
 			p.Postcondition = nil
 			p.Deviation = &job.Deviation{Code: job.Code(types.GateNotRun), Subject: subject, Reason: owner.runs}
-			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
+			p.Hint = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
 		}
 		ps = append(ps, p)
 	}
@@ -866,12 +866,12 @@ func postconditionCheckField(row job.Job, postcondition job.Postcondition) strin
 // carries, else JobPostconditionInvalid.
 func resolveProblem(err error) types.JobProblem {
 	p := types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions", Message: strings.TrimPrefix(err.Error(), "job: "),
-		Fix: fmt.Sprintf("declare each signature postcondition's signature, or write the symbol, run `%s` and fork again", hint.GraphBuild)}
+		Hint: fmt.Sprintf("declare each signature postcondition's signature, or write the symbol, run `%s` and fork again", hint.GraphBuild)}
 	var coded *types.DiagnosticError
 	if errors.As(err, &coded) {
 		p.Code, p.Message = coded.Code, coded.Msg
 		if p.Code == types.WritePathClaimUngradable {
-			p.Field, p.Fix = "paths.write", "claim the declaration in paths.write yourself"
+			p.Field, p.Hint = "paths.write", "claim the declaration in paths.write yourself"
 		}
 	}
 	return p
@@ -946,7 +946,7 @@ func ungradedProblems(row job.Job) types.JobProblems {
 		Code: types.JobUngraded, Field: "check",
 		Message: fmt.Sprintf("%s writes %s and declares neither a check nor a postcondition, so `%s` has nothing to grade it by",
 			row.ID, strings.Join(row.Paths.Write, ", "), hint.JobWait.With(row.ID)),
-		Fix: fmt.Sprintf(`add "check" (the target that proves it, as "<target> <project>") or "postconditions" to the record, such as`+
+		Hint: fmt.Sprintf(`add "check" (the target that proves it, as "<target> <project>") or "postconditions" to the record, such as`+
 			` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]} (`+"`%s`"+` prints every field),`+
 			` or mark a job that writes nothing "read_only"`, hint.JobFork.With("--schema")),
 	}}
@@ -963,7 +963,7 @@ func unscopedProblems(row job.Job) types.JobProblems {
 	return types.JobProblems{{
 		Code: types.JobUngraded, Field: "paths.write",
 		Message: fmt.Sprintf("%s names no write paths and is not read-only, so nothing bounds what its holder writes", row.ID),
-		Fix: fmt.Sprintf(`add the paths it writes to paths.write (--write-paths), or mark a job that only reads "read_only" (--read-only); a read-only job passes only with a`+
+		Hint: fmt.Sprintf(`add the paths it writes to paths.write (--write-paths), or mark a job that only reads "read_only" (--read-only); a read-only job passes only with a`+
 			` script check, {"check": {"script": "<probe>.buzz"}}, whose result cites the ref `+"`%s`"+` prints, or its holder ends it with `+"`%s`",
 			hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID)),
 	}}
@@ -991,7 +991,7 @@ func forkLimitProblems(rows []job.Job, id, parent string, limits config.Jobs) ty
 			Code: types.JobForkLimitExceeded, Field: "parent",
 			Message: fmt.Sprintf("%s would sit %d level(s) below its root job %s, and jobs.max_depth in magus.yaml allows %d",
 				id, depth, root, limits.MaxDepth),
-			Fix: "name a parent nearer the root job, or raise jobs.max_depth in magus.yaml",
+			Hint: "name a parent nearer the root job, or raise jobs.max_depth in magus.yaml",
 		})
 	}
 	if limits.MaxLive <= 0 {
@@ -1015,7 +1015,7 @@ func forkLimitProblems(rows []job.Job, id, parent string, limits config.Jobs) ty
 			Code: types.JobForkLimitExceeded, Field: "parent",
 			Message: fmt.Sprintf("forking %s would make %d live jobs under root job %s, and jobs.max_live in magus.yaml allows %d",
 				id, live, root, limits.MaxLive),
-			Fix: fmt.Sprintf("end one with `%s` first, or raise jobs.max_live in magus.yaml", hint.JobExit.With("<job>")),
+			Hint: fmt.Sprintf("end one with `%s` first, or raise jobs.max_live in magus.yaml", hint.JobExit.With("<job>")),
 		})
 	}
 	return ps
@@ -1051,7 +1051,7 @@ func ambiguousSymbolProblems(ctx context.Context, postconditions []job.Postcondi
 					Code: types.JobPostconditionInvalid, Field: fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
 					Message: fmt.Sprintf("postcondition %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",
 						postcondition.ID, name, postcondition.Resolve().Expect),
-					Fix: fmt.Sprintf("name a definition `%s` finds, as `<package>.<Name>` or a symbol id; with no symbol index built, `%s` builds one", hint.Refs.With(name), hint.GraphBuild),
+					Hint: fmt.Sprintf("name a definition `%s` finds, as `<package>.<Name>` or a symbol id; with no symbol index built, `%s` builds one", hint.Refs.With(name), hint.GraphBuild),
 				})
 				continue
 			}
@@ -1062,7 +1062,7 @@ func ambiguousSymbolProblems(ctx context.Context, postconditions []job.Postcondi
 				Code: types.JobPostconditionInvalid, Field: fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
 				Message: fmt.Sprintf("postcondition %q names %q, which the graph resolves to %d definitions (%s), so it would grade whichever ranks first",
 					postcondition.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")),
-				Fix: fmt.Sprintf("name one by the symbol id `%s` prints", hint.Refs.With(name)),
+				Hint: fmt.Sprintf("name one by the symbol id `%s` prints", hint.Refs.With(name)),
 			})
 		}
 	}

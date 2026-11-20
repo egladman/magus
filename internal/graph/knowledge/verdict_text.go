@@ -60,7 +60,7 @@ func PrintVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 		}
 		// A cause is what the read did about its index, so no rebuild is owed.
 		if c := ans.IndexCause; c != nil {
-			fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+			fmt.Fprintf(w, "  why: %s\n  hint: %s\n", c.Why, c.Hint)
 		} else if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
 			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}

@@ -71,7 +71,7 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	ans := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
 	ans.IndexCause = &types.KnowledgeIndexCause{
 		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
-		Fix: "`magus server start` keeps it current from now on",
+		Hint: "`magus server start` keeps it current from now on",
 	}
 	miss := RefsMiss{Name: "Foo", Answer: ans}
 

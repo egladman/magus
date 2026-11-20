@@ -119,7 +119,7 @@ func TestDiagnoseSync(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DiagnoseSync(tc.obs, cmds)
 			assert.Contains(t, got.Why, tc.cause)
-			assert.Contains(t, got.Fix, tc.fixes)
+			assert.Contains(t, got.Hint, tc.fixes)
 		})
 	}
 }

@@ -41,7 +41,7 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row job.Job) typ
 		ps      types.JobProblems
 	)
 	refuse := func(field, message, fix string) {
-		ps = append(ps, types.JobProblem{Code: types.WritePathClaimUngradable, Field: field, Message: message, Fix: fix})
+		ps = append(ps, types.JobProblem{Code: types.WritePathClaimUngradable, Field: field, Message: message, Hint: fix})
 	}
 	for _, list := range []struct {
 		label, field string
@@ -148,7 +148,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row job.Job
 			Field: fmt.Sprintf("paths.write[%d]", i),
 			Message: fmt.Sprintf("%q holds a project's configuration whole, and every job that changes the workspace's configuration"+
 				" writes that file, so a whole-file hold blocks them all for one line", entry),
-			Fix: "claim the declarations and keys the job changes instead, such as " + listClaims(file, all),
+			Hint: "claim the declarations and keys the job changes instead, such as " + listClaims(file, all),
 		})
 		files = append(files, file)
 	}
@@ -423,7 +423,7 @@ func sharedFileRefusal(ctx context.Context, store *Store, rows []job.Job, row, h
 			row.ID, s.mine, holder.ID, holder.State, updatedAgo(holder), s.theirs,
 			s.file,
 			holder.ID, describeTouched(touched, unreadable), describeUnused(holder.ID, unused)),
-		Fix: fix,
+		Hint: fix,
 	}
 }
 

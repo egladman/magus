@@ -122,7 +122,7 @@ func TestTheStaleNoticeSaysWhatTheReadDidAboutIt(t *testing.T) {
 	got := staleIndexNotice(types.KnowledgeAnswer{
 		StaleIndexes:      []string{"libs/a"},
 		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go"}},
-		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again"},
+		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Hint: "ask again"},
 	})
 	assert.Contains(t, got, "a refresh started in the background\n  ask again\n")
 	assert.NotContains(t, got, "refresh and ask again")

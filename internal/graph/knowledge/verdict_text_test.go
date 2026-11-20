@@ -197,7 +197,7 @@ func (s *VerdictRemedySuite) TestAnUnbuiltIndexBesideOneNothingMakesGetsTheBuild
 }
 
 func (s *VerdictRemedySuite) TestAReadThatRefreshedPrintsItsCauseAndNoRebuild() {
-	cause := &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again once it lands"}
+	cause := &types.KnowledgeIndexCause{Why: "a refresh started in the background", Hint: "ask again once it lands"}
 	stale := Answer("Foo", false, Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}}})
 	stale.IndexCause = cause
 	missing := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")})

@@ -22,7 +22,7 @@ func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
 	assert.Contains(t, skew.Fix, "build")
 
 	other := historyUnreadableCheck("memory-declarations", assert.AnError)
-	assert.Empty(t, other.Fix, "an unknown failure names no fix")
+	assert.Empty(t, other.Fix,"an unknown failure names no fix")
 }
 
 // historyWith writes a history file recording one peak per "<spell>/<target>" key

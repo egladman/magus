@@ -62,7 +62,7 @@ func (s *ReplacementCheckSuite) TestAGoRowIsOfferedTheCompilingCheck() {
 }
 
 func (s *ReplacementCheckSuite) TestAnUngradedCheckNamesTheNewerBinaryBeforeDoctor() {
-	got := ungradedCheckProblem("w", "check", types.LeaseCheck{Target: "test", Project: "."}, "the guard denies").Fix
+	got := ungradedCheckProblem("w", "check", types.LeaseCheck{Target: "test", Project: "."}, "the guard denies").Hint
 	s.Contains(got, "built at this checkout's HEAD or later")
 	s.Contains(got, "doctor")
 }
@@ -96,7 +96,7 @@ func (s *NoGraderSuite) TestACheckIsOneUngradedProblem() {
 	s.Require().Len(ps, 1)
 	s.Equal(types.JobUngraded, ps[0].Code)
 	s.Contains(ps[0].Message, "no check grader")
-	s.Contains(ps[0].Fix, "Grader")
+	s.Contains(ps[0].Hint, "Grader")
 }
 
 func (s *NoGraderSuite) TestAGateIsOfferedUngradedRatherThanPassed() {
@@ -180,7 +180,7 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	assert.Equal(t, "check", ps[0].Field)
 	assert.Contains(t, ps[0].Message, "w's check `magus run")
 	assert.Contains(t, ps[0].Message, "the hook binary is older than the tree", "the reason no verdict was reached is quoted")
-	assert.NotEmpty(t, ps[0].Fix)
+	assert.NotEmpty(t, ps[0].Hint)
 	assert.Len(t, rec.graded, 1, "grading stops at the first check nobody could grade")
 
 	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = row.Paths.Write, row.Check }, config.Jobs{}, nil)
@@ -217,7 +217,7 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 		Code:    types.JobCheckUnrunnable,
 		Field:   "check",
 		Message: p.Message,
-		Fix:     "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`",
+		Hint:     "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`",
 	}, p, "compiling is no stand-in for a run a person owns")
 }
 

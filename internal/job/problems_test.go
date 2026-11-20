@@ -233,7 +233,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 	for i, p := range ps {
 		fields[i] = fmt.Sprintf("%s %s", string(p.Code), p.Field)
 		assert.NotEmptyf(t, p.Message, "%s has a message", fields[i])
-		assert.NotEmptyf(t, p.Fix, "%s has a fix", fields[i])
+		assert.NotEmptyf(t, p.Hint, "%s has a fix", fields[i])
 	}
 	assert.Equal(t, []string{
 		"MGS3037 id",

@@ -39,7 +39,7 @@ func TestStaleReadFindsTheMachinesRefreshAndStartsNothing(t *testing.T) {
 	require.NotNil(t, cause)
 	assert.Contains(t, cause.Why, "this read started no refresh")
 	assert.Contains(t, cause.Why, fmt.Sprintf("the symbol refresh of /other (pid %d", os.Getpid()))
-	assert.Contains(t, cause.Fix, "magus refs Foo --refresh")
+	assert.Contains(t, cause.Hint, "magus refs Foo --refresh")
 }
 
 func TestDetachedRefreshExitsWhenTheMachineLockIsHeld(t *testing.T) {

@@ -55,7 +55,7 @@ func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 		Subject: "**/*.go",
 		Message: `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, ` +
 			"a leading `**`, which reaches every directory of the workspace",
-		Fix: `replace "**/*.go" with the files the postconditions and criteria name: "paths": {"write": ["pkg/b.go"]}; ` +
+		Hint: `replace "**/*.go" with the files the postconditions and criteria name: "paths": {"write": ["pkg/b.go"]}; ` +
 			`or keep it with the deviation {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
 	}}, got)
 }
@@ -72,7 +72,7 @@ func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 
 	require.Len(t, got, 1)
 	assert.Equal(t, `write path "pkg/gen/*.txt" matches 51 files in 1 project: more than 50 files`, got[0].Message)
-	assert.Contains(t, got[0].Fix, "the criteria and postconditions name no file the graph resolves")
+	assert.Contains(t, got[0].Hint, "the criteria and postconditions name no file the graph resolves")
 }
 
 func TestBroadClaimReadsTheWorkspaceBounds(t *testing.T) {
@@ -183,7 +183,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := broadClaimProblems(context.Background(), root, row, Workspace{}, read)
 			require.Len(t, got, 1)
-			assert.Contains(t, got[0].Fix, `"paths": {"write": ["web/x.go"]} (the knowledge graph did not answer the symbol postconditions`)
+			assert.Contains(t, got[0].Hint, `"paths": {"write": ["web/x.go"]} (the knowledge graph did not answer the symbol postconditions`)
 		})
 	}
 }

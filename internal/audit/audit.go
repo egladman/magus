@@ -426,7 +426,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 		} else if claimer, glob, ok := outputClaim(p, desc, b); ok {
 			message += fmt.Sprintf("\nwriter: likely %q target %q, whose declared output %q matches these files", project, claimer, glob)
 		}
-		message += fmt.Sprintf("\nfix: move this work to %q or exclude that path from the parent target", desc)
+		message += fmt.Sprintf("\nhint: move this work to %q or exclude that path from the parent target", desc)
 		types.EmitDiagnostic(ctx, types.DiagnosticEvent{
 			Code:    types.DescendantBoundaryCrossed,
 			Message: message,

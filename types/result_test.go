@@ -12,7 +12,7 @@ func TestResultConstructors(t *testing.T) {
 		t.Errorf("Ok(42) = %+v", ok)
 	}
 
-	d := Diagnostic{Code: "MGS1001", Message: "no ci target", Fix: "declare ci"}
+	d := Diagnostic{Code: "MGS1001", Message: "no ci target", Hint: "declare ci"}
 	failed := Fail[int](d)
 	if failed.IsOk() || failed.Value != 0 || failed.Error == nil || *failed.Error != d {
 		t.Errorf("Fail(d) = %+v", failed)
@@ -26,8 +26,8 @@ func TestResultJSON(t *testing.T) {
 		want string
 	}{
 		{"ok", Ok("v"), `{"value":"v"}`},
-		{"fail", Fail[string](Diagnostic{Code: "MGS1001", Message: "m", Fix: "f"}),
-			`{"value":"","error":{"code":"MGS1001","message":"m","fix":"f"}}`},
+		{"fail", Fail[string](Diagnostic{Code: "MGS1001", Message: "m", Hint: "f"}),
+			`{"value":"","error":{"code":"MGS1001","message":"m","hint":"f"}}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

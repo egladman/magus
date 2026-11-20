@@ -29,8 +29,8 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 		fmt.Fprintf(w, "%d %s:\n", len(v.Problems), noun)
 		for i, p := range v.Problems {
 			fmt.Fprintf(w, "  %d. [%s] %s\n", i+1, p.Code, problemText(p))
-			if p.Fix != "" {
-				fmt.Fprintf(w, "     fix: %s\n", p.Fix)
+			if p.Hint != "" {
+				fmt.Fprintf(w, "     hint: %s\n", p.Hint)
 			}
 		}
 	case dryRun:

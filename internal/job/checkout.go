@@ -464,7 +464,7 @@ func sharedCheckoutProblems(store *Store, rows []job.Job, row job.Job) types.Job
 				" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
 				" so every job here loses `magus run` until it lands, not just this one. %s",
 				row.ID, declared, load, holder.ID, store.root, holder.State, updatedAgo(holder), describeUnused(holder.ID, unused)),
-			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, fork it with `--depends-on %s` to wait for the holder,"+
+			Hint: fmt.Sprintf("fork %s into its own worktree with `%s`, fork it with `--depends-on %s` to wait for the holder,"+
 				" or drop %q from paths.write (`%s` names what else it covers)%s",
 				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), holder.ID, declared, hint.DescribeFile.With(load),
 				narrowAdvice(holder.ID, unused)),
@@ -524,7 +524,7 @@ func directoryWritePathProblems(store *Store, row job.Job) types.JobProblems {
 				Code:    types.WritePathIsDirectory,
 				Field:   fmt.Sprintf("paths.write[%d]", i),
 				Message: fmt.Sprintf("%s is a directory, and a write path names files: a directory claims every file under it, so the job would overlap every job editing anything there%s", named, why),
-				Fix:     "list the files the job will edit in its place, and name each file it creates by its path",
+				Hint:     "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}

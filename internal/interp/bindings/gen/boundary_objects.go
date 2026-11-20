@@ -1351,7 +1351,7 @@ func ObjectFinding(v types.Finding) vm.Value {
 	out.MapSet("col", vm.IntValue(int64(v.Col)))
 	out.MapSet("rule", vm.StringValue(v.Rule))
 	out.MapSet("message", vm.StringValue(v.Message))
-	out.MapSet("fix", vm.StringValue(v.Fix))
+	out.MapSet("hint", vm.StringValue(v.Hint))
 	out.MapSet("url", vm.StringValue(v.URL))
 	return out
 }
@@ -1567,7 +1567,7 @@ func ObjectKnowledgeTextPresence(v types.KnowledgeTextPresence) vm.Value {
 func ObjectKnowledgeIndexCause(v types.KnowledgeIndexCause) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("why", vm.StringValue(v.Why))
-	out.MapSet("fix", vm.StringValue(v.Fix))
+	out.MapSet("hint", vm.StringValue(v.Hint))
 	return out
 }
 
@@ -2578,7 +2578,7 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 	out.MapSet("code", vm.StringValue(v.Code))
 	out.MapSet("message", vm.StringValue(v.Message))
 	out.MapSet("url", vm.StringValue(v.URL))
-	out.MapSet("fix", vm.StringValue(v.Fix))
+	out.MapSet("hint", vm.StringValue(v.Hint))
 	return out
 }
 
