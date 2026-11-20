@@ -11,6 +11,6 @@ export object Finding {
     col: int = 0,
     rule: str = "",
     message: str = "",
-    fix: str = "",
+    hint: str = "",
     url: str = "",
 }

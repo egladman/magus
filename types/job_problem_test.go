@@ -11,8 +11,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
-func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
-	p := JobProblem{Code: WritePathIsDirectory, Field: "paths.write[0]", Message: `"internal/job" is a directory`, Fix: "list the files"}
+func TestJobProblemErrCarriesItsCodeAndHint(t *testing.T) {
+	p := JobProblem{Code: WritePathIsDirectory, Field: "paths.write[0]", Message: `"internal/job" is a directory`, Hint: "list the files"}
 
 	err := p.Error()
 
@@ -20,18 +20,18 @@ func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
 	assert.Equal(t, `"internal/job" is a directory: list the files`, err.Msg)
 }
 
-func TestJobProblemErrWithoutAFixIsTheMessage(t *testing.T) {
+func TestJobProblemErrWithoutAHintIsTheMessage(t *testing.T) {
 	assert.Equal(t, "bad", JobProblem{Code: JobRecordInvalid, Message: "bad"}.Error().Msg)
 }
 
 func TestJobProblemRemediesEncodeAsDataOnlyWhenSet(t *testing.T) {
-	bare, err := codec.Marshal(JobProblem{Code: JobRecordInvalid, Message: "bad", Fix: "fix it"})
+	bare, err := codec.Marshal(JobProblem{Code: JobRecordInvalid, Message: "bad", Hint: "fix it"})
 	require.NoError(t, err)
 	assert.NotContains(t, string(bare), "postcondition")
 	assert.NotContains(t, string(bare), "deviation")
 
 	p := JobProblem{
-		Code: GateNotRun, Message: "m", Fix: "f",
+		Code: GateNotRun, Message: "m", Hint: "f",
 		Deviation: &job.Deviation{Code: job.Code(GateNotRun), Subject: "test .", Reason: "github-actions runs it"},
 	}
 	enc, err := codec.Marshal(p)
@@ -99,7 +99,7 @@ func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 }
 
 func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
-	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Fix: "add it"}}.Error()
+	err := JobProblems{{Code: OutputOutsideWritePaths, Message: "x", Hint: "add it"}}.Error()
 
 	var diag *DiagnosticError
 	require.ErrorAs(t, err, &diag)

@@ -1316,7 +1316,7 @@ func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()
-		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Fix: f["fix"], Why: types.DiagnosticRationale(err)}
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Hint: f["hint"], Why: types.DiagnosticRationale(err)}
 	}
 	return types.Diagnostic{Message: err.Error(), Why: types.DiagnosticRationale(err)}
 }

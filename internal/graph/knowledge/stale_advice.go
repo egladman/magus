@@ -81,7 +81,7 @@ func staleIndexNotice(ans types.KnowledgeAnswer) string {
 		notice += fmt.Sprintf("  changed since: %s; deletions are not listed\n", files)
 	}
 	if c := ans.IndexCause; c != nil {
-		return notice + fmt.Sprintf("  %s\n  %s\n", c.Why, c.Fix)
+		return notice + fmt.Sprintf("  %s\n  %s\n", c.Why, c.Hint)
 	}
 	return notice + fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
 }

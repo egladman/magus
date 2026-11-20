@@ -397,7 +397,7 @@ func TestReportRefsMissCarriesTheIndexCauseInTheVerdictBlock(t *testing.T) {
 	ans := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
 	ans.IndexCause = &types.KnowledgeIndexCause{
 		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
-		Fix: "`magus server start` keeps it current from now on",
+		Hint: "`magus server start` keeps it current from now on",
 	}
 	miss := knowledge.RefsMiss{Name: "Foo", Answer: ans}
 
@@ -411,7 +411,7 @@ func TestReportRefsMissCarriesTheIndexCauseInTheVerdictBlock(t *testing.T) {
 	require.NoError(t, codec.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
 	assert.Equal(t, ans.IndexCause, record.Answer.IndexCause)
 	assert.Contains(t, stderr.String(), fmt.Sprintf("why: %s\n", ans.IndexCause.Why))
-	assert.Contains(t, stderr.String(), fmt.Sprintf("fix: %s\n", ans.IndexCause.Fix))
+	assert.Contains(t, stderr.String(), fmt.Sprintf("hint: %s\n", ans.IndexCause.Hint))
 
 	stderr.Reset()
 	stdout = captureStdout(t, func() {
@@ -421,8 +421,8 @@ func TestReportRefsMissCarriesTheIndexCauseInTheVerdictBlock(t *testing.T) {
 	assert.Empty(t, stdout, "text output keeps stdout for answers")
 	assert.Contains(t, stderr.String(), "outside coverage: libs/api (not-indexed)")
 	assert.Contains(t, stderr.String(), fmt.Sprintf(`  why: %s
-  fix: %s
-`, ans.IndexCause.Why, ans.IndexCause.Fix))
+  hint: %s
+`, ans.IndexCause.Why, ans.IndexCause.Hint))
 }
 
 // withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean
@@ -433,7 +433,7 @@ func TestWithIndexCauseFillsOnlyAnIndexBehind(t *testing.T) {
 	got := withIndexCause(t.Context(), w.Root(), behind)
 	require.NotNil(t, got.IndexCause)
 	assert.NotEmpty(t, got.IndexCause.Why)
-	assert.NotEmpty(t, got.IndexCause.Fix)
+	assert.NotEmpty(t, got.IndexCause.Hint)
 
 	clean := withIndexCause(t.Context(), w.Root(), types.ClassifyAnswer(true, "", nil))
 	assert.Nil(t, clean.IndexCause)

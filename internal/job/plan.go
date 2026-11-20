@@ -212,7 +212,7 @@ func Apply(ctx context.Context, store *Store, records []job.Declaration, limits 
 	for _, rec := range records {
 		var ps types.JobProblems
 		invalid := func(field, message, fix string) {
-			ps = append(ps, types.JobProblem{Code: types.JobRecordInvalid, Field: field, Message: message, Fix: fix})
+			ps = append(ps, types.JobProblem{Code: types.JobRecordInvalid, Field: field, Message: message, Hint: fix})
 		}
 		if rec.State != "" {
 			invalid("state", fmt.Sprintf("the record for %s carries state %q, which is status: apply writes the spec and never moves a job", rec.ID, rec.State),
@@ -331,7 +331,7 @@ func droppedPostconditionProblems(prev, next job.Job) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code: types.JobRecordInvalid, Field: "postconditions", Subject: g.ID,
 			Message: fmt.Sprintf("the record releases a write path of %s and drops its postcondition %q", prev.ID, g.ID),
-			Fix:     fmt.Sprintf("keep the postcondition %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
+			Hint:     fmt.Sprintf("keep the postcondition %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
 		})
 	}
 	return ps

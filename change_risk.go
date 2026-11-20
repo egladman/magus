@@ -566,7 +566,7 @@ func uncomparedLines(name, reason string) []types.Finding {
 	}
 	return []types.Finding{{Path: name, Line: 1,
 		Message: fmt.Sprintf("the coverage of %s was not compared: %s", name, reason),
-		Fix:     "Declare the coverage profile its spell names as an output of the target that writes it."}}
+		Hint:    "Declare the coverage profile its spell names as an output of the target that writes it."}}
 }
 
 func (r riskMeter) fileLines(name string, head, base profileRead) []types.Finding {
@@ -574,7 +574,7 @@ func (r riskMeter) fileLines(name string, head, base profileRead) []types.Findin
 		if run.reason != "" {
 			return []types.Finding{{Path: name, Line: 1,
 				Message: fmt.Sprintf("the coverage of %s %swas not measured: %s", name, run.side, run.reason),
-				Fix:     "Make its project's tests pass, so its covered lines can be compared."}}
+				Hint:    "Make its project's tests pass, so its covered lines can be compared."}}
 		}
 	}
 	now := fileNamed(head.files, name).Lines()
@@ -615,7 +615,7 @@ func lineFindings(name string, lines []int, what, fix string) []types.Finding {
 		if j > i {
 			span = fmt.Sprintf("%d-%d", lines[i], lines[j])
 		}
-		out = append(out, types.Finding{Path: name, Line: lines[i], Message: fmt.Sprintf("%s:%s %s", name, span, what), Fix: fix})
+		out = append(out, types.Finding{Path: name, Line: lines[i], Message: fmt.Sprintf("%s:%s %s", name, span, what), Hint: fix})
 		i = j + 1
 	}
 	return out

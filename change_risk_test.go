@@ -860,7 +860,7 @@ func (s *RiskMeterSuite) TestARedHeadIsAGapWithTheReason() {
 		Gaps:       []types.FunctionGap{{Symbol: "sym F", Label: "F", Path: "lib/a.go", Language: "go", Line: 3, Complexity: 3, Reason: reason}},
 		Lines: []types.Finding{{Path: "lib/a.go", Line: 1,
 			Message: "the coverage of lib/a.go was not measured: " + reason,
-			Fix:     "Make its project's tests pass, so its covered lines can be compared."}},
+			Hint:    "Make its project's tests pass, so its covered lines can be compared."}},
 	}, got)
 }
 
@@ -882,9 +882,9 @@ func (s *RiskMeterSuite) TestAKeptLineThatLostCoverageAndAnUncoveredAddedLineAre
 	got := s.measure()
 	s.Equal([]types.Finding{
 		{Path: "lib/a.go", Line: 4, Message: "lib/a.go:4 was covered at base and no test of its package covers it now",
-			Fix: "Restore the test that covered it, or delete the code no test needs."},
+			Hint: "Restore the test that covered it, or delete the code no test needs."},
 		{Path: "lib/a.go", Line: 5, Message: "lib/a.go:5 was added and no test of its package covers it",
-			Fix: "Cover the added lines with a test."},
+			Hint: "Cover the added lines with a test."},
 	}, got.Lines)
 }
 
@@ -897,8 +897,8 @@ func (s *RiskMeterSuite) TestRemovedCoveredLinesAreNeverFindings() {
 func (s *RiskMeterSuite) TestLineFindingsJoinConsecutiveLines() {
 	got := lineFindings("a.go", []int{9, 3, 4, 5, 9}, "x", "f")
 	s.Equal([]types.Finding{
-		{Path: "a.go", Line: 3, Message: "a.go:3-5 x", Fix: "f"},
-		{Path: "a.go", Line: 9, Message: "a.go:9 x", Fix: "f"},
+		{Path: "a.go", Line: 3, Message: "a.go:3-5 x", Hint: "f"},
+		{Path: "a.go", Line: 9, Message: "a.go:9 x", Hint: "f"},
 	}, got)
 }
 
@@ -919,7 +919,7 @@ func (s *RiskMeterSuite) TestAChangedFileWithNoSourceIsReported() {
 	got := s.measure()
 	s.Equal([]types.Finding{{Path: "lib/b.go", Line: 1,
 		Message: "the coverage of lib/b.go was not compared: no target of lib declares its coverage profile .magus/coverage.out as an output",
-		Fix:     "Declare the coverage profile its spell names as an output of the target that writes it."}}, got.Lines)
+		Hint:    "Declare the coverage profile its spell names as an output of the target that writes it."}}, got.Lines)
 }
 
 func (s *RiskMeterSuite) TestFilesOfOneProjectShareOneRead() {

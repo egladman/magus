@@ -27,6 +27,7 @@ const codeDocsMarker = "/reference/codes/"
 // writes to the grep. A section is a structure the page either declares or does not.
 var remediationSections = map[string]bool{
 	"fix":         true,
+	"hint":        true,
 	"fixing":      true,
 	"remediation": true,
 	"resolution":  true,

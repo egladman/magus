@@ -69,7 +69,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, []DefaultedAccept, error) 
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
 			ps := recordInvalid("api_version", err)
-			ps[0].Fix = fmt.Sprintf("add \"api_version\": %q to the record", job.APIVersion)
+			ps[0].Hint = fmt.Sprintf("add \"api_version\": %q to the record", job.APIVersion)
 			return job.Declaration{}, nil, ps.Error()
 		}
 		return job.Declaration{}, nil, err
@@ -123,7 +123,7 @@ func splitLegacy(raw []byte) ([]byte, types.LegacySpellings, error) {
 func foldValidation(row *job.Declaration, line string) error {
 	line = strings.TrimSpace(line)
 	invalid := func(message, fix string) error {
-		return types.JobProblems{{Code: types.JobRecordInvalid, Field: "validation", Message: message, Fix: fix}}.Error()
+		return types.JobProblems{{Code: types.JobRecordInvalid, Field: "validation", Message: message, Hint: fix}}.Error()
 	}
 	switch {
 	case line == "":
@@ -170,7 +170,7 @@ func notDeclaration(id, field, what string) error {
 		Code:    types.JobRecordInvalid,
 		Field:   field,
 		Message: fmt.Sprintf("the record for %s is %s, not a declaration, and fork would declare %s over the live job", id, what, id),
-		Fix:     fmt.Sprintf("send it to `%s`, or drop %s to declare", hint.JobApply.With("--stdin"), field),
+		Hint:     fmt.Sprintf("send it to `%s`, or drop %s to declare", hint.JobApply.With("--stdin"), field),
 	}}.Error()
 }
 
@@ -180,7 +180,7 @@ func recordInvalid(field string, err error) types.JobProblems {
 		Code:    types.JobRecordInvalid,
 		Field:   field,
 		Message: strings.TrimPrefix(err.Error(), "job: "),
-		Fix:     fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
+		Hint:     fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
 	}}
 }
 
@@ -199,7 +199,7 @@ func memberProblems(raw []byte, err error) types.JobProblems {
 			Code:    types.JobRecordInvalid,
 			Field:   name,
 			Message: fmt.Sprintf("%q is an unknown member of a %s job", name, job.APIVersion),
-			Fix:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
+			Hint:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
 		})
 	}
 	if len(ps) > 0 {

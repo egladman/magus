@@ -177,7 +177,7 @@ type Finding struct {
 	Col     int
 	Rule    string
 	Message string
-	Fix     string
+	Hint    string
 	URL     string `buzz:"url"`
 }
 

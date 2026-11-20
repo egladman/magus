@@ -29,7 +29,7 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // would be `magus self update` refusing to run for everyone at once. That is the
 // outage this whole area exists to have fixed, arriving by a different door.
 //
-// It carries NO Fix: re-signing is a human running a workflow, not a repair
+// It carries NO Hint: re-signing is a human running a workflow, not a repair
 // doctor may name as a command. The Fix arms it used to carry named `run release-index`,
 // a target no workspace declares.
 func (r *runner) checkReleaseIndexExpiry() check.Check {

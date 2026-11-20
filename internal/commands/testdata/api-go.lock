@@ -1682,7 +1682,7 @@ github.com/egladman/magus/types.DescribeStaleIndexes func(stale []KnowledgeStale
 github.com/egladman/magus/types.DeviationPermits func(d github.com/egladman/magus/libs/safetyscissors/job.Deviation, p JobProblem) bool
 github.com/egladman/magus/types.Diagnostic type struct
 github.com/egladman/magus/types.Diagnostic.Code field string "json:\"code\" yaml:\"code\""
-github.com/egladman/magus/types.Diagnostic.Fix field string "json:\"fix,omitempty\" yaml:\"fix,omitempty\" buzz:\"fix\""
+github.com/egladman/magus/types.Diagnostic.Hint field string "json:\"hint,omitempty\" yaml:\"hint,omitempty\" buzz:\"hint\""
 github.com/egladman/magus/types.Diagnostic.Message field string "json:\"message\" yaml:\"message\""
 github.com/egladman/magus/types.Diagnostic.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\" buzz:\"url\""
 github.com/egladman/magus/types.Diagnostic.Why field string "json:\"why,omitempty\" yaml:\"why,omitempty\" buzz:\"-\""
@@ -1699,13 +1699,13 @@ github.com/egladman/magus/types.DiagnosticError type = github.com/egladman/magus
 github.com/egladman/magus/types.DiagnosticError.BuzzError method(ptr) func() map[string]string
 github.com/egladman/magus/types.DiagnosticError.Code field github.com/egladman/magus/libs/diagnostics.Code
 github.com/egladman/magus/types.DiagnosticError.Error method(ptr) func() string
-github.com/egladman/magus/types.DiagnosticError.Fix field string
+github.com/egladman/magus/types.DiagnosticError.Hint field string
 github.com/egladman/magus/types.DiagnosticError.Is method(ptr) func(target error) bool
 github.com/egladman/magus/types.DiagnosticError.Msg field string
 github.com/egladman/magus/types.DiagnosticError.URL method(ptr) func() string
 github.com/egladman/magus/types.DiagnosticError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.DiagnosticError.Why field string
-github.com/egladman/magus/types.DiagnosticError.WithFix method(ptr) func(fix string) *github.com/egladman/magus/libs/diagnostics.Error
+github.com/egladman/magus/types.DiagnosticError.WithHint method(ptr) func(hint string) *github.com/egladman/magus/libs/diagnostics.Error
 github.com/egladman/magus/types.DiagnosticError.WithWhy method(ptr) func(why string) *github.com/egladman/magus/libs/diagnostics.Error
 github.com/egladman/magus/types.DiagnosticErrorf func(c DiagnosticCode, format string, args ...any) *DiagnosticError
 github.com/egladman/magus/types.DiagnosticEvent type = github.com/egladman/magus/libs/diagnostics.Event
@@ -2044,7 +2044,7 @@ github.com/egladman/magus/types.FindReviewRequest.Remote field string
 github.com/egladman/magus/types.FindReviewRequest.WantViewer field bool
 github.com/egladman/magus/types.Finding type struct
 github.com/egladman/magus/types.Finding.Col field int
-github.com/egladman/magus/types.Finding.Fix field string
+github.com/egladman/magus/types.Finding.Hint field string
 github.com/egladman/magus/types.Finding.Line field int
 github.com/egladman/magus/types.Finding.Message field string
 github.com/egladman/magus/types.Finding.Path field string
@@ -2522,7 +2522,7 @@ github.com/egladman/magus/types.JobProblem.Code field DiagnosticCode "json:\"cod
 github.com/egladman/magus/types.JobProblem.Deviation field *github.com/egladman/magus/libs/safetyscissors/job.Deviation "json:\"deviation,omitempty\""
 github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
-github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
+github.com/egladman/magus/types.JobProblem.Hint field string "json:\"hint\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
 github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Postcondition field *Postcondition "json:\"postcondition,omitempty\""
@@ -2686,7 +2686,7 @@ github.com/egladman/magus/types.KnowledgeGraphOutput.RelationFingerprint field s
 github.com/egladman/magus/types.KnowledgeGraphOutput.Relations field []KnowledgeRelationDefinition "json:\"relations\"           yaml:\"relations\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.SourceBaseURL field string "json:\"source_base,omitempty\" yaml:\"source_base,omitempty\""
 github.com/egladman/magus/types.KnowledgeIndexCause type struct
-github.com/egladman/magus/types.KnowledgeIndexCause.Fix field string "json:\"fix\" yaml:\"fix\""
+github.com/egladman/magus/types.KnowledgeIndexCause.Hint field string "json:\"hint\" yaml:\"hint\""
 github.com/egladman/magus/types.KnowledgeIndexCause.Why field string "json:\"why\" yaml:\"why\""
 github.com/egladman/magus/types.KnowledgeListRank type struct
 github.com/egladman/magus/types.KnowledgeListRank.List field string "json:\"list\" yaml:\"list\""

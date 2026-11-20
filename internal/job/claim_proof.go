@@ -884,7 +884,7 @@ func claimCeilingProblems(row job.Job, limits config.Jobs) types.JobProblems {
 	if _, err := claimCap(row, limits); err != nil {
 		return types.JobProblems{{
 			Code: types.JobForkLimitExceeded, Field: "max_claims", Message: err.Error(),
-			Fix: "name a smaller max_claims, or raise jobs.max_claims in magus.yaml",
+			Hint: "name a smaller max_claims, or raise jobs.max_claims in magus.yaml",
 		}}
 	}
 	return nil

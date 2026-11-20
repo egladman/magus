@@ -5,7 +5,7 @@ export object Diagnostic {
     code: str = "",
     message: str = "",
     url: str = "",
-    fix: str = "",
+    hint: str = "",
 }
 
 export object Result::<T> {
@@ -30,7 +30,7 @@ export fun fail::<T>(message: str) > Result::<T> {
 export fun caught::<T>(err: any, doing: str = "") > Result::<T> {
     final d = narrowed(err);
     final message = if (doing != "") "{doing}: {d.message}" else d.message;
-    return Result::<T>{ error = Diagnostic{ code = d.code, message = message, url = d.url, fix = d.fix } };
+    return Result::<T>{ error = Diagnostic{ code = d.code, message = message, url = d.url, hint = d.hint } };
 }
 
 fun narrowed(err: any) > Diagnostic {
@@ -48,7 +48,7 @@ fun narrowed(err: any) > Diagnostic {
             code = "{fields["code"] ?? ""}",
             message = "{fields["message"] ?? ""}",
             url = "{fields["url"] ?? ""}",
-            fix = "{fields["fix"] ?? ""}",
+            hint = "{fields["hint"] ?? ""}",
         };
     }
     return Diagnostic{ message = "{err}" };

@@ -775,7 +775,7 @@ func TestCheckAgentSkills(t *testing.T) {
 			Status: check.Fail,
 			// One line per install location; what they say is internal/agent's to test.
 			Details: got.Details,
-			Fix:     []string{"agent", "harness", "install", "--id", "test-host"},
+			Fix:      []string{"agent", "harness", "install", "--id", "test-host"},
 		}
 		require.Equal(t, want, withoutWording(got))
 	})
@@ -799,7 +799,7 @@ func TestCheckAgentSkills(t *testing.T) {
 			Message: "installed skills are behind this binary: .agents/skills",
 			// One line per install location; what they say is internal/agent's to test.
 			Details: got.Details,
-			Fix:     []string{"agent", "harness", "install", "--id", "test-host"},
+			Fix:      []string{"agent", "harness", "install", "--id", "test-host"},
 		}
 		assert.Equal(t, want, got)
 	})
@@ -1136,7 +1136,7 @@ func TestCheckConcurrencySizing(t *testing.T) {
 		assert.Equal(t, check.Check{
 			Status:  check.Advice,
 			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
-			Fix:     []string{"config", "set", "key=concurrency,value=4"},
+			Fix:      []string{"config", "set", "key=concurrency,value=4"},
 		}, withoutWording(got))
 		assert.Contains(t, got.Message, "undersized")
 		assert.Contains(t, got.Message, "leaves capacity idle")
@@ -1149,7 +1149,7 @@ func TestCheckConcurrencySizing(t *testing.T) {
 		assert.Equal(t, check.Check{
 			Status:  check.Advice,
 			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
-			Fix:     []string{"config", "set", "key=concurrency,value=4"},
+			Fix:      []string{"config", "set", "key=concurrency,value=4"},
 		}, withoutWording(got))
 		assert.Contains(t, got.Message, "oversized")
 		assert.Contains(t, got.Message, "contend rather than finish sooner")
@@ -1366,7 +1366,7 @@ func TestCheckStaleSockets(t *testing.T) {
 			Status: check.Fail,
 			// The pool's pid, version and address, which the proc package owns.
 			Details: got.Details,
-			Fix:     []string{"server", "stop", "--pools"},
+			Fix:      []string{"server", "stop", "--pools"},
 		}, withoutWording(got))
 		assert.Contains(t, got.Message, "from another build")
 	})

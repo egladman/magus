@@ -103,7 +103,7 @@ func (s *indexesBehindSuite) TestAStaleIndexIsBehind() {
 }
 
 func (s *indexesBehindSuite) TestAnAnswerKeepsTheCauseTheReadGaveIt() {
-	mine := &types.KnowledgeIndexCause{Why: "a refresh started", Fix: "ask again"}
+	mine := &types.KnowledgeIndexCause{Why: "a refresh started", Hint: "ask again"}
 	got := withIndexCause(s.T().Context(), s.T().TempDir(), types.KnowledgeAnswer{StaleIndexes: []string{"libs/a"}, IndexCause: mine})
 	s.Same(mine, got.IndexCause)
 }

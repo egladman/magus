@@ -1105,8 +1105,8 @@ func (a KnowledgeAnswer) DescribeStale() string {
 // now) and the command that clears it. Both are sentences; commands in them are
 // backquoted.
 type KnowledgeIndexCause struct {
-	Why string `json:"why" yaml:"why"`
-	Fix string `json:"fix" yaml:"fix"`
+	Why  string `json:"why" yaml:"why"`
+	Hint string `json:"hint" yaml:"hint"`
 }
 
 // KnowledgeTextPresence is what a raw-text search found for a name no symbol index

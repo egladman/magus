@@ -78,7 +78,7 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 	require.True(t, ans.IndexBehind())
 	ans.IndexCause = &KnowledgeIndexCause{
 		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
-		Fix: "`magus server start` keeps it current from now on",
+		Hint: "`magus server start` keeps it current from now on",
 	}
 	out := KnowledgeOccurrencesOutput{Symbol: "symbol:x", Answer: ans}
 	b, err := codec.Marshal(out)
@@ -89,7 +89,7 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 		} `json:"answer"`
 	}
 	require.NoError(t, codec.Unmarshal(b, &got))
-	assert.Equal(t, map[string]string{"why": ans.IndexCause.Why, "fix": ans.IndexCause.Fix}, got.Answer.IndexCause)
+	assert.Equal(t, map[string]string{"why": ans.IndexCause.Why, "hint": ans.IndexCause.Hint}, got.Answer.IndexCause)
 
 	b, err = codec.Marshal(KnowledgeAnswer{Verdict: VerdictFound})
 	require.NoError(t, err)

@@ -131,7 +131,7 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	assert.Contains(t, err.Error(), "api/docs")
 	assert.Contains(t, err.Error(), "guide.md")
 	assert.Contains(t, err.Error(), "target \"format\"")
-	assert.Contains(t, err.Error(), "fix:")
+	assert.Contains(t, err.Error(), "hint:")
 }
 
 func TestFinishSilentOnNoChanges(t *testing.T) {
@@ -450,7 +450,7 @@ func auditTree(t *testing.T, names ...string) (*types.Project, context.Context) 
 // crossed renders the MGS3001 error Finish returns for api's lint target and desc.
 func crossed(desc, summary string) error {
 	return types.DiagnosticErrorf(types.DescendantBoundaryCrossed,
-		"project %q target %q wrote into descendant project %q: %s\nfix: move this work to %q or exclude that path from the parent target",
+		"project %q target %q wrote into descendant project %q: %s\nhint: move this work to %q or exclude that path from the parent target",
 		"api", "lint", desc, summary, desc)
 }
 

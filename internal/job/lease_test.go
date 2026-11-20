@@ -143,12 +143,12 @@ func (s *LeaseCheckSuite) TestRowCheckSaysWhetherTheRowDeclaresOne() {
 func (s *LeaseCheckSuite) TestDeclarationProblemsNameTheCheckThatDoesNotRead() {
 	ps := declarationProblems(job.Declaration{ID: "w", Check: storedJSON(`{"target":"test","bogus":1}`)})
 	s.Require().Len(ps, 1)
-	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
+	s.Equal(types.JobProblem{Code: types.JobRecordInvalid, Field: "check", Message: ps[0].Message, Hint: ps[0].Hint}, ps[0])
 
 	ps = declarationProblems(job.Declaration{ID: "w", Postconditions: []job.Postcondition{{ID: "g", Kind: job.PostconditionKindCheck,
 		Check: fixtureCheck(types.LeaseCheck{Target: "test", Script: "p.buzz"}), Accept: []job.Basis{job.BasisWitnessed}}}})
 	s.Require().Len(ps, 1)
-	s.Equal(types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions[0].check.script", Message: ps[0].Message, Fix: ps[0].Fix}, ps[0])
+	s.Equal(types.JobProblem{Code: types.JobPostconditionInvalid, Field: "postconditions[0].check.script", Message: ps[0].Message, Hint: ps[0].Hint}, ps[0])
 }
 
 // checkIn is stored read as a lease check, failing t when it does not read.

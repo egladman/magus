@@ -55,7 +55,7 @@ func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 		assert.Equal(t, check.Check{
 			Name: "toolchain-lifecycle", Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: "no stored answer from endoflife-date for this workspace's spells; `magus describe tools` asks it",
-			Fix:     []string{"describe", "tools"},
+			Fix:      []string{"describe", "tools"},
 		}, got)
 	})
 }

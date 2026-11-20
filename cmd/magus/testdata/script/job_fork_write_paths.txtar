@@ -15,7 +15,7 @@ cp $WORK/console.buzz console/magusfile.buzz
 stderr 'MGS3018'
 stderr '"src/pkg", inside project "."'
 stderr 'a write path names files'
-stderr 'fix: list the files the job will edit in its place'
+stderr 'hint: list the files the job will edit in its place'
 ! exec magus job fork wave/glob --check 'test .' --write-paths 'src/**'
 stderr '"src/\*\*" \(matching the directory "src"\)'
 

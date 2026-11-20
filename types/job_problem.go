@@ -23,8 +23,8 @@ type JobProblem struct {
 	Subject string `json:"subject,omitempty"`
 	// Message says what is wrong, naming the field in its own words.
 	Message string `json:"message"`
-	// Fix is the edit to the record that clears the problem.
-	Fix string `json:"fix"`
+	// Hint is the edit to the record that clears the problem.
+	Hint string `json:"hint"`
 	// Postcondition is the postcondition whose addition to the record's postconditions clears the problem, as data.
 	// Magus prints it and never applies it: a caller merges `problems[].postcondition` itself.
 	Postcondition *Postcondition `json:"postcondition,omitempty"`
@@ -37,10 +37,10 @@ type JobProblem struct {
 // Error renders p as a DiagnosticError, so errors.Is matches its code. The text is the
 // message, then the fix after a colon.
 func (p JobProblem) Error() *DiagnosticError {
-	if p.Fix == "" {
+	if p.Hint == "" {
 		return DiagnosticErrorf(p.Code, "%s", p.Message)
 	}
-	return DiagnosticErrorf(p.Code, "%s: %s", p.Message, p.Fix)
+	return DiagnosticErrorf(p.Code, "%s: %s", p.Message, p.Hint)
 }
 
 // JobProblems are the problems of one record, in record order.
@@ -129,7 +129,7 @@ func FaultProblems(fs []job.Fault) JobProblems {
 	}
 	ps := make(JobProblems, len(fs))
 	for i, f := range fs {
-		ps[i] = JobProblem{Code: faultCode(f.Kind), Field: f.Field, Message: f.Message, Fix: f.Fix}
+		ps[i] = JobProblem{Code: faultCode(f.Kind), Field: f.Field, Message: f.Message, Hint: f.Fix}
 	}
 	return ps
 }

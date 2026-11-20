@@ -47,7 +47,7 @@ func (s *Store) declaredCheckpoint(ctx context.Context, rows []job.Job, id, toke
 	}
 	real := hint.VCSCheckpoint.With("-o name")
 	unplaceable := func(fix, format string, args ...any) (string, types.JobProblems) {
-		return token, types.JobProblems{{Code: types.JobCheckpointUnplaceable, Field: "checkpoint", Message: fmt.Sprintf(format, args...), Fix: fix}}
+		return token, types.JobProblems{{Code: types.JobCheckpointUnplaceable, Field: "checkpoint", Message: fmt.Sprintf(format, args...), Hint: fix}}
 	}
 	realFix := fmt.Sprintf("name the checkpoint `%s` prints, or leave it out", real)
 	rev, digest := types.ParseCheckpointToken(token)

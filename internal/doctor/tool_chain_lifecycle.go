@@ -47,7 +47,7 @@ func (r *runner) checkToolchainLifecycle(ctx context.Context, projects []*types.
 		return check.Check{
 			Name: name, Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("no stored answer from %s for this workspace's spells; `magus describe tools` asks it", wired),
-			Fix:     []string{"describe", "tools"},
+			Fix:      []string{"describe", "tools"},
 		}
 	}
 	details := lifecycleFindings(projects, answer, time.Now())

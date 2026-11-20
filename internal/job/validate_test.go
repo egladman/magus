@@ -139,16 +139,16 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 		}
 	}
 	assert.Contains(t, target.Message, `names target "nosuch", which project "." does not run`)
-	assert.Contains(t, target.Fix, "config-generate, lint", "an unknown target names the project's targets")
+	assert.Contains(t, target.Hint, "config-generate, lint", "an unknown target names the project's targets")
 	assert.Contains(t, project.Message, `names project "nowhere"`)
-	assert.Equal(t, "name one of its projects: ., docs", project.Fix)
+	assert.Equal(t, "name one of its projects: ., docs", project.Hint)
 
 	regen := problemAt(t, v.Problems, types.OutputOutsideWritePaths)
 	assert.NotEmpty(t, regen.Subject, "a permissible problem names what a deviation names")
-	assert.Contains(t, regen.Fix, `"reason":"the root regenerates it"`)
+	assert.Contains(t, regen.Hint, `"reason":"the root regenerates it"`)
 	gate := problemAt(t, v.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", gate.Subject)
-	assert.Contains(t, gate.Fix, `"check":{"target":"lint","project":"."}`, "the fix is the postcondition that runs it")
+	assert.Contains(t, gate.Hint, `"check":{"target":"lint","project":"."}`, "the fix is the postcondition that runs it")
 	assert.Empty(t, v.Unchecked)
 	assert.Equal(t, "w", v.Job.ID, "the result carries the row as it would be stored")
 }
@@ -820,7 +820,7 @@ func TestUnrunGateFixAddsThePostconditionWithoutAnOwner(t *testing.T) {
 	assert.Equal(t, types.JobProblems{{
 		Code: types.GateNotRun, Field: "postconditions", Subject: "unit .",
 		Message:       "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
-		Fix:           `add the postcondition {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`,
+		Hint:           `add the postcondition {"id":"unit","kind":"check","check":{"target":"unit","project":"."}} to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"unit .","reason":"the root runs it"}`,
 		Postcondition: &postcondition,
 	}}, ps, "the postcondition is the one remedy")
 }
@@ -834,7 +834,7 @@ func TestUnrunGateFixNamesTheDeclaredOwner(t *testing.T) {
 		assert.Equal(t, types.JobProblems{{
 			Code: types.GateNotRun, Field: "postconditions", Subject: "unit .",
 			Message:   "ci runs `unit .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
-			Fix:       fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs),
+			Hint:       fmt.Sprintf(`permit it in deviations, since %[1]s: {"code":"MGS3045","subject":"unit .","reason":"%[1]s"}`, runs),
 			Deviation: &job.Deviation{Code: "MGS3045", Subject: "unit .", Reason: runs},
 		}}, ps, "the owner's deviation is the one remedy")
 	}
@@ -852,7 +852,7 @@ func TestUnrunLintGateFixStaysThePostconditionWhoeverOwnsTheRest(t *testing.T) {
 	assert.Equal(t, types.JobProblems{{
 		Code: types.GateNotRun, Field: "postconditions", Subject: "lint .",
 		Message:       "ci runs `lint .` over the write paths (it reads **/*.go), and neither the check nor a postcondition runs it",
-		Fix:           fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"lint .","reason":"the root runs it"}`, `{"id":"unit","kind":"check","check":{"target":"unit","project":"."}}`),
+		Hint:           fmt.Sprintf(`add the postcondition %s to postconditions, or permit it in deviations: {"code":"MGS3045","subject":"lint .","reason":"the root runs it"}`, `{"id":"unit","kind":"check","check":{"target":"unit","project":"."}}`),
 		Postcondition: &postcondition,
 	}}, ps)
 }
@@ -874,7 +874,7 @@ func TestRegeneratedOutputFixOffersTheWritePathOrADeviation(t *testing.T) {
 	assert.Equal(t, types.JobProblems{{
 		Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: "manpage/*.1",
 		Message:   ".:man-generate regenerates manpage/*.1 from cli/registry.go, inside the write paths, and manpage/*.1 sits outside them",
-		Fix:       `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`,
+		Hint:       `add "manpage/*.1" to paths.write, or permit it in deviations: {"code":"MGS3044","subject":"manpage/*.1","reason":"the root regenerates it"}`,
 		Deviation: &job.Deviation{Code: "MGS3044", Subject: "manpage/*.1", Reason: "the root regenerates it"},
 	}}, ps)
 }

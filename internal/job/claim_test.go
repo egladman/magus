@@ -87,7 +87,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 		p := ps[0]
 		assert.Contains(t, p.Message, `"run.go": `)
 		assert.Equal(t, types.JobProblem{Code: types.WritePathClaimUngradable, Field: "paths.write[0]", Message: p.Message,
-			Fix: `claim the whole file "run.go"`}, p)
+			Hint: `claim the whole file "run.go"`}, p)
 	})
 
 	t.Run("every bad entry is its own problem", func(t *testing.T) {
@@ -233,8 +233,8 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	require.Len(t, ps, 1)
 	assert.Contains(t, ps[0].Message, "A (running, updated")
 	assert.Contains(t, ps[0].Message, "A has changed nothing under notes.md")
-	assert.Contains(t, ps[0].Fix, "--depends-on A")
-	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply A --release-write-path notes.md`, which keeps its postconditions")
+	assert.Contains(t, ps[0].Hint, "--depends-on A")
+	assert.Contains(t, ps[0].Hint, "the root narrows A to what it has changed with `magus job apply A --release-write-path notes.md`, which keeps its postconditions")
 
 	requests := releaseRequests(t, bRoot)
 	require.Len(t, requests, 1, "a shared file that is not a project's configuration asks too")
@@ -250,7 +250,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 		ps := unorderedFileShareProblems(t.Context(), s, rows, job.Job{ID: "B", Paths: job.Paths{Write: []string{"run.go"}}})
 		require.Len(t, ps, 1)
 		assert.Contains(t, ps[0].Message, "A's footprint could not be read")
-		assert.NotContains(t, ps[0].Fix, "job apply")
+		assert.NotContains(t, ps[0].Hint, "job apply")
 	})
 }
 

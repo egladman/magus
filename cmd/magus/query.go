@@ -701,30 +701,30 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 	}
 	fix := fmt.Sprintf("ask again once it lands, or wait for it: `%s`", wait)
 	if holder, running := maintenance.RunningGraphBuild(dir); running {
-		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, while pid %d refreshes it", holder.PID), Fix: fix}
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, while pid %d refreshes it", holder.PID), Hint: fix}
 	}
 	if failed := magus.RecentSymbolRefreshFailures(filepath.Dir(dir), time.Now()); len(failed) > 0 {
 		why := "its last refresh failed: " + strings.Join(failed, "; ")
 		slog.ErrorContext(ctx, why, attr.Notice("magus"))
-		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+		return &types.KnowledgeIndexCause{Why: why, Hint: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
 	holder, running, err := maintenance.RunningMachineGraphBuild()
 	if err != nil {
 		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
-		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Hint: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
 	if running {
-		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Fix: fix}
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Hint: fix}
 	}
 	started, err := startRefresh(dir)
 	switch {
 	case err != nil:
 		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
-		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Hint: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	case !started:
 		return nil
 	}
-	return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a refresh started in the background", Fix: fix}
+	return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a refresh started in the background", Hint: fix}
 }
 
 // startRefresh runs this command again with --refresh, detached, logging to

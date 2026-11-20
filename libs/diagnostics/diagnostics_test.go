@@ -232,7 +232,7 @@ func TestWhyNeverRenders(t *testing.T) {
 func TestFixCrossesIntoBuzzOnly(t *testing.T) {
 	d := New(testURL)
 	const fix = "run magus graph build"
-	err := d.Errorf(Code("TST0010"), "index is stale").WithFix(fix)
+	err := d.Errorf(Code("TST0010"), "index is stale").WithHint(fix)
 
 	if got := err.Error(); strings.Contains(got, fix) {
 		t.Errorf("Error() = %q, carries the fix", got)
@@ -241,12 +241,12 @@ func TestFixCrossesIntoBuzzOnly(t *testing.T) {
 		"code":    "TST0010",
 		"message": "index is stale",
 		"url":     "https://example/docs/TST0010.md",
-		"fix":     fix,
+		"hint":    fix,
 	}
 	if got := err.BuzzError(); !maps.Equal(got, want) {
 		t.Errorf("BuzzError = %v, want %v", got, want)
 	}
-	if _, ok := d.Errorf(Code("TST0010"), "no fix").BuzzError()["fix"]; ok {
+	if _, ok := d.Errorf(Code("TST0010"), "no fix").BuzzError()["hint"]; ok {
 		t.Error("BuzzError carries fix for an error without one")
 	}
 }

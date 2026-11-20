@@ -17,7 +17,7 @@ func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
 	v := types.JobValidation{
 		Job: job.Job{ID: "j"},
 		Problems: types.JobProblems{
-			{Code: types.JobCheckUnrunnable, Field: "check.target", Message: "no such target", Fix: "name a real one"},
+			{Code: types.JobCheckUnrunnable, Field: "check.target", Message: "no such target", Hint: "name a real one"},
 			{Code: types.JobUngraded, Message: "nothing grades the job"},
 		},
 	}
@@ -80,7 +80,7 @@ func TestApplyValidationsGroupsApplysProblemsByRecord(t *testing.T) {
 	t.Parallel()
 
 	err := errors.Join(
-		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Fix: "add a check"}}).Error(),
+		prefixed("b", types.JobProblems{{Code: types.JobUngraded, Message: "nothing grades the job", Hint: "add a check"}}).Error(),
 		prefixed("a", types.JobProblems{{Code: types.JobCheckUnrunnable, Message: "no such target"}, {Code: types.JobUngraded, Message: "no grade"}}).Error(),
 	)
 	got, ok := ApplyValidations(err, []string{"a", "b"})
