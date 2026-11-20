@@ -78,6 +78,9 @@ not keep (see the probe above), so every signature and every constructor names `
 
 ### The methods
 
+> Superseded by the 2026-11-19 amendment: the object has no methods. Eli rejected `orElse`,
+> `map`, `then`, `mapError`, `isOk` and `isErr` as JavaScript-isms that hide control flow.
+
 Methods on the object replace the reads that `.value!` and `.error` did by hand:
 
 | method | signature | returns |
@@ -103,10 +106,14 @@ export fun fail::<T, E>(error: E) > Result::<T, E>
 
 ### Where Diagnostic and its helpers go
 
+> Superseded by the 2026-11-19 amendment: `Diagnostic` is renamed `Error` and stays in the std
+> `result` module, with `fail` and `caught`. Nothing moves to `magus/`. The `magus/diagnostic`
+> proposal and the `magus/errors` pick are withdrawn.
+
 `Diagnostic` (`code`, `message`, `url`, `fix`) and the two helpers `fail` (a Diagnostic with a
 message and no code) and `caught` (a catch's value, narrowed to a Diagnostic) are magus
-concepts. The principle `buzz-modules-live-in-their-layer` (PR #867, not yet on `main`, so it is not
-linked here) says a std module names no magus concept, and the current
+concepts. The principle [`buzz-modules-live-in-their-layer`](../design/principles/buzz-modules-live-in-their-layer.md)
+says a std module names no magus concept, and the current
 `libs/result/result.buzz` names `Diagnostic` and `types.Diagnostic` directly. So the
 Diagnostic moves out of the std `result` module.
 
@@ -118,6 +125,9 @@ throughout so the text reads cleanly, and the name is an open question below.
 The std `result` module keeps `Result::<T, E>`, the methods and the generic `ok` and `fail`.
 
 ### What CallOp reads
+
+> Partly superseded by the 2026-11-19 amendment: the boundary's error type is `Error` from
+> `result`, not `magus/diagnostic.Diagnostic`. The reader and the refusal at load stand.
 
 `bindings.CallOp` reads a provider op's return as a `Result::<T, E>`. The boundary carries one
 error type: `magus/diagnostic.Diagnostic`. The reader is unchanged for it:
@@ -144,6 +154,11 @@ host, where the Go reader needs a fixed shape.
 
 ### The codemod
 
+> Superseded in its targets by the 2026-11-19 amendment: the rewrites use `Error` for
+> `Diagnostic`, and `result\Result::<T, Error>`, `result\ok(v)` and `result\err(e)` for the
+> constructors, with `result\caught` staying in `result`. The one-commit break and the
+> changelog entry stand.
+
 Every use converts by a single tool run over the `.buzz` tree, one change per shape:
 
 - `result\Result::<T>` becomes `result\Result::<T, diagnostic\Diagnostic>`, and the import of
@@ -159,6 +174,9 @@ change.
 
 ### The `.value!` force-unwraps
 
+> Superseded by the 2026-11-19 amendment: no method replaces `.value!`. A fallback is
+> `r.value ?? v`, and `r.value!` is allowed only after an error check that exits.
+
 Most of the 1,972 `.value!` sites follow an `.error` check in the same scope. They convert to
 the method that states what the branch does:
 
@@ -172,6 +190,8 @@ There is no `unwrap` method. A method that raised on an error would reintroduce 
 a host call, which ADR 0054 refused.
 
 ### The unread-Result lint
+
+> Extended by the 2026-11-19 amendment, which adds four lints beside this one.
 
 A lint flags a call that returns a `Result` whose value is never read: a binding that is never
 used, or a statement whose Result is discarded. The checker already warns on the discard
@@ -199,8 +219,8 @@ proposed, not built, and lives in `hack/lint` beside `no-throw`.
 - [Clear is better than clever](../design/principles/clear-is-better-than-clever.md): the methods
   name what a branch does, `ok`, `orElse`, `map`, `then`, `mapError`, where `value!` said nothing
   about the error path.
-- Buzz module layers (PR #867, not yet on `main`): a std module names no magus concept, so
-  `Diagnostic` moves out of `result`. Cited pending until that page lands on `main`.
+- [Buzz modules live in their layer](../design/principles/buzz-modules-live-in-their-layer.md):
+  a std module names no magus concept, so `Diagnostic` moves out of `result`.
 
 ## Alternatives
 
@@ -255,6 +275,9 @@ Nothing changes. Every error is a Diagnostic, and a script that needs another sh
 
 ## Consequences
 
+> Bullets 2 and 4 are superseded by the 2026-11-19 amendment: the std module is `result`, and
+> each `.value!` site takes the idiom in the amendment, not a method.
+
 - Every `.buzz` file that names a Result changes, through the codemod. The break merges as one
   change with its changelog entry.
 - The std `result` module no longer names `Diagnostic`. A script that imports `result` for
@@ -266,6 +289,10 @@ Nothing changes. Every error is a Diagnostic, and a script that needs another sh
 - The unread-Result lint is a new rule, and a new code if it reports.
 
 ## Open questions
+
+> Updated by the 2026-11-19 amendment. Question 1 is settled: the module is `result` and the type
+> is `Error`. Question 3 is moot, since there are no methods. Question 5 is replaced by the idiom
+> in the amendment. Question 6 is still open, and the amendment adds one more open question.
 
 - **The Diagnostic module name.** Eli picks among `magus/diagnostic`, `magus/failure` and
   `magus/errors`. Every example here uses `magus/diagnostic`.
@@ -280,3 +307,78 @@ Nothing changes. Every error is a Diagnostic, and a script that needs another sh
 - **The counts.** This record quotes the counts above with their method. The 2,124 figure from the
   probe uses a different sample. A recount at the base the codemod runs on will decide which the
   changelog cites.
+
+## Amendments
+
+### 2026-11-19: the shape after the call-site study
+
+A call-site study on `main` changed the shape this record settles on. The original text stays
+above. Each part the amendment replaces is marked superseded where it stands. What holds is the
+`Result::<T, E>` shape with `value` and `error`, exactly one side set, no default type parameter,
+`E` named at every use, the Go and TypeScript mirrors, the reader in `CallOp`, the refusal at load
+for an `E` other than the boundary's error type, and the codemod as one break with a changelog
+entry.
+
+Counts. The study's figures and a recount at `6b82a9954` differ on two patterns, and the record
+quotes both:
+
+- `Result::<` text in `.buzz` files: 1,228 in the study. The recount finds 2,315, because the
+  pattern also matches declarations and calls the study may not count.
+- `.value!` outside `docs/`, Markdown and `testdata/`: 2,177 in the study, 2,167 in the recount.
+- `-> err` checks: 1,251 in the study. The recount finds 798 with the pattern `-> err)`.
+- Hand-built `Result::<...>{` literals: 1,047 in both.
+- Rewrap-and-return sites: about 400 in the study. Not recounted here.
+- Combinator-shaped calls on a Result (`.orElse(`, `.mapError(`, `.isOk(`, `.isErr(`): essentially
+  none in the study. The recount finds zero.
+
+The decision:
+
+1. **The module and the type.** The module stays `result`. It holds `Result::<T, E>`, `Error`,
+   `ok`, `err` and `caught`, and `libs/result` folds into it. `Error` is today's Diagnostic under
+   a new name, with the fields `code`, `message`, `hint` and `url`. `fix` becomes `hint`, the word
+   compilers use. `Error` names no magus concept, so it stays in std. Code reads
+   `Result::<int, Error>`, `ok(v)` and `err(e)`. The module is not named `errors`, because upstream
+   Buzz already ships a std `errors` module. This replaces the `magus/diagnostic` proposal and the
+   `magus/errors` pick.
+2. **The import.** Files use `import "result" as _;`. That is upstream Buzz syntax, already used
+   about 70 times in `docs/engine`. A lint allows `as _` only for this module outside `docs/engine`.
+3. **No methods.** `orElse`, `map`, `then`, `mapError`, `isOk` and `isErr` are rejected: they are
+   JavaScript-isms that hide control flow. A fallback is `r.value ?? v`. The idiom is:
+
+   ```buzz
+   if (r.error -> e) {
+       return err(e);
+   }
+   final v = r.value!;
+   ```
+
+   `r.value!` is allowed only after that check.
+4. **The lints.** Five lints in `hack/lint`:
+   - no hand-built `Result::<...>{}` literal outside `result`;
+   - `.value!` only after an error check that exits the scope;
+   - no unread Result, which extends the lint above to cover bindings that are never read;
+   - no binding that shadows an imported name. The probe showed shadowing is silent, and the
+     tree's usual `-> err` binding would shadow the `err` constructor, so this lint is needed before
+     the idiom is safe;
+   - a script's entry point throws the error value, `throw err`, not `err.message`.
+5. **Checker holes first.** Two holes the probe found must close before the lints can rely on the
+   checker:
+   - `final n: int = maybe();`, where `maybe()` returns `int?`, passes `--check` and fails at run
+     time;
+   - a generic call's inferred type arguments are unchecked, so `return err("str");` passes in a
+     function returning `Result::<int, D>`.
+
+   Both are gopherbuzz checker holes owned by lease `buzz-checker-holes`. They are a prerequisite
+   for this decision, not part of it.
+6. **Known gaps.** Nothing may rely on these:
+   - a selective import binds every export for source modules (gopherbuzz README);
+   - a default type parameter is not enforced (the probe above);
+   - there are no generic type aliases (the probe above).
+
+Open after this amendment:
+
+- The Go mirror. The Buzz `Error` mirrors Go's `types.Diagnostic`, which still has the field
+  `Fix`. Either the generator maps `Fix` to `hint`, or Go renames `Fix` to `Hint`. Neither is
+  chosen here.
+- The count method, where the study and the recount differ.
+- The checker holes in item 5, which belong to another lease.
