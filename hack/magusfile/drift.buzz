@@ -74,11 +74,11 @@ export fun vcsHashes(paths: [str]) > result\Result::<{str: str}> {
 // vcsChangedSince compares the same opaque VCS entries vcsHashes took. It is for a
 // whole-tree drift gate fed by `vcs.status().files`; declared generated directories
 // keep using changedSince, whose recursive scope is intentional and bounded.
-export fun vcsChangedSince(before: {str: str}, paths: [str]) > [str] !> any {
+export fun vcsChangedSince(before: {str: str}, paths: [str]) > result\Result::<[str]> {
     var moved: mut [str] = mut [<str>];
     final hashed = vcsHashes(paths);
-    if (hashed.error != null) {
-        throw hashed.error!.message;
+    if (hashed.error -> e) {
+        return result\Result::<[str]>{ error = e };
     }
     final now = hashed.value!;
     foreach (p in now.keys()) {
@@ -87,31 +87,39 @@ export fun vcsChangedSince(before: {str: str}, paths: [str]) > [str] !> any {
     foreach (p in before.keys()) {
         if (now[p] == null) { moved.append(p); }
     }
-    return moved;
+    return result\ok::<[str]>(moved);
 }
 
 // saveFiles copies each regular file in paths into a fresh temp directory and returns it,
 // so restore can put uncommitted work back after a generator has written over it.
-export fun saveFiles(paths: [str]) > str !> any {
-    final saved = fs\tempDir("drift-saved-");
-    foreach (p in paths) {
-        if (!fs\isFile(p)) { continue; }
-        fs\mkdirAll(fs\join(saved, name: fs\dirname(p)));
-        fs\copyFile(p, dst: fs\join(saved, name: p));
+export fun saveFiles(paths: [str]) > result\Result::<str> {
+    try {
+        final saved = fs\tempDir("drift-saved-");
+        foreach (p in paths) {
+            if (!fs\isFile(p)) { continue; }
+            fs\mkdirAll(fs\join(saved, name: fs\dirname(p)));
+            fs\copyFile(p, dst: fs\join(saved, name: p));
+        }
+        return result\ok::<str>(saved);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "drift: save the dirty files");
     }
-    return saved;
 }
 
 // declaredOutputs is the part of moved some target declares as an output. Only those are
 // a generator's to undo; any other path that moved was edited by a person or agent while
 // the generators ran.
-export fun declaredOutputs(moved: [str]) > [str] !> any {
+export fun declaredOutputs(moved: [str]) > result\Result::<[str]> {
     var outputs: mut [str] = mut [<str>];
-    if (moved.len() == 0) { return outputs; }
-    foreach (f in magus\describe.file(moved).files) {
-        if (f.role == "output") { outputs.append(f.path); }
+    if (moved.len() == 0) { return result\ok::<[str]>(outputs); }
+    try {
+        foreach (f in magus\describe.file(moved).files) {
+            if (f.role == "output") { outputs.append(f.path); }
+        }
+        return result\ok::<[str]>(outputs);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "drift: classify the moved paths");
     }
-    return outputs;
 }
 
 // leftAlone is the part of moved that is not in outputs.
@@ -132,15 +140,20 @@ export fun leftNote(left: [str]) > str {
 
 // restore undoes what a check's generators wrote to outputs: a saved file returns to its
 // saved bytes, a path that was clean returns to HEAD, and a new untracked file is removed.
-export fun restore(outputs: [str], saved: str, dirtyBefore: [str]) > void !> any {
-    foreach (p in outputs) {
-        final kept = fs\join(saved, name: p);
-        if (fs\isFile(kept)) {
-            fs\copyFile(kept, dst: p);
-        } else if (dirtyBefore.indexOf(p) == null) {
-            final head = vcs\cmd(["checkout", "HEAD", "--", p], opts: vcs\CommandOptions{quiet = true, allowFailure = true});
-            if (!head.ok and fs\isFile(p)) { fs\remove(p); }
+export fun restore(outputs: [str], saved: str, dirtyBefore: [str]) > result\Result::<bool> {
+    try {
+        foreach (p in outputs) {
+            final kept = fs\join(saved, name: p);
+            if (fs\isFile(kept)) {
+                fs\copyFile(kept, dst: p);
+            } else if (dirtyBefore.indexOf(p) == null) {
+                final head = vcs\cmd(["checkout", "HEAD", "--", p], opts: vcs\CommandOptions{quiet = true, allowFailure = true});
+                if (!head.ok and fs\isFile(p)) { fs\remove(p); }
+            }
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "drift: restore the generated outputs");
     }
 }
 
@@ -176,12 +189,12 @@ test "VCS snapshots keep an existing untracked directory opaque" {
 
     final before = vcsHashes([evals]).value!;
     assert\equal(before[evals], want: "dir", message: "directory marker");
-    assert\equal(vcsChangedSince(before, [evals]), want: [], message: "unchanged opaque directory");
+    assert\equal(vcsChangedSince(before, [evals]).value!, want: [], message: "unchanged opaque directory");
 
     final generated = root + "/new-output";
     fs\mkdirAll(generated);
     fs\writeFile(generated + "/artifact", content: "generated");
-    assert\contains(vcsChangedSince(before, [evals, generated]), item: generated,
+    assert\contains(vcsChangedSince(before, [evals, generated]).value!, item: generated,
         message: "new directory is still drift");
 }
 
@@ -191,13 +204,14 @@ test "restore puts back only the outputs and names the rest" {
     final edited = root + "/edited.md";
     fs\writeFile(generated, content: "before");
     fs\writeFile(edited, content: "before");
-    final savedDir = saveFiles([generated, edited]);
+    final savedDir = saveFiles([generated, edited]).value!;
     fs\writeFile(generated, content: "generator wrote this");
     fs\writeFile(edited, content: "edited during the run");
 
     final moved = [generated, edited];
     final outputs = [generated];
-    restore(outputs, saved: savedDir, dirtyBefore: moved);
+    final restored = restore(outputs, saved: savedDir, dirtyBefore: moved);
+    assert\equal(restored.error == null, want: true, message: "restore succeeded");
 
     assert\equal(fs\readFile(generated), want: "before", message: "output restored");
     assert\equal(fs\readFile(edited), want: "edited during the run", message: "edit kept");
