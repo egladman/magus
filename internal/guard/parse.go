@@ -423,7 +423,7 @@ func onlyReads(name, script string, args []string) bool {
 	}
 	switch name {
 	case "sed":
-		return !hasFlag(args, 'i', "in-place")
+		return !sedEditsInPlace(args)
 	case "sort":
 		return !hasFlag(args, 'o', "output-file")
 	case "awk":
@@ -1165,21 +1165,9 @@ func operands(args []string, takesValue string) []string {
 	return out
 }
 
-// sedInPlaceFires reports an in-place sed this guard refuses. The flag may be packed
-// (`-ni`) or long.
-//
-// A sed naming its files LITERALLY is allowed, and that is the whole rule. What this
-// refuses is the BLIND sweep: operands that arrive from a glob, a command substitution, or
-// another process (`find -exec`, `xargs`), where the set of files edited is not visible on
-// the line and nobody can check it before it runs. A rename driven off
-// `magus refs --occurrences` produces exactly the allowed shape (verified paths, spelled
-// out), so the rule now separates a targeted edit from a hopeful one instead of refusing
-// both and sending every mechanical change through one file at a time.
-//
-// The earlier blanket refusal was measured costing more than it saved: the sanctioned
-// alternative it named, `refs --occurrences`, answers for SYMBOLS, and a rename of an
-// environment variable or a filename has no symbol to ask about, so the rule denied the
-// work and offered nothing that could do it.
+// sedInPlaceFires reports an in-place sed in any spelling, named files
+// or not. The edit module and the editor tool plan an edit and report
+// it; sed rewrites blind. Ruled 2026-11-18.
 func sedInPlaceFires(cmds []hint.Invocation) bool {
 	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
 		if rewritesInPlace(c) {
@@ -1194,18 +1182,52 @@ func sedInPlaceFires(cmds []hint.Invocation) bool {
 	})
 }
 
-// rewritesInPlace reports a sed that edits files the caller did not name in full.
-//
-// The operand split comes from hint.SedFiles, beside the other per-tool parsers, rather
-// than from a second flag-walker here: sed's -e and -f take a SCRIPT and a script file, and
-// a guard that counted either as a path would let the script's own text decide how the
-// caller is graded.
+// rewritesInPlace reports a sed that edits files in place.
 func rewritesInPlace(c hint.Invocation) bool {
-	if path.Base(c.Name) != "sed" || !hasFlag(c.Args, 'i', "in-place") {
-		return false
+	return path.Base(c.Name) == "sed" && sedEditsInPlace(c.Args)
+}
+
+// sedValuedShort and sedValuedLong take a value. A short one ends its
+// cluster: `-ei` is the script `i`, not in-place.
+const sedValuedShort = "efl"
+
+var sedValuedLong = []string{"expression", "file", "line-length"}
+
+// sedEditsInPlace reports an argv that parses to in-place. That is
+// `i` or BSD's `I` before a valued option in a cluster (`-ni`), or
+// any prefix getopt_long accepts for `--in-place`.
+func sedEditsInPlace(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return false
+		case strings.HasPrefix(a, "--"):
+			name, _, joined := strings.Cut(a[2:], "=")
+			if name == "" {
+				continue
+			}
+			if strings.HasPrefix("in-place", name) {
+				return true
+			}
+			if !joined && slices.ContainsFunc(sedValuedLong, func(o string) bool { return strings.HasPrefix(o, name) }) {
+				i++
+			}
+		case len(a) > 1 && a[0] == '-':
+			for j, r := range a[1:] {
+				if r == 'i' || r == 'I' {
+					return true
+				}
+				if strings.ContainsRune(sedValuedShort, r) {
+					if j == len(a)-2 {
+						i++
+					}
+					break
+				}
+			}
+		}
 	}
-	_, bounded := hint.SedFiles(c.Args)
-	return !bounded
+	return false
 }
 
 // scriptedRewriteInterpreters are the inline interpreters a refused rewrite reaches for

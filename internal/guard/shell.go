@@ -1985,7 +1985,7 @@ var (
 	// Every host driving this guard has a structured editor tool that reads the file,
 	// applies an exact replacement, and reports what changed, which is the same operation
 	// without the portability trap or the blind write.
-	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
+	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*[iI]|--i(n(-(p(l(a(ce?)?)?)?)?)?)?(\s|=|$))`)
 
 	// sourceReadRe is the fallback when the argv parse fails: an unbounded dump of a
 	// source file. Keep the extension list in sync with sourceExt in parse.go.
@@ -2074,9 +2074,9 @@ var (
 	denyNotesAuthor    = "an agent may not author a note; if it belongs in the notes, say so and let the person run it."
 	denyNotesAuthorWhy = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read."
 
-	denySedInPlace    = "`sed -i` reads differently on GNU and macOS; use your editor tool."
-	denySedInPlaceWhy = fmt.Sprintf("Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `%s` gives column-precise sites.\n"+
-		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched.",
+	denySedInPlace    = "an in-place sed rewrites files blind; use your editor tool, or a Buzz script with the `edit` module (`edit.replace_all`)."
+	denySedInPlaceWhy = fmt.Sprintf("The editor tool and the `edit` module read the file first, plan the change and report what it did; the module writes every file or none. Whole-tree mechanical edit? `%s` gives column-precise sites.\n"+
+		"Every in-place spelling is refused, named files or not: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched.",
 		hint.Refs.With("<symbol>", "--occurrences"))
 
 	// boundedRunWait is the one wait an agent has for work it starts: a backgrounded run the

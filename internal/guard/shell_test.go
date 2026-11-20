@@ -1646,25 +1646,24 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 	}
-	// A sed that NAMES its files is a targeted edit and is allowed. This reverses the
-	// blanket refusal that stood here: the alternative it pointed at, `refs --occurrences`,
-	// answers for SYMBOLS, so a rename of an environment variable or a filename was denied
-	// with nothing offered that could do it. An unambiguous suffix plus literal paths is a
-	// change a reader can check before it runs, which is the whole distinction.
+	// A sed that NAMES its files is refused too, ruled 2026-11-18.
 	for _, cmd := range []string{
 		"sed -i.bak s/a/b/ f",
 		"sed --in-place=.bak s/a/b/ f",
+		"sed --in-place s/a/b/ f",
 		"sed -i.bak -e s/a/b/ one.go two.go",
 		"sed -i.bak -f prog.sed one.go",
 	} {
 		v := Evaluate(t.Context(), strict(testDependencies()), cmd)
-		assert.Empty(t, v.Deny, "a sed naming its files is targeted, not blind: %q", cmd)
+		assert.Equal(t, denyRuleSedInPlace, v.Rule.Name, "a sed naming its files still rewrites them blind: %q", cmd)
 	}
 	for _, cmd := range []string{
 		"sed -n '1,5p' f.go",
 		"sed 's/a/b/' in.txt",
 		"cat f | sed -e 's/a/b/'",
 		"echo x | sed s/x/y/",
+		"sed -ei f.txt",
+		"sed --expression=s/in-place/x/ f.txt",
 	} {
 		assert.Empty(t, Evaluate(t.Context(), strict(testDependencies()), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
 	}

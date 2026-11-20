@@ -571,12 +571,13 @@ var ruleDocPersonAdvisory = types.RuleDoc{
 
 var ruleDocSedInPlace = types.RuleDoc{
 	Name:    string(denyRuleSedInPlace),
-	Catches: "`sed -i`, whose two spellings destroy each other's work across platforms",
+	Catches: "an in-place sed in any spelling (`-i`, `-i.bak`, `-ni`, `--in-pl`), named files or not",
 	Why: "`sed -i` is not portable and the two spellings destroy each other's work. " +
 		"GNU reads `sed -i 's/x/y/' f` as an edit; BSD and macOS read that same script as the BACKUP SUFFIX and take the next argument as the script. " +
 		"`sed -i '' ...` is the macOS spelling and makes GNU edit nothing. " +
 		"So a command that works here mangles the file on the next machine, by WRITING, before anyone reads a diff. " +
-		"An editor tool reads the file first and reports what it changed, and for a whole-tree rename `magus refs <symbol> --occurrences` gives column-precise sites a pattern cannot. Reading with sed is untouched.",
+		"A suffix does not make it safe: it still writes before anyone reads a diff, and the rule is judged by the in-place option, not by one spelling of it. " +
+		"An editor tool, or a Buzz script with the `edit` module, reads the file first and reports what it changed, and for a whole-tree rename `magus refs <symbol> --occurrences` gives column-precise sites a pattern cannot. Reading with sed is untouched.",
 }
 
 var ruleDocSharedStash = types.RuleDoc{
