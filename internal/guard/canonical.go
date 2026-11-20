@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,8 @@ func canonicalPath(p string) string {
 			// With no directory, only the lexical reading is left.
 			return filepath.Clean(p)
 		}
-		p = wd + string(filepath.Separator) + p
+		// Not filepath.Join, which cleans a `..` before it is resolved.
+		p = fmt.Sprintf("%s%c%s", wd, filepath.Separator, p)
 	}
 	vol := filepath.VolumeName(p)
 	resolved := vol + string(filepath.Separator)

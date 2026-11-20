@@ -92,7 +92,7 @@ func hooksOff(args []string, g gitCommand) bool {
 		if a == "--" {
 			return false
 		}
-		if len(a) > len("--no-") && strings.HasPrefix("--no-verify", a) {
+		if len(a) > len("--no-") && abbreviates(a, "--no-verify") {
 			return true
 		}
 		if g.sub != "commit" || len(a) < 2 || a[0] != '-' || a[1] == '-' {
@@ -766,7 +766,7 @@ func (o gitOptions) sets(short rune, long string) bool {
 	if short != 0 && strings.ContainsRune(o.shorts, short) {
 		return true
 	}
-	return long != "" && slices.ContainsFunc(o.longs, func(name string) bool { return name != "" && strings.HasPrefix(long, name) })
+	return long != "" && slices.ContainsFunc(o.longs, func(name string) bool { return abbreviates(name, long) })
 }
 
 // stagesAll reports a `git add` of everything: -A, -u, or a path
@@ -822,7 +822,7 @@ func isDeletingClean(args []string) bool {
 		case a == "--dry-run":
 			return false
 		case strings.HasPrefix(a, "--"):
-			deletes = deletes || (len(a) > 2 && strings.HasPrefix("--force", a))
+			deletes = deletes || abbreviates(a[2:], "force")
 		case strings.HasPrefix(a, "-"):
 			cluster := a[1:]
 			if strings.Contains(cluster, "n") {

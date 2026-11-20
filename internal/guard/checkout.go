@@ -126,7 +126,7 @@ func resolvePath(dir, p string) string {
 	if filepath.IsAbs(p) || dir == "" {
 		return p
 	}
-	return dir + string(filepath.Separator) + p
+	return fmt.Sprintf("%s%c%s", dir, filepath.Separator, p)
 }
 
 // gitCheckout resolves dir to the checkout containing it: the working tree's root,

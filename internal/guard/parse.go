@@ -1223,6 +1223,12 @@ func rewritesInPlace(c hint.Invocation) bool {
 	return path.Base(c.Name) == "sed" && sedEditsInPlace(c.Args)
 }
 
+// abbreviates reports a non-empty name that getopt_long would accept
+// for long, as a prefix of it.
+func abbreviates(name, long string) bool {
+	return name != "" && len(name) <= len(long) && long[:len(name)] == name
+}
+
 // sedValuedShort and sedValuedLong take a value. A short one ends its
 // cluster: `-ei` is the script `i`, not in-place.
 const sedValuedShort = "efl"
@@ -1243,7 +1249,7 @@ func sedEditsInPlace(args []string) bool {
 			if name == "" {
 				continue
 			}
-			if strings.HasPrefix("in-place", name) {
+			if abbreviates(name, "in-place") {
 				return true
 			}
 			if !joined && slices.ContainsFunc(sedValuedLong, func(o string) bool { return strings.HasPrefix(o, name) }) {
