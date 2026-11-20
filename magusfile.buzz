@@ -3060,7 +3060,8 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/conventions/go.mod", "libs/conventions/go.sum",
                     "libs/conventions/**/*.go",
                     "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go"]);
-    golangci\linkFresh();
+    final fresh = golangci\linkFresh();
+    if (fresh.error != null) { throw fresh.error!.message; }
 }
 
 // Measures the change's base for the conformance ceiling rule, which only reads the measure.
@@ -3187,7 +3188,8 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install_linter);
     ctx.readsFiles(["libs/testpairing/.custom-gcl.yml", "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
                     "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml"]);
-    golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
+    final fixed = golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
+    if (fixed.error != null) { throw fixed.error!.message; }
 }
 
 // Builds the linter first, then golangci-lint, go vet, markdownlint,
@@ -3221,7 +3223,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         if (scoped.error != null) { throw scoped.error!.message; }
         return;
     }
-    golangci\run(".", []);
+    final linted = golangci\run(".", []);
+    if (linted.error != null) { throw linted.error!.message; }
     // golangci-lint stops at a go.mod, so each other module gets its own run of the
     // tree-wide conventions.
     foreach (mod in fs\glob("libs/**/go.mod")) {
@@ -3263,7 +3266,8 @@ fun lintFiles(ctx: magus\Context, args: [str]) > result\Result::<bool> {
         if (files.len() == 0) {
             return result\ok::<bool>(true);
         }
-        golangci\linkFresh();
+        final fresh = golangci\linkFresh();
+        if (fresh.error -> e) { return result\Result::<bool>{ error = e }; }
         final failures = mut [<str>];
         // The rules judge from the symbol indexes.
         // magus\graph() freshens them, as in conventions.
@@ -3276,7 +3280,9 @@ fun lintFiles(ctx: magus\Context, args: [str]) > result\Result::<bool> {
         foreach (mod in fs\glob("libs/**/go.mod")) { libs.append(fs\dirname(mod.value)); }
         final packages = golangci\packagesOf(files, libs: libs);
         foreach (module, pkgs in packages) {
-            foreach (issue in golangci\issuesAt(module, packages: pkgs, files: files)) {
+            final found = golangci\issuesAt(module, packages: pkgs, files: files);
+            if (found.error -> e) { return result\Result::<bool>{ error = e }; }
+            foreach (issue in found.value!) {
                 failures.append(issue);
             }
         }
