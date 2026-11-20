@@ -81,6 +81,7 @@ var Modules = []buzz.Module{
 	}},
 	{Name: "buffer", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("buffer", bufferModule)},
 	{Name: "ffi", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("ffi", ffiModule)},
+	{Name: "errors", Labels: []string{buzz.LabelUpstream}, Bind: source("errors", errorsSource)},
 	{Name: "assertcore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("assertcore", assertCoreModule)},
 	{Name: "assert", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("assert", assertSource)},
 	{Name: "suite", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("suite", suiteSource)},

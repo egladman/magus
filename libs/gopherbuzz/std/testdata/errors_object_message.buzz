@@ -1,0 +1,10 @@
+// @expect: true
+// Each error object's message defaults to its own name, as upstream's does.
+import "errors";
+final __r = errors\CompileError{}.message == "CompileError"
+    and errors\InterpretError{}.message == "InterpretError"
+    and errors\InvalidArgumentError{}.message == "InvalidArgumentError"
+    and errors\NotYetImplementedError{}.message == "NotYetImplementedError"
+    and errors\OverflowError{}.message == "OverflowError"
+    and errors\UnderflowError{}.message == "UnderflowError"
+    and errors\UnexpectedError{}.message == "UnexpectedError";

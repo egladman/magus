@@ -1,0 +1,20 @@
+// @expect: empty path
+// An error object carries the message its thrower set over the default.
+import "errors";
+
+fun check(path: str) > str !> errors\InvalidArgumentError {
+    if (path == "") {
+        throw errors\InvalidArgumentError{ message = "empty path" };
+    }
+    return path;
+}
+
+fun reason(path: str) > str {
+    try {
+        return check(path);
+    } catch (err: errors\InvalidArgumentError) {
+        return err.message;
+    }
+}
+
+final __r = reason("");

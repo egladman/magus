@@ -1,0 +1,7 @@
+// @expect: true
+// errors\ names each enum upstream declares, and a case compares as itself.
+import "errors";
+final __r = errors\FileSystemError.FileNotFound == errors\FileSystemError.FileNotFound
+    and errors\ExecError.WaitTimeOut != errors\ExecError.TooBig
+    and errors\SocketError.Timeout == errors\SocketError.Timeout
+    and errors\ReadWriteError.BrokenPipe == errors\ReadWriteError.BrokenPipe;

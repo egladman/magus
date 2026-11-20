@@ -1,0 +1,20 @@
+// @expect: no such file
+// A function raises an errors type, and a catch clause matches it by type.
+import "errors";
+
+fun open(path: str) > str !> errors\FileSystemError {
+    throw errors\FileSystemError.FileNotFound;
+}
+
+fun describe(path: str) > str {
+    try {
+        return open(path);
+    } catch (err: errors\FileSystemError) {
+        if (err == errors\FileSystemError.FileNotFound) {
+            return "no such file";
+        }
+        return "other";
+    }
+}
+
+final __r = describe("missing.txt");
