@@ -1,0 +1,14 @@
+// @expect: 7
+// An optional fills an optional slot, and `??` or `!` produce a value the
+// non-optional slot accepts. Only the bare optional is refused.
+object R::<T> {
+    value: T?,
+}
+fun maybe() > int? {
+    return null;
+}
+final r = R::<int>{ value = 4 };
+final kept: int? = maybe();
+final fallback: int = maybe() ?? 3;
+final unwrapped: int = r.value!;
+final __r = fallback + unwrapped;

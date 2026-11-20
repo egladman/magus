@@ -1,0 +1,8 @@
+// A generic object's `T?` field stays optional once instantiated.
+// Upstream's eql refuses it as it refuses an optional call result.
+// @error: cannot assign optional r.value to non-optional int variable "n"
+object R::<T> {
+    value: T?,
+}
+final r = R::<int>{ value = null };
+final n: int = r.value;

@@ -217,6 +217,14 @@ reproducible difference at the pinned ref.
   erased, so `T` inside one matches anything, and the VM keeps no type argument, so
   `x is Result::<int>` tests `Result` and `assertOfType::<int>` cannot inspect
   anything; gopherbuzz's own `testing` module takes a type NAME string instead.
+  A call that writes no `::<...>` binds the parameters its arguments pin and checks
+  that result against the declared return (BZZ1005). Upstream refuses every such call
+  as an unresolved generic; a parameter no argument pins stays erased here and is
+  accepted.
+- **A declared `?` is tracked, not typed.** Assigning a `?` call result, a `?` field
+  or a `?` variable to a non-optional declaration is refused, as upstream's `eql`
+  refuses it. Only optionals declared in the checked source are known: an imported
+  function's `?` return is not seen.
 
 **Narrower gaps.** Known, bounded, and unlikely to bite most programs.
 

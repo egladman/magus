@@ -109,7 +109,12 @@ type checker struct {
 	// retOptional records that the enclosing function's return annotation ended in
 	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
 	retOptional bool
-	yieldTyp    types.Type // non-nil when inside a function with a *> yield annotation
+	// The type system erases `?`, so declared optionals are kept here.
+	// Members are keyed "Object.field" and "Object.method()".
+	optFuncs   map[*types.FuncType]bool
+	optMembers map[string]bool
+	optExprs   map[ast.Node]string
+	yieldTyp   types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !>; a call to a raising function is legal there without a surrounding
 	// try/catch, because the caller's own caller must handle it (or itself
@@ -758,6 +763,7 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	var required []string
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
+		c.noteOptionalMember(v.Name, f.Name, f.TypeAnnot)
 		if f.Default == nil && !strings.HasSuffix(strings.TrimSpace(f.TypeAnnot), "?") {
 			required = append(required, f.Name)
 		}
@@ -779,8 +785,22 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	}
 	for _, m := range v.Methods {
 		ot.Methods[m.Name] = c.funDeclType(m)
+		c.noteOptionalMember(v.Name, m.Name+"()", m.RetAnnot)
 	}
 	return ot
+}
+
+// noteOptionalMember records that object.member was declared with a `?` type.
+// The type system erases optionality, so declared optionals are kept here: a
+// field as "Object.field", a method's result as "Object.method()".
+func (c *checker) noteOptionalMember(object, member, annot string) {
+	if !strings.HasSuffix(strings.TrimSpace(annot), "?") {
+		return
+	}
+	if c.optMembers == nil {
+		c.optMembers = map[string]bool{}
+	}
+	c.optMembers[object+"."+member] = true
 }
 
 // fieldType is a field's declared type, left for its reader to resolve by name
@@ -810,7 +830,20 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	if fd.YieldAnnot != "" {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults, TypeParams: fd.TypeParams}
+	ft := &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults, TypeParams: fd.TypeParams}
+	c.noteOptionalFunc(ft, fd.RetAnnot)
+	return ft
+}
+
+// noteOptionalFunc records that ft was declared with a `?` return.
+func (c *checker) noteOptionalFunc(ft *types.FuncType, retAnnot string) {
+	if !strings.HasSuffix(strings.TrimSpace(retAnnot), "?") {
+		return
+	}
+	if c.optFuncs == nil {
+		c.optFuncs = map[*types.FuncType]bool{}
+	}
+	c.optFuncs[ft] = true
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -1017,6 +1050,8 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 		if !types.Compat(inferred, annotTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s variable %q",
 				inferred.TypeName(), annotTyp.TypeName(), v.Name)
+		} else if what, isNull := c.possiblyNullName(v.Value); isNull && !strings.HasSuffix(strings.TrimSpace(v.TypeAnnot), "?") && annotTyp != types.Any && annotTyp != types.Unknown {
+			c.errorfc(v.Pos, TypeMismatch, "cannot assign optional %s to non-optional %s variable %q", what, annotTyp.TypeName(), v.Name)
 		}
 		declTyp = annotTyp
 	}
@@ -1066,6 +1101,8 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 			rhs := c.inferExpected(v.Value, e.typ)
 			if !types.Compat(rhs, e.typ) {
 				c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
+			} else if what, isNull := c.possiblyNullName(v.Value); isNull && e.nonOptional && !e.optional {
+				c.errorfc(v.Pos, TypeMismatch, "cannot assign optional %s to non-optional %q", what, id.Name)
 			}
 			return
 		}
@@ -2207,6 +2244,13 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	}
 	ft, ok := calleeTyp.(*types.FuncType)
 	argsResolved := true
+	if id, named := v.Callee.(*ast.IdentExpr); named && ok && c.optFuncs[ft] {
+		c.markOptional(v, id.Name+"()")
+	} else if m, isMember := v.Callee.(*ast.MemberExpr); isMember {
+		if what := c.optExprs[m]; strings.HasSuffix(what, "()") {
+			c.markOptional(v, what)
+		}
+	}
 	if ok {
 		// Propagate-or-catch: a call to a function that declared !> (or, for a
 		// host extern, is authored as raising in std.Method) is only legal when
@@ -2265,6 +2309,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			}
 		}
 	}
+	gots := make([]types.Type, len(v.Args))
 	for i, a := range v.Args {
 		// Each argument is inferred against its parameter's type, so a construct
 		// that cannot name its own type (`.one`, and anything else that reads the
@@ -2277,6 +2322,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			// so stay a plain map whose methods then do not exist.
 			want := c.resolveType(ft.Params[i])
 			got := c.inferExpected(a, want)
+			gots[i] = got
 			if argsResolved {
 				c.checkArgType(ft, i, a, got, want)
 			}
@@ -2360,7 +2406,69 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	if ft.Ret == nil || ft.Ret == types.Void {
 		return types.Void
 	}
+	if len(ft.TypeParams) > 0 {
+		return types.Substitute(ft.Ret, inferTypeArgs(ft, gots))
+	}
 	return ft.Ret
+}
+
+// inferTypeArgs binds a generic function's type parameters from the argument
+// types a call passed. A parameter no argument pins stays unbound, and so stays
+// erased in the result.
+func inferTypeArgs(ft *types.FuncType, gots []types.Type) map[string]types.Type {
+	params := make(map[string]bool, len(ft.TypeParams))
+	for _, name := range ft.TypeParams {
+		params[name] = true
+	}
+	subst := map[string]types.Type{}
+	for i, got := range gots {
+		if got != nil && i < len(ft.Params) {
+			bindTypeParams(ft.Params[i], got, params, subst)
+		}
+	}
+	return subst
+}
+
+// bindTypeParams walks want and got together and binds each type parameter in
+// want to the type found at the same place in got. The first binding wins, and
+// an erased or dynamic got binds nothing.
+func bindTypeParams(want, got types.Type, params map[string]bool, subst map[string]types.Type) {
+	switch w := want.(type) {
+	case *types.NamedType:
+		if len(w.Args) == 0 && params[w.Name] {
+			if _, bound := subst[w.Name]; !bound && !hasErasedType(got) && got != types.Any && got != types.Unknown && got != types.Null {
+				subst[w.Name] = got
+			}
+			return
+		}
+		if g, ok := got.(*types.NamedType); ok && g.Name == w.Name {
+			bindAll(w.Args, g.Args, params, subst)
+		}
+		if g, ok := got.(*types.ObjectType); ok && g.Name == w.Name {
+			bindAll(w.Args, g.Args, params, subst)
+		}
+	case *types.ObjectType:
+		if g, ok := got.(*types.ObjectType); ok && g.Name == w.Name {
+			bindAll(w.Args, g.Args, params, subst)
+		}
+	case *types.ListType:
+		if g, ok := got.(*types.ListType); ok {
+			bindTypeParams(w.Elem, g.Elem, params, subst)
+		}
+	case *types.MapType:
+		if g, ok := got.(*types.MapType); ok {
+			bindTypeParams(w.Key, g.Key, params, subst)
+			bindTypeParams(w.Val, g.Val, params, subst)
+		}
+	}
+}
+
+func bindAll(want, got []types.Type, params map[string]bool, subst map[string]types.Type) {
+	for i := range want {
+		if i < len(got) {
+			bindTypeParams(want[i], got[i], params, subst)
+		}
+	}
 }
 
 // checkArgType reports an argument whose type does not match the parameter it
@@ -2617,9 +2725,15 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	switch t := ot.(type) {
 	case *types.ObjectType:
 		if ft, ok := t.Fields[v.Name]; ok {
+			if c.optMembers[t.Name+"."+v.Name] {
+				c.markOptional(v, c.exprText(v))
+			}
 			return ft
 		}
 		if mt, ok := t.Methods[v.Name]; ok {
+			if c.optMembers[t.Name+"."+v.Name+"()"] {
+				c.markOptional(v, c.exprText(v)+"()")
+			}
 			return mt
 		}
 		if t.IsNamespace {
@@ -2830,7 +2944,9 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.raiseDeclared = savedRaise
 	c.retOptional = savedRetOpt
 
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults, TypeParams: v.TypeParams}
+	ft := &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults, TypeParams: v.TypeParams}
+	c.noteOptionalFunc(ft, v.RetAnnot)
+	return ft
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
@@ -3877,6 +3993,10 @@ func (c *checker) possiblyNullName(n ast.Node) (string, bool) {
 		if entry, found := c.lookup(e.Name); found && entry.optional {
 			return e.Name, true
 		}
+	case *ast.CallExpr, *ast.MemberExpr:
+		if what, ok := c.optExprs[e]; ok {
+			return what, true
+		}
 	case *ast.MatchExpr:
 		for _, br := range e.Branches {
 			if name, ok := c.possiblyNullName(br.Body); ok {
@@ -3890,6 +4010,23 @@ func (c *checker) possiblyNullName(n ast.Node) (string, bool) {
 		return c.possiblyNullName(e.Else)
 	}
 	return "", false
+}
+
+// markOptional records that n reads a value declared optional, named what.
+func (c *checker) markOptional(n ast.Node, what string) {
+	if c.optExprs == nil {
+		c.optExprs = map[ast.Node]string{}
+	}
+	c.optExprs[n] = what
+}
+
+// exprText names a member read for a message: `object.name`, or `value.name`
+// when the object is not a plain name.
+func (c *checker) exprText(m *ast.MemberExpr) string {
+	if id, ok := m.Object.(*ast.IdentExpr); ok {
+		return id.Name + "." + m.Name
+	}
+	return "value." + m.Name
 }
 
 // returnsNullLiteral reports whether n is the literal null, looking through the

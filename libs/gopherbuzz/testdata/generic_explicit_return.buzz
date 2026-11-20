@@ -1,0 +1,13 @@
+// The explicit form upstream accepts: every type argument is written.
+// @expect: not a D
+object R::<T, E> {
+    value: T?,
+    error: E?,
+}
+fun err::<T, E>(e: E) > R::<T, E> {
+    return R::<T, E>{ error = e };
+}
+fun port() > R::<int, str> {
+    return err::<int, str>("not a D");
+}
+final __r = port().error!;
