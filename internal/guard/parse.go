@@ -259,7 +259,7 @@ func peelWrappers(words []string, d Dialect) []hint.Invocation {
 			return append([]hint.Invocation{{Name: name, Args: words[1:]}}, findExecCommands(words[1:], d)...)
 
 		case !wrappers[name]:
-			return []hint.Invocation{{Name: name, Args: words[1:]}}
+			return append([]hint.Invocation{{Name: name, Args: words[1:]}}, embeddedCommands(name, words[1:], d)...)
 
 		case name == "env":
 			// env -S / --split-string takes its argument AS the command line and,
@@ -312,6 +312,42 @@ func peelWrappers(words []string, d Dialect) []hint.Invocation {
 				return []hint.Invocation{{Name: name, Args: words[1:]}}
 			}
 			words = rest
+		}
+	}
+	return nil
+}
+
+// argvGuarded are the programs a rule judges by name and argv: the
+// VCS backends and the in-place rewriters.
+var argvGuarded = func() map[string]bool {
+	out := map[string]bool{"git": true, "sed": true}
+	for name := range vcsGlobals {
+		out[name] = true
+	}
+	for name := range scriptedRewriteInterpreters {
+		out[name] = true
+	}
+	return out
+}()
+
+// argvData never run their operands, like writeReaders. A guarded
+// name among their arguments is text.
+var argvData = map[string]bool{
+	"echo": true, "printf": true, "man": true, "which": true, "type": true, "whatis": true,
+	"apropos": true, "help": true, "test": true, "[": true, "true": true, "false": true, ":": true,
+}
+
+// embeddedCommands reads an unknown program's argv from its first
+// guarded word on: `watch -n1 git stash` runs `git stash`. The
+// wrappers allowlist fails open for every launcher it omits. This
+// fails closed; `mkdir git` costs only a verdict on `git`.
+func embeddedCommands(name string, args []string, d Dialect) []hint.Invocation {
+	if argvData[name] || writeReaders[name] || argvGuarded[name] {
+		return nil
+	}
+	for i, a := range args {
+		if !strings.HasPrefix(a, "-") && argvGuarded[path.Base(a)] {
+			return peelWrappers(args[i:], d)
 		}
 	}
 	return nil

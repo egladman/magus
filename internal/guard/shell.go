@@ -2886,8 +2886,14 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 	// A help request for a program documented never to run on one prints usage, so the
 	// destructive-command rules have nothing to guard.
 	grade := func(v ShellVerdict) (ShellVerdict, bool) { return held.ends(deps, v) }
+	// The parse does not track a cd, so after one only a plain
+	// relative path is proven narrower than the tree.
+	vcsScope := deps.scope
+	if changesDirectory(command, d) {
+		vcsScope.dir = ""
+	}
 	if parsed && !helpOnlyLine(command, d) {
-		if v, matched := gitGuard(cmds, grade); matched {
+		if v, matched := gitGuard(cmds, vcsScope, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
@@ -2897,7 +2903,7 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 		// fallback because clean, update, revert, goto, restore and abandon are ordinary English
 		// that a commit message or a skill body would carry, and matching prose is the
 		// false positive gitGuard's own doc says the AST exists to avoid.
-		if v, matched := nonGitVCSGuard(cmds, grade); matched {
+		if v, matched := nonGitVCSGuard(cmds, vcsScope, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
