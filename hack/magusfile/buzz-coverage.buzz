@@ -73,7 +73,7 @@ final SSG_LIBS = ["csp.buzz", "date.buzz", "dom.buzz", "feed.buzz", "paths.buzz"
 // bare, so it is gated strict. A magusfile import and a spell parse embedded,
 // where strict would reject legal constructs. internal/dry covers
 // spells/examples/**.
-export fun runs() > [Run] !> any {
+export fun runs() > result\Result::<[Run]> {
     final planned = mut [<Run>];
     final patterns = mut [<str>];
     final modes = mut [<bool>];
@@ -96,8 +96,8 @@ export fun runs() > [Run] !> any {
     skips.append("spells/examples/");
     foreach (i, pattern in patterns) {
         final glob = globbed(planned, pattern: pattern, embedded: modes[i], skip: skips[i]);
-        if (glob.error != null) {
-            throw glob.error!.message;
+        if (glob.error -> e) {
+            return result\Result::<[Run]>{ error = e };
         }
     }
     foreach (lib in DOCS_LIBS) {
@@ -106,7 +106,7 @@ export fun runs() > [Run] !> any {
     foreach (lib in SSG_LIBS) {
         planned.append(ssgLib(lib));
     }
-    return planned;
+    return result\ok::<[Run]>(planned);
 }
 
 // rebased is a fragment's text with run's SF rewrite applied.
@@ -117,8 +117,13 @@ export fun rebased(run: Run, text: str) > str {
 
 // keep adds what run left, rebased, to fragments. A run that wrote nothing adds
 // nothing, and report refuses a set with none.
-export fun keep(fragments: mut [str], run: Run) > void !> any {
-    if (fs\exists(run.fragment)) { fragments.append(rebased(run, text: fs\readFile(run.fragment))); }
+export fun keep(fragments: mut [str], run: Run) > result\Result::<bool> {
+    try {
+        if (fs\exists(run.fragment)) { fragments.append(rebased(run, text: fs\readFile(run.fragment))); }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "buzz-test: keep {run.fragment}");
+    }
 }
 
 // Report is what buzz-test keeps: the line percentage the badge shows, and the
@@ -130,15 +135,15 @@ export object Report {
 
 // report joins the fragments. None means no run wrote coverage, which is an
 // error rather than a 0% that would read as a measurement.
-export fun report(fragments: [str]) > Report !> any {
+export fun report(fragments: [str]) > result\Result::<Report> {
     if (fragments.len() == 0) {
-        throw "buzz-test: no LCOV fragments under {FRAGMENTS}/; --coverprofile did not write";
+        return result\fail::<Report>("buzz-test: no LCOV fragments under {FRAGMENTS}/; --coverprofile did not write");
     }
     final merged = lcov\mergePercent(fragments, keep: "");
-    if (merged.error != null) {
-        throw merged.error!.message;
+    if (merged.error -> e) {
+        return result\Result::<Report>{ error = e };
     }
-    return Report{ percent = merged.value!, tracefile = fragments.join("") };
+    return result\ok::<Report>(Report{ percent = merged.value!, tracefile = fragments.join("") });
 }
 
 test "a module runs from the root and writes its own fragment" {
@@ -192,7 +197,7 @@ test "a root run's fragment is kept as written" {
 
 test "every lint rule is its own run and no spell example is" {
     final modules = mut [<str>];
-    foreach (run in runs()) {
+    foreach (run in runs().value!) {
         modules.append(run.argv[run.argv.len() - 1]);
     }
     assert\equal(modules.indexOf("hack/lint/run.buzz") != null, want: true, message: "the runner");
@@ -206,23 +211,25 @@ test "every lint rule is its own run and no spell example is" {
 
 test "a run that wrote nothing keeps no fragment" {
     final fragments = mut [<str>];
-    keep(fragments, run: covered("hack/no-such-module.buzz", embedded: false));
+    final kept = keep(fragments, run: covered("hack/no-such-module.buzz", embedded: false));
+    assert\equal(kept.error == null, want: true, message: "no error");
     assert\equal(fragments.len(), want: 0, message: "absent");
 }
 
 test "a run's fragment is kept rebased" {
     final fragments = mut [<str>];
-    keep(fragments, run: Run{ argv = [<str>], fragment = "hack/magusfile/buzz-coverage.buzz", oldPrefix = "import", newPrefix = "IMPORT" });
+    final kept = keep(fragments, run: Run{ argv = [<str>], fragment = "hack/magusfile/buzz-coverage.buzz", oldPrefix = "import", newPrefix = "IMPORT" });
+    assert\equal(kept.error == null, want: true, message: "no error");
     assert\equal(fragments[0].startsWith("IMPORT \"fs\";"), want: true, message: "read and rebased");
 }
 
 test "fragments join into one tracefile and a percentage" {
     final parts = ["SF:a.buzz\nDA:1,1\nend_of_record\n", "SF:b.buzz\nDA:1,0\nend_of_record\n"];
-    final got = report(parts);
+    final got = report(parts).value!;
     assert\equal(got.tracefile, want: parts.join(""), message: "joined");
     assert\equal(got.percent, want: lcov\mergePercent(parts, keep: "").value!, message: "percent");
 }
 
 test "no fragment is an error, never a 0%" {
-    assert\throws(fun () > void !> any { final _ = report([<str>]); }, message: "none");
+    assert\equal(report([<str>]).error != null, want: true, message: "none");
 }
