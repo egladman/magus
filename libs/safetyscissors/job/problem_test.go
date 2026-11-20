@@ -26,19 +26,19 @@ func (s *FaultSuite) TestAPostconditionFaultsAsAPostconditionUnderItsIndex() {
 }
 
 // The module names no code, so a deviation may permit only what the caller lists, and the
-// fix names that list.
+// hint names that list.
 func (s *FaultSuite) TestADeviationPermitsOnlyACodeTheCallerLists() {
 	d := Declaration{ID: "worker", Deviations: []Deviation{{Code: "X1", Subject: "a", Reason: "the root runs it"}}}
 	s.Empty(d.Faults("X1"))
 	fs := d.Faults("Y1", "Y2", "Y3")
 	s.Require().Len(fs, 1)
 	s.Equal("deviations[0].code", fs[0].Field)
-	s.Contains(fs[0].Fix, "permit only Y1, Y2 or Y3")
+	s.Contains(fs[0].Hint, "permit only Y1, Y2 or Y3")
 }
 
-func (s *FaultSuite) TestAFaultReadsAsItsMessageThenItsFix() {
+func (s *FaultSuite) TestAFaultReadsAsItsMessageThenItsHint() {
 	s.Equal("broken", Fault{Message: "broken"}.Error())
-	s.Equal("broken: mend it", Fault{Message: "broken", Fix: "mend it"}.Error())
+	s.Equal("broken: mend it", Fault{Message: "broken", Hint: "mend it"}.Error())
 }
 
 func (s *FaultSuite) TestOrListJoinsForASentence() {

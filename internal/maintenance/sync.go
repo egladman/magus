@@ -95,22 +95,22 @@ func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 	switch req := o.LastRequest; {
 	case o.Building != nil:
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("%s is indexing this checkout now", o.Building),
+			Why:  fmt.Sprintf("%s is indexing this checkout now", o.Building),
 			Hint: fmt.Sprintf("ask again when it finishes; `%s` waits for it rather than starting a second build", c.GraphBuild),
 		}
 	case o.HookChecked && o.HookCommand == "":
 		return types.KnowledgeIndexCause{
-			Why: "no VCS refresh hook is installed, so no checkout, merge or rebase here asks for a sync",
+			Why:  "no VCS refresh hook is installed, so no checkout, merge or rebase here asks for a sync",
 			Hint: fmt.Sprintf("`%s` from this checkout installs it; %s", c.ServerStart, once),
 		}
 	case o.HookChecked && !o.HookRunnable:
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("the refresh hook runs `%s` and %s does not exist, so no checkout, merge or rebase here has asked for a sync", o.HookCommand, o.HookBinary),
+			Why:  fmt.Sprintf("the refresh hook runs `%s` and %s does not exist, so no checkout, merge or rebase here has asked for a sync", o.HookCommand, o.HookBinary),
 			Hint: fmt.Sprintf("put %s in place for the next checkout; %s", o.HookBinary, once),
 		}
 	case req != nil && req.Outcome == SyncRefused && req.At.After(o.IndexBuilt):
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("the server refused the sync requested at %s: %s", stamp(req.At), req.Detail),
+			Why:  fmt.Sprintf("the server refused the sync requested at %s: %s", stamp(req.At), req.Detail),
 			Hint: fmt.Sprintf("`%s` then `%s` restarts it on this build; %s", c.ServerStop, c.ServerStart, once),
 		}
 	case !o.ServerLive:
@@ -121,7 +121,7 @@ func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 		return types.KnowledgeIndexCause{Why: why, Hint: fmt.Sprintf("`%s` keeps it current from now on; %s", c.ServerStart, once)}
 	case o.ServerVersion != "" && o.Version != "" && o.ServerVersion != o.Version:
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("the server (pid %d) is %s and this checkout's magus is %s; a server refuses jobs from another build", o.ServerPID, o.ServerVersion, o.Version),
+			Why:  fmt.Sprintf("the server (pid %d) is %s and this checkout's magus is %s; a server refuses jobs from another build", o.ServerPID, o.ServerVersion, o.Version),
 			Hint: fmt.Sprintf("`%s` then `%s` restarts it on this build; %s", c.ServerStop, c.ServerStart, once),
 		}
 	case req != nil && (req.Outcome == SyncSubmitted || req.Outcome == SyncCoalesced) && req.At.After(o.IndexBuilt):
@@ -130,12 +130,12 @@ func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 			job = fmt.Sprintf(" (job %s)", req.Job)
 		}
 		return types.KnowledgeIndexCause{
-			Why: fmt.Sprintf("the server took the sync requested at %s%s and the index is still not current, so that job failed or has not written it", stamp(req.At), job),
+			Why:  fmt.Sprintf("the server took the sync requested at %s%s and the index is still not current, so that job failed or has not written it", stamp(req.At), job),
 			Hint: fmt.Sprintf("`%s` here builds it and shows any failure", c.GraphBuild),
 		}
 	default:
 		return types.KnowledgeIndexCause{
-			Why: "a server is running, but no sync has been asked for since the index was last built",
+			Why:  "a server is running, but no sync has been asked for since the index was last built",
 			Hint: fmt.Sprintf("`%s` asks the server; %s", c.JobRunSync, once),
 		}
 	}

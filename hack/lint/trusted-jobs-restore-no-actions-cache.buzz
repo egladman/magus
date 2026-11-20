@@ -170,7 +170,7 @@ export fun findings(files: [Path], exemptions: {str: str}) > result\Result::<[Fi
                     if (what != null) {
                         violations.append(Finding{ path = f.value, line = line,
                             message = "{file}/{name} holds a secret, a write token or id-token (or is the queue), and restores an Actions cache: {what!}",
-                            fix = "Turn the restore off (mise-action cache: false, setup-magus restore-history unset)." });
+                            hint = "Turn the restore off (mise-action cache: false, setup-magus restore-history unset)." });
                     }
                 }
 
@@ -180,7 +180,7 @@ export fun findings(files: [Path], exemptions: {str: str}) > result\Result::<[Fi
                     if (violations.len() == 0) {
                         found.append(Finding{ path = f.value, line = at.lines[jobPointer] ?? 0,
                             message = key + " no longer restores a cache",
-                            fix = "Delete its entry from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
+                            hint = "Delete its entry from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
                     }
                     continue;
                 }
@@ -192,7 +192,7 @@ export fun findings(files: [Path], exemptions: {str: str}) > result\Result::<[Fi
         foreach (key in support\sorted(exemptions.keys())) {
             if (used[key] == null) {
                 found.append(Finding{ path = ".github/workflows", message = "exemption " + key + " names no trusted job",
-                    fix = "Delete it from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
+                    hint = "Delete it from EXEMPTIONS in hack/lint/trusted-jobs-restore-no-actions-cache.buzz." });
             }
         }
         return result\ok::<[Finding]>(found);

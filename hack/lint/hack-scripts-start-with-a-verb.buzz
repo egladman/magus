@@ -95,7 +95,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         final problem = nameProblem(p);
         if (problem != "") {
             found.append(Finding{ path = f.value, line = 1, message = problem,
-                fix = "Move it to the directory of whoever runs it and name it <verb>-<object>. Read-only: {READ_VERBS.join(", ")}. "
+                hint = "Move it to the directory of whoever runs it and name it <verb>-<object>. Read-only: {READ_VERBS.join(", ")}. "
                     + "Runs the gate and reports: {RUN_VERBS.join(", ")}. "
                     + "Writes, only with --apply: {WRITE_VERBS.join(", ")}. "
                     + "Prepares the checkout it runs in, writing there and to its job's row only: {SETUP_VERBS.join(", ")}. "
@@ -105,7 +105,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
         if (listed(p) and listing.indexOf(p) == null) {
             found.append(Finding{ path = "hack/README.md", line = 1, message = "hack/README.md does not list {p}",
-                fix = "Add its row, with its effect and cost, under its directory's section." });
+                hint = "Add its row, with its effect and cost, under its directory's section." });
         }
     }
     return found;

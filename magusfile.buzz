@@ -1182,7 +1182,7 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     // mockery type-checks packages that import the bindings and config gen packages.
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
-              buzz_generate, config_generate);
+              buzz_generate, config_generate, mcp_tools_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
         "hack/magusfile/mockassert.buzz",
         "internal/spell/gen/types/*.buzz",
@@ -1302,11 +1302,11 @@ export fun symbol_digest_generate(ctx: magus\Context, args: [str]) > void !> any
 export fun proofread_decisions_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["hack/policy/proofread.buzz"]);
     ctx.writesFiles(["hack/policy/gen/proofread-decisions.json"]);
-    final body = json\stringify(decisions\table([<str>]), "  ") + "\n";
-    final path = fs\join("hack", "policy", "gen", "proofread-decisions.json");
-    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    final table = decisions\table([<str>]);
+    if (table.error != null) { throw table.error!.message; }
+    final body = json\stringify(table.value!, "  ") + "\n";
     fs\mkdirAll(fs\join("hack", "policy", "gen"));
-    fs\writeFile(path, body);
+    fs\writeFile(fs\join("hack", "policy", "gen", "proofread-decisions.json"), body);
 }
 
 // Exports the knowledge and target graphs the browser Graph Explorer loads; with cd it

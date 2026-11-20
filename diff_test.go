@@ -337,7 +337,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 		BaseSignature:         got.BaseSignature,
 		Checks: []check.Check{{
 			Name: diff.CheckNamingAffix, Status: check.Advice,
-			Message: found.Message, Details: found.Details, Evidence: found.Evidence, Fix: found.Fix,
+			Message: found.Message, Details: found.Details, Evidence: found.Evidence, Hint: found.Hint,
 		}},
 		PublicThrough: got.PublicThrough,
 	}, got)

@@ -107,23 +107,23 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (ghExec.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "runs gh outside the Buzz files that may reach a provider",
-                    fix = "move the call into a provider spell, internal/queue/provider/*.buzz, a script in " + support\SCRIPT_DIRS.join(", ") + ", "
+                    hint = "move the call into a provider spell, internal/queue/provider/*.buzz, a script in " + support\SCRIPT_DIRS.join(", ") + ", "
                         + "or a workflow action; or add the path to ALLOWED_FILES in hack/lint/provider-io-is-buzz.buzz, naming why" });
             } else if (curlExec.match(line) != null and providerHost.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "curls a CI/VCS provider host outside the Buzz files that may reach one",
-                    fix = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
+                    hint = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
             } else if (httpCall.match(line) != null and providerHost.match(line) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "calls the http module against a CI/VCS provider host outside the Buzz files that may reach one",
-                    fix = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
+                    hint = "move the call into an allowed file, or add the path to ALLOWED_FILES, naming why" });
             }
         }
     }
     foreach (p in support\sorted(ALLOWED_FILES.keys())) {
         if (seenAllowFile[p] == null) {
             found.append(Finding{ path = p, message = "ALLOWED_FILES names " + p + ", which is not in the tree",
-                fix = "delete the entry from hack/lint/provider-io-is-buzz.buzz" });
+                hint = "delete the entry from hack/lint/provider-io-is-buzz.buzz" });
         }
     }
     return found;

@@ -83,25 +83,25 @@ fun configFindings(f: Path, src: str, found: mut [Finding]) > result\Result::<bo
     if (!named(doc.q(["linters", "enable"]), name: LINTER)) {
         found.append(Finding{ path = f.value, line = line,
             message = "linters.enable leaves out testpair, so no test file is held to a pair",
-            fix = "Add `- testpair` to linters.enable." });
+            hint = "Add `- testpair` to linters.enable." });
     }
     if (named(doc.q(["linters", "disable"]), name: LINTER)) {
-        found.append(Finding{ path = f.value, line = line, message = "linters.disable names testpair", fix = FIX });
+        found.append(Finding{ path = f.value, line = line, message = "linters.disable names testpair", hint = FIX });
     }
     if (support\has(doc.q(["linters", "settings", "custom", LINTER]), key: "settings")) {
         found.append(Finding{ path = f.value, line = line,
             message = "testpair carries a settings block; it takes none, and an option is an exemption",
-            fix = "Delete the settings block under linters.settings.custom.testpair." });
+            hint = "Delete the settings block under linters.settings.custom.testpair." });
     }
     if (doc.q(["linters", "exclusions", "paths"]).listValue().len() > 0) {
         found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\n    paths:"),
             message = "linters.exclusions.paths excludes every linter, testpair included, from those paths",
-            fix = "Scope the exclusion to the linters it is for with a rules entry naming them." });
+            hint = "Scope the exclusion to the linters it is for with a rules entry naming them." });
     }
     if (support\scalar(doc.q(["run", "tests"])) == "false") {
         found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\n  tests:"),
             message = "run.tests is false, so no test file is analyzed and none is held to a pair",
-            fix = "Delete run.tests." });
+            hint = "Delete run.tests." });
     }
     var n = 0;
     foreach (rule in doc.q(["linters", "exclusions", "rules"]).listValue()) {
@@ -109,10 +109,10 @@ fun configFindings(f: Path, src: str, found: mut [Finding]) > result\Result::<bo
         if (!support\has(rule, key: "linters")) {
             found.append(Finding{ path = f.value, line = line,
                 message = "exclusion rule {n} names no linters, so it excludes testpair along with the rest",
-                fix = "Name the linters the rule is for." });
+                hint = "Name the linters the rule is for." });
         } else if (named(rule.q(["linters"]), name: LINTER)) {
             found.append(Finding{ path = f.value, line = line,
-                message = "exclusion rule {n} names testpair; it has no exemptions", fix = FIX });
+                message = "exclusion rule {n} names testpair; it has no exemptions", hint = FIX });
         }
     }
     return result\ok::<bool>(true);
@@ -125,7 +125,7 @@ fun runFindings(f: Path, src: str, found: mut [Finding]) > void {
         if (line.indexOf("\"--enable-only\"") != null and line.indexOf(LINTER) == null) {
             found.append(Finding{ path = f.value, line = n,
                 message = "a golangci-lint run with --enable-only leaves out testpair, so that module's test files go unpaired",
-                fix = "Add testpair to the --enable-only list." });
+                hint = "Add testpair to the --enable-only list." });
         }
     }
 }
@@ -156,7 +156,7 @@ fun directiveFindings(f: Path, src: str, found: mut [Finding]) > void {
         if (covers) {
             found.append(Finding{ path = f.value, line = n,
                 message = "nolint directive in a test file silences testpair; it has no exemptions",
-                fix = "Name only the linters the directive is for, never all or testpair. " + FIX });
+                hint = "Name only the linters the directive is for, never all or testpair. " + FIX });
         }
     }
 }

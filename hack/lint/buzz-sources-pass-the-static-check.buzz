@@ -104,7 +104,7 @@ export fun findings(output: str, prefix: str) > [Finding] {
             url = lines[i].trim().sub(5);
         }
         found.append(Finding{ path = prefix + m![2], line = std\parseInt(m![3]) ?? 0, col = std\parseInt(m![4]) ?? 0,
-            message = m![1] + m![5], fix = FIX, url = url });
+            message = m![1] + m![5], hint = FIX, url = url });
     }
     return found;
 }
@@ -122,7 +122,7 @@ fun run(argv: [str], dir: str, prefix: str) > [Finding] {
     final found = findings(output, prefix: prefix);
     if (found.len() == 0 and raised != "" and raised.indexOf("BZZ2001") == null) {
         return [Finding{ path = argv[argv.len() - 1], message = "magus buzz --check failed without a diagnostic: " + raised,
-            fix = FIX }];
+            hint = FIX }];
     }
     return found;
 }

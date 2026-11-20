@@ -524,7 +524,7 @@ func directoryWritePathProblems(store *Store, row job.Job) types.JobProblems {
 				Code:    types.WritePathIsDirectory,
 				Field:   fmt.Sprintf("paths.write[%d]", i),
 				Message: fmt.Sprintf("%s is a directory, and a write path names files: a directory claims every file under it, so the job would overlap every job editing anything there%s", named, why),
-				Hint:     "list the files the job will edit in its place, and name each file it creates by its path",
+				Hint:    "list the files the job will edit in its place, and name each file it creates by its path",
 			})
 		}
 	}

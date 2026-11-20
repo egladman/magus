@@ -48,7 +48,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (prev != "" and strings\compare(entry, b: prev) <= 0) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "lockfile entry out of byte order (or duplicated) within its block: " + entry + " follows " + prev,
-                    fix = "Move the entry to its sorted place; a comment line starts a new block." });
+                    hint = "Move the entry to its sorted place; a comment line starts a new block." });
             }
             prev = entry;
         }
@@ -56,7 +56,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     foreach (p in support\sorted(ENCODER_ORDERED.keys())) {
         if (exempted[p] == null) {
             found.append(Finding{ path = p, message = "ENCODER_ORDERED names " + p + ", which is not in the tree",
-                fix = "Delete the entry from hack/lint/lockfiles-are-sorted.buzz." });
+                hint = "Delete the entry from hack/lint/lockfiles-are-sorted.buzz." });
         }
     }
     return found;

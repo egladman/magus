@@ -53,7 +53,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry
 // flags TS. It runs here because a root target writing into console is MGS3001.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
+    ctx.readsFiles(["../types/**/*.go", "../cmd/magus-utils/*.go", "../internal/generate/**/*.go"]);
     ctx.writesFiles(["src/gen/magus/types.ts"]);
     _ = proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
 }

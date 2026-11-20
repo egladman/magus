@@ -291,7 +291,7 @@ export fun nolints(path: str, src: str) > [Finding] {
         if (at != null and line.indexOf("closedswitch") != null) {
             found.append(Finding{ path = path, line = n,
                 message = "a //nolint cannot exempt closedswitch",
-                fix = "Name every member of the set and drop the default arm, or ask a person to add an exit under {SECTION} in the " + POLICY + " of its project." });
+                hint = "Name every member of the set and drop the default arm, or ask a person to add an exit under {SECTION} in the " + POLICY + " of its project." });
         }
     }
     return found;
@@ -351,7 +351,7 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, projects: [str]) > [Fi
         foreach (s in held) {
             found.append(Finding{ path = s.path, line = s.line, col = s.col,
                 message = "{s.message}: {s.symbol} in {s.path} holds {held.len()}, over the {allowed} the {SECTION} baseline in {policyFile(owner(s.path, projects: projects))} records",
-                fix = s.fix });
+                hint = s.fix });
         }
     }
     foreach (k in support\sorted(ceilings.keys())) {
@@ -363,7 +363,7 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, projects: [str]) > [Fi
         if (held < c.count) {
             found.append(Finding{ path = c.file, line = c.line,
                 message = "records {c.count} for {c.symbol} in {c.path}, which holds {held}",
-                fix = if (held == 0) "Delete the row: the baseline only shrinks." else "Lower the count to {held}: the baseline only shrinks." });
+                hint = if (held == 0) "Delete the row: the baseline only shrinks." else "Lower the count to {held}: the baseline only shrinks." });
         }
     }
     return found;
@@ -378,14 +378,14 @@ export fun rowsNamingGoneFiles(counts: {str: Ceiling}, exits: [Exit], present: {
         if (c.path.endsWith(".go") and present[c.path] == null) {
             found.append(Finding{ path = c.file, line = c.line,
                 message = "records {c.count} for {c.symbol} in {c.path}, which is not in the tree",
-                fix = "Delete the row: the baseline only shrinks." });
+                hint = "Delete the row: the baseline only shrinks." });
         }
     }
     foreach (e in exits) {
         if (present[e.path] == null) {
             found.append(Finding{ path = e.file, line = 0,
                 message = "has an exit for {e.path}, which is not in the tree",
-                fix = "Delete the exit." });
+                hint = "Delete the exit." });
         }
     }
     return found;

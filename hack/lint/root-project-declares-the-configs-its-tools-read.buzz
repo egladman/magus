@@ -75,7 +75,7 @@ export fun findings(sources: [str], magusfile: str) > result\Result::<[Finding]>
             }
             found.append(Finding{ path = "magusfile.buzz", line = line,
                 message = p + " is read by " + CONFIGS[p]! + " but no root source glob names it",
-                fix = "Editing it reruns every root target while keying none of them. Declare it in the project's sources." });
+                hint = "Editing it reruns every root target while keying none of them. Declare it in the project's sources." });
         }
         return result\ok::<[Finding]>(found);
     } catch (err: any) {

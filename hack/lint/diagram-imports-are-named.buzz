@@ -38,7 +38,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (line > 0) {
             found.append(Finding{ path = f.value, line = line,
                 message = "{f.value} imports a module as _, so nothing in the diagram names it",
-                fix = "Import the module under a name the diagram uses, or drop the import." });
+                hint = "Import the module under a name the diagram uses, or drop the import." });
         }
     }
     return found;

@@ -97,16 +97,16 @@ export fun judge(pkgs: [GeneratedPackage]) > [Finding] {
         if (SHARED[p.clause] != null) {
             found.append(Finding{ path = p.dir,
                 message = "the generated package in {p.dir} is named {p.clause}, which other generated packages would share",
-                fix = "Name it for its owner: <owner>gen for a generator's output (bindgen, flaggen), <package>test for test doubles." });
+                hint = "Name it for its owner: <owner>gen for a generator's output (bindgen, flaggen), <package>test for test doubles." });
         } else if (p.mockery and !p.clause.endsWith("test")) {
             found.append(Finding{ path = p.dir,
                 message = "the mockery doubles in {p.dir} are package {p.clause}, not <package>test",
-                fix = "Set pkgname in .mockery.yaml to <package>test, as the top-level template does." });
+                hint = "Set pkgname in .mockery.yaml to <package>test, as the top-level template does." });
         }
         if (owner[p.clause] -> first) {
             found.append(Finding{ path = p.dir,
                 message = "the generated package in {p.dir} is named {p.clause}, as is {first}",
-                fix = "Give one of them a clause of its own; an importer of both would alias one." });
+                hint = "Give one of them a clause of its own; an importer of both would alias one." });
         } else {
             owner[p.clause] = p.dir;
         }

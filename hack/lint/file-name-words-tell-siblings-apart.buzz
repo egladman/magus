@@ -302,13 +302,13 @@ export fun findings(hits: [Hit], allow: {str: str}) > [Finding] {
         }
         found.append(Finding{ path = h.path,
             message = "no sibling {h.lang} file starts with \"{h.first}\", so the words after it tell this file apart from nothing",
-            fix = "Rename it to {h.suggest}, or add it to ALLOW in {THIS} with a reason." });
+            hint = "Rename it to {h.suggest}, or add it to ALLOW in {THIS} with a reason." });
     }
     foreach (p in support\sorted(allow.keys())) {
         if (hit[p] == null) {
             found.append(Finding{ path = THIS,
                 message = "ALLOW names {p}, which is not a finding",
-                fix = "Delete the entry from {THIS}." });
+                hint = "Delete the entry from {THIS}." });
         }
     }
     return found;
@@ -391,7 +391,7 @@ fun declaredTypes() > result\Result::<Declared> {
             if (indexed[lang] == null or seen[lang] == null) {
                 found.append(Finding{ path = ".",
                     message = "no {lang} type was indexed, so its file names cannot be judged: silence, not a pass",
-                    fix = "Declare a {lang} symbol index and rebuild it with `magus graph build`." });
+                    hint = "Declare a {lang} symbol index and rebuild it with `magus graph build`." });
             }
         }
         return result\ok::<Declared>(Declared{ types = typeIndex(pairs), findings = found });

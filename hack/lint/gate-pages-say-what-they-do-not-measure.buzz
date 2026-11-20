@@ -58,7 +58,7 @@ export fun judge(path: str, src: str) > [Finding] {
         }
         found.append(Finding{ path = path, line = s.line,
             message = "\"{s.heading}\" says what the gate measures but not what it does not",
-            fix = "Add a sentence saying what it does not measure, as in docs/design/principles/a-measure-is-not-the-goal.md." });
+            hint = "Add a sentence saying what it does not measure, as in docs/design/principles/a-measure-is-not-the-goal.md." });
     }
     return found;
 }

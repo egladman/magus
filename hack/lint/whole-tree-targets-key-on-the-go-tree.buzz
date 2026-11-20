@@ -73,7 +73,7 @@ export fun findings(footprints: {str: [str]}, magusfile: str) > [Finding] {
         final declared = footprints[target];
         if (declared == null) {
             found.append(Finding{ path = "magusfile.buzz", message = "declares no \"{target}\" target",
-                fix = "Update WHOLE_TREE if the target was renamed." });
+                hint = "Update WHOLE_TREE if the target was renamed." });
             continue;
         }
         // No footprint means no replacement: the target still inherits the project's.
@@ -87,7 +87,7 @@ export fun findings(footprints: {str: [str]}, magusfile: str) > [Finding] {
             }
             found.append(Finding{ path = "magusfile.buzz", line = line,
                 message = "target \"{target}\" declares a ctx.readsFiles footprint that does not name \"{glob}\"",
-                fix = "A footprint REPLACES the project and spell source globs, so an edit to it produces a cache HIT\n"
+                hint = "A footprint REPLACES the project and spell source globs, so an edit to it produces a cache HIT\n"
                     + "and the target replays a verdict computed against different code. Restate the tree the\n"
                     + "target actually reads, or drop the footprint declaration entirely." });
         }

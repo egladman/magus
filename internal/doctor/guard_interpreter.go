@@ -215,7 +215,7 @@ func interpreterSkew(ctx context.Context, bin, own string) (check.Check, bool) {
 			Status:  check.Fail,
 			Message: fmt.Sprintf("the hook interpreter %s did not answer `version` (%s), so no guard hook it runs can render a verdict", bin, reason),
 			Details: []string{"rebuild: " + hint.Run.With("build", ".")},
-			Fix:      hint.Run.Argv("build", "."),
+			Hint:    hint.Run.Argv("build", "."),
 		}, true
 	}
 	if fields[1] == own {
@@ -230,6 +230,6 @@ func interpreterSkew(ctx context.Context, bin, own string) (check.Check, bool) {
 			"a hook runs the session root's ./magus when it is executable, else the first magus on PATH",
 			fmt.Sprintf("rebuild ./magus (%s), or put the right magus first on PATH; a live session keeps the binary it started with", hint.Run.With("build", ".")),
 		},
-		Fix: hint.Run.Argv("build", "."),
+		Hint: hint.Run.Argv("build", "."),
 	}, true
 }

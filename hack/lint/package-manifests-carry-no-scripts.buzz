@@ -27,7 +27,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (support\has(serialize\Boxed.init(json\parse(src)), key: "scripts")) {
             found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\"scripts\""),
                 message = "package.json carries scripts, but a manifest declares the package, not how to build it",
-                fix = "Move each script into the project's magusfile as a spell op call (typescript[\"esbuild\"], typescript[\"node-test\"], ...) and delete the scripts key." });
+                hint = "Move each script into the project's magusfile as a spell op call (typescript[\"esbuild\"], typescript[\"node-test\"], ...) and delete the scripts key." });
         }
     }
     return found;

@@ -76,7 +76,7 @@ export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Findin
             final shown = if (matched == "") "" else ": {matched}";
             found.append(Finding{ path = file, line = h.line, message = "{said}{shown} [{rule}]",
                 url = r["url"] ?? "",
-                fix = "Reword the description in " + file + "; a tool's registry entry is generated from its std module descriptor." });
+                hint = "Reword the description in " + file + "; a tool's registry entry is generated from its std module descriptor." });
         }
     }
     return found;
@@ -122,7 +122,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             final helps = clihelp\extract(lines);
             if (helps.len() == 0) {
                 found.append(Finding{ path = name, message = "no description was found, so none was judged: silence, not a pass",
-                    fix = "The rule reads the quoted Description field of a tool, or a skill entry's description; update it if the source changed shape." });
+                    hint = "The rule reads the quoted Description field of a tool, or a skill entry's description; update it if the source changed shape." });
                 continue;
             }
             final rows = mut {<str: [any]>};
@@ -141,7 +141,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
     } catch (e) {
         fs\remove(table) catch void;
-        return [Finding{ path = JUDGE, message = "proofread did not run, so no description was judged: {e}", fix = fix }];
+        return [Finding{ path = JUDGE, message = "proofread did not run, so no description was judged: {e}", hint = fix }];
     }
     fs\remove(table) catch void;
     return found;

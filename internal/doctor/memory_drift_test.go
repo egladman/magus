@@ -19,10 +19,10 @@ func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
 	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: "magus.forecast-history/v1alpha2", Max: forecast.HistoryVersion, Path: "h"})
 	assert.Equal(t, check.Advice, skew.Status)
 	assert.Contains(t, skew.Message, "magus.forecast-history/v1alpha2")
-	assert.Contains(t, skew.Fix, "build")
+	assert.Contains(t, skew.Hint, "build")
 
 	other := historyUnreadableCheck("memory-declarations", assert.AnError)
-	assert.Empty(t, other.Fix,"an unknown failure names no fix")
+	assert.Empty(t, other.Hint, "an unknown failure names no fix")
 }
 
 // historyWith writes a history file recording one peak per "<spell>/<target>" key

@@ -86,7 +86,7 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] {
         if (!declared) {
             judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} precedent was judged",
-                fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
+                hint = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
         }
     }
     if (!judgeable) {
@@ -108,7 +108,7 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] {
             }
             if (held.len() == 0) {
                 found.append(Finding{ path = ".", message = "the graph establishes no {what} precedent to hold",
-                    fix = "The miner or the index changed under this rule; read `magus\\graph().precedents()` before dropping the family." });
+                    hint = "The miner or the index changed under this rule; read `magus\\graph().precedents()` before dropping the family." });
                 continue;
             }
             foreach (row in held) {
@@ -125,7 +125,7 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] {
                     final at = position(d.source);
                     found.append(Finding{ path = at.path, line = at.line,
                         message = "departs from the {what} precedent that {follow} of {cohort} {cases} follow{key}: {node}",
-                        fix = "Follow it, or add \"{node}{key}\" to SANCTIONED in " + THIS + " with the reason it departs." });
+                        hint = "Follow it, or add \"{node}{key}\" to SANCTIONED in " + THIS + " with the reason it departs." });
                 }
             }
         }
@@ -133,10 +133,10 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] {
     foreach (node, reason in sanctioned) {
         if (departed[node] == null) {
             found.append(Finding{ path = THIS, message = "sanctions {node}, which no longer departs",
-                fix = "Delete the entry: the list only shrinks." });
+                hint = "Delete the entry: the list only shrinks." });
         } else if (reason.trim() == "") {
             found.append(Finding{ path = THIS, message = "sanctions {node} without a reason",
-                fix = "Say in one line why it departs." });
+                hint = "Say in one line why it departs." });
         }
     }
     return found;

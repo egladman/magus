@@ -48,7 +48,7 @@ func broadClaimProblems(ctx context.Context, root string, row job.Job, ws Worksp
 			Code:    types.WritePathTooBroad,
 			Field:   "paths.write",
 			Message: fmt.Sprintf("write path breadth was not judged: the claim bounds jobs.max_claim_files and jobs.max_claim_projects are unreadable: %v", err),
-			Hint:     "fix the jobs section of magus.yaml, then fork again",
+			Hint:    "fix the jobs section of magus.yaml, then fork again",
 		}}
 	}
 	maxFiles, maxProjects := cfg.Jobs.MaxClaimFiles, cfg.Jobs.MaxClaimProjects

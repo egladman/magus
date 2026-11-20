@@ -160,14 +160,14 @@ export fun judge(helps: [Help], rows: {str: [any]}, baseline: [str]) > [Finding]
             final shown = if (matched == "") "" else ": {matched}";
             found.append(Finding{ path = REGISTRY, line = h.line, message = "{said}{shown} [{rule}]",
                 url = r["url"] ?? "",
-                fix = "Reword it in " + REGISTRY + "; the man pages and the flag bindings regenerate from it. "
+                hint = "Reword it in " + REGISTRY + "; the man pages and the flag bindings regenerate from it. "
                     + "A text that must stay goes in BASELINE in " + THIS + " with its first {KEY} bytes." });
         }
     }
     foreach (key in baseline) {
         if (used[key] == null) {
             found.append(Finding{ path = THIS, message = "baselines \"{key}\", which no longer has a finding",
-                fix = "Delete the entry: the list only shrinks." });
+                hint = "Delete the entry: the list only shrinks." });
         }
     }
     return found;
@@ -211,7 +211,7 @@ fun checkAgainst(files: [Path], baseline: [str]) > result\Result::<[Finding]> {
     final fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} cli-help, and read why it stopped.";
     if (helps.len() == 0) {
         return result\ok::<[Finding]>([Finding{ path = REGISTRY, message = "no help text was found, so none was judged: silence, not a pass",
-            fix = "The rule reads the quoted Doc, Short and Description fields; update it if the registry changed shape." }]);
+            hint = "The rule reads the quoted Doc, Short and Description fields; update it if the registry changed shape." }]);
     }
     var bin = "";
     var table = "";
@@ -231,7 +231,7 @@ fun checkAgainst(files: [Path], baseline: [str]) > result\Result::<[Finding]> {
             final row = judged(bin, table: table, text: h.text);
             if (row.error != null) {
                 fs\remove(table) catch void;
-                return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no help text was judged: {row.error!.message}", fix = fix }]);
+                return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no help text was judged: {row.error!.message}", hint = fix }]);
             }
             rows[h.text] = row.value!;
         }

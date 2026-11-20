@@ -213,7 +213,7 @@ export fun exemptions(path: str, src: str) > [Finding] {
             foreach (m in EXEMPTING) {
                 if (comment.indexOf(m) != null) {
                     found.append(Finding{ path = path, line = n, col = at + 1,
-                        message = "a comment tries to exempt no-throw (`{m}`), and no comment does", fix = FIX_MARKER });
+                        message = "a comment tries to exempt no-throw (`{m}`), and no comment does", hint = FIX_MARKER });
                     break;
                 }
             }
@@ -502,7 +502,7 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry], proj
             found.append(Finding{ path = s.path, line = s.line, col = s.col,
                 message = "{subject(s)}, below the top-level entry: {s.path} holds {held.len()}, "
                     + "over the {allowed} that the no-throw.baseline of {policyFile(owner(s.path, projects: projects))} allows",
-                fix = remedy(s.construct) });
+                hint = remedy(s.construct) });
         }
     }
     foreach (k in support\sorted(ceilings.keys())) {
@@ -511,17 +511,17 @@ export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry], proj
         if (held < c.count) {
             found.append(Finding{ path = c.file,
                 message = "no-throw.baseline.{c.construct} records {c.count} for {c.path}, which holds {held}",
-                fix = if (held == 0) "Delete the entry: the count only falls." else "Lower it to {held}: the count only falls." });
+                hint = if (held == 0) "Delete the entry: the count only falls." else "Lower it to {held}: the count only falls." });
         }
     }
     foreach (e in entries) {
         if (e.reason.trim() == "") {
             found.append(Finding{ path = e.file, message = "no-throw.exits names {e.scope} in {e.path} with no reason",
-                fix = "Give the exit a reason, or delete it." });
+                hint = "Give the exit a reason, or delete it." });
         }
         if (used[e.path + " " + e.scope] == null) {
             found.append(Finding{ path = e.file, message = "no-throw.exits names {e.scope} in {e.path}, and it holds no throw",
-                fix = "Delete the exit from no-throw.exits." });
+                hint = "Delete the exit from no-throw.exits." });
         }
     }
     return found;

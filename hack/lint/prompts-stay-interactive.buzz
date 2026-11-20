@@ -101,7 +101,7 @@ export fun judge(path: str, src: str) > [Finding] {
         if (HELPER_IMPORT.match(line) != null and !hasMain) {
             found.append(Finding{ path = path, line = n,
                 message = "{path} imports hack/lib/prompt but has no main, so whatever imports it can prompt",
-                fix = FIX_IMPORT });
+                hint = FIX_IMPORT });
         }
         final guardAt = line.indexOf(GUARD);
         final direct = PROMPT.match(line);
@@ -117,7 +117,7 @@ export fun judge(path: str, src: str) > [Finding] {
             final callAt = line.indexOf("term\\{direct![1]}")!;
             if (!guarded and (guardAt == null or guardAt! > callAt)) {
                 found.append(Finding{ path = path, line = n,
-                    message = "{call} in {where} has no {GUARD} guard before it", fix = FIX_GUARD });
+                    message = "{call} in {where} has no {GUARD} guard before it", hint = FIX_GUARD });
             }
         }
         if (guardAt != null) {
@@ -125,10 +125,10 @@ export fun judge(path: str, src: str) > [Finding] {
         }
         if (unattended(path)) {
             found.append(Finding{ path = path, line = n,
-                message = "{call} in {path}, which runs with nobody to answer it", fix = FIX_UNATTENDED });
+                message = "{call} in {path}, which runs with nobody to answer it", hint = FIX_UNATTENDED });
         } else if (!isHelper and where != "fun main") {
             found.append(Finding{ path = path, line = n,
-                message = "{call} in {where}, outside a script's main", fix = FIX_MAIN });
+                message = "{call} in {where}, outside a script's main", hint = FIX_MAIN });
         }
     }
     return found;

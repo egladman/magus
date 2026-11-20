@@ -1781,7 +1781,7 @@ func (r *runner) checkStaleSockets(ctx context.Context) check.Check {
 			Status:  check.Fail,
 			Message: fmt.Sprintf("%d live pool parent(s) from another build", n),
 			Details: details,
-			Fix:      []string{"server", "stop", "--pools"},
+			Hint:    []string{"server", "stop", "--pools"},
 		}
 	}
 	return check.Check{Name: "sockets", Status: check.OK, Message: strings.Join(parts, ", "), Details: details}
@@ -2577,7 +2577,7 @@ func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 			Status:  check.Fail,
 			Message: msg,
 			Details: details,
-			Fix:     fix,
+			Hint:    fix,
 		}
 	case pastedStale:
 		return check.Check{
@@ -2865,7 +2865,7 @@ func (r *runner) checkConcurrencySizing() check.Check {
 		Name: name, Status: check.Advice,
 		Message: fmt.Sprintf("concurrency is %s: %s", shape, detail),
 		Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
-		Fix:      []string{"config", "set", fmt.Sprintf("key=concurrency,value=%d", fit)},
+		Hint:    []string{"config", "set", fmt.Sprintf("key=concurrency,value=%d", fit)},
 	}
 }
 

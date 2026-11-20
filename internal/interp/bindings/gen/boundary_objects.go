@@ -367,11 +367,11 @@ func ObjectCheck(v check.Check, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("details", vm.ListValue(itemsDetails))
 	out.MapSet("evidence", enums.Case("magus\\check\\Evidence", string(v.Evidence)))
-	itemsFix := make([]vm.Value, len(v.Fix))
-	for indexFix := range v.Fix {
-		itemsFix[indexFix] = vm.StringValue(v.Fix[indexFix])
+	itemsHint := make([]vm.Value, len(v.Hint))
+	for indexHint := range v.Hint {
+		itemsHint[indexHint] = vm.StringValue(v.Hint[indexHint])
 	}
-	out.MapSet("fix", vm.ListValue(itemsFix))
+	out.MapSet("hint", vm.ListValue(itemsHint))
 	return out
 }
 

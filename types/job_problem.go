@@ -129,7 +129,7 @@ func FaultProblems(fs []job.Fault) JobProblems {
 	}
 	ps := make(JobProblems, len(fs))
 	for i, f := range fs {
-		ps[i] = JobProblem{Code: faultCode(f.Kind), Field: f.Field, Message: f.Message, Hint: f.Fix}
+		ps[i] = JobProblem{Code: faultCode(f.Kind), Field: f.Field, Message: f.Message, Hint: f.Hint}
 	}
 	return ps
 }

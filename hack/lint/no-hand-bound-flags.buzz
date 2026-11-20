@@ -41,7 +41,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final base = mergeBase();
     if (base == "") {
         return [Finding{ path = ".", message = "cannot tell which lines this change touched: no git merge base",
-            fix = "Run the lint in a git checkout that holds the base branch: fetch it, then rerun lint." }];
+            hint = "Run the lint in a git checkout that holds the base branch: fetch it, then rerun lint." }];
     }
     foreach (f in todo) {
         final was = fileAt(base, p: f.value) ?? "";
@@ -102,7 +102,7 @@ export fun judge(path: str, now: str, was: str) > [Finding] {
         }
         found.append(Finding{ path = path, line = i + 1,
             message = "this change binds a CLI flag by hand: " + brief(key),
-            fix = "Declare the flag in internal/commands so the generated flag set carries it." });
+            hint = "Declare the flag in internal/commands so the generated flag set carries it." });
     }
     return found;
 }

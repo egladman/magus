@@ -39,7 +39,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final m = constant.match(readResult.value!);
     if (m == null) {
         return [Finding{ path = CODES, message = "declares no StaleGeneratedOutput code",
-            fix = "Update this rule's pattern to where the engine's drift code is declared now." }];
+            hint = "Update this rule's pattern to where the engine's drift code is declared now." }];
     }
     final code = m![1];
     final readResult2 = support\read(magusfile!);
@@ -50,7 +50,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final i = src.indexOf(anchor);
     if (i == null) {
         return [Finding{ path = MAGUSFILE, message = "the whole-tree drift throw moved or was reworded",
-            fix = "Update this rule's anchor text to the throw's new wording." }];
+            hint = "Update this rule's anchor text to the throw's new wording." }];
     }
     // The code is a plain-text prefix on the throw, not a magus\raise call: magus\raise
     // refuses the MGS namespace as reserved for magus's own diagnostics.
@@ -60,7 +60,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     return [Finding{ path = MAGUSFILE, line = support\lineAt(src, off: i!),
         message = "the whole-tree drift throw does not carry " + code,
-        fix = "Prefix it with the code the engine's declared-output path emits via types.ClassifyDrift." }];
+        hint = "Prefix it with the code the engine's declared-output path emits via types.ClassifyDrift." }];
 }
 
 final codesGo = "\tStaleGeneratedOutput      DiagnosticCode = \"MGS4006\"\n";

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
+func TestRenderValidationNumbersEveryProblemWithItsHint(t *testing.T) {
 	t.Parallel()
 
 	v := types.JobValidation{
@@ -25,8 +25,8 @@ func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
 	RenderValidation(&buf, v, false)
 	assert.Equal(t, "2 problems:\n"+
 		"  1. [MGS3040] check.target: no such target\n"+
-		"     fix: name a real one\n"+
-		"  2. [MGS3039] nothing grades the job\n", buf.String(), "a record-wide problem has no field, and one without a fix has no fix line")
+		"     hint: name a real one\n"+
+		"  2. [MGS3039] nothing grades the job\n", buf.String(), "a record-wide problem has no field, and one without a hint has no hint line")
 }
 
 func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {

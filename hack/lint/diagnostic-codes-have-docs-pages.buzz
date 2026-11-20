@@ -86,7 +86,7 @@ export fun check(files: [Path]) > [Finding] !> any {
                 }
                 if (!documented) {
                     found.append(Finding{ path = f.value, line = n, message = "{code} has no docs page",
-                        fix = "Add the page for {code}; a diagnostic's see: link points at it." });
+                        hint = "Add the page for {code}; a diagnostic's see: link points at it." });
                 }
             }
         }

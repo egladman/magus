@@ -82,7 +82,7 @@ export fun check(files: [Path]) > [Finding] !> any {
                     final name = words[0].sub(0, len: eq!);
                     found.append(Finding{ path = p, line = support\findLine(raw, needle: words[0]),
                         message = "wires the Buzz glue on {event} \"{matcher}\" behind a {name}= prefix",
-                        fix = "A Buzz hook command is a plain argv: {host} runs {FORMS[host]!}.\n"
+                        hint = "A Buzz hook command is a plain argv: {host} runs {FORMS[host]!}.\n"
                             + "The glue reads the raw-event question off the event itself and takes its\n"
                             + "flags from the argv after --, so there is nothing left for a variable to say." });
                 }
@@ -122,7 +122,7 @@ test "the shipped checkout-first form passes, and a knob on its glue segment doe
     assert\equal(check(configs(head + glue)).len(), want: 0, message: "the binary choice runs before the glue segment");
     final got = check(configs(head + "MAGUS_GUARD_ADVISE=1 " + glue));
     assert\equal(got.len(), want: 1, message: "a knob after the binary choice");
-    assert\isTrue(got[0].fix.indexOf("magus buzz -C . -s <file>") != null, message: got[0].fix);
+    assert\isTrue(got[0].hint.indexOf("magus buzz -C . -s <file>") != null, message: got[0].hint);
 }
 
 test "a prefix on the Buzz glue is reported at its line" {

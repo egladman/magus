@@ -426,14 +426,14 @@ fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > result\Result::<[Fin
             foreach (glob in sel.unmatched) {
                 found.append(Finding{ path = "hack/lint/" + r.name + ".buzz", rule = r.name,
                     message = "reads " + glob + ", which matches no file in the tree",
-                    fix = "Restore the file, or update the rule's reads() to what it reads now." });
+                    hint = "Restore the file, or update the rule's reads() to what it reads now." });
             }
             if (sel.unmatched.len() > 0) {
                 continue;
             }
             foreach (f in r.check(sel.matched)) {
                 found.append(Finding{ path = f.path, line = f.line, col = f.col, rule = r.name,
-                    message = f.message, fix = f.fix, url = f.url });
+                    message = f.message, hint = f.hint, url = f.url });
             }
         }
         return result\ok::<[Finding]>(found);
@@ -500,7 +500,7 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
         if (!keyed) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
                 message = "conventions reads " + rel + " but its ctx.readsFiles does not key it",
-                fix = "Declare it in conventions, or an edit to it replays a verdict computed without it.\n"
+                hint = "Declare it in conventions, or an edit to it replays a verdict computed without it.\n"
                     + "A glob rooted above a nested project does not reach into it: name the project's path." });
         }
     }
@@ -518,7 +518,7 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
         if (!keys) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
                 message = "conventions declares " + glob + ", which keys no file a rule reads",
-                fix = "Drop it from the ctx.readsFiles of conventions, or point it at what a rule reads now." });
+                hint = "Drop it from the ctx.readsFiles of conventions, or point it at what a rule reads now." });
         }
     }
     return result\ok::<[Finding]>(found);
@@ -569,7 +569,7 @@ fun footprint(rules: [Rule], files: [str], byRule: {str: RuleFiles}) > result\Re
         }
         if (declared == null) {
             return result\ok::<[Finding]>([Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no conventions target",
-                fix = "hack/lint/run.buzz is what conventions runs; update this check if the target was renamed." }]);
+                hint = "hack/lint/run.buzz is what conventions runs; update this check if the target was renamed." }]);
         }
         final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun conventions(");
         return footprintFindings(read, declared: declared!, nested: nested, line: line);
@@ -588,8 +588,8 @@ export fun render(f: Finding) > str {
         }
     }
     var s = pos + ": " + f.message + " [" + f.rule + "]";
-    if (f.fix != "") {
-        s = s + "\n    " + f.fix.replace("\n", with: "\n    ");
+    if (f.hint != "") {
+        s = s + "\n    " + f.hint.replace("\n", with: "\n    ");
     }
     if (f.url != "") {
         s = s + "\n    see: " + f.url;
@@ -948,7 +948,7 @@ test "a project's verdict holds every path inside it, and no path outside it" {
 }
 
 test "render names the position, message, rule and indented fix" {
-    assert\equal(render(Finding{ path = "a.lock", line = 3, rule = "r", message = "b follows c", fix = "Move it.\nSecond line." }),
+    assert\equal(render(Finding{ path = "a.lock", line = 3, rule = "r", message = "b follows c", hint = "Move it.\nSecond line." }),
         want: "a.lock:3: b follows c [r]\n    Move it.\n    Second line.", message: "full");
     assert\equal(render(Finding{ path = "a.lock", line = 3, col = 7, rule = "r", message = "m" }), want: "a.lock:3:7: m [r]", message: "column");
     assert\equal(render(Finding{ path = "a.lock", rule = "r", message = "gone" }), want: "a.lock: gone [r]", message: "no line");
@@ -1064,7 +1064,7 @@ test "--record and --session reach the selection, and a path with --record is re
 }
 
 test "a recorded run keeps one line per finding and marks a quiet rule ran" {
-    final found = [Finding{ path = "a.md", line = 3, rule = "banned-words", message = "m", fix = "f" }];
+    final found = [Finding{ path = "a.md", line = 3, rule = "banned-words", message = "m", hint = "f" }];
     final stamp = Firing{
         rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "", ts = 7, session = "s", commit = "c",
     };

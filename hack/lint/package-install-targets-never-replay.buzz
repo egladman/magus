@@ -74,7 +74,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 export fun findings(targets: [InstallTarget], sources: {str: str}) > [Finding] {
     if (targets.len() == 0) {
         return [Finding{ path = ".", message = "no install target found",
-            fix = "INSTALL_OPS no longer matches how projects install; update it." }];
+            hint = "INSTALL_OPS no longer matches how projects install; update it." }];
     }
     final found = mut [<Finding>];
     foreach (t in targets) {
@@ -85,7 +85,7 @@ export fun findings(targets: [InstallTarget], sources: {str: str}) > [Finding] {
         found.append(Finding{ path = magusfile,
             line = support\findLine(sources[magusfile] ?? "", needle: "export fun " + t.declaredAs + "("),
             message = "target \"{t.name}\" installs packages but may replay",
-            fix = "Its effect is node_modules, which no cache entry records, so a hit on a fresh checkout\n"
+            hint = "Its effect is node_modules, which no cache entry records, so a hit on a fresh checkout\n"
                 + "restores nothing. Declare \"{t.name}\": \{\"skip_cache\": \"<why>\"} in the project's targets." });
     }
     return found;

@@ -35,7 +35,7 @@ export object Check {
     message: str = "",
     details: [str] = [],
     evidence: Evidence = Evidence.none,
-    fix: [str] = [],
+    hint: [str] = [],
 }
 
 export object TierEvidence {

@@ -37,14 +37,14 @@ type Fault struct {
 	Field string
 	// Message says what is wrong, naming the field in its own words.
 	Message string
-	// Fix is the edit to the record that clears the fault, empty when none is named.
-	Fix string
+	// Hint is the edit that clears the fault, empty when none is named.
+	Hint string
 }
 
-// Error is the message, then the fix after a colon.
+// Error is the message, then the hint after a colon.
 func (f Fault) Error() string {
-	if f.Fix == "" {
+	if f.Hint == "" {
 		return f.Message
 	}
-	return fmt.Sprintf("%s: %s", f.Message, f.Fix)
+	return fmt.Sprintf("%s: %s", f.Message, f.Hint)
 }

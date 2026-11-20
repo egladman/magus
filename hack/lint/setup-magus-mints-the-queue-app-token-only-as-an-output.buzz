@@ -88,7 +88,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 fun at(path: str, line: int, message: str, fix: str) > Finding {
-    return Finding{ path = path, line = line, message = message, fix = fix };
+    return Finding{ path = path, line = line, message = message, hint = fix };
 }
 
 // actionFindings grades setup-magus's action.yml.

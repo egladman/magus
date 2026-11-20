@@ -217,19 +217,19 @@ export fun staleness(idx: any, judging: str) > Staleness {
     final lang: str = idx["language"] ?? "";
     final detail: str = idx["detail"] ?? "";
     final rebuild = "Rebuild it with `magus graph build`, then rerun lint.";
-    final fix = if (detail != "") detail + "\n" + rebuild else rebuild;
+    final hint = if (detail != "") detail + "\n" + rebuild else rebuild;
     final changed: [str] = idx["changed"] ?? [<str>];
     final count = std\toInt(idx["changed_count"] ?? 0);
     if (freshness != "out-of-date" or changed.len() == 0 or count > changed.len()) {
         return Staleness{ judgeable = false, findings = [Finding{ path = project,
             message = "the {lang} symbol index of {project} is {freshness}, so its {judging} cannot be judged",
-            fix = fix }] };
+            hint = hint }] };
     }
     final found = mut [<Finding>];
     foreach (file in changed) {
         found.append(Finding{ path = file,
             message = "changed since the {lang} symbol index of {project} was built, so its {judging} cannot be judged",
-            fix = fix });
+            hint = hint });
     }
     return Staleness{ findings = found, judgeable = true };
 }
@@ -237,7 +237,7 @@ export fun staleness(idx: any, judging: str) > Staleness {
 // missing is the finding a rule reports for a file it reads that the tree lacks.
 export fun missing(p: str) > Finding {
     return Finding{ path = p, message = "cannot read " + p,
-        fix = "this rule reads it; restore the file or move the rule with it" };
+        hint = "this rule reads it; restore the file or move the rule with it" };
 }
 
 // fixture writes files, each a workspace path and its content, under a new temporary
