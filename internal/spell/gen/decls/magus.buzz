@@ -1196,7 +1196,7 @@ export object Finding {
     col: int = 0,
     rule: str = "",
     message: str = "",
-    fix: str = "",
+    hint: str = "",
     url: str = "",
 }
 
@@ -1341,7 +1341,7 @@ export object KnowledgeTextPresence {
 
 export object KnowledgeIndexCause {
     why: str = "",
-    fix: str = "",
+    hint: str = "",
 }
 
 export object KnowledgeAnswer {
@@ -1860,7 +1860,7 @@ export object Diagnostic {
     code: str = "",
     message: str = "",
     url: str = "",
-    fix: str = "",
+    hint: str = "",
 }
 
 export object DiffUncovered {
