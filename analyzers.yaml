@@ -114,13 +114,12 @@ no-throw:
       hack/dev/bootstrap-checkout.buzz: 2
       hack/magusfile/advisories.buzz: 3
       hack/magusfile/bootstrap-timing.buzz: 2
-      hack/magusfile/buzz-coverage.buzz: 3
       hack/magusfile/changelog.buzz: 3
-      hack/magusfile/drift.buzz: 5
+      hack/magusfile/drift.buzz: 1
       hack/magusfile/index.buzz: 1
       hack/magusfile/releases.buzz: 10
       hack/magusfile/ruledocs.buzz: 2
-      hack/magusfile/run-golangci.buzz: 5
+      hack/magusfile/run-golangci.buzz: 2
       hack/policy/guard.buzz: 2
       hack/policy/stale.buzz: 1
       spells/golang/golangci.buzz: 2
