@@ -771,9 +771,8 @@ func (s *remedyContractSuite) TestUnjudgedStep() {
 		Tools: agent.FindToolRows(t.TempDir(), "claude-code"),
 	}
 	v := Judge(ctx, deps, call)
-	require.Equal(t, verdict.Deny, v.Decision, "%+v", v)
-	require.Equal(t, string(denyRuleUnjudgedStep), v.Rule, v.Reason)
-	require.Empty(t, v.NextSteps, "a leased caller cannot install harness tool rows")
+	shape, text := spoken(v)
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleUnjudgedStep), Lease: "harness/worker", LeaseFrom: "flag"}, shape, text)
 	d := denyUnjudgedTool("mcp__browser__click", call.Tools)
 	require.Len(t, d.Next, 1)
 	assertRunsOnTheTree(t, d.Next[0].Run)
