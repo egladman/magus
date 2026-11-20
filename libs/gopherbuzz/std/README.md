@@ -3,7 +3,12 @@
 This package implements the **standard library of the Buzz language** for the
 gopherbuzz VM: the modules a Buzz program reaches with a bare `import`:
 `std`, `math`, `fs`, `os`, `crypto`, `gc`, `debug`, `io`, `serialize`,
-`buffer`, and `ffi`.
+`buffer`, `ffi`, and `errors`.
+
+`errors` is upstream's `src/lib/errors.buzz` at `UpstreamRef`, embedded byte for
+byte: the `FileSystemError`, `ExecError`, `SocketError` and `ReadWriteError`
+enums and the error objects such as `InvalidArgumentError`. The std functions
+here still declare `!> any` where upstream raises one of those types.
 
 ```go
 sess := buzz.NewSession(ctx)
