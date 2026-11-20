@@ -1,0 +1,18 @@
+// Upstream refuses any call to a generic that names no type arguments.
+// TypeChecker.zig reports "Return value" on the unresolved result.
+// Here E is inferred from the argument, and it is not a D.
+// @error: want R::<int, D>
+object D {
+    name: str,
+}
+object R::<T, E> {
+    value: T?,
+    error: E?,
+}
+fun err::<T, E>(e: E) > R::<T, E> {
+    return R::<T, E>{ error = e };
+}
+fun port() > R::<int, D> {
+    return err("not a D");
+}
+final __r = port();

@@ -1,0 +1,7 @@
+// Upstream refuses it: ObjTypeDef.eql in src/obj.zig lets a nullable slot take
+// a plain value, never the reverse. It reports "Wrong variable type".
+// @error: cannot assign optional maybe() to non-optional int variable "n"
+fun maybe() > int? {
+    return null;
+}
+final n: int = maybe();
