@@ -3019,15 +3019,20 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt", "coverage/buzz/lcov.info"]);
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
-    final runs = buzzcov\runs();
+    final planned = buzzcov\runs();
+    if (planned.error != null) { throw planned.error!.message; }
+    final runs = planned.value!;
     // Every command runs to its end, so the failure names each one that failed.
     _ = magus\cmdAll(runs.map(fun (index: int, run: buzzcov\Run) > magus\Subcommand
         => magus\Subcommand{sub = "buzz", args = run.argv, opts = magus\CommandOptions{dir = run.dir}}));
     final fragments = mut [<str>];
     foreach (run in runs) {
-        buzzcov\keep(fragments, run: run);
+        final kept = buzzcov\keep(fragments, run: run);
+        if (kept.error != null) { throw kept.error!.message; }
     }
-    final report = buzzcov\report(fragments);
+    final reported = buzzcov\report(fragments);
+    if (reported.error != null) { throw reported.error!.message; }
+    final report = reported.value!;
     fs\writeFile("coverage/buzz/coverage.txt", content: report.percent + "\n");
     fs\writeFile("coverage/buzz/lcov.info", content: report.tracefile);
 }
