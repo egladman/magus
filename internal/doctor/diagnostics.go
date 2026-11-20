@@ -26,6 +26,7 @@ const codeDocsMarker = "/reference/codes/"
 // a gate that greps a sentence for encouraging words grades wording, and every author then
 // writes to the grep. A section is a structure the page either declares or does not.
 var remediationSections = map[string]bool{
+	"fix":         true,
 	"hint":        true,
 	"fixing":      true,
 	"remediation": true,

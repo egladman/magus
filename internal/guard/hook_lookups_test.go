@@ -33,7 +33,7 @@ func TestIndexCauseNamesWhyAndFix(t *testing.T) {
 		return types.KnowledgeIndexCause{Why: "it was refused in " + root, Hint: "run the sync"}
 	}
 
-	assert.Equal(t, "Why: it was refused in /repo. Fix: run the sync.", env.newLookups("").indexCause())
+	assert.Equal(t, "Why: it was refused in /repo. Hint: run the sync.", env.newLookups("").indexCause())
 }
 
 func TestIndexCauseIsEmptyOutsideAWorkspace(t *testing.T) {
