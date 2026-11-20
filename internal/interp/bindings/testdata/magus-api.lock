@@ -46,7 +46,9 @@ guard.step
 guard.stop
 guard.write
 harness
+harness.install
 harness.provider
+harness.verify
 hasCharm
 history
 job

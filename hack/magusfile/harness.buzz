@@ -3,6 +3,22 @@ namespace harness;
 import "magus";
 import "strings";
 import "assert";
+import "result";
+
+// installAndVerifyHooks leaves optional plugins to explicit verification.
+export fun installAndVerifyHooks(opts: magus\CommandOptions) > result\Result::<bool> {
+    try {
+        _ = magus\harness.install(opts);
+        foreach (plan in magus\describe.harness(opts: opts)) {
+            if (plan.guard == "hooks") {
+                _ = magus\harness.verify(plan.id, opts: opts);
+            }
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "install and verify the declared harness hooks");
+    }
+}
 
 // Drift is what harness-drift reports. failure is empty when every host file is current;
 // otherwise it names each stale file in one line. merges holds each drifted host's

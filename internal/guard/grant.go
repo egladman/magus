@@ -29,6 +29,24 @@ func GrantableRules() []string {
 	return []string{string(denyRuleHooksOff)}
 }
 
+func callerRules(ctx context.Context, deps Dependencies, at location, standing leaseStanding, adviseUnjudged bool) (Dependencies, map[string]jobtypes.Grant) {
+	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
+	deps, granted := grantedRules(ctx, deps, at, standing)
+	if adviseUnjudged {
+		name := string(denyRuleUnjudgedStep)
+		setting := deps.Builtins[name]
+		if setting.Decision != builtin.Off {
+			setting.Decision = builtin.Advise
+			deps.Builtins = maps.Clone(deps.Builtins)
+			if deps.Builtins == nil {
+				deps.Builtins = make(map[string]builtin.Setting)
+			}
+			deps.Builtins[name] = setting
+		}
+	}
+	return deps, granted
+}
+
 // grantedRules lowers to advise, for this call alone, each grantable rule a live grant names
 // for the acting lease, and returns the grants that did. A grants file that cannot be read
 // lowers nothing, so every rule keeps refusing.

@@ -8353,6 +8353,12 @@ func decodeMagusCommandOptions(v vm.Value, path string) (types.MagusCommandOptio
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
+		case "binary":
+			sBinary, err := decodeString(item, path+".binary")
+			if err != nil {
+				return out, err
+			}
+			out.Binary = sBinary
 		case "root":
 			sRoot, err := decodeString(item, path+".root")
 			if err != nil {
@@ -8404,6 +8410,12 @@ func decodeMagusDiffOptions(v vm.Value, path string) (types.MagusDiffOptions, er
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
+		case "binary":
+			sBinary, err := decodeString(item, path+".binary")
+			if err != nil {
+				return out, err
+			}
+			out.MagusCommandOptions.Binary = sBinary
 		case "root":
 			sRoot, err := decodeString(item, path+".root")
 			if err != nil {

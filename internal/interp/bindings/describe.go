@@ -135,8 +135,14 @@ func buildDescribe(sess *buzz.Session, obs buzz.DirectObserver, withheld []strin
 		return ffi.ObjectSlice(out, func(v types.RuleDoc) vm.Value { return bindgen.ObjectRuleDoc(v, ffi.SessionEnums(ctx, sess, "magus")) }), err
 	})
 	bind("harness", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := std.MagusDescribeHarness(ctx, ffi.String(args, 0))
-		return bindgen.ObjectHarnessInstallation(out, ffi.SessionEnums(ctx, sess, "magus")), err
+		opts, err := describeOptions("harness", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusDescribeHarness(ctx, ffi.String(args, 0), opts)
+		return ffi.ObjectSlice(out, func(v types.HarnessInstallation) vm.Value {
+			return bindgen.ObjectHarnessInstallation(v, ffi.SessionEnums(ctx, sess, "magus"))
+		}), err
 	})
 	bind("mcpTool", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		opts, err := describeOptions("mcpTool", args, 1)

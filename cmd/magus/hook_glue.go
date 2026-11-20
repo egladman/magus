@@ -1,12 +1,66 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"path/filepath"
 	"slices"
+	"strings"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/termkit"
 )
+
+func runBuzzScript(ctx context.Context, root string, runner *interp.ScriptRunner, opts interp.ScriptOptions, inline string, rest, forwarded []string, separated bool) error {
+	if inline == "" && len(rest) > 0 {
+		if name, managed := embeddedHookName(rest[0]); managed {
+			args := slices.Clone(rest[1:])
+			if separated {
+				args = append(args, forwarded...)
+			}
+			return runEmbeddedHook(ctx, root, opts, rest[0], name, args)
+		}
+	}
+	return runner.Run(ctx, root, opts, inline, rest, forwarded, separated)
+}
+
+// Managed paths select this binary's glue without following source symlinks.
+func embeddedHookName(filename string) (string, bool) {
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return "", false
+	}
+	const dir = "/.magus/harness/hooks/"
+	path := filepath.ToSlash(abs)
+	at := strings.LastIndex(path, dir)
+	if at < 0 {
+		return "", false
+	}
+	return path[at+len(dir):], true
+}
+
+func runEmbeddedHook(ctx context.Context, root string, opts interp.ScriptOptions, filename, name string, args []string) error {
+	code, err := agent.GlueAsset(agent.GlueSource + name)
+	if err != nil {
+		return fmt.Errorf("hook %s: %w", filename, err)
+	}
+	helper, err := agent.GlueAsset(agent.GlueSource + "lib/hook.buzz")
+	if err != nil {
+		return fmt.Errorf("hook helper: %w", err)
+	}
+	runner := newBuzzRunner(ctx)
+	register := runner.Host.RegisterModules
+	runner.Host.RegisterModules = func(ctx context.Context, sess *buzz.Session, out io.Writer) {
+		register(ctx, sess, out)
+		sess.SetModuleDecls("lib/hook", string(helper))
+	}
+	return runner.RunSource(ctx, root, opts, filename, string(code), args)
+}
 
 // hookGlueShaped reports `magus buzz -s` with stdin not a terminal: the shape every
 // shipped hook wiring runs.

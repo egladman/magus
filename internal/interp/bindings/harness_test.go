@@ -2,11 +2,16 @@ package bindings
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,6 +57,39 @@ func TestBuildHarness(t *testing.T) {
 		}
 		assert.Equal(t, []string{"cursor", "claude-code", "codex"}, reg.Harnesses())
 	})
+}
+
+func TestHarnessOperationsDecodeTheSelectedBinaryFromBuzz(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the candidate executable fixture is a POSIX script")
+	}
+	root := t.TempDir()
+	binary := filepath.Join(root, "candidate")
+	program := `#!/bin/sh
+[ "$1" = --root ] || exit 81
+shift 2
+case "$1 $2" in
+  'describe harness') printf '%s\n' '[{"id":"fixture","guard":"hooks","wired":[]}]' ;;
+  'agent harness') printf '%s\n' 'done' ;;
+  *) exit 82 ;;
+esac
+`
+	require.NoError(t, os.WriteFile(binary, []byte(program), 0o755))
+	ctx := testkit.WithEnvResolver(t.Context())
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true))
+	require.NoError(t, sess.Exec(ctx, fmt.Sprintf(`import "magus";
+fun probe() > str !> any {
+    final selected = magus\CommandOptions{binary = %q, root = %q, quiet = true};
+    final plans = magus\describe.harness(opts: selected);
+    _ = magus\harness.install(selected);
+    _ = magus\harness.verify(plans[0].id, opts: selected);
+    return plans[0].id;
+}`, binary, root)))
+	got, err := sess.CallValue(ctx, sess.GetGlobal("probe"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "fixture", got.AsString())
 }
 
 // A spell's mgs_renderPrompts list reaches the descriptor field for field: a whole file,

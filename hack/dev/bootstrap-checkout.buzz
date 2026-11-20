@@ -436,6 +436,11 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
         });
         did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
+        final installed = installHarnesses(h, dir: dir);
+        if (installed.error -> err) { throw err.message; }
+        return installed.value!;
+    }));
     final opens = storeOpens(h, dir: dir);
     if (opens.error -> err) {
         throw err.message;
@@ -458,13 +463,6 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
             return installed.value!;
         }));
     }
-    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
-        final installed = installHarnesses(h, dir: dir);
-        if (installed.error -> err) {
-            throw err.message;
-        }
-        return installed.value!;
-    }));
     if (restart) {
         final started = startDaemon(h, dir: dir);
         if (started.error -> err) {
@@ -522,6 +520,11 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
     } else {
         did.append(timing\timed(h.say, clock: h.clock, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", step: timing\BUILD, run: fun () > str !> any => h.build(dir)));
     }
+    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
+        final installed = installHarnesses(h, dir: dir);
+        if (installed.error -> err) { throw err.message; }
+        return installed.value!;
+    }));
     final opens = storeOpens(h, dir: dir);
     if (opens.error -> err) {
         throw err.message;
@@ -561,13 +564,6 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
     timing\report(h.say, step: timing\SKILLS, ms: std\toInt(h.clock() - skillsBegan));
     did.append(timing\timed(h.say, clock: h.clock, start: "installing every project's dependencies with {dir}/magus", step: timing\INSTALL, run: fun () > str !> any {
         final installed = installDependencies(h, dir: dir);
-        if (installed.error -> err) {
-            throw err.message;
-        }
-        return installed.value!;
-    }));
-    did.append(timing\timed(h.say, clock: h.clock, start: "installing every declared harness", step: timing\HARNESS, run: fun () > str !> any {
-        final installed = installHarnesses(h, dir: dir);
         if (installed.error -> err) {
             throw err.message;
         }
@@ -1232,32 +1228,33 @@ test "verify-ready stops the daemon, rebuilds a skewed binary, removes only untr
     assert\equal(did, want: [
         "stopped the daemon",
         "placed /c/magus",
+        "installed every declared harness",
         "stopped the pool parents of other builds",
         "removed the stale untracked skill install .claude/skills/magus-run",
         "installed every project's dependencies",
-        "installed every declared harness",
         "built the graph",
         "generated the symbol digest",
         "built the proofread binary",
     ], message: "did");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("remove")), want: ["remove /c/.claude/skills/magus-run"], message: "one removal");
     assert\equal(calls.indexOf("magus server stop")! < calls.indexOf("build /c")!, want: true, message: "daemon stops before the build");
+    assert\equal(calls.indexOf("magus buzz hack/dev/bootstrap-harnesses.buzz")! < calls.indexOf("magus ls jobs -o name")!, want: true, message: "harness repair before reading job state");
     assert\equal(calls.indexOf("magus ls jobs -o name")! < calls.indexOf("magus server stop --pools")!, want: true, message: "the store opens first");
     assert\equal(calls.indexOf("magus run install --all")! < calls.indexOf("magus graph build")!, want: true, message: "install before the graph build");
     assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
 }
 
-test "the build path stops the daemon, places the binary, seeds the index, then installs every project's dependencies with it" {
+test "the build path places the binary and harnesses before indexing and dependencies" {
     final calls = mut [<str>];
     final h = stubHost({}, stamps: {}, calls: calls);
     assert\equal(placeBinary(h, dir: "/c", restart: false), want: [
         "stopped the daemon",
         "placed /c/magus",
+        "installed every declared harness",
         "seeded /c",
         "installed every project's dependencies",
-        "installed every declared harness",
     ], message: "did");
-    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus ls jobs -o name", "seed /c", "magus run install --all", "magus buzz hack/dev/bootstrap-harnesses.buzz"], message: "order");
+    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus buzz hack/dev/bootstrap-harnesses.buzz", "magus ls jobs -o name", "seed /c", "magus run install --all"], message: "order");
 }
 
 test "a job store the placed binary will not open stops the build path before any step writes it" {
@@ -1277,12 +1274,12 @@ test "each slow step says what it does before it runs, and its result with the t
         "stopped the daemon",
         "building /c/magus at its HEAD with go; a cold build cache takes a minute or more",
         "placed /c/magus (0ms)",
+        "installing every declared harness",
+        "installed every declared harness (0ms)",
         "seeding the symbol index of /c",
         "seeded /c (0ms)",
         "installing the dependencies of docs with /c/magus",
         "installed the dependencies of docs (0ms)",
-        "installing every declared harness",
-        "installed every declared harness (0ms)",
     ], message: "said");
 }
 
@@ -1310,10 +1307,10 @@ test "a binary built from uncommitted changes at HEAD is rebuilt" {
 test "install names the projects to install, one run each, or none" {
     final calls = mut [<str>];
     final h = stubHost({}, stamps: {}, calls: calls);
-    assert\equal(placeBinary(h, dir: "/c", restart: false, install: "docs,console")[3], want: "installed the dependencies of docs,console", message: "named");
+    assert\equal(placeBinary(h, dir: "/c", restart: false, install: "docs,console")[4], want: "installed the dependencies of docs,console", message: "named");
     assert\equal(calls.indexOf("magus run install docs") != null and calls.indexOf("magus run install console") != null, want: true, message: "ran");
     assert\equal(calls.indexOf("magus run install --all"), want: null, message: "not every project");
-    assert\equal(placeBinary(h, dir: "/c", restart: false, install: "none")[3], want: "installed no dependencies: the job touches no project that has an install target", message: "none");
+    assert\equal(placeBinary(h, dir: "/c", restart: false, install: "none")[4], want: "installed no dependencies: the job touches no project that has an install target", message: "none");
 }
 
 test "a failed install of a named project stops the build path, naming the command" {

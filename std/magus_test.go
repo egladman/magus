@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -92,6 +93,75 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 			assert.Equal(t, tc.wantWarn, got, "warn mismatch (log=%q)", buf.String())
 		})
 	}
+}
+
+func (s *stdSuite) TestHarnessEffectsRefuseAllowFailure() {
+	ctx := withSecrets(s.T().Context())
+	opts := types.MagusCommandOptions{
+		Binary:       filepath.Join(s.T().TempDir(), "missing"),
+		AllowFailure: true,
+	}
+	_, err := MagusHarnessInstall(ctx, opts)
+	s.Require().ErrorContains(err, "allowFailure")
+	_, err = MagusHarnessVerify(ctx, "fixture", opts)
+	s.Require().ErrorContains(err, "allowFailure")
+}
+
+func (s *stdSuite) TestHarnessOperationsUseTheSelectedBinaryAndTypedPlans() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("the candidate executable fixture is a POSIX script")
+	}
+	root := s.T().TempDir()
+	s.Require().NoError(os.Mkdir(filepath.Join(root, "work"), 0o755))
+	program := `#!/bin/sh
+[ "$1" = --root ] || exit 81
+shift 2
+case "$1 $2 $3" in
+  'describe harness -o') printf '%s\n' '[{"id":"fixture","guard":"hooks","wired":[]}]' ;;
+  'describe harness fixture') printf '%s\n' '{"id":"fixture","guard":"hooks","wired":[]}' ;;
+  'describe harness missing') echo 'unknown harness' >&2; exit 1 ;;
+  'agent harness install') printf '%s\n' 'candidate installs its assets' ;;
+  'agent harness verify') [ "$5" = fixture ] || exit 2; printf '%s\n' 'candidate verifies fixture' ;;
+  *) exit 82 ;;
+esac
+`
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "candidate"), []byte(program), 0o755))
+	ctx := WithCurrentWorkingDirectory(withSecrets(s.T().Context()), root)
+	opts := types.MagusCommandOptions{Binary: "../candidate", Dir: "work", Root: root, Quiet: true}
+	want := []types.HarnessInstallation{{ID: "fixture", Guard: "hooks", Wired: []types.HarnessWired{}}}
+	for _, id := range []string{"", "fixture"} {
+		plans, err := MagusDescribeHarness(ctx, id, opts)
+		s.Require().NoError(err)
+		s.Equal(want, plans)
+	}
+	_, err := MagusDescribeHarness(ctx, "missing", opts)
+	s.Require().Error(err)
+	installed, err := MagusHarnessInstall(ctx, opts)
+	s.Require().NoError(err)
+	s.Equal(types.ExecResult{Stdout: "candidate installs its assets", OK: true}, installed)
+	verified, err := MagusHarnessVerify(ctx, "fixture", opts)
+	s.Require().NoError(err)
+	s.Equal(types.ExecResult{Stdout: "candidate verifies fixture", OK: true}, verified)
+	_, err = MagusHarnessVerify(ctx, "missing", opts)
+	s.Require().Error(err)
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "other"), []byte(strings.ReplaceAll(program, "candidate installs", "other installs")), 0o755))
+	other := opts
+	other.Binary = "../other"
+	batch, err := MagusCommandAll(ctx, []types.MagusSubcommand{
+		{Sub: "agent", Args: []string{"harness", "install"}, Opts: opts},
+		{Sub: "agent", Args: []string{"harness", "install"}, Opts: other},
+	})
+	s.Require().NoError(err)
+	s.Equal([]types.ExecResult{{Stdout: "candidate installs its assets", OK: true}, {Stdout: "other installs its assets", OK: true}}, batch)
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "empty"), []byte("#!/bin/sh\nprintf '%s\\n' '[]'\n"), 0o755))
+	opts.Binary = "../empty"
+	plans, err := MagusDescribeHarness(ctx, "", opts)
+	s.Nil(plans)
+	var noProviders types.NoHarnessProvidersError
+	s.Require().ErrorAs(err, &noProviders)
+	opts.Binary = "../absent"
+	_, err = MagusHarnessInstall(ctx, opts)
+	s.Require().Error(err, "an explicitly selected binary never falls back to the caller")
 }
 
 // leased is ctx carrying lease.

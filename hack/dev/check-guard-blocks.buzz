@@ -750,10 +750,7 @@ fun hostReport(plan: magus\HarnessInstallation, root: str, all: [Case]) > HostRe
 // plansOf is the plan of every harness describe harness names.
 fun plansOf() > result\Result::<[magus\HarnessInstallation]> {
     try {
-        final wired = mut [<magus\HarnessInstallation>];
-        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim().split("\n")) {
-            if (id != "") { wired.append(magus\describe.harness(id)); }
-        }
+        final wired = magus\describe.harness();
         return result\ok::<[magus\HarnessInstallation]>(wired);
     } catch (err: any) {
         return result\caught::<[magus\HarnessInstallation]>(err, doing: "list the harnesses");

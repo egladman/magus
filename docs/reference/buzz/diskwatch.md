@@ -18,21 +18,21 @@ The cheap half of disk reclaiming: the per-user store of free-space samples, wha
 
 storePath is the store's path, creating its directory.
 
-**Signature:** `diskwatch\storePath() -> str`
+**Signature:** `diskwatch\storePath() -> result\Result::<str>`
 
-**Returns:** str
+**Returns:** result\Result::<str>
 
 ### thresholds
 
 thresholds reads the disk section of `magus config view -o json`. A key the config does
 
-**Signature:** `diskwatch\thresholds(config) -> Thresholds`
+**Signature:** `diskwatch\thresholds(config) -> result\Result::<Thresholds>`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `config`  | `str` |          |             |
 
-**Returns:** Thresholds
+**Returns:** result\Result::<Thresholds>
 
 ### due
 
@@ -140,44 +140,46 @@ pendingLine is what the store has that no person was told: a tick's result,
 
 ### encode
 
-**Signature:** `diskwatch\encode(s) -> str`
+**Signature:** `diskwatch\encode(s) -> result\Result::<str>`
 
 | Parameter | Type         | Optional | Description |
 | --------- | ------------ | -------- | ----------- |
 | `s`       | `DiskSample` |          |             |
 
-**Returns:** str
+**Returns:** result\Result::<str>
 
 ### decode
 
-**Signature:** `diskwatch\decode(text) -> DiskSample`
+**Signature:** `diskwatch\decode(text) -> result\Result::<DiskSample>`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `text`    | `str` |          |             |
 
-**Returns:** DiskSample
+**Returns:** result\Result::<DiskSample>
 
 ### read
 
 read decodes every line of the store at path; a missing store is empty.
 
-**Signature:** `diskwatch\read(path) -> [DiskSample]`
+**Signature:** `diskwatch\read(path) -> result\Result::<[DiskSample]>`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `path`    | `str` |          |             |
 
-**Returns:** [DiskSample]
+**Returns:** result\Result::<[DiskSample]>
 
 ### append
 
 append adds s to the store, then compacts it by rename once it holds twice keepLines.
 
-**Signature:** `diskwatch\append(path, s)`
+**Signature:** `diskwatch\append(path, s) -> result\Result::<bool>`
 
 | Parameter | Type         | Optional | Description |
 | --------- | ------------ | -------- | ----------- |
 | `path`    | `str`        |          |             |
 | `s`       | `DiskSample` |          |             |
+
+**Returns:** result\Result::<bool>
 

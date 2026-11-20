@@ -21,6 +21,11 @@ Parsing is upstream\-strict by default: a file written for the magusfile
 engine needs \-\-embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 .PP
+Normal execution of .magus/harness/hooks/<name> runs the script and shared
+helper embedded in this binary. Installed copies may be stale or missing;
+they never supply runtime code. Run an authored template outside that reserved
+directory to try edits. \-\-check and \-t still inspect the named files.
+.PP
 \-t runs the test blocks of every script given and reports pass or fail, which
 is how Buzz code in this ecosystem is tested. \-\-coverprofile writes one LCOV
 report across all the files under \-t (a file is measured when it is a \-t

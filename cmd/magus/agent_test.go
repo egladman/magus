@@ -612,6 +612,29 @@ func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 	})
 }
 
+func TestHarnessOperationsRefuseAnUndeclaredProviderCollection(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "empty_harnesses.txtar")
+	require.NoError(t, os.WriteFile(script, []byte(`! exec magus describe harness -o json
+stderr 'name a harness id'
+! stdout '^\[\]$'
+! exec magus agent harness install
+stderr 'name a harness id'
+! exec magus agent harness verify
+stderr 'name a harness id'
+
+-- magus.yaml --
+-- magusfile.buzz --
+import "magus";
+magus\project({});
+`), 0o644))
+	testscript.Run(t, testscript.Params{Files: []string{script}, Setup: func(e *testscript.Env) error {
+		e.Setenv("MAGUS_SERVER_ENABLED", "false")
+		e.Setenv("MAGUS_BROKER", "off")
+		e.Setenv("MAGUS_HINTS_ENABLED", "false")
+		return nil
+	}})
+}
+
 const describeHarnessMergeTxtar = `exec sh -c 'magus describe harness script-host | sed -n "s/^  \(magus describe harness .*\)/\1/p" > printed.sh'
 cmp printed.sh want-merge.sh
 exec sh printed.sh

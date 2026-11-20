@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,10 +20,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -83,7 +79,9 @@ var Magus = Module{
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
 		"since there is no workspace to read. The nested-command methods (`cmd`, `run`, " +
 		"`doctor`, and the `magus\\describe` methods that fork) work there either way and discover " +
-		"the workspace themselves.",
+		"the workspace themselves. `CommandOptions.binary` selects an executable for a nested call; " +
+		"relative paths resolve from the child's directory. Omit it to use the caller's executable. " +
+		"An explicitly selected executable never falls back to PATH or to the caller.",
 	Methods: []Method{
 		{
 			Name: "cmd",
@@ -601,13 +599,27 @@ var Magus = Module{
 		},
 		{
 			Name: "harness",
-			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.",
+			Doc:  "Agent-host harness selection, managed installation and verification. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.",
 			Methods: []Method{{
 				Name:    "provider",
 				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness id, which keys the hosts map of magus\\modelTiers; a call that ignores it wires the harness all the same.",
 				Args:    []Arg{{Name: "spell"}},
 				Returns: []Ret{{}},
 				Extern:  (func(context.Context, map[string]any) (string, error))(nil),
+			}, {
+				Name:    "install",
+				Doc:     "Install every declared harness's managed assets. Returns the command outcome and raises on failure; opts.allowFailure is refused. opts.binary selects the executable whose embedded assets are installed, so a build can install from its newly linked binary.",
+				Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
+				Returns: []Ret{{Object: "ExecResult"}},
+				Raises:  true,
+				Extern:  (func(context.Context, map[string]any) (map[string]any, error))(nil),
+			}, {
+				Name:    "verify",
+				Doc:     "Verify the declared harness id, including synthetic hook probes. Returns the command outcome and raises when verification fails; opts.allowFailure is refused. opts.binary selects the executable performing verification.",
+				Args:    []Arg{{Name: "id"}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+				Returns: []Ret{{Object: "ExecResult"}},
+				Raises:  true,
+				Extern:  (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
 			}},
 		},
 		{
@@ -788,11 +800,11 @@ var Magus = Module{
 				},
 				{
 					Name:    "harness",
-					Doc:     "What the wired harness id's host config needs merged: {id, files, merge, mcpHint, wired}, files keyed by workspace path. magus never writes host config; the person runs merge. An empty or unknown id raises, naming the wired ids. Runs a nested magus.",
-					Args:    []Arg{{Name: "id"}},
-					Returns: []Ret{{Object: "HarnessInstallation"}},
+					Doc:     "Declared harnesses as typed installation plans. Omit id for every provider; a named provider returns a one-element list and an unknown name raises. No declared providers raises. opts.binary selects the executable reading its own harness assets.",
+					Args:    []Arg{{Name: "id", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[HarnessInstallation]"}},
 					Raises:  true,
-					Extern:  (func(context.Context, string) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) ([]map[string]any, error))(nil),
 				},
 				{
 					Name:    "mcp_tool",
@@ -1097,25 +1109,43 @@ func MagusDescribeRule(ctx context.Context, name string, opts types.MagusCommand
 	return []types.RuleDoc{rule}, nil
 }
 
-// MagusDescribeHarness implements magus\describe.harness: the plan of the one wired harness
-// id names. An empty id is an error naming the wired ids, which a nested describe lists.
-func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessInstallation, error) {
+// MagusDescribeHarness keeps the collection shape for a named provider
+// and for a read of every provider.
+func MagusDescribeHarness(ctx context.Context, id string, opts types.MagusCommandOptions) ([]types.HarnessInstallation, error) {
 	if id != "" {
-		return runMagusJSON[types.HarnessInstallation](ctx, "describe", []string{"harness", id}, types.MagusCommandOptions{})
+		plan, err := runMagusJSON[types.HarnessInstallation](ctx, "describe", []string{"harness", id}, opts)
+		if err != nil {
+			return nil, err
+		}
+		return []types.HarnessInstallation{plan}, nil
 	}
-	plans, err := runMagusJSON[[]types.HarnessInstallation](ctx, "describe", []string{"harness"}, types.MagusCommandOptions{})
+	plans, err := runMagusJSON[[]types.HarnessInstallation](ctx, "describe", []string{"harness"}, opts)
 	if err != nil {
-		return types.HarnessInstallation{}, fmt.Errorf(`magus\describe.harness: no harness id named, and listing the wired ones failed: %w`, err)
+		return nil, err
 	}
-	ids := make([]string, len(plans))
-	for i, p := range plans {
-		ids[i] = p.ID
+	if len(plans) == 0 {
+		return nil, types.NoHarnessProvidersError{}
 	}
-	wired := strings.Join(ids, ", ")
-	if wired == "" {
-		wired = "none"
+	return plans, nil
+}
+
+// MagusHarnessInstall runs the installer shipped by the selected executable.
+func MagusHarnessInstall(ctx context.Context, opts types.MagusCommandOptions) (types.ExecResult, error) {
+	if opts.AllowFailure {
+		return types.ExecResult{}, errors.New("magus.harness.install: allowFailure is not supported")
 	}
-	return types.HarnessInstallation{}, fmt.Errorf(`magus\describe.harness: name a harness id, one of the wired ones: %s`, wired)
+	return runMagusSub(ctx, "agent", []string{"harness", "install"}, opts)
+}
+
+// MagusHarnessVerify returns an error when verification fails.
+func MagusHarnessVerify(ctx context.Context, id string, opts types.MagusCommandOptions) (types.ExecResult, error) {
+	if opts.AllowFailure {
+		return types.ExecResult{}, errors.New("magus.harness.verify: allowFailure is not supported")
+	}
+	if id == "" {
+		return types.ExecResult{}, errors.New("magus.harness.verify: name a harness id from magus\\describe.harness()")
+	}
+	return runMagusSub(ctx, "agent", []string{"harness", "verify", "--id", id}, opts)
 }
 
 // MagusDescribeMCPTool implements magus\describe.mcpTool.
@@ -1297,20 +1327,22 @@ func MagusCommandAll(ctx context.Context, commands []types.MagusSubcommand) ([]t
 			return nil, fmt.Errorf(`magus.cmdAll: command %d: magus %s is refused: this run's pool adopts it, where it would wait for a slot the batch holds, so call magus\run for it`, i, c.Sub)
 		}
 	}
-	self, err := os.Executable()
-	if err != nil {
-		return nil, fmt.Errorf("magus.cmdAll: executable: %w", err)
-	}
 	env := batchCommandEnv(ctx)
 	argvs := make([][]string, len(commands))
+	binaries := make([]string, len(commands))
 	for i, c := range commands {
+		binary, err := magusExecutable(ctx, c.Opts)
+		if err != nil {
+			return nil, fmt.Errorf("magus.cmdAll: command %d: executable: %w", i, err)
+		}
+		binaries[i] = binary
 		warnIfTypedSubcommand(ctx, c.Sub, c.Args)
 		argvs[i] = nestedArgv(append([]string{c.Sub}, c.Args...), c.Opts)
 	}
 	label := func(i int) string { return "magus " + strings.Join(argvs[i], " ") }
 	results := make([]types.ExecResult, len(commands))
 	errs := runSeated(ctx, len(commands), label, func(ctx context.Context, i int) error {
-		res, err := spawn.Exec(nestedMagusContext(ctx), self, argvs[i], nestedExecOptions(ctx, commands[i].Opts, env))
+		res, err := spawn.Exec(nestedMagusContext(ctx), binaries[i], argvs[i], nestedExecOptions(ctx, commands[i].Opts, env))
 		results[i], err = nestedResult("cmdAll", argvs[i], res, err, commands[i].Opts)
 		return err
 	})
@@ -1963,186 +1995,6 @@ func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts ty
 		return out, runErr
 	}
 	return out, fmt.Errorf("magus.%s: decode report: %s", sub, res.Stderr)
-}
-
-// runMagusSub runs a nested magus invocation for subcommand sub: it prepends sub
-// to args (so the subcommand name is fixed by the caller, not user-supplied) and
-// hands off to runMagus.
-func runMagusSub(ctx context.Context, sub string, args []string, opts types.MagusCommandOptions) (types.ExecResult, error) {
-	return runMagus(ctx, sub, append([]string{sub}, args...), opts)
-}
-
-// resolveRunDir picks the directory a nested magus runs in: the contextual project dir,
-// or opts.dir resolved RELATIVE to it, exactly as proc.exec's dir is, so the two spell the
-// same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
-// there is nothing to resolve against, so it is used as given.
-func resolveRunDir(ctx context.Context, opts types.MagusCommandOptions) string {
-	dir, _ := CurrentWorkingDirectoryFromContext(ctx)
-	sub := opts.Dir
-	if sub == "" {
-		return dir
-	}
-	if filepath.IsAbs(sub) || dir == "" {
-		return sub
-	}
-	return filepath.Join(dir, sub)
-}
-
-// runMagus runs a nested magus invocation with the full arg vector, yielding the
-// caller's concurrency slot for the duration so the child can run. Output streams
-// live and is captured: on success it returns the same {stdout, stderr, code, ok}
-// object as proc.exec, so a magusfile can read a subcommand's output (e.g. `magus
-// describe graph -o markdown` to generate MAGUS.md). It raises when the child can't
-// launch or exits non-zero unless opts.AllowFailure is set, mirroring proc.exec. label
-// names the calling method for error messages.
-//
-// The child runs in the working directory carried by ctx (WithCurrentWorkingDirectory) but loads the whole
-// workspace, so a command scoped to one project names it. opts may carry "root",
-// emitted as the global --root flag, which precedes the subcommand.
-// nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
-// what it is fed.
-//
-// Extracted from runMagus so the option plumbing can be asserted without spawning anything.
-// Each field answers one opt, spelled as proc.exec spells it:
-//
-//   - dir runs the child somewhere else, resolved RELATIVE to the contextual project dir, so
-//     a nested magus reaching a sibling project needs no proc.exec("magus", ...).
-//   - quiet captures the output without echoing it, for a command whose stdout is consumed.
-//   - stdin feeds the child. A subcommand that reads a credential there (graph push) is the
-//     case it exists for: an argument would put the token in a process listing and in every
-//     run log. It was missing, so the magusfile that pipes a token to `graph push` had it
-//     dropped on the floor and the publish failed on every push to main.
-func nestedExecOptions(ctx context.Context, opts types.MagusCommandOptions, env []string) spawn.ExecOptions {
-	return spawn.ExecOptions{
-		Dir:     resolveRunDir(ctx, opts),
-		Env:     env,
-		Capture: true,
-		Quiet:   opts.Quiet,
-		Stdin:   opts.Stdin,
-	}
-}
-
-func runMagus(ctx context.Context, label string, args []string, opts types.MagusCommandOptions) (types.ExecResult, error) {
-	self, err := os.Executable()
-	if err != nil {
-		return types.ExecResult{}, fmt.Errorf("magus.%s: executable: %w", label, err)
-	}
-
-	full := nestedArgv(args, opts)
-
-	// childEnv withholds server sockets from subprocesses, while a recursive Magus
-	// call must retain both that trusted transport and its captured lease.
-	env := recursiveMagusEnv(ctx)
-
-	lim := cache.LimiterFromContext(ctx)
-	var rec types.ExecResult
-	var cmdErr error
-	runFn := func() error {
-		res, err := spawn.Exec(nestedMagusContext(ctx), self, full, nestedExecOptions(ctx, opts, env))
-		rec, cmdErr = nestedResult(label, full, res, err, opts)
-		return nil
-	}
-	if err := proc.RunChildSync(ctx, lim, runFn); err != nil {
-		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
-	}
-	return rec, cmdErr
-}
-
-// nestedArgv is a nested magus's argv: global flags (--root) precede the
-// subcommand and its args.
-func nestedArgv(args []string, opts types.MagusCommandOptions) []string {
-	var full []string
-	if opts.Root != "" {
-		full = append(full, "--root", opts.Root)
-	}
-	return append(full, args...)
-}
-
-// nestedResult turns a nested magus's exit into what the calling method returns.
-// A non-zero exit raises unless opts.AllowFailure is set, which returns the
-// result instead, as proc.exec's runResult does; a sandbox denial always raises.
-func nestedResult(label string, full []string, res spawn.ExecResult, err error, opts types.MagusCommandOptions) (types.ExecResult, error) {
-	if err != nil && errors.Is(err, types.ExecDenied) {
-		return types.ExecResult{}, err
-	}
-	var rec types.ExecResult
-	if res.Started || opts.AllowFailure {
-		// Recorded even on a non-zero exit. A child that RAN said something, and
-		// that output is the answer for a command whose failure IS its report:
-		// doctor exits 1 because a check failed, and dropping stdout there left
-		// nothing to decode. The error is still returned alongside, so a caller
-		// that only wants the happy path is unaffected.
-		rec = types.ExecResult{
-			Stdout: strings.TrimSpace(res.Stdout),
-			Stderr: strings.TrimSpace(res.Stderr),
-			Code:   res.Code,
-			OK:     res.Code == 0,
-		}
-	}
-	if res.Code == 0 || opts.AllowFailure {
-		return rec, nil
-	}
-	if !res.Started {
-		// The child never launched (binary not found, permission, ctx cancelled
-		// before exec); surface the real cause, not a fabricated "code -1".
-		return rec, fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
-	}
-	// The child's own diagnostic is not repeated here. It reaches the console
-	// itself (printed by the child when it runs as its own process, and by
-	// proc.Forward when it was adopted), so folding it into this message too
-	// produced the same paragraph twice, once truncated into a `cause:` line.
-	// Under opts.quiet nothing streams, and a caller that only reads the error
-	// sees no ExecResult, so the child's stderr rides in the error or is lost.
-	cmdErr := fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
-	if opts.Quiet {
-		if msg := strings.TrimSpace(res.Stderr); msg != "" {
-			cmdErr = fmt.Errorf("%w: %s", cmdErr, msg)
-		}
-	}
-	return rec, cmdErr
-}
-
-// nestedMagusContext confines a nested magus under every target's layer.
-// It runs targets, and a landlock domain grants them nothing it lacks.
-// The caller's own children keep ctx's policy.
-func nestedMagusContext(ctx context.Context) context.Context {
-	return sandbox.WithPolicy(ctx, sandbox.PolicyFromContext(ctx).ForNestedMagus())
-}
-
-// recursiveMagusEnv carries only the invocation facts a nested Magus process needs.
-// It deliberately rebuilds BAGGAGE from the context instead of forwarding the mutable
-// process value, so a script cannot shed its bound lease before calling magus\cmd.
-func recursiveMagusEnv(ctx context.Context) []string {
-	env := leaseEnv(ctx)
-	for _, k := range spawn.ProcForwardVars {
-		if v := os.Getenv(k); v != "" {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
-			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
-				"magus socket injected into recursive magus invocation"), "var", k)
-		}
-	}
-	return env
-}
-
-// leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
-func leaseEnv(ctx context.Context) []string {
-	if lease := jobtypes.LeaseFromContext(ctx); lease != "" {
-		return []string{fmt.Sprintf("%s=%s=%s", recorder.EnvBaggage, recorder.BaggageLease, lease)}
-	}
-	return nil
-}
-
-// batchCommandEnv is a magus\cmdAll command's: the lease without this run's
-// pool socket. The command holds a slot of its step, so a nested run it
-// forwarded here would queue for that slot.
-func batchCommandEnv(ctx context.Context) []string {
-	for _, k := range spawn.ProcForwardVars {
-		if os.Getenv(k) != "" {
-			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
-				`magus socket withheld from a magus\cmdAll command`), "var", k)
-		}
-	}
-	return leaseEnv(ctx)
 }
 
 // MagusDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the

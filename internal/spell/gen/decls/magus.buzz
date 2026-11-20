@@ -434,6 +434,7 @@ export object Change {
 }
 
 export object CommandOptions {
+    binary: str = "",
     root: str = "",
     dir: str = "",
     stdin: str = "",
@@ -1703,6 +1704,7 @@ export object TierReport {
 }
 
 export object DiffOptions {
+    binary: str = "",
     root: str = "",
     dir: str = "",
     stdin: str = "",
@@ -2835,9 +2837,11 @@ export object guard {
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
-// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
+// Agent-host harness selection, managed installation and verification. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
 export object harness {
+    static extern fun install(opts: CommandOptions? = null) > ExecResult !> any;
     static extern fun provider(spell: {str: any}) > str;
+    static extern fun verify(id: str, opts: CommandOptions? = null) > ExecResult !> any;
 }
 
 // Secret provider selection, and the credentials read through it.
@@ -2865,7 +2869,7 @@ export object describe {
     static extern fun file(paths: [str], opts: CommandOptions? = null) > FileReport !> any;
     static extern fun graph(opts: CommandOptions? = null) > TargetGraph !> any;
     static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions? = null) > str !> any;
-    static extern fun harness(id: str) > HarnessInstallation !> any;
+    static extern fun harness(id: str = "", opts: CommandOptions? = null) > [HarnessInstallation] !> any;
     static extern fun mcpTool(name: str = "", opts: CommandOptions? = null) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;

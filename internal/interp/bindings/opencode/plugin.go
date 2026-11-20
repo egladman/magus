@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	reclaimDiskScript = ".opencode/magus/runtime/magus-reclaim-disk.buzz"
-	buzzCheckScript   = ".opencode/magus/runtime/magus-buzz-check.buzz"
-	observeScript     = ".opencode/magus/runtime/magus-observe.buzz"
+	reclaimDiskScript = ".magus/harness/hooks/magus-reclaim-disk.buzz"
+	buzzCheckScript   = ".magus/harness/hooks/magus-buzz-check.buzz"
+	observeScript     = ".magus/harness/hooks/magus-observe.buzz"
 	magusFix          = "Install magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."
 	agentName         = "opencode"
 	maxBrief          = 16384

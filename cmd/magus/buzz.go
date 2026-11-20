@@ -158,7 +158,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	if bf.Test {
 		return runner.Test(ctx, root, opts, bf.Coverprofile, bf.E, rest, forwarded)
 	}
-	return runner.Run(ctx, root, opts, bf.E, rest, forwarded, sep)
+	return runBuzzScript(ctx, root, runner, opts, bf.E, rest, forwarded, sep)
 }
 
 // newBuzzRunner wires the script runner to this process: the workspace opener, the

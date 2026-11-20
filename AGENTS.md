@@ -97,8 +97,10 @@ saying it, delete it here.
 
 ## Binary
 
-- A fresh worktree has no `./magus`, and the guard names two lines. The bootstrap
-  only builds `./magus`. Then
+- `./magus run go-build .` links the development binary, installs every declared
+  harness, and verifies hook wiring. It never requires a provider's optional plugin.
+- A fresh worktree has no `./magus`, and the guard names two lines. A bare
+  `go build` only links `./magus`. Then
   `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready`
   installs every project's dependencies and every declared harness's tool rows.
   It also builds the graph, the symbol digest and the proofread binary the commit

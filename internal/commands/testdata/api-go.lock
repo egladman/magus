@@ -586,7 +586,7 @@ github.com/egladman/magus/std.MagusDescribeEvaluatedTarget func(ctx context.Cont
 github.com/egladman/magus/std.MagusDescribeFile func(ctx context.Context, paths []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.FileReport, error)
 github.com/egladman/magus/std.MagusDescribeGraph func(ctx context.Context, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.TargetGraphOutput, error)
 github.com/egladman/magus/std.MagusDescribeGraphMarkdown func(ctx context.Context, projects []string, opts github.com/egladman/magus/types.MagusCommandOptions) (string, error)
-github.com/egladman/magus/std.MagusDescribeHarness func(ctx context.Context, id string) (github.com/egladman/magus/types.HarnessInstallation, error)
+github.com/egladman/magus/std.MagusDescribeHarness func(ctx context.Context, id string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.HarnessInstallation, error)
 github.com/egladman/magus/std.MagusDescribeMCPTool func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.MCPTool, error)
 github.com/egladman/magus/std.MagusDescribeProject func(ctx context.Context) (github.com/egladman/magus/types.ProjectsOutput, error)
 github.com/egladman/magus/std.MagusDescribeRule func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.RuleDoc, error)
@@ -627,6 +627,8 @@ github.com/egladman/magus/std.MagusGraphStats func(ctx context.Context, g github
 github.com/egladman/magus/std.MagusGraphSymbols func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Symbols, error)
 github.com/egladman/magus/std.MagusGraphUnreferenced func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Unreferenced, error)
 github.com/egladman/magus/std.MagusGrouping func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
+github.com/egladman/magus/std.MagusHarnessInstall func(ctx context.Context, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
+github.com/egladman/magus/std.MagusHarnessVerify func(ctx context.Context, id string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name string) (bool, error)
 github.com/egladman/magus/std.MagusHistoryAffinity func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Affinity, error)
 github.com/egladman/magus/std.MagusHistoryHotspots func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Hotspots, error)
@@ -3069,6 +3071,7 @@ github.com/egladman/magus/types.MagusBuild.Version field string
 github.com/egladman/magus/types.MagusBuildFromContext func(ctx context.Context) MagusBuild
 github.com/egladman/magus/types.MagusCommandOptions type struct
 github.com/egladman/magus/types.MagusCommandOptions.AllowFailure field bool
+github.com/egladman/magus/types.MagusCommandOptions.Binary field string
 github.com/egladman/magus/types.MagusCommandOptions.Dir field string
 github.com/egladman/magus/types.MagusCommandOptions.Quiet field bool
 github.com/egladman/magus/types.MagusCommandOptions.Root field string
@@ -3270,6 +3273,8 @@ github.com/egladman/magus/types.NextStep.Run field string "json:\"run\"         
 github.com/egladman/magus/types.NextStep.Why field string "json:\"why,omitempty\"   yaml:\"why,omitempty\""
 github.com/egladman/magus/types.NoAuthToken const DiagnosticCode = "MGS9004"
 github.com/egladman/magus/types.NoCITarget const DiagnosticCode = "MGS1001"
+github.com/egladman/magus/types.NoHarnessProvidersError type struct
+github.com/egladman/magus/types.NoHarnessProvidersError.Error method func() string
 github.com/egladman/magus/types.NoSymbols var SymbolScope
 github.com/egladman/magus/types.NoWorkspaceRoot const DiagnosticCode = "MGS3008"
 github.com/egladman/magus/types.Node type struct
