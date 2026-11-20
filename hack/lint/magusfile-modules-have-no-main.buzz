@@ -42,11 +42,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         if (f.value.startsWith(MODULES) and line > 0) {
             found.append(Finding{ path = f.value, line = line,
                 message = "{f.value} declares main, but a module a magusfile imports is never run",
-                fix = "Move it to the directory of whoever runs it ({support\SCRIPT_DIRS.join(", ")}), or drop main." });
+                hint = "Move it to the directory of whoever runs it ({support\SCRIPT_DIRS.join(", ")}), or drop main." });
         } else if (support\scriptDir(f.value) != "" and line == 0) {
             found.append(Finding{ path = f.value, line = 1,
                 message = "{f.value} declares no main, so nothing runs it",
-                fix = "Move it to hack/magusfile/ if a magusfile imports it, or give it a main that calls its work." });
+                hint = "Move it to hack/magusfile/ if a magusfile imports it, or give it a main that calls its work." });
         }
     }
     return found;

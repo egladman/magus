@@ -89,11 +89,11 @@ fun judge(path: str, src: str, found: mut [Finding]) > void {
             if (isTest(path)) {
                 found.append(Finding{ path = path, line = n,
                     message = "{k} in a test; no comment excuses it",
-                    fix = "Assert instead (node:assert fails the test). A double for a failing platform call takes its rejection from rejected(reason) in console/src/lib/rejected.ts." });
+                    hint = "Assert instead (node:assert fails the test). A double for a failing platform call takes its rejection from rejected(reason) in console/src/lib/rejected.ts." });
             } else {
                 found.append(Finding{ path = path, line = n,
                     message = "{k} in hand-written TypeScript; a fallible call here returns a Result",
-                    fix = "Return fail(new MagusError(...)) from gen/magus/types, or wrap the call in attempt or fromPromise, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
+                    hint = "Return fail(new MagusError(...)) from gen/magus/types, or wrap the call in attempt or fromPromise, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
             }
         }
     }

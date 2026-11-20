@@ -1,6 +1,6 @@
 // lint-findings-carry-a-message-and-a-fix refuses a Finding literal in a
-// hack/lint rule whose message or fix is unset or empty. The message is the
-// reason, and the fix is the next step. Test blocks build findings to compare
+// hack/lint rule whose message or hint is unset or empty. The message is the
+// reason, and the hint is the next step. Test blocks build findings to compare
 // against, so they are skipped.
 //
 // Tier 1, mechanical: the fix is a field on the literal.
@@ -13,7 +13,7 @@ import "hack/lint/support" as support;
 
 final OPEN = "Finding\{";
 final FIELD_MESSAGE = std\pattern("[\{,]\\s*message\\s*=\\s*(\"\"|``)?");
-final FIELD_FIX = std\pattern("[\{,]\\s*fix\\s*=\\s*(\"\"|``)?");
+final FIELD_HINT = std\pattern("[\{,]\\s*hint\\s*=\\s*(\"\"|``)?");
 
 export fun reads() > [str] {
     return ["hack/lint/*.buzz"];
@@ -51,13 +51,13 @@ export fun judge(path: str, src: str) > [Finding] {
             if (!set(FIELD_MESSAGE, literal: literal)) {
                 missing.append("message");
             }
-            if (!set(FIELD_FIX, literal: literal)) {
-                missing.append("fix");
+            if (!set(FIELD_HINT, literal: literal)) {
+                missing.append("hint");
             }
             if (missing.len() > 0) {
                 found.append(Finding{ path = path, line = support\lineAt(src, off: start),
                     message = "a finding with no {missing.join(" and no ")}: a refusal names its reason and its next step",
-                    fix = "Set message to why the file breaks the rule and fix to what to change, both non-empty." });
+                    hint = "Set message to why the file breaks the rule and hint to what to change, both non-empty." });
             }
         }
         at = src.indexOf(OPEN, from: end + 1);
@@ -124,13 +124,13 @@ fun closing(src: str, open: int) > int {
     return src.len() - 1;
 }
 
-test "a literal with a message and a fix passes, over several lines and with interpolation" {
-    final src = "fun f() > void \{\n    _ = Finding\{ path = p,\n        message = \"bad \{x[\"k\"]}\",\n        fix = FIX };\n}\n";
+test "a literal with a message and a hint passes, over several lines and with interpolation" {
+    final src = "fun f() > void \{\n    _ = Finding\{ path = p,\n        message = \"bad \{x[\"k\"]}\",\n        hint = HINT };\n}\n";
     assert\equal(judge("a.buzz", src: src).len(), want: 0, message: support\messages(judge("a.buzz", src: src)).join("; "));
 }
 
-test "a literal missing its fix, or with an empty one, fails at its line" {
-    final got = judge("a.buzz", src: "fun f() > void \{\n    _ = Finding\{ path = p, message = \"m\" };\n    _ = Finding\{ message = \"m\", fix = \"\" };\n}\n");
+test "a literal missing its hint, or with an empty one, fails at its line" {
+    final got = judge("a.buzz", src: "fun f() > void \{\n    _ = Finding\{ path = p, message = \"m\" };\n    _ = Finding\{ message = \"m\", hint = \"\" };\n}\n");
     assert\equal(got.len(), want: 2, message: support\messages(got).join("; "));
     assert\equal(got[0].line, want: 2, message: "first literal");
     assert\equal(got[1].line, want: 3, message: "second literal");
@@ -139,7 +139,7 @@ test "a literal missing its fix, or with an empty one, fails at its line" {
 test "a literal with neither names both" {
     final got = judge("a.buzz", src: "final x = Finding\{ path = \"p\" };\n");
     assert\equal(got.len(), want: 1, message: "one finding");
-    assert\equal(got[0].message.indexOf("no message and no fix") != null, want: true, message: got[0].message);
+    assert\equal(got[0].message.indexOf("no message and no hint") != null, want: true, message: got[0].message);
 }
 
 test "a literal inside a test block is skipped" {
@@ -150,6 +150,6 @@ test "a literal inside a test block is skipped" {
 }
 
 test "a field name inside a string does not count as the field" {
-    final got = judge("a.buzz", src: "final z = Finding\{ path = \"fix = x\", message = \"m\" };\n");
-    assert\equal(got.len(), want: 1, message: "fix appears only inside the path string");
+    final got = judge("a.buzz", src: "final z = Finding\{ path = \"hint = x\", message = \"m\" };\n");
+    assert\equal(got.len(), want: 1, message: "hint appears only inside the path string");
 }

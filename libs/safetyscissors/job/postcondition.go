@@ -192,7 +192,7 @@ func (j Job) EffectivePostconditions() []Postcondition {
 func postconditionFaults(postconditions []Postcondition, primary bool) []Fault {
 	var ps []Fault
 	bad := func(field, message, fix string) {
-		ps = append(ps, Fault{Kind: FaultPostcondition, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultPostcondition, Field: field, Message: message, Hint: fix})
 	}
 	index := make(map[string]int, len(postconditions))
 	if primary {
@@ -267,7 +267,7 @@ func oneSignaturePerSymbol(postconditions []Postcondition) []Fault {
 					Kind:    FaultPostcondition,
 					Field:   fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
 					Message: fmt.Sprintf("postconditions %q and %q both expect a signature of %q, and a symbol has one", other, gate.ID, name),
-					Fix:     "keep one signature postcondition per symbol",
+					Hint:    "keep one signature postcondition per symbol",
 				})
 				continue
 			}
@@ -289,7 +289,7 @@ func (g Postcondition) faults(field string) []Fault {
 		if field != "" {
 			at = fmt.Sprintf("%s.%s", field, sub)
 		}
-		ps = append(ps, Fault{Kind: FaultPostcondition, Field: at, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultPostcondition, Field: at, Message: message, Hint: fix})
 	}
 	if rule := idRule(strings.TrimSpace(g.ID)); rule != "" {
 		bad("id", fmt.Sprintf("id %q is not a postcondition id: %s", g.ID, rule), "use a lowercase, branch-shaped id")

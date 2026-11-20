@@ -3,9 +3,9 @@ package std
 import (
 	_ "embed"
 
-	diagramsrc "github.com/egladman/magus/libs/diagram"
 	diskmod "github.com/egladman/magus/internal/disk"
 	jobsrc "github.com/egladman/magus/internal/job"
+	diagramsrc "github.com/egladman/magus/libs/diagram"
 	resultsrc "github.com/egladman/magus/libs/result"
 )
 

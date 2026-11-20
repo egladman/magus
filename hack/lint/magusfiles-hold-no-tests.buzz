@@ -31,7 +31,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (TEST_BLOCK.match(line.trim()) != null) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "magusfile carries a test block, but a magusfile is glue, not logic to pin",
-                    fix = "Move the assertion into a Buzz module, spell or policy library this magusfile imports, and test it there." });
+                    hint = "Move the assertion into a Buzz module, spell or policy library this magusfile imports, and test it there." });
             }
         }
     }

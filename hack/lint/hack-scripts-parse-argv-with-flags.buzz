@@ -36,7 +36,7 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
         found.append(Finding{ path = f.value, line = line,
             message = "{f.value} is run but reads its argv without the flags module",
-            fix = "import \"flags\" and read argv with flags\\parse(args, switches:, valued:, required:, repeated:, command:),\n"
+            hint = "import \"flags\" and read argv with flags\\parse(args, switches:, valued:, required:, repeated:, command:),\n"
                 + "the one parser every hack script shares; a subcommand is args[0] and its flags parse the rest." });
     }
     return found;

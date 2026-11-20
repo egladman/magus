@@ -57,7 +57,7 @@ export fun checkAgainst(files: [Path], before: fun (p: str) > str?) > result\Res
         foreach (moved in moves(was!, now: readResult.value!)) {
             found.append(Finding{ path = f.value, line = moved.line,
                 message = "this case was an fp at the merge base and is a pass now with no was= note: " + brief(moved.value),
-                fix = "Put `was=fp:<round>:<id>` on the section header, as in `-- pass/<kind> was=fp:round4:c17 --`, naming the round and case id the fp carried." });
+                hint = "Put `was=fp:<round>:<id>` on the section header, as in `-- pass/<kind> was=fp:round4:c17 --`, naming the round and case id the fp carried." });
         }
     }
     return result\ok::<[Finding]>(found);
@@ -262,5 +262,5 @@ test "a finding names the file, the line and the note to add" {
     assert\equal(got[0].path, want: path, message: "path");
     assert\equal(got[0].line, want: 2, message: "line");
     assert\equal(got[0].message, want: "this case was an fp at the merge base and is a pass now with no was= note: - It never fired.", message: "message");
-    assert\equal(got[0].fix.indexOf("was=fp:<round>:<id>") != null, want: true, message: "the fix shows the note");
+    assert\equal(got[0].hint.indexOf("was=fp:<round>:<id>") != null, want: true, message: "the hint shows the note");
 }

@@ -199,7 +199,7 @@ export fun fileFindings(rel: str, src: str) > result\Result::<[Finding]> {
                 final at = line.indexOf(m[0], from: next) ?? 0;
                 next = at + m[0].len();
                 found.append(Finding{ path = rel, line = n, col = at + 1,
-                    message = "\"{m[0]}\" says acts in place", fix = ACTS_IN_PLACE_FIX });
+                    message = "\"{m[0]}\" says acts in place", hint = ACTS_IN_PLACE_FIX });
             }
         }
     }
@@ -225,7 +225,7 @@ fun nounFindings(rel: str, line: str, n: int) > [Finding] {
             }
             seen[word] = true;
             found.append(Finding{ path = rel, line = n, col = at + 1,
-                message = "\"{m[0]}\" uses surface as a noun", fix = SURFACE_FIX });
+                message = "\"{m[0]}\" uses surface as a noun", hint = SURFACE_FIX });
         }
     }
     return found;
@@ -242,22 +242,22 @@ fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] {
         final low = token.lower();
         if (carriesSurface(low) and VERB_FORM.match(low) == null and VERB_TEST.match(token) == null) {
             found.append(Finding{ path = rel, line = n, col = at + 1,
-                message = "the identifier {token} carries surface as a noun", fix = IDENTIFIER_FIX });
+                message = "the identifier {token} carries surface as a noun", hint = IDENTIFIER_FIX });
         }
         foreach (w in WORD.matchAll(token) ?? [<[str]>]) {
             final word = w[0].lower();
             if ((word == "lane" or word == "lanes") and !lanesAllowed) {
                 found.append(Finding{ path = rel, line = n, col = at + 1,
-                    message = "\"{token}\" says lane", fix = LANE_FIX });
+                    message = "\"{token}\" says lane", hint = LANE_FIX });
             } else if (word == "corpus" or word == "corpora") {
                 found.append(Finding{ path = rel, line = n, col = at + 1,
-                    message = "\"{token}\" says {word}", fix = CORPUS_FIX });
+                    message = "\"{token}\" says {word}", hint = CORPUS_FIX });
             } else if (word == "recipe" or word == "recipes") {
                 found.append(Finding{ path = rel, line = n, col = at + 1,
-                    message = "\"{token}\" says {word}", fix = RECIPE_FIX });
+                    message = "\"{token}\" says {word}", hint = RECIPE_FIX });
             } else if (word == "ratchet" or word == "ratchets") {
                 found.append(Finding{ path = rel, line = n, col = at + 1,
-                    message = "\"{token}\" says {word}", fix = RATCHET_FIX });
+                    message = "\"{token}\" says {word}", hint = RATCHET_FIX });
             }
         }
     }
@@ -292,10 +292,10 @@ export fun sanction(found: [Finding], sanctioned: {str: str}) > [Finding] {
     foreach (key, reason in sanctioned) {
         if (used[key] == null) {
             kept.append(Finding{ path = THIS, message = "sanctions {key}, which no longer has a finding",
-                fix = "Delete the entry: the list only shrinks." });
+                hint = "Delete the entry: the list only shrinks." });
         } else if (reason.trim() == "") {
             kept.append(Finding{ path = THIS, message = "sanctions {key} without a reason",
-                fix = "Say in one line why it stays." });
+                hint = "Say in one line why it stays." });
         }
     }
     return kept;

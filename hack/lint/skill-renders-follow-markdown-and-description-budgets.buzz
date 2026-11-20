@@ -113,7 +113,7 @@ export fun judgedFindings(rows: [any], pairs: [Pair], catalog: str) > [Finding] 
             line = support\findLine(catalog, needle: "\{name: \"{name}\"");
         }
         found.append(Finding{ path = CATALOG, line = line, message = "{which}: {said} [{rule}]", url = r["url"] ?? "",
-            fix = "Shorten the skill's description in " + CATALOG + "; the full twin's sentence is built there too." });
+            hint = "Shorten the skill's description in " + CATALOG + "; the full twin's sentence is built there too." });
     }
     return found;
 }
@@ -136,7 +136,7 @@ export fun lintFindings(file: str, rows: [any]) > [Finding] {
         final detail: str = r["errorDetail"] ?? "";
         final shown = if (detail == "") "" else " ({detail})";
         found.append(Finding{ path = source, message = "full render line {line}: {rule} {said}{shown}",
-            fix = "Fix the text the full form shows; `magus agent install --dir <tmp> --skill-form full skills` writes the render to read." });
+            hint = "Fix the text the full form shows; `magus agent install --dir <tmp> --skill-form full skills` writes the render to read." });
     }
     return found;
 }
@@ -282,14 +282,14 @@ export fun check(files: [Path]) > [Finding] !> any {
     final rendered = render();
     if (rendered.error != null) {
         return [Finding{ path = SKILLS, message = "the skills did not render, so none was judged: {rendered.error!.message}",
-            fix = "Run `magus agent install --dir <tmp> --skill-form both skills` and read why it stopped." }];
+            hint = "Run `magus agent install --dir <tmp> --skill-form both skills` and read why it stopped." }];
     }
     final dir = rendered.value!;
     final found = mut [<Finding>];
     final linted = markdownlint(dir);
     if (linted.error != null) {
         found.append(Finding{ path = SKILLS, message = "markdownlint did not run, so no full render was judged: {linted.error!.message}",
-            fix = "markdownlint is installed by mise (npm:markdownlint-cli); run `mise install`." });
+            hint = "markdownlint is installed by mise (npm:markdownlint-cli); run `mise install`." });
     } else {
         foreach (f in linted.value!) {
             found.append(f);
@@ -298,7 +298,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final judgedFound = judgeDescriptions(dir, catalog: catalog!);
     if (judgedFound.error != null) {
         found.append(Finding{ path = JUDGE, message = "proofread did not run, so no skill description was judged: {judgedFound.error!.message}",
-            fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} skill-template, and read why it stopped." });
+            hint = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} skill-template, and read why it stopped." });
     } else {
         foreach (f in judgedFound.value!) {
             found.append(f);

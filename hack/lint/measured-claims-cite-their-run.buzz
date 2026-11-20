@@ -48,7 +48,7 @@ export fun judge(path: str, src: str) > [Finding] {
             if (claims(text)) {
                 found.append(Finding{ path = path, line = start + 1,
                     message = "a measured claim with no run behind it: {text}",
-                    fix = "Link the run's output ref (out<hash>) or the measurement, or drop the figure." });
+                    hint = "Link the run's output ref (out<hash>) or the measurement, or drop the figure." });
             }
             start = i;
             paragraph = mut [<str>];

@@ -235,11 +235,11 @@ fun judge(files: [str], base: str, module: str, kind: str) > result\Result::<[Fi
         // Exit 1 is a deny finding, written to stdout like any other.
         if (run == null or (run!.code != 0 and run!.code != 1)) {
             final why = if (run == null) "proofread did not start" else "it exited {run!.code}: " + run!.stderr.trim();
-            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no Markdown was judged; " + why, fix = fix }]);
+            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread did not run, so no Markdown was judged; " + why, hint = fix }]);
         }
         final rows: [any]? = json\parse(run!.stdout) catch null;
         if (rows == null) {
-            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread printed no JSON array, so no Markdown was judged", fix = fix }]);
+            return result\ok::<[Finding]>([Finding{ path = JUDGE, message = "proofread printed no JSON array, so no Markdown was judged", hint = fix }]);
         }
         return result\ok::<[Finding]>(judgedFindings(rows!));
     } catch (err: any) {
@@ -262,7 +262,7 @@ export fun judgedFindings(rows: [any]) > [Finding] {
         final line = if (source.len() > node.len()) std\parseInt(source.sub(node.len() + 1)) ?? 0 else 0;
         final said: str = r["message"] ?? "";
         found.append(Finding{ path = node, line = line, message = "{said} [{rule}]", url = r["url"] ?? "",
-            fix = "Reword it to the writing rules in docs/conventions.md; a quoted word is a mention, not a use." });
+            hint = "Reword it to the writing rules in docs/conventions.md; a quoted word is a mention, not a use." });
     }
     return found;
 }
@@ -446,14 +446,14 @@ export fun proseFindings(file: str, md: str) > [Finding] {
         n = n + 1;
         foreach (col in dashColumns(line, text: text)) {
             found.append(Finding{ path = file, line = n, col = col, message = "a spaced hyphen used as a dash",
-                fix = "Say what the dash meant: a colon, a semicolon, a comma, parentheses or two sentences." });
+                hint = "Say what the dash meant: a colon, a semicolon, a comma, parentheses or two sentences." });
         }
         if (text.startsWith("#")) {
             final word = headingWord(text);
             if (word != "") {
                 found.append(Finding{ path = file, line = n,
                     message = "heading word `{word}` is capitalized; headings are sentence case",
-                    fix = "Lowercase it. A proper noun or identifier goes in ALLOW in hack/lint/markdown-proofread.buzz." });
+                    hint = "Lowercase it. A proper noun or identifier goes in ALLOW in hack/lint/markdown-proofread.buzz." });
             }
         }
     }

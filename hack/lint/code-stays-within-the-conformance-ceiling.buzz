@@ -52,14 +52,14 @@ export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) >
             final lang: str = idx.language;
             found.append(Finding{ path = project,
                 message = "the {lang} symbol index of {project} is {freshness}, so its conformance cannot be judged",
-                fix = indexFix(idx.op, detail: idx.detail) });
+                hint = indexFix(idx.op, detail: idx.detail) });
         }
     }
     final answer = report.answer;
     if (answer.verdict == magus\KnowledgeVerdict.unknown) {
         final reason: str = if (answer.reason.value == "") "no reason given" else answer.reason.value;
         found.append(Finding{ path = ".", message = "magus\\change().conformance answered unknown ({reason}), so nothing was judged",
-            fix = "Rebuild the index with `magus graph build`, then rerun lint." });
+            hint = "Rebuild the index with `magus graph build`, then rerun lint." });
     }
     if (found.len() > 0) {
         return found;
@@ -84,7 +84,7 @@ export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) >
             final past = if (metric == "file-split") "with {home} at or under the floor of {value}" else "past the anchor of {value}";
             found.append(Finding{ path = if (at.path == "") file else at.path, line = at.line,
                 message = "{label}: {id} measures {measure}, {past}{concept}; {file} holds {now}, up from {was} at {commit}",
-                fix = fixFor(metric, value: value, item: Item{ file = at.path, home = home, measure = measure,
+                hint = fixFor(metric, value: value, item: Item{ file = at.path, home = home, measure = measure,
                     unshared = v.unshared, rename = rename }) });
         }
     }
@@ -99,7 +99,7 @@ export fun judge(report: magus\ConformanceReport, base: magus\ConformanceBase) >
         final direction = if (metric == "file-split") "down" else "up";
         found.append(Finding{ path = at.path, line = at.line,
             message = "{label}: {id} measures {measure}, {direction} from {was} at {commit}; it was past the anchor of {value} there, and an item past its anchor may not grow",
-            fix = growthFix(metric, value: value, was: was) });
+            hint = growthFix(metric, value: value, was: was) });
     }
     return found;
 }
@@ -255,7 +255,7 @@ test "a function past its anchor that grew fails, naming both measures" {
     assert\equal(got[0].message,
         want: "func-lines source: internal/guard/judge.go#Judge measures 957, up from 328 at 0123456789ab; it was past the anchor of 167 there, and an item past its anchor may not grow",
         message: "both measures and the anchor");
-    assert\equal(got[0].fix, want: "Shrink it back to 328 or under 167: extract from it, or delete from it, rather than add to it.", message: "the fix");
+    assert\equal(got[0].hint, want: "Shrink it back to 328 or under 167: extract from it, or delete from it, rather than add to it.", message: "the hint");
 }
 
 test "a stale index or an unknown answer fails instead of passing on what it lacks" {

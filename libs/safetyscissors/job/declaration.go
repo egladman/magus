@@ -209,7 +209,7 @@ func pathOutsideWorkspace(p string) string {
 func (d Declaration) Faults(permissible ...Code) []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Hint: fix})
 	}
 	if rule := idRule(strings.TrimSpace(d.ID)); rule != "" {
 		invalid("id", fmt.Sprintf("%q is not a lease id: %s", d.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
@@ -334,7 +334,7 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 func (d Declaration) claimFaults() []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Hint: fix})
 	}
 	rest := d
 	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
@@ -375,7 +375,7 @@ func (d Declaration) Settles() bool {
 func (d Declaration) settlementFaults() []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Hint: fix})
 	}
 	rest := d
 	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""

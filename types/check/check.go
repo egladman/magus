@@ -46,9 +46,9 @@ type Check struct {
 	// Evidence is what this run rests on. A run that could not look sets
 	// EvidenceUnknown, and one that probed raises it to EvidenceMeasured.
 	Evidence Evidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
-	// Fix is the magus command that remedies the finding, as argv without
+	// Hint is the magus command that remedies the finding, as argv without
 	// "magus", nil when nothing mechanical applies. doctor prints it and runs nothing.
-	Fix []string `json:"fix,omitempty" yaml:"fix,omitempty"`
+	Hint []string `json:"hint,omitempty" yaml:"hint,omitempty"`
 }
 
 // Tier is how much of a change's gate magus can prove unnecessary, lowest

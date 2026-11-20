@@ -665,7 +665,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
 				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(check), project),
-				Hint:     "name one of its projects: " + listNames(paths),
+				Hint:    "name one of its projects: " + listNames(paths),
 			})
 			continue
 		}
@@ -701,7 +701,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
 				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(check), spell, project),
-				Hint:     "name a spell it binds: " + listNames(p.Spells),
+				Hint:    "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
 		}
@@ -712,7 +712,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
 			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(check), name, project),
-			Hint:     "name one of its targets: " + listNames(slices.Compact(targets)),
+			Hint:    "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
 	return ps, unchecked

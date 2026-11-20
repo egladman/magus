@@ -33,14 +33,17 @@ export fun check(files: [Path]) > [Finding] !> any {
     final fix = "Run `{proofread\build}`, then {bin} rules, and read why it stopped.";
     final run = proc\exec(bin, args: ["rules"], opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
     if (run == null or run!.code != 0) {
-        return [Finding{ path = TABLE, message = "proofread rules did not run, so no decision was held to its evidence", fix = fix }];
+        return [Finding{ path = TABLE, message = "proofread rules did not run, so no decision was held to its evidence", hint = fix }];
     }
     final catalog: [any]? = json\parse(run!.stdout) catch null;
     if (catalog == null) {
-        return [Finding{ path = TABLE, message = "proofread rules printed no JSON array", fix = fix }];
+        return [Finding{ path = TABLE, message = "proofread rules printed no JSON array", hint = fix }];
     }
     final table = decisions\table([<str>]);
-    final rules: {str: str} = table["rules"] ?? {<str: str>};
+    if (table.error != null) {
+        return [Finding{ path = TABLE, message = table.error!.message, hint = fix }];
+    }
+    final rules: {str: str} = table.value!["rules"] ?? {<str: str>};
     final readResult = support\read(files[0]);
     if (readResult.error != null) {
         throw readResult.error!.message;
@@ -68,7 +71,7 @@ export fun judge(rules: {str: str}, catalog: [any], src: str) > [Finding] {
         if (weights[rule] == null) {
             found.append(Finding{ path = TABLE, line = line,
                 message = "{rule} is denied but proofread has no such rule, so its evidence cannot be read",
-                fix = "Drop the entry, or fix the name to a rule `proofread rules` lists." });
+                hint = "Drop the entry, or fix the name to a rule `proofread rules` lists." });
             continue;
         }
         final weight = weights[rule]!;
@@ -77,7 +80,7 @@ export fun judge(rules: {str: str}, catalog: [any], src: str) > [Finding] {
         }
         found.append(Finding{ path = TABLE, line = line,
             message = "{rule} is denied at weight {weight}, under the evidence gate {GATE}",
-            fix = "Set it to advise until a labeling round measures its precision at {GATE} or more." });
+            hint = "Set it to advise until a labeling round measures its precision at {GATE} or more." });
     }
     return found;
 }

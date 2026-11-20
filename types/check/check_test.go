@@ -3,12 +3,24 @@ package check
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/codec"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 type TierSuite struct{ suite.Suite }
 
 func TestTier(t *testing.T) { suite.Run(t, new(TierSuite)) }
+
+func TestCheckEncodesItsHint(t *testing.T) {
+	want := Check{Name: "tool", Status: Fail, Hint: []string{"toolchain", "doctor"}}
+	data, err := codec.Marshal(want)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"name":"tool","status":"fail","hint":["toolchain","doctor"]}`, string(data))
+	var got Check
+	require.NoError(t, codec.Unmarshal(data, &got))
+	require.Equal(t, want, got)
+}
 
 // A tier nobody proved bounds nothing, so it must not rank as trivial.
 func (s *TierSuite) TestAnUnknownTierRanksAsFull() {

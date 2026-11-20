@@ -9,20 +9,20 @@ export interface Diagnostic {
   code: string;
   message: string;
   url?: string;
-  fix?: string;
+  hint?: string;
 }
 
 export class MagusError extends Error implements Diagnostic {
   readonly code: string;
   readonly url?: string;
-  readonly fix?: string;
+  readonly hint?: string;
 
   constructor(d: Diagnostic, options?: ErrorOptions) {
     super(d.message, options);
     this.name = "MagusError";
     this.code = d.code;
     if (d.url !== undefined) this.url = d.url;
-    if (d.fix !== undefined) this.fix = d.fix;
+    if (d.hint !== undefined) this.hint = d.hint;
   }
 }
 

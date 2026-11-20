@@ -47,7 +47,7 @@ func TestCheckReleaseIndexExpiry(t *testing.T) {
 			require.Contains(t, got.Message, c.wantMsg)
 			// No Fix: re-signing is a human running a workflow. The arms this used to carry named `run
 			// release-index`, a target no workspace declares.
-			require.Empty(t, got.Fix)
+			require.Empty(t, got.Hint)
 		})
 	}
 }

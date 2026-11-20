@@ -77,16 +77,16 @@ export fun actionFindings(raw: str) > result\Result::<[Finding]> {
         }
         if (publish < 0) {
             return result\ok::<[Finding]>([Finding{ path = ACTION, message = "setup-magus has no step with id publish",
-                fix = "The step uploading the binary it built carries id: publish." }]);
+                hint = "The step uploading the binary it built carries id: publish." }]);
         }
         if (restore < 0) {
             return result\ok::<[Finding]>([Finding{ path = ACTION, message = "setup-magus restores no run history",
-                fix = "Update this rule if the history restore moved out of setup-magus." }]);
+                hint = "Update this rule if the history restore moved out of setup-magus." }]);
         }
         if (publish > restore) {
             return result\ok::<[Finding]>([Finding{ path = ACTION, line = lines["/runs/steps/{restore}"] ?? 0,
                 message = "setup-magus extracts a cache entry before it uploads the binary it built",
-                fix = "Move the publish step above the restore: an extracted entry could overwrite the binary." }]);
+                hint = "Move the publish step above the restore: an extracted entry could overwrite the binary." }]);
         }
         return result\ok::<[Finding]>([<Finding>]);
     } catch (err: any) {
@@ -116,7 +116,7 @@ export fun workflowFindings(workflows: {str: str}) > result\Result::<[Finding]> 
                     }
                     final line = lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0;
                     final flag = fun (message: str, fix: str) > void {
-                        found.append(Finding{ path = p, line = line, message = "{file}/{name}: " + message, fix = fix });
+                        found.append(Finding{ path = p, line = line, message = "{file}/{name}: " + message, hint = fix });
                     };
                     if (support\scalar(step.q(["with", "publish-artifact"])) != "") {
                         published = published + 1;
@@ -182,7 +182,7 @@ export fun workflowFindings(workflows: {str: str}) > result\Result::<[Finding]> 
         }
         if (published == 0) {
             found.append(Finding{ path = ".github/workflows", message = "no job publishes magus for later jobs to install",
-                fix = "ci.yaml builds magus once and shares it; update this rule if that changed." });
+                hint = "ci.yaml builds magus once and shares it; update this rule if that changed." });
         }
         return result\ok::<[Finding]>(found);
     } catch (err: any) {

@@ -27,7 +27,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             if (t.startsWith("```mermaid") or t.startsWith("~~~mermaid")) {
                 found.append(Finding{ path = f.value, line = n,
                     message = "a mermaid fence; nothing in this repository renders mermaid",
-                    fix = "Draw it with magus/diagram (see the magus-diagram skill), or describe it as a table or list." });
+                    hint = "Draw it with magus/diagram (see the magus-diagram skill), or describe it as a table or list." });
             }
         }
     }

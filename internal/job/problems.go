@@ -65,7 +65,7 @@ func checkFaults(kind job.FaultKind, field string, stored job.Check) []job.Fault
 	c, err := types.DecodeLeaseCheck(stored)
 	if err != nil {
 		return []job.Fault{{Kind: kind, Field: field, Message: err.Error(),
-			Fix: "write the check as {target, project, args, no_default_charms} or {script, args, test}"}}
+			Hint: "write the check as {target, project, args, no_default_charms} or {script, args, test}"}}
 	}
 	_, err = validateLeaseCheck(c)
 	var shape *checkShapeError
@@ -73,11 +73,11 @@ func checkFaults(kind job.FaultKind, field string, stored job.Check) []job.Fault
 	case err == nil:
 		return nil
 	case errors.As(err, &shape) && shape.Field == "test" && kind == job.FaultRecord:
-		return []job.Fault{{Kind: kind, Field: field + ".test", Message: err.Error(), Fix: "drop test, or name a script"}}
+		return []job.Fault{{Kind: kind, Field: field + ".test", Message: err.Error(), Hint: "drop test, or name a script"}}
 	case errors.As(err, &shape):
 		return []job.Fault{{Kind: kind, Field: field + ".script", Message: err.Error(),
-			Fix: "name a target or a script, and give a script no project or charms"}}
+			Hint: "name a target or a script, and give a script no project or charms"}}
 	default:
-		return []job.Fault{{Kind: kind, Field: field + ".target", Message: err.Error(), Fix: "name one target and the project it runs in"}}
+		return []job.Fault{{Kind: kind, Field: field + ".target", Message: err.Error(), Hint: "name one target and the project it runs in"}}
 	}
 }

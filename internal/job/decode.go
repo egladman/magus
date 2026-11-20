@@ -170,7 +170,7 @@ func notDeclaration(id, field, what string) error {
 		Code:    types.JobRecordInvalid,
 		Field:   field,
 		Message: fmt.Sprintf("the record for %s is %s, not a declaration, and fork would declare %s over the live job", id, what, id),
-		Hint:     fmt.Sprintf("send it to `%s`, or drop %s to declare", hint.JobApply.With("--stdin"), field),
+		Hint:    fmt.Sprintf("send it to `%s`, or drop %s to declare", hint.JobApply.With("--stdin"), field),
 	}}.Error()
 }
 
@@ -180,7 +180,7 @@ func recordInvalid(field string, err error) types.JobProblems {
 		Code:    types.JobRecordInvalid,
 		Field:   field,
 		Message: strings.TrimPrefix(err.Error(), "job: "),
-		Hint:     fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
+		Hint:    fmt.Sprintf("send one JSON job; `%s` prints its fields", hint.JobFork.With("--schema")),
 	}}
 }
 
@@ -199,7 +199,7 @@ func memberProblems(raw []byte, err error) types.JobProblems {
 			Code:    types.JobRecordInvalid,
 			Field:   name,
 			Message: fmt.Sprintf("%q is an unknown member of a %s job", name, job.APIVersion),
-			Hint:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
+			Hint:    fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
 		})
 	}
 	if len(ps) > 0 {

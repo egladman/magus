@@ -217,7 +217,7 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 		Code:    types.JobCheckUnrunnable,
 		Field:   "check",
 		Message: p.Message,
-		Hint:     "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`",
+		Hint:    "declare a check its worker may run in its place, with `magus job fork w --check '<target> <project>'`",
 	}, p, "compiling is no stand-in for a run a person owns")
 }
 

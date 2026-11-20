@@ -396,7 +396,7 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 func TestReportRefsMissCarriesTheIndexCauseInTheVerdictBlock(t *testing.T) {
 	ans := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
 	ans.IndexCause = &types.KnowledgeIndexCause{
-		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
+		Why:  "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
 		Hint: "`magus server start` keeps it current from now on",
 	}
 	miss := knowledge.RefsMiss{Name: "Foo", Answer: ans}

@@ -54,13 +54,13 @@ fun versus(f: magus\ChangeRiskFunction) > str {
 fun refuse(f: magus\ChangeRiskFunction) > Finding {
     return Finding{ path = f.path, line = f.line,
         message = "{f.label} has change risk {hundredths(f.score)} (complexity {f.complexity}, coverage {coverage(f)}), past {THRESHOLD} ({versus(f)})",
-        fix = "Cover it with tests, or split it into functions that each score {THRESHOLD} or less." };
+        hint = "Cover it with tests, or split it into functions that each score {THRESHOLD} or less." };
 }
 
 fun unscored(g: magus\FunctionGap) > Finding {
     return Finding{ path = g.path, line = g.line,
         message = "{g.label} has no change risk score ({g.reason}) and complexity {g.complexity} does not decide it within {THRESHOLD}",
-        fix = "Give its language a coverage measure, or split it until complexity squared plus complexity is {THRESHOLD} or less." };
+        hint = "Give its language a coverage measure, or split it until complexity squared plus complexity is {THRESHOLD} or less." };
 }
 
 fun coverage(f: magus\ChangeRiskFunction) > str {

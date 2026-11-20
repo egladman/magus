@@ -123,14 +123,14 @@ func tsType(t reflect.Type, declared map[string]bool, name func(reflect.Type) st
 const tsResult = `export class MagusError extends Error implements Diagnostic {
   readonly code: string;
   readonly url?: string;
-  readonly fix?: string;
+  readonly hint?: string;
 
   constructor(d: Diagnostic, options?: ErrorOptions) {
     super(d.message, options);
     this.name = "MagusError";
     this.code = d.code;
     if (d.url !== undefined) this.url = d.url;
-    if (d.fix !== undefined) this.fix = d.fix;
+    if (d.hint !== undefined) this.hint = d.hint;
   }
 }
 

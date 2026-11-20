@@ -41,13 +41,13 @@ export fun findings(skills: [str], ignore: str) > [Finding] {
         if (lines.indexOf("\n!" + AGENTS + "/" + name + "\n") == null) {
             found.append(Finding{path = ".gitignore",
                 message = "{AGENTS}/{name} is an authored skill, but .gitignore has no negation for its canonical source",
-                fix = "Add !{AGENTS}/{name} without a trailing slash; bootstrap installs its host links."});
+                hint = "Add !{AGENTS}/{name} without a trailing slash; bootstrap installs its host links."});
         }
     }
     foreach (dir in [".claude", ".codex", ".cursor", ".opencode"]) {
         if (lines.indexOf("\n/" + dir + "/\n") == null) {
             found.append(Finding{path = ".gitignore", message = "{dir} is an installed harness tree and must remain local",
-                fix = "Add /{dir}/ to .gitignore; commit the neutral harness sources instead."});
+                hint = "Add /{dir}/ to .gitignore; commit the neutral harness sources instead."});
         }
     }
     return found;

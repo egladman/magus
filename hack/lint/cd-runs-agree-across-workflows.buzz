@@ -124,7 +124,7 @@ export fun findings(files: [Path]) > result\Result::<[Finding]> {
                 }
                 found.append(Finding{ path = run.path, line = run.line,
                     message = "{run.where} runs `magus run {command}` without {support\sorted(lacking).join(", ")}, which {passing.join(", ")} passes",
-                    fix = "Pass the same env names at every step that runs it, and check the job grants what they need (GHCR_TOKEN needs packages: write)." });
+                    hint = "Pass the same env names at every step that runs it, and check the job grants what they need (GHCR_TOKEN needs packages: write)." });
             }
         }
         return result\ok::<[Finding]>(found);

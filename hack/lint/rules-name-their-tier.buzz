@@ -56,7 +56,7 @@ export fun judge(path: str, src: str) > [Finding] {
         if (word == null or !rest.sub(1, len: rest.len() - 1).startsWith(", " + word!)) {
             found.append(Finding{ path = path, line = i + 1,
                 message = "the tier line does not read `// Tier N, <name>` with a name from TIERS: {line}",
-                fix = "Write `// Tier 1, mechanical`, `// Tier 2, measured shape` or `// Tier 3, judgment`, then the reason." });
+                hint = "Write `// Tier 1, mechanical`, `// Tier 2, measured shape` or `// Tier 3, judgment`, then the reason." });
             continue;
         }
         named = named + 1;
@@ -64,7 +64,7 @@ export fun judge(path: str, src: str) > [Finding] {
     if (named == 0 and found.len() == 0) {
         found.append(Finding{ path = path, line = 1,
             message = "the rule's header comment names no rollout tier",
-            fix = "Add `// Tier N, <name>: <why>` to the header; CONTRIBUTING.md, \"Rolling out a stricter rule\", says which tier." });
+            hint = "Add `// Tier N, <name>: <why>` to the header; CONTRIBUTING.md, \"Rolling out a stricter rule\", says which tier." });
     }
     return found;
 }

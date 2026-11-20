@@ -331,7 +331,7 @@ func droppedPostconditionProblems(prev, next job.Job) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code: types.JobRecordInvalid, Field: "postconditions", Subject: g.ID,
 			Message: fmt.Sprintf("the record releases a write path of %s and drops its postcondition %q", prev.ID, g.ID),
-			Hint:     fmt.Sprintf("keep the postcondition %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
+			Hint:    fmt.Sprintf("keep the postcondition %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
 		})
 	}
 	return ps

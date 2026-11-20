@@ -54,7 +54,7 @@ export fun findings(output: str) > [Finding] {
             url = lines[i].trim().sub(5);
         }
         found.append(Finding{ path = "docs/" + m![2], line = std\parseInt(m![3]) ?? 0, col = std\parseInt(m![4]) ?? 0,
-            message = m![1] + m![5], fix = FIX, url = url });
+            message = m![1] + m![5], hint = FIX, url = url });
     }
     return found;
 }
@@ -73,7 +73,7 @@ export fun hostCalls(src: str) > [Finding] {
         if (m != null) {
             found.append(Finding{ path = LIBRARY, line = n,
                 message = "the diagram library calls magus\\{m![1]}; it takes graph records, it never reads the workspace",
-                fix = "Take the Dir, Layer or RefsResult as a parameter and let the diagram build it with magus\\graph().dir, magus\\graph().layer or magus\\graph().refs." });
+                hint = "Take the Dir, Layer or RefsResult as a parameter and let the diagram build it with magus\\graph().dir, magus\\graph().layer or magus\\graph().refs." });
         }
     }
     return found;
@@ -113,7 +113,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final found = findings(output);
     if (found.len() == 0 and raised != "") {
         return [Finding{ path = DIAGRAMS, message = "magus buzz --check failed without a diagnostic: " + raised,
-            fix = "Run `magus buzz --check site/diagrams/<figure>.buzz` from docs/ and fix what it reports." }] + library;
+            hint = "Run `magus buzz --check site/diagrams/<figure>.buzz` from docs/ and fix what it reports." }] + library;
     }
     return found + library;
 }

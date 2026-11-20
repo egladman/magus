@@ -77,7 +77,7 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 	ans := ClassifyAnswer(true, "", []KnowledgeSymbolGap{{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt}})
 	require.True(t, ans.IndexBehind())
 	ans.IndexCause = &KnowledgeIndexCause{
-		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
+		Why:  "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
 		Hint: "`magus server start` keeps it current from now on",
 	}
 	out := KnowledgeOccurrencesOutput{Symbol: "symbol:x", Answer: ans}
