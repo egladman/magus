@@ -317,25 +317,35 @@ magus\project({
 
 // releases\rootReleaseTag rejects verified-refinements and per-module tags such as
 // libs/gopherbuzz/v0.1.0.
-fun exact_release_tag() > str !> any {
-    return releases\rootReleaseTag(tag_names_on_head());
+fun exact_release_tag() > result\Result::<str> {
+    final names = tag_names_on_head();
+    if (names.error -> e) {
+        return result\fail::<str>(e.message);
+    }
+    return result\ok::<str>(releases\rootReleaseTag(names.value!));
 }
 
 // Unpatterned: a glob stops at "/", and the release checks need the namespaced tags.
-fun tag_names_on_head() > [str] !> any {
-    final head = vcs\commit().id;
-    var names = mut [<str>];
-    foreach (t in vcs\tags()) {
-        if (t.id == head) { names.append(t.name); }
+fun tag_names_on_head() > result\Result::<[str]> {
+    try {
+        final head = vcs\commit().id;
+        var names = mut [<str>];
+        foreach (t in vcs\tags()) {
+            if (t.id == head) { names.append(t.name); }
+        }
+        return result\ok::<[str]>(names);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the tags on HEAD");
     }
-    return names;
 }
 
 // A root tag on HEAD beats describe, which picks arbitrarily among a release commit's
 // per-module tags. `v[0-9]*` keeps describe off verified-refinements and libs/<name>/v*.
-fun version() > str !> any {
+fun version() > str {
     try {
-        final tag = exact_release_tag();
+        final exact = exact_release_tag();
+        if (exact.error != null) { return "unknown"; }
+        final tag = exact.value!;
         if (tag != "") {
             if (vcs\isDirty()) { return tag + "-dirty"; }
             return tag;
@@ -349,7 +359,7 @@ fun version() > str !> any {
     }
 }
 
-fun commit() > str !> any {
+fun commit() > str {
     try {
         return vcs\commit().id;
     } catch (e) {
@@ -357,7 +367,7 @@ fun commit() > str !> any {
     }
 }
 
-fun build_date() > str !> any {
+fun build_date() > str {
     try {
         final c: Commit = vcs\commit();
         return c.date;
@@ -368,9 +378,9 @@ fun build_date() > str !> any {
 
 // Set by release.yaml, never read from the runner, so it can match the keyless
 // signature's job_workflow_ref.
-fun built_by() > str !> any { return os\env("BUILT_BY") ?? ""; }
+fun built_by() > str { return os\env("BUILT_BY") ?? ""; }
 
-fun ld_flags() > str !> any {
+fun ld_flags() > str {
     return "-w -s"
         + " -X github.com/egladman/magus/internal/buildinfo.version=" + version()
         + " -X github.com/egladman/magus/internal/buildinfo.commit=" + commit()
@@ -390,34 +400,41 @@ export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> 
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    link_magus(ctx, binary: "magus");
+    final linked = link_magus(ctx, binary: "magus");
+    if (linked.error != null) { throw linked.error!; }
 }
 
 // Compiles magus at bin/magus, the product path go-build declares. A leased
 // worker tries its own edits there; no hook runs it.
 export fun go_build_product(ctx: magus\Context, args: [str]) > void !> any {
-    link_magus(ctx, binary: "bin/magus");
+    final linked = link_magus(ctx, binary: "bin/magus");
+    if (linked.error != null) { throw linked.error!; }
 }
 
-fun link_magus(ctx: magus\Context, binary: str) > void !> any {
-    ctx.needs(gopherbuzz\build, opencode_runtime_generate);
-    // The embedded spell type mirrors are an output, so the link must follow their
-    // regeneration; ctx.readsFiles would replace the **/*.go footprint, not add to it.
-    ctx.needs(spells_generate);
-    // Read after spells_generate so it records the declarations this link embeds. Its Go
-    // input digest is what bootstrap-worktree compares before placing this binary elsewhere.
-    final stamp = agentpolicy\buildStamp(".");
-    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
-        "args": ["-trimpath",
-            "-ldflags", ld_flags() + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + stamp,
-            "-o", binary,
-            "./cmd/magus"],
-    });
-    // macOS assesses a new executable on its first exec, which can outlast a hook's
-    // budget; run it here so no hook pays for that.
-    final said = proc\exec("./{binary}", ["version"], ".").stdout;
-    if (!said.startsWith("magus ")) {
-        throw "go-build: the built ./{binary} did not answer `version` with a `magus ` line: {said}";
+fun link_magus(ctx: magus\Context, binary: str) > result\Result::<bool> {
+    try {
+        ctx.needs(gopherbuzz\build, opencode_runtime_generate);
+        // The embedded spell type mirrors are an output, so the link must follow their
+        // regeneration; ctx.readsFiles would replace the **/*.go footprint, not add to it.
+        ctx.needs(spells_generate);
+        // Read after spells_generate so it records the declarations this link embeds. Its Go
+        // input digest is what bootstrap-worktree compares before placing this binary elsewhere.
+        final stamp = agentpolicy\buildStamp(".");
+        go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+            "args": ["-trimpath",
+                "-ldflags", ld_flags() + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + stamp,
+                "-o", binary,
+                "./cmd/magus"],
+        });
+        // macOS assesses a new executable on its first exec, which can outlast a hook's
+        // budget; run it here so no hook pays for that.
+        final said = proc\exec("./{binary}", ["version"], ".").stdout;
+        if (!said.startsWith("magus ")) {
+            return result\fail::<bool>("go-build: the built ./{binary} did not answer `version` with a `magus ` line: {said}");
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "go-build: link ./{binary}");
     }
 }
 
@@ -472,21 +489,26 @@ final GHCR_SPELLS = Registry{
 // Every tag goes into one buildx invocation, so each registry gets the identical digest.
 final REGISTRIES = [GHCR];
 
-fun image_tag() > str !> any { return "magus:" + commit(); }
+fun image_tag() > str { return "magus:" + commit(); }
 
 // unpublished narrows registries to the ones a release image is pushed to: all of them
 // under the mutable charm, otherwise those not yet carrying tag. A release's version tag is
 // write-once, and the floating tags beside it (latest) move only when it is pushed.
-fun unpublished(ctx: magus\Context, registries: [Registry], tag: str) > [Registry] !> any {
+fun unpublished(ctx: magus\Context, registries: [Registry], tag: str) > result\Result::<[Registry]> {
     final targets = mut [<Registry>];
     foreach (reg in registries) {
-        final tags = registry_tags(reg.repository, user: magus\secret.read(reg.user_ref),
-            token: magus\secret.read(reg.token_ref));
-        if (publish_action(ctx, unit: reg.repository + ":" + tag, published: tags.indexOf(tag) != null) != releases\KEEP) {
-            targets.append(reg);
+        try {
+            final tags = registry_tags(reg.repository, user: magus\secret.read(reg.user_ref),
+                token: magus\secret.read(reg.token_ref));
+            if (tags.error -> e) { return result\Result::<[Registry]>{ error = e }; }
+            if (publish_action(ctx, unit: reg.repository + ":" + tag, published: tags.value!.indexOf(tag) != null) != releases\KEEP) {
+                targets.append(reg);
+            }
+        } catch (err: any) {
+            return result\caught::<[Registry]>(err, doing: "read the credentials for {reg.repository}");
         }
     }
-    return targets;
+    return result\ok::<[Registry]>(targets);
 }
 
 // The index is assembled once and pushed to each registry, so each
@@ -515,13 +537,13 @@ fun publish_variant(ctx: magus\Context, variant: images\ImageVariant, build: ima
     return images\Published{ refs = refs };
 }
 
-fun write_image_summary(ctx: magus\Context, refs: [str]) > void !> any {
-    if (!ctx.hasCharm("gha")) { return; }
+fun write_image_summary(ctx: magus\Context, refs: [str]) > result\Result::<bool> {
+    if (!ctx.hasCharm("gha")) { return result\ok::<bool>(true); }
     final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath == null or ("{summaryPath}") == "") {
-        throw "image-build: the gha charm is set but $GITHUB_STEP_SUMMARY is unset; run this inside a GitHub Actions step";
+        return result\fail::<bool>("image-build: the gha charm is set but $GITHUB_STEP_SUMMARY is unset; run this inside a GitHub Actions step");
     }
-    if (refs.len() == 0) { return; }
+    if (refs.len() == 0) { return result\ok::<bool>(true); }
 
     final rows = mut ["## Container images\n\n| Reference | Pull |\n| --- | --- |\n"];
     foreach (r in refs) {
@@ -531,28 +553,39 @@ fun write_image_summary(ctx: magus\Context, refs: [str]) > void !> any {
         + refs[0] + " ls\n```\n";
 
     final sp = "{summaryPath}";
-    var existing = "";
-    if (fs\exists(sp)) { existing = fs\readFile(sp); }
-    fs\writeFile(sp, existing + md);
+    try {
+        var existing = "";
+        if (fs\exists(sp)) { existing = fs\readFile(sp); }
+        fs\writeFile(sp, existing + md);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "image-build: write the step summary");
+    }
+    return result\ok::<bool>(true);
 }
 
 // `--load` cannot load a multi-platform result, so a local build is one architecture.
 // Always linux/: the artifact is a container image whatever the host OS.
-fun load_platform(ctx: magus\Context) > str !> any {
-    exclusive_charms(ctx, "amd64", "arm64", "WS1001", "which platform to build for");
-    if (ctx.hasCharm("amd64")) { return "linux/amd64"; }
-    if (ctx.hasCharm("arm64")) { return "linux/arm64"; }
-    return "linux/" + os\platform()[1];
+fun load_platform(ctx: magus\Context) > result\Result::<str> {
+    final exclusive = exclusive_charms(ctx, "amd64", "arm64", "WS1001", "which platform to build for");
+    if (exclusive.error -> e) { return result\Result::<str>{ error = e }; }
+    if (ctx.hasCharm("amd64")) { return result\ok::<str>("linux/amd64"); }
+    if (ctx.hasCharm("arm64")) { return result\ok::<str>("linux/arm64"); }
+    return result\ok::<str>("linux/" + os\platform()[1]);
 }
 
 // Charms are an unordered set, so reading two in sequence would invent a precedence.
 // WS is the code prefix magus.yaml declares; magus\diagnosticCode refuses MGS.
-fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
+fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: str) > result\Result::<bool> {
     if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
-        magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b
-            + "` charms both answer " + question + " - name one",
-            opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+        try {
+            magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b
+                + "` charms both answer " + question + " - name one",
+                opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "choose between the " + a + " and " + b + " charms");
+        }
     }
+    return result\ok::<bool>(true);
 }
 
 // docker load needs a docker-save manifest.json beside the OCI layout (classic
@@ -588,7 +621,9 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
     if (!ctx.hasCharm("cd")) {
         var variant = images\STATIC;
         if (ctx.hasCharm("dynamic")) { variant = images\DYNAMIC; }
-        final loaded = load_variant(ctx, variant: variant, platform: load_platform(ctx), ldflags: ldflags, tag: image_tag());
+        final platform = load_platform(ctx);
+        if (platform.error != null) { throw platform.error!; }
+        final loaded = load_variant(ctx, variant: variant, platform: platform.value!, ldflags: ldflags, tag: image_tag());
         if (loaded.error != "") { throw loaded.error; }
         magus\log.info("image-build: loaded {loaded.tag} ({loaded.id}) from {loaded.layout}");
         return;
@@ -601,9 +636,13 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
             + "`-- --builder <server url>/<workflow ref>`; got {args}";
     }
     final build = images\Build{ ldflags = ldflags, revision = commit(), builder = builder };
-    final registries = publish_registries(ctx);
+    final chosen = publish_registries(ctx);
+    if (chosen.error != null) { throw chosen.error!; }
+    final registries = chosen.value!;
     final pushed = mut [<str>];
-    final ch = channel(ctx);
+    final channelChoice = channel(ctx);
+    if (channelChoice.error != null) { throw channelChoice.error!; }
+    final ch = channelChoice.value!;
     if (ch == "commit") {
         final run = publish_variant(ctx, variant: images\STATIC, build: build, registries: registries, tags: [commit()]);
         if (run.error != "") { throw run.error; }
@@ -611,77 +650,98 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
     } else {
         foreach (variant in [images\STATIC, images\DYNAMIC]) {
             final tags = images\releaseTags(variant, version: version(), stable: ch == "stable");
+            final pending = unpublished(ctx, registries: registries, tag: tags[0]);
+            if (pending.error != null) { throw pending.error!; }
             final run = publish_variant(ctx, variant: variant, build: build,
-                registries: unpublished(ctx, registries: registries, tag: tags[0]), tags: tags);
+                registries: pending.value!, tags: tags);
             if (run.error != "") { throw run.error; }
             foreach (r in run.refs) { pushed.append(r); }
         }
     }
-    write_image_summary(ctx, refs: pushed);
+    final summary = write_image_summary(ctx, refs: pushed);
+    if (summary.error != null) { throw summary.error!; }
 }
 
-fun publish_registries(ctx: magus\Context) > [Registry] !> any {
-    if (!ctx.hasCharm("cd")) { return []; }
-    if (channel(ctx) == "commit") { return [GHCR]; }
-    return REGISTRIES;
+fun publish_registries(ctx: magus\Context) > result\Result::<[Registry]> {
+    if (!ctx.hasCharm("cd")) { return result\ok::<[Registry]>([<Registry>]); }
+    final ch = channel(ctx);
+    if (ch.error -> e) { return result\Result::<[Registry]>{ error = e }; }
+    if (ch.value! == "commit") { return result\ok::<[Registry]>([GHCR]); }
+    return result\ok::<[Registry]>(REGISTRIES);
 }
 
 // `tagged` derives the channel from the release tag, so cutting a candidate needs only a tag.
-fun channel(ctx: magus\Context) > str !> any {
-    exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
+fun channel(ctx: magus\Context) > result\Result::<str> {
+    final exclusive = exclusive_charms(ctx, "stable", "unstable", "WS1002", "which channel to publish to");
+    if (exclusive.error -> e) { return result\Result::<str>{ error = e }; }
     final wantTagged = ctx.hasCharm("tagged");
     final wantStable = ctx.hasCharm("stable");
     final wantUnstable = ctx.hasCharm("unstable");
     if (wantTagged and (wantStable or wantUnstable)) {
-        magus\raise(magus\diagnosticCode("WS1002"), message: "the `tagged` charm reads which channel to publish "
-            + "to off the release tag, so naming `stable` or `unstable` beside it answers "
-            + "that question twice - name one",
-            opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+        try {
+            magus\raise(magus\diagnosticCode("WS1002"), message: "the `tagged` charm reads which channel to publish "
+                + "to off the release tag, so naming `stable` or `unstable` beside it answers "
+                + "that question twice - name one",
+                opts: magus\RaiseOptions{url = "https://eli.gladman.cc/magus/recommendations/#one-charm-answers-one-question"});
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "image: choose the channel");
+        }
     }
-    if (!wantStable and !wantUnstable and !wantTagged) { return "commit"; }
+    if (!wantStable and !wantUnstable and !wantTagged) { return result\ok::<str>("commit"); }
 
     final v = version();
     if (v == "unknown") {
-        throw "image: a channel charm needs a version and this tree reports none - magus "
+        return result\fail::<str>("image: a channel charm needs a version and this tree reports none - magus "
             + "reads it from `git describe`, so a shallow clone with no tags cannot supply "
-            + "one. Fetch tags, or drop the charm to publish to the commit channel.";
+            + "one. Fetch tags, or drop the charm to publish to the commit channel.");
     }
     if (wantTagged) {
-        final tag = exact_release_tag();
+        final exact = exact_release_tag();
+        if (exact.error -> e) { return result\fail::<str>(e.message); }
+        final tag = exact.value!;
         if (tag == "") {
-            throw "image: `tagged` reads the channel off the release tag HEAD sits on, and "
+            return result\fail::<str>("image: `tagged` reads the channel off the release tag HEAD sits on, and "
                 + "HEAD is not tagged - `" + v + "` describes distance past the nearest tag "
-                + "rather than a release. Tag the release first, or name `stable`/`unstable`.";
+                + "rather than a release. Tag the release first, or name `stable`/`unstable`.");
         }
-        if (semver\parse(tag).prerelease == "") { return "stable"; }
-        return "unstable";
+        try {
+            if (semver\parse(tag).prerelease == "") { return result\ok::<str>("stable"); }
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "image: parse the release tag {tag}");
+        }
+        return result\ok::<str>("unstable");
     }
 
     // describe() gives an untagged commit a prerelease (v0.4.0-3-gabc123), so stable rejects
     // untagged builds too.
-    final pre = semver\parse(v).prerelease;
+    var pre = "";
+    try {
+        pre = semver\parse(v).prerelease;
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "image: parse the version {v}");
+    }
     if (wantStable and pre != "") {
-        throw "image: `" + v + "` carries the prerelease `" + pre + "`, so it cannot go to "
+        return result\fail::<str>("image: `" + v + "` carries the prerelease `" + pre + "`, so it cannot go to "
             + "the stable channel - that is the channel `latest` follows. Use `unstable` "
-            + "for it, or run this from a stable release tag.";
+            + "for it, or run this from a stable release tag.");
     }
     if (wantUnstable and pre == "") {
-        throw "image: `" + v + "` is a stable version, so `unstable` would file it under a "
-            + "channel it does not belong to. Use `stable` for it.";
+        return result\fail::<str>("image: `" + v + "` is a stable version, so `unstable` would file it under a "
+            + "channel it does not belong to. Use `stable` for it.");
     }
-    if (wantStable) { return "stable"; }
-    return "unstable";
+    if (wantStable) { return result\ok::<str>("stable"); }
+    return result\ok::<str>("unstable");
 }
 
 // By host, never index: how many registries there are depends on the charms.
-fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
-    if (host == "") { return registries; }
+fun select_registries(registries: [Registry], host: str) > result\Result::<[Registry]> {
+    if (host == "") { return result\ok::<[Registry]>(registries); }
     final hosts = mut [<str>];
     foreach (reg in registries) {
-        if (reg.host == host) { return [reg]; }
+        if (reg.host == host) { return result\ok::<[Registry]>([reg]); }
         hosts.append(reg.host);
     }
-    throw "no registry \"{host}\" for these charms; this mode publishes to: {hosts.join(", ")}";
+    return result\fail::<[Registry]>("no registry \"{host}\" for these charms; this mode publishes to: {hosts.join(", ")}");
 }
 
 // Reports where image-build under the same charms pushes and, with `verify`, fails when a
@@ -689,7 +749,11 @@ fun select_registries(registries: [Registry], host: str) > [Registry] !> any {
 export fun image_registries(ctx: magus\Context, args: [str]) > void !> any {
     var host = "";
     if (args.len() > 0) { host = args[0]; }
-    final registries = select_registries(publish_registries(ctx), host);
+    final published = publish_registries(ctx);
+    if (published.error != null) { throw published.error!; }
+    final selected = select_registries(published.value!, host);
+    if (selected.error != null) { throw selected.error!.message; }
+    final registries = selected.value!;
     if (registries.len() == 0) {
         magus\log.info("image-registries: this build pushes nowhere; add the cd charm to see where a delivery goes (`:cd` per-commit, `:cd,stable` a release)");
         return;
@@ -736,7 +800,7 @@ fun resolvable(ref: str) > bool {
     }
 }
 
-fun pad(s: str, width: int) > str !> any {
+fun pad(s: str, width: int) > str {
     if (s.len() >= width) { return s + " "; }
     return s + " ".repeat(width - s.len() + 1);
 }
@@ -816,54 +880,78 @@ export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/commands/testdata/api-go.lock"]);
 }
 
-fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> any {
-    if (!ctx.hasCharm("gha")) { return null; }
+fun pull_request_event(ctx: magus\Context, target: str) > result\Result::<serialize\Boxed?> {
+    if (!ctx.hasCharm("gha")) { return result\ok::<serialize\Boxed?>(null); }
     final path = os\env("GITHUB_EVENT_PATH") ?? "";
-    if (path == "" or !fs\exists(path)) {
-        throw "{target}: the gha charm is set but $GITHUB_EVENT_PATH names no file; run it in a pull_request workflow";
+    try {
+        if (path == "" or !fs\exists(path)) {
+            return result\fail::<serialize\Boxed?>("{target}: the gha charm is set but $GITHUB_EVENT_PATH names no file; run it in a pull_request workflow");
+        }
+        return result\ok::<serialize\Boxed?>(serialize\jsonDecode(fs\readFile(path)).q("pull_request"));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed?>(err, doing: "{target}: read the pull request event");
     }
-    return serialize\jsonDecode(fs\readFile(path)).q("pull_request");
 }
 
-fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> any {
+fun pull_request_title(ctx: magus\Context, args: [str], target: str) > result\Result::<str> {
     final title = args.join(" ");
-    if (title != "") { return title; }
-    final event = pull_request_event(ctx, target: target);
+    if (title != "") { return result\ok::<str>(title); }
+    final loaded = pull_request_event(ctx, target: target);
+    if (loaded.error -> e) { return result\Result::<str>{ error = e }; }
+    final event = loaded.value;
     if (event == null) {
-        throw "{target}: no title: pass one after `--`, or add the gha charm in a pull_request workflow";
+        return result\fail::<str>("{target}: no title: pass one after `--`, or add the gha charm in a pull_request workflow");
     }
-    return event?.q("title").stringValue() ?? "";
+    try {
+        return result\ok::<str>(event?.q("title").stringValue() ?? "");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "{target}: read the pull request title");
+    }
 }
 
 // workspaceProjects are every project's path, as `magus ls` lists them.
-fun workspaceProjects() > [str] !> any {
-    final listed = magus\cmd("ls", args: ["-o", "name"], opts: magus\CommandOptions{ quiet = true });
+fun workspaceProjects() > result\Result::<[str]> {
     final paths = mut [<str>];
-    foreach (line in listed.stdout.trim().split("\n")) {
-        if (line != "") {
-            paths.append(line);
+    try {
+        final listed = magus\cmd("ls", args: ["-o", "name"], opts: magus\CommandOptions{ quiet = true });
+        foreach (line in listed.stdout.trim().split("\n")) {
+            if (line != "") {
+                paths.append(line);
+            }
         }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the workspace projects");
     }
-    return paths;
+    return result\ok::<[str]>(paths);
 }
 
 // affectedProjects are the projects the change against the base reaches.
-fun affectedProjects() > [str] !> any {
+fun affectedProjects() > result\Result::<[str]> {
     final paths = mut [<str>];
-    foreach (p in magus\change("").affected().affected) {
-        paths.append(p);
+    try {
+        foreach (p in magus\change("").affected().affected) {
+            paths.append(p);
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the affected projects");
     }
-    return paths;
+    return result\ok::<[str]>(paths);
 }
 
 // Fails a pull request title that is not a conventional commit subject, or whose subject
 // is not imperative or carries a selling word.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
-    final title = pull_request_title(ctx, args: args, target: "pr-title");
+    final titled = pull_request_title(ctx, args: args, target: "pr-title");
+    if (titled.error != null) { throw titled.error!.message; }
+    final title = titled.value!;
     final problems = mut [<str>];
     var problem = commits\problem(title);
     if (problem == "" and commits\scopes(title).len() > 0) {
-        problem = commits\scopeProblem(title, projects: workspaceProjects(), affected: affectedProjects());
+        final projects = workspaceProjects();
+        if (projects.error != null) { throw projects.error!.message; }
+        final reached = affectedProjects();
+        if (reached.error != null) { throw reached.error!.message; }
+        problem = commits\scopeProblem(title, projects: projects.value!, affected: reached.value!);
     }
     if (problem != "") {
         problems.append(problem);
@@ -905,7 +993,9 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
 // Fails a feat, fix, perf or breaking pull request that ships code without a changelog
 // fragment under changes/unreleased/, and any malformed fragment.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
-    final title = pull_request_title(ctx, args: args, target: "pr-changelog");
+    final titled = pull_request_title(ctx, args: args, target: "pr-changelog");
+    if (titled.error != null) { throw titled.error!.message; }
+    final title = titled.value!;
     final base = vcs\base();
     var changed = mut [<str>];
     foreach (f in vcs\changedFiles(base)) { changed.append(f.value); }
@@ -1232,25 +1322,33 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
     // ci strips cd, so the gate never pushes.
     if (ctx.hasCharm("cd")) {
-        publish_graph(ctx);
+        final published = publish_graph(ctx);
+        if (published.error != null) { throw published.error!.message; }
     }
 }
 
 // Pushes the knowledge store shard by shard, so a reader fetches only the shards it lacks.
 // Tags follow channel(), matching the image built from the same merge.
-fun publish_graph(ctx: magus\Context) > void !> any {
+fun publish_graph(ctx: magus\Context) > result\Result::<bool> {
     final reg = GHCR_GRAPH;
-    final user = magus\secret.read(reg.user_ref);
-    final token = magus\secret.read(reg.token_ref);
-    var tags = [commit()];
-    if (channel(ctx) != "commit") {
-        tags = [version(), "latest"];
+    try {
+        final user = magus\secret.read(reg.user_ref);
+        final token = magus\secret.read(reg.token_ref);
+        var tags = [commit()];
+        final ch = channel(ctx);
+        if (ch.error -> e) { return result\Result::<bool>{ error = e }; }
+        if (ch.value! != "commit") {
+            tags = [version(), "latest"];
+        }
+        foreach (tag in tags) {
+            _ = magus\cmd("graph", args: ["push", "--ref", reg.repository + ":" + tag, "--username", user],
+                opts: magus\CommandOptions{stdin = token});
+        }
+        magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "graph-generate: publish {reg.repository}");
     }
-    foreach (tag in tags) {
-        _ = magus\cmd("graph", args: ["push", "--ref", reg.repository + ":" + tag, "--username", user],
-            opts: magus\CommandOptions{stdin = token});
-    }
-    magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
 // Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged
@@ -1276,7 +1374,9 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
         }
         return;
     }
-    final tag = exact_release_tag();
+    final exact = exact_release_tag();
+    if (exact.error != null) { throw exact.error!.message; }
+    final tag = exact.value!;
     if (tag == "") {
         throw "spell-publish: HEAD is not on a release tag, and each spell is published under "
             + "the release version. Tag the release first; without cd this prints what would publish.";
@@ -1285,7 +1385,9 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
     final token = magus\secret.read(reg.token_ref);
     foreach (name, _ in shipped) {
         final repo = reg.repository + "/" + name;
-        final published = registry_tags(repo, user: user, token: token).indexOf(tag) != null;
+        final repoTags = registry_tags(repo, user: user, token: token);
+        if (repoTags.error != null) { throw repoTags.error!.message; }
+        final published = repoTags.value!.indexOf(tag) != null;
         if (publish_action(ctx, unit: repo + ":" + tag, published: published) == releases\KEEP) { continue; }
         _ = magus\cmd("spell", args: ["push", "magus/spell/" + name, repo + ":" + tag,
             "--username", user], opts: magus\CommandOptions{stdin = token});
@@ -1422,13 +1524,17 @@ final RELEASE_TAG_REFSPEC = "v*";
 final RELEASE_WORKFLOW = ".github/workflows/release.yaml";
 
 // Every release archive in dist/, one releases\assetGlob per tool, sorted by path.
-fun release_archives() > [str] !> any {
-    final archives = mut [<str>];
-    foreach (tool in releases\TOOLS) {
-        foreach (p in fs\glob(releases\assetGlob(tool))) { archives.append(p.value); }
+fun release_archives() > result\Result::<[str]> {
+    try {
+        final archives = mut [<str>];
+        foreach (tool in releases\TOOLS) {
+            foreach (p in fs\glob(releases\assetGlob(tool))) { archives.append(p.value); }
+        }
+        _ = archives.sort(fun (a: str, b: str) > bool => a < b);
+        return result\ok::<[str]>(archives);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the release archives");
     }
-    _ = archives.sort(fun (a: str, b: str) > bool => a < b);
-    return archives;
 }
 
 // Maps an asset arch token to its GOARM level, or "" for arches without one. ARMv7
@@ -1445,50 +1551,61 @@ fun goarm_level(goos: str, goarch: str) > str {
 
 // Reads the module list from the shipped binary, not go.mod: the two variants link
 // different modules.
-fun write_notices(stage: str, tool: str, binary: str) > void !> any {
-    final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".").stdout.split(separator: "\n")[0];
-    final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".").stdout;
+fun write_notices(stage: str, tool: str, binary: str) > result\Result::<bool> {
+    try {
+        final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".").stdout.split(separator: "\n")[0];
+        final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".").stdout;
 
-    final body = mut ["THIRD-PARTY NOTICES\n\n"
-        + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
-        + "modules below, each under its own terms, reproduced here in full. This list is read\n"
-        + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
-        + "in general.\n\n"];
-    var missing = mut [<str>];
-    var count = 0;
+        final body = mut ["THIRD-PARTY NOTICES\n\n"
+            + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
+            + "modules below, each under its own terms, reproduced here in full. This list is read\n"
+            + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
+            + "in general.\n\n"];
+        var missing = mut [<str>];
+        var count = 0;
 
-    foreach (line in listing.split(separator: "\n")) {
-        final f = line.split(separator: "\t");
-        if (f.len() < 4) { continue; }
-        if (f[1] != "dep") { continue; }
-        if (f[2].startsWith("github.com/egladman/magus")) { continue; }
+        foreach (line in listing.split(separator: "\n")) {
+            final f = line.split(separator: "\t");
+            if (f.len() < 4) { continue; }
+            if (f[1] != "dep") { continue; }
+            if (f[2].startsWith("github.com/egladman/magus")) { continue; }
 
-        final text = read_module_license(modcache, f[2], f[3]);
-        if (text == "") { missing.append(f[2] + "@" + f[3]); continue; }
-        body.append("==============================================================================\n"
-            + f[2] + " " + f[3] + "\n"
-            + "==============================================================================\n\n"
-            + text + "\n\n");
-        count = count + 1;
+            final read = read_module_license(modcache, f[2], f[3]);
+            if (read.error -> e) { return result\Result::<bool>{ error = e }; }
+            final text = read.value!;
+            if (text == "") { missing.append(f[2] + "@" + f[3]); continue; }
+            body.append("==============================================================================\n"
+                + f[2] + " " + f[3] + "\n"
+                + "==============================================================================\n\n"
+                + text + "\n\n");
+            count = count + 1;
+        }
+
+        if (missing.len() > 0) {
+            return result\fail::<bool>("release-build: no license found for " + "{missing.len()}"
+                + " module(s), refusing to write an incomplete THIRD-PARTY-NOTICES: "
+                + missing.join(separator: ", "));
+        }
+        fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body.join(""));
+        magus\log.info("notices: documented {count} third-party modules");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "release-build: write the third-party notices");
     }
-
-    if (missing.len() > 0) {
-        throw "release-build: no license found for " + "{missing.len()}"
-            + " module(s), refusing to write an incomplete THIRD-PARTY-NOTICES: "
-            + missing.join(separator: ", ");
-    }
-    fs\writeFile(fs\join(stage, "THIRD-PARTY-NOTICES"), body.join(""));
-    magus\log.info("notices: documented {count} third-party modules");
 }
 
-fun read_module_license(modcache: str, path: str, version: str) > str !> any {
-    final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
-    foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE", "LICENSE.txt",
-                      "COPYING", "COPYING.md", "COPYING.txt"]) {
-        final p = fs\join(dir, name);
-        if (fs\exists(p)) { return fs\readFile(p); }
+fun read_module_license(modcache: str, path: str, version: str) > result\Result::<str> {
+    try {
+        final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
+        foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE", "LICENSE.txt",
+                          "COPYING", "COPYING.md", "COPYING.txt"]) {
+            final p = fs\join(dir, name);
+            if (fs\exists(p)) { return result\ok::<str>(fs\readFile(p)); }
+        }
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "read the license of {path}@{version}");
     }
-    return "";
 }
 
 // The module cache's case encoding: an uppercase letter becomes "!" plus its lowercase.
@@ -1506,18 +1623,22 @@ fun escape_module_path(path: str) > str {
 
 // release_asset is tool's archive path in dist/, refused before any write when its upload
 // glob would miss it.
-fun release_asset(tool: str, v: str, goos: str, goarch: str, suffix: str) > str !> any {
-    final asset = fs\join("dist", releases\assetName(tool, version: v, goos: goos, goarch: goarch, suffix: suffix));
-    final glob = releases\assetGlob(tool);
-    // Against the upload glob, not the basename: a "/" in the version turns the name into
-    // a path the glob misses, and the build stays green.
-    if (!releases\matchesGlob(glob, releases\toSlash(asset))) {
-        throw "release-build: the asset would be `" + asset + "`, which `"
-            + glob + "` does not match, so the release upload would not find "
-            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
-            + "resolves.";
+fun release_asset(tool: str, v: str, goos: str, goarch: str, suffix: str) > result\Result::<str> {
+    try {
+        final asset = fs\join("dist", releases\assetName(tool, version: v, goos: goos, goarch: goarch, suffix: suffix));
+        final glob = releases\assetGlob(tool);
+        // Against the upload glob, not the basename: a "/" in the version turns the name into
+        // a path the glob misses, and the build stays green.
+        if (!releases\matchesGlob(glob, releases\toSlash(asset))) {
+            return result\fail::<str>("release-build: the asset would be `" + asset + "`, which `"
+                + glob + "` does not match, so the release upload would not find "
+                + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
+                + "resolves.");
+        }
+        return result\ok::<str>(asset);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "release-build: name the {tool} archive");
     }
-    return asset;
 }
 
 fun exe_name(tool: str, goos: str) > str {
@@ -1527,97 +1648,114 @@ fun exe_name(tool: str, goos: str) > str {
 
 // archive_release_stage puts the license texts, readme and BUILDINFO beside tool's binary
 // in stage, archives stage as asset, and writes the asset's digest beside it.
-fun archive_release_stage(stage: str, tool: str, binary: str, readme: str, asset: str, buildinfo: str) > void !> any {
-    // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
-    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
-    fs\copyFile(readme, fs\join(stage, "README.md"));
-    write_notices(stage, tool: tool, binary: binary);
-    fs\writeFile(fs\join(stage, "BUILDINFO"), buildinfo
-        + "\nRun `go version -m " + tool + "` for the full module list and build settings.\n");
+fun archive_release_stage(stage: str, tool: str, binary: str, readme: str, asset: str, buildinfo: str) > result\Result::<bool> {
+    try {
+        // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
+        fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
+        fs\copyFile(readme, fs\join(stage, "README.md"));
+        final notices = write_notices(stage, tool: tool, binary: binary);
+        if (notices.error -> e) { return result\Result::<bool>{ error = e }; }
+        fs\writeFile(fs\join(stage, "BUILDINFO"), buildinfo
+            + "\nRun `go version -m " + tool + "` for the full module list and build settings.\n");
 
-    _ = archive\compress(stage, asset);
-    fs\removeAll(stage);
+        _ = archive\compress(stage, asset);
+        fs\removeAll(stage);
 
-    // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
-    final digest = crypto\sha256File(asset);
-    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+        // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
+        final digest = crypto\sha256File(asset);
+        fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "archive the {tool} release stage");
+    }
 }
 
-fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void !> any {
-    // Before any write, so a refused platform leaves no trace.
-    // armv6/armv7 are asset names; they fold to GOARCH=arm plus GOARM.
-    final goarm = goarm_level(goos, goarch);
+fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > result\Result::<bool> {
+    try {
+        // Before any write, so a refused platform leaves no trace.
+        // armv6/armv7 are asset names; they fold to GOARCH=arm plus GOARM.
+        final goarm = goarm_level(goos, goarch);
 
-    final v = version();
-    final asset = release_asset("magus", v: v, goos: goos, goarch: goarch, suffix: suffix);
-    // proofread links no C, so its static archive serves every host and a dynamic build
-    // would only duplicate it.
-    var proofreadAsset = "";
-    if (!cgo) {
-        proofreadAsset = release_asset("proofread", v: v, goos: goos, goarch: goarch, suffix: suffix);
+        final v = version();
+        final named = release_asset("magus", v: v, goos: goos, goarch: goarch, suffix: suffix);
+        if (named.error -> e) { return result\Result::<bool>{ error = e }; }
+        final asset = named.value!;
+        // proofread links no C, so its static archive serves every host and a dynamic build
+        // would only duplicate it.
+        var proofreadAsset = "";
+        if (!cgo) {
+            final proofreadNamed = release_asset("proofread", v: v, goos: goos, goarch: goarch, suffix: suffix);
+            if (proofreadNamed.error -> e) { return result\Result::<bool>{ error = e }; }
+            proofreadAsset = proofreadNamed.value!;
+        }
+
+        fs\mkdirAll("dist");
+        final binary = exe_name("magus", goos: goos);
+
+        final stage = fs\join("dist", goos + "-" + goarch + suffix);
+        fs\mkdirAll(stage);
+
+        var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
+        if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
+        if (cgo) {
+            env["CGO_ENABLED"] = "1";
+            final cc = os\env("MAGUS_CGO_CC");
+            if (cc != null and cc != "") { env["CC"] = cc; }
+            // Pinned so cgo never runs an earlier pkg-config on PATH (Strawberry Perl's on Windows).
+            final pkgbin = os\env("MAGUS_CGO_PKG_CONFIG");
+            if (pkgbin != null and pkgbin != "") { env["PKG_CONFIG"] = pkgbin; }
+            final pkgcfg = os\env("MAGUS_CGO_PKG_CONFIG_PATH");
+            if (pkgcfg != null and pkgcfg != "") { env["PKG_CONFIG_PATH"] = pkgcfg; }
+        } else {
+            env["CGO_ENABLED"] = "0";
+        }
+
+        // An untagged build is what `go install` produces, so it must work anywhere. Static opts
+        // out of FFI with noffi: purego's cgo_import_dynamic adds a PT_INTERP even at
+        // CGO_ENABLED=0. The codec tags need system dev headers, so only dynamic opts in.
+        var build_args = mut ["-trimpath"];
+        if (cgo) { build_args.append("-tags"); build_args.append("liblzma,libzstd"); }
+        else { build_args.append("-tags"); build_args.append("noffi"); }
+        build_args.append("-ldflags"); build_args.append(ld_flags());
+        build_args.append("-o"); build_args.append(fs\join(stage, binary));
+        build_args.append("./cmd/magus");
+        go["go-build"](ctx.withEnv(env), {"args": build_args});
+
+        // Readable when a dynamic build cannot start for want of a library.
+        var variant = "static";
+        if (cgo) { variant = "dynamic"; }
+        var platform = goos + "/" + goarch;
+        if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
+        final info = " " + v + "\n"
+            + "commit:   " + commit() + "\n"
+            + "built:    " + build_date() + "\n"
+            + "platform: " + platform + "\n"
+            + "variant:  " + variant + "\n";
+        final archived = archive_release_stage(stage, tool: "magus", binary: binary, readme: "README.md", asset: asset,
+            buildinfo: "magus" + info);
+        if (archived.error -> e) { return result\Result::<bool>{ error = e }; }
+
+        if (proofreadAsset == "") { return result\ok::<bool>(true); }
+        final pbinary = exe_name("proofread", goos: goos);
+        final pstage = fs\join("dist", "proofread-" + goos + "-" + goarch + suffix);
+        fs\mkdirAll(pstage);
+        // -C runs the build inside proofread's own module, so -o climbs back out to dist/. The flags are
+        // proofread-build's: proofread stamps no version, which BUILDINFO records instead.
+        final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
+        go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
+            "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
+        // The embedded tagger model is trained on CC BY-SA 4.0 data, which requires its attribution.
+        fs\copyFile(fs\join(proofread\home, proofread\attribution), fs\join(pstage, "ATTRIBUTION-wordclass"));
+        final proofreadArchived = archive_release_stage(pstage, tool: "proofread", binary: pbinary,
+            readme: fs\join(proofread\home, "README.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
+        if (proofreadArchived.error -> e) { return result\Result::<bool>{ error = e }; }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "release-build: build the {goos}/{goarch}{suffix} variant");
     }
-
-    fs\mkdirAll("dist");
-    final binary = exe_name("magus", goos: goos);
-
-    final stage = fs\join("dist", goos + "-" + goarch + suffix);
-    fs\mkdirAll(stage);
-
-    var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
-    if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
-    if (cgo) {
-        env["CGO_ENABLED"] = "1";
-        final cc = os\env("MAGUS_CGO_CC");
-        if (cc != null and cc != "") { env["CC"] = cc; }
-        // Pinned so cgo never runs an earlier pkg-config on PATH (Strawberry Perl's on Windows).
-        final pkgbin = os\env("MAGUS_CGO_PKG_CONFIG");
-        if (pkgbin != null and pkgbin != "") { env["PKG_CONFIG"] = pkgbin; }
-        final pkgcfg = os\env("MAGUS_CGO_PKG_CONFIG_PATH");
-        if (pkgcfg != null and pkgcfg != "") { env["PKG_CONFIG_PATH"] = pkgcfg; }
-    } else {
-        env["CGO_ENABLED"] = "0";
-    }
-
-    // An untagged build is what `go install` produces, so it must work anywhere. Static opts
-    // out of FFI with noffi: purego's cgo_import_dynamic adds a PT_INTERP even at
-    // CGO_ENABLED=0. The codec tags need system dev headers, so only dynamic opts in.
-    var build_args = mut ["-trimpath"];
-    if (cgo) { build_args.append("-tags"); build_args.append("liblzma,libzstd"); }
-    else { build_args.append("-tags"); build_args.append("noffi"); }
-    build_args.append("-ldflags"); build_args.append(ld_flags());
-    build_args.append("-o"); build_args.append(fs\join(stage, binary));
-    build_args.append("./cmd/magus");
-    go["go-build"](ctx.withEnv(env), {"args": build_args});
-
-    // Readable when a dynamic build cannot start for want of a library.
-    var variant = "static";
-    if (cgo) { variant = "dynamic"; }
-    var platform = goos + "/" + goarch;
-    if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
-    final info = " " + v + "\n"
-        + "commit:   " + commit() + "\n"
-        + "built:    " + build_date() + "\n"
-        + "platform: " + platform + "\n"
-        + "variant:  " + variant + "\n";
-    archive_release_stage(stage, tool: "magus", binary: binary, readme: "README.md", asset: asset,
-        buildinfo: "magus" + info);
-
-    if (proofreadAsset == "") { return; }
-    final pbinary = exe_name("proofread", goos: goos);
-    final pstage = fs\join("dist", "proofread-" + goos + "-" + goarch + suffix);
-    fs\mkdirAll(pstage);
-    // -C runs the build inside proofread's own module, so -o climbs back out to dist/. The flags are
-    // proofread-build's: proofread stamps no version, which BUILDINFO records instead.
-    final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
-    go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
-        "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
-    // The embedded tagger model is trained on CC BY-SA 4.0 data, which requires its attribution.
-    fs\copyFile(fs\join(proofread\home, proofread\attribution), fs\join(pstage, "ATTRIBUTION-wordclass"));
-    archive_release_stage(pstage, tool: "proofread", binary: pbinary,
-        readme: fs\join(proofread\home, "README.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
 }
 
-fun release_target_platform(goos: str, goarch: str) > [str] !> any {
+fun release_target_platform(goos: str, goarch: str) > [str] {
     if (goos != null and goos != "") { return [goos, goarch]; }
     final envos = os\env("GOOS");
     final envarch = os\env("GOARCH");
@@ -1643,11 +1781,14 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // The static archive carries "_static" and the dynamic one the bare name, as with
     // busybox-static. A "_" field keeps the name splittable on its arch.
     final p = release_target_platform(goos, goarch);
+    var cgo = false;
+    var suffix = "_static";
     if (ctx.hasCharm("dynamic")) {
-        build_release_variant(ctx, p[0], p[1], true, "");
-    } else {
-        build_release_variant(ctx, p[0], p[1], false, "_static");
+        cgo = true;
+        suffix = "";
     }
+    final built = build_release_variant(ctx, p[0], p[1], cgo, suffix);
+    if (built.error != null) { throw built.error!.message; }
 }
 
 // Signs dist/SHA256SUMS with the Ed25519 key in MAGUS_SIGNING_KEY, then verifies the
@@ -1668,13 +1809,15 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
 
 // release_tag is the release tag HEAD sits on, which every publishing target publishes
 // under.
-fun release_tag(target: str) > str !> any {
-    final tag = exact_release_tag();
+fun release_tag(target: str) > result\Result::<str> {
+    final exact = exact_release_tag();
+    if (exact.error -> e) { return result\fail::<str>(e.message); }
+    final tag = exact.value!;
     if (tag == "") {
-        throw target + ": HEAD is not on a release tag, and a release is published under one;"
-            + " check the tag out first";
+        return result\fail::<str>(target + ": HEAD is not on a release tag, and a release is published under one;"
+            + " check the tag out first");
     }
-    return tag;
+    return result\ok::<str>(tag);
 }
 
 // publish_action decides, and says, what a publishing target does with one unit; the rule
@@ -1693,63 +1836,78 @@ fun publish_action(ctx: magus\Context, unit: str, published: bool) > str {
 // repository's tags, image or spell. A repository never pushed to carries none, which the
 // distribution spec reports as NAME_UNKNOWN. The read is authenticated because GHCR answers
 // an anonymous read of a private package and of a missing one with the same denial.
-fun registry_tags(repository: str, user: str, token: str) > [str] !> any {
-    final res = magus\cmd("spell", args: ["ls", repository, "--username", user, "-o", "json"],
-        opts: magus\CommandOptions{quiet = true, allowFailure = true, stdin = token});
-    if (!res.ok) {
-        if (res.stderr.indexOf("NAME_UNKNOWN") != null) { return []; }
-        throw "cannot list the tags of {repository}, so whether a release is already published"
-            + " there is unknown: {res.stderr.trim()}";
+fun registry_tags(repository: str, user: str, token: str) > result\Result::<[str]> {
+    try {
+        final res = magus\cmd("spell", args: ["ls", repository, "--username", user, "-o", "json"],
+            opts: magus\CommandOptions{quiet = true, allowFailure = true, stdin = token});
+        if (!res.ok) {
+            if (res.stderr.indexOf("NAME_UNKNOWN") != null) { return result\ok::<[str]>([<str>]); }
+            return result\fail::<[str]>("cannot list the tags of {repository}, so whether a release is already published"
+                + " there is unknown: {res.stderr.trim()}");
+        }
+        final tags = mut [<str>];
+        final listed = json\parse(res.stdout)["tags"];
+        if (listed == null) { return result\ok::<[str]>(tags); }
+        foreach (t in listed) { tags.append("{t}"); }
+        return result\ok::<[str]>(tags);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the tags of {repository}");
     }
-    final tags = mut [<str>];
-    final listed = json\parse(res.stdout)["tags"];
-    if (listed == null) { return tags; }
-    foreach (t in listed) { tags.append("{t}"); }
-    return tags;
 }
 
 // release_assets names the assets tag's GitHub Release carries, or null when there is no
 // such release. A release that exists with assets missing is still published: an upload
 // was interrupted, and replacing it takes the mutable charm like any other.
-fun release_assets(tag: str) > [str]? !> any {
-    final res = proc\exec("gh", args: ["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"],
-        dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
-    if (!res.ok) {
-        if (res.stderr.indexOf("release not found") != null) { return null; }
-        throw "release: cannot read the {tag} GitHub Release: {res.stderr.trim()}";
+fun release_assets(tag: str) > result\Result::<[str]?> {
+    try {
+        final res = proc\exec("gh", args: ["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"],
+            dir: ".", opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        if (!res.ok) {
+            if (res.stderr.indexOf("release not found") != null) { return result\ok::<[str]?>(null); }
+            return result\fail::<[str]?>("release: cannot read the {tag} GitHub Release: {res.stderr.trim()}");
+        }
+        final names = mut [<str>];
+        foreach (line in res.stdout.split("\n")) {
+            if (line.trim() != "") { names.append(line.trim()); }
+        }
+        return result\ok::<[str]?>(names);
+    } catch (err: any) {
+        return result\caught::<[str]?>(err, doing: "read the {tag} GitHub Release");
     }
-    final names = mut [<str>];
-    foreach (line in res.stdout.split("\n")) {
-        if (line.trim() != "") { names.append(line.trim()); }
-    }
-    return names;
 }
 
 // download_release fetches tag's published release into dist/ and verifies it before
 // anything reads it: SHA256SUMS names tag, lists every archive present with its digest, and
 // carries a signature by the release key. A partial download hashes perfectly well, so an
 // unverified one is never trusted.
-fun download_release(tag: str) > void !> any {
-    fs\mkdirAll("dist");
-    _ = proc\exec("gh", args: ["release", "download", tag, "--dir", "dist", "--clobber"], dir: ".", opts: proc\ExecOptions{quiet = true});
-    final sumsPath = fs\join("dist", "SHA256SUMS");
-    final sigPath = sumsPath + ".sig";
-    var problems = mut [<str>];
-    if (!fs\exists(sumsPath) or !fs\exists(sigPath)) {
-        problems.append("SHA256SUMS or its signature is missing");
-    } else {
-        final have = mut {<str: str>};
-        foreach (a in release_archives()) {
-            have[fs\basename(a)] = crypto\sha256File(a);
+fun download_release(tag: str) > result\Result::<bool> {
+    try {
+        fs\mkdirAll("dist");
+        _ = proc\exec("gh", args: ["release", "download", tag, "--dir", "dist", "--clobber"], dir: ".", opts: proc\ExecOptions{quiet = true});
+        final sumsPath = fs\join("dist", "SHA256SUMS");
+        final sigPath = sumsPath + ".sig";
+        var problems = mut [<str>];
+        if (!fs\exists(sumsPath) or !fs\exists(sigPath)) {
+            problems.append("SHA256SUMS or its signature is missing");
+        } else {
+            final have = mut {<str: str>};
+            final archives = release_archives();
+            if (archives.error -> e) { return result\Result::<bool>{ error = e }; }
+            foreach (a in archives.value!) {
+                have[fs\basename(a)] = crypto\sha256File(a);
+            }
+            problems = releases\sumsProblems(tag, sums: fs\readFile(sumsPath), have: have).cloneMutable();
         }
-        problems = releases\sumsProblems(tag, sums: fs\readFile(sumsPath), have: have).cloneMutable();
+        if (problems.len() > 0) {
+            return result\fail::<bool>("release: the published {tag} release does not verify, so nothing may build on it."
+                + " Rebuild it and replace it with the mutable charm:\n  " + problems.join("\n  "));
+        }
+        releases\verifySignature(fs\readFile(sumsPath), sig: fs\readFile(sigPath),
+            pubHex: releases\activeReleaseKey(fs\readFile(releases\KEYRING)), sigPath: sigPath);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "download and verify the {tag} release");
     }
-    if (problems.len() > 0) {
-        throw "release: the published {tag} release does not verify, so nothing may build on it."
-            + " Rebuild it and replace it with the mutable charm:\n  " + problems.join("\n  ");
-    }
-    releases\verifySignature(fs\readFile(sumsPath), sig: fs\readFile(sigPath),
-        pubHex: releases\activeReleaseKey(fs\readFile(releases\KEYRING)), sigPath: sigPath);
 }
 
 // Publishes this tag's GitHub Release, write-once. With no release yet it signs the
@@ -1758,13 +1916,20 @@ fun download_release(tag: str) > void !> any {
 // bytes people download rather than a rebuild of them. Replacing a published release takes
 // the mutable charm. Without cd it signs and stops short of GitHub.
 export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
-    final tag = release_tag("release-publish");
-    final action = publish_action(ctx, unit: "the {tag} GitHub Release", published: release_assets(tag) != null);
+    final taggedRelease = release_tag("release-publish");
+    if (taggedRelease.error != null) { throw taggedRelease.error!.message; }
+    final tag = taggedRelease.value!;
+    final existing = release_assets(tag);
+    if (existing.error != null) { throw existing.error!.message; }
+    final action = publish_action(ctx, unit: "the {tag} GitHub Release", published: existing.value != null);
     if (action == releases\KEEP) {
-        download_release(tag);
+        final downloaded = download_release(tag);
+        if (downloaded.error != null) { throw downloaded.error!.message; }
         return;
     }
-    final archives = release_archives();
+    final listed = release_archives();
+    if (listed.error != null) { throw listed.error!.message; }
+    final archives = listed.value!;
     if (archives.len() == 0) {
         throw "release-publish: dist/ holds no release archive; the release-build jobs leave them there";
     }
@@ -1800,8 +1965,11 @@ export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
 // is done. release-index.yaml signs the index on that branch and opens the pull request,
 // so this target never holds the signing key.
 export fun release_manifest(ctx: magus\Context, args: [str]) > void !> any {
-    final tag = release_tag("release-manifest");
-    download_release(tag);
+    final taggedRelease = release_tag("release-manifest");
+    if (taggedRelease.error != null) { throw taggedRelease.error!.message; }
+    final tag = taggedRelease.value!;
+    final downloaded = download_release(tag);
+    if (downloaded.error != null) { throw downloaded.error!.message; }
     final manifestPath = fs\join("releases", tag + ".yaml");
     _ = vcs\cmd(["fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"], vcs\CommandOptions{quiet = true});
     final onMain = vcs\cmd(["show", "origin/main:" + manifestPath], vcs\CommandOptions{quiet = true, allowFailure = true});
@@ -1924,25 +2092,34 @@ fun noted(name: str, detail: str) > Verdict {
 }
 
 // refs/heads only: a remote branch never shadows a tag's short name.
-fun local_branches() > [str] !> any {
+fun local_branches() > result\Result::<[str]> {
     var names = mut [<str>];
-    final listing = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"],
-        vcs\CommandOptions{quiet = true}).stdout;
-    foreach (line in listing.split("\n")) {
-        final name = line.trim();
-        if (name != "") { names.append(name); }
+    try {
+        final listing = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"],
+            vcs\CommandOptions{quiet = true}).stdout;
+        foreach (line in listing.split("\n")) {
+            final name = line.trim();
+            if (name != "") { names.append(name); }
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the local branches");
     }
-    return names;
+    return result\ok::<[str]>(names);
 }
 
 // Neither the tag trigger nor the build jobs' upload paths derive from RELEASE_TAG_REFSPEC
 // and releases\assetGlob, so only this notices one side edited alone. release-publish
 // globs dist/ by releases\assetGlob itself, but sees only what the build jobs uploaded.
-fun verify_release_workflow() > [Verdict] !> any {
-    if (!fs\exists(RELEASE_WORKFLOW)) {
-        return [failed("workflow", RELEASE_WORKFLOW + " is missing, so the tag trigger cannot be confirmed")];
+fun verify_release_workflow() > result\Result::<[Verdict]> {
+    var body = "";
+    try {
+        if (!fs\exists(RELEASE_WORKFLOW)) {
+            return result\ok::<[Verdict]>([failed("workflow", RELEASE_WORKFLOW + " is missing, so the tag trigger cannot be confirmed")]);
+        }
+        body = fs\readFile(RELEASE_WORKFLOW);
+    } catch (err: any) {
+        return result\caught::<[Verdict]>(err, doing: "read " + RELEASE_WORKFLOW);
     }
-    final body = fs\readFile(RELEASE_WORKFLOW);
     var checks = mut [<Verdict>];
     if (body.indexOf("- '" + RELEASE_TAG_REFSPEC + "'") == null) {
         checks.append(failed("workflow tag trigger",
@@ -1964,135 +2141,141 @@ fun verify_release_workflow() > [Verdict] !> any {
         checks.append(passed("workflow upload paths", "every upload-artifact step in "
             + RELEASE_WORKFLOW + " lists each tool's archives"));
     }
-    return checks;
+    return result\ok::<[Verdict]>(checks);
 }
 
 // Every check that must hold before a tag exists: the Go module proxy caches a tag
 // within the hour, so a failed release burns the version. alreadyThere is the tags already
 // on the commit wouldBeTags go on: none on a new release commit, HEAD's when the release
 // tags HEAD. Returns every verdict rather than stopping at the first.
-fun release_checks(wouldBeTags: [str], rootVersion: str, alreadyThere: [str]) > [Verdict] !> any {
-    var checks = mut [<Verdict>];
-    final branches = local_branches();
+fun release_checks(wouldBeTags: [str], rootVersion: str, alreadyThere: [str]) > result\Result::<[Verdict]> {
+    try {
+        var checks = mut [<Verdict>];
+        final branchList = local_branches();
+        if (branchList.error -> e) { return result\Result::<[Verdict]>{ error = e }; }
+        final branches = branchList.value!;
 
-    // (a) A branch named like a tag is noted, never refused: git supports it. A bare
-    // `git push <remote> <tag>` is then ambiguous; push refs/tags/<tag>.
-    foreach (tag in wouldBeTags) {
-        var collides = false;
-        foreach (b in branches) {
-            if (b == tag) { collides = true; }
+        // (a) A branch named like a tag is noted, never refused: git supports it. A bare
+        // `git push <remote> <tag>` is then ambiguous; push refs/tags/<tag>.
+        foreach (tag in wouldBeTags) {
+            var collides = false;
+            foreach (b in branches) {
+                if (b == tag) { collides = true; }
+            }
+            if (collides) {
+                checks.append(noted("branch collision", "a branch named `" + tag + "` exists beside this "
+                    + "tag. The two namespaces are separate, so both are legal and magus reads tags by "
+                    + "written name either way. Bare-name git spellings are ambiguous while both exist: "
+                    + "push it as `git push <remote> refs/tags/" + tag + "`, since `git push <remote> "
+                    + tag + "` is refused as matching more than one ref"));
+            } else {
+                checks.append(passed("branch collision", "no branch is named `" + tag + "`"));
+            }
         }
-        if (collides) {
-            checks.append(noted("branch collision", "a branch named `" + tag + "` exists beside this "
-                + "tag. The two namespaces are separate, so both are legal and magus reads tags by "
-                + "written name either way. Bare-name git spellings are ambiguous while both exist: "
-                + "push it as `git push <remote> refs/tags/" + tag + "`, since `git push <remote> "
-                + tag + "` is refused as matching more than one ref"));
+
+        // (e) release_build's refusal, asked before a tag burns the version.
+        final shims = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".",
+            opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        if (shims.ok) {
+            checks.append(passed("development-only shims", shims.stdout.trim()));
         } else {
-            checks.append(passed("branch collision", "no branch is named `" + tag + "`"));
+            checks.append(failed("development-only shims", shims.stderr.trim()));
         }
-    }
 
-    // (e) release_build's refusal, asked before a tag burns the version.
-    final shims = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".",
-        opts: proc\ExecOptions{quiet = true, allowFailure = true});
-    if (shims.ok) {
-        checks.append(passed("development-only shims", shims.stdout.trim()));
-    } else {
-        checks.append(failed("development-only shims", shims.stderr.trim()));
-    }
-
-    // (b) Simulates version() on the tagged commit. Gated only on a root tag: a
-    // library-only release publishes no assets.
-    final root = releases\rootReleaseTag(wouldBeTags + alreadyThere);
-    if (root == "") {
-        var stamped = "the nearest tag by distance";
-        final near = wouldBeTags + alreadyThere;
-        if (near.len() > 0) { stamped = "one of " + near.join(", ") + ", chosen arbitrarily"; }
-        checks.append(passed("asset names", "no root release tag would sit on the tagged commit, so "
-            + RELEASE_WORKFLOW + " does not run and nothing is published. A local "
-            + "`magus run release-build` on that commit stamps " + stamped
-            + ", and refuses when that carries a separator"));
-    } else {
-        var offenders = mut [<str>];
-        foreach (tool in releases\TOOLS) {
-            foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
-                           ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
-                foreach (suffix in ["_static", ""]) {
-                    // toSlash: fs\join uses the rehearsing machine's separator.
-                    final asset = fs\join("dist", releases\assetName(tool, version: root, goos: p[0], goarch: p[1], suffix: suffix));
-                    if (!releases\matchesGlob(releases\assetGlob(tool), releases\toSlash(asset))) {
-                        offenders.append(asset);
+        // (b) Simulates version() on the tagged commit. Gated only on a root tag: a
+        // library-only release publishes no assets.
+        final root = releases\rootReleaseTag(wouldBeTags + alreadyThere);
+        if (root == "") {
+            var stamped = "the nearest tag by distance";
+            final near = wouldBeTags + alreadyThere;
+            if (near.len() > 0) { stamped = "one of " + near.join(", ") + ", chosen arbitrarily"; }
+            checks.append(passed("asset names", "no root release tag would sit on the tagged commit, so "
+                + RELEASE_WORKFLOW + " does not run and nothing is published. A local "
+                + "`magus run release-build` on that commit stamps " + stamped
+                + ", and refuses when that carries a separator"));
+        } else {
+            var offenders = mut [<str>];
+            foreach (tool in releases\TOOLS) {
+                foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
+                               ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
+                    foreach (suffix in ["_static", ""]) {
+                        // toSlash: fs\join uses the rehearsing machine's separator.
+                        final asset = fs\join("dist", releases\assetName(tool, version: root, goos: p[0], goarch: p[1], suffix: suffix));
+                        if (!releases\matchesGlob(releases\assetGlob(tool), releases\toSlash(asset))) {
+                            offenders.append(asset);
+                        }
                     }
                 }
             }
+            if (offenders.len() > 0) {
+                checks.append(failed("asset names", "the tagged commit would stamp version `" + root + "`, naming assets "
+                    + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
+                    + "build would be green and the release would publish nothing. " + "{offenders.len()}"
+                    + " of the assets release.yaml builds are affected."));
+            } else {
+                checks.append(passed("asset names", "version `" + root + "` names assets each tool's "
+                    + "upload glob matches on every platform release.yaml builds"));
+            }
         }
-        if (offenders.len() > 0) {
-            checks.append(failed("asset names", "the tagged commit would stamp version `" + root + "`, naming assets "
-                + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
-                + "build would be green and the release would publish nothing. " + "{offenders.len()}"
-                + " of the assets release.yaml builds are affected."));
+
+        if (rootVersion == "") {
+            checks.append(passed("publish prerequisites", "no root version named, so nothing publishes"));
+            return result\ok::<[Verdict]>(checks);
+        }
+        final rootTag = "v" + rootVersion;
+
+        // (c) What `magus-utils cut` needs, asked before any binary is built.
+        final manifest = fs\join("releases", rootTag + ".yaml");
+        if (fs\exists(manifest)) {
+            checks.append(failed("release manifest", manifest + " already exists, and release manifests "
+                + "are immutable once committed; `magus-utils cut` would refuse after the binaries "
+                + "were built"));
         } else {
-            checks.append(passed("asset names", "version `" + root + "` names assets each tool's "
-                + "upload glob matches on every platform release.yaml builds"));
+            checks.append(passed("release manifest", manifest + " is absent, as cut requires"));
         }
-    }
 
-    if (rootVersion == "") {
-        checks.append(passed("publish prerequisites", "no root version named, so nothing publishes"));
-        return checks;
-    }
-    final rootTag = "v" + rootVersion;
-
-    // (c) What `magus-utils cut` needs, asked before any binary is built.
-    final manifest = fs\join("releases", rootTag + ".yaml");
-    if (fs\exists(manifest)) {
-        checks.append(failed("release manifest", manifest + " already exists, and release manifests "
-            + "are immutable once committed; `magus-utils cut` would refuse after the binaries "
-            + "were built"));
-    } else {
-        checks.append(passed("release manifest", manifest + " is absent, as cut requires"));
-    }
-
-    final fragments = fs\glob(changelog\FRAGMENT_DIR + "*.md");
-    if (fragments.len() == 0) {
-        checks.append(failed("changelog", changelog\FRAGMENT_DIR + " holds no changelog fragments, so "
-            + "`magus-utils cut` would refuse and this release would publish binaries with no notes. "
-            + "Write the entries before tagging"));
-    } else {
-        // pr-changelog lints only the fragments a pull request adds, so lint them all here.
-        var paths = mut [<str>];
-        foreach (f in fragments) { paths.append(f.value); }
-        final malformed = changelog\lint(paths);
-        if (malformed.len() > 0) {
-            checks.append(failed("changelog", "`magus-utils cut` would refuse " + changelog\FRAGMENT_DIR
-                + ": " + malformed.join("\n")));
+        final fragments = fs\glob(changelog\FRAGMENT_DIR + "*.md");
+        if (fragments.len() == 0) {
+            checks.append(failed("changelog", changelog\FRAGMENT_DIR + " holds no changelog fragments, so "
+                + "`magus-utils cut` would refuse and this release would publish binaries with no notes. "
+                + "Write the entries before tagging"));
         } else {
-            checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
+            // pr-changelog lints only the fragments a pull request adds, so lint them all here.
+            var paths = mut [<str>];
+            foreach (f in fragments) { paths.append(f.value); }
+            final malformed = changelog\lint(paths);
+            if (malformed.len() > 0) {
+                checks.append(failed("changelog", "`magus-utils cut` would refuse " + changelog\FRAGMENT_DIR
+                    + ": " + malformed.join("\n")));
+            } else {
+                checks.append(passed("changelog", changelog\FRAGMENT_DIR + " holds {fragments.len()} fragment(s) for cut to fold"));
+            }
         }
-    }
 
-    // (d) The trigger from both sides: the root tag must start a release and a module tag
-    // must not.
-    if (!releases\matchesGlob(RELEASE_TAG_REFSPEC, rootTag)) {
-        checks.append(failed("workflow trigger", "`" + rootTag + "` does not match "
-            + RELEASE_WORKFLOW + "'s `" + RELEASE_TAG_REFSPEC + "` trigger, so pushing it would "
-            + "publish nothing"));
-    } else {
-        checks.append(passed("workflow trigger", "`" + rootTag + "` matches `" + RELEASE_TAG_REFSPEC
-            + "` and starts the release"));
-    }
-    foreach (tag in wouldBeTags) {
-        if (tag == rootTag) { continue; }
-        if (releases\matchesGlob(RELEASE_TAG_REFSPEC, tag)) {
-            checks.append(failed("workflow trigger", "the module tag `" + tag + "` also matches `"
-                + RELEASE_TAG_REFSPEC + "`, so pushing it would start a second release run"));
+        // (d) The trigger from both sides: the root tag must start a release and a module tag
+        // must not.
+        if (!releases\matchesGlob(RELEASE_TAG_REFSPEC, rootTag)) {
+            checks.append(failed("workflow trigger", "`" + rootTag + "` does not match "
+                + RELEASE_WORKFLOW + "'s `" + RELEASE_TAG_REFSPEC + "` trigger, so pushing it would "
+                + "publish nothing"));
         } else {
-            checks.append(passed("workflow trigger", "the module tag `" + tag + "` starts no release run"));
+            checks.append(passed("workflow trigger", "`" + rootTag + "` matches `" + RELEASE_TAG_REFSPEC
+                + "` and starts the release"));
         }
-    }
+        foreach (tag in wouldBeTags) {
+            if (tag == rootTag) { continue; }
+            if (releases\matchesGlob(RELEASE_TAG_REFSPEC, tag)) {
+                checks.append(failed("workflow trigger", "the module tag `" + tag + "` also matches `"
+                    + RELEASE_TAG_REFSPEC + "`, so pushing it would start a second release run"));
+            } else {
+                checks.append(passed("workflow trigger", "the module tag `" + tag + "` starts no release run"));
+            }
+        }
 
-    return checks;
+        return result\ok::<[Verdict]>(checks);
+    } catch (err: any) {
+        return result\caught::<[Verdict]>(err, doing: "run the release checks");
+    }
 }
 
 // Cuts versions in Go's multi-module order. Dry run by default; name <module>@<version> to
@@ -2126,7 +2309,9 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         wanted[key] = v;
     }
 
-    final branches = local_branches();
+    final branchList = local_branches();
+    if (branchList.error != null) { throw branchList.error!.message; }
+    final branches = branchList.value!;
     foreach (m in modules) {
         final cur = releases\currentVersion(m["prefix"]);
         final n = releases\nextVersions(cur);
@@ -2223,7 +2408,11 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
             if (releasing[dep] != null) { continue; }
             final tag = releases\tagName(dep, version: req["version"]!);
             if (tagNames.indexOf(tag) == null) { continue; }
-            if (tree_id(tag, dir: dep) != tree_id("HEAD", dir: dep)) {
+            final taggedTree = tree_id(tag, dir: dep);
+            if (taggedTree.error != null) { throw taggedTree.error!.message; }
+            final headTree = tree_id("HEAD", dir: dep);
+            if (headTree.error != null) { throw headTree.error!.message; }
+            if (taggedTree.value! != headTree.value!) {
                 pinFailures.append(releases\tagName(dir, version: version) + " requires " + tag
                     + ", and HEAD's " + dep + " has changed since that tag: release " + dep + " in this run");
             }
@@ -2287,8 +2476,16 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // no go.mod changes.
     final pinned = releases\pinGomods(gomods, releasing: releasing);
     var alreadyThere = [<str>];
-    if (pinned.next.len() == 0) { alreadyThere = tag_names_on_head(); }
-    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion, alreadyThere: alreadyThere)) {
+    if (pinned.next.len() == 0) {
+        final onHead = tag_names_on_head();
+        if (onHead.error != null) { throw onHead.error!.message; }
+        alreadyThere = onHead.value!;
+    }
+    final workflowChecks = verify_release_workflow();
+    if (workflowChecks.error != null) { throw workflowChecks.error!.message; }
+    final releaseVerdicts = release_checks(wouldBeTags, rootVersion: rootVersion, alreadyThere: alreadyThere);
+    if (releaseVerdicts.error != null) { throw releaseVerdicts.error!.message; }
+    foreach (c in workflowChecks.value! + releaseVerdicts.value!) {
         if (c.note) {
             magus\log.warn("release: NOTE " + c.name + " - " + c.detail);
         } else if (c.ok) {
@@ -2312,11 +2509,12 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // A missing tag leaves the scratch install nothing to resolve, so it is not rehearsed.
     if ((failures == 0 or !deliver) and goReleased and plan.missing.len() == 0) {
         scratch = fs\tempDir("magus-release-");
-        try {
-            staged = stage_release(scratch, order: order, releasing: releasing, gomods: gomods, pinned: pinned);
-        } catch (e) {
+        final made = stage_release(scratch, order: order, releasing: releasing, gomods: gomods, pinned: pinned);
+        if (made.error -> e) {
             failures = failures + 1;
-            magus\log.warn("release: FAIL release commit - {e}");
+            magus\log.warn("release: FAIL release commit - {e.message}");
+        } else {
+            staged = made.value!;
         }
     }
     if (staged -> s) {
@@ -2325,12 +2523,14 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
 
     // Both refusals follow the whole transcript, so one problem cannot hide another.
     if (failures > 0 and deliver) {
-        cleanup_scratch(scratch);
+        final cleaned = cleanup_scratch(scratch);
+        if (cleaned.error != null) { throw cleaned.error!.message; }
         throw "release: " + failures + " release check(s) failed; nothing was tagged. "
             + "Drop the cd charm to rehearse until they pass.";
     }
     if (deliver and dirty) {
-        cleanup_scratch(scratch);
+        final cleaned = cleanup_scratch(scratch);
+        if (cleaned.error != null) { throw cleaned.error!.message; }
         throw "release: tree is dirty; commit before releasing";
     }
     if (!deliver) {
@@ -2363,7 +2563,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("release: tag " + tag);
         if (deliver) { _ = vcs\cmd(["tag", tag, at]); }
     }
-    cleanup_scratch(scratch);
+    final cleaned = cleanup_scratch(scratch);
+    if (cleaned.error != null) { throw cleaned.error!.message; }
 
     if (deliver) {
         magus\log.info("release: done - nothing was pushed. Push the branch and the module tags, then the root's, when ready.");
@@ -2411,10 +2612,14 @@ fun gomod_path(dir: str) > str {
 }
 
 // tree_id is the tree rev holds at dir, "" when it holds none.
-fun tree_id(rev: str, dir: str) > str !> any {
+fun tree_id(rev: str, dir: str) > result\Result::<str> {
     var spec = rev + ":" + dir;
     if (dir == ".") { spec = rev + "^\{tree}"; }
-    return vcs\cmd(["rev-parse", "--verify", "--quiet", spec], vcs\CommandOptions{quiet = true, allowFailure = true}).stdout.trim();
+    try {
+        return result\ok::<str>(vcs\cmd(["rev-parse", "--verify", "--quiet", spec], vcs\CommandOptions{quiet = true, allowFailure = true}).stdout.trim());
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "read the tree of {spec}");
+    }
 }
 
 // go_env is the environment the scratch clone's go commands run in, then the go binary:
@@ -2422,114 +2627,141 @@ fun tree_id(rev: str, dir: str) > str !> any {
 // modules fetched straight from the clone, whose tags this run has already cut. The binary
 // is the toolchain's own, asked for here: a mise shim on PATH would read the clone's
 // untrusted mise.toml.
-fun go_env(scratch: str, clone: str) > [str] !> any {
-    final cache = proc\exec("go", args: ["env", "GOMODCACHE"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
-    final goroot = proc\exec("go", args: ["env", "GOROOT"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
-    return ["GOROOT=" + goroot, "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=-mod=mod", "GOPRIVATE=" + releases\MODULE_ROOT,
-            "GOPROXY=file://" + cache + "/cache/download,https://proxy.golang.org",
-            "GOMODCACHE=" + fs\join(scratch, "modcache"), "GOBIN=" + fs\join(scratch, "bin"),
-            "GIT_CONFIG_COUNT=2",
-            "GIT_CONFIG_KEY_0=url.file://" + clone + ".insteadOf", "GIT_CONFIG_VALUE_0=https://" + releases\MODULE_ROOT,
-            "GIT_CONFIG_KEY_1=protocol.file.allow", "GIT_CONFIG_VALUE_1=always",
-            fs\join(goroot, "bin", "go")];
+fun go_env(scratch: str, clone: str) > result\Result::<[str]> {
+    try {
+        final cache = proc\exec("go", args: ["env", "GOMODCACHE"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
+        final goroot = proc\exec("go", args: ["env", "GOROOT"], opts: proc\ExecOptions{quiet = true}).stdout.trim();
+        return result\ok::<[str]>(["GOROOT=" + goroot, "GOTOOLCHAIN=local", "GOWORK=off", "GOFLAGS=-mod=mod", "GOPRIVATE=" + releases\MODULE_ROOT,
+                "GOPROXY=file://" + cache + "/cache/download,https://proxy.golang.org",
+                "GOMODCACHE=" + fs\join(scratch, "modcache"), "GOBIN=" + fs\join(scratch, "bin"),
+                "GIT_CONFIG_COUNT=2",
+                "GIT_CONFIG_KEY_0=url.file://" + clone + ".insteadOf", "GIT_CONFIG_VALUE_0=https://" + releases\MODULE_ROOT,
+                "GIT_CONFIG_KEY_1=protocol.file.allow", "GIT_CONFIG_VALUE_1=always",
+                fs\join(goroot, "bin", "go")]);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "read the go environment for the scratch clone");
+    }
 }
 
 // scratch_go runs go with args in dir under env, go_env's environment and binary, and
 // raises with go's stderr.
-fun scratch_go(env: [str], args: [str], dir: str) > void !> any {
-    final res = proc\exec("env", args: env + args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
-    if (!res.ok) {
-        throw "`go " + args.join(" ") + "` in " + dir + ": " + res.stderr.trim();
+fun scratch_go(env: [str], args: [str], dir: str) > result\Result::<bool> {
+    try {
+        final res = proc\exec("env", args: env + args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        if (!res.ok) {
+            return result\fail::<bool>("`go " + args.join(" ") + "` in " + dir + ": " + res.stderr.trim());
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "run go in {dir}");
     }
 }
 
 // stage_release builds the release commit for the dirs in order in a scratch clone of
 // HEAD, tags them there, and proves each Go module installs from those tags outside this
 // repo. It raises with the step that failed.
-fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {str: str}, pinned: releases\Pinned) > ReleaseStage !> any {
-    final clone = fs\join(scratch, "repo");
-    final head = vcs\cmd(["rev-parse", "HEAD"], vcs\CommandOptions{quiet = true}).stdout.trim();
-    _ = vcs\cmd(["clone", "--quiet", "--shared", "--no-checkout", vcs\root(), clone], vcs\CommandOptions{quiet = true});
-    final inClone = vcs\CommandOptions{dir = clone, quiet = true};
-    _ = vcs\cmd(["checkout", "--quiet", "--detach", head], inClone);
-    final commitAll = fun (args: [str]) > void !> any {
-        _ = vcs\cmd(["add", "--all"], inClone);
-        _ = vcs\cmd(["commit", "--quiet"] + args, inClone);
-    };
+fun stage_release(scratch: str, order: [str], releasing: {str: str}, gomods: {str: str}, pinned: releases\Pinned) > result\Result::<ReleaseStage> {
+    try {
+        final clone = fs\join(scratch, "repo");
+        final head = vcs\cmd(["rev-parse", "HEAD"], vcs\CommandOptions{quiet = true}).stdout.trim();
+        _ = vcs\cmd(["clone", "--quiet", "--shared", "--no-checkout", vcs\root(), clone], vcs\CommandOptions{quiet = true});
+        final inClone = vcs\CommandOptions{dir = clone, quiet = true};
+        _ = vcs\cmd(["checkout", "--quiet", "--detach", head], inClone);
+        final commitAll = fun (args: [str]) > void !> any {
+            _ = vcs\cmd(["add", "--all"], inClone);
+            _ = vcs\cmd(["commit", "--quiet"] + args, inClone);
+        };
 
-    final tags = mut [<str>];
-    foreach (dir in order) { tags.append(releases\tagName(dir, version: releasing[dir]!)); }
-    final tagAll = fun () > void !> any {
-        foreach (tag in tags) { _ = vcs\cmd(["tag", "--force", tag], inClone); }
-    };
-    final restored = pinned.restored;
-    foreach (path, text in pinned.next) { fs\writeFile(fs\join(clone, path), content: text); }
-    var subject = "";
-    if (pinned.next.len() > 0) {
-        subject = "release " + releases\releaseName(tags);
-        commitAll(["--message", subject]);
-    }
-    tagAll();
-    final env = go_env(scratch, clone: clone);
-    // Without its replaces a module's go.sum must vouch for the in-repo modules too. Each
-    // is tidied after what it requires, so the sums it records are of their final trees.
-    foreach (dir in order) {
-        if (restored[gomod_path(dir)] == null) { continue; }
-        scratch_go(env, args: ["mod", "tidy"], dir: fs\join(clone, dir));
-        commitAll(["--amend", "--no-edit"]);
-        tagAll();
-    }
-    final release = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
-
-    // A scratch module outside the repo, so no replace and no go.work is in play.
-    final consumer = fs\join(scratch, "consumer");
-    fs\mkdirAll(consumer);
-    scratch_go(env, args: ["mod", "init", "example.test/release-check"], dir: consumer);
-    final verified = mut [<str>];
-    foreach (dir in order) {
-        if (gomods[gomod_path(dir)] == null) { continue; }
-        var module = releases\MODULE_ROOT;
-        if (dir != ".") { module = module + "/" + dir; }
-        final version = releasing[dir]!;
-        scratch_go(env, args: ["get", module + "@" + version], dir: consumer);
-        scratch_go(env, args: ["build", module + "/..."], dir: consumer);
-        verified.append("`go get " + module + "@" + version + "` and `go build " + module + "/...` pass outside the repo");
-        if (restored[gomod_path(dir)] != null and fs\isDir(fs\join(clone, dir, "cmd"))) {
-            var cmds = module + "/cmd/...@" + version;
-            if (dir == ".") { cmds = module + "/cmd/magus@" + version; }
-            scratch_go(env, args: ["install", cmds], dir: consumer);
-            verified.append("`go install " + cmds + "` passes");
+        final tags = mut [<str>];
+        foreach (dir in order) { tags.append(releases\tagName(dir, version: releasing[dir]!)); }
+        final tagAll = fun () > void !> any {
+            foreach (tag in tags) { _ = vcs\cmd(["tag", "--force", tag], inClone); }
+        };
+        final restored = pinned.restored;
+        foreach (path, text in pinned.next) { fs\writeFile(fs\join(clone, path), content: text); }
+        var subject = "";
+        if (pinned.next.len() > 0) {
+            subject = "release " + releases\releaseName(tags);
+            commitAll(["--message", subject]);
         }
-    }
+        tagAll();
+        final goEnv = go_env(scratch, clone: clone);
+        if (goEnv.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+        final env = goEnv.value!;
+        // Without its replaces a module's go.sum must vouch for the in-repo modules too. Each
+        // is tidied after what it requires, so the sums it records are of their final trees.
+        foreach (dir in order) {
+            if (restored[gomod_path(dir)] == null) { continue; }
+            final tidied = scratch_go(env, args: ["mod", "tidy"], dir: fs\join(clone, dir));
+            if (tidied.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+            commitAll(["--amend", "--no-edit"]);
+            tagAll();
+        }
+        final release = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
 
-    var restore = "";
-    var restoreSubject = "";
-    if (restored.len() > 0) {
-        foreach (path, text in restored) {
-            fs\writeFile(fs\join(clone, path), content: text);
-            final sum = fs\join(releases\gomodDir(path), "go.sum");
-            if (tree_id(head, dir: sum) != "") {
-                _ = vcs\cmd(["checkout", "--quiet", head, "--", sum], inClone);
-            } else if (fs\exists(fs\join(clone, sum))) {
-                fs\remove(fs\join(clone, sum));
+        // A scratch module outside the repo, so no replace and no go.work is in play.
+        final consumer = fs\join(scratch, "consumer");
+        fs\mkdirAll(consumer);
+        final initialized = scratch_go(env, args: ["mod", "init", "example.test/release-check"], dir: consumer);
+        if (initialized.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+        final verified = mut [<str>];
+        foreach (dir in order) {
+            if (gomods[gomod_path(dir)] == null) { continue; }
+            var module = releases\MODULE_ROOT;
+            if (dir != ".") { module = module + "/" + dir; }
+            final version = releasing[dir]!;
+            final got = scratch_go(env, args: ["get", module + "@" + version], dir: consumer);
+            if (got.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+            final built = scratch_go(env, args: ["build", module + "/..."], dir: consumer);
+            if (built.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+            verified.append("`go get " + module + "@" + version + "` and `go build " + module + "/...` pass outside the repo");
+            if (restored[gomod_path(dir)] != null and fs\isDir(fs\join(clone, dir, "cmd"))) {
+                var cmds = module + "/cmd/...@" + version;
+                if (dir == ".") { cmds = module + "/cmd/magus@" + version; }
+                final installed = scratch_go(env, args: ["install", cmds], dir: consumer);
+                if (installed.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+                verified.append("`go install " + cmds + "` passes");
             }
         }
-        restoreSubject = "restore the in-repo replaces after " + releases\releaseName(tags);
-        commitAll(["--message", restoreSubject]);
-        restore = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
+
+        var restore = "";
+        var restoreSubject = "";
+        if (restored.len() > 0) {
+            foreach (path, text in restored) {
+                fs\writeFile(fs\join(clone, path), content: text);
+                final sum = fs\join(releases\gomodDir(path), "go.sum");
+                final summed = tree_id(head, dir: sum);
+                if (summed.error -> e) { return result\Result::<ReleaseStage>{ error = e }; }
+                if (summed.value! != "") {
+                    _ = vcs\cmd(["checkout", "--quiet", head, "--", sum], inClone);
+                } else if (fs\exists(fs\join(clone, sum))) {
+                    fs\remove(fs\join(clone, sum));
+                }
+            }
+            restoreSubject = "restore the in-repo replaces after " + releases\releaseName(tags);
+            commitAll(["--message", restoreSubject]);
+            restore = vcs\cmd(["rev-parse", "HEAD"], inClone).stdout.trim();
+        }
+        _ = vcs\cmd(["branch", "--force", STAGED_BRANCH], inClone);
+        return result\ok::<ReleaseStage>(ReleaseStage{ clone = clone, base = head, release = release, releaseSubject = subject,
+            restore = restore, restoreSubject = restoreSubject, verified = verified });
+    } catch (err: any) {
+        return result\caught::<ReleaseStage>(err, doing: "stage the release commit in {scratch}");
     }
-    _ = vcs\cmd(["branch", "--force", STAGED_BRANCH], inClone);
-    return ReleaseStage{ clone = clone, base = head, release = release, releaseSubject = subject,
-        restore = restore, restoreSubject = restoreSubject, verified = verified };
 }
 
 // cleanup_scratch removes a release's scratch clone and module cache; "" is none. go
 // writes the cache read-only, so go clean empties it first.
-fun cleanup_scratch(scratch: str) > void !> any {
-    if (scratch == "") { return; }
-    _ = proc\exec("env", args: ["GOMODCACHE=" + fs\join(scratch, "modcache"), "go", "clean", "-modcache"],
-        opts: proc\ExecOptions{quiet = true, allowFailure = true});
-    fs\removeAll(scratch);
+fun cleanup_scratch(scratch: str) > result\Result::<bool> {
+    if (scratch == "") { return result\ok::<bool>(true); }
+    try {
+        _ = proc\exec("env", args: ["GOMODCACHE=" + fs\join(scratch, "modcache"), "go", "clean", "-modcache"],
+            opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        fs\removeAll(scratch);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "remove the scratch clone {scratch}");
+    }
 }
 
 // Rebuilds on every debounced change until interrupted.
@@ -2600,8 +2832,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(buzz_test, proofreadlib\proofread_build);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
     // `args`.
+    final raced = raced_packages();
+    if (raced.error != null) { throw raced.error!.message; }
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced.value! + args});
     final settled = cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
         every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
     if (settled.error != null) {
@@ -2648,22 +2882,26 @@ final CMD_MAGUS_PROFILE = ".magus/coverage.cmd.out";
 final COVERAGE_PROFILE = ".magus/coverage.out";
 final COVERAGE_HAND_PROFILE = ".magus/coverage.hand.out";
 
-fun raced_packages() > [str] !> any {
-    final located = cov\modulePath(fs\readFile("go.mod"));
-    if (located.error != null) {
-        throw located.error!.message;
+fun raced_packages() > result\Result::<[str]> {
+    try {
+        final located = cov\modulePath(fs\readFile("go.mod"));
+        if (located.error -> e) {
+            return result\Result::<[str]>{ error = e };
+        }
+        final skip = located.value! + CMD_MAGUS_PKG.sub(1);
+        var raced = mut [<str>];
+        foreach (line in proc\exec("go", ["list", "./..."], ".", proc\ExecOptions{quiet = true}).stdout.split("\n")) {
+            final pkg = line.trim();
+            if (pkg != "" and pkg != skip) { raced.append(pkg); }
+        }
+        // An empty listing makes `go test` run the current directory alone, silently.
+        if (raced.len() < 2) {
+            return result\fail::<[str]>("test: `go list ./...` named " + "{raced.len()}" + " package(s) to race; expected the whole module");
+        }
+        return result\ok::<[str]>(raced);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "test: list the packages to race");
     }
-    final skip = located.value! + CMD_MAGUS_PKG.sub(1);
-    var raced = mut [<str>];
-    foreach (line in proc\exec("go", ["list", "./..."], ".", proc\ExecOptions{quiet = true}).stdout.split("\n")) {
-        final pkg = line.trim();
-        if (pkg != "" and pkg != skip) { raced.append(pkg); }
-    }
-    // An empty listing makes `go test` run the current directory alone, silently.
-    if (raced.len() < 2) {
-        throw "test: `go list ./...` named " + "{raced.len()}" + " package(s) to race; expected the whole module";
-    }
-    return raced;
 }
 
 
@@ -2974,7 +3212,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                     ".github/workflows/*.yaml",
                     "mise.toml", "magus.yaml"]);
     if (args.len() > 0) {
-        lintFiles(ctx, args: args);
+        final scoped = lintFiles(ctx, args: args);
+        if (scoped.error != null) { throw scoped.error!.message; }
         return;
     }
     golangci\run(".", []);
@@ -3010,44 +3249,49 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // lintFiles is lint over the files among args that exist; only a finding at one of them fails.
-fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
-    final files = mut [<str>];
-    foreach (a in args) {
-        if (fs\exists(a)) { files.append(a); }
-    }
-    if (files.len() == 0) {
-        return;
-    }
-    golangci\linkFresh();
-    final failures = mut [<str>];
-    // The rules judge from the symbol indexes.
-    // magus\graph() freshens them, as in conventions.
-    // A bare magus\graph() freshens without mining precedents; the child mines its own.
-    _ = magus\graph();
-    if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
-        failures.append("hack/lint/run.buzz reported findings above");
-    }
-    final libs = mut [<str>];
-    foreach (mod in fs\glob("libs/**/go.mod")) { libs.append(fs\dirname(mod.value)); }
-    final packages = golangci\packagesOf(files, libs: libs);
-    foreach (module, pkgs in packages) {
-        foreach (issue in golangci\issuesAt(module, packages: pkgs, files: files)) {
-            failures.append(issue);
+fun lintFiles(ctx: magus\Context, args: [str]) > result\Result::<bool> {
+    try {
+        final files = mut [<str>];
+        foreach (a in args) {
+            if (fs\exists(a)) { files.append(a); }
         }
-    }
-    // Each tool prints its own findings; a failing one is named and the rest still run.
-    foreach (argv in scopedTools(ctx, files: files, goPackages: packages["."] ?? [<str>])) {
-        if (!proc\exec(argv[0], argv.sub(1, len: argv.len() - 1), opts: proc\ExecOptions{allowFailure = true}).ok) {
-            failures.append("{argv[0]} reported findings above");
+        if (files.len() == 0) {
+            return result\ok::<bool>(true);
         }
-    }
-    final fragments = files.filter(fun (i: int, f: str) > bool => f.startsWith(changelog\FRAGMENT_DIR) and f.endsWith(".md"));
-    foreach (m in changelog\lint(fragments)) {
-        failures.append(m);
-    }
-    if (failures.len() > 0) {
-        final listed = failures.join("\n  ");
-        throw "lint: {failures.len()} failure(s) at the files:\n  {listed}";
+        golangci\linkFresh();
+        final failures = mut [<str>];
+        // The rules judge from the symbol indexes.
+        // magus\graph() freshens them, as in conventions.
+        // A bare magus\graph() freshens without mining precedents; the child mines its own.
+        _ = magus\graph();
+        if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
+            failures.append("hack/lint/run.buzz reported findings above");
+        }
+        final libs = mut [<str>];
+        foreach (mod in fs\glob("libs/**/go.mod")) { libs.append(fs\dirname(mod.value)); }
+        final packages = golangci\packagesOf(files, libs: libs);
+        foreach (module, pkgs in packages) {
+            foreach (issue in golangci\issuesAt(module, packages: pkgs, files: files)) {
+                failures.append(issue);
+            }
+        }
+        // Each tool prints its own findings; a failing one is named and the rest still run.
+        foreach (argv in scopedTools(ctx, files: files, goPackages: packages["."] ?? [<str>])) {
+            if (!proc\exec(argv[0], argv.sub(1, len: argv.len() - 1), opts: proc\ExecOptions{allowFailure = true}).ok) {
+                failures.append("{argv[0]} reported findings above");
+            }
+        }
+        final fragments = files.filter(fun (i: int, f: str) > bool => f.startsWith(changelog\FRAGMENT_DIR) and f.endsWith(".md"));
+        foreach (m in changelog\lint(fragments)) {
+            failures.append(m);
+        }
+        if (failures.len() > 0) {
+            final listed = failures.join("\n  ");
+            return result\fail::<bool>("lint: {failures.len()} failure(s) at the files:\n  {listed}");
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "lint the named files");
     }
 }
 
@@ -3178,57 +3422,63 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     final agent = "benchmarks/agent";
     var steps = mut [];
     if (synthetic) {
-        steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
+        steps.append(["makefixture", "-model", "claude-opus-5", fs\join(agent, "results-synthetic")]);
         results = "results-synthetic/results";
     }
     // No -p: the price table is compiled in, so a published figure cannot depend on the cwd.
-    steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl")]);
-    steps.append(["analyze", fs\join(agent, "metrics.jsonl"), "-o", fs\join(agent, "analysis.json"),
-                  "--seed", "20260902"]);
-    steps.append(["report", fs\join(agent, "analysis.json"), "-o", fs\join(agent, "report.md")]);
+    steps.append(["extract", "-o", fs\join(agent, "metrics.jsonl"), fs\join(agent, results)]);
+    steps.append(["analyze", "-o", fs\join(agent, "analysis.json"), "--seed", "20260902",
+                  fs\join(agent, "metrics.jsonl")]);
+    steps.append(["report", "-o", fs\join(agent, "report.md"), fs\join(agent, "analysis.json")]);
     foreach (step in steps) {
         _ = proc\exec(bin, step);
     }
     magus\log.info("benchmark report written to benchmarks/agent/report.md");
     if (publish != "") {
-        publish_report(agent, results, publish);
+        final filed = publish_report(agent, results, publish);
+        if (filed.error != null) { throw filed.error!.message; }
     }
 }
 
 // Files report.md as reports/<date>/<provider>/<model>.md with the environment stamped
 // after its title. The provider is an argument because a model id does not carry it.
-fun publish_report(agent: str, results: str, provider: str) > void !> any {
-    final report = fs\readFile(fs\join(agent, "report.md"));
-    final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
-    final names = mut [<str>];
-    foreach (model in analysis["models"]) {
-        names.append("{model}");
-    }
-    final models = names.join(", ");
-    final count = names.len();
-    if (count != 1) {
-        throw "agent-bench-report: --publish files a report under one model, and `" + results
-            + "` carries " + "{count}" + " (" + models + ")";
-    }
-    // The version string carries a second line when a server of another build was up.
-    var version = "unknown";
-    foreach (entry in fs\listDir(fs\join(agent, results))) {
-        final meta = fs\join(agent, results, entry, "meta.json");
-        if (fs\exists(meta)) {
-            final record = json\parse(fs\readFile(meta));
-            version = "{record["magus_version"]}".split("\n")[0];
-            break;
+fun publish_report(agent: str, results: str, provider: str) > result\Result::<bool> {
+    try {
+        final report = fs\readFile(fs\join(agent, "report.md"));
+        final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
+        final names = mut [<str>];
+        foreach (model in analysis["models"]) {
+            names.append("{model}");
         }
+        final models = names.join(", ");
+        final count = names.len();
+        if (count != 1) {
+            return result\fail::<bool>("agent-bench-report: --publish files a report under one model, and `" + results
+                + "` carries " + "{count}" + " (" + models + ")");
+        }
+        // The version string carries a second line when a server of another build was up.
+        var version = "unknown";
+        foreach (entry in fs\listDir(fs\join(agent, results))) {
+            final meta = fs\join(agent, results, entry, "meta.json");
+            if (fs\exists(meta)) {
+                final record = json\parse(fs\readFile(meta));
+                version = "{record["magus_version"]}".split("\n")[0];
+                break;
+            }
+        }
+        final now = time\nowIso();
+        final stamp = "Published " + now + " from `" + results + "`: {analysis["runs"]} scored run(s), "
+            + "model " + models + " (" + provider + "), " + version + ", host " + os\platform().join("/") + ".";
+        final title = report.split("\n")[0];
+        final dir = fs\join(agent, "reports", now.sub(0, len: 10), provider);
+        final target = fs\join(dir, models + ".md");
+        fs\mkdirAll(dir);
+        fs\writeFile(target, report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
+        magus\log.info("benchmark report published to " + target);
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "agent-bench-report: publish the report");
     }
-    final now = time\nowIso();
-    final stamp = "Published " + now + " from `" + results + "`: {analysis["runs"]} scored run(s), "
-        + "model " + models + " (" + provider + "), " + version + ", host " + os\platform().join("/") + ".";
-    final title = report.split("\n")[0];
-    final dir = fs\join(agent, "reports", now.sub(0, len: 10), provider);
-    final target = fs\join(dir, models + ".md");
-    fs\mkdirAll(dir);
-    fs\writeFile(target, report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
-    magus\log.info("benchmark report published to " + target);
 }
 
 // Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into
