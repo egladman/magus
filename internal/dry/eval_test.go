@@ -474,9 +474,10 @@ fun dir(path: str) > magus\Dir {
     final record: any = fields;
     return record;
 }
-return diagram\draw(diagram\of("t").box(dir("a")).unscoped(why: "x"), theme: diagram\Theme.light) catch "refused";`)
+final drawn = diagram\draw(diagram\of("t").box(dir("a")).unscoped(why: "x"), theme: diagram\Theme.light);
+return drawn.error!.message;`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
-	assert.Equal(t, "refused", r.Result, "diagram type-checks against magus\\Dir and raises its finding")
+	assert.Equal(t, `diagram "t": draws directories and declares unscoped(why:); drop the unscoped`, r.Result)
 }
 
 // TestEvalDiagramKeepsItsPrivateNode draws from a script that declares its own
@@ -490,7 +491,8 @@ object Node {
 }
 final a = diagram\external("a", link: "https://a.example");
 final b = diagram\external("b");
-return diagram\draw(diagram\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: diagram\Theme.light) catch "refused";`)
+final drawn = diagram\draw(diagram\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: diagram\Theme.light);
+return drawn.value!;`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	assert.True(t, strings.HasPrefix(r.Result, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), r.Result)
 }

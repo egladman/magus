@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -129,6 +130,37 @@ func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
 		return text, true
 	}
 	return "", false
+}
+
+// envelopeSpawnDescription reads the label separately from the brief. A
+// collaboration call can carry an encrypted message, so a reserved task name
+// can supply the label on both the pre-call and post-call envelopes.
+func envelopeSpawnDescription(tool string, input map[string]any) string {
+	if label := cmp.Or(envelopeString(input, "description"), envelopeString(input, "title")); label != "" {
+		return label
+	}
+	if tool != "collaborationspawn_agent" && tool != "spawn_agent" {
+		return ""
+	}
+	name := envelopeString(input, "task_name")
+	if encoded, ok := strings.CutPrefix(name, "job__"); ok {
+		parts := strings.Split(encoded, "__")
+		if len(parts) != 3 {
+			return ""
+		}
+		for i, part := range parts {
+			parts[i] = strings.ReplaceAll(part, "_", "-")
+			if !jobtypes.ValidID(parts[i]) || strings.ContainsAny(parts[i], "/.") {
+				return ""
+			}
+		}
+		return fmt.Sprintf("%s/%s %s", parts[0], parts[1], parts[2])
+	}
+	line, _, _ := strings.Cut(envelopeString(input, "message"), "\n")
+	if _, _, ok := splitSpawnTitle(line); ok {
+		return strings.TrimSpace(line)
+	}
+	return ""
 }
 
 // pendingSpawnPrefix starts the kind of a spawn that passed and has not yet been joined to

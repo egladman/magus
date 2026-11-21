@@ -81,10 +81,8 @@ func probeName(kind ProbeKind) string {
 		return "readiness"
 	case probeMCP:
 		return "mcp"
-
 	}
 	return "unknown"
-
 }
 
 // evaluateHealth reports whether the server is healthy. root, if non-empty, pins readiness to a specific workspace.

@@ -21,10 +21,6 @@ export fun mgs_getHarness() > Harness {
             HarnessAsset{path = ".opencode/magus/probe.ts", source = "magus:harness/opencode/probe.ts"},
             HarnessAsset{path = ".opencode/magus/magus-opencode.wasm", source = "magus:harness/opencode/gen/magus-opencode.wasm"},
             HarnessAsset{path = ".opencode/magus/wasm_exec.js", source = "magus:harness/opencode/gen/wasm_exec.js"},
-            HarnessAsset{path = ".magus/harness/hooks/magus-observe.buzz", source = "magus:glue/magus-observe.buzz"},
-            HarnessAsset{path = ".magus/harness/hooks/magus-buzz-check.buzz", source = "magus:glue/magus-buzz-check.buzz"},
-            HarnessAsset{path = ".magus/harness/hooks/magus-reclaim-disk.buzz", source = "magus:glue/magus-reclaim-disk.buzz"},
-            HarnessAsset{path = ".magus/harness/hooks/lib/hook.buzz", source = "magus:glue/lib/hook.buzz"},
         ],
         probe = ["node", ".opencode/magus/probe.ts"],
     };
@@ -225,7 +221,7 @@ test "mgs_getName is the harness id describe and verify look up" {
 test "the harness installs its plugin and runtime beside .opencode/skills" {
     assert\equal(mgs_getHarness().config.path, "", "the plugin loads from its project directory");
     assert\equal(mgs_getHarness().guard, "plugin", "no config path is not skills-only");
-    assert\equal(mgs_getHarness().assets.len(), 8, "plugin, probe and all runtime helpers");
+    assert\equal(mgs_getHarness().assets.len(), 4, "plugin and activation runtime; the binary owns its managed glue");
     assert\equal(mgs_getSkills().paths.join(","), ".opencode/skills", "OpenCode reads .opencode/skills");
     assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
 }

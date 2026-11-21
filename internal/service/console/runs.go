@@ -178,10 +178,8 @@ func resultState(status journal.Status) daemon.TargetRunState {
 		return daemon.TargetRunPermitted
 	case journal.StatusFail:
 		return daemon.TargetRunFailed
-
 	}
 	return ""
-
 }
 
 // runSinkKey carries the server's live-run handler on ctx so the adopted run/affected
