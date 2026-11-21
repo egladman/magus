@@ -1910,9 +1910,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		}
 		s.bindQualifiedTypes(boundName, prog)
 		s.importCache[key] = s.cacheBindings(src, exports)
-		s.bindNamespaceObject(boundName, exports)
+		s.bindNamespaceObject(boundName, s.importCache[key].values)
 		if ns := s.declaredNamespace(src); ns != nil {
-			if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+			if err := s.bindNamespacePath(ns, s.importCache[key].values, imp.Path); err != nil {
 				return ImportDecls, err
 			}
 		}
@@ -2027,15 +2027,15 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	// Also bind a namespace object under the basename so upstream-Buzz
 	// qualified access (`regex\reCompile`) resolves the same export the
 	// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
-	s.bindNamespaceObject(boundName, exports)
+	s.bindNamespaceObject(boundName, s.importCache[abs].values)
 	// And, when the file declares `namespace a\b\c`, bind its exports
 	// under that full path too, matching upstream Buzz exactly (and
 	// erroring on a duplicate namespace instead of failing downstream).
 	if ns := s.declaredNamespace(string(data)); ns != nil {
-		if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+		if err := s.bindNamespacePath(ns, s.importCache[abs].values, imp.Path); err != nil {
 			return ImportFile, err
 		}
-		s.bindNamespaceRelative(ns, exports)
+		s.bindNamespaceRelative(ns, s.importCache[abs].values)
 	}
 	return ImportFile, nil
 }
@@ -2463,13 +2463,12 @@ func (s *Session) bindQualifiedTypes(boundName string, prog *ast.Program) {
 }
 
 // bindNamespaceObject binds, under name, a map of the names a flat import just
-// exported (the chunk's own Exports). It lets upstream-style qualified access
+// exported, using that module's values. It lets upstream-style qualified access
 // `name\export` resolve the same value the unqualified splat also bound. Skipped
 // if name is already bound (e.g. the module exports something matching its own
-// basename). Using the chunk's exact export list — rather than diffing the
-// session-wide export set — keeps it correct when two modules export the same
-// identifier: each module's namespace object captures its own export.
-func (s *Session) bindNamespaceObject(name string, exports []string) {
+// basename). A cached import must read its own values: a bare name in this
+// session may belong to another module exporting the same identifier.
+func (s *Session) bindNamespaceObject(name string, exports vmpackage.Value) {
 	if strings.IndexByte(name, '\\') >= 0 {
 		return
 	}
@@ -2478,8 +2477,8 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 	}
 	m := vmpackage.NewMap()
 	s.adoptNamespacePrefix(name, m)
-	for _, n := range exports {
-		if v, ok := s.env.Get(n); ok {
+	for _, n := range exports.MapKeys() {
+		if v, ok := exports.MapGet(n); ok {
 			m.MapSet(n, v)
 		}
 	}
@@ -2540,16 +2539,16 @@ func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, 
 			s.env.Define(n, v)
 		}
 	}
-	s.bindNamespaceObject(boundName, c.names)
+	s.bindNamespaceObject(boundName, c.values)
 	ns := s.declaredNamespace(c.src)
 	if ns == nil {
 		return nil
 	}
-	if err := s.bindNamespacePath(ns, c.names, importPath); err != nil {
+	if err := s.bindNamespacePath(ns, c.values, importPath); err != nil {
 		return err
 	}
 	if relative {
-		s.bindNamespaceRelative(ns, c.names)
+		s.bindNamespaceRelative(ns, c.values)
 	}
 	return nil
 }
@@ -2704,7 +2703,7 @@ func (s *Session) nestedDeclNamespace(path string, imp *ast.ImportStmt) string {
 // The shared prefix is computed segment-wise, so the sibling case (sharing only
 // `commom`) and the child case (sharing `commom\part`) fall out of one rule. With no
 // namespace on either side there is no prefix to strip and this does nothing.
-func (s *Session) bindNamespaceRelative(ns []string, exports []string) {
+func (s *Session) bindNamespaceRelative(ns []string, exports vmpackage.Value) {
 	shared := 0
 	for shared < len(ns) && shared < len(s.ownNamespace) && ns[shared] == s.ownNamespace[shared] {
 		shared++
@@ -2717,8 +2716,8 @@ func (s *Session) bindNamespaceRelative(ns []string, exports []string) {
 	}
 
 	leaf := vmpackage.NewMap()
-	for _, n := range exports {
-		if v, ok := s.env.Get(n); ok {
+	for _, n := range exports.MapKeys() {
+		if v, ok := exports.MapGet(n); ok {
 			leaf.MapSet(n, v)
 		}
 	}
@@ -2736,7 +2735,7 @@ func (s *Session) bindNamespaceRelative(ns []string, exports []string) {
 	}
 }
 
-func (s *Session) bindNamespacePath(segments []string, exports []string, importPath string) error {
+func (s *Session) bindNamespacePath(segments []string, exports vmpackage.Value, importPath string) error {
 	if len(segments) == 0 {
 		return nil
 	}
@@ -2753,8 +2752,8 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 	}
 
 	leaf := vmpackage.NewMap()
-	for _, n := range exports {
-		if v, ok := s.env.Get(n); ok {
+	for _, n := range exports.MapKeys() {
+		if v, ok := exports.MapGet(n); ok {
 			leaf.MapSet(n, v)
 		}
 	}
