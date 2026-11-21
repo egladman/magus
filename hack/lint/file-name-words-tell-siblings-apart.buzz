@@ -2,6 +2,7 @@
 // tell it apart from no sibling: model_tier.go beside enums.go is model.go.
 // A rename is reported only when the extra word is a suffix used in three
 // directories and the file declares a type named by the first word.
+// Go names that compress several declared type words also need separators.
 //
 // Tier 1, mechanical: the fix is a rename, and ALLOW keeps a file with why.
 namespace filesiblings;
@@ -66,6 +67,7 @@ export object Hit {
     first: str,
     suggest: str,
     lang: str,
+    reason: str = "",
 }
 
 fun camelWords(s: str) > [str] {
@@ -75,7 +77,11 @@ fun camelWords(s: str) > [str] {
     var i = 0;
     while (i < s.len()) {
         final c = s.sub(i, len: 1);
-        if (c >= "A" and c <= "Z" and lower and cur.len() > 0) {
+        final upper = c >= "A" and c <= "Z";
+        final next = if (i + 1 < s.len()) s.sub(i + 1, len: 1) else "";
+        final acronym = upper and cur.len() > 1 and next >= "a" and next <= "z"
+            and !(next == "s" and i + 2 == s.len());
+        if (upper and (lower or acronym) and cur.len() > 0) {
             pieces.append(cur.join(""));
             cur = mut [<str>];
         }
@@ -235,7 +241,10 @@ fun suffixQualifies(n: Name, t: Tally) > bool {
 // The group's files must declare a type that starts with the first word.
 fun declaresFirst(n: Name, types: {str: str}) > bool {
     final declared = types[groupOf(n) + "\n" + n.base] ?? "";
-    return declared.indexOf(" " + squash(n.words[0])) != null;
+    foreach (name in declared.split(" ")) {
+        if (squash(name).startsWith(squash(n.words[0]))) { return true; }
+    }
+    return false;
 }
 
 fun suggestion(n: Name) > str {
@@ -249,8 +258,9 @@ fun suggestion(n: Name) > str {
 // echoing its directory, or a numbered series, is not judged.
 //
 // The extra word must be a suffix that multi-word names end in across three
-// directories. types holds, per file group, the squashed type names its files
-// declare; one must start with the first word.
+// directories. types holds the declared type names per file group; one must
+// start with the first word. Compressed Go names use those declarations to
+// recover word boundaries independently of sibling naming conventions.
 export fun judge(files: [str], skipped: [str], types: {str: str}) > result\Result::<[Hit]> {
     try {
         final every = mut {<str: bool>};
@@ -273,6 +283,13 @@ export fun judge(files: [str], skipped: [str], types: {str: str}) > result\Resul
         }
         final hits = mut [<Hit>];
         foreach (n in names) {
+            final separated = separatedStem(n, types: types);
+            if (separated != "") {
+                final home = if (n.dir == "") "" else n.dir + "/";
+                hits.append(Hit{ path = n.path, first = n.words[0], suggest = home + separated + n.suffix, lang = n.lang,
+                    reason = "the filename joins distinct words of a declared type without a separator" });
+                continue;
+            }
             if (!hasUnsharedFirst(n, t) or hasConvention(n, t) or echoesDir(n)) {
                 continue;
             }
@@ -301,8 +318,9 @@ export fun findings(hits: [Hit], allow: {str: str}) > [Finding] {
             continue;
         }
         found.append(Finding{ path = h.path,
-            message = "no sibling {h.lang} file starts with \"{h.first}\", so the words after it tell this file apart from nothing",
-            hint = "Rename it to {h.suggest}, or add it to ALLOW in {THIS} with a reason." });
+            message = if (h.reason != "") h.reason else "no sibling {h.lang} file starts with \"{h.first}\", so the words after it tell this file apart from nothing",
+            hint = if (h.reason != "") "Use separated words, such as {h.suggest}; choose a distinct separated name if that path already exists."
+                else "Rename it to {h.suggest}, or add it to ALLOW in {THIS} with a reason." });
     }
     foreach (p in support\sorted(allow.keys())) {
         if (hit[p] == null) {
@@ -337,14 +355,14 @@ export fun groupKey(p: str) > str {
     return n!.dir + "\n" + n!.lang + "\n" + n!.base;
 }
 
-// typeIndex maps each group to the squashed type names its files declare.
+// typeIndex preserves declaration word boundaries for each file group.
 // A pair is a file path and a type name.
 export fun typeIndex(pairs: [[str]]) > {str: str} {
     final index = mut {<str: str>};
     foreach (pair in pairs) {
         final key = groupKey(pair[0]);
         if (key != "") {
-            index[key] = (index[key] ?? "") + " " + squash(pair[1]);
+            index[key] = (index[key] ?? "") + " " + pair[1];
         }
     }
     return index;
@@ -398,6 +416,110 @@ fun declaredTypes() > result\Result::<Declared> {
     } catch (err: any) {
         return result\caught::<Declared>(err);
     }
+}
+
+fun abbreviation(part: str, word: str) > bool {
+    if (part == word) { return true; }
+    if (part.len() < 2 or part.len() > word.len() or part.sub(0, len: 1) != word.sub(0, len: 1)) { return false; }
+    var matched = 0;
+    for (var i = 0; i < word.len() and matched < part.len(); i += 1) {
+        if (word.sub(i, len: 1) == part.sub(matched, len: 1)) { matched += 1; }
+    }
+    return matched == part.len();
+}
+
+// A complete first word anchors the match. Later words may be abbreviations;
+// an unrelated single word must not be split by guessing a dictionary.
+fun expandChunk(chunk: str, words: [str]) > str {
+    var expanded = "";
+    for (var start = 0; start + 1 < words.len(); start += 1) {
+        if (!chunk.startsWith(words[start]) or chunk.len() <= words[start].len()) { continue; }
+        var positions = [words[start].len()];
+        for (var index = start + 1; index < words.len(); index += 1) {
+            final next = mut [<int>];
+            foreach (at in positions) {
+                for (var end = at + 2; end <= chunk.len() and end <= at + words[index].len(); end += 1) {
+                    if (abbreviation(chunk.sub(at, len: end - at), word: words[index]) and next.indexOf(end) == null) {
+                        next.append(end);
+                    }
+                }
+            }
+            positions = next;
+            if (positions.indexOf(chunk.len()) != null) {
+                final candidate = words.sub(start, len: index - start + 1).join("_");
+                if (expanded != "" and expanded != candidate) { return ""; }
+                expanded = candidate;
+            }
+        }
+    }
+    return expanded;
+}
+
+fun separatedStem(n: Name, types: {str: str}) > str {
+    if (n.lang != "go") { return ""; }
+    final declared = (types[groupOf(n) + "\n" + n.base] ?? "").split(" ");
+    final separated = mut [<str>];
+    var changed = false;
+    foreach (chunk in n.words) {
+        var expanded = "";
+        foreach (name in declared) {
+            final words = camelWords(name).map(fun (index: int, word: str) > str => word.lower());
+            final candidate = expandChunk(chunk.lower(), words: words);
+            if (candidate == "") { continue; }
+            if (expanded != "" and expanded != candidate) { return ""; }
+            expanded = candidate;
+        }
+        separated.append(if (expanded == "") chunk else expanded);
+        changed = changed or expanded != "";
+    }
+    return if (changed) separated.join("_") else "";
+}
+
+test "options filenames cannot hide word boundaries or evade through a test pair" {
+    final paths = ["screen/svg.go", "screen/svg_test.go", "screen/svgopts.go", "screen/svgopts_test.go"];
+    final found = judge(paths, skipped: [<str>], types: typeIndex([["screen/svgopts.go", "SVGOptions"]]));
+    std\assert(found.error == null, message: "the names can be judged");
+    final got = found.value!;
+    std\assert(got.len() == 2, message: "both compressed names are findings");
+    std\assert(got[0].path == "screen/svgopts.go" and got[0].suggest == "screen/svg_options.go", message: "source rename");
+    std\assert(got[1].path == "screen/svgopts_test.go" and got[1].suggest == "screen/svg_options_test.go", message: "test rename");
+    final spelled = judge(["screen/svgoptions.go"], skipped: [<str>],
+        types: typeIndex([["screen/svgoptions.go", "SVGOptions"]]));
+    std\assert(spelled.error == null and spelled.value!.len() == 1, message: "spelling out options still needs a word boundary");
+}
+
+test "an options suffix needs a matching declaration and never overwrites a sibling" {
+    final plain = judge(["screen/adopts.go"], skipped: [<str>], types: typeIndex([["screen/adopts.go", "Adopts"]]));
+    std\assert(plain.error == null and plain.value!.len() == 0, message: "an ordinary word is not an options abbreviation");
+    final occupied = judge(["screen/options.go", "screen/svgopts.go"], skipped: [<str>],
+        types: typeIndex([["screen/svgopts.go", "SVGOptions"]]));
+    std\assert(occupied.error == null and occupied.value!.len() == 1, message: "the compressed name is still a finding");
+    std\assert(occupied.value![0].suggest == "screen/svg_options.go", message: "the existing sibling stays available");
+}
+
+test "collapsed declaration words are found across unrelated names and abbreviations" {
+    final paths = ["wire/httpheaders.go", "wire/httpreq.go", "wire/httpcfg.go", "wire/requestparams.go", "wire/headerflds_linux_test.go"];
+    final declared = typeIndex([[paths[0], "HTTPHeaders"], [paths[1], "HTTPRequest"], [paths[2], "HTTPConfig"],
+        [paths[3], "RequestParameters"], ["wire/headerflds.go", "HeaderFields"]]);
+    final judged = judge(paths, skipped: [<str>], types: declared);
+    std\assert(judged.error == null, message: "the declarations can be judged");
+    final got = judged.value!;
+    std\assert(got.len() == 5, message: "the rule is not tied to options or one abbreviation");
+    std\assert(got[0].suggest == "wire/http_headers.go", message: "initialism boundary");
+    std\assert(got[1].suggest == "wire/http_request.go", message: "prefix abbreviation");
+    std\assert(got[2].suggest == "wire/http_config.go", message: "consonant abbreviation");
+    std\assert(got[3].suggest == "wire/request_parameters.go", message: "plural abbreviation");
+    std\assert(got[4].suggest == "wire/header_fields_linux_test.go", message: "build and test suffixes");
+}
+
+test "single words separated names and ambiguous abbreviations are not guessed" {
+    final paths = ["wire/database.go", "wire/request.go", "wire/http_headers.go", "wire/headeropts.go"];
+    final declared = typeIndex([[paths[0], "Database"], [paths[1], "RequestParameters"], [paths[2], "HTTPHeaders"],
+        [paths[3], "HeaderOptions"], [paths[3], "HeaderOperations"]]);
+    final judged = judge(paths, skipped: [<str>], types: declared);
+    std\assert(judged.error == null and judged.value!.len() == 0,
+        message: "a split needs unambiguous declaration evidence");
+    assert\equal(camelWords("UserIDs").join("_"), want: "User_IDs", message: "a plural initialism stays together");
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -596,5 +718,5 @@ test "an allowed file is kept, and an allow entry that names no hit is a finding
 test "typeIndex groups a file with its test and skips what is not a source" {
     final index = typeIndex([["a/key.go", "Key"], ["a/key_test.go", "KeySuite"], ["a/readme.md", "Doc"]]);
     assert\equal(index.len(), want: 1, message: "one group");
-    assert\equal(index["a\ngo\nkey"], want: " key keysuite", message: "squashed names joined");
+    assert\equal(index["a\ngo\nkey"], want: " Key KeySuite", message: "declaration word boundaries retained");
 }

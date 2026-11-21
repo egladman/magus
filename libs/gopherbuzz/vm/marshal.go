@@ -9,10 +9,11 @@ import (
 )
 
 // BytecodeVersion is the current bytecode format version; UnmarshalChunk rejects
-// blobs with a different version. Increment it whenever any of the following
-// change: opcode numbering (opcode.go), Chunk/Instr/UpvalInfo layout (chunk.go),
-// the serializable Value constant subset, or AST node types (ast.go) — the decoder
-// rejects mismatched blobs rather than mis-executing stale bytecode. The version stays
+// blobs with a different version. Increment it when opcode numbering
+// (op_code.go), Chunk/Instr/UpvalInfo layout (chunk.go), serializable Value
+// constants, or AST node types (ast.go) change. The decoder rejects mismatched
+// blobs rather than
+// mis-executing stale bytecode. The version stays
 // a number because it follows upstream Buzz.
 //
 // v2 adds the per-chunk Exports list, so a session-compiled (SharedGlobals)

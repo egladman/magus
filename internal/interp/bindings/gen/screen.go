@@ -19,6 +19,25 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
+	m.MapSet("variantPath", vm.DirectValue("screen.variantPath", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := ffi.String(bzArgs, 0)
+		suffix := ffi.String(bzArgs, 1)
+		ret0, err := screen.ImplVariantPath(ctx, path, suffix)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("animate", vm.DirectValue("screen.animate", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		frames := ffi.Any(bzArgs, 0)
+		holds := ffi.Any(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
+		ret0, err := screen.ImplAnimate(ctx, frames, holds, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
 	m.MapSet("new", vm.DirectValue("screen.new", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		width := ffi.Int(bzArgs, 0, 0)
 		height := ffi.Int(bzArgs, 1, 0)
@@ -150,25 +169,6 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 		terminal := ffi.Int(bzArgs, 0, 0)
 		opts := ffi.AnyMap(bzArgs, 1)
 		ret0, err := screen.ImplTerminalSVG(ctx, terminal, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.StringVal(ret0), nil
-	}))
-	m.MapSet("variantPath", vm.DirectValue("screen.variantPath", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.String(bzArgs, 0)
-		suffix := ffi.String(bzArgs, 1)
-		ret0, err := screen.ImplVariantPath(ctx, path, suffix)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.StringVal(ret0), nil
-	}))
-	m.MapSet("animate", vm.DirectValue("screen.animate", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		frames := ffi.Any(bzArgs, 0)
-		holds := ffi.Any(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
-		ret0, err := screen.ImplAnimate(ctx, frames, holds, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
