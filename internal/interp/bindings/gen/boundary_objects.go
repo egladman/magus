@@ -6600,6 +6600,7 @@ func ObjectHTTPServerOptions(v types.HTTPServerOptions) vm.Value {
 
 func ObjectMagusCommandOptions(v types.MagusCommandOptions) vm.Value {
 	out := vm.NewMap()
+	out.MapSet("binary", vm.StringValue(v.Binary))
 	out.MapSet("root", vm.StringValue(v.Root))
 	out.MapSet("dir", vm.StringValue(v.Dir))
 	out.MapSet("stdin", vm.StringValue(v.Stdin))
@@ -6610,6 +6611,7 @@ func ObjectMagusCommandOptions(v types.MagusCommandOptions) vm.Value {
 
 func ObjectMagusDiffOptions(v types.MagusDiffOptions) vm.Value {
 	out := vm.NewMap()
+	out.MapSet("binary", vm.StringValue(v.MagusCommandOptions.Binary))
 	out.MapSet("root", vm.StringValue(v.MagusCommandOptions.Root))
 	out.MapSet("dir", vm.StringValue(v.MagusCommandOptions.Dir))
 	out.MapSet("stdin", vm.StringValue(v.MagusCommandOptions.Stdin))

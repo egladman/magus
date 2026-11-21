@@ -238,7 +238,7 @@ magus\project({
         },
         "install-linter": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary; the body relinks only when the linter sources moved"},
         "go-build": {
-            "skip_cache": "declares no outputs, so a replay would skip the link and restore no binary",
+            "skip_cache": "places the development binary and refreshes and verifies its harnesses; a replay would skip those local writes",
             "relinks": "./magus",
             // A worker tries its own edits at bin/magus, which no hook runs.
             "product": {"path": "bin/magus", "target": "go-build-product"},
@@ -398,10 +398,13 @@ export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> 
     _ = proc\exec("go", ["generate", "./internal/interp/bindings/opencode"]);
 }
 
-// Compiles the version-stamped magus binary.
+// Places the development binary and its harnesses as one readiness operation.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles([".opencode/magus/magus-opencode.wasm"]);
     final linked = link_magus(ctx, binary: "magus");
     if (linked.error != null) { throw linked.error!; }
+    final installed = hostconfig\installAndVerifyHooks(magus\CommandOptions{binary = "./magus"});
+    if (installed.error != null) { throw installed.error!.message; }
 }
 
 // Compiles magus at bin/magus, the product path go-build declares. A leased
@@ -3186,10 +3189,7 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["magusfile.buzz", "hack/magusfile/harness.buzz", "spells/harness/**/*.buzz",
                     ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                     ".codex/rules/*.rules", "opencode.json"]);
-    final plans = mut [<magus\HarnessInstallation>];
-    foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{quiet = true}).stdout.trim().split("\n")) {
-        if (id != "") { plans.append(magus\describe.harness(id)); }
-    }
+    final plans = magus\describe.harness();
     final report = hostconfig\stale(plans);
     if (report.failure != "") {
         magus\log.info(report.merges);

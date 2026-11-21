@@ -18,14 +18,14 @@ Architecture diagrams drawn from graph records: boxes and groups over Dir record
 
 without is dirs less drop, in the order dirs holds them.
 
-**Signature:** `diagram\without(dirs, drop) -> [magus\Dir]`
+**Signature:** `diagram\without(dirs, drop) -> result\Result::<[magus\Dir]>`
 
 | Parameter | Type          | Optional | Description |
 | --------- | ------------- | -------- | ----------- |
 | `dirs`    | `[magus\Dir]` |          |             |
 | `drop`    | `[magus\Dir]` |          |             |
 
-**Returns:** [magus\Dir]
+**Returns:** result\Result::<[magus\Dir]>
 
 ### person
 
@@ -113,7 +113,7 @@ of starts an empty diagram. direction defaults to Direction.across. level is the
 
 draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
 
-**Signature:** `diagram\draw(f, theme, [anchorHref]) -> str`
+**Signature:** `diagram\draw(f, theme, [anchorHref]) -> result\Result::<str>`
 
 | Parameter    | Type      | Optional | Description |
 | ------------ | --------- | -------- | ----------- |
@@ -121,13 +121,13 @@ draw lays f out and paints it with theme. anchorHref is a URL template: {path} t
 | `theme`      | `Theme`   |          |             |
 | `anchorHref` | `str`     | yes      |             |
 
-**Returns:** str
+**Returns:** result\Result::<str>
 
 ### drawLayout
 
 drawLayout paints d, a Diagram's layout(), with theme, as draw
 
-**Signature:** `diagram\drawLayout(d, theme, [anchorHref], [drillHref]) -> str`
+**Signature:** `diagram\drawLayout(d, theme, [anchorHref], [drillHref]) -> result\Result::<str>`
 
 | Parameter    | Type     | Optional | Description |
 | ------------ | -------- | -------- | ----------- |
@@ -136,7 +136,7 @@ drawLayout paints d, a Diagram's layout(), with theme, as draw
 | `anchorHref` | `str`    | yes      |             |
 | `drillHref`  | `str`    | yes      |             |
 
-**Returns:** str
+**Returns:** result\Result::<str>
 
 ### nodeFact
 

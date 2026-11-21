@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // buildHarness assembles magus\harness for a magusfile. provider() wires an imported
@@ -41,5 +46,32 @@ func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		return vm.StringValue(name), nil
 	}))
+	harness.MapSet("install", directVal(obs, "magus.harness.install", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		opts, err := harnessCommandOptions("install", args, 0)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusHarnessInstall(ctx, opts)
+		return bindgen.ObjectExecResult(out), err
+	}))
+	harness.MapSet("verify", directVal(obs, "magus.harness.verify", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		opts, err := harnessCommandOptions("verify", args, 1)
+		if err != nil {
+			return vm.Null, err
+		}
+		out, err := std.MagusHarnessVerify(ctx, ffi.String(args, 0), opts)
+		return bindgen.ObjectExecResult(out), err
+	}))
 	return harness
+}
+
+func harnessCommandOptions(member string, args []vm.Value, at int) (types.MagusCommandOptions, error) {
+	if !ffi.Present(args, at) {
+		return types.MagusCommandOptions{}, nil
+	}
+	opts, err := decode.DecodeMagusCommandOptions(args[at])
+	if err != nil {
+		return opts, fmt.Errorf("magus.harness.%s: opts: %w", member, err)
+	}
+	return opts, nil
 }

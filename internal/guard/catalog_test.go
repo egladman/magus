@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -766,13 +767,17 @@ func (s *remedyContractSuite) TestUnjudgedStep() {
 	call := Request{
 		Input: toolEnvelope(t, "unjudged-remedy", root, "mcp__browser__click", map[string]any{"ref": "e1"}),
 		Host:  "claude-code", Session: "unjudged-remedy", Dir: root, DryRun: true,
+		Lease: "harness/worker",
 		Tools: agent.FindToolRows(t.TempDir(), "claude-code"),
 	}
 	v := Judge(ctx, deps, call)
-	require.Equal(t, string(denyRuleUnjudgedStep), v.Rule, v.Reason)
-	require.Len(t, v.NextSteps, 1)
-	assertRunsOnTheTree(t, v.NextSteps[0].Run)
-	gradeServed(t, ctx, deps, call, "unread tool rows", v.NextSteps[0].ID, v.NextSteps[0].Run)
+	shape, text := spoken(v)
+	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleUnjudgedStep), Lease: "harness/worker", LeaseFrom: "flag"}, shape, text)
+	d := denyUnjudgedTool("mcp__browser__click", call.Tools)
+	require.Len(t, d.Next, 1)
+	assertRunsOnTheTree(t, d.Next[0].Run)
+	call.Lease = ""
+	gradeServed(t, ctx, deps, call, "unleased harness maintainer", d.Next[0].ID, d.Next[0].Run)
 }
 
 func (s *remedyContractSuite) TestWorktreeRemove() {

@@ -91,7 +91,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [read-navigation](read-navigation.md)                     | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                         |
 | [read-paging](read-paging.md)                             | a mapped file read window by window, past two windows of it                                         |
 | [search-translation](search-translation.md)               | a text search whose pattern a graph query provably answers with the same entities                   |
-| [sed-in-place](sed-in-place.md)                           | `sed -i`, whose two spellings destroy each other's work across platforms                            |
+| [sed-in-place](sed-in-place.md)                           | an in-place sed in any spelling (`-i`, `-i.bak`, `-ni`, `--in-pl`), named files or not              |
 | [shared-stash](shared-stash.md)                           | a bare stash push or pop, on a stack every worktree shares                                          |
 | [sibling-checkout](sibling-checkout.md)                   | a magus command relocated into another checkout, judging a tree nobody ships                        |
 | [sleep-poll](sleep-poll.md)                               | a sleep before a status read, a call that only sleeps, or a wait on or retry into a full budget     |

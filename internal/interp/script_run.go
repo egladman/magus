@@ -96,7 +96,12 @@ func (r *ScriptRunner) Run(ctx context.Context, root string, o ScriptOptions, ev
 	if sep {
 		scriptArgs = append(scriptArgs, forwarded...)
 	}
-	return r.runScript(ctx, root, o, coverage.BuzzScript{Code: code, Name: name, Args: scriptArgs}, nil)
+	return r.RunSource(ctx, root, o, name, code, scriptArgs)
+}
+
+// RunSource gives host-owned source the file runner's sandbox and recording.
+func (r *ScriptRunner) RunSource(ctx context.Context, root string, o ScriptOptions, name, code string, args []string) error {
+	return r.runScript(ctx, root, o, coverage.BuzzScript{Code: code, Name: name, Args: args}, nil)
 }
 
 // Test runs the test blocks of each script, one session apiece, and writes one

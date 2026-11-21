@@ -15,6 +15,14 @@ var ErrSpellNotRegistered = errors.New("spell not registered")
 // ErrSpellNameRequired is returned by magus.WithSpell when called with an empty name.
 var ErrSpellNameRequired = errors.New("spell name required")
 
+// NoHarnessProvidersError means the workspace declares no harness providers.
+// Listing providers cannot succeed without a declaration to inspect.
+type NoHarnessProvidersError struct{}
+
+func (NoHarnessProvidersError) Error() string {
+	return "name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile"
+}
+
 // ErrUnregisteredDep is returned by (*Workspace).Graph when a declared
 // dependency path has not been registered.
 var ErrUnregisteredDep = errors.New("dependency not registered")

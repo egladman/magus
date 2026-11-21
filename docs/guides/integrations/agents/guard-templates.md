@@ -6,33 +6,33 @@ tags: [agents, guard, hooks, templates, claude code, codex]
 
 # Guard hook templates
 
-These are files, not snippets. They sit in
-[`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents):
-download them from there, or copy a block below. magus's own repository invokes
-the same files rather than keeping a private copy, so what it dogfoods is what
-you get, and two tests fail if its config stops referencing them or a block here
-drifts from the file.
+The canonical sources sit in
+[`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents).
+The binary embeds these scripts and their shared helper. `magus agent harness install`
+writes the host configuration and copies of the sources into the workspace.
+
+Managed hook commands name `.magus/harness/hooks/<name>.buzz`. During normal
+execution, magus reads that name from its embedded assets, so the script and
+helper match the executing binary even if the installed files are missing or
+stale. A hook invocation writes no files. An unknown managed name fails.
+
+To try edits, run the authored source or a custom copy outside that reserved
+directory. `magus buzz --check` and `magus buzz -t` still read the named files.
 
 They are a magus project of their own, so the TypeScript and Buzz beside them are
 held to the same gates as the rest of the workspace
 (`magus run lint docs/guides/integrations/agents` runs `tsc --noEmit`, Biome,
 and `magus buzz --check`).
 
-Two hosts run these files: [Claude Code](claude-code.md) and [Codex](codex.md).
-Both wire the same Buzz templates, run as `magus buzz -s <file>`, so there is one
-guard to reason about. Each needs neither a POSIX shell nor `jq`, so it runs
-unchanged on Windows and installs nothing. `magus describe harness` prints the
-entries that name the files; Magus does not inject a reserved command.
-[Cursor](cursor.md) and [OpenCode](opencode.md) each ship one self-contained file
-instead, on their own pages, because a host that needs five downloads to install a
-guard ends up without one.
+[Claude Code](claude-code.md), [Codex](codex.md) and [Cursor](cursor.md) declare
+their hook wiring through harness spells. [OpenCode](opencode.md) uses a plugin
+for guard events and invokes the same managed paths for its auxiliary hooks.
+`magus describe harness` prints each provider's declared wiring.
 
-## Checking whether your copy is current
+## Checking whether a custom copy is current
 
-Once you copy a template into your host's config it is yours, and magus cannot
-reach it again. That is the point (you are meant to edit these), but it means a
-fix magus makes never arrives on its own, and nothing about your copy says how
-old it is. So each one carries a version line:
+A custom copy outside the managed directory is yours. Its updates do not arrive
+with a new binary, so each template carries a version line:
 
 ```sh
 grep magus-guard-template magus-command.buzz
@@ -3159,7 +3159,7 @@ import "flags";
 import "proc";
 import "result";
 import "encoding/json";
-import "diskwatch";
+import "magus/diskwatch";
 import "lib/hook" as hook;
 
 final AGENT_NAME_FLAG = "--agent-name";
@@ -3203,16 +3203,18 @@ fun tickSnippet() > str {
 
 // pending says what the store holds that nobody was told, and marks it told.
 fun pending(store: str, now: double) > result\Result::<str?> {
-    try {
-        final samples = diskwatch\read(store);
-        final said = diskwatch\pendingLine(samples, now: now);
-        if (said != null) {
-            diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
-        }
-        return result\ok::<str?>(said);
-    } catch (err: any) {
-        return result\caught::<str?>(err);
+    final samples = diskwatch\read(store);
+    if (samples.error -> err) {
+        return result\Result::<str?>{ error = err };
     }
+    final said = diskwatch\pendingLine(samples.value!, now: now);
+    if (said != null) {
+        final wrote = diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+        if (wrote.error -> err) {
+            return result\Result::<str?>{ error = err };
+        }
+    }
+    return result\ok::<str?>(said);
 }
 
 fun main(args: [str]) > void {
@@ -3227,7 +3229,7 @@ fun main(args: [str]) > void {
     var cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
     if (cwd == "") { cwd = "."; }
 
-    final store = diskwatch\storePath() catch "";
+    final store = diskwatch\storePath().value ?? "";
     if (store == "") { return; }
     final now = os\time();
     // The cheap path every turn takes: one stat, and nothing else, inside the floor.

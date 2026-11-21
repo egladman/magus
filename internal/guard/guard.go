@@ -1035,8 +1035,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 	if binding.Gone {
 		standing.endedBinding = binding.Job
 	}
-	deps.worker = standing.declared && standing.state.Live() && workerRole(standing.row, deps.caller) != ""
-	deps, granted := grantedRules(ctx, deps, location, standing)
+	deps, granted := callerRules(ctx, deps, location, standing, unjudged != "" && who.Agent == "" && actingLease == "" && !binding.Gone)
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice

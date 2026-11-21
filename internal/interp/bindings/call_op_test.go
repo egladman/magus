@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/spells/gen/spellstest"
 	"github.com/egladman/magus/types"
@@ -59,6 +60,29 @@ export fun last_green_run(target: Target, req: Empty) > any {
 }
 
 // A failed Result is the error a raise of its Diagnostic became.
+func TestCallOpPreservesADiagnosticHint(t *testing.T) {
+	drv := buzzProvider(t, `import "result";
+export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {
+    return result\Result::<Secret>{ error = result\Diagnostic{ code = "MGS1051", message = "vault sealed", hint = "unlock the vault" } };
+}`)
+	_, _, err := CallOp(context.Background(), drv, providerops.ResolveSecret, types.Target{}, types.SecretRef{Ref: "x"})
+	var diagnostic *diagnostics.Error
+	require.ErrorAs(t, err, &diagnostic)
+	assert.Equal(t, "unlock the vault", diagnostic.Hint)
+	assert.ErrorIs(t, err, types.SpellContractViolated)
+	assert.NotErrorIs(t, err, errMalformedAnswer)
+}
+
+func TestCallOpRefusesTheRetiredDiagnosticFixKey(t *testing.T) {
+	drv := buzzProvider(t, `object LegacyDiagnostic { message: str, fix: str }
+object Result { value: Secret? = null, error: LegacyDiagnostic? = null }
+export fun resolve_secret(target: Target, req: SecretRef) > Result {
+    return Result{ error = LegacyDiagnostic{ message = "vault sealed", fix = "unlock the vault" } };
+}`)
+	_, _, err := CallOp(context.Background(), drv, providerops.ResolveSecret, types.Target{}, types.SecretRef{Ref: "x"})
+	require.ErrorIs(t, err, errMalformedAnswer)
+}
+
 func TestCallOpReadsAFailedResultAsTheError(t *testing.T) {
 	drv := buzzProvider(t, `import "result";
 export fun resolve_secret(target: Target, req: SecretRef) > result\Result::<Secret> {

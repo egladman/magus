@@ -18,25 +18,25 @@ LCOV coverage reports: the percentage a badge or a floor gate shows, and the lin
 
 percent is the covered-line percentage across an lcov report, as a string
 
-**Signature:** `lcov\percent(lcov, keep) -> str`
+**Signature:** `lcov\percent(lcov, keep) -> result\Result::<str>`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `lcov`    | `str` |          |             |
 | `keep`    | `str` |          |             |
 
-**Returns:** str
+**Returns:** result\Result::<str>
 
 ### mergePercent
 
 mergePercent is percent over SEVERAL lcov reports of the same sources,
 
-**Signature:** `lcov\mergePercent(reports, keep) -> str`
+**Signature:** `lcov\mergePercent(reports, keep) -> result\Result::<str>`
 
 | Parameter | Type    | Optional | Description |
 | --------- | ------- | -------- | ----------- |
 | `reports` | `[str]` |          |             |
 | `keep`    | `str`   |          |             |
 
-**Returns:** str
+**Returns:** result\Result::<str>
 

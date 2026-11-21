@@ -38,6 +38,9 @@ type VCSCommandOptions struct {
 // MagusCommandOptions are the options of every door that runs a nested magus: magus\cmd,
 // run, doctor, clean, attention, impact and the forking magus\describe members.
 type MagusCommandOptions struct {
+	// Binary selects the nested executable; relative paths use the child's dir.
+	// Omitted uses the caller's executable, without a PATH fallback.
+	Binary string
 	// Root is the global --root workspace the child loads.
 	Root string
 	// Dir runs the child in another directory, relative to the target's.

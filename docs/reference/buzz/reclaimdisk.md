@@ -212,37 +212,24 @@ headline is the plan's one-line summary; trimmed, when not empty, is what a cach
 
 **Returns:** str
 
-### timeLeft
-
-timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline is 0, and
-
-**Signature:** `reclaimdisk\timeLeft(deadline, now) -> double`
-
-| Parameter  | Type     | Optional | Description |
-| ---------- | -------- | -------- | ----------- |
-| `deadline` | `double` |          |             |
-| `now`      | `double` |          |             |
-
-**Returns:** double
-
 ### status
 
 status reads one worktree's dirt; a directory that is gone reads dirty -1.
 
-**Signature:** `reclaimdisk\status(path, deadline) -> Status`
+**Signature:** `reclaimdisk\status(path, deadline) -> result\Result::<Status>`
 
 | Parameter  | Type     | Optional | Description |
 | ---------- | -------- | -------- | ----------- |
 | `path`     | `str`    |          |             |
 | `deadline` | `double` |          |             |
 
-**Returns:** Status
+**Returns:** result\Result::<Status>
 
 ### survey
 
 survey reads every worktree and agent branch of the repository at the working directory
 
-**Signature:** `reclaimdisk\survey(base, now, keepRecent, measure, deadline) -> Survey`
+**Signature:** `reclaimdisk\survey(base, now, keepRecent, measure, deadline) -> result\Result::<Survey>`
 
 | Parameter    | Type     | Optional | Description |
 | ------------ | -------- | -------- | ----------- |
@@ -252,7 +239,7 @@ survey reads every worktree and agent branch of the repository at the working di
 | `measure`    | `bool`   |          |             |
 | `deadline`   | `double` |          |             |
 
-**Returns:** Survey
+**Returns:** result\Result::<Survey>
 
 ### apply
 
@@ -314,26 +301,26 @@ trimLine says what one trim really did, null when it did nothing to say.
 
 trimDeclared trims every cache a spell gives a budget and returns each
 
-**Signature:** `reclaimdisk\trimDeclared(fence, deadline) -> [CacheTrim]`
+**Signature:** `reclaimdisk\trimDeclared(fence, deadline) -> result\Result::<[CacheTrim]>`
 
 | Parameter  | Type     | Optional | Description |
 | ---------- | -------- | -------- | ----------- |
 | `fence`    | `double` |          |             |
 | `deadline` | `double` |          |             |
 
-**Returns:** [CacheTrim]
+**Returns:** result\Result::<[CacheTrim]>
 
 ### chunk
 
 chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 
-**Signature:** `reclaimdisk\chunk(deadline) -> [Item]`
+**Signature:** `reclaimdisk\chunk(deadline) -> result\Result::<[Item]>`
 
 | Parameter  | Type     | Optional | Description |
 | ---------- | -------- | -------- | ----------- |
 | `deadline` | `double` |          |             |
 
-**Returns:** [Item]
+**Returns:** result\Result::<[Item]>
 
 ### keptLine
 

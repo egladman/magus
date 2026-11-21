@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/libs/codec"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -236,7 +237,7 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 	assert.Equal(t, verdict.Deny, judge("a2", bash("sed -n 81,121p paged.go")).Decision, "and again by the shell")
 }
 
-func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
+func TestUnjudgedToolAdvisesOnceForAnUnleasedMainSession(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
 	tools := testTools(t)
@@ -253,12 +254,36 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 
 	denied := call(Dependencies{}, "unjudged-deny", "mcp__browser__click")
 	deniedShape, deniedText := spoken(denied)
-	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Advise, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
 	assert.Contains(t, deniedText, "mcp__browser__click")
+	worker := Judge(ctx, Dependencies{}, Request{Input: toolEnvelope(t, "unjudged-worker", root, "mcp__browser__click", map[string]any{"ref": "e1"}), Host: "claude-code", Agent: "worker", Dir: root, Tools: tools})
+	assert.Equal(t, verdict.Deny, worker.Decision, "an undeclared worker tool remains refused")
 
 	assert.Equal(t, verdict.Defer, call(withSetting(string(denyRuleUnjudgedStep), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
 		"an inert tool is never named")
 	assert.Equal(t, verdict.Defer, call(withSetting(string(denyRuleUnjudgedStep), builtin.Off), "unjudged-off", "mcp__browser__click").Decision)
+}
+
+func TestUnjudgedToolStillDeniesALeasedMainSession(t *testing.T) {
+	for _, bound := range []bool{false, true} {
+		t.Run(fmt.Sprintf("bound=%v", bound), func(t *testing.T) {
+			row := jobtypes.Job{ID: "held-job", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/held/**"}}}
+			ctx, root := fleetFixture(t, row)
+			who := hookAttribution{Host: "claude-code", Session: "leased-main"}
+			lease := row.ID
+			if bound {
+				bindCaller(t, ctx, who, row.ID)
+				lease = ""
+			}
+			v := Judge(ctx, Dependencies{}, Request{
+				Input: toolEnvelope(t, who.Session, root, "mcp__browser__click", map[string]any{"ref": "e1"}),
+				Host:  who.Host, Dir: root, Lease: lease, Tools: testTools(t),
+			})
+			shape, _ := spoken(v)
+			shape.LeaseFrom = "" // The two cases deliberately select the lease differently.
+			assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleUnjudgedStep), Lease: row.ID}, shape)
+		})
+	}
 }
 
 // The read-only fast path: a call to an inert tool is answered before the rules load, which

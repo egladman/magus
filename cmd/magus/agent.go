@@ -506,7 +506,7 @@ func resolveHarnessIDs(ctx context.Context, rootOverride, id string) ([]string, 
 		return []string{id}, ctx, nil
 	}
 	if len(wired) == 0 {
-		return nil, ctx, exit.Usagef("name a harness id, or wire one or more hosts with magus\\harness.provider(<spell>) in the root magusfile")
+		return nil, ctx, types.NoHarnessProvidersError{}
 	}
 	return wired, ctx, nil
 }

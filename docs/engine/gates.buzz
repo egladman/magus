@@ -800,8 +800,10 @@ fun crosscheckFindings(root: str, docs: str, pages: [str]) > result\Result::<[st
         }
         // Grade canonical wiring, never a developer's merged personal installation.
         final hooks = mut {<str: any>};
-        foreach (block in magus\describe.harness("claude-code").wired) {
-            if (block.key.startsWith("hooks.")) { hooks[block.key.sub(6)] = block.entries; }
+        foreach (plan in magus\describe.harness("claude-code")) {
+            foreach (block in plan.wired) {
+                if (block.key.startsWith("hooks.")) { hooks[block.key.sub(6)] = block.entries; }
+            }
         }
         final configs = {"claude-code.md": json\stringify({"hooks": hooks}),
             "codex.md": fs\readFile(agentsDir + "/codex-hooks.json")};

@@ -51,6 +51,46 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 	assert.NotContains(t, stderr, "BZZ3001", "-s/--silent must suppress the warning line")
 }
 
+func TestBuzzCmd_ManagedHookRunsTheBinarysGlue(t *testing.T) {
+	for _, installed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("installed=%t", installed), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, ".magus", "harness", "hooks", "magus-reclaim-disk.buzz")
+			if installed {
+				require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(path), "lib"), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte("import \"diskwatch\";\n"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(path), "lib", "hook.buzz"),
+					[]byte("import \"retired-hook-helper\";\n"), 0o644))
+			}
+			countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) { return nil, nil })
+			var runErr error
+			stderr := captureStderr(t, func() {
+				runErr = buzzCommand(t.Context(), "", []string{"-s", path})
+			})
+			require.NoError(t, runErr)
+			assert.Contains(t, stderr, "[MGS3024]", "the embedded main runs and reports the missing host argument")
+			assert.NotContains(t, stderr, "BZZ2001")
+			_, err := os.Stat(path)
+			if installed {
+				require.NoError(t, err)
+				body, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.Equal(t, "import \"diskwatch\";\n", string(body), "running a hook rewrites no installed files")
+			} else {
+				assert.ErrorIs(t, err, os.ErrNotExist)
+			}
+		})
+	}
+}
+
+func TestBuzzCmd_AnOrdinaryHookFileStillRunsItsOwnSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "magus-reclaim-disk.buzz")
+	require.NoError(t, os.WriteFile(path, []byte("import \"retired-hook-module\";\n"), 0o644))
+	countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) { return nil, nil })
+	err := buzzCommand(t.Context(), "", []string{"-s", path})
+	require.ErrorContains(t, err, "retired-hook-module")
+}
+
 // buzzSandboxTarget is what the fixture script removes. It sits outside the workspace
 // and every other write grant, so a permitted run would reach it. Nothing is created
 // there: checkWrite runs before the removal, so the deny fires on a path that does not
