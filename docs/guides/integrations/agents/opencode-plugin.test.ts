@@ -68,7 +68,9 @@ function stubBun(
           controller.close();
         },
       }),
-      exited: failed ? rejected(new Error("spawn failed: no such file or directory")) : Promise.resolve(0),
+      exited: failed
+        ? rejected(new Error("spawn failed: no such file or directory"))
+        : Promise.resolve(0),
     };
   };
   (globalThis as unknown as { Bun: unknown }).Bun = {
