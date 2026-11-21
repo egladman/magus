@@ -645,20 +645,28 @@ type spawnTitle func() (jobtypes.Job, bool)
 // spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
 // tried as spawnTitleJob tries them, whatever the row's state.
 func spawnTitleRow(rows []jobtypes.Job, title string) (jobtypes.Job, bool) {
-	fields := strings.Fields(title)
-	if len(fields) != 2 {
+	parent, leaf, ok := splitSpawnTitle(title)
+	if !ok {
 		return jobtypes.Job{}, false
 	}
-	slash := strings.LastIndex(fields[0], "/")
-	if slash <= 0 || slash == len(fields[0])-1 || !jobtypes.ValidID(fields[1]) {
-		return jobtypes.Job{}, false
-	}
-	for _, id := range []string{fields[1], fmt.Sprintf("%s/%s", fields[0][:slash], fields[1])} {
+	for _, id := range []string{leaf, fmt.Sprintf("%s/%s", parent, leaf)} {
 		if i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == id }); i >= 0 {
 			return rows[i], true
 		}
 	}
 	return jobtypes.Job{}, false
+}
+
+func splitSpawnTitle(title string) (parent, leaf string, ok bool) {
+	fields := strings.Fields(title)
+	if len(fields) != 2 {
+		return "", "", false
+	}
+	slash := strings.LastIndex(fields[0], "/")
+	if slash <= 0 || slash == len(fields[0])-1 || !jobtypes.ValidID(fields[1]) {
+		return "", "", false
+	}
+	return fields[0][:slash], fields[1], true
 }
 
 // spawnedJob reports whether one of the spawn records in facts attributed a worker to job:

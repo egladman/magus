@@ -190,7 +190,11 @@ const drawEntry = `import "magus/diagram";
 
 export fun draw(f: diagram\Diagram, anchorHref: str) > [str] {
     try {
-        return [diagram\draw(decoded(f), theme: diagram\Theme.page, anchorHref: anchorHref), ""];
+        final rendered = diagram\draw(decoded(f), theme: diagram\Theme.page, anchorHref: anchorHref);
+        if (rendered.error -> e) {
+            return ["", e.message];
+        }
+        return [rendered.value!, ""];
     } catch (findings: str) {
         return ["", findings];
     }

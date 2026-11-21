@@ -2788,7 +2788,7 @@ export fun watch(ctx: magus\Context, args: [str]) > void !> any {
     fs\watch(["cmd", "internal"], fun(changed: [str]) > bool {
         magus\log.info("change detected - rebuilding");
         try {
-            go_build(ctx, []);
+            _ = magus\run(["go-build", "."]);
         } catch (e) {
             magus\log.warn("build failed, still watching: " + e);
         }

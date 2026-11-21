@@ -31,7 +31,7 @@ func validateHarnessMCP(m *types.McpServer) error {
 	if m.Hint == "" && m.Docs == "" && len(m.Register) == 0 {
 		return fmt.Errorf("harness mcp: need hint, docs, and/or register argv (Magus does not write host MCP config)")
 	}
-	if !m.Transport.Valid() {
+	if m.Transport == "" || !m.Transport.Valid() {
 		return fmt.Errorf("harness mcp: transport %s is none of %s", m.Transport, strings.Join(m.Transport.Values(), ", "))
 	}
 	switch m.Transport {
