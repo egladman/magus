@@ -74,10 +74,8 @@ func (s GateScope) MarshalJSON() ([]byte, error) {
 	switch s {
 	case GateScopeAffected, GateScopeProject:
 		return codec.Marshal(string(s))
-
 	}
 	return nil, fmt.Errorf("gate result scope %q: want %q or %q", string(s), GateScopeAffected, GateScopeProject)
-
 }
 
 // UnmarshalJSON accepts only a known scope. An entry with no scope member never reaches
@@ -91,10 +89,8 @@ func (s *GateScope) UnmarshalJSON(data []byte) error {
 	case GateScopeAffected, GateScopeProject:
 		*s = GateScope(v)
 		return nil
-
 	}
 	return fmt.Errorf("gate result scope %q: want %q or %q", v, GateScopeAffected, GateScopeProject)
-
 }
 
 // GateResult is the payload of a [KindGateResult] record.

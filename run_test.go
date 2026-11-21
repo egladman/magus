@@ -2739,7 +2739,7 @@ func TestCancelledTargetStillReportsItsWriteIntoADescendant(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
 	want := `project "." target "lint" wrote into descendant project "leaf": added=[src/gen.ts]` +
-		"\n" + `fix: move this work to "leaf" or exclude that path from the parent target`
+		"\n" + `hint: move this work to "leaf" or exclude that path from the parent target`
 	assert.Equal(t, []string{want}, boundaryMessages(err))
 }
 

@@ -29,12 +29,12 @@ Eli approves repairing both execution and installation order.
 
 ## Decision
 
-| behavior | enforcement | State |
-| --- | --- | --- |
-| A managed hook path executes its running binary's embedded script and `lib/hook` helper, even when the installed copies are missing or stale. | `cmd/magus/hook_glue.go`; upgrade regression in `buzz_test.go` | done |
-| Ordinary Buzz paths execute their own source. Explicit source checks and test runs still inspect files. | `buzzCommand`; ordinary-file regression | done |
-| The development build installs declared harness assets and verifies providers whose declared guard is `hooks`. The target stays uncached. | `magusfile.buzz#go_build` | done |
-| Both checkout bootstrap paths install harnesses before job-store reads, indexing and dependency installation. | `bootstrap-checkout.buzz` ordering tests | done |
+| behavior                                                                                                                                      | enforcement                                                    | State |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----- |
+| A managed hook path executes its running binary's embedded script and `lib/hook` helper, even when the installed copies are missing or stale. | `cmd/magus/hook_glue.go`; upgrade regression in `buzz_test.go` | done  |
+| Ordinary Buzz paths execute their own source. Explicit source checks and test runs still inspect files.                                       | `buzzCommand`; ordinary-file regression                        | done  |
+| The development build installs declared harness assets and verifies providers whose declared guard is `hooks`. The target stays uncached.     | `magusfile.buzz#go_build`                                      | done  |
+| Both checkout bootstrap paths install harnesses before job-store reads, indexing and dependency installation.                                 | `bootstrap-checkout.buzz` ordering tests                       | done  |
 
 The reserved runtime path is `.magus/harness/hooks/<name>`, relative or absolute.
 Its name selects an embedded asset; an unknown name fails. No installed source
@@ -119,10 +119,10 @@ has been inspected. A leased caller or delegated agent still receives a denial.
 Known command and write rules retain their decisions, and `JudgeStep` still
 requires a declared SDK step kind under ADR 0046.
 
-| behavior | enforcement | State |
-| --- | --- | --- |
-| An unlisted host tool advises an unleased main session. | `Judge`; `TestUnjudgedToolAdvisesOnceForAnUnleasedMainSession` | done |
-| An explicit lease or a session binding keeps an unlisted tool denied. | `TestUnjudgedToolStillDeniesALeasedMainSession` | done |
+| behavior                                                              | enforcement                                                    | State |
+| --------------------------------------------------------------------- | -------------------------------------------------------------- | ----- |
+| An unlisted host tool advises an unleased main session.               | `Judge`; `TestUnjudgedToolAdvisesOnceForAnUnleasedMainSession` | done  |
+| An explicit lease or a session binding keeps an unlisted tool denied. | `TestUnjudgedToolStillDeniesALeasedMainSession`                | done  |
 
 This follows [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md):
 the host still owns its tools and the session still receives the missing-row
