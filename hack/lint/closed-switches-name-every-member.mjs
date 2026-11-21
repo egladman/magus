@@ -2,7 +2,8 @@
 // line, for hack/lint/closed-switches-name-every-member.buzz to judge. It parses with the
 // TypeScript compiler API, so a switch inside a string or a comment is never counted. Each
 // site says whether the switch has a default clause and whether the statement after it is
-// `unreachable(<the switch's expression>)`; the rule, not this script, decides what fails.
+// an unreachable assertion for its value or union object. The rule decides
+// what fails.
 //
 //	node hack/lint/closed-switches-name-every-member.mjs <root> < paths
 //
@@ -86,15 +87,26 @@ const symbolOf = (ts, sf, node) => {
   return "<module>";
 };
 
-// callsUnreachable reports whether stmt is `unreachable(subject)` or `return unreachable(subject)`.
+const unparenthesized = (ts, node) => {
+  while (ts.isParenthesizedExpression(node)) node = node.expression;
+  return node;
+};
+
+// A discriminant switch can narrow its containing union object to never.
 const callsUnreachable = (ts, sf, stmt, subject) => {
   const expr = ts.isReturnStatement(stmt) || ts.isExpressionStatement(stmt) ? stmt.expression : undefined;
+  if (
+    expr === undefined ||
+    !ts.isCallExpression(expr) ||
+    expr.expression.getText(sf) !== "unreachable" ||
+    expr.arguments.length !== 1
+  ) return false;
+  const value = unparenthesized(ts, subject);
+  const asserted = unparenthesized(ts, expr.arguments[0]).getText(sf);
   return (
-    expr !== undefined &&
-    ts.isCallExpression(expr) &&
-    expr.expression.getText(sf) === "unreachable" &&
-    expr.arguments.length === 1 &&
-    expr.arguments[0].getText(sf) === subject
+    asserted === value.getText(sf) ||
+    ((ts.isPropertyAccessExpression(value) || ts.isElementAccessExpression(value)) &&
+      asserted === unparenthesized(ts, value.expression).getText(sf))
   );
 };
 
@@ -113,7 +125,7 @@ const sitesIn = (ts, path, sf) => {
         symbol: symbolOf(ts, sf, node),
         subject,
         hasDefault: node.caseBlock.clauses.some((c) => ts.isDefaultClause(c)),
-        exhausted: next !== undefined && callsUnreachable(ts, sf, next, subject),
+        exhausted: next !== undefined && callsUnreachable(ts, sf, next, node.expression),
       });
     }
     node.forEachChild(visit);

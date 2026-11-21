@@ -4,10 +4,10 @@
 // reads the same file; this rule judges TypeScript and Buzz, and holds the Go side to
 // the rest of the contract: no //nolint, and no row naming a file that is gone.
 //
-// TypeScript: no default clause, and the statement after the switch is
-// `unreachable(<the switch's expression>)`, so tsc proves every member is named through
-// `never`. The parser sees no types, so every TS switch is in scope; a switch over an open
-// set (a key name, a path) is a lookup table or an if chain instead.
+// TypeScript: no default clause. The statement after the switch asserts
+// `unreachable` on its value or discriminated union, so tsc proves exhaustion
+// through `never`. The parser sees no types, so every TS switch is in scope.
+// An open set (a key name or path) uses a lookup table or an if chain.
 // Buzz: a `match` that names enum members has no `else` arm; the checker already refuses a
 // match that misses one.
 //
@@ -223,11 +223,12 @@ export fun tsSite(row: {str: any}) > Site? {
     var fix = "";
     if (hasDefault) {
         message = "switch on {subject} keeps a default arm";
-        fix = "Delete the default arm, give every member its own case, and end with `return unreachable({subject});` "
-            + "(console/src/lib/unreachable.ts). If the set is open, use a lookup table or an if chain. " + COUNT_FIX;
+        fix = "Delete the default arm and give every member its own case. Call `unreachable` after the switch, "
+            + "passing the switched value or its discriminated union object. If the set is open, use a lookup table or an if chain. " + COUNT_FIX;
     } else if (!exhausted) {
-        message = "switch on {subject} is not followed by unreachable({subject})";
-        fix = "Add `return unreachable({subject});` after the switch, so tsc fails when a member is missing. " + COUNT_FIX;
+        message = "switch on {subject} has no following unreachable assertion";
+        fix = "Call `unreachable` after the switch, passing the switched value or its discriminated union object, "
+            + "so tsc fails when a member is missing. " + COUNT_FIX;
     } else {
         return null;
     }
@@ -405,7 +406,38 @@ test "a switch ending in unreachable with no default passes, a default or a miss
     final dflt = tsSite({"path": "a.ts", "line": 4, "subject": "k", "hasDefault": true, "exhausted": false});
     assert\equal(dflt!.message, want: "switch on k keeps a default arm", message: "default");
     final bare = tsSite({"path": "a.ts", "line": 9, "subject": "k", "hasDefault": false, "exhausted": false});
-    assert\equal(bare!.message, want: "switch on k is not followed by unreachable(k)", message: "no call");
+    assert\equal(bare!.message, want: "switch on k has no following unreachable assertion", message: "no call");
+}
+
+test "the TypeScript parser accepts switched values and discriminated union objects" {
+    final made = support\fixture({"unions.ts": `
+declare function unreachable(value: never): never;
+type State = { kind: "a" } | { kind: "b" };
+type Command = { tag: "a" } | { tag: "b" };
+function direct(kind: "a" | "b") { switch (kind) { case "a": return 1; case "b": return 2; } return unreachable(kind); }
+function property(state: State) { switch (state.kind) { case "a": return 1; case "b": return 2; } return unreachable(state); }
+function indexed(command: Command) { switch (command["tag"]) { case "a": return 1; case "b": return 2; } return unreachable(command); }
+function nested(packet: { body: State }) { switch ((packet.body.kind)) { case "a": return 1; case "b": return 2; } return unreachable((packet.body)); }
+`});
+    assert\equal(made.error == null, want: true, message: "fixtures");
+    final scanned = tsSites(made.value!);
+    assert\equal(scanned.error == null, want: true, message: "parser");
+    assert\equal(scanned.value!.len(), want: 0, message: "each assertion covers the switched value or its union object");
+}
+
+test "the TypeScript parser rejects assertions on unrelated values" {
+    final made = support\fixture({"unrelated.ts": `
+function other(state, unrelated) { switch (state.kind) { case "a": return 1; } return unreachable(unrelated); }
+function sibling(state) { switch (state.kind) { case "a": return 1; } return unreachable(state.other); }
+function ancestor(packet) { switch (packet.body.kind) { case "a": return 1; } return unreachable(packet); }
+function call(state) { switch (tag(state)) { case "a": return 1; } return unreachable(state); }
+function missing(state) { switch (state.kind) { case "a": return 1; } }
+function fallback(state) { switch (state.kind) { default: return 1; } return unreachable(state); }
+`});
+    assert\equal(made.error == null, want: true, message: "fixtures");
+    final scanned = tsSites(made.value!);
+    assert\equal(scanned.error == null, want: true, message: "parser");
+    assert\equal(scanned.value!.len(), want: 6, message: "an unrelated assertion, missing assertion or default still fails");
 }
 
 final BASELINE = "exhaustive-switch:\n  baseline:\n    - \{path: a.ts, symbol: f}\n  exits: []\n";
