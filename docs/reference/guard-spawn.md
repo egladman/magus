@@ -70,9 +70,8 @@ which is the context a resume has to rebuild. Claude Code reports it through
 looking at the file's final 512 KiB only. Cursor and Codex report no per-agent usage,
 so it stays null there.
 
-Every field is what the host reported or magus recorded. A host that does not report
-a field leaves it empty; nothing is inferred from which host sent the call, and no
-model string is mapped to a tier.
+Fields come from what the host reported or Magus recorded. Codex can supply its
+description through the job label described below. Model strings stay as reported.
 
 `magus\guard.once(key)` is true the first time a key is asked in the calling session.
 `magus\guard.count(key)` adds one to a key's tally in that session and returns it.
@@ -93,6 +92,12 @@ dir. An explicit `--lease` still wins. The record is keyed on the agent's id as 
 as its session, because a subagent shares its parent's session id and only its agent
 id tells the two apart: neither ever reads the other's binding. It outranks a
 `BAGGAGE` claim, as every record does.
+
+For a Codex spawn without `description` or `title`, put the label on the first
+line of `message`. When Codex encrypts the message, use a task name such as
+`job__orchestrator__review__guard_facts`. The double underscores separate the
+parent, role and job. A single underscore represents a hyphen. This example
+resolves to `orchestrator/review guard-facts` and follows the same lease checks.
 
 When the job has not reported a base, the agent's first hook call records the
 revision and dirty-patch digest of the checkout it runs in, the values
