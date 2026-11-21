@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/diagram"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -37,4 +38,20 @@ func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
 		assert.True(t, strings.HasPrefix(string(a), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), paths[i])
 		assert.Equal(t, string(a), string(b), paths[i])
 	}
+}
+
+func TestPlanSVGsWriteNothingWhenADiagramIsRefused(t *testing.T) {
+	p := job.NewPlan([]jobtypes.Job{{ID: "lead", Created: 1, State: jobtypes.StateRunning}})
+	figures := p.Diagrams()
+	require.NotEmpty(t, figures)
+	invalid := *figures[0]
+	invalid.ID = ""
+	figures = append(figures, &invalid)
+	dir := filepath.Join(t.TempDir(), "svg")
+
+	_, err := WritePlanSVGs(t.Context(), p, figures, dir, job.HolderCell)
+
+	var findings *diagram.Findings
+	require.ErrorAs(t, err, &findings)
+	assert.NoDirExists(t, dir)
 }
