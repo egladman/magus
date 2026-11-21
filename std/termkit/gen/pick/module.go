@@ -12,13 +12,14 @@ import (
 	convert "github.com/egladman/magus/std/termkit/convert"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
 	os "os"
+	slices "slices"
 )
 
 // Module binds github.com/egladman/magus/libs/termkit/pick for Buzz.
 var Module = std.Module{
 	Name: "pick",
 	Path: "termkit/pick",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
 		{
 			Name:    "one",
@@ -71,12 +72,23 @@ func EncodeOptions(v lib.Options) map[string]any {
 	}
 }
 
-// DecodeOptions reads a Options from a Buzz map. A missing key reads as the zero value.
+// DecodeOptions reads a Options from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeOptions(v any) (lib.Options, error) {
 	var out lib.Options
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"prompt", "initialFilter", "initial", "maxRows"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Prompt, err = convert.String(m["prompt"]); err != nil {
 		return out, fmt.Errorf("prompt: %w", err)

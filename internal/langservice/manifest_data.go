@@ -272,7 +272,7 @@ var modules = []Module{
 	},
 	{
 		Name: "layout",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/layout, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/layout, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "cols", Doc: "Cols is the display width of s in terminal columns.", Sig: "layout\\cols(s) -> int"},
 			{Name: "fit", Doc: "Fit shortens text to width columns, ending in \"...\" when it cut.", Sig: "layout\\fit(text, width) -> string"},
@@ -386,7 +386,7 @@ var modules = []Module{
 	},
 	{
 		Name: "notify",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/notify, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/notify, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "new", Doc: "New returns a notifier that will draw into the bottom of z, holding at most max notifications at once.", Sig: "notify\\new(z, max) -> int"},
 			{Name: "stderr", Doc: "Stderr returns the process-wide notification band on standard error, creating it on first use.", Sig: "notify\\stderr() -> int"},
@@ -430,7 +430,7 @@ var modules = []Module{
 	},
 	{
 		Name: "pick",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "one", Doc: "Pick blocks until the user selects an item or aborts.", Sig: "pick\\one(p, items, opts) -> int"},
 			{Name: "many", Doc: "Many blocks until the user marks one or more items and confirms, or aborts.", Sig: "pick\\many(p, items, opts, marked) -> any"},
@@ -477,7 +477,7 @@ var modules = []Module{
 	},
 	{
 		Name: "progress",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "bar", Doc: "Bar draws done of total in cols cells, filled in eighths so it moves a fraction of a cell at a time.", Sig: "progress\\bar(done, total, cols, track) -> map[string]any"},
 			{Name: "loader_width", Doc: "Width returns l sized to cols columns.", Sig: "progress\\loaderWidth(loader, cols) -> int"},
@@ -537,6 +537,15 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "recorder",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/recorder, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
+		Methods: []Method{
+			{Name: "commands", Doc: "Commands keeps startup bytes on the first command's frame.", Sig: "recorder\\commands(capture, prompt) -> []string"},
+			{Name: "marked", Doc: "Marked discards teardown after the final frame marker.", Sig: "recorder\\marked(capture, marker) -> []string"},
+			{Name: "animate", Doc: "Animate replays one cumulative terminal and gives all frames the same height.", Sig: "recorder\\animate(segments, width, height, pace, theme) -> string"},
+		},
+	},
+	{
 		Name: "result",
 		Doc:  "A value or the Diagnostic that stopped it: Result, the Buzz form of types.Result, with ok, fail, and caught for what a catch hands back.",
 		Methods: []Method{
@@ -547,7 +556,7 @@ var modules = []Module{
 	},
 	{
 		Name: "screen",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "new", Doc: "New returns a Terminal of the given size, cursor at the top left and the whole grid scrollable.", Sig: "screen\\new(width, height) -> int"},
 			{Name: "terminal_fd", Doc: "Fd and Write let a test hand a Terminal to code that expects one, so it drives the real code path.", Sig: "screen\\terminalFd(terminal) -> int"},
@@ -648,7 +657,7 @@ var modules = []Module{
 	},
 	{
 		Name: "termkit",
-		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "colorize", Doc: "Colorize wraps s in an SGR sequence and closes it again, so no caller composes escapes by hand or forgets the reset.", Sig: "termkit\\colorize(s, sgr) -> string"},
 			{Name: "hyperlink", Doc: "Hyperlink makes text a real clickable link to uri, for terminals that support OSC 8 (iTerm2, kitty, VTE, WezTerm, Windows Terminal), and returns text unchanged for everything else.", Sig: "termkit\\hyperlink(text, uri) -> string"},
@@ -681,7 +690,6 @@ var modules = []Module{
 			{Name: "prose_item", Doc: "ProseItem writes label and its sentences as one paragraph whose continuation lines hang under the label, the shape a flag or subcommand list wants.", Sig: "termkit\\proseItem(p, label, sentences)"},
 			{Name: "make_raw", Doc: "MakeRaw switches the terminal behind fd into raw mode, so a reader receives each keystroke as it is typed rather than a line at a time.", Sig: "termkit\\makeRaw(fd) -> int"},
 			{Name: "raw_mode_restore", Doc: "Restore puts the terminal back the way MakeRaw found it.", Sig: "termkit\\rawModeRestore(rawMode)"},
-			{Name: "line_spans_copy", Doc: "SpansCopy returns this line's spans as a fresh slice, normalizing the Text+Style shorthand on the way.", Sig: "termkit\\lineSpansCopy(line) -> any"},
 			{Name: "reset_scroll_margins", Doc: "ResetScrollMargins clears any DECSTBM margins on w unconditionally.", Sig: "termkit\\resetScrollMargins(p)"},
 			{Name: "new_zone", Doc: "NewZone returns a Zone over w, measured through p.", Sig: "termkit\\newZone(p) -> int"},
 			{Name: "stderr_zone", Doc: "StderrZone returns the process-wide owner of standard error's bottom rows.", Sig: "termkit\\stderrZone() -> int"},

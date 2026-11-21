@@ -10,13 +10,14 @@ import (
 	lib "github.com/egladman/magus/libs/termkit/screen"
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
+	slices "slices"
 )
 
 // Module binds github.com/egladman/magus/libs/termkit/screen for Buzz.
 var Module = std.Module{
 	Name: "screen",
 	Path: "termkit/screen",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
 		{
 			Name:    "new",
@@ -195,12 +196,23 @@ func EncodeSVGOptions(v lib.SVGOptions) map[string]any {
 	}
 }
 
-// DecodeSVGOptions reads a SVGOptions from a Buzz map. A missing key reads as the zero value.
+// DecodeSVGOptions reads a SVGOptions from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeSVGOptions(v any) (lib.SVGOptions, error) {
 	var out lib.SVGOptions
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"fontFamily", "fontSize", "cellWidth", "lineHeight", "baseline", "pad", "radius", "theme"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.FontFamily, err = convert.String(m["fontFamily"]); err != nil {
 		return out, fmt.Errorf("fontFamily: %w", err)
@@ -248,12 +260,23 @@ func EncodeTheme(v lib.Theme) map[string]any {
 	}
 }
 
-// DecodeTheme reads a Theme from a Buzz map. A missing key reads as the zero value.
+// DecodeTheme reads a Theme from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeTheme(v any) (lib.Theme, error) {
 	var out lib.Theme
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"background", "foreground", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "black"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Background, err = convert.String(m["background"]); err != nil {
 		return out, fmt.Errorf("background: %w", err)
@@ -296,12 +319,23 @@ func EncodeThemeVariant(v lib.ThemeVariant) map[string]any {
 	}
 }
 
-// DecodeThemeVariant reads a ThemeVariant from a Buzz map. A missing key reads as the zero value.
+// DecodeThemeVariant reads a ThemeVariant from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeThemeVariant(v any) (lib.ThemeVariant, error) {
 	var out lib.ThemeVariant
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"suffix", "theme"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Suffix, err = convert.String(m["suffix"]); err != nil {
 		return out, fmt.Errorf("suffix: %w", err)

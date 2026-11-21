@@ -11,13 +11,14 @@ import (
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
 	os "os"
+	slices "slices"
 )
 
 // Module binds github.com/egladman/magus/libs/termkit for Buzz.
 var Module = std.Module{
 	Name: "termkit",
 	Path: "termkit",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
 		{
 			Name:    "colorize",
@@ -246,14 +247,6 @@ var Module = std.Module{
 			Args:   []std.Arg{{Name: "rawMode"}},
 			Raises: true,
 			Impl:   ImplRawModeRestore,
-		},
-		{
-			Name:    "line_spans_copy",
-			Doc:     "SpansCopy returns this line's spans as a fresh slice, normalizing the Text+Style shorthand on the way.",
-			Args:    []std.Arg{{Name: "line"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
-			Impl:    ImplLineSpansCopy,
 		},
 		{
 			Name:   "reset_scroll_margins",
@@ -624,6 +617,16 @@ var Module = std.Module{
 			Impl:    ImplSystemProbe,
 		},
 	},
+	Objects: []std.Object{
+		{Name: "Line", Methods: []std.Method{
+			{
+				Name:    "spansCopy",
+				Doc:     "SpansCopy returns this line's spans as a fresh slice, normalizing the Text+Style shorthand on the way.",
+				Returns: []std.Ret{{}},
+				Impl:    ImplLineSpansCopy,
+			},
+		}},
+	},
 }
 
 // EncodeEvent is a Event as a Buzz map.
@@ -641,12 +644,23 @@ func EncodeEvent(v lib.Event) map[string]any {
 	}
 }
 
-// DecodeEvent reads a Event from a Buzz map. A missing key reads as the zero value.
+// DecodeEvent reads a Event from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeEvent(v any) (lib.Event, error) {
 	var out lib.Event
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"kind", "key", "rune", "button", "row", "col", "press", "motion", "clicks"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Kind, err = convert.IntAs[lib.EventKind](m["kind"]); err != nil {
 		return out, fmt.Errorf("kind: %w", err)
@@ -696,12 +710,23 @@ func EncodeLine(v lib.Line) map[string]any {
 	}
 }
 
-// DecodeLine reads a Line from a Buzz map. A missing key reads as the zero value.
+// DecodeLine reads a Line from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeLine(v any) (lib.Line, error) {
 	var out lib.Line
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"text", "style", "spans"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Text, err = convert.String(m["text"]); err != nil {
 		return out, fmt.Errorf("text: %w", err)
@@ -730,12 +755,23 @@ func EncodeSpan(v lib.Span) map[string]any {
 	}
 }
 
-// DecodeSpan reads a Span from a Buzz map. A missing key reads as the zero value.
+// DecodeSpan reads a Span from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeSpan(v any) (lib.Span, error) {
 	var out lib.Span
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"text", "style", "key"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Text, err = convert.String(m["text"]); err != nil {
 		return out, fmt.Errorf("text: %w", err)
@@ -1033,11 +1069,7 @@ func ImplRawModeRestore(ctx context.Context, rawMode int) error {
 }
 
 // ImplLineSpansCopy binds github.com/egladman/magus/libs/termkit.Line.SpansCopy.
-func ImplLineSpansCopy(ctx context.Context, line map[string]any) (any, error) {
-	recv, err := DecodeLine(line)
-	if err != nil {
-		return nil, err
-	}
+func ImplLineSpansCopy(ctx context.Context, recv lib.Line) (any, error) {
 	r0 := recv.SpansCopy()
 	return convert.EncodeList(r0, func(x lib.Span) any { return EncodeSpan(x) }), nil
 }

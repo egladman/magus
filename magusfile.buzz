@@ -1,6 +1,7 @@
 import "magus";
 import "./hack/magusfile/toolchain-policy" as policy;
 import "./hack/magusfile/drift" as drift;
+import "./hack/magusfile/library-bindings" as librarybindings;
 import "./hack/magusfile/run-golangci" as golangci;
 import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
@@ -1081,11 +1082,10 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Regenerates everything derived from the boundary registry: the runtime boundary list,
-// the Go-to-Buzz encoders, the Buzz-to-Go decoders, the provider ops, the spell
-// contract's signatures and the merge queue script's record mirrors. The TypeScript
-// forms are console's and docs' own types-generate.
+// Console and docs generate their own TypeScript boundary mirrors.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(termkit_bindings_generate);
+    ctx.readsFiles([".buzzgen.yaml"]);
     ctx.writesFiles(["internal/interp/bindings/gen/boundary_list.go",
         "internal/interp/bindings/gen/boundary_objects.go",
         "internal/interp/bindings/gen/boundary_ops.go",
@@ -1100,9 +1100,14 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "types", "-from", "internal/queue/provider/host.go"]);
 }
 
-// Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from
-// std.Module declarations. The exclusions keep gen/'s hand-written tests and
-// types_generate's files out of its outputs.
+// Boundary generation reflects over these library bindings.
+export fun termkit_bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["std/termkit/gen/**/*.go"]);
+    librarybindings\generate(ctx, args: args);
+}
+
+// Regenerates the Go host bindings from std.Module declarations.
+// The exclusions leave tests and types_generate's outputs with their owners.
 export fun buzz_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
@@ -1110,12 +1115,7 @@ export fun buzz_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
-        "!internal/interp/bindings/gen/boundary_*.go",
-        "std/termkit/gen/**/*.go"]);
-    // The termkit leaf packages compile into magus-utils, so they are written
-    // before the run that reads every module.
-    _ = proc\exec("go", ["run", "./cmd/magus-utils", "libmodules", "-dir", "libs/termkit",
-        "-outdir", "std/termkit/gen", "-import", "github.com/egladman/magus/std/termkit/gen"]);
+        "!internal/interp/bindings/gen/boundary_*.go"]);
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "bindings", "-all",
         "-outdir", "internal/interp/bindings/gen", "-pkg", "bindgen"]);
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "moduleset",
