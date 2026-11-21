@@ -204,7 +204,7 @@ func (s *VerdictRemedySuite) TestAReadThatRefreshedPrintsItsCauseAndNoRebuild() 
 	missing.IndexCause = cause
 	for _, ans := range []types.KnowledgeAnswer{stale, missing} {
 		got := renderVerdict(ans, "")
-		s.Contains(got, "  why: a refresh started in the background\n  fix: ask again once it lands\n")
+		s.Contains(got, "  why: a refresh started in the background\n  hint: ask again once it lands\n")
 		s.NotContains(got, "graph build")
 	}
 }

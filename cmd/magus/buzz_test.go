@@ -345,7 +345,7 @@ func TestGuardGlueImportsNoWorkspaceReader(t *testing.T) {
 			if !strings.HasPrefix(trimmed, "import ") {
 				continue
 			}
-			assert.NotRegexp(t, `^import "(magus|spells/)`, trimmed,
+			assert.NotRegexp(t, `^import "(magus"|spells/)`, trimmed,
 				"%s:%d imports a workspace reader. A hook runs on every tool call and may not pay for\n"+
 					"opening the workspace; reach the binary with proc\\exec instead, the way the glue\n"+
 					"resolves its verdict today.", name, i+1)

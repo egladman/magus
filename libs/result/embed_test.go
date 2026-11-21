@@ -69,16 +69,16 @@ func (s *ModuleSuite) TestCaughtPrefixesWhatItWasDoing() {
 }
 
 func (s *ModuleSuite) TestCaughtKeepsAThrownDiagnosticsFields() {
-	got := s.answer(`final d = result\Diagnostic{ code = "X1", message = "m", url = "u", fix = "f" };
+	got := s.answer(`final d = result\Diagnostic{ code = "X1", message = "m", url = "u", hint = "f" };
     final e = result\caught::<int>(d, doing: "doing").error!;
-    return "{e.code}|{e.message}|{e.url}|{e.fix}";`)
+    return "{e.code}|{e.message}|{e.url}|{e.hint}";`)
 	assert.Equal(s.T(), "X1|doing: m|u|f", got)
 }
 
 func (s *ModuleSuite) TestCaughtReadsAHostErrorsMapInsteadOfPrintingIt() {
-	got := s.answer(`final host: {str: any} = {"code": "MGS1", "message": "no such file", "fix": "create it"};
+	got := s.answer(`final host: {str: any} = {"code": "MGS1", "message": "no such file", "hint": "create it"};
     final e = result\caught::<int>(host).error!;
-    return "{e.code}|{e.message}|{e.url}|{e.fix}";`)
+    return "{e.code}|{e.message}|{e.url}|{e.hint}";`)
 	assert.Equal(s.T(), "MGS1|no such file||create it", got)
 }
 

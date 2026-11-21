@@ -192,7 +192,7 @@ func magusRooted(e ast.Node, member []string) bool {
 // magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
 // does, with no source the target could declare.
 func binaryAnswers() [][]string {
-	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
+	return [][]string{{"describe"}, {"harness"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
 }
 
 // BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
