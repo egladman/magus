@@ -12,6 +12,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -86,6 +88,7 @@ var inboundTypes = []inboundType{
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLeaseCheck(v) }},
 	{Name: "Lifecycle", Zero: spells.Lifecycle{}, Encode: func(v any) vm.Value { return ObjectLifecycle(v.(spells.Lifecycle)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLifecycle(v) }},
 	{Name: "Limits", Zero: types.Limits{}, Encode: func(v any) vm.Value { return ObjectLimits(v.(types.Limits)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLimits(v) }},
+	{Name: "Line", Zero: termkit.Line{}, Encode: func(v any) vm.Value { return ObjectTermkitLine(v.(termkit.Line), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTermkitLine(v) }},
 	{Name: "ManagedEntries", Zero: types.ManagedEntries{}, Encode: func(v any) vm.Value { return ObjectManagedEntries(v.(types.ManagedEntries)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeManagedEntries(v) }},
 	{Name: "Manifest", Zero: spells.Manifest{}, Encode: func(v any) vm.Value { return ObjectManifest(v.(spells.Manifest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeManifest(v) }},
 	{Name: "McpServer", Zero: types.McpServer{}, Encode: func(v any) vm.Value { return ObjectMcpServer(v.(types.McpServer), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMcpServer(v) }},
@@ -93,6 +96,7 @@ var inboundTypes = []inboundType{
 		return ObjectKnowledgeNeighborhoodOptions(v.(types.KnowledgeNeighborhoodOptions), ffi.EnumBacking)
 	}, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgeNeighborhoodOptions(v) }},
 	{Name: "Origin", Zero: job.Origin{}, Encode: func(v any) vm.Value { return ObjectJobOrigin(v.(job.Origin), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobOrigin(v) }},
+	{Name: "Pace", Zero: recorder.Pace{}, Encode: func(v any) vm.Value { return ObjectRecorderPace(v.(recorder.Pace), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRecorderPace(v) }},
 	{Name: "PatchOp", Zero: spells.PatchOp{}, Encode: func(v any) vm.Value { return ObjectPatchOp(v.(spells.PatchOp), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodePatchOp(v) }},
 	{Name: "Path", Zero: types.Path{}, Encode: func(v any) vm.Value { return ObjectPath(v.(types.Path)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodePath(v) }},
 	{Name: "PathOptions", Zero: types.KnowledgePathOptions{}, Encode: func(v any) vm.Value {
@@ -151,6 +155,7 @@ var inboundTypes = []inboundType{
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
 	{Name: "Setting", Zero: types.Setting{}, Encode: func(v any) vm.Value { return ObjectSetting(v.(types.Setting)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSetting(v) }},
 	{Name: "SkillsOptions", Zero: types.SkillsOptions{}, Encode: func(v any) vm.Value { return ObjectSkillsOptions(v.(types.SkillsOptions), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSkillsOptions(v) }},
+	{Name: "Span", Zero: termkit.Span{}, Encode: func(v any) vm.Value { return ObjectTermkitSpan(v.(termkit.Span)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTermkitSpan(v) }},
 	{Name: "Spec", Zero: imagetypes.Spec{}, Encode: func(v any) vm.Value { return ObjectImageSpec(v.(imagetypes.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSpec(v) }},
 	{Name: "Strings", Zero: types.Strings{}, Encode: func(v any) vm.Value { return ObjectStrings(v.(types.Strings)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStrings(v) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStubSyntax(v) }},

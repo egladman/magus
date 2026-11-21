@@ -44,6 +44,7 @@ var Modules = ffi.Set{
 	"platform": {Register: RegisterPlatform, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"proc":     {Register: RegisterProc},
 	"progress": {Register: RegisterProgress, Path: "termkit/progress"},
+	"recorder": {Register: RegisterRecorder, Path: "termkit/recorder"},
 	"screen":   {Register: RegisterScreen, Path: "termkit/screen"},
 	"semver":   {Register: RegisterSemver, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"sort":     {Register: RegisterSort, Capabilities: ffi.Capabilities(ffi.WASM)},

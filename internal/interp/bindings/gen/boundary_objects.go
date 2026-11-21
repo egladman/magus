@@ -10,6 +10,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -5899,6 +5901,22 @@ func ObjectLimits(v types.Limits) vm.Value {
 	return out
 }
 
+func ObjectTermkitSpan(v termkit.Span) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("text", vm.StringValue(v.Text))
+	out.MapSet("style", vm.StringValue(string(v.Style)))
+	out.MapSet("key", vm.StringValue(v.Key))
+	return out
+}
+
+func ObjectTermkitLine(v termkit.Line, enums ffi.EnumCases) vm.Value {
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = ObjectTermkitSpan(v.Spans[indexSpans])
+	}
+	return enums.Instance("Line", []string{"text", "style", "spans"}, []vm.Value{vm.StringValue(v.Text), vm.StringValue(string(v.Style)), vm.ListValue(itemsSpans)})
+}
+
 func ObjectManagedEntries(v types.ManagedEntries) vm.Value {
 	out := vm.NewMap()
 	itemsPath := make([]vm.Value, len(v.Path))
@@ -5952,6 +5970,10 @@ func ObjectMcpServer(v types.McpServer, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("register", vm.ListValue(itemsRegister))
 	return out
+}
+
+func ObjectRecorderPace(v recorder.Pace, enums ffi.EnumCases) vm.Value {
+	return enums.Instance("Pace", []string{"base", "perLine", "max", "last"}, []vm.Value{vm.FloatValue(float64(v.Base)), vm.FloatValue(float64(v.PerLine)), vm.FloatValue(float64(v.Max)), vm.FloatValue(float64(v.Last))})
 }
 
 func ObjectKnowledgePathOptions(v types.KnowledgePathOptions, enums ffi.EnumCases) vm.Value {

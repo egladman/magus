@@ -8,13 +8,14 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/termkit/gen/termkit"
 )
 
 // RegisterTermkit builds the "termkit" module map and returns it.
-// Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.
+// Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.
 func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -260,14 +261,6 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return vm.Null, nil
-	}))
-	m.MapSet("lineSpansCopy", vm.DirectValue("termkit.lineSpansCopy", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		line := ffi.AnyMap(bzArgs, 0)
-		ret0, err := termkit.ImplLineSpansCopy(ctx, line)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.AnyVal(ret0), nil
 	}))
 	m.MapSet("resetScrollMargins", vm.DirectValue("termkit.resetScrollMargins", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -685,6 +678,17 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("termkit__Line__spansCopy", vm.DirectValue("termkit.termkit__Line__spansCopy", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("termkit\\termkit__Line__spansCopy", "recv", bzArgs, 0, decode.DecodeTermkitLine)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := termkit.ImplLineSpansCopy(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.AnyVal(ret0), nil
 	}))
 	return m
 }

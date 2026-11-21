@@ -7,6 +7,16 @@
 version: v1alpha1
 module: magus
 packages:
+  github.com/egladman/magus/libs/termkit:
+    config: {module: ""}
+    types:
+      SGR:
+        config:
+          open: terminal control sequences can be composed at run time
+  github.com/egladman/magus/libs/termkit/recorder:
+    config: {module: ""}
+  github.com/egladman/magus/libs/termkit/screen:
+    config: {module: ""}
   github.com/egladman/magus/types/daemon:
     config: {module: ""}
   github.com/egladman/magus/types/diff:

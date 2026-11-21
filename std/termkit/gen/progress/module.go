@@ -20,7 +20,7 @@ import (
 var Module = std.Module{
 	Name: "progress",
 	Path: "termkit/progress",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
 		{
 			Name:    "bar",

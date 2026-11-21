@@ -21,6 +21,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -4053,6 +4055,55 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 	return out, nil
 }
 
+// DecodeTermkitLine decodes a Buzz Line, an object instance or a map, into a termkit.Line.
+func DecodeTermkitLine(v vm.Value) (termkit.Line, error) {
+	return decodeTermkitLine(v, "line")
+}
+
+func decodeTermkitLine(v vm.Value, path string) (termkit.Line, error) {
+	var out termkit.Line
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Line", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "text":
+			sText, err := decodeString(item, path+".text")
+			if err != nil {
+				return out, err
+			}
+			out.Text = sText
+		case "style":
+			sStyle, err := decodeString(item, path+".style")
+			if err != nil {
+				return out, err
+			}
+			out.Style = termkit.SGR(sStyle)
+		case "spans":
+			listSpans, err := decodeList(item, path+".spans", "[Span]")
+			if err != nil {
+				return out, err
+			}
+			if len(listSpans) > 0 {
+				itemsSpans := make([]termkit.Span, len(listSpans))
+				for indexSpans, itemSpans := range listSpans {
+					xSpansItem, err := decodeTermkitSpan(itemSpans, fmt.Sprintf("%s[%d]", path+".spans", indexSpans))
+					if err != nil {
+						return out, err
+					}
+					itemsSpans[indexSpans] = xSpansItem
+				}
+				out.Spans = itemsSpans
+			}
+		default:
+			return out, unknownMember(path, "Line", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeManagedEntries decodes a Buzz ManagedEntries, an object instance or a map, into a types.ManagedEntries.
 func DecodeManagedEntries(v vm.Value) (types.ManagedEntries, error) {
 	return decodeManagedEntries(v, "managedEntries")
@@ -4337,6 +4388,51 @@ func decodeJobOrigin(v vm.Value, path string) (job.Origin, error) {
 			out.Credential = xCredential
 		default:
 			return out, unknownMember(path, "Origin", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeRecorderPace decodes a Buzz Pace, an object instance or a map, into a recorder.Pace.
+func DecodeRecorderPace(v vm.Value) (recorder.Pace, error) {
+	return decodeRecorderPace(v, "pace")
+}
+
+func decodeRecorderPace(v vm.Value, path string) (recorder.Pace, error) {
+	var out recorder.Pace
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Pace", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "base":
+			nBase, err := decodeFloat(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = nBase
+		case "perLine":
+			nPerLine, err := decodeFloat(item, path+".perLine")
+			if err != nil {
+				return out, err
+			}
+			out.PerLine = nPerLine
+		case "max":
+			nMax, err := decodeFloat(item, path+".max")
+			if err != nil {
+				return out, err
+			}
+			out.Max = nMax
+		case "last":
+			nLast, err := decodeFloat(item, path+".last")
+			if err != nil {
+				return out, err
+			}
+			out.Last = nLast
+		default:
+			return out, unknownMember(path, "Pace", key)
 		}
 	}
 	return out, nil
@@ -7381,6 +7477,45 @@ func decodeSkillsOptions(v vm.Value, path string) (types.SkillsOptions, error) {
 			out.Form = types.SkillForm(sForm)
 		default:
 			return out, unknownMember(path, "SkillsOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeTermkitSpan decodes a Buzz Span, an object instance or a map, into a termkit.Span.
+func DecodeTermkitSpan(v vm.Value) (termkit.Span, error) {
+	return decodeTermkitSpan(v, "span")
+}
+
+func decodeTermkitSpan(v vm.Value, path string) (termkit.Span, error) {
+	var out termkit.Span
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Span", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "text":
+			sText, err := decodeString(item, path+".text")
+			if err != nil {
+				return out, err
+			}
+			out.Text = sText
+		case "style":
+			sStyle, err := decodeString(item, path+".style")
+			if err != nil {
+				return out, err
+			}
+			out.Style = termkit.SGR(sStyle)
+		case "key":
+			sKey, err := decodeString(item, path+".key")
+			if err != nil {
+				return out, err
+			}
+			out.Key = sKey
+		default:
+			return out, unknownMember(path, "Span", key)
 		}
 	}
 	return out, nil

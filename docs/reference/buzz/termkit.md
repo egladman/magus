@@ -8,7 +8,7 @@ tags: [termkit, module, stdlib, magusfile]
 
 # termkit
 
-Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.
+Bindings for the Go package github.com/egladman/magus/libs/termkit, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.
 
 > **Naming convention:** import the module under its bare name (`import "termkit"`), reach members with a backslash, and call methods in `camelCase`: `termkit\someMethod`.
 
@@ -357,18 +357,6 @@ Restore puts the terminal back the way MakeRaw found it.
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `rawMode` | `int` |          |             |
-
-### lineSpansCopy
-
-SpansCopy returns this line's spans as a fresh slice, normalizing the Text+Style shorthand on the way.
-
-**Signature:** `termkit\lineSpansCopy(line) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
-
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `line`    | `map[string]any` |          |             |
-
-**Returns:** any
 
 ### resetScrollMargins
 

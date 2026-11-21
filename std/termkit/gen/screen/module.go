@@ -10,14 +10,30 @@ import (
 	lib "github.com/egladman/magus/libs/termkit/screen"
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
+	slices "slices"
 )
 
 // Module binds github.com/egladman/magus/libs/termkit/screen for Buzz.
 var Module = std.Module{
 	Name: "screen",
 	Path: "termkit/screen",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
+		{
+			Name:    "variant_path",
+			Doc:     "VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.",
+			Args:    []std.Arg{{Name: "path"}, {Name: "suffix"}},
+			Returns: []std.Ret{{}},
+			Impl:    ImplVariantPath,
+		},
+		{
+			Name:    "animate",
+			Doc:     "Animate renders a sequence of frames as one self-contained animated SVG.",
+			Args:    []std.Arg{{Name: "frames"}, {Name: "holds"}, {Name: "opts"}},
+			Returns: []std.Ret{{}},
+			Raises:  true,
+			Impl:    ImplAnimate,
+		},
 		{
 			Name:    "new",
 			Doc:     "New returns a Terminal of the given size, cursor at the top left and the whole grid scrollable.",
@@ -146,21 +162,6 @@ var Module = std.Module{
 			Impl:    ImplTerminalSVG,
 		},
 		{
-			Name:    "variant_path",
-			Doc:     "VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.",
-			Args:    []std.Arg{{Name: "path"}, {Name: "suffix"}},
-			Returns: []std.Ret{{}},
-			Impl:    ImplVariantPath,
-		},
-		{
-			Name:    "animate",
-			Doc:     "Animate renders a sequence of frames as one self-contained animated SVG.",
-			Args:    []std.Arg{{Name: "frames"}, {Name: "holds"}, {Name: "opts"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
-			Impl:    ImplAnimate,
-		},
-		{
 			Name:    "dark_theme",
 			Doc:     "DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI primaries, which are harsh at small sizes on a page.",
 			Returns: []std.Ret{{}},
@@ -195,12 +196,23 @@ func EncodeSVGOptions(v lib.SVGOptions) map[string]any {
 	}
 }
 
-// DecodeSVGOptions reads a SVGOptions from a Buzz map. A missing key reads as the zero value.
+// DecodeSVGOptions reads a SVGOptions from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeSVGOptions(v any) (lib.SVGOptions, error) {
 	var out lib.SVGOptions
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"fontFamily", "fontSize", "cellWidth", "lineHeight", "baseline", "pad", "radius", "theme"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.FontFamily, err = convert.String(m["fontFamily"]); err != nil {
 		return out, fmt.Errorf("fontFamily: %w", err)
@@ -248,12 +260,23 @@ func EncodeTheme(v lib.Theme) map[string]any {
 	}
 }
 
-// DecodeTheme reads a Theme from a Buzz map. A missing key reads as the zero value.
+// DecodeTheme reads a Theme from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeTheme(v any) (lib.Theme, error) {
 	var out lib.Theme
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"background", "foreground", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "black"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Background, err = convert.String(m["background"]); err != nil {
 		return out, fmt.Errorf("background: %w", err)
@@ -296,12 +319,23 @@ func EncodeThemeVariant(v lib.ThemeVariant) map[string]any {
 	}
 }
 
-// DecodeThemeVariant reads a ThemeVariant from a Buzz map. A missing key reads as the zero value.
+// DecodeThemeVariant reads a ThemeVariant from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeThemeVariant(v any) (lib.ThemeVariant, error) {
 	var out lib.ThemeVariant
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"suffix", "theme"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Suffix, err = convert.String(m["suffix"]); err != nil {
 		return out, fmt.Errorf("suffix: %w", err)
@@ -310,6 +344,33 @@ func DecodeThemeVariant(v any) (lib.ThemeVariant, error) {
 		return out, fmt.Errorf("theme: %w", err)
 	}
 	return out, nil
+}
+
+// ImplVariantPath binds github.com/egladman/magus/libs/termkit/screen.VariantPath.
+func ImplVariantPath(ctx context.Context, aPath string, aSuffix string) (string, error) {
+	r0 := lib.VariantPath(aPath, aSuffix)
+	return r0, nil
+}
+
+// ImplAnimate binds github.com/egladman/magus/libs/termkit/screen.Animate.
+func ImplAnimate(ctx context.Context, aFrames any, aHolds any, aOpts map[string]any) (string, error) {
+	vFrames, err := convert.DecodeSlice(aFrames, func(x any) (*lib.Terminal, error) { return convert.Handle(TerminalHandles, x) })
+	if err != nil {
+		return "", fmt.Errorf("frames: %w", err)
+	}
+	vHolds, err := convert.DecodeSlice(aHolds, func(x any) (float64, error) { return convert.Float(x) })
+	if err != nil {
+		return "", fmt.Errorf("holds: %w", err)
+	}
+	vOpts, err := DecodeSVGOptions(aOpts)
+	if err != nil {
+		return "", fmt.Errorf("opts: %w", err)
+	}
+	r0, err := lib.Animate(vFrames, vHolds, vOpts)
+	if err != nil {
+		return "", err
+	}
+	return r0, nil
 }
 
 // ImplNew binds github.com/egladman/magus/libs/termkit/screen.New.
@@ -472,33 +533,6 @@ func ImplTerminalSVG(ctx context.Context, terminal int, aOpts map[string]any) (s
 		return "", fmt.Errorf("opts: %w", err)
 	}
 	r0 := recv.SVG(vOpts)
-	return r0, nil
-}
-
-// ImplVariantPath binds github.com/egladman/magus/libs/termkit/screen.VariantPath.
-func ImplVariantPath(ctx context.Context, aPath string, aSuffix string) (string, error) {
-	r0 := lib.VariantPath(aPath, aSuffix)
-	return r0, nil
-}
-
-// ImplAnimate binds github.com/egladman/magus/libs/termkit/screen.Animate.
-func ImplAnimate(ctx context.Context, aFrames any, aHolds any, aOpts map[string]any) (string, error) {
-	vFrames, err := convert.DecodeSlice(aFrames, func(x any) (*lib.Terminal, error) { return convert.Handle(TerminalHandles, x) })
-	if err != nil {
-		return "", fmt.Errorf("frames: %w", err)
-	}
-	vHolds, err := convert.DecodeSlice(aHolds, func(x any) (float64, error) { return convert.Float(x) })
-	if err != nil {
-		return "", fmt.Errorf("holds: %w", err)
-	}
-	vOpts, err := DecodeSVGOptions(aOpts)
-	if err != nil {
-		return "", fmt.Errorf("opts: %w", err)
-	}
-	r0, err := lib.Animate(vFrames, vHolds, vOpts)
-	if err != nil {
-		return "", err
-	}
 	return r0, nil
 }
 

@@ -8,11 +8,38 @@ tags: [screen, module, stdlib, magusfile]
 
 # screen
 
-Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.
+Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.
 
 > **Naming convention:** import the module under its bare name (`import "screen"`), reach members with a backslash, and call methods in `camelCase`: `screen\someMethod`.
 
 ## Methods
+
+### variantPath
+
+VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.
+
+**Signature:** `screen\variantPath(path, suffix) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
+| `suffix`  | `string` |          |             |
+
+**Returns:** string
+
+### animate
+
+Animate renders a sequence of frames as one self-contained animated SVG.
+
+**Signature:** `screen\animate(frames, holds, opts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `frames`  | `any`            |          |             |
+| `holds`   | `any`            |          |             |
+| `opts`    | `map[string]any` |          |             |
+
+**Returns:** string
 
 ### new
 
@@ -211,33 +238,6 @@ SVG renders what the terminal currently shows as a standalone SVG picture.
 | ---------- | ---------------- | -------- | ----------- |
 | `terminal` | `int`            |          |             |
 | `opts`     | `map[string]any` |          |             |
-
-**Returns:** string
-
-### variantPath
-
-VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.
-
-**Signature:** `screen\variantPath(path, suffix) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
-
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `path`    | `string` |          |             |
-| `suffix`  | `string` |          |             |
-
-**Returns:** string
-
-### animate
-
-Animate renders a sequence of frames as one self-contained animated SVG.
-
-**Signature:** `screen\animate(frames, holds, opts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
-
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `frames`  | `any`            |          |             |
-| `holds`   | `any`            |          |             |
-| `opts`    | `map[string]any` |          |             |
 
 **Returns:** string
 
