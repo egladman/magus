@@ -105,7 +105,7 @@ func readDiagnostic(v vm.Value) (types.Diagnostic, error) {
 			d.Message = item.AsString()
 		case "url":
 			d.URL = item.AsString()
-		case "fix":
+		case "hint":
 			d.Hint = item.AsString()
 		default:
 			return d, fmt.Errorf("error: Diagnostic has no member %q", key)
