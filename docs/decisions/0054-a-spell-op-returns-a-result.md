@@ -7,7 +7,7 @@ status: accepted
 date: 2026-11-19
 ---
 
-# ADR 0054: a spell op returns a Result
+# ADR 0054: a spell op returns a `Result`
 
 ## Context
 

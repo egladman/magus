@@ -35,14 +35,14 @@ fun names(said: [str]) > [str] {
 test "a build path whose every step runs past its bound names each one and still finishes" {
     final said = mut [<str>];
     final did = checkout\placeBinary(ticking(said, tick: 200000.0), dir: "/c", install: "docs");
-    assert\equal(names(said), want: ["server stop", "go build", "ls jobs", "symbol index seed", "dependency install", "harness install"], message: "slow steps");
+    assert\equal(names(said), want: ["server stop", "go build", "harness install", "ls jobs", "symbol index seed", "dependency install"], message: "slow steps");
     assert\equal(did.len(), want: 5, message: "never refuses");
 }
 
 test "verify-ready names its slow graph, digest, proofread, pool and skill steps" {
     final said = mut [<str>];
     _ = checkout\verifyReady(ticking(said, tick: 500000.0), dir: "/c");
-    assert\equal(names(said), want: ["server stop", "go build", "ls jobs", "server stop --pools", "skill cleanup", "dependency install", "harness install", "graph build", "symbol digest", "proofread build"], message: "slow steps");
+    assert\equal(names(said), want: ["server stop", "go build", "harness install", "ls jobs", "server stop --pools", "skill cleanup", "dependency install", "graph build", "symbol digest", "proofread build"], message: "slow steps");
 }
 
 test "steps within their bounds say nothing of being slow" {
