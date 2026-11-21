@@ -34,16 +34,17 @@ Considerations is optional and holds three bullets at most: the trade-off taken,
 constraint, the alternative set aside, a risk. Never a reading order ("Start with X");
 name a file only with why it matters.
 
-When this change lays groundwork, a `## Later` section names the follow-up pull requests,
-one line each. It's the one section that may speak in the future tense, and it holds no
-tasks.
+Use `## Next` for substantive work that follows this change.
+Name a consumer to migrate or an API to extend. It may use the future tense.
+Omit this section when there is no meaningful follow-up.
 
 Add `## Tested` only when someone checked the change by hand, beyond the test targets.
 List the commands they ran in a fenced block, and what they saw. Leave it out otherwise;
 it is never a default section.
 
-End with `## Next` when work is left: `- [ ]` tasks and nothing else, one per thing not
-done or not checked. A person or an agent ticks them without touching the prose.
+Next is not a checklist for finishing the current pull request. Do not fill it with
+checking CI, requesting review, waiting for approval or merging. State a material
+limitation in the implementation description or Considerations instead.
 
 The lead is the one place for an opinion ("I'd rather pin it now"). Your own words carry
 your voice, so draft the lead from what you said about the change.
@@ -68,8 +69,8 @@ about what's rough. Contractions are fine. Watch for these tells:
 - puffery ("robust", "seamless", "significantly")
 - bullets that repeat the diff line by line
 
-A claim covers what you measured. If you ran it, give the number. If you didn't, make it
-a task under Next instead of writing "should fix".
+A claim covers what you measured. If you ran it, give the number. If you did not verify
+a material claim, say what remains unknown beside that claim.
 
 ## Review comments
 

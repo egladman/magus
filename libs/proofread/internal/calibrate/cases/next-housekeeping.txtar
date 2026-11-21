@@ -1,0 +1,33 @@
+A follow-up section describes work after the change, rather than administering the current pull request.
+-- hit/change-description whole --
+feat: share the recorder
+
+Move capture rendering into the shared library so both callers produce the same frames.
+
+## Next
+
+- Review GitHub checks after the prerequisite repair lands.
+-- hit/change-description whole --
+feat: share the recorder
+
+Move capture rendering into the shared library so both callers produce the same frames.
+
+## Next
+
+- Obtain review approval.
+-- pass/change-description whole --
+feat: share the recorder
+
+Move capture rendering into the shared library so both callers produce the same frames.
+
+## Next
+
+- Extend the generator with typed record arguments and returns.
+-- pass/change-description whole --
+feat: share the recorder
+
+Move capture rendering into the shared library so both callers produce the same frames.
+
+## Next
+
+- Add CI coverage for a Windows backend.

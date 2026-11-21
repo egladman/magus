@@ -28,6 +28,13 @@ magus\project({
 
 export fun install(ctx: magus\Context, args: [str]) > void !> any { go["go-mod-download"](ctx); }
 
+export fun rule_pins_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["testdata/kind-rules.jsonl", "internal/calibrate/testdata/case-findings.jsonl"]);
+    go["go-test"](ctx.withEnv({"KIND_PIN_UPDATE": "1", "CASE_PIN_UPDATE": "1"}),
+        {"args": ["-count=1", "-run", "^TestEveryBuiltInKindJudgesItsPinnedRules$|^TestEveryCaseJudgesAsPinned$",
+                    ".", "./internal/calibrate"]});
+}
+
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final replaced = gomod\replaceWorkspaceModules(ctx, go, "libs/proofread");
