@@ -1425,7 +1425,7 @@ func opSymbol(op OpCode) string {
 
 // execCold runs the opcodes deliberately kept out of Exec's switch — the
 // bitwise family — reached through the switch's existing default arm. See the
-// comment on OpBAnd in opcode.go for why they have no case of their own.
+// comment on OpBAnd in op_code.go for why they have no case of their own.
 //
 //go:noinline
 func (vm *VM) execCold(op OpCode) error {
