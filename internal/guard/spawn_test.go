@@ -218,6 +218,20 @@ func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
 				Child: "audit_guard", Spawn: spawnFields{Name: "audit_guard"},
 			},
 		},
+		"v2 job on first message line": {
+			`{"task_name":"audit_guard","message":"orchestrator/review audit-guard\nAudit internal/guard."}`,
+			hookRequest{
+				Value: "orchestrator/review audit-guard\nAudit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "audit_guard", Spawn: spawnFields{Name: "audit_guard", Description: "orchestrator/review audit-guard"},
+			},
+		},
+		"v2 explicit title wins": {
+			`{"task_name":"job__root__review__audit_guard","message":"root/review other-job\nAudit internal/guard.","description":"root/review explicit"}`,
+			hookRequest{
+				Value: "root/review other-job\nAudit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "root/review explicit", Spawn: spawnFields{Name: "job__root__review__audit_guard", Description: "root/review explicit"},
+			},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req, ok := decodeTestEnvelope(t, fmt.Sprintf(envelope, tc.input))
@@ -422,8 +436,8 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "codex"})
 	}
 
-	spawn := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "spawn_agent",
-		"tool_input": map[string]any{"message": "gAAAAencrypted", "task_name": "worker", "agent_type": "default", "description": "orchestrator/impl guard-facts"}})
+	spawn := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "collaborationspawn_agent",
+		"tool_input": map[string]any{"message": "gAAAAencrypted", "task_name": "job__orchestrator__impl__guard_facts", "agent_type": "default"}})
 	require.NotEqual(t, verdict.Deny, spawn.Decision, spawn.Reason)
 	codex(map[string]any{"hook_event_name": "SubagentStart", "agent_id": "019e-child"})
 
