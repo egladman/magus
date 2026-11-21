@@ -52,8 +52,8 @@ func CallOp[Req, Resp any](ctx context.Context, drv spells.Driver, op bindgen.Pr
 	if err != nil {
 		return resp, true, fmt.Errorf("%w: spell %q: %s: %w", errMalformedAnswer, drv.Name(), op.Name, err)
 	}
-	if failure != nil {
-		return resp, true, fmt.Errorf("spell %q: %s: %w", drv.Name(), op.Name, failure)
+	if failure.Message != "" {
+		return resp, true, fmt.Errorf("spell %q: %s: %w", drv.Name(), op.Name, diagnosticError(failure))
 	}
 	if resp, err = op.Decode(answer); err != nil {
 		return resp, true, fmt.Errorf("%w: spell %q: %w", errMalformedAnswer, drv.Name(), err)
@@ -63,26 +63,26 @@ func CallOp[Req, Resp any](ctx context.Context, drv spells.Driver, op bindgen.Pr
 
 // readResult opens rv when it is a result\Result.
 // Any other rv is the answer of an op that cannot fail.
-func readResult(rv vm.Value) (answer vm.Value, failure error, err error) {
+func readResult(rv vm.Value) (answer vm.Value, failure types.Diagnostic, err error) {
 	if rv.ObjectTypeName() != "Result" {
-		return rv, nil, nil
+		return rv, failure, nil
 	}
 	fields, ok := rv.MapView()
 	if !ok {
-		return vm.Null, nil, errors.New("a Result that is not an object")
+		return vm.Null, failure, errors.New("a Result that is not an object")
 	}
 	if errValue, _ := fields.MapGet("error"); !errValue.IsNull() {
 		d, err := readDiagnostic(errValue)
 		if err != nil {
-			return vm.Null, nil, err
+			return vm.Null, failure, err
 		}
-		return vm.Null, diagnosticError(d), nil
+		return vm.Null, d, nil
 	}
 	value, _ := fields.MapGet("value")
 	if value.IsNull() {
-		return vm.Null, nil, errors.New("the Result carries neither a value nor an error")
+		return vm.Null, failure, errors.New("the Result carries neither a value nor an error")
 	}
-	return value, nil, nil
+	return value, failure, nil
 }
 
 // readDiagnostic reads a Result's error.
