@@ -8,7 +8,7 @@ tags: [pick, module, stdlib, magusfile]
 
 # pick
 
-Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.
+Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.
 
 > **Naming convention:** import the module under its bare name (`import "pick"`), reach members with a backslash, and call methods in `camelCase`: `pick\someMethod`.
 
