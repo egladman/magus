@@ -7,7 +7,7 @@ status: accepted (Diagnostic module name open)
 date: 2026-11-19
 ---
 
-# ADR 0055: a Buzz Result names its error type
+# ADR 0055: a Buzz `Result` names its error type
 
 ## Context
 
@@ -30,7 +30,7 @@ Result names its error type: `result\Result::<T, E>`.
 
 The forces, measured at `0ef0dd64a`. The counts below exclude `docs/`, Markdown and
 `testdata/`. The method is a `git grep -o` over the tree with those paths excluded; a
-recount at another base will move them.
+recount at another base moves them.
 
 - `.value!` force-unwraps: 1,972.
 - Reads of `.error` against `null` (`!= null` or `== null`): 657.
@@ -104,7 +104,7 @@ export fun ok::<T, E>(value: T) > Result::<T, E>
 export fun fail::<T, E>(error: E) > Result::<T, E>
 ```
 
-### Where Diagnostic and its helpers go
+### Where `Diagnostic` and its helpers go
 
 > Superseded by the 2026-11-19 amendment: `Diagnostic` is renamed `Error` and stays in the std
 > `result` module, with `fail` and `caught`. Nothing moves to `magus/`. The `magus/diagnostic`
@@ -124,7 +124,7 @@ throughout so the text reads cleanly, and the name is an open question below.
 
 The std `result` module keeps `Result::<T, E>`, the methods and the generic `ok` and `fail`.
 
-### What CallOp reads
+### What `CallOp` reads
 
 > Partly superseded by the 2026-11-19 amendment: the boundary's error type is `Error` from
 > `result`, not `magus/diagnostic.Diagnostic`. The reader and the refusal at load stand.
@@ -136,7 +136,7 @@ error type: `magus/diagnostic.Diagnostic`. The reader is unchanged for it:
 
 Any other `E` is refused at load, not read at run time. `checkContract` already refuses an op
 that declares `!>` (MGS1051); the same check refuses an op whose declared `Result` names a
-type other than `Diagnostic`, with a new code the implementation will assign. Refusing at load
+type other than `Diagnostic`, with a new code assigned during implementation. Refusing at load
 matches the rest of the contract: the op's signature is the statement, read from the source,
 so the check never depends on a default the checker does not enforce.
 
@@ -189,7 +189,7 @@ the method that states what the branch does:
 There is no `unwrap` method. A method that raised on an error would reintroduce a raise through
 a host call, which ADR 0054 refused.
 
-### The unread-Result lint
+### The unread-`Result` lint
 
 > Extended by the 2026-11-19 amendment, which adds four lints beside this one.
 
@@ -262,7 +262,7 @@ An alias would give the common case a short name.
 - Evidence: the 2026-11-19 probe.
 - Reopen when: gopherbuzz accepts a generic alias.
 
-### Keep `Result::<T>` with a fixed Diagnostic error
+### Keep `Result::<T>` with a fixed `Diagnostic` error
 
 Nothing changes. Every error is a Diagnostic, and a script that needs another shape wraps it.
 
@@ -305,8 +305,7 @@ Nothing changes. Every error is a Diagnostic, and a script that needs another sh
 - **The `.value!` migration rule.** The record covers the three shapes that dominate. A site that
   matches none of them is a case-by-case edit, and the codemod does not touch it.
 - **The counts.** This record quotes the counts above with their method. The 2,124 figure from the
-  probe uses a different sample. A recount at the base the codemod runs on will decide which the
-  changelog cites.
+  probe uses a different sample. The changelog count comes from a recount at the codemod's base.
 
 ## Amendments
 
