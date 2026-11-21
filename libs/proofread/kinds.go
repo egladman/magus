@@ -211,7 +211,7 @@ var builtinKinds = []KindSpec{
 			Format: FormatMarkdown, Titled: true, Headings: true, Sections: true, Quotes: true,
 		},
 		Rules: rules(
-			deny(RuleLeadContext, RuleCondescension, RuleChatbot, RuleBuzzword, RuleVague, RuleCloser,
+			deny(RuleLeadContext, RuleNextHousekeeping, RuleCondescension, RuleChatbot, RuleBuzzword, RuleVague, RuleCloser,
 				RuleSuppressionUnused, RuleGrade),
 			advise(RuleFiller, RuleReplyVoice, RuleHedge, RuleWordy, RuleBlame, RuleVerdict, RuleAbsolute, RuleIntent,
 				RuleCredit, RuleClaim, RuleSignpost, RuleLeak, RuleBuzzwordWeak, RuleContrast, RuleIngTail, RuleStaccato,

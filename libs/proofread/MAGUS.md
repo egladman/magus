@@ -9,6 +9,7 @@ Query: `magus query project=libs/proofread`
 | Target               | What it does                                                                                                                           |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `install`            |                                                                                                                                        |
+| `rule-pins-generate` |                                                                                                                                        |
 | `generate`           | Regenerates MAGUS.md and fails on drift.                                                                                               |
 | `wordclass-generate` | Trains the word-class tagger's model on UD English EWT, fetched by a pinned digest, and writes the test split its accuracy test reads. |
 | `format`             |                                                                                                                                        |

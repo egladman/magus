@@ -306,7 +306,7 @@ func isHouse(r Rule) bool {
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, uniformChecks,
-	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks)
+	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks, nextChecks)
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, reads: []Format{FormatMessage}, judge: messageLength},
