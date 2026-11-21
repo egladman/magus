@@ -549,6 +549,8 @@ var modules = []Module{
 		Name: "screen",
 		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
 		Methods: []Method{
+			{Name: "variant_path", Doc: "VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.", Sig: "screen\\variantPath(path, suffix) -> string"},
+			{Name: "animate", Doc: "Animate renders a sequence of frames as one self-contained animated SVG.", Sig: "screen\\animate(frames, holds, opts) -> string"},
 			{Name: "new", Doc: "New returns a Terminal of the given size, cursor at the top left and the whole grid scrollable.", Sig: "screen\\new(width, height) -> int"},
 			{Name: "terminal_fd", Doc: "Fd and Write let a test hand a Terminal to code that expects one, so it drives the real code path.", Sig: "screen\\terminalFd(terminal) -> int"},
 			{Name: "terminal_write", Doc: "Calls Terminal.Write.", Sig: "screen\\terminalWrite(terminal, p) -> int"},
@@ -565,8 +567,6 @@ var modules = []Module{
 			{Name: "terminal_find_row", Doc: "FindRow returns the 1-based row whose text contains substr, or 0.", Sig: "screen\\terminalFindRow(terminal, substr) -> int"},
 			{Name: "terminal_trailing_space_rows", Doc: "TrailingSpaceRows returns the 1-based rows whose last written cell is a space.", Sig: "screen\\terminalTrailingSpaceRows(terminal) -> any"},
 			{Name: "terminal_svg", Doc: "SVG renders what the terminal currently shows as a standalone SVG picture.", Sig: "screen\\terminalSvg(terminal, opts) -> string"},
-			{Name: "variant_path", Doc: "VariantPath names the file one variant of a picture is written to, given the unsuffixed name and the variant's suffix.", Sig: "screen\\variantPath(path, suffix) -> string"},
-			{Name: "animate", Doc: "Animate renders a sequence of frames as one self-contained animated SVG.", Sig: "screen\\animate(frames, holds, opts) -> string"},
 			{Name: "dark_theme", Doc: "DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI primaries, which are harsh at small sizes on a page.", Sig: "screen\\darkTheme() -> map[string]any"},
 			{Name: "light_theme", Doc: "LightTheme renders on a page that is not dark.", Sig: "screen\\lightTheme() -> map[string]any"},
 			{Name: "theme_variants", Doc: "ThemeVariants is every palette a committed picture ships in.", Sig: "screen\\themeVariants() -> any"},
