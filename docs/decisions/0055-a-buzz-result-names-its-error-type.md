@@ -83,13 +83,13 @@ not keep (see the probe above), so every signature and every constructor names `
 
 Methods on the object replace the reads that `.value!` and `.error` did by hand:
 
-| method | signature | returns |
-| --- | --- | --- |
-| `ok` | `fun ok() > T?` | the value when there is no error, otherwise null |
-| `orElse` | `fun orElse(fallback: T) > T` | the value, or `fallback` when there is an error |
-| `map` | `fun map::<U>(fn: fun (value: T) > U) > Result::<U, E>` | a Result of `fn` applied to the value, the error passed through |
-| `then` | `fun then::<U>(fn: fun (value: T) > Result::<U, E>) > Result::<U, E>` | `fn`'s Result when there is a value, the error passed through |
-| `mapError` | `fun mapError::<F>(fn: fun (error: E) > F) > Result::<T, F>` | the value passed through, `fn` applied to the error |
+| method     | signature                                                             | returns                                                         |
+| ---------- | --------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `ok`       | `fun ok() > T?`                                                       | the value when there is no error, otherwise null                |
+| `orElse`   | `fun orElse(fallback: T) > T`                                         | the value, or `fallback` when there is an error                 |
+| `map`      | `fun map::<U>(fn: fun (value: T) > U) > Result::<U, E>`               | a Result of `fn` applied to the value, the error passed through |
+| `then`     | `fun then::<U>(fn: fun (value: T) > Result::<U, E>) > Result::<U, E>` | `fn`'s Result when there is a value, the error passed through   |
+| `mapError` | `fun mapError::<F>(fn: fun (error: E) > F) > Result::<T, F>`          | the value passed through, `fn` applied to the error             |
 
 `ok` is a method and also a module function (`result\ok`). A dot reaches a value and a
 backslash reaches a module (see the conventions page on Buzz syntax), so both names stay.
