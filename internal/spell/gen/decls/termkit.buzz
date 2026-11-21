@@ -6,6 +6,24 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object Span {
+    text: str = "",
+    style: str = "",
+    key: str = "",
+}
+
+export object Line {
+    text: str = "",
+    style: str = "",
+    spans: [Span] = [],
+
+    fun spansCopy() > any {
+        return termkit__Line__spansCopy(this);
+    }
+}
+
+extern fun termkit__Line__spansCopy(recv: Line) > any;
+
 export extern fun canRender(p: int) > bool !> any;
 export extern fun captureProbe(width: int, height: int) > int;
 export extern fun clearScreen() > void !> any;
@@ -51,7 +69,6 @@ export extern fun leaseRelease(lease: int) > void !> any;
 export extern fun leaseRows(lease: int) > int !> any;
 export extern fun leaseSet(lease: int, rows: any) > bool !> any;
 export extern fun leaseWidth(lease: int) > int !> any;
-export extern fun lineSpansCopy(line: {str: any}) > any !> any;
 export extern fun makeRaw(fd: int) > int !> any;
 export extern fun mouseLeft() > int;
 export extern fun mouseMiddle() > int;

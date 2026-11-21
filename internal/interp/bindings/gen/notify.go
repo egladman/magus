@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterNotify builds the "notify" module map and returns it.
-// Bindings for the Go package github.com/egladman/magus/libs/termkit/notify, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.
+// Bindings for the Go package github.com/egladman/magus/libs/termkit/notify, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.
 func RegisterNotify(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess

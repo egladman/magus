@@ -248,6 +248,7 @@ func (s *LibModulesSuite) TestBuzzModulesMirrorTheGoImportPaths() {
 		"github.com/egladman/magus/libs/termkit/notify":   "termkit/notify",
 		"github.com/egladman/magus/libs/termkit/pick":     "termkit/pick",
 		"github.com/egladman/magus/libs/termkit/progress": "termkit/progress",
+		"github.com/egladman/magus/libs/termkit/recorder": "termkit/recorder",
 		"github.com/egladman/magus/libs/termkit/screen":   "termkit/screen",
 	}, paths)
 }
@@ -268,15 +269,17 @@ func (s *LibModulesSuite) TestInternalPackagesAreNotBound() {
 	s.Empty(lib.gaps())
 }
 
-func (s *LibModulesSuite) TestARecordMethodTakesTheRecordAsAMap() {
+func (s *LibModulesSuite) TestARecordMethodBelongsToItsObject() {
 	lib, err := loadLib(s.writeLib("package kit\n\ntype Pair struct{ A, B string }\n\nfunc (p Pair) Join() string { return p.A + p.B }\n"), termkitGen)
 	s.Require().NoError(err)
 	src, err := lib.emitPackage(lib.pkgs[0])
 	s.Require().NoError(err)
-	s.Regexp(`Name:\s+"pair_join"`, string(src))
-	s.Contains(string(src), `{Name: "pair"}`)
-	s.Contains(string(src), "pair map[string]any")
-	s.Contains(string(src), "func DecodePair(v any) (lib.Pair, error)")
+	s.Contains(string(src), "Objects: []std.Object{")
+	s.Regexp(`Name:\s+"Pair"`, string(src))
+	s.Regexp(`Name:\s+"join"`, string(src))
+	s.Contains(string(src), "recv lib.Pair")
+	s.NotContains(string(src), `Name: "pair"`)
+	s.NotContains(string(src), `Name: "pair_join"`)
 }
 
 func (s *LibModulesSuite) TestAStatefulTypeCrossesAsAHandle() {

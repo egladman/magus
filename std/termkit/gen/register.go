@@ -10,6 +10,7 @@ import (
 	gennotify "github.com/egladman/magus/std/termkit/gen/notify"
 	genpick "github.com/egladman/magus/std/termkit/gen/pick"
 	genprogress "github.com/egladman/magus/std/termkit/gen/progress"
+	genrecorder "github.com/egladman/magus/std/termkit/gen/recorder"
 	genscreen "github.com/egladman/magus/std/termkit/gen/screen"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
 )
@@ -22,6 +23,7 @@ func Modules() []std.Module {
 		gennotify.Module,
 		genpick.Module,
 		genprogress.Module,
+		genrecorder.Module,
 		genscreen.Module,
 	}
 }

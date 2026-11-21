@@ -12,13 +12,14 @@ import (
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
+	slices "slices"
 )
 
 // Module binds github.com/egladman/magus/libs/termkit/layout for Buzz.
 var Module = std.Module{
 	Name: "layout",
 	Path: "termkit/layout",
-	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/layout, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
+	Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/layout, generated from its exported API. A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.",
 	Methods: []std.Method{
 		{
 			Name:    "cols",
@@ -94,12 +95,23 @@ func EncodeHint(v lib.Hint) map[string]any {
 	}
 }
 
-// DecodeHint reads a Hint from a Buzz map. A missing key reads as the zero value.
+// DecodeHint reads a Hint from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeHint(v any) (lib.Hint, error) {
 	var out lib.Hint
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"text", "key"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Text, err = convert.String(m["text"]); err != nil {
 		return out, fmt.Errorf("text: %w", err)
@@ -119,12 +131,23 @@ func EncodeRow(v lib.Row) map[string]any {
 	}
 }
 
-// DecodeRow reads a Row from a Buzz map. A missing key reads as the zero value.
+// DecodeRow reads a Row from a Buzz map. Unknown keys are refused.
+// A missing key reads as the zero value.
 func DecodeRow(v any) (lib.Row, error) {
 	var out lib.Row
 	m, err := convert.Map(v)
 	if err != nil {
 		return out, err
+	}
+	var unknown []string
+	for key := range m {
+		if !slices.Contains([]string{"label", "meta", "selected"}, key) {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		return out, fmt.Errorf("unknown field %q", unknown[0])
 	}
 	if out.Label, err = convert.DecodeSlice(m["label"], func(x any) (libtermkit.Span, error) { return gentermkit.DecodeSpan(x) }); err != nil {
 		return out, fmt.Errorf("label: %w", err)

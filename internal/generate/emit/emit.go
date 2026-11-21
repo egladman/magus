@@ -736,6 +736,7 @@ type moduleEmitter struct {
 	body    bytes.Buffer
 	imports map[string]string
 	methods []string
+	objects map[string][]string
 }
 
 func (lib *libModule) emitPackage(p *libPkg) ([]byte, error) {
@@ -802,14 +803,26 @@ func (e *moduleEmitter) source() ([]byte, error) {
 	}
 	out.WriteString(")\n\n")
 	doc := fmt.Sprintf("Bindings for the Go package %s, generated from its exported API. "+
-		"A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.", p.importPath)
+		"A value with state is an int handle. Record methods belong to typed objects. Writers are standard error and readers standard input.", p.importPath)
 	fmt.Fprintf(&out, "// Module binds %s for Buzz.\nvar Module = std.Module{\n\tName: %q,\n\tPath: %q,\n\tDoc: %q,\n",
 		p.importPath, p.buzzName, p.buzzPath, doc)
 	out.WriteString("\tMethods: []std.Method{\n")
 	for _, m := range e.methods {
 		out.WriteString(m)
 	}
-	out.WriteString("\t},\n}\n\n")
+	out.WriteString("\t},\n")
+	if len(e.objects) > 0 {
+		out.WriteString("\tObjects: []std.Object{\n")
+		for _, name := range sortedKeys(e.objects) {
+			fmt.Fprintf(&out, "{Name: %q, Methods: []std.Method{\n", name)
+			for _, method := range e.objects[name] {
+				out.WriteString(method)
+			}
+			out.WriteString("}},\n")
+		}
+		out.WriteString("\t},\n")
+	}
+	out.WriteString("}\n\n")
 	out.Write(e.body.Bytes())
 	src, err := format.Source(out.Bytes())
 	if err != nil {
@@ -865,9 +878,10 @@ func (t *libType) byPointer() bool {
 
 func (e *moduleEmitter) record(t *libType) error {
 	gt := e.goType(t, false)
-	var enc, dec bytes.Buffer
+	var enc, dec, decoded bytes.Buffer
+	keys := make([]string, 0, len(t.fields))
 	fmt.Fprintf(&enc, "// Encode%s is a %s as a Buzz map.\nfunc Encode%s(v %s) map[string]any {\n\treturn map[string]any{\n", t.name, t.name, t.name, gt)
-	fmt.Fprintf(&dec, "// Decode%s reads a %s from a Buzz map. A missing key reads as the zero value.\nfunc Decode%s(v any) (%s, error) {\n\tvar out %s\n\tm, err := convert.Map(v)\n\tif err != nil {\n\t\treturn out, err\n\t}\n", t.name, t.name, t.name, gt, gt)
+	fmt.Fprintf(&dec, "// Decode%s reads a %s from a Buzz map. Unknown keys are refused.\n// A missing key reads as the zero value.\nfunc Decode%s(v any) (%s, error) {\n\tvar out %s\n\tm, err := convert.Map(v)\n\tif err != nil {\n\t\treturn out, err\n\t}\n", t.name, t.name, t.name, gt, gt)
 	for _, f := range t.fields {
 		if isFunc(f.typ) {
 			continue
@@ -877,11 +891,15 @@ func (e *moduleEmitter) record(t *libType) error {
 			return err
 		}
 		key := lowerFirst(f.name)
+		keys = append(keys, key)
 		fmt.Fprintf(&enc, "\t\t%q: %s,\n", key, e.encode(c, "v."+f.name))
-		fmt.Fprintf(&dec, "\tif out.%s, err = %s; err != nil {\n\t\treturn out, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", f.name, e.decode(c, fmt.Sprintf("m[%q]", key)), key)
+		fmt.Fprintf(&decoded, "\tif out.%s, err = %s; err != nil {\n\t\treturn out, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", f.name, e.decode(c, fmt.Sprintf("m[%q]", key)), key)
 	}
 	e.use("fmt", "fmt")
+	e.use("slices", "slices")
 	enc.WriteString("\t}\n}\n\n")
+	fmt.Fprintf(&dec, "\tvar unknown []string\n\tfor key := range m {\n\t\tif !slices.Contains(%#v, key) {\n\t\t\tunknown = append(unknown, key)\n\t\t}\n\t}\n\tif len(unknown) > 0 {\n\t\tslices.Sort(unknown)\n\t\treturn out, fmt.Errorf(\"unknown field %%q\", unknown[0])\n\t}\n", keys)
+	dec.Write(decoded.Bytes())
 	dec.WriteString("\treturn out, nil\n}\n\n")
 	e.body.Write(enc.Bytes())
 	e.body.Write(dec.Bytes())
@@ -1050,7 +1068,9 @@ type binding struct {
 // function binds fn as an Impl in the body and a std.Method entry.
 func (e *moduleEmitter) function(fn *libFunc) error {
 	name := snake(fn.name)
-	if fn.recv != nil {
+	if fn.recv != nil && fn.recv.kind == kindRecord {
+		name = lowerFirst(fn.name)
+	} else if fn.recv != nil {
 		name = fmt.Sprintf("%s_%s", snake(fn.recv.name), name)
 	}
 	impl := "Impl" + upperFirst(strings.ReplaceAll(fn.qualified(), ".", ""))
@@ -1075,20 +1095,17 @@ func (e *moduleEmitter) function(fn *libFunc) error {
 	return nil
 }
 
-// receiver reads fn's receiver from its handle, or decodes it from a map for
-// a record.
+// receiver leaves record decoding to the object boundary and resolves handles.
 func (e *moduleEmitter) receiver(fn *libFunc, b *binding) {
 	if fn.recv == nil {
 		return
 	}
 	recvName := lowerFirst(fn.recv.name)
-	alias := e.genAlias(fn.recv.pkg)
 	if fn.recv.kind == kindRecord {
-		b.args = append(b.args, fmt.Sprintf("{Name: %q}", recvName))
-		b.params = append(b.params, recvName+" map[string]any")
-		b.pre = append(b.pre, fmt.Sprintf("recv, err := %sDecode%s(%s)\nif err != nil {\nreturn ZERO, err\n}", alias, fn.recv.name, recvName))
+		b.params = append(b.params, "recv "+e.goType(fn.recv, false))
 		return
 	}
+	alias := e.genAlias(fn.recv.pkg)
 	b.args = append(b.args, fmt.Sprintf("{Name: %q}", recvName))
 	b.params = append(b.params, recvName+" int")
 	b.pre = append(b.pre, fmt.Sprintf("recv, err := %s%sHandles.Get(%s)\nif err != nil {\nreturn ZERO, err\n}", alias, fn.recv.name, recvName))
@@ -1214,7 +1231,14 @@ func (e *moduleEmitter) method(fn *libFunc, name, impl, retTag string, b *bindin
 		m.WriteString("\t\t\tRaises: true,\n")
 	}
 	fmt.Fprintf(&m, "\t\t\tImpl: %s,\n\t\t},\n", impl)
-	e.methods = append(e.methods, m.String())
+	if fn.recv != nil && fn.recv.kind == kindRecord {
+		if e.objects == nil {
+			e.objects = make(map[string][]string)
+		}
+		e.objects[fn.recv.name] = append(e.objects[fn.recv.name], m.String())
+	} else {
+		e.methods = append(e.methods, m.String())
+	}
 }
 
 // getter binds an exported field of a handle, which a script cannot read off
@@ -1341,7 +1365,7 @@ func upperFirst(s string) string {
 
 func isUpper(r rune) bool { return r >= 'A' && r <= 'Z' }
 
-func sortedKeys(m map[string]string) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
