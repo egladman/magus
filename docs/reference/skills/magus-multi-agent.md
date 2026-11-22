@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27586
-skill_short_bytes: 21835
+skill_full_bytes: 27742
+skill_short_bytes: 21991
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `6a241343641f` |
+| `skill-content` | `c660fe22e0ad` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -441,7 +441,9 @@ branch's unpushed commits into one per merged job, each output beside its source
 merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
-`magus job wait <job>` before reading each result; reopen evidence with
+`magus job wait <job>` before reading each result. On rejection, give the
+same job and its `magus describe job <job>` feedback to the worker handling
+the correction. Verify the corrected result on that job. Reopen evidence with
 `magus query output <ref>`; resolve shared seams once; regenerate declared outputs
 once; re-plan with `magus affected <target> --plan` if the partition broke; read
 `magus diff --impact` for context only; validate once per wave; finish with
@@ -931,7 +933,9 @@ branch's unpushed commits into one per merged job, each output beside its source
 merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
-`magus job wait <job>` before reading each result; reopen evidence with
+`magus job wait <job>` before reading each result. On rejection, give the
+same job and its `magus describe job <job>` feedback to the worker handling
+the correction. Verify the corrected result on that job. Reopen evidence with
 `magus query output <ref>`; resolve shared seams once; regenerate declared outputs
 once; re-plan with `magus affected <target> --plan` if the partition broke; read
 `magus diff --impact` for context only; validate once per wave; finish with
