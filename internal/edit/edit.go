@@ -235,14 +235,14 @@ func (p *Plan) readFile(rel string, sites []Site) *fileEdit {
 // createFile plans a new file and the parents it needs, or
 // refuses and returns nil.
 func (p *Plan) createFile(rel, content string) *fileEdit {
-	refuseFile := func(reason string) *fileEdit {
+	refuseFile := func(reason string) {
 		p.refuse(types.EditRefusal{Path: rel, Reason: reason})
-		return nil
 	}
 	var missing []string
 	root, err := os.OpenRoot(p.root)
 	if err != nil {
-		return refuseFile(err.Error())
+		refuseFile(err.Error())
+		return nil
 	}
 	defer root.Close()
 	if parent := path.Dir(rel); parent != "." {
@@ -255,18 +255,23 @@ func (p *Plan) createFile(rel, content string) *fileEdit {
 				missing = append(missing, dir)
 			case err != nil:
 				if !insideRoot(p.root, p.abs(dir)) {
-					return refuseFile("resolves outside the workspace through a symlinked directory")
+					refuseFile("resolves outside the workspace through a symlinked directory")
+					return nil
 				}
-				return refuseFile(err.Error())
+				refuseFile(err.Error())
+				return nil
 			case !info.IsDir():
-				return refuseFile(dir + " is not a directory")
+				refuseFile(dir + " is not a directory")
+				return nil
 			}
 		}
 	}
 	if _, err := root.Lstat(filepath.FromSlash(rel)); err == nil {
-		return refuseFile("already exists; change it with old and new")
+		refuseFile("already exists; change it with old and new")
+		return nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return refuseFile(err.Error())
+		refuseFile(err.Error())
+		return nil
 	}
 	after := []byte(content)
 	return p.graded(&fileEdit{
@@ -542,7 +547,7 @@ func restore(root *os.Root, rename func(*os.Root, string, string) error, files [
 		if err == nil {
 			err = rename(root, s, f.path)
 			if err != nil {
-				_ = root.Remove(s)
+				err = errors.Join(err, root.Remove(s))
 			}
 		}
 		if err != nil {
@@ -555,7 +560,7 @@ func restore(root *os.Root, rename func(*os.Root, string, string) error, files [
 // stage writes content to a synced temp sibling of abs, so the rename that lands it stays
 // on one filesystem.
 func stage(root *os.Root, rel string, content []byte, mode fs.FileMode) (string, error) {
-	name := path.Join(path.Dir(rel), "."+path.Base(rel)+".magus-edit-"+rand.Text())
+	name := path.Join(path.Dir(rel), fmt.Sprintf(".%s.magus-edit-%s", path.Base(rel), rand.Text()))
 	tmp, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
@@ -571,8 +576,7 @@ func stage(root *os.Root, rel string, content []byte, mode fs.FileMode) (string,
 		err = cerr
 	}
 	if err != nil {
-		_ = root.Remove(name)
-		return "", err
+		return "", errors.Join(err, root.Remove(name))
 	}
 	return name, nil
 }
