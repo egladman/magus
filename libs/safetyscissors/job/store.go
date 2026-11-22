@@ -263,6 +263,13 @@ type jobsLog struct {
 	partial bool
 }
 
+type jobLedger struct {
+	rows Rows
+	log  jobsLog
+	// An older version must reach the migration with its original row bytes.
+	migrationLines []codec.Line
+}
+
 // tailWait is how long a reader waits for an append it caught mid-write to finish before
 // it reports the file's last line as one no writer finished.
 const tailWait = 50 * time.Millisecond
@@ -687,10 +694,11 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error, then func() e
 		return fmt.Errorf("job: create store %s: %w", filepath.Dir(s.path), err)
 	}
 	return s.locked(ctx, func() error {
-		f, log, err := s.readFile(ctx, false)
+		ledger, err := s.readFile(ctx, false)
 		if err != nil {
 			return err
 		}
+		f, log := ledger.rows, ledger.log
 		gone := make(map[string]bool, len(f.Jobs))
 		for _, row := range f.Jobs {
 			gone[row.ID] = true
@@ -785,8 +793,8 @@ func refuseDuplicateRows(rows []Job) error {
 // been recorded yet. ctx bounds the wait for an append in flight and for the lock a
 // migration takes.
 func (s *Store) Read(ctx context.Context) (Rows, error) {
-	f, _, err := s.readFile(ctx, true)
-	return f, err
+	ledger, err := s.readFile(ctx, true)
+	return ledger.rows, err
 }
 
 // readFile parses the ledger and the log a write compares against.
@@ -802,72 +810,73 @@ func (s *Store) Read(ctx context.Context) (Rows, error) {
 //
 // A file at another store version is converted first, once, under the lock (see
 // [WithMigrations]); without wait the caller already holds it.
-func (s *Store) readFile(ctx context.Context, wait bool) (Rows, jobsLog, error) {
-	f, log, lines, err := s.parse(ctx, wait)
-	if err != nil || s.current(f, log) || log.lines == 0 {
-		return f, log, err
+func (s *Store) readFile(ctx context.Context, wait bool) (jobLedger, error) {
+	ledger, err := s.parse(ctx, wait)
+	if err != nil || s.current(ledger) || ledger.log.lines == 0 {
+		return ledger, err
 	}
 	// The caller's migrations refuse a newer file in their own words; with none, the store
 	// refuses any other version than its own.
 	if s.migrate == nil {
-		return Rows{}, jobsLog{}, s.refuseVersion(f)
+		return jobLedger{}, s.refuseVersion(ledger.rows)
 	}
 	if wait {
 		// The lines were read before the lock: re-read them under it, so a writer that
 		// migrated or appended in between is migrated from what it left.
 		err = s.locked(ctx, func() error {
-			f, log, lines, err := s.parse(ctx, false)
-			if err != nil || s.current(f, log) {
+			ledger, err := s.parse(ctx, false)
+			if err != nil || s.current(ledger) {
 				return err
 			}
-			return s.migrate(ctx, s.path, f.APIVersion, lines)
+			return s.migrate(ctx, s.path, ledger.rows.APIVersion, ledger.migrationLines)
 		})
 	} else {
-		err = s.migrate(ctx, s.path, f.APIVersion, lines)
+		err = s.migrate(ctx, s.path, ledger.rows.APIVersion, ledger.migrationLines)
 	}
 	if err != nil {
-		return Rows{}, jobsLog{}, err
+		return jobLedger{}, err
 	}
-	f, log, _, err = s.parse(ctx, wait)
-	return f, log, err
+	return s.parse(ctx, wait)
 }
 
 // parse reads the file as it stands; see [Store.readFile]. A file at another store
 // version than this build's has no rows decoded: they are returned as lines.
-func (s *Store) parse(ctx context.Context, wait bool) (Rows, jobsLog, []codec.Line, error) {
+func (s *Store) parse(ctx context.Context, wait bool) (jobLedger, error) {
 	if s.err != nil {
-		return Rows{}, jobsLog{}, nil, s.err
+		return jobLedger{}, s.err
 	}
 	if err := s.refuseDocument(); err != nil {
-		return Rows{}, jobsLog{}, nil, err
+		return jobLedger{}, err
 	}
 	read, err := s.readLines(ctx, wait)
 	if err != nil {
-		return Rows{}, jobsLog{}, nil, err
+		return jobLedger{}, err
 	}
-	f := Rows{stored: map[string]jobRecord{}}
-	log := jobsLog{rows: make(map[string][]byte, len(read.Lines)), lines: len(read.Lines), partial: read.Partial}
-	texts, err := s.takeHeader(read.Lines, &f, &log)
+	ledger := jobLedger{
+		rows: Rows{stored: map[string]jobRecord{}},
+		log:  jobsLog{rows: make(map[string][]byte, len(read.Lines)), lines: len(read.Lines), partial: read.Partial},
+	}
+	texts, err := s.takeHeader(read.Lines, &ledger.rows, &ledger.log)
 	if err != nil {
-		return Rows{}, jobsLog{}, nil, err
+		return jobLedger{}, err
 	}
-	if !s.current(f, log) {
-		lines := make([]codec.Line, len(texts))
+	if !s.current(ledger) {
+		ledger.migrationLines = make([]codec.Line, len(texts))
 		for i, row := range texts {
-			lines[i] = row.Line
+			ledger.migrationLines[i] = row.Line
 		}
-		return f, log, lines, nil
+		return ledger, nil
 	}
-	if f.TypeMeta != s.listType() && log.header != nil {
-		return Rows{}, jobsLog{}, nil, s.refuseRecord(s.listType(), f.TypeMeta, 1)
+	if ledger.rows.TypeMeta != s.listType() && ledger.log.header != nil {
+		return jobLedger{}, s.refuseRecord(s.listType(), ledger.rows.TypeMeta, 1)
 	}
-	if err := s.decodeRows(texts, &f, &log); err != nil {
-		return Rows{}, jobsLog{}, nil, err
+	if err := s.decodeRows(texts, &ledger.rows, &ledger.log); err != nil {
+		return jobLedger{}, err
 	}
-	if err := s.refuseUnmetFeatures(f); err != nil {
-		return Rows{}, jobsLog{}, nil, err
+	if err := s.refuseUnmetFeatures(ledger.rows); err != nil {
+		return jobLedger{}, err
 	}
-	return f, log, nil, nil
+	return ledger, nil
 }
 
 // readLines reads the file's lines. With wait it reads again, a millisecond apart, for up
