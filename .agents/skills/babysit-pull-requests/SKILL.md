@@ -47,9 +47,28 @@ fix the pure function that produced it and its test, then run it again.
    `needs-queue`.
 
    `merge` appears only on a `green` or `red-inherited` record whose stage allows
-   a merge. It is the person's command: hand it over, never run it.
+   a merge. It may suggest GitHub auto-merge. Use the queue label below when
+   authorized to queue the pull request.
 
-2. Take the actions that change no code, with the same selectors:
+2. Queue by label when the person asks you to queue or land a pull request.
+   A GitHub user with write access can supply merge intent with a method label.
+   Use the requested method, or squash if the request leaves it open:
+
+   ```sh
+   gh pr edit <n> --add-label "merge-queue: squash"
+   ```
+
+   For a standalone pull request, use its own number. For a stack, use the top
+   pull request's number. A monitoring request alone leaves merge intent to
+   the person. If the label is already present, proceed to monitoring. Check
+   `status` after applying it. A pull request can be `queued` while CI or an
+   approving review is pending.
+
+   The method labels are `merge-queue: squash`, `merge-queue: rebase`, and
+   `merge-queue: merge`. The queue writes its own `queue: <state>` labels.
+   [GitHub provider behavior](../../../docs/concepts/merge-queue.md#providers)
+
+3. When authorized to act on the selected pull requests, run `apply` with the same selectors:
 
    ```sh
    ./magus buzz hack/ci/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
@@ -58,12 +77,12 @@ fix the pure function that produced it and its test, then run it again.
    It queues a `green` stack by the label on its top and reruns a `red` that is not
    the change's, once per head. It prints each command it ran.
 
-   - It never enables auto-merge. For a `green` pull request in no stack it prints
-     the command under `for_person`; you tell the person to run it.
+   - For a `green` standalone pull request it prints a command under `for_person`.
+     Use the method label from step 2 when authorized to supply intent.
    - It never acts on `red-inherited`. Nothing in the change is broken, and the
      queue would refuse it for main's failures.
 
-3. Run the script chain for a record yourself, without asking the person. Each
+4. Run the script chain for a record yourself, without asking the person. Each
    step is one script. Never stand in for one with raw `git`, `gh` or a hand-run
    gate: each script already absorbs the failure that recurs there.
 
@@ -101,13 +120,11 @@ fix the pure function that produced it and its test, then run it again.
    An opus agent may fan out sonnet agents for mechanical parts of its work (a
    regeneration, an import block), each in its own worktree.
 
-4. When an agent reports, check its branch with a narrow test of what it changed.
-   Then you, and only you, push it. Queuing it again is the person's: tell them
-   `gh pr merge <n> --auto --squash`, which you never run, or for a stack the
-   `merge-queue: <method>` label on its top pull request. A `queue: <state>` label
-   is the queue's answer, never intent.
+5. When an agent reports, check its branch with a narrow test of what it changed.
+   Then you, and only you, push it. After a kickback, use step 2 to restore the
+   authorized method label once the reported cause is fixed.
 
-5. Schedule the next pass with the host's wakeup about every 20 minutes (the
+6. Check again in about 20 minutes (the
    queue's validation time), or with its pull request monitor. Repeat from 1.
    - A record with `action: none` needs no agent. It is queued, waiting on the pull
      request below it, `running`, or `red-inherited` with a `merge` for the person.
@@ -129,11 +146,9 @@ advisor in `.github/actions/advice/`; don't rename code to quiet it.
 ## Never
 
 - Never admin-merge (`gh pr merge --admin`) yourself. It skips the queue's
-  validation and ordering, so nothing checked the combination that merges. The
-  record's `merge` is for the person to run.
+  validation and ordering.
 - Never enable auto-merge (`gh pr merge --auto`, or the `enablePullRequestAutoMerge`
-  mutation through `gh api`). A person enables it; the repo's guard denies it. Tell the
-  person the command. `--disable-auto` and reading `autoMergeRequest` are yours.
+  mutation through `gh api`). Use the Magus method label for authorized queueing.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
   commits, and a rewrite orphans both. The one rewrite is
   `rebase-branches-onto-base.buzz` on a `rebase-branches-onto-base` record: the
