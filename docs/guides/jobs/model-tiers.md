@@ -48,9 +48,48 @@ the default maps no harness to one: until a magusfile maps a harness with
 
 `magus\modelTiers(null)` turns tiers off.
 
+## Update a harness model
+
+New model releases are a normal workspace configuration change. If your harness
+can spawn the model, you can map it to an existing tier without updating magus.
+For example, a workspace that adopts GPT-6.2 Astra for its `design` work can
+keep the same tier name, rank and limits.
+
+Choose models by the work each tier handles. This repository uses Astra for
+complex Codex design work and Sol for bounded implementation.[^openai-models]
+Claude Code uses Opus for design work and Fable as the next step for harder
+work.[^anthropic-models] A harness can share one model across those adjacent
+tiers.
+
+1. Find `magus\modelTiers` in the root `magusfile.buzz`. Follow the function
+   under `hosts` for the harness you want to update. It may live in an imported
+   Buzz file. If your workspace uses the defaults and has no host mapping, start
+   with [Declare your own](#declare-your-own).
+2. Replace the model string in the tier's `match` arm with the exact ID the
+   harness accepts for a spawn. If two adjacent tiers share the old model,
+   decide whether to update both arms. Update the model IDs in your tests
+   and any assertion that two tiers share an alias.
+
+   ```diff
+   -        .design -> "gpt-6-astra",
+   +        .design -> "gpt-6.2-astra",
+   ```
+
+3. From the workspace root, run `magus ls` to load the declaration. If the
+   mapping lives in a separate Buzz file with tests, run those too.
+
+   ```sh
+   magus buzz -t --embedded <mapping-file>
+   ```
+
+4. On the next fork at that tier, use `magus describe job <job>` to review the
+   recorded tier. A job that names a concrete model explicitly keeps that
+   model.
+
 ## Declare your own
 
-Copy the module into the root magusfile and change what you need:
+To define your own tiers or supply the first harness mapping, add a declaration
+to the root magusfile. If your workspace already has one, edit that declaration.
 
 ```buzz
 import "magus";
@@ -93,10 +132,10 @@ magus\modelTiers(ModelTier, default: ModelTier.bounded,
     bounds: bounds, skills: skills);
 ```
 
-- **The enum is yours.** Its order is the rank, cheapest first. A misspelled
-  tier fails `magus check`, like any other enum.
-- **Every mapping is a `match` over the enum.** Add a tier and `magus check`
-  fails until `hosts`, `bounds` and `skills` each cover it.
+- **The enum is yours.** Its order is the rank, cheapest first. An invalid
+  case reference fails when the workspace loads.
+- **Every mapping is a `match` over the enum.** Each supplied function must
+  cover every case.
 - **`hosts` is keyed by harness.** `magus\harness.provider` returns the
   harness id; keep it, as `cc` above, and use it as the key. A call that
   ignores the return value wires the harness all the same. The harness must be wired
@@ -117,6 +156,22 @@ none of them. A declaration it cannot use stops the load with
 a default that is not one of its cases, a host the magusfile did not wire, a
 function that raises or answers the wrong type, a second call, or a call from a
 project's magusfile instead of the root one.
+
+## Add a tier
+
+Add a tier when the work needs a separate rank, limit or skill policy. The
+enum and its policy live in your workspace's Buzz code. A new tier requires
+no magus release.
+
+1. Add a case to your enum at the intended rank, cheapest first. If you use
+   `magus/modeltiers`, declare a workspace enum with the cases you want and
+   pass it to `magus\modelTiers`.
+2. Supply `bounds` and `skills` functions that cover every case of your enum.
+   Add an arm for the new case to each host function. An adjacent tier can
+   share the same model alias. Review the default and any matrix function
+   that chooses a tier.
+3. Run `magus ls` and the tests for your mapping. If a function leaves out
+   the new case, the workspace load reports the incomplete declaration.
 
 ## Which tier a job gets
 
@@ -225,3 +280,10 @@ can verify is the wrong place to try a cheaper model.
 - [Jobs](../jobs.md): the plan a tier is recorded on.
 - [`magus\modelTiers`](../../reference/buzz/magus.md) and `magus\modelTier`
   in the Buzz reference.
+
+[^openai-models]: [OpenAI model selection](https://developers.openai.com/api/docs/guides/model-selection)
+    recommends Astra for complex projects and Sol for most Codex tasks.
+
+[^anthropic-models]: [Anthropic's guidance for Fable 5.2](https://www.anthropic.com/claude-fable-and-mythos-5-2)
+    describes Opus as the everyday starting point and Fable as an escalation
+    for harder work.
