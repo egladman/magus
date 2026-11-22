@@ -3273,6 +3273,125 @@ func ObjectSemverNext(v types.SemverNext) vm.Value {
 	return out
 }
 
+func ObjectEditChange(v types.EditChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("old", vm.StringValue(v.Old))
+	out.MapSet("new", vm.StringValue(v.New))
+	out.MapSet("count", vm.IntValue(int64(v.Count)))
+	out.MapSet("regex", vm.BoolValue(v.Regex))
+	out.MapSet("create", vm.BoolValue(v.Create))
+	return out
+}
+
+func ObjectEditRefusal(v types.EditRefusal) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("column", vm.IntValue(int64(v.Column)))
+	out.MapSet("rule", vm.StringValue(v.Rule))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectEditDocument(v types.EditDocument) vm.Value {
+	out := vm.NewMap()
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectEditChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	itemsRefused := make([]vm.Value, len(v.Refused))
+	for indexRefused := range v.Refused {
+		itemsRefused[indexRefused] = ObjectEditRefusal(v.Refused[indexRefused])
+	}
+	out.MapSet("refused", vm.ListValue(itemsRefused))
+	return out
+}
+
+func ObjectEditedFile(v types.EditedFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("digestBefore", vm.StringValue(v.DigestBefore))
+	out.MapSet("digestAfter", vm.StringValue(v.DigestAfter))
+	return out
+}
+
+func ObjectEditPosition(v types.EditPosition) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("column", vm.IntValue(int64(v.Column)))
+	return out
+}
+
+func ObjectEditSpan(v types.EditSpan) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("start", ObjectEditPosition(v.Start))
+	out.MapSet("end", ObjectEditPosition(v.End))
+	return out
+}
+
+func ObjectEditPlan(v types.EditPlan) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectEditChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = ObjectEditedFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = ObjectEditSpan(v.Spans[indexSpans])
+	}
+	out.MapSet("spans", vm.ListValue(itemsSpans))
+	itemsMakesDirs := make([]vm.Value, len(v.MakesDirs))
+	for indexMakesDirs := range v.MakesDirs {
+		itemsMakesDirs[indexMakesDirs] = vm.StringValue(v.MakesDirs[indexMakesDirs])
+	}
+	out.MapSet("makesDirs", vm.ListValue(itemsMakesDirs))
+	itemsAlready := make([]vm.Value, len(v.Already))
+	for indexAlready := range v.Already {
+		itemsAlready[indexAlready] = ObjectEditChange(v.Already[indexAlready])
+	}
+	out.MapSet("already", vm.ListValue(itemsAlready))
+	itemsRefused := make([]vm.Value, len(v.Refused))
+	for indexRefused := range v.Refused {
+		itemsRefused[indexRefused] = ObjectEditRefusal(v.Refused[indexRefused])
+	}
+	out.MapSet("refused", vm.ListValue(itemsRefused))
+	out.MapSet("nothingToDo", vm.BoolValue(v.NothingToDo))
+	return out
+}
+
+func ObjectEditApplied(v types.EditApplied) vm.Value {
+	out := vm.NewMap()
+	itemsWritten := make([]vm.Value, len(v.Written))
+	for indexWritten := range v.Written {
+		itemsWritten[indexWritten] = ObjectEditedFile(v.Written[indexWritten])
+	}
+	out.MapSet("written", vm.ListValue(itemsWritten))
+	out.MapSet("already", vm.IntValue(int64(v.Already)))
+	out.MapSet("nothingToDo", vm.BoolValue(v.NothingToDo))
+	return out
+}
+
+func ObjectResultOfEditApplied(v types.Result[types.EditApplied]) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", ObjectEditApplied(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
 func ObjectTermSize(v types.TermSize) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("width", vm.IntValue(int64(v.Width)))
