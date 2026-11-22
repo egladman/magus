@@ -495,6 +495,9 @@ const DependsOnRoot DiagnosticCode = "MGS1061"
 // since MGS1061 refuses naming the root.
 const CrossNeedsUndeclared DiagnosticCode = "MGS1062"
 
+// EditPlanRefused reports a refused plan or stale digest from splice\apply.
+const EditPlanRefused DiagnosticCode = "MGS1063"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -1175,6 +1178,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SourceGlobInAnotherProject,
 	DependsOnRoot,
 	CrossNeedsUndeclared,
+	EditPlanRefused,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,

@@ -10,7 +10,6 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -32,7 +31,7 @@ func TestRenameGradeInspectsTheLoadedRoot(t *testing.T) {
 	ws, err := inspectWorkspace(t.Context(), loaded)
 	require.NoError(t, err)
 
-	grade := edit.RenameGrade(t.Context(), guardDependencies(t.Context(), loaded), ws, true)
+	grade := renameGrade(t.Context(), guardDependencies(t.Context(), loaded), ws, true)
 	var rule, reason string
 	require.NotPanics(t, func() { rule, reason = grade("a.go", []byte("package a\n"), []byte("package b\n")) })
 	assert.Empty(t, rule, reason)

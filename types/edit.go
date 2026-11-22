@@ -79,3 +79,25 @@ type EditDocument struct {
 	Changes []EditChange  `json:"changes"           yaml:"changes"`
 	Refused []EditRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
 }
+
+// EditPlan is a set of changes resolved against the tree, before
+// anything is written. A plan whose every change is already
+// applied has NothingToDo set and is applicable.
+type EditPlan struct {
+	Digest      string        `json:"digest"               yaml:"digest"`
+	Changes     []EditChange  `json:"changes"              yaml:"changes"`
+	Files       []EditedFile  `json:"files"                yaml:"files"`
+	Spans       []EditSpan    `json:"spans"                yaml:"spans"`
+	MakesDirs   []string      `json:"makes_dirs,omitempty" yaml:"makes_dirs,omitempty"`
+	Already     []EditChange  `json:"already,omitempty"    yaml:"already,omitempty"`
+	Refused     []EditRefusal `json:"refused,omitempty"    yaml:"refused,omitempty"`
+	NothingToDo bool          `json:"nothing_to_do"        yaml:"nothing_to_do"`
+}
+
+// EditApplied is what applying an edit plan wrote. Already
+// counts the changes the tree held before the apply.
+type EditApplied struct {
+	Written     []EditedFile `json:"written"       yaml:"written"`
+	Already     int          `json:"already"       yaml:"already"`
+	NothingToDo bool         `json:"nothing_to_do" yaml:"nothing_to_do"`
+}
