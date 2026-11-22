@@ -30,11 +30,16 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	}
 	// Taking a job changes the main thread's write scope. Its context still
 	// belongs to the integrating session, even while the worker row is live.
-	thread, _ := callerThread(at.cacheDir, who, lease)
+	thread, _ := callerThread(who, lease)
 	if thread == types.AgentThreadMain {
 		return advice{}
 	}
-	tokens := reportedContext(facts, who.Agent)
+	tokens := int64(0)
+	if usage := callerContext(at, who, thread, facts); usage != nil {
+		tokens = usage.Tokens
+	} else if thread == types.AgentThreadUnknown {
+		tokens = readCostState(facts).Tokens
+	}
 	if tokens <= 0 {
 		return advice{}
 	}
@@ -59,20 +64,6 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 			"Whether the rest of the job is re-forked at a higher tier or split smaller is the root's call, and it needs your report to make it.",
 			me.ModelTier.Name, me.ModelTier.Rank),
 	}
-}
-
-// reportedContext is the caller's context in tokens as its host last reported it: a
-// subagent's from the usage recorded for it, a session's own from its transcript. Zero
-// when nothing was reported.
-func reportedContext(facts hint.Gate, agentID string) int64 {
-	if agentID == "" {
-		return readCostState(facts).Tokens
-	}
-	rec, _ := readSpawnedAgent(facts, agentID)
-	if rec.ContextTokens == nil {
-		return 0
-	}
-	return *rec.ContextTokens
 }
 
 // tierContextCap is the context cap of the tier row was forked at, 0 for none. The answer

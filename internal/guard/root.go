@@ -292,7 +292,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, judged verdict.Jud
 	if judged.Decision == verdict.Deny || in.preauth != "" || in.lease != "" || at.cacheDir == "" {
 		return judged
 	}
-	thread, from := callerThread(at.cacheDir, who, in.lease)
+	thread, from := callerThread(who, in.lease)
 	if thread != types.AgentThreadMain {
 		return judged
 	}
@@ -360,7 +360,7 @@ func gradeMainWrite(deps Dependencies, judged verdict.Judgment, path string, lea
 	if judged.Decision == verdict.Deny || lease != "" || at.cacheDir == "" || notesPath(path, at) {
 		return judged
 	}
-	thread, from := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	if thread != types.AgentThreadMain {
 		return judged
 	}
@@ -444,7 +444,7 @@ func gradeSpawnModel(deps Dependencies, judged verdict.Judgment, env hookRequest
 	if judged.Decision == verdict.Deny || !env.IsSpawn || at.cacheDir == "" {
 		return judged
 	}
-	thread, from := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	var forked forkedTier
 	bound := false
 	if row, ok := titled(); ok {

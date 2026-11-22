@@ -28,35 +28,34 @@ import (
 // A host is believed about the main thread once it has named a subagent on some call;
 // until then an unleased call is the main thread by inference, and a leased one unknown.
 func TestCallerThread(t *testing.T) {
-	t.Parallel()
-	cache := t.TempDir()
 	host := hookAttribution{Host: "claude-code", Session: "s"}
 
-	thread, from := callerThread(cache, hookAttribution{Session: "s"}, "")
+	thread, from := callerThread(hookAttribution{Session: "s"}, "")
 	assert.Equal(t, types.AgentThreadUnknown, thread, "a call no host made")
 	assert.Equal(t, types.ThreadInferred, from)
 
-	thread, from = callerThread(cache, host, "")
+	thread, from = callerThread(host, "")
 	assert.Equal(t, types.AgentThreadMain, thread)
 	assert.Equal(t, types.ThreadInferred, from, "this host has named no subagent yet")
 
-	thread, from = callerThread(cache, host, "job-a")
+	thread, from = callerThread(host, "job-a")
 	assert.Equal(t, types.AgentThreadUnknown, thread, "a leased call from an unlearned host")
 	assert.Equal(t, types.ThreadInferred, from)
 
 	sub := host
 	sub.Agent = "a1"
-	thread, from = callerThread(cache, sub, "")
+	thread, from = callerThread(sub, "")
 	assert.Equal(t, types.AgentThreadSub, thread)
 	assert.Equal(t, types.ThreadReported, from)
 
-	hostGate(cache, "claude-code").MarkFired(hostAgentsKind)
-	thread, from = callerThread(cache, host, "job-a")
-	assert.Equal(t, types.AgentThreadMain, thread, "a learned host's call naming no subagent")
+	host.Transcript = reportedMainTranscript(t, host.Session)
+	host = host.withTranscriptCaller(true)
+	thread, from = callerThread(host, "job-a")
+	assert.Equal(t, types.AgentThreadMain, thread, "the hook points to its own main transcript")
 	assert.Equal(t, types.ThreadReported, from)
 
 	other := hookAttribution{Host: "codex", Session: "s"}
-	_, from = callerThread(cache, other, "")
+	_, from = callerThread(other, "")
 	assert.Equal(t, types.ThreadInferred, from, "what one host taught says nothing of another")
 }
 
@@ -332,13 +331,13 @@ func TestModelRowsResolveByExactID(t *testing.T) {
 func TestObserveCallRecordsAJudgedCallOnce(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{ModelRows: fixtureModelSource})
-	transcript := filepath.Join(t.TempDir(), "main.jsonl")
+	transcript := reportedMainTranscript(t, "s")
 	appendLines(t, transcript,
 		`{"type":"assistant","message":{"model":"claude-opus-5-5","usage":{"input_tokens":1,"cache_read_input_tokens":99999,"cache_creation_input_tokens":0},"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git diff"}}]}}`,
 		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"diff"}]}}`,
 	)
 	who := hookAttribution{Host: "claude-code", Session: "s", Transcript: transcript}
-	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	who = who.withTranscriptCaller(true)
 
 	var calls []observability.AgentCall
 	rec := observabilitytest.NewMockProvider(t)
@@ -405,7 +404,8 @@ func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
 	who := hookAttribution{Host: "claude-code", Session: "s"}
-	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	who.Transcript = reportedMainTranscript(t, who.Session)
+	who = who.withTranscriptCaller(true)
 	facts := hint.NewGate(cache, who.factsKey())
 
 	noteMainSpawn(at, who, "", "")

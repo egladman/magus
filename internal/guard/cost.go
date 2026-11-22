@@ -39,36 +39,37 @@ import (
 // it is, how large its context is, and how its account pays. None is inferred from a
 // host's name.
 
-// hostAgentsKind marks a host that has reported a subagent id on a judged call, so a call
-// from it that reports none comes from a main thread.
-const hostAgentsKind hint.MarkerKind = "reports-agent-ids"
-
 // costStateKind holds a session main thread's costState.
 const costStateKind hint.MarkerKind = "cost-main"
 
-// hostGate keys what magus has learned about one host, across its sessions. A caller that
-// names no host learns nothing.
-func hostGate(cacheDir, host string) hint.Gate {
-	if strings.TrimSpace(host) == "" {
-		return hint.NewGate("", "")
+
+func (who hookAttribution) withTranscriptCaller(readUsage bool) hookAttribution {
+	var sample *types.ContextWindow
+	if readUsage {
+		sample = &who.transcriptUsage
 	}
-	return hint.NewGate(cacheDir, "guard/host/"+callerKeyEscaper.Replace(host))
+	role, owner := transcriptCaller(who, sample)
+	who.transcriptRole = role
+	if role == types.AgentThreadSub {
+		who.Agent = owner
+	}
+	return who
 }
 
-// callerThread is which thread of its session who is, and what that rests on. A call
-// naming a subagent is one. A host that has named a subagent on some call does so on
-// every call, so its calls naming none are the main thread's. Otherwise an unleased call
-// from a host is taken for the main thread, inferred: the subagents of a host that names
-// none look the same, so a rule reading an inferred thread only advises. A call no host
-// made, or a leased one from a host magus has not learned, is unknown.
-func callerThread(cacheDir string, who hookAttribution, lease string) (types.AgentThread, types.ThreadSource) {
+// An unleased call with no actor can offer advisory main-thread observations.
+// A lease establishes write scope only.
+func callerThread(who hookAttribution, lease string) (types.AgentThread, types.ThreadSource) {
 	switch {
+	case who.conflictingCaller:
+		return types.AgentThreadUnknown, types.ThreadInferred
 	case who.Agent != "":
 		return types.AgentThreadSub, types.ThreadReported
+	case who.transcriptRole == types.AgentThreadMain:
+		return types.AgentThreadMain, types.ThreadReported
 	case strings.TrimSpace(who.Host) == "":
 		return types.AgentThreadUnknown, types.ThreadInferred
-	case hostGate(cacheDir, who.Host).AlreadyFired(hostAgentsKind):
-		return types.AgentThreadMain, types.ThreadReported
+	case who.Transcript != "" && who.transcriptRole == types.AgentThreadUnknown:
+		return types.AgentThreadUnknown, types.ThreadInferred
 	case lease == "":
 		return types.AgentThreadMain, types.ThreadInferred
 	}
@@ -78,7 +79,7 @@ func callerThread(cacheDir string, who hookAttribution, lease string) (types.Age
 // callerCost is the thread, its source and the context window a rule request carries for
 // who.
 func callerCost(at location, who hookAttribution, lease string, facts hint.Gate) (types.AgentThread, types.ThreadSource, *types.ContextWindow) {
-	thread, from := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	return thread, from, callerContext(at, who, thread, facts)
 }
 
@@ -92,6 +93,12 @@ func callerContext(at location, who hookAttribution, thread types.AgentThread, f
 		st := readCostState(facts)
 		c = types.ContextWindow{Tokens: st.Tokens, Window: st.Window, Model: st.Model, Source: types.ContextFromTranscript}
 	case types.AgentThreadSub:
+		if who.transcriptRole == types.AgentThreadSub {
+			if who.transcriptUsage.Tokens > 0 {
+				return &who.transcriptUsage
+			}
+			return nil
+		}
 		rec, _ := readSpawnedAgent(facts, who.Agent)
 		if rec.ContextTokens != nil {
 			c = types.ContextWindow{Tokens: *rec.ContextTokens, Window: rec.ContextWindow, Model: rec.Model, Source: types.ContextFromTranscript}
@@ -693,10 +700,7 @@ func invocationClass(c hint.Invocation) types.DelegableClass {
 // nothing a metric counts: counting both would count the call twice.
 func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, judged verdict.Judgment) types.AgentFacts {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if who.Agent != "" && judged.Decision != "" {
-		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
-	}
-	thread, from := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	out := types.AgentFacts{Thread: thread, ThreadFrom: from}
 	if judged.Decision == "" {
 		return out
@@ -803,7 +807,7 @@ func noteMainSpawn(at location, who hookAttribution, lease, row string) {
 		return
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if thread, _ := callerThread(at.cacheDir, who, lease); thread != types.AgentThreadMain {
+	if thread, _ := callerThread(who, lease); thread != types.AgentThreadMain {
 		return
 	}
 	st := readCostState(facts)

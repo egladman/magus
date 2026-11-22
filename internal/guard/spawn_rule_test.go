@@ -98,7 +98,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
 				Name: "brisk-heron", Prompt: "Implement ADR 0002.", Background: true, Isolated: true,
-				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
+				Role: types.AgentRoleRoot, Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred,
 			},
 		},
 		{

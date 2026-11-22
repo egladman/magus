@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +16,112 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
+
+// reportedMainTranscript is the hook's transcript pointer for tests that need a
+// reported Claude Code main thread.
+func reportedMainTranscript(t testing.TB, session string) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", home)
+	path := filepath.Join(home, "projects", "guard-fixture", session+".jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	row := fmt.Sprintf(`{"type":"user","sessionId":%q,"isSidechain":false}`, session)
+	require.NoError(t, os.WriteFile(path, []byte(row+"\n"), 0o600))
+	return path
+}
+
+func fixtureMainTranscript(session string) string {
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		return ""
+	}
+	path := filepath.Join(dir, "projects", "guard-fixture", session+".jsonl")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+func TestCodexHookAttributesTheLeaseAndUsageToTheCallingRollout(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "sessions")
+	require.NoError(t, os.Mkdir(dir, 0o700))
+	set := testModelTiers(t, "claude-code")
+	ctx := tierFixture(t, set, fixture.FleetLeases()...)
+	t.Setenv("CODEX_HOME", home)
+	at := hookLocation(ctx, Dependencies{})
+	root := hookAttribution{Host: "codex", Session: "parent"}
+	writeCostState(hint.NewGate(at.cacheDir, root.factsKey()), costState{Tokens: 205_000})
+	deps := withSetting(string(advisoryModelTierContextCap), builtin.Deny)
+	deps.ModelTiers = func() *tier.Set { return set }
+	writeRollout := func(id, role, source string, tokens int) string {
+		t.Helper()
+		path := filepath.Join(dir, fmt.Sprintf("rollout-%s.jsonl", id))
+		meta := fmt.Sprintf(`{"type":"session_meta","payload":{"id":%q,"source":%s,"thread_source":%q}}`, id, source, role)
+		sample := fmt.Sprintf(`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":%d},"model_context_window":400000}}}`, tokens)
+		require.NoError(t, os.WriteFile(path, fmt.Appendf(nil, "%s\n%s\n", meta, sample), 0o600))
+		return path
+	}
+	input := func(path string) Request {
+		return Request{Host: "codex", Lease: "lease-a", Tools: testTools(t), Input: hookJSON(t, map[string]any{
+			"session_id": "parent", "transcript_path": path, "cwd": at.workspace, "hook_event_name": "PreToolUse",
+			"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: internal/ledger/store.go\n@@\n-x\n+y\n*** Update File: internal/ledger/types.go\n@@\n-x\n+y\n*** End Patch\n"},
+		})}
+	}
+	parent := writeRollout("parent", "user", `"vscode"`, 205_000)
+	childSource := `{"subagent":{"thread_spawn":{"parent_thread_id":"parent","depth":1}}}`
+	child := writeRollout("child", "subagent", childSource, 100_000)
+	verify := root
+	verify.Transcript = parent
+	role, owner := transcriptCaller(verify, &verify.transcriptUsage)
+	require.Equal(t, "parent", owner, "role %s, home %s", role, os.Getenv("CODEX_HOME"))
+	verify.Transcript = child
+	role, owner = transcriptCaller(verify, &verify.transcriptUsage)
+	require.Equal(t, "child", owner, "role %s", role)
+	for _, path := range []string{parent, child} {
+		v := Judge(ctx, deps, input(path))
+		assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
+	}
+	writeRollout("child", "subagent", childSource, 100_001)
+	v := Judge(ctx, deps, input(child))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v), v.Reason)
+	exec := func(path, lease string) Request {
+		return Request{Host: "codex", Tools: testTools(t), Input: hookJSON(t, map[string]any{
+			"session_id": "parent", "transcript_path": path, "cwd": at.workspace, "hook_event_name": "PreToolUse",
+			"tool_name": "exec_command", "tool_input": map[string]any{"cmd": "./magus job exec " + lease},
+		})}
+	}
+	sibling := writeRollout("sibling", "subagent", childSource, 50_000)
+	first := exec(sibling, "lease-b")
+	v = Judge(ctx, deps, first)
+	require.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
+	require.Equal(t, "lease-b", ResolveAuthority(ctx, deps, first).Lease)
+	req := input(child)
+	req.Lease = ""
+	require.Empty(t, ResolveAuthority(ctx, deps, req).Lease)
+	v = Judge(ctx, deps, exec(child, "lease-a"))
+	require.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
+	assert.Equal(t, "lease-a", ResolveAuthority(ctx, deps, req).Lease)
+	assert.Equal(t, "lease-b", ResolveAuthority(ctx, deps, first).Lease)
+	rootReq := input(parent)
+	rootReq.Lease = ""
+	assert.Empty(t, ResolveAuthority(ctx, deps, rootReq).Lease)
+	unrelated := writeRollout("unrelated", "user", `"vscode"`, 12_000)
+	v = Judge(ctx, deps, input(unrelated))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
+	assert.Contains(t, v.Reason, "cannot attribute")
+	disagrees := input(child)
+	disagrees.Transcript = parent
+	v = Judge(ctx, deps, disagrees)
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
+	assert.Contains(t, v.Reason, "cannot attribute")
+	forged := filepath.Join(t.TempDir(), "parent.jsonl")
+	require.NoError(t, os.Symlink(forged, filepath.Join(dir, "outside.jsonl")))
+	require.NoError(t, os.WriteFile(forged, []byte(`{"type":"session_meta","payload":{"id":"parent","source":"vscode","thread_source":"user"}}`+"\n"), 0o600))
+	v = Judge(ctx, deps, input(filepath.Join(dir, "outside.jsonl")))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
+	assert.Contains(t, v.Reason, "cannot attribute")
+}
 
 // A leased subagent is advised once its reported context passes its row's tier cap, and
 // the cap is read from the declaration once per session.
@@ -85,7 +193,8 @@ func TestContextCapFollowsTheCallerAcrossLeaseChanges(t *testing.T) {
 	ctx := tierFixture(t, set, fixture.FleetLeases()[0])
 	at := hookLocation(ctx, Dependencies{})
 	main := hookAttribution{Host: "claude-code", Session: "s"}
-	hostGate(at.cacheDir, main.Host).MarkFired(hostAgentsKind)
+	main.Transcript = reportedMainTranscript(t, main.Session)
+	main = main.withTranscriptCaller(true)
 	facts := hint.NewGate(at.cacheDir, main.factsKey())
 	writeCostState(facts, costState{Tokens: 205_000})
 	deps := withSetting(string(advisoryModelTierContextCap), builtin.Deny)
@@ -105,6 +214,7 @@ func TestContextCapFollowsTheCallerAcrossLeaseChanges(t *testing.T) {
 
 	worker := main
 	worker.Agent = "worker"
+	worker = worker.withTranscriptCaller(true)
 	workerFacts := hint.NewGate(at.cacheDir, worker.factsKey())
 	tokens := int64(100_000)
 	writeSpawnedAgent(workerFacts, worker.Agent, spawnedAgent{ContextTokens: &tokens})

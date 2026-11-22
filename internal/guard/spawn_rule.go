@@ -896,6 +896,10 @@ func lastContextUsage(path string) (types.ContextWindow, bool) {
 		return types.ContextWindow{}, false
 	}
 	defer f.Close()
+	return lastContextUsageIn(f)
+}
+
+func lastContextUsageIn(f *os.File) (types.ContextWindow, bool) {
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		return types.ContextWindow{}, false

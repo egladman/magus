@@ -789,6 +789,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
+	if req.Session != "" && req.Transcript != "" && (req.Message || req.ToolMs > 0 || !strings.HasPrefix(input, "{")) {
+		who = who.withTranscriptCaller(true)
+	}
 	if req.Message {
 		if req.DryRun {
 			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
@@ -834,17 +837,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		if callDir == "" && filepath.IsAbs(env.Cwd) {
 			callDir = env.Cwd
 		}
-		if who.Session == "" {
-			who.Session = env.Who.Session
-		}
-		if who.Transcript == "" {
-			who.Transcript = env.Who.Transcript
-		}
+		who = who.withEnvelopeCaller(env.Who, true)
 		if who.Event == "" {
 			who.Event = env.Who.Event
-		}
-		if who.Agent == "" {
-			who.Agent = env.Who.Agent
 		}
 		if req.DryRun && env.NothingToJudge && env.UnjudgedTool == "" {
 			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
@@ -2411,6 +2406,10 @@ type hookRequest struct {
 // inside the judged text because the guard's verdict must never depend on it.
 type hookAttribution struct {
 	Host string
+	// The transcript and hook must agree on the session or parent.
+	transcriptRole    types.AgentThread
+	transcriptUsage   types.ContextWindow
+	conflictingCaller bool
 	// Form is the form of the installed hook that called, such as sh or buzz.
 	Form       string
 	Session    string
@@ -2854,7 +2853,7 @@ func appendToolTime(ctx context.Context, location location, who hookAttribution,
 		return
 	}
 	lease, _ := resolveActingLease(who, location, "")
-	thread, from := callerThread(location.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	facts := types.AgentFacts{
 		Thread: thread, ThreadFrom: from,
 		CallDigest: req.CallDigest, ResultDigest: req.ResultDigest,
@@ -2905,7 +2904,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	}
 	facts := hint.NewGate(location.cacheDir, who.factsKey())
 	lease, _ := resolveActingLease(who, location, "")
-	thread, from := callerThread(location.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	cost := types.AgentFacts{Thread: thread, ThreadFrom: from, Billing: accountAt(location.workspace).billing}
 	setContext(&cost, callerContext(location, who, thread, facts))
 	recordAgentCalls(ctx, cost, nil)

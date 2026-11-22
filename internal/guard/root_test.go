@@ -142,13 +142,13 @@ func TestMainThreadPastTheBudgetStillBuilds(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	deps := strictDeps(t)
 	who := hookAttribution{Host: "claude-code", Session: "s"}
-	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	who.Transcript = reportedMainTranscript(t, who.Session)
 	budgetRule := func(v verdict.Judgment) bool {
 		return v.Rule == string(denyRuleRootContextBudget) || v.Rule == string(denyRuleRootHeavyCommand)
 	}
 	judge := func(line string) verdict.Judgment {
 		writeCostState(hint.NewGate(cache, who.factsKey()), costState{Tokens: 900_000, Streak: 20})
-		return Judge(ctx, deps, Request{Input: line, Host: who.Host, Session: who.Session})
+		return Judge(ctx, deps, Request{Input: line, Host: who.Host, Session: who.Session, Transcript: who.Transcript})
 	}
 
 	for _, line := range []string{"./magus run go-build . -s", "git status --short", "./magus job wait a1", "./magus describe job a1 -o name"} {
@@ -166,10 +166,10 @@ func TestSpawnsEscapeTheBudgetRules(t *testing.T) {
 	ctx, cache := spawnFixture(t)
 	deps := strictDeps(t)
 	who := hookAttribution{Host: "claude-code", Session: "s"}
-	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	who.Transcript = reportedMainTranscript(t, who.Session)
 	writeCostState(hint.NewGate(cache, who.factsKey()), costState{Tokens: 900_000, Streak: 20})
 
-	v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+	v := Judge(ctx, deps, Request{Host: "claude-code", Transcript: who.Transcript, Input: hookJSON(t, map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report.", "model": "haiku"},
 	})})
@@ -355,10 +355,9 @@ func TestGroundworkNamesTheIntegratorForAReset(t *testing.T) {
 func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {
 	ctx, _ := fleetFixture(t, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := levelDeps(t, types.GuardProfileLight)
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	transcript := reportedMainTranscript(t, "s")
 	judge := func(line, agent string) verdict.Judgment {
-		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s", Agent: agent})
+		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s", Agent: agent, Transcript: transcript})
 	}
 
 	require.NotEqual(t, string(denyRuleOrchestratorGroundwork), judge("git diff", "").Rule, "no record yet")
@@ -379,8 +378,10 @@ func TestGradeMainWrite(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	grade := func(orchestrates types.Orchestration, path, lease string, prepare func(at location)) verdict.Judgment {
 		at := handedOutFixture(t, jobtypes.Job{ID: "a1", State: jobtypes.StateRunning})
+		who := who
 		if orchestrates == types.OrchestrationProven {
-			hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
+			who.Transcript = reportedMainTranscript(t, who.Session)
+			who = who.withTranscriptCaller(true)
 		}
 		if orchestrates != "" {
 			writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Forked: []string{"a1"}})
@@ -529,8 +530,7 @@ func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
 		asked++
 		return testModelTiers(t, "claude-code")
 	}
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(t, "s")
 
 	v := judgeSpawn(ctx, t, deps, "")
 	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnNamesModel)}, judgedAs(v))
@@ -566,8 +566,7 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(t, "s")
 
 	v := judgeSpawn(ctx, t, deps, "haiku")
 	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "haiku is the economy alias")
@@ -602,8 +601,7 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 		}
 	}
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(t, "s")
 
 	v := judgeSpawn(ctx, t, deps, "haiku")
 	assert.NotEqual(t, string(denyRuleSpawnNamesModel), v.Rule, "haiku is the economy row's alias")
@@ -705,7 +703,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 			deps.ModelTiers = func() *tier.Set { return facts.Tiers }
 			deps.ModelRows = func() []model.Row { return facts.Rows }
 			at := hookLocation(ctx, deps)
-			hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+			reportedMainTranscript(t, "s")
 			writeCostState(hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey()), costState{Model: tc.parent})
 			v := judgeSpawn(ctx, t, deps, tc.model)
 			if tc.allow {
@@ -731,8 +729,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(t, "s")
 
 	v := judgeSpawn(ctx, t, deps, "haiku")
 
@@ -748,8 +745,7 @@ func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
 	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := levelDeps(t, types.GuardProfileStandard)
 	deps.ModelTiers = func() *tier.Set { return set }
-	at := hookLocation(ctx, deps)
-	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(t, "s")
 
 	v := judgeSpawn(ctx, t, deps, "haiku")
 	assert.NotEqual(t, string(denyRuleSpawnAboveModelTier), v.Rule)
@@ -765,13 +761,12 @@ func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 	deps := strictDeps(t)
 	deps.Builtins[string(denyRuleRootContextBudget)] = builtin.Setting{Decision: builtin.Advise, Tokens: 2_000_000}
 	judge := func(rows bool) verdict.Judgment {
-		ctx, cache := spawnFixture(t)
+		ctx, _ := spawnFixture(t)
 		d := deps
 		if rows {
 			d.ModelRows = fixtureModelSource
 		}
-		hostGate(cache, "claude-code").MarkFired(hostAgentsKind)
-		return Judge(ctx, d, Request{Input: "ls", Host: "claude-code", Session: "s"})
+		return Judge(ctx, d, Request{Input: "ls", Host: "claude-code", Session: "s", Transcript: reportedMainTranscript(t, "s")})
 	}
 
 	assert.NotEqual(t, string(denyRuleRootContextBudget), judge(false).Rule, "no rows, no window to bound by")
@@ -852,7 +847,7 @@ func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model stri
 	if model != "" {
 		input["model"] = model
 	}
-	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+	return Judge(ctx, deps, Request{Host: "claude-code", Transcript: fixtureMainTranscript("s"), Input: hookJSON(t, map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
 	})})
 }
@@ -885,12 +880,12 @@ func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuit
 func (s *RootGroundworkSuite) SetupTest() {
 	s.layers, _ = fleetLayers(s.T(), jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
-	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(s.T(), "s")
 	s.Require().NotEqual(verdict.Deny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
 }
 
 func (s *RootGroundworkSuite) judge(line string) verdict.Judgment {
-	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s", Transcript: fixtureMainTranscript("s")})
 }
 
 // The root must reopen the acceptance evidence a worker names by ref.
@@ -928,7 +923,7 @@ type RootCitedReadSuite struct {
 func (s *RootCitedReadSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
 func (s *RootCitedReadSuite) judge(line string) verdict.Judgment {
-	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s", Transcript: fixtureMainTranscript("s")})
 }
 
 func TestRootCitedReadSuite(t *testing.T) { suite.Run(t, new(RootCitedReadSuite)) }
@@ -941,7 +936,7 @@ func (s *RootCitedReadSuite) SetupTest() {
 		ChangedPaths:    []string{},
 		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
 	}))
-	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	reportedMainTranscript(s.T(), "s")
 	s.Require().NotEqual(verdict.Deny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
 }
 
