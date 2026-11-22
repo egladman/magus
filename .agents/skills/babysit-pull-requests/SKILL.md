@@ -46,9 +46,8 @@ fix the pure function that produced it and its test, then run it again.
    `waiting-below`, `conflicting`, `kicked-back`, `behind`, `queued`,
    `needs-queue`.
 
-   `merge` appears only on a `green` or `red-inherited` record whose stage allows
-   a merge. It may suggest GitHub auto-merge. Use the queue label below when
-   authorized to queue the pull request.
+   The `merge` field prints an admin-merge command for the person. Use the
+   method label for authorized queueing.
 
 2. Queue by label when the person asks you to queue or land a pull request.
    A GitHub user with write access can supply merge intent with a method label.
@@ -58,14 +57,20 @@ fix the pure function that produced it and its test, then run it again.
    gh pr edit <n> --add-label "merge-queue: squash"
    ```
 
-   For a standalone pull request, use its own number. For a stack, use the top
-   pull request's number. A monitoring request alone leaves merge intent to
-   the person. If the label is already present, proceed to monitoring. Check
-   `status` after applying it. A pull request can be `queued` while CI or an
-   approving review is pending.
+   For a standalone pull request, use its own number. Label a stack's top
+   only when the person authorized every pull request in that stack. Apply
+   the same scope check before running `apply`. A monitoring request alone
+   leaves merge intent to the person.
 
-   The method labels are `merge-queue: squash`, `merge-queue: rebase`, and
-   `merge-queue: merge`. The queue writes its own `queue: <state>` labels.
+   Standalone methods are squash, merge and rebase. Stacks support squash
+   and merge. After a kickback, fix the reported cause before restoring the
+   intent label.
+
+   Check existing method labels and GitHub auto-merge before adding a label.
+   If a different method already has intent, resolve it with the person
+   before changing it. An existing label alone does not prove admission.
+   Check the queue plan or dashboard for the effective method and admission.
+   The queue writes its own `queue: <state>` labels.
    [GitHub provider behavior](../../../docs/concepts/merge-queue.md#providers)
 
 3. When authorized to act on the selected pull requests, run `apply` with the same selectors:
@@ -121,8 +126,7 @@ fix the pure function that produced it and its test, then run it again.
    regeneration, an import block), each in its own worktree.
 
 5. When an agent reports, check its branch with a narrow test of what it changed.
-   Then you, and only you, push it. After a kickback, use step 2 to restore the
-   authorized method label once the reported cause is fixed.
+   Then you, and only you, push it. Use step 2 for any new merge intent.
 
 6. Check again in about 20 minutes (the
    queue's validation time), or with its pull request monitor. Repeat from 1.

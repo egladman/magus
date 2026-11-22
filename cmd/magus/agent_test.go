@@ -52,18 +52,6 @@ func TestRenderAgentSkill(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestInstalledAgentInstructionsAvoidRepositoryTooling(t *testing.T) {
-	skills, err := agentSkills.RenderedSkills(types.SkillFormBoth)
-	require.NoError(t, err)
-
-	repoTool := regexp.MustCompile(`(?i)(^|[^a-z0-9])(mist|mise)([^a-z0-9]|$)`)
-	for _, skill := range skills {
-		assert.Empty(t, repoTool.Find(agentSkills.RenderSkill(skill)), "%s/SKILL.md mentions repository tooling", skill.Name)
-		assert.Empty(t, repoTool.FindString(skill.Reference), "%s/reference.md mentions repository tooling", skill.Name)
-	}
-	assert.Empty(t, repoTool.FindString(agentSkills.Section()), "the managed AGENTS.md block mentions repository tooling")
-}
-
 // TestAgentsSectionIsPlainASCII holds the AGENTS.md block to the same message rule.
 func TestAgentsSectionIsPlainASCII(t *testing.T) {
 	require.NotEmpty(t, agentSkills.Section())

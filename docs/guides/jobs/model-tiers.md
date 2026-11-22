@@ -67,7 +67,8 @@ tiers.
    with [Declare your own](#declare-your-own).
 2. Replace the model string in the tier's `match` arm with the exact ID the
    harness accepts for a spawn. If two adjacent tiers share the old model,
-   decide whether to update both arms.
+   decide whether to update both arms. Update the model IDs in your tests
+   and any assertion that two tiers share an alias.
 
    ```diff
    -        .design -> "gpt-6-astra",
@@ -165,9 +166,10 @@ no magus release.
 1. Add a case to your enum at the intended rank, cheapest first. If you use
    `magus/modeltiers`, declare a workspace enum with the cases you want and
    pass it to `magus\modelTiers`.
-2. Add an arm for the new case to each host function and any `bounds` and
-   `skills` functions you supply. An adjacent tier can share the same model
-   alias. Review the default and any matrix function that chooses a tier.
+2. Supply `bounds` and `skills` functions that cover every case of your enum.
+   Add an arm for the new case to each host function. An adjacent tier can
+   share the same model alias. Review the default and any matrix function
+   that chooses a tier.
 3. Run `magus ls` and the tests for your mapping. If a function leaves out
    the new case, the workspace load reports the incomplete declaration.
 
