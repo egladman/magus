@@ -72,6 +72,13 @@ var mcpReadOnlyTools = map[hint.ToolName]func(input map[string]any) bool{
 	hint.ToolConfig:  func(map[string]any) bool { return true },
 	hint.ToolConsole: func(map[string]any) bool { return true },
 	hint.ToolBuzz:    func(map[string]any) bool { return true },
+	hint.ToolSplice: func(input map[string]any) bool {
+		if _, present := input["apply"]; !present {
+			return true
+		}
+		apply, ok := input["apply"].(bool)
+		return ok && !apply
+	},
 	// The ops that write into the person's review session are not reads; the handler
 	// defaults an op that is absent or not text to state.
 	hint.ToolDiff: func(input map[string]any) bool {
