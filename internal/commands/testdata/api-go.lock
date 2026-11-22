@@ -836,7 +836,7 @@ github.com/egladman/magus/std.Splice var Module
 github.com/egladman/magus/std.SpliceApply func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan) (github.com/egladman/magus/types.Result[github.com/egladman/magus/types.EditApplied], error)
 github.com/egladman/magus/std.SpliceBlocks func(_ context.Context, text string, name string) (github.com/egladman/magus/types.EditDocument, error)
 github.com/egladman/magus/std.SpliceCreate func(_ context.Context, path string, content string) (github.com/egladman/magus/types.EditChange, error)
-github.com/egladman/magus/std.SpliceDiff func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan, contextLines int) (string, error)
+github.com/egladman/magus/std.SpliceDiff func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan, contextLines int) (github.com/egladman/magus/types.Result[string], error)
 github.com/egladman/magus/std.SplicePlan func(ctx context.Context, changes []github.com/egladman/magus/types.EditChange) (github.com/egladman/magus/types.EditPlan, error)
 github.com/egladman/magus/std.SpliceReplace func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
 github.com/egladman/magus/std.SpliceReplaceAll func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
