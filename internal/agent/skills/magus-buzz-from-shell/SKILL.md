@@ -1,7 +1,7 @@
 # Rewriting shell as Buzz
 
 {{if .Full}}A shell script ported line by line into Buzz is worse than the shell it replaced.
-Every `curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list.
+Every `curl` and `sed` becomes a `proc\exec` call with a hand-built argument list.
 The temp files and traps survive only to feed those tools, and the result still parses text.
 
 Port what the script DOES instead. Name its inputs and outputs, and decide whether it
@@ -10,7 +10,7 @@ should be a script at all. Then write each step with the host module that alread
 
 This skill teaches the rewrite. {{skill "buzz-lang"}} teaches the syntax; load it first
 if you have not written Buzz in this session.{{else}}Port what script DOES, never its lines.
-Line-by-line port: every `curl`/`jq`/`sed` becomes `proc\exec`, temp files and traps survive only to feed them, result still parses text.
+Use the host modules for HTTP and structured data.
 `proc\exec` only for real external program script exists to run.
 Syntax: {{skill "buzz-lang"}}; load it first.{{end}}
 
@@ -86,7 +86,7 @@ assuming a row's call takes the arguments you expect.
 | `trap 'rm -rf "$TMP"' EXIT` | usually nothing: keep the data in memory |
 | `curl -fsSL --retry 5 URL` | `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })` |
 | `curl -o file URL` | `http\download(url, dest: file)` |
-| `jq`, `yq` | `json\parse`, `yaml\parse`, then index; `json\stringify` |
+| JSON and YAML | `json\parse`, `yaml\parse`, then index; `json\stringify` |
 | `grep PAT file`, `grep -c` | `fs\readLines(file).filter(...)`, `.len()` |
 | `sed 's/a/b/g'` | `text.replace("a", with: "b")` |
 | `cut -d: -f2`, `awk '{print $2}'` | `line.split(":")[1]`, `strings\fields(line)[1]` |
@@ -107,7 +107,7 @@ assuming a row's call takes the arguments you expect.
 | `git ...` | `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for the rest |
 | `( cd d && tool )` | `proc\exec("tool", args: [...], dir: d)` |
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
-| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
+| Magus queries | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
 | `{{cmd "run"}} t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |{{else}}Signatures: `{{cmd "describe"}} module <name>`. Check before assuming arguments.
 
 shell: Buzz
@@ -116,7 +116,7 @@ shell: Buzz
 - `trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
 - `curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
 - `curl -o file URL`: `http\download(url, dest: file)`
-- `jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
+- JSON and YAML: `json\parse`, `yaml\parse`, then index; `json\stringify`
 - `grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
 - `sed 's/a/b/g'`: `text.replace("a", with: "b")`
 - `cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
@@ -137,7 +137,7 @@ shell: Buzz
 - `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
 - `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
 - `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
+- Magus queries: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
 - `{{cmd "run"}} t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
 
 ## Pairs
@@ -175,7 +175,6 @@ when the message you would write says more than the raised one.{{else}}`fs\readF
 ```sh
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$API&offset=$o" -o "$TMP/page.json"
-jq -e '(.rows | length) == 100' "$TMP/page.json" >/dev/null || exit 1
 ```
 
 ```buzz
@@ -194,10 +193,8 @@ fun fetchPage(api: str, offset: int) > [any] !> any {
 }
 ```
 
-{{if .Full}}The temp directory and its trap existed because `jq` reads files. With the body in memory
-both go. Without a `retry` argument a request runs exactly once. When a real directory is
-needed, [reference.md](reference.md#a-temp-directory-that-must-exist) removes it on both
-paths.{{else}}Temp dir and trap existed because `jq` reads files; body in memory -> both go. No `retry` argument: request runs once. Real directory needed: [reference.md](reference.md#a-temp-directory-that-must-exist).{{end}}
+Parse the response body in memory and validate the row count before returning. Without a
+`retry` argument the request runs once. [Temporary directories](reference.md#a-temp-directory-that-must-exist)
 
 ### Digests, counts and key=value files
 

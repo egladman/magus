@@ -51,7 +51,7 @@ It raises on a non-zero exit.{{else}}`proc\exec` belongs here: `node`, `prettier
 ## Asking magus
 
 ```sh
-role=$(./magus describe file go.mod -o json | jq -r '.files[0].role')
+./magus describe file go.mod -o 'template={{"{{(index .files 0).role}}"}}'
 ./magus run generate docs
 ```
 
@@ -66,13 +66,12 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-{{if .Full}}A typed record fails the check on a misspelled field. A `jq` path returns `null` and
-the script carries on.{{else}}Typed record fails check on misspelled field; `jq` path returns `null`, script carries on.{{end}}
+The Buzz checker catches a misspelled record field.
 
 ## A whole rewrite
 
 A dataset fetch script, 50 lines of bash: `mktemp` and a trap, five `curl` calls into
-page files, a `jq -e` length check per page, `jq -s` to merge, sort and drop a field,
+page files, a length check per page, a merge, sort and field selection,
 `wc -l` to count rows, a `sha256sum`-or-`shasum` fallback, and `cut` to compare against a
 pinned digest. It reads one URL and writes one JSONL file, so it stays a script: it runs on
 demand and nothing builds from its output.
@@ -127,8 +126,7 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-What went: the temp directory, the trap, every `jq` program, the row-count pipeline, and the
+What went: the temp directory, the trap, the row-count pipeline, and the
 digest tool fallback. What stayed: the five pages, the two counts, the pinned-digest
 comparison. Those are what the script does. Before replacing the shell, run both and
-compare the JSONL files byte for byte. A `jq -c` and a `json\stringify` can order keys
-differently, and only the diff says so.
+compare the JSONL files byte for byte. Check object key order when the digest covers serialized bytes.

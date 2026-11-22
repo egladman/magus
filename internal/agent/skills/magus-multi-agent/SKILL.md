@@ -88,20 +88,15 @@ outcome, changed paths, validation refs and unresolved risks; reopen the relevan
 evidence when verification needs it. Persist the complete JSON or JSONL in the
 host capture or result file. Do not echo it into another tool call or the reply.
 
-For a job validation, project `problems`, `unchecked` and a count of `permitted`
-from `-o json` before it reaches your context. Keep the producer's failure status
-when piping. Inspect individual permitted deviations only when they affect a
+For a job validation, select the fields you need with an output template.
+Inspect individual permitted deviations only when they affect a
 decision; `--dry-run` text intentionally previews the full record. Prepare the
 spec once in a scratch file (`job_spec` below); do not retype its full exception
-list on every retry:{{else}}Read worker's structured result, never whole event stream. Keep job id, outcome, changed paths, validation refs, unresolved risks.
-Persist full JSON/JSONL in host capture or result file; never echo it into another call or reply.
-Job validation: project `problems`, `unchecked`, count of `permitted` from `-o json`; keep producer's failure status when piping.
-Inspect a permitted deviation only when it affects a decision. Spec once in scratch file (`job_spec`); never retype exception list per retry:{{end}}
+list on every retry:{{else}}Keep the worker's job id, outcome, changed paths, validation refs and unresolved risks.
+Save full records separately. Reuse the spec in `$job_spec` for retries.{{end}}
 
 ```sh
-set -o pipefail
-{{cmd "job fork"}} --stdin --dry-run -o json < "$job_spec" |
-  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+{{cmd "job fork"}} --stdin --dry-run -o 'template={{"{{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}"}}' < "$job_spec"
 ```
 
 {{if .Full}}Tell the person what changed, what passed, what remains unverified, and any decision
