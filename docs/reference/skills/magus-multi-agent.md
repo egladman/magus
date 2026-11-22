@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27742
-skill_short_bytes: 21991
+skill_full_bytes: 27583
+skill_short_bytes: 21594
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `c660fe22e0ad` |
+| `skill-content` | `c8c8335a03d9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -123,15 +123,11 @@ The loop: define, partition, hand out, observe, evaluate, course-correct, integr
 
 ## Keep worker records out of the user update
 
-Read worker's structured result, never whole event stream. Keep job id, outcome, changed paths, validation refs, unresolved risks.
-Persist full JSON/JSONL in host capture or result file; never echo it into another call or reply.
-Job validation: project `problems`, `unchecked`, count of `permitted` from `-o json`; keep producer's failure status when piping.
-Inspect a permitted deviation only when it affects a decision. Spec once in scratch file (`job_spec`); never retype exception list per retry:
+Keep the worker's job id, outcome, changed paths, validation refs and unresolved risks.
+Save full records separately. Reuse the spec in `$job_spec` for retries.
 
 ```sh
-set -o pipefail
-magus job fork --stdin --dry-run -o json < "$job_spec" |
-  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+magus job fork --stdin --dry-run -o 'template={{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}' < "$job_spec"
 ```
 
 Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
@@ -559,17 +555,14 @@ outcome, changed paths, validation refs and unresolved risks; reopen the relevan
 evidence when verification needs it. Persist the complete JSON or JSONL in the
 host capture or result file. Do not echo it into another tool call or the reply.
 
-For a job validation, project `problems`, `unchecked` and a count of `permitted`
-from `-o json` before it reaches your context. Keep the producer's failure status
-when piping. Inspect individual permitted deviations only when they affect a
+For a job validation, select the fields you need with an output template.
+Inspect individual permitted deviations only when they affect a
 decision; `--dry-run` text intentionally previews the full record. Prepare the
 spec once in a scratch file (`job_spec` below); do not retype its full exception
 list on every retry:
 
 ```sh
-set -o pipefail
-magus job fork --stdin --dry-run -o json < "$job_spec" |
-  jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
+magus job fork --stdin --dry-run -o 'template={{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}' < "$job_spec"
 ```
 
 Tell the person what changed, what passed, what remains unverified, and any decision
