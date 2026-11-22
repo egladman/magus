@@ -49,7 +49,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun job_schema_generate(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(["job/*.go", "../apiversion/*.go", "internal/cmd/jobschema/*.go"]);
     ctx.writesFiles(["job/internal/gen/schema.go"]);
-    go["go-run"](ctx, {"args": ["./internal/cmd/jobschema", "job", "../apiversion"]});
+    go["go-run"](ctx, {"args": ["./internal/cmd/jobschema"]});
 }
 
 // Renders MAGUS.md, this project's target catalog.

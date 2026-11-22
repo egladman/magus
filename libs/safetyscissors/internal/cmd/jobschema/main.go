@@ -23,13 +23,10 @@ type generator struct {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		log.Fatal("usage: jobschema JOB_DIR APIVERSION_DIR")
-	}
-	job := os.Args[1]
+	const job = "job"
 	g := generator{types: make(map[string]ast.Expr), names: make(map[string]string), written: make(map[string]bool)}
 	g.load(job, "")
-	g.load(os.Args[2], "apiversion.")
+	g.load("../apiversion", "apiversion.")
 	roots := []string{"jobRecord", "attemptRecord", "grantRecord", "checkRunRecord", "gradeRecord"}
 	for _, r := range roots {
 		n := strings.TrimSuffix(r, "Record")

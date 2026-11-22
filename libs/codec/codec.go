@@ -837,7 +837,8 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 	}
 	seen := map[string]struct{}{}
 	if depth == 0 && s.schema != nil {
-		s.inspected.RootFields = seen
+		s.inspected.RootFields = make(map[string]struct{})
+		seen = s.inspected.RootFields
 	}
 	separator, kept := s.pos, false
 	for {

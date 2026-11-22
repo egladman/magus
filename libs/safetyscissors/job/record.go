@@ -1,6 +1,6 @@
 package job
 
-//go:generate go run ../internal/cmd/jobschema . ../../apiversion
+//go:generate go -C .. run ./internal/cmd/jobschema
 
 import (
 	"errors"
@@ -924,7 +924,7 @@ type UnknownMemberError struct {
 }
 
 func (e *UnknownMemberError) Error() string {
-	return fmt.Sprintf("job: unknown stored fields %s; read the store with the writer's build", strings.Join(e.Paths, ", "))
+	return fmt.Sprintf("job: unknown stored fields %s (read the store with the writer's build)", strings.Join(e.Paths, ", "))
 }
 
 // Only the store owns the schemas below. Embedded domain types keep their
