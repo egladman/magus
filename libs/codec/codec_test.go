@@ -22,6 +22,23 @@ type ConformanceSuite struct{ suite.Suite }
 
 func TestConformance(t *testing.T) { suite.Run(t, new(ConformanceSuite)) }
 
+func (s *ConformanceSuite) TestInspectSeparatesExtensionsFromRejectedFields() {
+	leaf := &ObjectSchema{Name: "leaf", Closed: true, Fields: map[string]*ObjectSchema{"id": nil}}
+	item := &ObjectSchema{Fields: map[string]*ObjectSchema{"leaf": leaf}}
+	schema := ObjectSchema{Fields: map[string]*ObjectSchema{"items": {Element: item}}}
+	data := []byte(`{"first":0,"items":[{"x":1,"leaf":{"a, b":0},"y":2},{"x":[3]}],"last":4}`)
+	got, err := schema.Inspect(data)
+	s.Require().NoError(err)
+	s.JSONEq(`{"items":[{"leaf":{"a, b":0}},{}]}`, string(got.Known))
+	s.Equal([]UnknownField{{Object: "leaf", Name: "a, b", Path: `items[0].leaf["a, b"]`}}, got.Rejected)
+	s.Equal(RawMessage("[3]"), got.Extensions["items[1]"]["x"])
+	s.Equal(RawMessage("2"), got.Extensions["items[0]"]["y"])
+	s.Equal(RawMessage("4"), got.Extensions[""]["last"])
+	_, err = schema.Inspect(data[:len(data)-1])
+	var syntax *SyntaxError
+	s.ErrorAs(err, &syntax)
+}
+
 type pair struct {
 	K string `json:"k"`
 	V int    `json:"v"`

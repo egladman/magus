@@ -17,14 +17,12 @@ import (
 // reads the file again after.
 type Migrate func(ctx context.Context, path string, found apiversion.APIVersion, lines []codec.Line) error
 
-// current reports whether the file f and log were read from is at the store version s
-// writes. A file without a header predates every conversion, so only a store with none
-// reads it as it stands.
-func (s *Store) current(f Rows, log jobsLog) bool {
-	if log.header == nil {
+// A headerless ledger predates migrations.
+func (s *Store) current(ledger jobLedger) bool {
+	if ledger.log.header == nil {
 		return s.migrate == nil
 	}
-	return f.APIVersion == s.version
+	return ledger.rows.APIVersion == s.version
 }
 
 // refuseVersion refuses a file whose header f is at another store version than s writes,

@@ -1,15 +1,18 @@
 package job
 
+//go:generate go -C .. run ./internal/cmd/jobschema
+
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job/internal/gen"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -100,14 +103,26 @@ func (r jobRecord) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON reads the record, keeping the members it does not declare in Unknown.
 func (r *jobRecord) UnmarshalJSON(data []byte) error {
-	type plain jobRecord
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
+	fields, err := gen.Job.Inspect(data)
 	if err != nil {
 		return err
 	}
+	return r.decode(fields)
+}
+
+func (r *jobRecord) decode(fields codec.InspectedObject) error {
+	if err := rejectUnknown(fields.Rejected); err != nil {
+		return err
+	}
+	type plain jobRecord
+	var p plain
+	if err := codec.Unmarshal(fields.Known, &p); err != nil {
+		return err
+	}
 	*r = jobRecord(p)
-	r.Unknown = unknown
+	r.Unknown = fields.Extensions[""]
+	r.Spec.Unknown = fields.Extensions["spec"]
+	r.Status.Unknown = fields.Extensions["status"]
 	return nil
 }
 
@@ -117,36 +132,10 @@ func (s jobSpec) MarshalJSON() ([]byte, error) {
 	return codec.MarshalWithUnknown(plain(s), s.Unknown)
 }
 
-// UnmarshalJSON reads the spec, keeping the members it does not declare in Unknown.
-func (s *jobSpec) UnmarshalJSON(data []byte) error {
-	type plain jobSpec
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
-	if err != nil {
-		return err
-	}
-	*s = jobSpec(p)
-	s.Unknown = unknown
-	return nil
-}
-
 // MarshalJSON writes the status with the members it kept in Unknown.
 func (st jobStatus) MarshalJSON() ([]byte, error) {
 	type plain jobStatus
 	return codec.MarshalWithUnknown(plain(st), st.Unknown)
-}
-
-// UnmarshalJSON reads the status, keeping the members it does not declare in Unknown.
-func (st *jobStatus) UnmarshalJSON(data []byte) error {
-	type plain jobStatus
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
-	if err != nil {
-		return err
-	}
-	*st = jobStatus(p)
-	st.Unknown = unknown
-	return nil
 }
 
 // recordJob is row as the line jobs.jsonl stores. stored is the row's
@@ -479,7 +468,7 @@ func wireSkills() wireEnum[tier.SkillVariant] {
 }
 
 // The records below mirror domain types under snake_case keys, and each refuses a member
-// it does not declare (see [readNested]), which a domain type does not.
+// it does not declare (see [checkStoredMembers]), which a domain type does not.
 
 type agentRecord struct {
 	Model        Model        `json:"model,omitzero"`
@@ -933,153 +922,50 @@ func (r *resultRecord) result() *Result {
 	return out
 }
 
-// UnknownMemberError is a stored record, below the top of a row or an attempt line,
-// holding a member this build does not declare. Only [Job.Unknown]'s three levels keep
-// such a member for the next write, so a reader refuses it rather than drop it on the
-// write after.
+// UnknownMemberError reports the fields this build would lose on rewriting a stored line.
 type UnknownMemberError struct {
-	// Record is the Go name of the record type that holds the members.
+	// Record is the Go type holding the members, or empty if several types are involved.
 	Record  string
 	Members []string
+	// Paths names each rejected field from the root of the entry.
+	Paths []string
 }
 
 func (e *UnknownMemberError) Error() string {
-	return fmt.Sprintf("job: a stored %s holds %q, which this build does not declare: a newer writer stored it, so read the store with that writer's build", e.Record, e.Members)
+	return fmt.Sprintf("job: unknown stored fields %s (read the store with the writer's build)", strings.Join(e.Paths, ", "))
 }
 
-// readNested decodes data into p, refusing a member p's type does not declare.
-func readNested[P any](data []byte, p *P, record string) error {
-	unknown, err := codec.UnmarshalWithUnknown(data, p)
+// Only the store owns the schemas below. Embedded domain types keep their
+// own decoding rules, and the job envelope carries unknown fields forward.
+func rejectUnknown(fields []codec.UnknownField) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	refusal := &UnknownMemberError{Record: fields[0].Object}
+	for _, f := range fields {
+		if refusal.Record != f.Object {
+			refusal.Record = ""
+		}
+		refusal.Members = append(refusal.Members, f.Name)
+		refusal.Paths = append(refusal.Paths, f.Path)
+	}
+	slices.Sort(refusal.Members)
+	slices.Sort(refusal.Paths)
+	return refusal
+}
+
+func unmarshalWithSchema(data []byte, dst any, schema *codec.ObjectSchema) error {
+	fields, err := schema.Inspect(data)
 	if err != nil {
 		return err
 	}
-	if len(unknown) > 0 {
-		return &UnknownMemberError{Record: record, Members: slices.Sorted(maps.Keys(unknown))}
+	if err := rejectUnknown(fields.Rejected); err != nil {
+		return err
 	}
-	return nil
-}
-
-func (r *agentRecord) UnmarshalJSON(data []byte) error {
-	type plain agentRecord
-	return readNested(data, (*plain)(r), "agentRecord")
-}
-
-func (r *workerRecord) UnmarshalJSON(data []byte) error {
-	type plain workerRecord
-	return readNested(data, (*plain)(r), "workerRecord")
-}
-
-func (r *postconditionRecord) UnmarshalJSON(data []byte) error {
-	type plain postconditionRecord
-	return readNested(data, (*plain)(r), "postconditionRecord")
-}
-
-func (r *modelTierRecord) UnmarshalJSON(data []byte) error {
-	type plain modelTierRecord
-	return readNested(data, (*plain)(r), "modelTierRecord")
-}
-
-func (r *originRecord) UnmarshalJSON(data []byte) error {
-	type plain originRecord
-	return readNested(data, (*plain)(r), "originRecord")
-}
-
-func (r *credentialRecord) UnmarshalJSON(data []byte) error {
-	type plain credentialRecord
-	return readNested(data, (*plain)(r), "credentialRecord")
-}
-
-func (r *claimRecord) UnmarshalJSON(data []byte) error {
-	type plain claimRecord
-	return readNested(data, (*plain)(r), "claimRecord")
-}
-
-func (r *claimEvidenceRecord) UnmarshalJSON(data []byte) error {
-	type plain claimEvidenceRecord
-	return readNested(data, (*plain)(r), "claimEvidenceRecord")
-}
-
-func (r *releaseRecord) UnmarshalJSON(data []byte) error {
-	type plain releaseRecord
-	return readNested(data, (*plain)(r), "releaseRecord")
-}
-
-func (r *entryRecord) UnmarshalJSON(data []byte) error {
-	type plain entryRecord
-	return readNested(data, (*plain)(r), "entryRecord")
-}
-
-func (r *verificationRecord) UnmarshalJSON(data []byte) error {
-	type plain verificationRecord
-	return readNested(data, (*plain)(r), "verificationRecord")
-}
-
-func (r *rejectionRecord) UnmarshalJSON(data []byte) error {
-	type plain rejectionRecord
-	return readNested(data, (*plain)(r), "rejectionRecord")
-}
-
-func (r *worktreeRecord) UnmarshalJSON(data []byte) error {
-	type plain worktreeRecord
-	return readNested(data, (*plain)(r), "worktreeRecord")
-}
-
-func (r *runAttemptRecord) UnmarshalJSON(data []byte) error {
-	type plain runAttemptRecord
-	return readNested(data, (*plain)(r), "runAttemptRecord")
-}
-
-func (r *postconditionAttemptRecord) UnmarshalJSON(data []byte) error {
-	type plain postconditionAttemptRecord
-	return readNested(data, (*plain)(r), "postconditionAttemptRecord")
-}
-
-func (r *runRecord) UnmarshalJSON(data []byte) error {
-	type plain runRecord
-	return readNested(data, (*plain)(r), "runRecord")
-}
-
-func (r *integrationRecord) UnmarshalJSON(data []byte) error {
-	type plain integrationRecord
-	return readNested(data, (*plain)(r), "integrationRecord")
+	return codec.Unmarshal(fields.Known, dst)
 }
 
 func (r *attemptRecord) UnmarshalJSON(data []byte) error {
 	type plain attemptRecord
-	return readNested(data, (*plain)(r), "attemptRecord")
-}
-
-func (r *attemptSpec) UnmarshalJSON(data []byte) error {
-	type plain attemptSpec
-	return readNested(data, (*plain)(r), "attemptSpec")
-}
-
-func (r *attemptStatusRecord) UnmarshalJSON(data []byte) error {
-	type plain attemptStatusRecord
-	return readNested(data, (*plain)(r), "attemptStatusRecord")
-}
-
-func (r *resultRecord) UnmarshalJSON(data []byte) error {
-	type plain resultRecord
-	return readNested(data, (*plain)(r), "resultRecord")
-}
-
-func (r *resultValidationRecord) UnmarshalJSON(data []byte) error {
-	type plain resultValidationRecord
-	return readNested(data, (*plain)(r), "resultValidationRecord")
-}
-
-func (r *evidenceRecord) UnmarshalJSON(data []byte) error {
-	type plain evidenceRecord
-	return readNested(data, (*plain)(r), "evidenceRecord")
-}
-
-func (r *denialRecord) UnmarshalJSON(data []byte) error {
-	type plain denialRecord
-	return readNested(data, (*plain)(r), "denialRecord")
-}
-
-func (r *retryRecord) UnmarshalJSON(data []byte) error {
-	type plain retryRecord
-	return readNested(data, (*plain)(r), "retryRecord")
+	return unmarshalWithSchema(data, (*plain)(r), &gen.Attempt)
 }

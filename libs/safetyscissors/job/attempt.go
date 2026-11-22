@@ -263,11 +263,11 @@ func (s *Store) RecordAttempt(ctx context.Context, a Attempt) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.locked(ctx, func() error {
-		f, _, err := s.readFile(ctx, false)
+		ledger, err := s.readFile(ctx, false)
 		if err != nil {
 			return err
 		}
-		if !slices.ContainsFunc(f.Jobs, func(row Job) bool { return row.ID == a.Job }) {
+		if !slices.ContainsFunc(ledger.rows.Jobs, func(row Job) bool { return row.ID == a.Job }) {
 			return s.wrap(fmt.Errorf("%w: %q", ErrUnknownJob, a.Job))
 		}
 		var refused error

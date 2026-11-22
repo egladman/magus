@@ -80,6 +80,7 @@ verdict.
 | Package   | Holds                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------- |
 | `job`     | the declared row with its `Check` and `Postcondition`s, the store, attempts and grading     |
+| `job/gen/jobtest` | mocks for job interfaces |
 | `budget`  | the slot limiter, machine-wide memory and slot claims, and the `Price` and `Pricer` types   |
 | `verdict` | what a rule answers about a call (defer, advise, ask, deny) and the `Stricter` merge        |
 | `step`    | one thing a program is about to do, as data, and the spec of each kind                      |

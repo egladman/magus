@@ -95,7 +95,7 @@ magus graph export -o json  # the whole graph
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                             |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      13 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `lint`              |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `lint`, `ci`                             |
-| [libs/safetyscissors](libs/safetyscissors/MAGUS.md)                         |      13 | `magus query project=libs/safetyscissors`             | `ci`, `format`, `lint`                           |
+| [libs/safetyscissors](libs/safetyscissors/MAGUS.md)                         |      15 | `magus query project=libs/safetyscissors`             | `ci`, `format`, `lint`                           |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `lint`, `ci`                           |
 | [libs/secrets](libs/secrets/MAGUS.md)                                       |       8 | `magus query project=libs/secrets`                    | `format`, `lint`, `ci`                           |
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                           |
