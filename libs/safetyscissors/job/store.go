@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job/internal/gen"
 )
 
 // ErrNoID reports a lease with no id. The id is what Update upserts on, so a row without
@@ -1367,7 +1368,7 @@ type grantRecord struct {
 
 func (r *grantRecord) UnmarshalJSON(data []byte) error {
 	type plain grantRecord
-	return readNested(data, (*plain)(r), "grantRecord")
+	return unmarshalWithSchema(data, (*plain)(r), &gen.Grant)
 }
 
 func recordGrant(g Grant) grantRecord {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job/internal/gen"
 )
 
 // RunRef names one run the store recorded. Only the store mints one, and a ref grades only
@@ -413,17 +414,12 @@ type checkRunRecord struct {
 
 func (r *checkRunRecord) UnmarshalJSON(data []byte) error {
 	type plain checkRunRecord
-	return readNested(data, (*plain)(r), "checkRunRecord")
+	return unmarshalWithSchema(data, (*plain)(r), &gen.CheckRun)
 }
 
 func (r *gradeRecord) UnmarshalJSON(data []byte) error {
 	type plain gradeRecord
-	return readNested(data, (*plain)(r), "gradeRecord")
-}
-
-func (r *postconditionGradeRecord) UnmarshalJSON(data []byte) error {
-	type plain postconditionGradeRecord
-	return readNested(data, (*plain)(r), "postconditionGradeRecord")
+	return unmarshalWithSchema(data, (*plain)(r), &gen.Grade)
 }
 
 func recordCheckRun(r run) checkRunRecord {

@@ -16,6 +16,19 @@ type RecordSuite struct {
 
 func TestRecordSuite(t *testing.T) { suite.Run(t, new(RecordSuite)) }
 
+func BenchmarkStoredJobRead(b *testing.B) {
+	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"review"},"spec":{"postconditions":[{"id":"tests","kind":"check"},{"id":"format","kind":"check"}]},"status":{"created":0,"updated":0,"registered_by":{"credential":{}}}}`)
+	b.Run(codec.Version(), func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			var r jobRecord
+			if err := codec.Unmarshal(line, &r); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
 // readRecord is the row a line of jobs.jsonl stores, and false for a line that is not a
 // row, such as the header.
 func readRecord(text []byte) (Job, bool, error) {
@@ -85,18 +98,21 @@ func (s *RecordSuite) TestACredentialKindTheStoreDoesNotAdmitIsRefused() {
 }
 
 func (s *RecordSuite) TestAMemberANewerWriterStoredGoesBackOut() {
-	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"later":1},"status":{"created":0,"updated":0},"extra":true}`)
+	line := []byte(`{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"later":1},"status":{"created":0,"updated":0,"future":{"v":2}},"extra":true}`)
 
 	row, ok, err := readRecord(line)
 	s.Require().NoError(err)
 	s.Require().True(ok)
-	s.Equal([]string{"extra", "spec.later"}, row.Unknown)
+	s.Equal([]string{"extra", "spec.later", "status.future"}, row.Unknown)
 
 	var r jobRecord
 	s.Require().NoError(codec.Unmarshal(line, &r))
 	out, err := MarshalRecord(row, r.Unknown)
 	s.Require().NoError(err)
 	s.Contains(string(out), `"extra":true`)
+	out, err = codec.Marshal(r)
+	s.Require().NoError(err)
+	s.JSONEq(string(line), string(out))
 }
 
 func (s *RecordSuite) TestAPostconditionsBasesRoundTrip() {
@@ -144,6 +160,26 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredTwoLevelsDownIsRefused() {
 	_, _, err := readRecord(line)
 
 	s.Equal("credentialRecord", s.nestedRefusal(err).Record)
+}
+
+func (s *RecordSuite) TestNamesOnOneRejectedObjectAreReportedTogether() {
+	line := []byte(`{"spec":{"postconditions":[{"z_future":1,"a_future":2}]}}`)
+	var row jobRecord
+	err := codec.Unmarshal(line, &row)
+	refused := s.nestedRefusal(err)
+	s.Equal("postconditionRecord", refused.Record)
+	s.Equal([]string{"a_future", "z_future"}, refused.Members)
+}
+
+func (s *RecordSuite) TestAllUnknownPathsInOneEntry() {
+	const line = `{"extension":{"ok":1},"status":{"registered_by":{"credential":{"extra":1}}},"spec":{"postconditions":[{"typo":1},{"typo":2}]}}`
+	var row jobRecord
+	err := codec.Unmarshal([]byte(line), &row)
+	want := []string{"spec.postconditions[0].typo", "spec.postconditions[1].typo", "status.registered_by.credential.extra"}
+	s.Equal(want, s.nestedRefusal(err).Paths)
+	for _, path := range want {
+		s.ErrorContains(err, path)
+	}
 }
 
 func (s *RecordSuite) TestAMemberANewerWriterStoredOnAnAttemptIsRefused() {

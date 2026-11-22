@@ -593,6 +593,60 @@ func validate(data []byte) error {
 	return s.document(nil, reflect.Value{})
 }
 
+// ObjectSchema describes the members of an object or the elements of an array.
+// A nil child leaves its contents to the field's decoder.
+type ObjectSchema struct {
+	Name    string
+	Closed  bool
+	Fields  map[string]*ObjectSchema
+	Element *ObjectSchema
+}
+
+// UnknownField identifies an undeclared member of a closed object.
+type UnknownField struct{ Object, Path, Name string }
+
+// UnknownFields inspects one complete document. Syntax errors take precedence.
+func (schema *ObjectSchema) UnknownFields(data []byte) ([]UnknownField, error) {
+	s := scanner{data: data, schema: schema}
+	if err := s.document(nil, reflect.Value{}); err != nil {
+		return nil, err
+	}
+	return s.unknown, nil
+}
+
+type pathPart struct {
+	name  string
+	index int
+	array bool
+}
+
+func fieldPath(parts []pathPart, name string) string {
+	var b strings.Builder
+	writeName := func(n string) {
+		if n == "" || strings.ContainsAny(n, ".[]\"\\") || !strconv.CanBackquote(n) {
+			b.WriteByte('[')
+			b.WriteString(strconv.Quote(n))
+			b.WriteByte(']')
+			return
+		}
+		if b.Len() > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(n)
+	}
+	for _, p := range parts {
+		if p.array {
+			b.WriteByte('[')
+			b.WriteString(strconv.Itoa(p.index))
+			b.WriteByte(']')
+		} else {
+			writeName(p.name)
+		}
+	}
+	writeName(name)
+	return b.String()
+}
+
 // maxDepth is the nesting both libraries refuse past.
 const maxDepth = 10000
 
@@ -614,6 +668,9 @@ type scanner struct {
 	pos  int
 
 	strict   bool
+	schema   *ObjectSchema
+	path     []pathPart
+	unknown  []UnknownField
 	caseOnly bool
 	likeV2   bool
 
@@ -810,9 +867,24 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 		case elem != nil:
 			ft = elem
 		}
+		parent := s.schema
+		if parent != nil {
+			child, known := parent.Fields[name]
+			if !known && parent.Closed {
+				s.unknown = append(s.unknown, UnknownField{Object: parent.Name, Name: name, Path: fieldPath(s.path, name)})
+			}
+			s.schema = child
+			if child != nil {
+				s.path = append(s.path, pathPart{name: name})
+			}
+		}
 		if err := s.value(depth+1, ft, fv); err != nil {
 			return err
 		}
+		if s.schema != nil {
+			s.path = s.path[:len(s.path)-1]
+		}
+		s.schema = parent
 		s.skipSpace()
 		if s.pos >= len(s.data) {
 			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
@@ -860,9 +932,20 @@ func (s *scanner) array(depth int, t reflect.Type, v reflect.Value) error {
 		if fixed && v.IsValid() && i < v.Len() {
 			ev = v.Index(i)
 		}
+		parent := s.schema
+		if parent != nil {
+			s.schema = parent.Element
+			if s.schema != nil {
+				s.path = append(s.path, pathPart{index: i, array: true})
+			}
+		}
 		if err := s.value(depth+1, elem, ev); err != nil {
 			return err
 		}
+		if s.schema != nil {
+			s.path = s.path[:len(s.path)-1]
+		}
+		s.schema = parent
 		s.skipSpace()
 		if s.pos >= len(s.data) {
 			return s.errorAt(s.pos, io.ErrUnexpectedEOF)

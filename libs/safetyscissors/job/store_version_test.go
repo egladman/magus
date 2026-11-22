@@ -18,6 +18,19 @@ type StoreVersionSuite struct {
 
 func TestStoreVersionSuite(t *testing.T) { suite.Run(t, new(StoreVersionSuite)) }
 
+func (s *StoreSuite) TestUnknownFieldsRefuseTheUpdateBeforeAppend() {
+	const original = `{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"extension":1,"spec":{"postconditions":[{"typo":1},{"typo":2}]},"status":{"registered_by":{"credential":{"extra":1}}}}` + "\n"
+	path := filepath.Join(s.dir, jobsFileName)
+	s.Require().NoError(os.WriteFile(path, []byte(original), 0600))
+	_, err := s.open().Update(s.T().Context(), "a", func(*Job) { s.FailNow("unexpected update") })
+	var unknown *UnknownMemberError
+	s.Require().ErrorAs(err, &unknown)
+	s.Equal([]string{"spec.postconditions[0].typo", "spec.postconditions[1].typo", "status.registered_by.credential.extra"}, unknown.Paths)
+	got, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(original, string(got))
+}
+
 func (s *StoreVersionSuite) TestANewerWriterNamesWhatItLacks() {
 	err := &NewerWriterError{Path: "/s/jobs.jsonl", Lacks: []string{"jobs-v2"}}
 

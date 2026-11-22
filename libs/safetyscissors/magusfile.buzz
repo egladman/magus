@@ -34,7 +34,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     if (replaced.error != null) {
         throw replaced.error!.message;
     }
-    ctx.needs(index_generate, mark_generate);
+    ctx.needs(index_generate, mark_generate, job_schema_generate);
+}
+
+// Derives the JSON member tables from the job store's wire types.
+export fun job_schema_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(["job/*.go", "../apiversion/*.go"]);
+    ctx.writesFiles(["job/internal/gen/schema.go"]);
+    go["go-test"](ctx, {"args": ["./job", "-run", "^TestStoredSchemas$", "-count=1", "-update-job-schema"]});
 }
 
 // Renders MAGUS.md, this project's target catalog.
