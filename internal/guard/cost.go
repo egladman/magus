@@ -320,7 +320,7 @@ func (st *costState) readRecord(line []byte) []toolResult {
 		return nil
 	}
 	var rec transcriptUsage
-	if codec.Unmarshal(line, &rec) != nil || rec.IsSidechain {
+	if codec.Unmarshal(line, &rec) != nil || (rec.IsSidechain != nil && *rec.IsSidechain) {
 		return nil
 	}
 	if tokens, window, ok := rec.contextSize(); ok {

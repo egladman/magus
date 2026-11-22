@@ -4,11 +4,16 @@ import (
 	"bufio"
 	"cmp"
 	"io"
+	"io/fs"
+	"path"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -33,19 +38,27 @@ func transcriptCaller(who hookAttribution, usage *types.ContextWindow) (types.Ag
 	if who.Session == "" || !filepath.IsAbs(who.Transcript) {
 		return types.AgentThreadUnknown, ""
 	}
-	var home, store string
-	switch who.Host {
-	case "codex":
-		home, store = hostHome("CODEX_HOME", ".codex"), "sessions"
-	case "claude-code":
-		home, store = hostHome("CLAUDE_CONFIG_DIR", ".claude"), "projects"
-	default:
+	if !fs.ValidPath(who.Host) || strings.Contains(who.Host, "/") || who.Host == "." {
 		return types.AgentThreadUnknown, ""
 	}
+	var profile struct {
+		Format      string `yaml:"format"`
+		HomeEnv     string `yaml:"home_env"`
+		DefaultHome string `yaml:"default_home"`
+		Store       string `yaml:"store"`
+	}
+	declaration, err := fs.ReadFile(spells.Shipped(), path.Join("harness", who.Host, "transcript.yaml"))
+	if err != nil || yaml.Unmarshal(declaration, &profile) != nil {
+		return types.AgentThreadUnknown, ""
+	}
+	if profile.HomeEnv == "" || !filepath.IsLocal(profile.DefaultHome) || profile.DefaultHome == "." || !filepath.IsLocal(profile.Store) || profile.Store == "." {
+		return types.AgentThreadUnknown, ""
+	}
+	home := hostHome(profile.HomeEnv, profile.DefaultHome)
 	if !filepath.IsAbs(home) {
 		return types.AgentThreadUnknown, ""
 	}
-	root, err := filepath.EvalSymlinks(filepath.Join(home, store))
+	root, err := filepath.EvalSymlinks(filepath.Join(home, profile.Store))
 	if err != nil {
 		return types.AgentThreadUnknown, ""
 	}
@@ -65,10 +78,13 @@ func transcriptCaller(who hookAttribution, usage *types.ContextWindow) (types.Ag
 	if opened, err := f.Stat(); err != nil || !os.SameFile(info, opened) {
 		return types.AgentThreadUnknown, ""
 	}
-	if who.Host == "claude-code" {
-		return claudeTranscriptCaller(f, who, root)
+	switch profile.Format {
+	case "messages":
+		return messageTranscriptCaller(f, who, root)
+	case "rollout":
+		return rolloutTranscriptCaller(f, who, usage)
 	}
-	return codexTranscriptCaller(f, who, usage)
+	return types.AgentThreadUnknown, ""
 }
 
 func hostHome(env, dirname string) string {
@@ -82,26 +98,22 @@ func hostHome(env, dirname string) string {
 	return filepath.Join(dir, dirname)
 }
 
-func claudeTranscriptCaller(f *os.File, who hookAttribution, root string) (types.AgentThread, string) {
+func messageTranscriptCaller(f *os.File, who hookAttribution, root string) (types.AgentThread, string) {
 	if who.Agent != "" || filepath.Base(f.Name()) != who.Session+".jsonl" || filepath.Dir(filepath.Dir(f.Name())) != root {
 		return types.AgentThreadUnknown, ""
 	}
 	scan := bufio.NewScanner(io.LimitReader(f, agentUsageTail))
 	scan.Buffer(nil, agentUsageTail)
 	for scan.Scan() {
-		var row struct {
-			Type      string `json:"type"`
-			Session   string `json:"sessionId"`
-			Sidechain *bool  `json:"isSidechain"`
-		}
-		if codec.Unmarshal(scan.Bytes(), &row) == nil && (row.Type == "user" || row.Type == "assistant") && row.Session == who.Session && row.Sidechain != nil && !*row.Sidechain {
-			return types.AgentThreadMain, row.Session
+		var row transcriptUsage
+		if codec.Unmarshal(scan.Bytes(), &row) == nil && (row.Type == "user" || row.Type == "assistant") && row.SessionID == who.Session && row.IsSidechain != nil && !*row.IsSidechain {
+			return types.AgentThreadMain, row.SessionID
 		}
 	}
 	return types.AgentThreadUnknown, ""
 }
 
-func codexTranscriptCaller(f *os.File, who hookAttribution, usage *types.ContextWindow) (types.AgentThread, string) {
+func rolloutTranscriptCaller(f *os.File, who hookAttribution, usage *types.ContextWindow) (types.AgentThread, string) {
 	line, err := bufio.NewReader(io.LimitReader(f, agentUsageTail)).ReadBytes('\n')
 	if err != nil {
 		return types.AgentThreadUnknown, ""

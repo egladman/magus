@@ -17,30 +17,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
-// reportedMainTranscript is the hook's transcript pointer for tests that need a
-// reported Claude Code main thread.
-func reportedMainTranscript(t testing.TB, session string) string {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("CLAUDE_CONFIG_DIR", home)
-	path := filepath.Join(home, "projects", "guard-fixture", session+".jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
-	row := fmt.Sprintf(`{"type":"user","sessionId":%q,"isSidechain":false}`, session)
-	require.NoError(t, os.WriteFile(path, []byte(row+"\n"), 0o600))
-	return path
-}
-
-func fixtureMainTranscript(session string) string {
-	dir := os.Getenv("CLAUDE_CONFIG_DIR")
-	if dir == "" {
-		return ""
-	}
-	path := filepath.Join(dir, "projects", "guard-fixture", session+".jsonl")
-	if _, err := os.Stat(path); err != nil {
-		return ""
-	}
-	return path
-}
 
 func TestCodexHookAttributesTheLeaseAndUsageToTheCallingRollout(t *testing.T) {
 	home := t.TempDir()

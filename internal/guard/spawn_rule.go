@@ -850,7 +850,8 @@ type transcriptUsage struct {
 		Content codec.RawMessage `json:"content"`
 	} `json:"message"`
 	// IsSidechain marks a subagent's line written into its parent's transcript.
-	IsSidechain bool   `json:"isSidechain"`
+	IsSidechain *bool  `json:"isSidechain"`
+	SessionID   string `json:"sessionId"`
 	Type        string `json:"type"`
 	Payload     struct {
 		Type string `json:"type"`
