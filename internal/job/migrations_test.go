@@ -276,7 +276,7 @@ func TestRegroupSuite(t *testing.T) { suite.Run(t, new(regroupSuite)) }
 func (s *regroupSuite) SetupTest() {
 	s.st = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.st, running("a"))
-	s.Require().NoError(s.st.fileResult(s.T().Context(), "a", &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}, 30))
+	s.Require().NoError(s.st.fileResult(s.T().Context(), "a", &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}, nil, 30))
 	var err error
 	s.jobs, err = s.st.Path()
 	s.Require().NoError(err)

@@ -156,14 +156,9 @@ func (s *Store) EndCallerAttempt(ctx context.Context, c Caller, end job.AttemptE
 	return s.EndAttempt(ctx, b.Job, end, now)
 }
 
-// fileResult puts result on job id's try in progress and ends it by
-// exit, as `magus job exit` does.
-func (s *Store) fileResult(ctx context.Context, id string, result *job.Result, now int64) error {
+func (s *Store) fileResult(ctx context.Context, id string, result *job.Result, rejection *job.Rejection, now int64) error {
 	_, err := s.ChangeLiveAttempt(ctx, id, func(a *job.Attempt) bool {
-		a.Status.Result = result
-		if a.Status.Ended == 0 {
-			a.Status.Ended, a.Status.End = now, job.AttemptEndExit
-		}
+		a.FileResult(*result, rejection, now)
 		return true
 	})
 	return err

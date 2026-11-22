@@ -29,6 +29,8 @@ type AttemptStatus struct {
 	End   AttemptEnd `json:"end,omitempty"  yaml:"end,omitempty"`
 	// Result is what the holder filed when it exited.
 	Result *Result `json:"result,omitzero" yaml:"result,omitempty"`
+	// Rejections holds the grades addressed by resubmissions, oldest first.
+	Rejections []Rejection `json:"rejections,omitempty" yaml:"rejections,omitempty"`
 	// The members below are written when a fork of the ended job starts
 	// the next try. State is what the job ended as, "" until then.
 	State              State                `json:"state,omitempty"               yaml:"state,omitempty"`
@@ -49,6 +51,21 @@ type AttemptStatus struct {
 	DenialsKnown bool         `json:"denials_known,omitzero"  yaml:"denials_known,omitempty"`
 	Retry        RetryVerdict `json:"retry,omitzero"          yaml:"retry,omitempty"`
 }
+
+// FileResult keeps a corrected submission's grade on the same attempt.
+func (a *Attempt) FileResult(result Result, rejection *Rejection, now int64) {
+	s := &a.Status
+	if rejection != nil && max(1, rejection.Submission) == a.Submission() {
+		s.Rejections = append(s.Rejections, rejection.clone())
+	}
+	s.Result = &result
+	if s.Ended == 0 || rejection != nil {
+		s.Ended, s.End = now, AttemptEndExit
+	}
+}
+
+// Submission is the ordinal of the result a verifier grades in this attempt.
+func (a Attempt) Submission() int { return len(a.Status.Rejections) + 1 }
 
 // AttemptEnd is how the end of a try was observed.
 type AttemptEnd string
@@ -88,14 +105,12 @@ func (a Attempt) Bound(deadline, now int64) Attempt {
 // Clone returns a copy of a that shares no slice or pointer with it.
 func (a Attempt) Clone() Attempt {
 	s := &a.Status
+	s.Rejections = slices.Clone(s.Rejections)
+	for i := range s.Rejections {
+		s.Rejections[i] = s.Rejections[i].clone()
+	}
 	if s.Result != nil {
-		r := *s.Result
-		r.Schema = s.Result.Schema.clone()
-		r.ChangedPaths = slices.Clone(r.ChangedPaths)
-		r.Descendants = slices.Clone(r.Descendants)
-		r.UnresolvedRisks = slices.Clone(r.UnresolvedRisks)
-		r.FollowUps = slices.Clone(r.FollowUps)
-		r.VerificationEvidence = slices.Clone(r.VerificationEvidence)
+		r := cloneResult(*s.Result)
 		s.Result = &r
 	}
 	s.Unmet = cloneVerificationStatuses(s.Unmet)
@@ -103,6 +118,22 @@ func (a Attempt) Clone() Attempt {
 	s.FailingRefs = slices.Clone(s.FailingRefs)
 	s.Denials = slices.Clone(s.Denials)
 	return a
+}
+
+func cloneResult(r Result) Result {
+	r.Schema = r.Schema.clone()
+	r.ChangedPaths = slices.Clone(r.ChangedPaths)
+	r.Descendants = slices.Clone(r.Descendants)
+	r.UnresolvedRisks = slices.Clone(r.UnresolvedRisks)
+	r.FollowUps = slices.Clone(r.FollowUps)
+	r.VerificationEvidence = slices.Clone(r.VerificationEvidence)
+	return r
+}
+
+func (r Rejection) clone() Rejection {
+	r.Unmet = cloneVerificationStatuses(r.Unmet)
+	r.Violations = slices.Clone(r.Violations)
+	return r
 }
 
 // Attempts are a store's attempts by job, each job's in order of N.

@@ -54,6 +54,24 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
 
 Eli chose these on 2026-11-11.
 
+### Corrections within an attempt
+
+A rejected verification can return a job to its holder for rework. The job ID,
+attempt number and acceptance criteria still identify the work. Safety Scissors
+keeps the rejection each resubmission addressed, in filing order on the attempt.
+Each rejection names its submission, generation, unmet conditions and violations.
+The attempt holds the latest filed result. Forking an ended job under the same ID starts the next numbered
+attempt. Starting a fresh worker by itself does not increment that number.
+
+Magus grades the workspace evidence and renders the job brief. The host dispatches
+the worker. Every tier uses the existing worker choice. Resume when the previous
+investigation is still relevant. A fresh worker can be worthwhile for a bounded
+correction whose recorded failure explains what to fix, or when the earlier
+approach repeatedly missed the same condition. Record that reason in
+`agent.worker`. Tier alone gives no evidence about the value of cached context
+on a particular job. This decision adds no per-tier defaults. See
+[The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md).
+
 ### 2. The agent section is its own domain package, and the job holds it
 
 On the wire the agent section is the Job's `spec.agent` and the Attempt's

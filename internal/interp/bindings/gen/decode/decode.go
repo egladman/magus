@@ -3499,6 +3499,12 @@ func decodeJobRejection(v vm.Value, path string) (job.Rejection, error) {
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
+		case "submission":
+			nSubmission, err := decodeInt(item, path+".submission")
+			if err != nil {
+				return out, err
+			}
+			out.Submission = int(nSubmission)
 		case "unmet":
 			listUnmet, err := decodeList(item, path+".unmet", "[VerificationStatus]")
 			if err != nil {

@@ -663,6 +663,7 @@ func verifications(in []verificationRecord) []VerificationStatus {
 }
 
 type rejectionRecord struct {
+	Submission         int                  `json:"submission,omitempty"`
 	Unmet              []verificationRecord `json:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"`
 	At                 int64                `json:"at"`
@@ -673,14 +674,14 @@ func recordRejection(r *Rejection) *rejectionRecord {
 	if r == nil {
 		return nil
 	}
-	return &rejectionRecord{Unmet: recordVerifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
+	return &rejectionRecord{Submission: r.Submission, Unmet: recordVerifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
 }
 
 func (r *rejectionRecord) rejection() *Rejection {
 	if r == nil {
 		return nil
 	}
-	return &Rejection{Unmet: verifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
+	return &Rejection{Submission: r.Submission, Unmet: verifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
 }
 
 type worktreeRecord struct {
@@ -782,6 +783,7 @@ type attemptSpec struct {
 // attemptStatusRecord is [AttemptStatus] as attempts.jsonl stores it.
 // JobState is what the job ended as, never the try's lifecycle.
 type attemptStatusRecord struct {
+	Rejections         []rejectionRecord    `json:"rejections,omitempty"`
 	Started            int64                `json:"started,omitzero"`
 	Ended              int64                `json:"ended,omitzero"`
 	End                string               `json:"end,omitempty"`
@@ -869,6 +871,9 @@ func recordAttempt(a Attempt) attemptRecord {
 	for _, d := range s.Denials {
 		st.Denials = append(st.Denials, denialRecord(d))
 	}
+	for _, c := range s.Rejections {
+		st.Rejections = append(st.Rejections, *recordRejection(&c))
+	}
 	return attemptRecord{TypeMeta: attemptType(), Spec: attemptSpec{Job: a.Job, N: a.N}, Status: st}
 }
 
@@ -883,6 +888,9 @@ func (r attemptRecord) attempt() (Attempt, error) {
 		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Unmet: verifications(st.Unmet),
 		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
 		Retry: RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange().read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
+	}
+	for _, c := range st.Rejections {
+		s.Rejections = append(s.Rejections, *c.rejection())
 	}
 	if err := bad.refusal(); err != nil {
 		return Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)

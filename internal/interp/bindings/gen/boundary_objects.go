@@ -603,6 +603,7 @@ func ObjectJobVerificationStatus(v job.VerificationStatus) vm.Value {
 
 func ObjectJobRejection(v job.Rejection) vm.Value {
 	out := vm.NewMap()
+	out.MapSet("submission", vm.IntValue(int64(v.Submission)))
 	itemsUnmet := make([]vm.Value, len(v.Unmet))
 	for indexUnmet := range v.Unmet {
 		itemsUnmet[indexUnmet] = ObjectJobVerificationStatus(v.Unmet[indexUnmet])
@@ -953,6 +954,11 @@ func ObjectJobAttemptStatus(v job.AttemptStatus, enums ffi.EnumCases) vm.Value {
 		optResult = ObjectJobResult((*v.Result))
 	}
 	out.MapSet("result", optResult)
+	itemsRejections := make([]vm.Value, len(v.Rejections))
+	for indexRejections := range v.Rejections {
+		itemsRejections[indexRejections] = ObjectJobRejection(v.Rejections[indexRejections])
+	}
+	out.MapSet("rejections", vm.ListValue(itemsRejections))
 	out.MapSet("state", enums.Case("JobState", string(v.State)))
 	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	out.MapSet("endReason", vm.StringValue(v.EndReason))

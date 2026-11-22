@@ -24,6 +24,26 @@ func (s *AttemptSuite) TestAStartedTryWithNoEndIsRunning() {
 	s.False(Attempt{}.Running(), "a try the guard never saw start")
 }
 
+func (s *RecordAttemptSuite) TestCorrectedSubmissionsStayWithTheirAttemptInOrder() {
+	a := ended(1)
+	a.FileResult(Result{UnresolvedRisks: []string{"missing title"}}, nil, 10)
+	first := Rejection{Submission: 1, At: 12, Violations: []string{"body missing"}}
+	title := Result{ChangedPaths: []string{"title.md"}}
+	a.FileResult(title, &first, 15)
+	a.FileResult(title, &first, 15)
+	second := Rejection{Submission: 2, At: 16, Violations: []string{"summary missing"}}
+	a.FileResult(Result{ChangedPaths: []string{"title.md", "body.md"}}, &second, 20)
+	s.Require().NoError(s.store.RecordAttempt(s.T().Context(), a))
+	attempts := s.stored()
+	s.Require().Len(attempts, 1)
+	got := attempts[0]
+	s.Equal(a, got)
+	s.Require().Len(got.Status.Rejections, 2)
+	s.Equal([]Rejection{first, second}, got.Status.Rejections)
+	s.Equal([]string{"title.md", "body.md"}, got.Status.Result.ChangedPaths)
+	s.Equal(int64(20), got.Status.Ended)
+}
+
 func (s *AttemptSuite) TestATryRunningPastItsDeadlineReadsAsEndedThere() {
 	got := Attempt{Status: AttemptStatus{Started: 10}}.Bound(50, 60)
 	s.Equal(AttemptStatus{Started: 10, Ended: 50, End: AttemptEndDeadline}, got.Status)
