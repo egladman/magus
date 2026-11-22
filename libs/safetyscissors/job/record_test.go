@@ -195,7 +195,7 @@ func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
 	row := Job{ID: "a", State: StateDeclared, Agent: &Agent{Instructions: "go", Worker: Worker{Type: WorkerTypeNew}},
 		Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}},
 		RegisteredBy:   Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc"},
-		Rejection: &Rejection{Unmet: []VerificationStatus{{ID: "tests"}}, At: 1}}
+		Rejection: &Rejection{Submission: 2, Unmet: []VerificationStatus{{ID: "tests"}}, At: 1}}
 	out, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
 

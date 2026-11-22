@@ -102,6 +102,7 @@ var verificationRecord = codec.ObjectSchema{Name: "verificationRecord", Closed: 
 }}
 
 var rejectionRecord = codec.ObjectSchema{Name: "rejectionRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{
+	"submission":          nil,
 	"unmet":               &codec.ObjectSchema{Element: &verificationRecord},
 	"violations":          nil,
 	"at":                  nil,
@@ -268,6 +269,7 @@ var retryRecord = codec.ObjectSchema{Name: "retryRecord", Closed: true, Fields: 
 }}
 
 var attemptStatusRecord = codec.ObjectSchema{Name: "attemptStatusRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{
+	"rejections":          &codec.ObjectSchema{Element: &rejectionRecord},
 	"started":             nil,
 	"ended":               nil,
 	"end":                 nil,
