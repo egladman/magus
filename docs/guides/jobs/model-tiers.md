@@ -55,8 +55,11 @@ can spawn the model, you can map it to an existing tier without updating magus.
 For example, a workspace that adopts GPT-6.2 Astra for its `design` work can
 keep the same tier name, rank and limits.
 
-Choose models by the work each tier handles. A harness with one model for
-both design work and escalation can use that model for both adjacent tiers.
+Choose models by the work each tier handles. This repository uses Astra for
+complex Codex design work and Sol for bounded implementation.[^openai-models]
+Claude Code uses Opus for design work and Fable as the next step for harder
+work.[^anthropic-models] A harness can share one model across those adjacent
+tiers.
 
 1. Find `magus\modelTiers` in the root `magusfile.buzz`. Follow the function
    under `hosts` for the harness you want to update. It may live in an imported
@@ -275,3 +278,10 @@ can verify is the wrong place to try a cheaper model.
 - [Jobs](../jobs.md): the plan a tier is recorded on.
 - [`magus\modelTiers`](../../reference/buzz/magus.md) and `magus\modelTier`
   in the Buzz reference.
+
+[^openai-models]: [OpenAI model selection](https://developers.openai.com/api/docs/guides/model-selection)
+    recommends Astra for complex projects and Sol for most Codex tasks.
+
+[^anthropic-models]: [Anthropic's guidance for Fable 5.2](https://www.anthropic.com/claude-fable-and-mythos-5-2)
+    describes Opus as the everyday starting point and Fable as an escalation
+    for harder work.

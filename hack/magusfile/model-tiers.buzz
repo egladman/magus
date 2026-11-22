@@ -14,6 +14,8 @@ import "assert";
 // so the agents magus ships stay on claude-haiku-5-5. The spell's short
 // aliases still resolve a spawn of haiku, sonnet, opus or fable.
 export fun claude(tier: modeltiers\ModelTier) > str {
+    // Opus handles design. Fable is the escalation for harder work.
+    // https://www.anthropic.com/claude-fable-and-mythos-5-2
     return match (tier) {
         .routine -> "claude-haiku-5-5",
         .bounded -> "claude-sonnet-5-5",
@@ -26,6 +28,8 @@ export fun claude(tier: modeltiers\ModelTier) > str {
 // work, gpt-6.1-sol where a task should start, and gpt-6-astra for the flagship
 // the model page prices above both.
 export fun codex(tier: modeltiers\ModelTier) > str {
+    // Sol handles bounded work. Astra handles complex design work.
+    // https://developers.openai.com/api/docs/guides/model-selection
     return match (tier) {
         .routine -> "gpt-6-luna",
         .bounded -> "gpt-6.1-sol",
