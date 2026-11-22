@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
 )
 
 // advisoryModelTierContextCap advises a leased worker whose context passed the cap of the
@@ -27,6 +28,12 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	if s, _ := deps.setting(string(advisoryModelTierContextCap)); s.Decision == builtin.Off {
 		return advice{}
 	}
+	// Taking a job changes the main thread's write scope. Its context still
+	// belongs to the integrating session, even while the worker row is live.
+	thread, _ := callerThread(at.cacheDir, who, lease)
+	if thread == types.AgentThreadMain {
+		return advice{}
+	}
 	tokens := reportedContext(facts, who.Agent)
 	if tokens <= 0 {
 		return advice{}
@@ -38,6 +45,12 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	limit := tierContextCap(deps, facts, me)
 	if limit <= 0 || tokens <= limit {
 		return advice{}
+	}
+	if thread == types.AgentThreadUnknown {
+		return advice{
+			Say: fmt.Sprintf("magus workspace: cannot attribute the session context to a worker on lease %s. The session has %s tokens and the %s tier caps workers at %s.", me.ID, kTokens(tokens), me.ModelTier.Name, kTokens(limit)),
+			Why: "This host supplied no worker identity. Use an identified worker for this lease so its own context can be measured.",
+		}
 	}
 	return advice{
 		Say: fmt.Sprintf("magus workspace: lease %s runs at model tier %s, which caps a worker's context at %s tokens, and yours has reached %s: report what you have and stop.",

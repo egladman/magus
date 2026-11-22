@@ -64,7 +64,7 @@ func TestModelTierContextCapNeedsATierWithACap(t *testing.T) {
 	assert.Equal(t, advice{}, adviseModelTierContext(ctx, Dependencies{}, at, who, facts, "lease-a"), "no declaration")
 }
 
-// Raised to deny, the rule refuses the worker's write as a passed deadline does.
+// A host with no worker attribution keeps its conservative denial.
 func TestModelTierContextCapRaisedToDenyRefusesWrites(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set, fixture.FleetLeases()[0])
@@ -77,5 +77,39 @@ func TestModelTierContextCapRaisedToDenyRefusesWrites(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "internal/ledger/store.go"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-a"})
 
 	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
-	assert.Contains(t, v.Reason, "lease lease-a runs at model tier economy")
+	assert.Contains(t, v.Reason, "cannot attribute the session context to a worker")
+}
+
+func TestContextCapFollowsTheCallerAcrossLeaseChanges(t *testing.T) {
+	set := testModelTiers(t, "claude-code")
+	ctx := tierFixture(t, set, fixture.FleetLeases()[0])
+	at := hookLocation(ctx, Dependencies{})
+	main := hookAttribution{Host: "claude-code", Session: "s"}
+	hostGate(at.cacheDir, main.Host).MarkFired(hostAgentsKind)
+	facts := hint.NewGate(at.cacheDir, main.factsKey())
+	writeCostState(facts, costState{Tokens: 205_000})
+	deps := withSetting(string(advisoryModelTierContextCap), builtin.Deny)
+	deps.ModelTiers = func() *tier.Set { return set }
+
+	checkMain := func(wantLease string) {
+		t.Helper()
+		lease, _ := resolveActingLease(main, at, "")
+		require.Equal(t, wantLease, lease)
+		assert.Equal(t, advice{}, adviseModelTierContext(ctx, deps, at, main, facts, lease))
+	}
+	checkMain("")
+	bindOnExec(ctx, at, main, "./magus job exec lease-a")
+	checkMain("lease-a")
+	releaseOnEnd(at, main, "./magus job exit lease-a --stdin")
+	checkMain("")
+
+	worker := main
+	worker.Agent = "worker"
+	workerFacts := hint.NewGate(at.cacheDir, worker.factsKey())
+	tokens := int64(100_000)
+	writeSpawnedAgent(workerFacts, worker.Agent, spawnedAgent{ContextTokens: &tokens})
+	assert.Equal(t, advice{}, adviseModelTierContext(ctx, deps, at, worker, workerFacts, "lease-a"))
+	tokens++
+	writeSpawnedAgent(workerFacts, worker.Agent, spawnedAgent{ContextTokens: &tokens})
+	assert.Contains(t, adviseModelTierContext(ctx, deps, at, worker, workerFacts, "lease-a").Say, "caps a worker's context")
 }
