@@ -607,7 +607,7 @@ var modules = []Module{
 	},
 	{
 		Name: "splice",
-		Doc:  "Explicit file edits: literal and regex replacements and new files, planned against the tree, graded under the lease, diffed, and written all or none.",
+		Doc:  "Explicit file edits: plan literal and regex replacements and new files, grade them under the lease, preview the diff and apply the plan.",
 		Methods: []Method{
 			{Name: "replace", Doc: "A change replacing old with new in path. old must occur exactly once when planned.", Sig: "splice\\replace(path, old, new) -> EditChange"},
 			{Name: "replace_all", Doc: "A change replacing every occurrence of old with new in path. old must occur at least once when planned. old inside an occurrence of new is not replaced, so `a -> ab` applies once.", Sig: "splice\\replaceAll(path, old, new) -> EditChange"},
@@ -615,8 +615,8 @@ var modules = []Module{
 			{Name: "create", Doc: "A change creating path holding content. path must not exist when planned, unless it already holds exactly content.", Sig: "splice\\create(path, content) -> EditChange"},
 			{Name: "blocks", Doc: "Parse a block document: `## <path>` sections of fenced old, old all, pattern, new and create blocks. name labels its refusals. A document with a refusal carries no changes.", Sig: "splice\\blocks(text, [name]) -> EditDocument"},
 			{Name: "plan", Doc: "Resolve changes against the tree and grade every file under the lease, writing nothing. Paths resolve against the working directory as fs paths do. Refusals, and changes the tree already holds, are fields of the plan.", Sig: "splice\\plan(changes) -> SplicePlan"},
-			{Name: "diff", Doc: "Render a plan as a unified diff, one file after another, each labelled with its path and `edited`. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.", Sig: "splice\\diff(plan, [context]) -> string"},
-			{Name: "apply", Doc: "Plan the changes again and write every file or none. The Result fails when the plan carries refusals, when the tree changed since the plan was made, or when a write fails. A plan whose every change the tree holds succeeds and writes nothing.", Sig: "splice\\apply(plan) -> result\\Result::<EditApplied>"},
+			{Name: "diff", Doc: "Render a plan as a unified diff. The Result carries the complete patch or the refusal. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.", Sig: "splice\\diff(plan, [context]) -> result\\Result::<str>"},
+			{Name: "apply", Doc: "Plan the changes again and publish each file. A refusal prevents publication. A write failure triggers restoration of preceding writes and the Result reports any restoration failure. A plan whose every change the tree holds succeeds and writes nothing.", Sig: "splice\\apply(plan) -> result\\Result::<EditApplied>"},
 		},
 	},
 	{

@@ -67,7 +67,7 @@ export object EditDocument {
 export extern fun apply(plan: SplicePlan) > result\Result::<EditApplied>;
 export extern fun blocks(text: str, name: str = "<document>") > EditDocument;
 export extern fun create(path: str, content: str) > EditChange;
-export extern fun diff(plan: SplicePlan, context: int = 3) > str;
+export extern fun diff(plan: SplicePlan, context: int = 3) > result\Result::<str>;
 export extern fun plan(changes: [EditChange]) > SplicePlan;
 export extern fun replace(path: str, old: str, new: str) > EditChange;
 export extern fun replaceAll(path: str, old: str, new: str) > EditChange;

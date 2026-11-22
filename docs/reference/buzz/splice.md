@@ -2,13 +2,13 @@
 title: splice module
 generated_from: reference/buzz/
 aliases: [modules/splice]
-description: "Explicit file edits: literal and regex replacements and new files, planned against the tree, graded under the lease, diffed, and written all or none."
+description: "Explicit file edits: plan literal and regex replacements and new files, grade them under the lease, preview the diff and apply the plan."
 tags: [splice, module, stdlib, magusfile]
 ---
 
 # splice
 
-Explicit file edits: literal and regex replacements and new files, planned against the tree, graded under the lease, diffed, and written all or none.
+Explicit file edits: plan literal and regex replacements and new files, grade them under the lease, preview the diff and apply the plan.
 
 > **Naming convention:** import the module under its bare name (`import "splice"`), reach members with a backslash, and call methods in `camelCase`: `splice\someMethod`.
 
@@ -96,20 +96,20 @@ Resolve changes against the tree and grade every file under the lease, writing n
 
 ### diff
 
-Render a plan as a unified diff, one file after another, each labelled with its path and `edited`. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.
+Render a plan as a unified diff. The Result carries the complete patch or the refusal. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.
 
-**Signature:** `splice\diff(plan, [context]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/splice.go)
+**Signature:** `splice\diff(plan, [context]) -> result\Result::<str>` - [source](https://github.com/egladman/magus/blob/main/std/splice.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
 | `plan`    | `map[string]any` |          |             |
 | `context` | `int`            | yes      |             |
 
-**Returns:** string
+**Returns:** map[string]any
 
 ### apply
 
-Plan the changes again and write every file or none. The Result fails when the plan carries refusals, when the tree changed since the plan was made, or when a write fails. A plan whose every change the tree holds succeeds and writes nothing.
+Plan the changes again and publish each file. A refusal prevents publication. A write failure triggers restoration of preceding writes and the Result reports any restoration failure. A plan whose every change the tree holds succeeds and writes nothing.
 
 **Signature:** `splice\apply(plan) -> result\Result::<EditApplied>` - [source](https://github.com/egladman/magus/blob/main/std/splice.go)
 

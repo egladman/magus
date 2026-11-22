@@ -3369,6 +3369,17 @@ func ObjectEditPlan(v types.EditPlan) vm.Value {
 	return out
 }
 
+func ObjectResultOfString(v types.Result[string]) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("value", vm.StringValue(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
 func ObjectEditApplied(v types.EditApplied) vm.Value {
 	out := vm.NewMap()
 	itemsWritten := make([]vm.Value, len(v.Written))

@@ -15,7 +15,7 @@ import (
 )
 
 // RegisterSplice builds the "splice" module map and returns it.
-// Explicit file edits: literal and regex replacements and new files, planned against the tree, graded under the lease, diffed, and written all or none.
+// Explicit file edits: plan literal and regex replacements and new files, grade them under the lease, preview the diff and apply the plan.
 func RegisterSplice(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -89,7 +89,7 @@ func RegisterSplice(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StringVal(ret0), nil
+		return ObjectResultOfString(ret0), nil
 	}))
 	m.MapSet("apply", vm.DirectValue("splice.apply", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		plan, err := ffi.Object("splice\\apply", "plan", bzArgs, 0, decode.DecodeEditPlan)
