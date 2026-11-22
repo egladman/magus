@@ -1,5 +1,5 @@
 ---
-title: "ADR 0054: a spell op returns a Result"
+title: "ADR 0054: a spell op returns a result"
 order: 54
 description: "A provider op that can fail returns result\\Result::<T>, and bindings.CallOp reads its error as the failure, worded and coded as the Diagnostic says. An op that cannot fail returns T. An op that declares !> is refused at load with MGS1051. Every shipped op that raised now returns a Result, and their no-throw rows are gone."
 tags: [adr, decision, spells, providers, buzz, boundary, errors]
@@ -7,7 +7,7 @@ status: accepted
 date: 2026-11-19
 ---
 
-# ADR 0054: a spell op returns a `Result`
+# ADR 0054: a spell op returns a result
 
 ## Context
 

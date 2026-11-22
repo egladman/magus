@@ -149,9 +149,9 @@ over one view double the help and the completions for a pivot `-o` already gives
 `magus jobs`, after the shell builtin. Rejected: `magus job` already names a forked worktree
 job, and `job` and `jobs` meaning different things is a trap.
 
-### A JSON Lines store of who bound what
+### Record port bindings in a store
 
-Each step appends its pid, port, workspace and target to a store, and `ps` reads it back.
+Each step appends its pid, port, workspace and target to a JSON Lines store, and `ps` reads it back.
 Rejected: the inherited mark already ties a process to its run and survives reparenting, and a
 store records a pid that may have been reused by the time anyone reads it, the same hazard the
 service journal avoids.
@@ -179,7 +179,7 @@ would carry the platform split that belongs below the magusfile.
 - A process detached through `proc\exec` shows as `unknown`. That is correct, and it means a
   magusfile that detaches a dev server gets no attribution for it.
 - A non-magus process, like the Nx leftover in the context, is listed with its port, parent,
-  directory and age, which is enough for the person to recognise it.
+  directory and age, which is enough for the person to recognize it.
 
 ## Open questions
 

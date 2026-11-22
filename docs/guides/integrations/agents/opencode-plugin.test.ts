@@ -30,7 +30,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { MagusGuard } from "./opencode-plugin.installed.ts";
-import { rejected } from "../../../../console/src/lib/rejected";
+import { rejected } from "../../../../console/src/lib/rejected.ts";
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
@@ -674,7 +674,7 @@ const glue = (script: string): string[] => [
   "-C",
   "/work",
   "-s",
-  `.opencode/magus/runtime/${script}.buzz`,
+  `.magus/harness/hooks/${script}.buzz`,
   "--",
   "--agent-name",
   "opencode",
@@ -994,7 +994,7 @@ test("a root idle runs the disk hook, and its line reaches the next tool result 
       "-C",
       "/work",
       "-s",
-      ".opencode/magus/runtime/magus-reclaim-disk.buzz",
+      ".magus/harness/hooks/magus-reclaim-disk.buzz",
       "--",
       "--agent-name",
       "opencode",

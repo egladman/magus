@@ -1,5 +1,5 @@
 ---
-title: "ADR 0055: a Buzz Result names its error type"
+title: "ADR 0055: a Buzz result names its error type"
 order: 55
 description: "result\\Result becomes result\\Result::<T, E>, with the error type named at every use and no default. Errors stay values as ADR 0054 has them. Diagnostic and its fail and caught helpers move out of the std result module into a magus module, the name for Eli to pick. CallOp reads the error of the one E the boundary carries. The 2,000-odd call sites convert by codemod, and value! moves onto methods."
 tags: [adr, decision, buzz, errors, result, boundary, providers]
@@ -7,7 +7,7 @@ status: accepted (Diagnostic module name open)
 date: 2026-11-19
 ---
 
-# ADR 0055: a Buzz `Result` names its error type
+# ADR 0055: a Buzz result names its error type
 
 ## Context
 
