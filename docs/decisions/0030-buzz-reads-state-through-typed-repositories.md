@@ -26,7 +26,7 @@ skeptic) over the store layer:
 | --------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `hack/policy/mandate.buzz` (4 sites)                      | mandate, mandate attention                              | names `mandate.jsonl` and `mandate-attention.jsonl`, splits, last line wins, appends                  | none: repo Buzz owns the store                   |
 | `hack/dev/issue-mandate.buzz` (3)                         | mandate, attention                                      | appends, splits, last line wins                                                                       | none                                             |
-| `std/lib/diskwatch.buzz`                                  | disk samples (`$XDG_STATE_HOME/magus/disk/space.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners                                 |
+| `internal/disk/diskwatch.buzz`                            | disk samples (`$XDG_STATE_HOME/magus/disk/space.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners                                 |
 | `hack/retro/trace.buzz`                                   | guard trail                                             | reads `events.jsonl` and blobs, splits, filters                                                       | `session().trail()`, which drops the request ref |
 | `hack/retro/cursor-audit.buzz`                            | guard trail                                             | reads `.magus/activity/events.jsonl`, splits                                                          | `session().trail()`                              |
 | `hack/ci/show-failures.buzz`                              | `.magus/logs/failed-outputs.jsonl`                      | names the path, splits; a shell step in `.github/workflows/ci.yaml:836` writes it                     | none: no magus owner                             |
@@ -193,7 +193,7 @@ The verbs stay as they are, including `Job.exit` with an empty result meaning ab
 ### Two stores gain a Go owner
 
 - The disk samples (`$XDG_STATE_HOME/magus/disk/space.jsonl`) have two owners today:
-  the shipped `std/lib/diskwatch.buzz` writes and compacts them, and Go's doctor reads
+  the shipped `internal/disk/diskwatch.buzz` writes and compacts them, and Go's doctor reads
   the file. A Go repository becomes the one owner; `diskwatch.buzz`, `reclaimdisk.buzz`
   and doctor go through it, and the Buzz line code is deleted (Eli, 2026-11-07).
 - `.magus/logs/failed-outputs.jsonl` is written by a shell loop in
@@ -285,7 +285,7 @@ store reached through a computed path or an environment variable (none on this t
 | `hack/dev/issue-mandate.buzz` calls `mandate.buzz` instead of splitting the mandate file                                                                                                        | proposed |
 | `hack/dev/{count-feedback,merge-job-branches}.buzz` fixtures build typed records                                                                                                                | proposed |
 | magus records failed outputs through a Go repository, replacing the `ci.yaml` shell step; `hack/ci/show-failures.buzz` reads its door                                                           | proposed |
-| a Go repository owns the disk samples; `std/lib/{diskwatch,reclaimdisk}.buzz` and doctor go through it; the Buzz line code is deleted                                                           | proposed |
+| a Go repository owns the disk samples; `internal/disk/{diskwatch,reclaimdisk}.buzz` and doctor go through it; the Buzz line code is deleted                                                     | proposed |
 | `ConformanceRow` renamed `ConformanceThreshold`; `historymetrics` moves to `v1alpha2`                                                                                                           | proposed |
 | `ToolRow`, `ModelRow`, `rows` fields and every user-facing "row" renamed; ADR 0019 and 0022 amended                                                                                             | proposed |
 | the store-layer defects listed above fixed                                                                                                                                                      | proposed |

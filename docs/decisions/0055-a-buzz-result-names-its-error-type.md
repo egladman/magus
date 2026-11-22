@@ -7,7 +7,7 @@ status: accepted (Diagnostic module name open)
 date: 2026-11-19
 ---
 
-# ADR 0055: a Buzz `Result` names its error type
+# ADR 0055: a Buzz Result names its error type
 
 ## Context
 

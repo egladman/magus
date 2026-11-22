@@ -2183,7 +2183,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		// all, not so an answer can be graded.
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		req.Spawn = spawnFields{
-			AgentType: cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
+			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
 			Description: envelopeSpawnDescription(env.ToolName, env.ToolInput),
 			Name:        cmp.Or(envelopeString(env.ToolInput, "name"), envelopeString(env.ToolInput, "task_name")),
 			// Only an explicit true: a host whose default is to background agents still
