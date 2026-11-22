@@ -149,6 +149,7 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolConfig, "view the resolved workspace config (read-only)"),
 	toolLine(hint.ToolDiff, "join the review session a person has open: state, comment, suggest, resolve"),
 	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
+	toolLine(hint.ToolSplice, "plan or apply workspace edits from a splice block document"),
 	"",
 	"Typical flow:",
 	fmt.Sprintf("  Discover through %s with the typed members (%s.project, .graph and .file, %s); they return records, not CLI text.", hint.ToolClient.String(), member("describe"), member("graph().query")),

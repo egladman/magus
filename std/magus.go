@@ -937,6 +937,16 @@ var magusMCPTools = []MCPTool{
 			{Name: "agent_name", Type: TypeString, Doc: "Optional label for which agent is speaking; attribution only."},
 		},
 	},
+	{
+		Name: hint.ToolSplice.String(),
+		Doc: "Plan a batch of explicit file edits using splice's block document format. " +
+			"The plan is returned without writing unless apply is true. " +
+			"Writes are confined to the workspace and the caller's live lease; a caller with no HTTP lease can only inspect the plan.",
+		Params: []MCPParam{
+			{Name: "document", Type: TypeString, Doc: "A splice block document: ## <path> sections of fenced old, old all, pattern, new and create blocks."},
+			{Name: "apply", Type: TypeBool, Doc: "Apply the plan after showing it; defaults to false."},
+		},
+	},
 }
 
 // MagusHasCharm reports whether the execution charm name is active in ctx. It

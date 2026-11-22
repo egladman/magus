@@ -75,4 +75,12 @@ var Registry = []ToolDescriptor{
 			{Name: "agent_name", Type: "string", Description: "Optional label for which agent is speaking; attribution only."},
 		},
 	},
+	{
+		Name:        "splice",
+		Description: "Plan a batch of explicit file edits using splice's block document format. The plan is returned without writing unless apply is true. Writes are confined to the workspace and the caller's live lease; a caller with no HTTP lease can only inspect the plan.",
+		Params: []ParamDescriptor{
+			{Name: "document", Type: "string", Description: "A splice block document: ## <path> sections of fenced old, old all, pattern, new and create blocks."},
+			{Name: "apply", Type: "boolean", Description: "Apply the plan after showing it; defaults to false."},
+		},
+	},
 }

@@ -29,6 +29,7 @@ const (
 	ToolDiff    ToolName = "diff"
 	ToolConsole ToolName = "console"
 	ToolBuzz    ToolName = "buzz"
+	ToolSplice  ToolName = "splice"
 )
 
 // AllToolNames is every declared tool-name constant, for the drift test to walk.
@@ -36,7 +37,7 @@ const (
 // this file and fails if a declaration is missing, the way a hand-maintained
 // list cannot.
 var AllToolNames = []ToolName{
-	ToolClient, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz,
+	ToolClient, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz, ToolSplice,
 }
 
 // LookupTool resolves a declared tool name, reporting false for one nobody declares.

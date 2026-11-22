@@ -193,6 +193,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&consoleTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
 		&configTool{cfg: opts.Config},
 		&diffTool{sessions: opts.DiffSessions, workspaceRoot: opts.Magus.Root(), src: opts.Magus, anchors: opts.ReviewAnchors()},
+		&spliceTool{root: opts.Magus.Root(), workspace: opts.Magus, jobs: opts.Jobs},
 	}
 }
 

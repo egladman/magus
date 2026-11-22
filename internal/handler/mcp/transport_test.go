@@ -41,6 +41,7 @@ The workspace is the client tool: a Buzz program that imports "magus" and calls 
   config                  - view the resolved workspace config (read-only)
   diff                    - join the review session a person has open: state, comment, suggest, resolve
   console                 - return a local console link when a person asks to see it
+  splice                  - plan or apply workspace edits from a splice block document
 
 Typical flow:
   Discover through client with the typed members (magus\describe.project, .graph and .file, magus\graph().query); they return records, not CLI text.
