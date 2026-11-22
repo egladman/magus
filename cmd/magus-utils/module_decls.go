@@ -719,7 +719,9 @@ func methodObjects(m std.Method) []string {
 	for i, r := range m.Returns {
 		if sig := m.Signature(); sig != nil && i < sig.NumOut() {
 			if arg, ok := emit.ResultArgument(sig.Out(i)); ok {
-				out = append(out, buzzName(arg))
+				if arg.Kind() == reflect.Struct {
+					out = append(out, buzzName(arg))
+				}
 				continue
 			}
 		}

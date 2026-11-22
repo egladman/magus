@@ -645,6 +645,9 @@ func objectName(goType reflect.Type) string {
 // switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
 	if arg, ok := emit.ResultArgument(t); ok {
+		if arg == reflect.TypeFor[string]() {
+			return `result\Result::<str>`
+		}
 		return fmt.Sprintf(`result\Result::<%s>`, buzzName(arg))
 	}
 	return buzzName(t)
@@ -780,8 +783,8 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string, pkgs *argPackag
 }
 
 func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
-	if arg, ok := emit.ResultArgument(t); ok && (arg.Kind() != reflect.Struct || !isBoundaryType(arg)) {
-		return fmt.Errorf("result payload %s must be a named boundary struct", arg)
+	if arg, ok := emit.ResultArgument(t); ok && arg != reflect.TypeFor[string]() && (arg.Kind() != reflect.Struct || !isBoundaryType(arg)) {
+		return fmt.Errorf("unsupported result payload %s: expected string or a named boundary struct", arg)
 	}
 	if e.emitted[t] {
 		return nil
@@ -884,6 +887,9 @@ func typePackage(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
+	if t == reflect.TypeFor[string]() {
+		return t.Name()
+	}
 	if arg, ok := emit.ResultArgument(t); ok {
 		return fmt.Sprintf("%s.Result[%s]", typePackage(t).alias, qualifyType(arg))
 	}
@@ -892,6 +898,9 @@ func qualifyType(t reflect.Type) string {
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
+	if t == reflect.TypeFor[string]() {
+		return "String"
+	}
 	if arg, ok := emit.ResultArgument(t); ok {
 		return "ResultOf" + typeIdent(arg)
 	}
