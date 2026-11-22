@@ -644,6 +644,7 @@ export object VerificationStatus {
 }
 
 export object JobRejection {
+    submission: int = 0,
     unmet: [VerificationStatus] = [],
     violations: [str] = [],
     at: int = 0,
@@ -974,6 +975,7 @@ export object AttemptStatus {
     ended: int = 0,
     end: AttemptEnd = AttemptEnd.none,
     result: JobResult? = null,
+    rejections: [JobRejection] = [],
     state: JobState = JobState.none,
     observedGeneration: int = 0,
     endReason: str = "",

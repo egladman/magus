@@ -600,6 +600,19 @@ job` say the list is unknown and name `magus graph build`, rather than printing 
 list. `-o json` carries it as `referenced_outside`, and the reason it is unknown as
 `referenced_outside_gap`.
 
+## Following a rejected result
+
+When `magus job wait <id>` rejects a result, read the reported state and
+`magus describe job <id>`. A job that reclaimed its paths is running again.
+If another job holds a path it needs, resolve that claim before resuming writes.
+Give the same ID to the worker handling the correction. File the corrected result
+and verify it again with `magus job wait <id>`.
+
+The brief shows up to three reasons from the live rejection, or the latest
+corrected submission when there is no live rejection. Use
+`magus describe job <id> -o json` for all recorded corrections in each attempt.
+The job's existing worker choice applies whichever tier handles the correction.
+
 ## CI checks the merged work
 
 Each job passed in the worktree it was written in. Whether the work still passes

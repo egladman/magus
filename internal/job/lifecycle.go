@@ -91,6 +91,7 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 		return job.Job{}, err
 	}
 	var filed *job.Result
+	var rejection *job.Rejection
 	update := func(apply func(*job.Job)) (job.Job, error) {
 		if store.dryRun {
 			row := rows[i].Clone()
@@ -106,7 +107,7 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 			return row, err
 		}
 		if filed != nil {
-			return row, store.fileResult(ctx, id, filed, store.now().Unix())
+			return row, store.fileResult(ctx, id, filed, rejection, store.now().Unix())
 		}
 		return row, store.EndAttempt(ctx, id, job.AttemptEndExit, store.now())
 	}
@@ -146,6 +147,7 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 	}
 	return update(func(row *job.Job) {
 		prev := row.Clone()
+		rejection = row.Rejection
 		generation := max(row.Generation, 1)
 		stamped := *result
 		stamped.ObservedGeneration = generation
@@ -265,7 +267,8 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	if err != nil {
 		return job.Status{}, err
 	}
-	filed := job.NewAttempts(tries).Result(id)
+	attempts := job.NewAttempts(tries)
+	filed := attempts.Result(id)
 	var ev graded
 	var prior int
 	if result == nil {
@@ -293,7 +296,7 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 		}
 	}
 	seen.TestSelection = store.testSelection()
-	seen.tries = job.NewAttempts(tries)
+	seen.tries = attempts
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritPostconditions(jobs[i], jobs).EffectivePostconditions(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
@@ -323,7 +326,12 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 				" run %s again and file its result with `%s`", prior, generation, checkLine(held), hint.JobExit.With(id, "--stdin")))
 		}
 		if !status.Verified {
+			// A repeated wait leaves the original verdict intact.
+			if row.State == job.StatePass {
+				return nil
+			}
 			row.Rejection = &job.Rejection{
+				Submission:         attempts.Live(id).Submission(),
 				Unmet:              unmetGates(status.Gates),
 				Violations:         slices.Clone(status.Violations[:min(len(status.Violations), maxFolded)]),
 				At:                 now,

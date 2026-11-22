@@ -23,7 +23,7 @@ func filedTry(id string, result *job.Result) job.Attempt {
 // fileTry files result on job id's try in progress, as an exit does.
 func fileTry(t *testing.T, s *Store, id string, result *job.Result) {
 	t.Helper()
-	require.NoError(t, s.fileResult(t.Context(), id, result, time.Now().Unix()))
+	require.NoError(t, s.fileResult(t.Context(), id, result, nil, time.Now().Unix()))
 }
 
 // triesIn are the tries s holds, by job.
@@ -134,7 +134,7 @@ func (s *attemptStoreSuite) TestAFiledResultEndsTheTryByExit() {
 	s.Require().NoError(err)
 	result := &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}
 
-	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", result, 30))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", result, nil, 30))
 
 	got := liveTry(s.T(), s.store, "a")
 	s.Equal(job.AttemptStatus{Started: 10, Ended: 30, End: job.AttemptEndExit, Result: result}, got.Status)
@@ -144,7 +144,7 @@ func (s *attemptStoreSuite) TestAResultFiledAfterAnEndKeepsThatEnd() {
 	seed(s.T(), s.store, running("a"))
 	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", job.AttemptEndHandback, s.at(15)))
 
-	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a"}, 30))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a"}, nil, 30))
 
 	got := liveTry(s.T(), s.store, "a")
 	s.Equal(job.AttemptStatus{Ended: 15, End: job.AttemptEndHandback, Result: &job.Result{Job: "a"}}, got.Status)
@@ -179,7 +179,7 @@ func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 
 func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	seed(s.T(), s.store, running("a"))
-	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}, 30))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}, nil, 30))
 
 	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.storePath()), attemptsFileName))
 	s.Require().NoError(err)

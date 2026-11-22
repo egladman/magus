@@ -290,6 +290,16 @@ const maxUnmetShown = 5
 // transcript, and each older one in a line, newest first. A first attempt with no cap writes
 // nothing.
 func writeAttempts(s *strings.Builder, row job.Job, tries job.Attempts) {
+	if r := row.Rejection; r != nil && row.State != job.StatePass && max(1, r.Submission) == tries.Live(row.ID).Submission() {
+		writeFeedback(s, "rejection feedback", row.ID, r.Violations)
+	} else {
+		for _, a := range slices.Backward(tries[row.ID]) {
+			if n := len(a.Status.Rejections); n > 0 {
+				writeFeedback(s, fmt.Sprintf("attempt %d, rejected submission %d", a.N, n), row.ID, a.Status.Rejections[n-1].Violations)
+				break
+			}
+		}
+	}
 	if n := tries.LiveN(row.ID); n > 1 || row.MaxAttempts > 0 {
 		line := fmt.Sprintf("attempt %d", n)
 		if row.MaxAttempts > 0 {
@@ -303,10 +313,25 @@ func writeAttempts(s *strings.Builder, row job.Job, tries job.Attempts) {
 	}
 	newest := prior[len(prior)-1]
 	lines := append([]string{priorSummary(newest)}, priorDetail(newest)...)
-	for _, p := range slices.Backward(prior[:len(prior)-1]) {
+	const previousAttemptsShown = 3
+	start := max(0, len(prior)-previousAttemptsShown)
+	for _, p := range slices.Backward(prior[start : len(prior)-1]) {
 		lines = append(lines, fmt.Sprintf("%s, %s", priorSummary(p), retryLine(p.Status.Retry)))
 	}
+	if start > 0 {
+		lines = append(lines, fmt.Sprintf("%d older attempts: %s -o json", start, hint.DescribeJob.With(row.ID)))
+	}
 	writeList(s, "previous attempts", lines)
+}
+
+// Keep terminal output and long histories out of the worker's context.
+func writeFeedback(s *strings.Builder, heading, id string, violations []string) {
+	const limit = 3
+	fmt.Fprintf(s, "\n%s\n", heading)
+	for _, v := range violations[:min(limit, len(violations))] {
+		fmt.Fprintf(s, "  %.240s\n", firstLine(v))
+	}
+	fmt.Fprintf(s, "  full record: %s -o json\n", hint.DescribeJob.With(id))
 }
 
 // priorSummary is one ended attempt in a line: how it ended, at which tier, and how much

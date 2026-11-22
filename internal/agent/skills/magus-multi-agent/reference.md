@@ -470,6 +470,11 @@ Tightening them means cancel and respawn, not a message sent mid-flight.
   ref's own recorded attempt from the output store and derives the outcome from
   it, never from what the worker claims{{end}}.
 
+A rejection sends the work back to the same job. Read `{{cmd "describe job"}} <id>`
+for its feedback and current write paths. Have the worker correct the result, or
+give a fresh worker that job and its brief. File the corrected result and run
+`{{cmd "job wait"}} <id>` again before accepting the work.
+
 A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
 a result that will not decode exits 2. A holder does not verify its own job, or a
 sibling's. Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}}

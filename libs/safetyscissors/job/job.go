@@ -668,6 +668,8 @@ type Integration struct {
 
 // Rejection is a grade that refused the live attempt, At unix seconds.
 type Rejection struct {
+	// Submission numbers the results within an attempt from one.
+	Submission         int                  `json:"submission,omitempty" yaml:"submission,omitempty"`
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	At                 int64                `json:"at"                            yaml:"at"`
@@ -1051,9 +1053,7 @@ func (j Job) Clone() Job {
 		c.Worktree = &wt
 	}
 	if j.Rejection != nil {
-		r := *j.Rejection
-		r.Unmet = cloneVerificationStatuses(j.Rejection.Unmet)
-		r.Violations = slices.Clone(j.Rejection.Violations)
+		r := j.Rejection.clone()
 		c.Rejection = &r
 	}
 	return c

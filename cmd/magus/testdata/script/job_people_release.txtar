@@ -49,6 +49,30 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/ls-board.out
 
+# The worker can recover the reason from its job, correct the omission and resubmit.
+cd ../notes
+exec magus describe job release-1.3/notes
+stdout '^rejection feedback$'
+stdout '^  postcondition "notes": nothing matching "notes/1[.]3[.]md" is in the tree, so this postcondition is unmet$'
+mkdir notes
+cp $WORK/CHANGELOG.md notes/1.3.md
+exec git add notes/1.3.md
+exec git commit -qm 'publish release notes'
+stdin $WORK/corrected-notes.json
+exec magus job exit release-1.3/notes --stdin
+cd ../shop
+exec magus job wait release-1.3/notes
+stdout '^verified release-1[.]3/notes, recorded pass$'
+! exec magus job wait release-1.3/notes
+stdout 'already pass'
+exec magus describe job release-1.3/notes -o json
+! stdout '^    "rejection":'
+stdout '"submission": 1,'
+exec magus describe job release-1.3/notes
+! stdout '^rejection feedback$'
+stdout '^attempt 1, rejected submission 1$'
+stdout '^  postcondition "notes": nothing matching "notes/1[.]3[.]md" is in the tree, so this postcondition is unmet$'
+
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --
@@ -74,6 +98,8 @@ import "magus";
 {"api_version": "safetyscissors.job-result/v1alpha1", "changed_paths": ["CHANGELOG.md"], "unresolved_risks": []}
 -- notes.json --
 {"api_version": "safetyscissors.job-result/v1alpha1", "changed_paths": [], "unresolved_risks": ["the notes need the final benchmark numbers"]}
+-- corrected-notes.json --
+{"api_version":"safetyscissors.job-result/v1alpha1","changed_paths":["notes/1.3.md"],"unresolved_risks":[]}
 -- apply.out --
 created release-1.3/changelog, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers

@@ -476,7 +476,9 @@ branch's unpushed commits into one per merged job, each output beside its source
 merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
-`{{cmd "job wait"}} <job>` before reading each result; reopen evidence with
+`{{cmd "job wait"}} <job>` before reading each result. On rejection, give the
+same job and its `{{cmd "describe job"}} <job>` feedback to the worker handling
+the correction. Verify the corrected result on that job. Reopen evidence with
 `{{cmd "query output"}} <ref>`; resolve shared seams once; regenerate declared outputs
 once; re-plan with `{{cmd "affected"}} <target> --plan` if the partition broke; read
 `{{cmd "diff"}} --impact` for context only; validate once per wave; finish with

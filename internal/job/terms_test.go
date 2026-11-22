@@ -21,6 +21,25 @@ type termsDeliverySuite struct {
 	suite.Suite
 }
 
+func TestWorkerBriefShowsOnlyTheLatestRelevantFeedback(t *testing.T) {
+	row := briefRow()
+	reasons := []string{"first", "second", strings.Repeat("界", 250), "fourth"}
+	a := job.Attempt{Job: row.ID, N: 1}
+	for range 20 {
+		a.Status.Rejections = append(a.Status.Rejections, job.Rejection{Violations: reasons})
+	}
+	facts := TermsFacts{Attempts: []job.Attempt{a}}
+	brief := NewTerms(row, facts).String()
+	assert.Equal(t, 1, strings.Count(brief, "rejected submission"))
+	assert.Contains(t, brief, "attempt 1, rejected submission 20")
+	assert.NotContains(t, brief, "fourth")
+	assert.Equal(t, 240, strings.Count(brief, "界"))
+	row.Rejection = &job.Rejection{Submission: 21, Violations: []string{"latest failure"}}
+	brief = NewTerms(row, facts).String()
+	assert.Contains(t, brief, "latest failure")
+	assert.NotContains(t, brief, "rejected submission")
+}
+
 func TestTermsDelivery(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(termsDeliverySuite))
