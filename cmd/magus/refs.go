@@ -406,7 +406,7 @@ func refsRenameCommand(ctx context.Context, root string, opts output.Options, g 
 		return refuse(refused...)
 	}
 
-	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(edit.RenameGrade(ctx, guardDependencies(ctx, root), ws, dryRun)))
+	plan := edit.Resolve(ws.Root(), edit.Request{Sites: sites}, edit.WithGrade(edit.RenameGrade(ctx, guardDependencies(ctx, root), ws, dryRun)))
 	if refused := plan.Refused(); len(refused) > 0 {
 		return refuse(refused...)
 	}

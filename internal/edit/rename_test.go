@@ -95,7 +95,7 @@ func TestRenameAppliesEveryVerifiedSite(t *testing.T) {
 
 	sites, refused := RenameSites(files, "parse", "decode")
 	require.Empty(t, refused)
-	require.NoError(t, Resolve(root, sites).Apply())
+	require.NoError(t, Resolve(root, Request{Sites: sites}).Apply())
 
 	assert.Equal(t, "package a\n\nfunc decode() {}\n\nfunc parseAll() { decode(); decode() }\n", readFile(t, root, "a.go"))
 	assert.Equal(t, "package b\n\nvar _ = a.decode\n", readFile(t, root, "b/b.go"))
