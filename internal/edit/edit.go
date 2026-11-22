@@ -89,7 +89,7 @@ type fileEdit struct {
 // span is a resolved site as byte offsets into the file's original bytes, end exclusive.
 type span struct {
 	start, end int
-	at         types.EditPosition
+	at, until  types.EditPosition
 	repl       string
 }
 
@@ -193,14 +193,15 @@ func (p *Plan) readFile(rel string, sites []Site) *fileEdit {
 
 	ok := true
 	spans := make([]span, 0, len(sites))
+	lines := indexLines(before)
 	for _, s := range sites {
-		start, end, reason := byteRange(before, s)
+		start, end, reason := lines.byteRange(before, s)
 		if reason != "" {
 			p.refuse(types.EditRefusal{Path: rel, Line: s.Start.Line, Column: s.Start.Column, Reason: reason})
 			ok = false
 			continue
 		}
-		spans = append(spans, span{start: start, end: end, at: s.Start, repl: s.New})
+		spans = append(spans, span{start: start, end: end, at: s.Start, until: s.End, repl: s.New})
 	}
 	if !ok {
 		return nil
@@ -225,7 +226,7 @@ func (p *Plan) readFile(rel string, sites []Site) *fileEdit {
 	f.after = compose(before, spans)
 	f.digestAfter = digest(f.after)
 	for _, s := range spans {
-		f.spans = append(f.spans, types.EditSpan{Path: rel, Start: positionAt(before, s.start), End: positionAt(before, s.end)})
+		f.spans = append(f.spans, types.EditSpan{Path: rel, Start: s.at, End: s.until})
 	}
 	return p.graded(f)
 }
@@ -297,12 +298,12 @@ func insideRoot(root, abs string) bool {
 
 // byteRange resolves a site's positions to offsets into content and checks that they hold
 // Old, or says why not.
-func byteRange(content []byte, s Site) (int, int, string) {
-	start, ok := offsetAt(content, s.Start)
+func (lines lineOffsets) byteRange(content []byte, s Site) (int, int, string) {
+	start, ok := lines.offsetAt(content, s.Start)
 	if !ok {
 		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file", s.Start.Line, s.Start.Column)
 	}
-	end, ok := offsetAt(content, s.End)
+	end, ok := lines.offsetAt(content, s.End)
 	if !ok || end < start {
 		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file after the start", s.End.Line, s.End.Column)
 	}
@@ -312,26 +313,34 @@ func byteRange(content []byte, s Site) (int, int, string) {
 	return start, end, ""
 }
 
+// lineOffsets includes the empty line after a final newline.
+type lineOffsets []int
+
+func indexLines(content []byte) lineOffsets {
+	lines := make(lineOffsets, 1, bytes.Count(content, []byte{'\n'})+1)
+	for offset, c := range content {
+		if c == '\n' {
+			lines = append(lines, offset+1)
+		}
+	}
+	return lines
+}
+
 // offsetAt is the byte offset of a 1-based line and column. A column may sit one past the
 // line's last byte, where an exclusive end lands, but never past its terminator.
-func offsetAt(content []byte, at types.EditPosition) (int, bool) {
-	if at.Line < 1 || at.Column < 1 {
+func (lines lineOffsets) offsetAt(content []byte, at types.EditPosition) (int, bool) {
+	if at.Line < 1 || at.Line > len(lines) || at.Column < 1 {
 		return 0, false
 	}
-	lineStart := 0
-	for range at.Line - 1 {
-		nl := bytes.IndexByte(content[lineStart:], '\n')
-		if nl < 0 {
-			return 0, false
-		}
-		lineStart += nl + 1
-	}
+	lineStart := lines[at.Line-1]
 	lineEnd := len(content)
-	if nl := bytes.IndexByte(content[lineStart:], '\n'); nl >= 0 {
-		lineEnd = lineStart + nl
+	if at.Line < len(lines) {
+		lineEnd = lines[at.Line] - 1
 	}
-	off := lineStart + at.Column - 1
-	return off, off <= lineEnd
+	if at.Column-1 > lineEnd-lineStart {
+		return 0, false
+	}
+	return lineStart + (at.Column - 1), true
 }
 
 // positionAt is the 1-based line and byte column of offset.

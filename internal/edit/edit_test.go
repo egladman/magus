@@ -1,11 +1,13 @@
 package edit
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -460,4 +462,73 @@ func dirEntriesUnder(t *testing.T, root, dir string) []string {
 		return nil
 	}
 	return dirEntries(t, filepath.Join(root, dir))
+}
+
+// Each marker occurs exactly once per requested site. The external editor can
+// therefore do the same replacement without receiving byte coordinates.
+func BenchmarkSplice(b *testing.B) {
+	for _, size := range []struct{ lines, edits int }{{32, 1}, {8192, 1}, {8192, 128}} {
+		name := fmt.Sprintf("%d-lines/%d-edits", size.lines, size.edits)
+		var input bytes.Buffer
+		var request Request
+		for line := 1; line <= size.lines; line++ {
+			if line%(size.lines/size.edits) == 0 {
+				input.WriteString("old value\n")
+				request.Sites = append(request.Sites, site("input", line, 1, "old", "new"))
+			} else {
+				input.WriteString("unchanged\n")
+			}
+		}
+		want := bytes.ReplaceAll(input.Bytes(), []byte("old value"), []byte("new value"))
+		for _, method := range []string{"resolve", "resolve-apply", "perl-in-place"} {
+			b.Run(fmt.Sprintf("%s/%s", name, method), func(b *testing.B) {
+				root := b.TempDir()
+				path := filepath.Join(root, "input")
+				var perl string
+				if method == "perl-in-place" {
+					var err error
+					perl, err = exec.LookPath("perl")
+					if err != nil {
+						b.Skip("perl unavailable")
+					}
+				}
+				b.ReportAllocs()
+				b.SetBytes(int64(input.Len()))
+				for b.Loop() {
+					b.StopTimer()
+					if err := os.WriteFile(path, input.Bytes(), 0o600); err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+					if method == "perl-in-place" {
+						if err := exec.Command(perl, "-pi", "-e", "s/^old value$/new value/", path).Run(); err != nil {
+							b.Fatal(err)
+						}
+					} else {
+						plan := Resolve(root, request)
+						if len(plan.refused) != 0 {
+							b.Fatal(plan.refused)
+						}
+						if method == "resolve" {
+							b.StopTimer()
+							if !bytes.Equal(plan.files[0].after, want) {
+								b.Fatal("resolved bytes differ")
+							}
+							b.StartTimer()
+							continue
+						}
+						if err := plan.Apply(); err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.StopTimer()
+					got, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(got, want) {
+						b.Fatalf("edited bytes differ (read error %v)", err)
+					}
+					b.StartTimer()
+				}
+			})
+		}
+	}
 }
