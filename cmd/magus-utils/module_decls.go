@@ -130,6 +130,9 @@ func renderNamespaceDecls(module string) (string, error) {
 // module's own that src names a type of.
 func namespaceImports(module, src string) string {
 	var b strings.Builder
+	if strings.Contains(src, `result\Result::<`) {
+		b.WriteString("import \"result\";\n")
+	}
 	for _, nested := range nestedModules() {
 		if nested != module && strings.Contains(src, qualifiedName(nested, "")) {
 			fmt.Fprintf(&b, "import %q;\n", nested)
@@ -713,7 +716,13 @@ func methodObjects(m std.Method) []string {
 	for _, a := range m.Args {
 		out = append(out, strings.Trim(a.Object, "[]"))
 	}
-	for _, r := range m.Returns {
+	for i, r := range m.Returns {
+		if sig := m.Signature(); sig != nil && i < sig.NumOut() {
+			if arg, ok := emit.ResultArgument(sig.Out(i)); ok {
+				out = append(out, buzzName(arg))
+				continue
+			}
+		}
 		out = append(out, strings.Trim(r.Object, "[]"))
 	}
 	return out

@@ -644,6 +644,9 @@ func objectName(goType reflect.Type) string {
 // at generate time with "declares Object X but its Impl returns Y", naming neither the
 // switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
+	if arg, ok := emit.ResultArgument(t); ok {
+		return fmt.Sprintf(`result\Result::<%s>`, buzzName(arg))
+	}
 	return buzzName(t)
 }
 
@@ -777,6 +780,9 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string, pkgs *argPackag
 }
 
 func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
+	if arg, ok := emit.ResultArgument(t); ok && (arg.Kind() != reflect.Struct || !isBoundaryType(arg)) {
+		return fmt.Errorf("result payload %s must be a named boundary struct", arg)
+	}
 	if e.emitted[t] {
 		return nil
 	}
@@ -878,11 +884,17 @@ func typePackage(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
+	if arg, ok := emit.ResultArgument(t); ok {
+		return fmt.Sprintf("%s.Result[%s]", typePackage(t).alias, qualifyType(arg))
+	}
 	return fmt.Sprintf("%s.%s", typePackage(t).alias, t.Name())
 }
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
+	if arg, ok := emit.ResultArgument(t); ok {
+		return "ResultOf" + typeIdent(arg)
+	}
 	prefix := typePackage(t).prefix
 	if strings.HasPrefix(t.Name(), prefix) {
 		return t.Name()

@@ -5,7 +5,17 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
+	"github.com/egladman/magus/types"
 )
+
+// ResultArgument returns the payload type of an instantiated types.Result.
+func ResultArgument(t reflect.Type) (reflect.Type, bool) {
+	if t.PkgPath() != reflect.TypeFor[types.Result[any]]().PkgPath() || !strings.HasPrefix(t.Name(), "Result[") {
+		return nil, false
+	}
+	value, ok := t.FieldByName("Value")
+	return value.Type, ok
+}
 
 // CallbackFuncName names the generated adapter for callback type t, a func
 // whose first parameter is a context. The name spells its parameter and

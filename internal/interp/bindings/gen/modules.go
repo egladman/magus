@@ -48,6 +48,7 @@ var Modules = ffi.Set{
 	"screen":   {Register: RegisterScreen, Path: "termkit/screen"},
 	"semver":   {Register: RegisterSemver, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"sort":     {Register: RegisterSort, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"splice":   {Register: RegisterSplice},
 	"strings":  {Register: RegisterStrings, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"template": {Register: RegisterTemplate, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"term":     {Register: RegisterTerm},

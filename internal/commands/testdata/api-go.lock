@@ -832,6 +832,15 @@ github.com/egladman/magus/std.SourceModule.Name field string
 github.com/egladman/magus/std.SourceModule.Path field string
 github.com/egladman/magus/std.SourceModule.Source field string
 github.com/egladman/magus/std.SourceModulesAsModules func() []Module
+github.com/egladman/magus/std.Splice var Module
+github.com/egladman/magus/std.SpliceApply func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan) (github.com/egladman/magus/types.Result[github.com/egladman/magus/types.EditApplied], error)
+github.com/egladman/magus/std.SpliceBlocks func(_ context.Context, text string, name string) (github.com/egladman/magus/types.EditDocument, error)
+github.com/egladman/magus/std.SpliceCreate func(_ context.Context, path string, content string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceDiff func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan, contextLines int) (string, error)
+github.com/egladman/magus/std.SplicePlan func(ctx context.Context, changes []github.com/egladman/magus/types.EditChange) (github.com/egladman/magus/types.EditPlan, error)
+github.com/egladman/magus/std.SpliceReplace func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceReplaceAll func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceReplaceRegex func(_ context.Context, path string, pattern string, template string) (github.com/egladman/magus/types.EditChange, error)
 github.com/egladman/magus/std.StatusError type struct
 github.com/egladman/magus/std.StatusError.Body field string
 github.com/egladman/magus/std.StatusError.BuzzError method(ptr) func() map[string]string
@@ -1860,6 +1869,30 @@ github.com/egladman/magus/types.DutyNotesVerify const Duty = "notes-verify"
 github.com/egladman/magus/types.EdgeDirection type string
 github.com/egladman/magus/types.EdgeIn const EdgeDirection = "in"
 github.com/egladman/magus/types.EdgeOut const EdgeDirection = "out"
+github.com/egladman/magus/types.EditApplied type struct
+github.com/egladman/magus/types.EditApplied.Already field int "json:\"already\"       yaml:\"already\""
+github.com/egladman/magus/types.EditApplied.NothingToDo field bool "json:\"nothing_to_do\" yaml:\"nothing_to_do\""
+github.com/egladman/magus/types.EditApplied.Written field []EditedFile "json:\"written\"       yaml:\"written\""
+github.com/egladman/magus/types.EditChange type struct
+github.com/egladman/magus/types.EditChange.Count field int "json:\"count\" yaml:\"count\""
+github.com/egladman/magus/types.EditChange.Create field bool "json:\"create,omitempty\" yaml:\"create,omitempty\""
+github.com/egladman/magus/types.EditChange.New field string "json:\"new\"           yaml:\"new\""
+github.com/egladman/magus/types.EditChange.Old field string "json:\"old,omitempty\" yaml:\"old,omitempty\""
+github.com/egladman/magus/types.EditChange.Path field string "json:\"path\"          yaml:\"path\""
+github.com/egladman/magus/types.EditChange.Regex field bool "json:\"regex,omitempty\" yaml:\"regex,omitempty\""
+github.com/egladman/magus/types.EditDocument type struct
+github.com/egladman/magus/types.EditDocument.Changes field []EditChange "json:\"changes\"           yaml:\"changes\""
+github.com/egladman/magus/types.EditDocument.Refused field []EditRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.EditPlan type struct
+github.com/egladman/magus/types.EditPlan.Already field []EditChange "json:\"already,omitempty\"    yaml:\"already,omitempty\""
+github.com/egladman/magus/types.EditPlan.Changes field []EditChange "json:\"changes\"              yaml:\"changes\""
+github.com/egladman/magus/types.EditPlan.Digest field string "json:\"digest\"               yaml:\"digest\""
+github.com/egladman/magus/types.EditPlan.Files field []EditedFile "json:\"files\"                yaml:\"files\""
+github.com/egladman/magus/types.EditPlan.MakesDirs field []string "json:\"makes_dirs,omitempty\" yaml:\"makes_dirs,omitempty\""
+github.com/egladman/magus/types.EditPlan.NothingToDo field bool "json:\"nothing_to_do\"        yaml:\"nothing_to_do\""
+github.com/egladman/magus/types.EditPlan.Refused field []EditRefusal "json:\"refused,omitempty\"    yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.EditPlan.Spans field []EditSpan "json:\"spans\"                yaml:\"spans\""
+github.com/egladman/magus/types.EditPlanRefused const DiagnosticCode = "MGS1063"
 github.com/egladman/magus/types.EditPosition type struct
 github.com/egladman/magus/types.EditPosition.Column field int "json:\"column\" yaml:\"column\""
 github.com/egladman/magus/types.EditPosition.Line field int "json:\"line\"   yaml:\"line\""
