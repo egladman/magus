@@ -852,7 +852,11 @@ func (s *Store) parse(ctx context.Context, wait bool) (Rows, jobsLog, []codec.Li
 		return Rows{}, jobsLog{}, nil, err
 	}
 	if !s.current(f, log) {
-		return f, log, texts, nil
+		lines := make([]codec.Line, len(texts))
+		for i, row := range texts {
+			lines[i] = row.Line
+		}
+		return f, log, lines, nil
 	}
 	if f.TypeMeta != s.listType() && log.header != nil {
 		return Rows{}, jobsLog{}, nil, s.refuseRecord(s.listType(), f.TypeMeta, 1)
@@ -889,20 +893,23 @@ func (s *Store) readLines(ctx context.Context, wait bool) (codec.Lines, error) {
 	}
 }
 
-// takeHeader sets the header line into f and log, and returns the lines of the rows.
-func (s *Store) takeHeader(lines []codec.Line, f *Rows, log *jobsLog) ([]codec.Line, error) {
-	var texts []codec.Line
+type inspectedRow struct {
+	codec.Line
+	fields codec.InspectedObject
+}
+
+// takeHeader retains each row's field inspection until the header admits its version.
+func (s *Store) takeHeader(lines []codec.Line, f *Rows, log *jobsLog) ([]inspectedRow, error) {
+	var texts []inspectedRow
 	for _, line := range lines {
-		var probe struct {
-			apiversion.TypeMeta
-			ID   codec.RawMessage `json:"id"`
-			Spec codec.RawMessage `json:"spec"`
-		}
-		if err := codec.Unmarshal(line.Text, &probe); err != nil {
+		fields, err := gen.Job.Inspect(line.Text)
+		if err != nil {
 			return nil, s.wrap(&codec.LineError{Path: s.path, Line: line.N, Err: err})
 		}
-		if probe.ID != nil || probe.Spec != nil {
-			texts = append(texts, line)
+		_, id := fields.RootFields["id"]
+		_, spec := fields.RootFields["spec"]
+		if id || spec {
+			texts = append(texts, inspectedRow{line, fields})
 			continue
 		}
 		header := Rows{}
@@ -917,11 +924,11 @@ func (s *Store) takeHeader(lines []codec.Line, f *Rows, log *jobsLog) ([]codec.L
 
 // decodeRows decodes the row lines into f and log, a later line of a row replacing the
 // earlier one in place.
-func (s *Store) decodeRows(texts []codec.Line, f *Rows, log *jobsLog) error {
+func (s *Store) decodeRows(texts []inspectedRow, f *Rows, log *jobsLog) error {
 	at := map[string]int{}
 	for _, line := range texts {
 		var r jobRecord
-		if err := codec.Unmarshal(line.Text, &r); err != nil {
+		if err := r.decode(line.fields); err != nil {
 			return s.wrap(&codec.LineError{Path: s.path, Line: line.N, Err: err})
 		}
 		row, err := r.job(s.creds)

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ type StoreVersionSuite struct {
 func TestStoreVersionSuite(t *testing.T) { suite.Run(t, new(StoreVersionSuite)) }
 
 func (s *StoreSuite) TestUnknownFieldsRefuseTheUpdateBeforeAppend() {
-	const original = `{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"extension":1,"spec":{"postconditions":[{"typo":1},{"typo":2}]},"status":{"registered_by":{"credential":{"extra":1}}}}` + "\n"
+	const original = `{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"Spec":1,"spec":{"postconditions":[{"typo":1},{"typo":2}]},"status":{"registered_by":{"credential":{"extra":1}}}}` + "\n"
 	path := filepath.Join(s.dir, jobsFileName)
 	s.Require().NoError(os.WriteFile(path, []byte(original), 0600))
 	_, err := s.open().Update(s.T().Context(), "a", func(*Job) { s.FailNow("unexpected update") })
@@ -29,6 +30,44 @@ func (s *StoreSuite) TestUnknownFieldsRefuseTheUpdateBeforeAppend() {
 	got, err := os.ReadFile(path)
 	s.Require().NoError(err)
 	s.Equal(original, string(got))
+}
+
+func (s *StoreSuite) TestCaseOnlyExtensionsSurviveUpdate() {
+	const original = `{"Spec":1,"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{"Parent":2},"status":{"Created":3,"created":0,"updated":0},"Status":4}` + "\n"
+	path := filepath.Join(s.dir, jobsFileName)
+	s.Require().NoError(os.WriteFile(path, []byte(original), 0600))
+	_, err := s.open().Update(s.T().Context(), "a", func(j *Job) { j.Parent = "root" })
+	s.Require().NoError(err)
+	data, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
+	last := string(lines[len(lines)-1])
+	for _, field := range []string{`"Spec":1`, `"Parent":2`, `"parent":"root"`, `"Created":3`, `"Status":4`} {
+		s.Contains(last, field)
+	}
+}
+
+func BenchmarkStoreUpdate(b *testing.B) {
+	dir := b.TempDir()
+	store, err := Open(b.Context(), Config{Dir: dir}, writable()...)
+	if err != nil {
+		b.Fatal(err)
+	}
+	const line = `{"api_version":"safetyscissors.job/v1alpha1","kind":"Job","metadata":{"name":"a"},"spec":{},"status":{"created":0,"updated":0}}` + "\n"
+	path := filepath.Join(dir, jobsFileName)
+	b.Run(codec.Version(), func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			b.StopTimer()
+			if err := os.WriteFile(path, []byte(line), 0600); err != nil {
+				b.Fatal(err)
+			}
+			b.StartTimer()
+			if _, err := store.Update(b.Context(), "a", func(j *Job) { j.Parent = "root" }); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
 
 func (s *StoreVersionSuite) TestANewerWriterNamesWhatItLacks() {

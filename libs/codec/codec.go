@@ -605,13 +605,28 @@ type ObjectSchema struct {
 // UnknownField identifies an undeclared member of a closed object.
 type UnknownField struct{ Object, Path, Name string }
 
-// UnknownFields inspects one complete document. Syntax errors take precedence.
-func (schema *ObjectSchema) UnknownFields(data []byte) ([]UnknownField, error) {
+// InspectedObject contains the typed decoder's input and the members excluded
+// from it. Known aliases the input when there are no extensions.
+type InspectedObject struct {
+	Known      []byte
+	RootFields map[string]struct{}
+	Extensions map[string]map[string]RawMessage // keyed by the enclosing object's path
+	Rejected   []UnknownField
+}
+
+// Inspect validates syntax and classifies members in one walk. Extension values
+// are copied so callers may retain them after releasing the original line.
+func (schema *ObjectSchema) Inspect(data []byte) (InspectedObject, error) {
 	s := scanner{data: data, schema: schema}
 	if err := s.document(nil, reflect.Value{}); err != nil {
-		return nil, err
+		return InspectedObject{}, err
 	}
-	return s.unknown, nil
+	if s.copied == 0 {
+		s.inspected.Known = data
+	} else {
+		s.inspected.Known = append(s.inspected.Known, data[s.copied:]...)
+	}
+	return s.inspected, nil
 }
 
 type pathPart struct {
@@ -620,10 +635,10 @@ type pathPart struct {
 	array bool
 }
 
-func fieldPath(parts []pathPart, name string) string {
+func fieldPath(parts []pathPart) string {
 	var b strings.Builder
 	writeName := func(n string) {
-		if n == "" || strings.ContainsAny(n, ".[]\"\\") || !strconv.CanBackquote(n) {
+		if n == "" || strings.ContainsAny(n, ".,[]\"\\\t") || !strconv.CanBackquote(n) {
 			b.WriteByte('[')
 			b.WriteString(strconv.Quote(n))
 			b.WriteByte(']')
@@ -643,7 +658,6 @@ func fieldPath(parts []pathPart, name string) string {
 			writeName(p.name)
 		}
 	}
-	writeName(name)
 	return b.String()
 }
 
@@ -667,12 +681,13 @@ type scanner struct {
 	data []byte
 	pos  int
 
-	strict   bool
-	schema   *ObjectSchema
-	path     []pathPart
-	unknown  []UnknownField
-	caseOnly bool
-	likeV2   bool
+	strict    bool
+	schema    *ObjectSchema
+	path      []pathPart
+	inspected InspectedObject
+	copied    int // first input byte not yet copied after removing an extension
+	caseOnly  bool
+	likeV2    bool
 
 	canon          bool
 	sawReplacement bool
@@ -821,6 +836,10 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 		return nil
 	}
 	seen := map[string]struct{}{}
+	if depth == 0 && s.schema != nil {
+		s.inspected.RootFields = seen
+	}
+	separator, kept := s.pos, false
 	for {
 		s.skipSpace()
 		if s.pos >= len(s.data) {
@@ -868,16 +887,19 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 			ft = elem
 		}
 		parent := s.schema
+		extension := false
 		if parent != nil {
 			child, known := parent.Fields[name]
 			if !known && parent.Closed {
-				s.unknown = append(s.unknown, UnknownField{Object: parent.Name, Name: name, Path: fieldPath(s.path, name)})
+				s.inspected.Rejected = append(s.inspected.Rejected, UnknownField{Object: parent.Name, Name: name, Path: fieldPath(append(s.path, pathPart{name: name}))})
 			}
+			extension = !known && !parent.Closed && parent.Fields != nil
 			s.schema = child
 			if child != nil {
 				s.path = append(s.path, pathPart{name: name})
 			}
 		}
+		start := s.pos
 		if err := s.value(depth+1, ft, fv); err != nil {
 			return err
 		}
@@ -885,10 +907,32 @@ func (s *scanner) object(depth int, t reflect.Type, v reflect.Value) error {
 			s.path = s.path[:len(s.path)-1]
 		}
 		s.schema = parent
+		end := s.pos
 		s.skipSpace()
 		if s.pos >= len(s.data) {
 			return s.errorAt(s.pos, io.ErrUnexpectedEOF)
 		}
+		if extension {
+			path := fieldPath(s.path)
+			if s.inspected.Extensions == nil {
+				s.inspected.Extensions = make(map[string]map[string]RawMessage)
+			}
+			if s.inspected.Extensions[path] == nil {
+				s.inspected.Extensions[path] = make(map[string]RawMessage)
+			}
+			s.inspected.Extensions[path][name] = bytes.Clone(bytes.TrimSpace(s.data[start:end]))
+			from, to := at, end
+			if kept {
+				from = separator
+			} else if s.data[s.pos] == ',' {
+				to = s.pos + 1
+			}
+			s.inspected.Known = append(s.inspected.Known, s.data[s.copied:from]...)
+			s.copied = to
+		} else {
+			kept = true
+		}
+		separator = s.pos
 		switch c := s.data[s.pos]; c {
 		case ',':
 			s.pos++

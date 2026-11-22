@@ -1,0 +1,9 @@
+template: testify
+dir: "{{.InterfaceDir}}/gen/{{.SrcPackageName}}test"
+pkgname: "{{.SrcPackageName}}test"
+filename: "{{.InterfaceName | snakecase}}.go"
+packages:
+  github.com/egladman/magus/libs/safetyscissors/job:
+    interfaces:
+      Reader:
+      CheckSpec:

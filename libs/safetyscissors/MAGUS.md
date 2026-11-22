@@ -12,6 +12,7 @@ Query: `magus query project=libs/safetyscissors`
 | `format`              |                                                                                                                          |
 | `golangci-lint`       | The tree-wide conventions over this module, through .magus/custom-gcl.                                                   |
 | `ci`                  | The anchor `magus affected ci` keys off.                                                                                 |
+| `mocks-generate`      | Generates the test doubles downstream hosts import.                                                                      |
 | `job-schema-generate` | Derives the JSON member tables from the job store's wire types.                                                          |
 | `index-generate`      | Renders MAGUS.md, this project's target catalog.                                                                         |
 | `mark-generate`       | mark_generate draws the mark into assets/gen/.                                                                           |

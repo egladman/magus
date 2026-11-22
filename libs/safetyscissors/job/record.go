@@ -1,6 +1,6 @@
 package job
 
-//go:generate go test -run ^TestStoredSchemas$ -update-job-schema
+//go:generate go run ../internal/cmd/jobschema . ../../apiversion
 
 import (
 	"errors"
@@ -103,17 +103,26 @@ func (r jobRecord) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON reads the record, keeping the members it does not declare in Unknown.
 func (r *jobRecord) UnmarshalJSON(data []byte) error {
-	type plain jobRecord
-	if err := checkStoredMembers(data, &gen.Job); err != nil {
-		return err
-	}
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
+	fields, err := gen.Job.Inspect(data)
 	if err != nil {
 		return err
 	}
+	return r.decode(fields)
+}
+
+func (r *jobRecord) decode(fields codec.InspectedObject) error {
+	if err := rejectUnknown(fields.Rejected); err != nil {
+		return err
+	}
+	type plain jobRecord
+	var p plain
+	if err := codec.Unmarshal(fields.Known, &p); err != nil {
+		return err
+	}
 	*r = jobRecord(p)
-	r.Unknown = unknown
+	r.Unknown = fields.Extensions[""]
+	r.Spec.Unknown = fields.Extensions["spec"]
+	r.Status.Unknown = fields.Extensions["status"]
 	return nil
 }
 
@@ -123,36 +132,10 @@ func (s jobSpec) MarshalJSON() ([]byte, error) {
 	return codec.MarshalWithUnknown(plain(s), s.Unknown)
 }
 
-// UnmarshalJSON reads the spec, keeping the members it does not declare in Unknown.
-func (s *jobSpec) UnmarshalJSON(data []byte) error {
-	type plain jobSpec
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
-	if err != nil {
-		return err
-	}
-	*s = jobSpec(p)
-	s.Unknown = unknown
-	return nil
-}
-
 // MarshalJSON writes the status with the members it kept in Unknown.
 func (st jobStatus) MarshalJSON() ([]byte, error) {
 	type plain jobStatus
 	return codec.MarshalWithUnknown(plain(st), st.Unknown)
-}
-
-// UnmarshalJSON reads the status, keeping the members it does not declare in Unknown.
-func (st *jobStatus) UnmarshalJSON(data []byte) error {
-	type plain jobStatus
-	var p plain
-	unknown, err := codec.UnmarshalWithUnknown(data, &p)
-	if err != nil {
-		return err
-	}
-	*st = jobStatus(p)
-	st.Unknown = unknown
-	return nil
 }
 
 // recordJob is row as the line jobs.jsonl stores. stored is the row's
@@ -946,10 +929,9 @@ func (e *UnknownMemberError) Error() string {
 
 // Only the store owns the schemas below. Embedded domain types keep their
 // own decoding rules, and the job envelope carries unknown fields forward.
-func checkStoredMembers(data []byte, schema *codec.ObjectSchema) error {
-	fields, err := schema.UnknownFields(data)
-	if err != nil || len(fields) == 0 {
-		return err
+func rejectUnknown(fields []codec.UnknownField) error {
+	if len(fields) == 0 {
+		return nil
 	}
 	refusal := &UnknownMemberError{Record: fields[0].Object}
 	for _, f := range fields {
@@ -965,10 +947,14 @@ func checkStoredMembers(data []byte, schema *codec.ObjectSchema) error {
 }
 
 func unmarshalWithSchema(data []byte, dst any, schema *codec.ObjectSchema) error {
-	if err := checkStoredMembers(data, schema); err != nil {
+	fields, err := schema.Inspect(data)
+	if err != nil {
 		return err
 	}
-	return codec.Unmarshal(data, dst)
+	if err := rejectUnknown(fields.Rejected); err != nil {
+		return err
+	}
+	return codec.Unmarshal(fields.Known, dst)
 }
 
 func (r *attemptRecord) UnmarshalJSON(data []byte) error {

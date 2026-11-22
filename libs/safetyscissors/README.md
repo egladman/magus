@@ -72,6 +72,14 @@ Every other part stays absent until you pass its option. Its accessor then retur
 On Linux a confined child is your binary run again, so `main` calls
 `sandbox.Relaunch(os.Args)` first.
 
+## Testing a host
+
+Import `github.com/egladman/magus/libs/safetyscissors/job/gen/jobtest` in
+your Go tests. `jobtest.NewMockReader(t)` returns a `job.Reader` with typed
+expectations such as `reader.EXPECT().List(ctx).Return(rows, nil).Once()`.
+Use `jobtest.NewMockCheckSpec(t)` for the host's `Config.CheckSpec`. Both
+constructors check their expectations when the test ends.
+
 ## Packages
 
 Each package imports on its own. A program that needs only verdict imports only

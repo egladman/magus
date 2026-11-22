@@ -373,13 +373,13 @@ func (e *gradesEntry) UnmarshalJSON(data []byte) error {
 	switch probe.TypeMeta {
 	case runType():
 		var r checkRunRecord
-		if err := codec.Unmarshal(data, &r); err != nil {
+		if err := r.UnmarshalJSON(data); err != nil {
 			return err
 		}
 		*e = gradesEntry{run: &r}
 	case gradeType():
 		var g gradeRecord
-		if err := codec.Unmarshal(data, &g); err != nil {
+		if err := g.UnmarshalJSON(data); err != nil {
 			return err
 		}
 		*e = gradesEntry{grade: &g}
