@@ -2,6 +2,7 @@ package edit
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -32,19 +33,25 @@ type CommittedFile func(rel string) (string, error)
 // Old inside new is skipped, so `a -> ab` applies once.
 // Absent deletions and unmatched patterns are Already only if committed
 // proves a prior match. A change that would apply again is refused.
-func Expand(root string, changes []types.EditChange, committed CommittedFile) Expansion {
+func Expand(ctx context.Context, root string, changes []types.EditChange, committed CommittedFile) Expansion {
 	x := expander{root: root, files: map[string]readResult{}, committed: committed}
 	if len(changes) == 0 {
 		x.refuse(types.EditChange{}, "nothing to edit")
 	}
 	for i, c := range changes {
+		if err := ctx.Err(); err != nil {
+			return Expansion{Refused: []types.EditRefusal{{Path: c.Path, Reason: err.Error()}}}
+		}
 		x.current = i
 		x.expand(c)
 	}
 	// Convergence over a partly refused plan would judge output
 	// the plan never writes.
 	if len(x.out.Refused) == 0 {
-		x.converge(changes)
+		x.converge(ctx, changes)
+	}
+	if err := ctx.Err(); err != nil {
+		return Expansion{Refused: []types.EditRefusal{{Reason: err.Error()}}}
 	}
 	return x.out
 }
@@ -122,6 +129,9 @@ func (x *expander) expand(c types.EditChange) {
 	case c.Create && (c.Regex || c.Old != ""):
 		x.refuse(c, "a creation carries no old text or pattern; drop old, or drop create")
 		return
+	case c.Create && c.Count != 0:
+		x.refuse(c, "a creation carries no count; drop count, or drop create")
+		return
 	case c.Create:
 		c.Path = rel
 		x.create(c)
@@ -188,7 +198,9 @@ func (x *expander) literal(c types.EditChange, body []byte) {
 // hold: applied already, or a miss whose fix the refusal names.
 func (x *expander) absent(c types.EditChange, content string) {
 	if c.New == "" {
-		x.unproven(c, func(committed string) bool { return strings.Contains(committed, c.Old) },
+		x.unproven(c, func(committed string) int {
+			return strings.Count(committed, c.Old)
+		},
 			"old is absent", "this deletion", "name a line that stays, in old and in new")
 		return
 	}
@@ -235,16 +247,18 @@ func (x *expander) regex(c types.EditChange, body []byte) {
 	}
 	switch {
 	case len(matches) == 0:
-		x.unproven(c, re.MatchString, "the pattern matches nothing", "this change",
+		x.unproven(c, func(committed string) int {
+			return len(re.FindAllStringIndex(committed, 2))
+		}, "the pattern matches nothing", "this change",
 			"write the pattern to match its own output too, such as `(?:old|new)`, so a rerun reads as applied")
-	case len(found) == 0:
-		x.already(c)
 	case c.Count == 1 && len(matches) > 1:
 		starts := make([]int, len(matches))
 		for i, m := range matches {
 			starts[i] = m[0]
 		}
 		x.ambiguous(c, body, starts, "the pattern matches", "anchor it to one match, or set count -1 to replace every match")
+	case len(found) == 0:
+		x.already(c)
 	default:
 		for _, f := range found {
 			x.site(c.Path, body, f.start, f.end, f.repl)
@@ -254,7 +268,7 @@ func (x *expander) regex(c types.EditChange, body []byte) {
 
 // unproven places a change its absence cannot prove applied. It is
 // Already when holds finds the text in the committed revision.
-func (x *expander) unproven(c types.EditChange, holds func(committed string) bool, what, change, fix string) {
+func (x *expander) unproven(c types.EditChange, count func(committed string) int, what, change, fix string) {
 	cannot := fmt.Sprintf("so whether %s was applied cannot be told: %s", change, fix)
 	if x.committed == nil {
 		x.refuse(c, fmt.Sprintf("%s and no version control holds a committed revision to compare, %s", what, cannot))
@@ -264,24 +278,35 @@ func (x *expander) unproven(c types.EditChange, holds func(committed string) boo
 	switch {
 	case err != nil:
 		x.refuse(c, fmt.Sprintf("%s and the committed revision cannot be read (%v), %s", what, err, cannot))
-	case holds(text):
-		x.already(c)
 	default:
-		x.refuse(c, fmt.Sprintf("%s here and in the committed revision, %s", what, cannot))
+		switch n := count(text); {
+		case n == 0:
+			x.refuse(c, fmt.Sprintf("%s here and in the committed revision, %s", what, cannot))
+		case n > 1 && c.Count == 1:
+			x.refuse(c, fmt.Sprintf("%s and the committed revision has multiple matches, %s", what, cannot))
+		default:
+			x.already(c)
+		}
 	}
 }
 
 // converge refuses each change that would apply again to the
 // plan's own output. A file whose sites overlap is left to
 // [Resolve], which refuses the overlap.
-func (x *expander) converge(changes []types.EditChange) {
+func (x *expander) converge(ctx context.Context, changes []types.EditChange) {
 	after := map[string][]byte{}
 	for rel, spans := range x.spansByFile(-1) {
+		if ctx.Err() != nil {
+			return
+		}
 		if body, ok := composed(x.files[rel].body, spans); ok {
 			after[rel] = body
 		}
 	}
 	for i, c := range changes {
+		if ctx.Err() != nil {
+			return
+		}
 		rel, _ := localPath(c.Path)
 		body, edited := after[rel]
 		if c.Create || !edited {

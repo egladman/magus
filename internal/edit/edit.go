@@ -3,6 +3,7 @@ package edit
 import (
 	"bytes"
 	"cmp"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -53,7 +54,7 @@ type Option func(*options)
 
 type options struct {
 	grade  func(path string, before, after []byte) (rule, reason string)
-	rename func(oldpath, newpath string) error
+	rename func(root *os.Root, oldpath, newpath string) error
 }
 
 // WithGrade refuses every file for which grade returns a reason.
@@ -75,7 +76,6 @@ type Plan struct {
 
 type fileEdit struct {
 	path          string // workspace-relative, slash-separated
-	abs           string
 	mode          fs.FileMode
 	before, after []byte
 	digestBefore  string
@@ -98,7 +98,7 @@ type span struct {
 // than stopping at the first, and writes nothing. An empty
 // request is an applicable plan that writes nothing.
 func Resolve(root string, req Request, opts ...Option) *Plan {
-	p := &Plan{opts: options{rename: os.Rename}, root: root}
+	p := &Plan{root: root}
 	for _, opt := range opts {
 		opt(&p.opts)
 	}
@@ -161,8 +161,12 @@ func localPath(p string) (string, bool) {
 // readRegular reads rel under root, or says why a rename could
 // not safely replace it.
 func readRegular(root, rel string) ([]byte, fs.FileMode, string) {
-	abs := filepath.Join(root, filepath.FromSlash(rel))
-	info, err := os.Lstat(abs)
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, 0, err.Error()
+	}
+	defer r.Close()
+	info, err := r.Lstat(filepath.FromSlash(rel))
 	switch {
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
 		// a.go/b under a regular a.go is as absent as any missing path.
@@ -173,10 +177,7 @@ func readRegular(root, rel string) ([]byte, fs.FileMode, string) {
 		// A rename over a symlink replaces the link, not the file it names.
 		return nil, 0, fmt.Sprintf("not a regular file (%s)", info.Mode().Type().String())
 	}
-	if !insideRoot(root, abs) {
-		return nil, 0, "resolves outside the workspace through a symlinked directory"
-	}
-	body, err := os.ReadFile(abs)
+	body, err := r.ReadFile(filepath.FromSlash(rel))
 	if err != nil {
 		return nil, 0, err.Error()
 	}
@@ -222,7 +223,7 @@ func (p *Plan) readFile(rel string, sites []Site) *fileEdit {
 		return nil
 	}
 
-	f := &fileEdit{path: rel, abs: p.abs(rel), mode: mode, before: before, digestBefore: digest(before)}
+	f := &fileEdit{path: rel, mode: mode, before: before, digestBefore: digest(before)}
 	f.after = compose(before, spans)
 	f.digestAfter = digest(f.after)
 	for _, s := range spans {
@@ -239,35 +240,37 @@ func (p *Plan) createFile(rel, content string) *fileEdit {
 		return nil
 	}
 	var missing []string
-	nearest := p.root
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		return refuseFile(err.Error())
+	}
+	defer root.Close()
 	if parent := path.Dir(rel); parent != "." {
 		parts := strings.Split(parent, "/")
 		for i := range parts {
 			dir := strings.Join(parts[:i+1], "/")
-			info, err := os.Stat(p.abs(dir))
+			info, err := root.Stat(filepath.FromSlash(dir))
 			switch {
 			case errors.Is(err, fs.ErrNotExist):
 				missing = append(missing, dir)
 			case err != nil:
+				if !insideRoot(p.root, p.abs(dir)) {
+					return refuseFile("resolves outside the workspace through a symlinked directory")
+				}
 				return refuseFile(err.Error())
 			case !info.IsDir():
 				return refuseFile(dir + " is not a directory")
-			default:
-				nearest = p.abs(dir)
 			}
 		}
 	}
-	if !insideRoot(p.root, nearest) {
-		return refuseFile("resolves outside the workspace through a symlinked directory")
-	}
-	if _, err := os.Lstat(p.abs(rel)); err == nil {
+	if _, err := root.Lstat(filepath.FromSlash(rel)); err == nil {
 		return refuseFile("already exists; change it with old and new")
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return refuseFile(err.Error())
 	}
 	after := []byte(content)
 	return p.graded(&fileEdit{
-		path: rel, abs: p.abs(rel), mode: createdMode, after: after, digestAfter: digest(after),
+		path: rel, mode: createdMode, after: after, digestAfter: digest(after),
 		created: true, makesDirs: missing,
 	})
 }
@@ -426,64 +429,81 @@ func (p *Plan) MakesDirs() []string {
 	return slices.Compact(dirs)
 }
 
-// Apply writes every file of the plan or none of them, and runs
-// no VCS command. It stages every file as a temp sibling and
-// renames each over its original. When a rename fails, it puts
-// back every file already written and removes the directories it
-// made. The error says whether that restore held.
+// Apply stages every file before publishing them individually. On failure
+// it attempts to restore preceding writes. Readers may see intermediate states.
 func (p *Plan) Apply() error {
 	if len(p.refused) > 0 {
 		return ErrRefused
 	}
 	var made []string
+	if len(p.files) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	rename := p.opts.rename
+	if rename == nil {
+		rename = (*os.Root).Rename
+	}
 	staged := make([]string, len(p.files))
 	discard := func() error {
+		var errs []error
 		for _, s := range staged {
 			if s != "" {
-				_ = os.Remove(s)
+				errs = append(errs, root.Remove(s))
 			}
 		}
-		return removeDirs(made)
+		return errors.Join(append(errs, removeDirs(root, made))...)
 	}
 	for _, dir := range p.MakesDirs() {
-		err := os.Mkdir(p.abs(dir), createdDirMode)
+		err := root.Mkdir(dir, createdDirMode)
 		if err != nil && !errors.Is(err, fs.ErrExist) {
 			return errors.Join(fmt.Errorf("make %s, nothing written: %w", dir, err), discard())
 		}
 		if err == nil {
-			made = append(made, p.abs(dir))
+			made = append(made, dir)
 		}
 	}
 	for i, f := range p.files {
-		s, err := stage(f.abs, f.after, f.mode)
+		s, err := stage(root, f.path, f.after, f.mode)
 		if err != nil {
 			return errors.Join(fmt.Errorf("stage %s, nothing written: %w", f.path, err), discard())
 		}
 		staged[i] = s
 	}
 	for i, f := range p.files {
-		err := checkUnchanged(f)
+		err := checkUnchanged(root, f)
 		if err == nil {
-			err = p.opts.rename(staged[i], f.abs)
+			if f.created {
+				err = root.Link(staged[i], f.path)
+			} else {
+				err = rename(root, staged[i], f.path)
+			}
 		}
 		if err != nil {
 			failed := fmt.Errorf("edit: write %s: %w", f.path, err)
-			rerr := errors.Join(p.restore(p.files[:i]), discard())
+			rerr := errors.Join(restore(root, rename, p.files[:i]), discard())
 			if rerr != nil {
 				return errors.Join(failed, fmt.Errorf("%w: %w", ErrRestoreFailed, rerr))
 			}
 			return fmt.Errorf("every file written before it was restored: %w", failed)
 		}
-		staged[i] = ""
+		if !f.created {
+			staged[i] = ""
+		}
 	}
-	return nil
+	made = nil
+	return discard()
 }
 
 // removeDirs removes the directories Apply made, innermost first.
-func removeDirs(made []string) error {
+func removeDirs(root *os.Root, made []string) error {
 	var errs []error
 	for _, d := range slices.Backward(made) {
-		if err := os.Remove(d); err != nil {
+		if err := root.Remove(d); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -492,14 +512,14 @@ func removeDirs(made []string) error {
 
 // checkUnchanged refuses a file another writer changed between Resolve and its rename,
 // which the rename would otherwise silently discard.
-func checkUnchanged(f *fileEdit) error {
+func checkUnchanged(root *os.Root, f *fileEdit) error {
 	if f.created {
-		if _, err := os.Lstat(f.abs); !errors.Is(err, fs.ErrNotExist) {
+		if _, err := root.Lstat(f.path); !errors.Is(err, fs.ErrNotExist) {
 			return errors.New("created on disk since it was planned")
 		}
 		return nil
 	}
-	now, err := os.ReadFile(f.abs)
+	now, err := root.ReadFile(f.path)
 	if err != nil {
 		return err
 	}
@@ -509,20 +529,20 @@ func checkUnchanged(f *fileEdit) error {
 	return nil
 }
 
-func (p *Plan) restore(files []*fileEdit) error {
+func restore(root *os.Root, rename func(*os.Root, string, string) error, files []*fileEdit) error {
 	var errs []error
 	for _, f := range files {
 		if f.created {
-			if err := os.Remove(f.abs); err != nil {
+			if err := root.Remove(f.path); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", f.path, err))
 			}
 			continue
 		}
-		s, err := stage(f.abs, f.before, f.mode)
+		s, err := stage(root, f.path, f.before, f.mode)
 		if err == nil {
-			err = p.opts.rename(s, f.abs)
+			err = rename(root, s, f.path)
 			if err != nil {
-				_ = os.Remove(s)
+				_ = root.Remove(s)
 			}
 		}
 		if err != nil {
@@ -534,12 +554,12 @@ func (p *Plan) restore(files []*fileEdit) error {
 
 // stage writes content to a synced temp sibling of abs, so the rename that lands it stays
 // on one filesystem.
-func stage(abs string, content []byte, mode fs.FileMode) (string, error) {
-	tmp, err := os.CreateTemp(filepath.Dir(abs), fmt.Sprintf(".%s.magus-edit-*", filepath.Base(abs)))
+func stage(root *os.Root, rel string, content []byte, mode fs.FileMode) (string, error) {
+	name := path.Join(path.Dir(rel), "."+path.Base(rel)+".magus-edit-"+rand.Text())
+	tmp, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
-	name := tmp.Name()
 	_, err = tmp.Write(content)
 	if err == nil {
 		err = tmp.Chmod(mode)
@@ -551,7 +571,7 @@ func stage(abs string, content []byte, mode fs.FileMode) (string, error) {
 		err = cerr
 	}
 	if err != nil {
-		_ = os.Remove(name)
+		_ = root.Remove(name)
 		return "", err
 	}
 	return name, nil

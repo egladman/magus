@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -19,13 +20,13 @@ func TestEditExpand(t *testing.T) {
 }
 
 func (s *ExpandSuite) expand(files map[string]string, changes ...types.EditChange) Expansion {
-	return Expand(writeFiles(s.T(), files), changes, nil)
+	return Expand(s.T().Context(), writeFiles(s.T(), files), changes, nil)
 }
 
 // expandCommitted expands with committed as the revision's files;
 // a path it lacks reads as absent at that revision.
 func (s *ExpandSuite) expandCommitted(files, committed map[string]string, changes ...types.EditChange) Expansion {
-	return Expand(writeFiles(s.T(), files), changes, committedFiles(committed))
+	return Expand(s.T().Context(), writeFiles(s.T(), files), changes, committedFiles(committed))
 }
 
 func committedFiles(files map[string]string) CommittedFile {
@@ -221,6 +222,35 @@ func (s *ExpandSuite) TestNoChangesRefused() {
 	s.Equal([]types.EditRefusal{{Reason: "nothing to edit"}}, s.expand(nil).Refused)
 }
 
+func (s *ExpandSuite) TestCreationRefusesCount() {
+	c := create("a.go", "new")
+	c.Count = 1
+	x := s.expand(nil, c)
+	s.Require().Len(x.Refused, 1)
+	s.Empty(x.Creates)
+}
+
+func (s *ExpandSuite) TestCancellationDuringCommittedReadDropsPartialBatch() {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	defer cancel()
+	root := writeFiles(s.T(), map[string]string{"a.go": "present"})
+	x := Expand(ctx, root, []types.EditChange{create("first", "first"), replace("a.go", "gone", ""), create("last", "last")},
+		func(string) (string, error) {
+			cancel()
+			return "gone", nil
+		})
+	s.Require().Len(x.Refused, 1)
+	s.Contains(x.Refused[0].Reason, context.Canceled.Error())
+	s.Empty(x.Creates)
+	s.Empty(x.Already)
+}
+
+func (s *ExpandSuite) TestUniqueDeletionCannotRetryAmbiguousCommittedAnchor() {
+	x := s.expandCommitted(map[string]string{"a.go": ""}, map[string]string{"a.go": "old old"}, replace("a.go", "old", ""))
+	s.Require().Len(x.Refused, 1)
+	s.Empty(x.Already)
+}
+
 func (s *ExpandSuite) TestEveryRefusalIsCollected() {
 	x := s.expand(map[string]string{"a.go": "x\n"}, replace("a.go", "q", "r"), replace("b.go", "x", "y"), replace("a.go", "x", "y"))
 
@@ -332,14 +362,14 @@ func (s *ExpandSuite) TestRerunOfAnAppliedPlanHasNothingToDo() {
 	}
 
 	committed := committedFiles(map[string]string{"a.go": "var x = 1\nf(); f()\nconst k = 3\n"})
-	first := Expand(root, changes, committed)
+	first := Expand(s.T().Context(), root, changes, committed)
 	s.Require().Empty(first.Refused)
 	s.Require().Empty(first.Already)
 	plan := Resolve(root, Request{Sites: first.Sites, Creates: first.Creates})
 	s.Require().NoError(plan.Apply())
 	s.Equal("var x = 2\ng(); g()\nconst k = 4\n", readFile(s.T(), root, "a.go"))
 
-	rerun := Expand(root, changes, committed)
+	rerun := Expand(s.T().Context(), root, changes, committed)
 	s.Empty(rerun.Refused)
 	s.Empty(rerun.Sites)
 	s.Empty(rerun.Creates)

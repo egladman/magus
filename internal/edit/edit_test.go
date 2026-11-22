@@ -158,14 +158,14 @@ func (s *ResolveSuite) TestRenameFailureRestoresEarlierFiles() {
 	p := Resolve(root, sites(site("a.go", 1, 1, "one", "ONE"), site("b.go", 1, 1, "two", "TWO")))
 	s.Require().Empty(p.Refused())
 	var landed []string
-	p.opts.rename = func(oldpath, newpath string) error {
+	p.opts.rename = func(root *os.Root, oldpath, newpath string) error {
 		if filepath.Base(newpath) == "b.go" {
 			return errors.New("injected")
 		}
-		body, err := os.ReadFile(oldpath)
+		body, err := root.ReadFile(oldpath)
 		s.Require().NoError(err)
 		landed = append(landed, fmt.Sprintf("%s=%s", filepath.Base(newpath), string(body)))
-		return os.Rename(oldpath, newpath)
+		return root.Rename(oldpath, newpath)
 	}
 
 	err := p.Apply()
@@ -182,9 +182,9 @@ func (s *ResolveSuite) TestRestoreFailureIsNamed() {
 	root := s.tree(map[string]string{"a.go": "one\n", "b.go": "two\n"})
 	p := Resolve(root, sites(site("a.go", 1, 1, "one", "ONE"), site("b.go", 1, 1, "two", "TWO")))
 	calls := 0
-	p.opts.rename = func(oldpath, newpath string) error {
+	p.opts.rename = func(root *os.Root, oldpath, newpath string) error {
 		if calls++; calls == 1 {
-			return os.Rename(oldpath, newpath)
+			return root.Rename(oldpath, newpath)
 		}
 		return errors.New("injected")
 	}
@@ -396,11 +396,11 @@ func (s *ResolveSuite) TestFailedApplyRemovesCreationsAndTheirDirectories() {
 		Creates: []Creation{{Path: "a/b/new.go", Content: "x\n"}},
 	})
 	s.Require().Empty(p.Refused())
-	p.opts.rename = func(oldpath, newpath string) error {
+	p.opts.rename = func(root *os.Root, oldpath, newpath string) error {
 		if filepath.Base(newpath) == "z.go" {
 			return errors.New("injected")
 		}
-		return os.Rename(oldpath, newpath)
+		return root.Rename(oldpath, newpath)
 	}
 
 	err := p.Apply()
@@ -420,6 +420,19 @@ func (s *ResolveSuite) TestCreationRacedOnDiskIsNotOverwritten() {
 	s.Require().ErrorContains(err, "edit: write new.go: created on disk since it was planned")
 	s.Equal("theirs\n", readFile(s.T(), root, "new.go"))
 	s.Equal([]string{"new.go"}, dirEntries(s.T(), root))
+}
+
+func (s *ResolveSuite) TestApplyConfinesDirectoriesCreatedAfterResolve() {
+	root := s.tree(nil)
+	outside := s.T().TempDir()
+	p := Resolve(root, Request{Creates: []Creation{{Path: "a/b/new.go", Content: "mine"}}})
+	s.Require().Empty(p.Refused())
+	if err := os.Symlink(outside, filepath.Join(root, "a")); err != nil {
+		s.T().Skipf("directory symlinks unavailable: %v", err)
+	}
+	s.Require().Error(p.Apply())
+	s.Empty(dirEntries(s.T(), outside))
+	s.Equal([]string{"a"}, dirEntries(s.T(), root))
 }
 
 func (s *ResolveSuite) TestDigestIsStableAcrossSiteOrder() {

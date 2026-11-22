@@ -234,7 +234,22 @@ func (s *SpliceModuleSuite) TestDiffReadsAsAPatch() {
 
 	s.Require().NoError(err)
 	s.Equal("--- a.go\n+++ edited\n@@ -2,2 +2,2 @@\n \n-var x = 1\n+var x = 2\n"+
-		"--- b.go\n+++ edited\n@@ -0,0 +1 @@\n+package b\n", got)
+		"--- b.go\n+++ edited\n@@ -0,0 +1 @@\n+package b\n", got.Value)
+	s.Nil(got.Error)
+}
+
+func (s *SpliceModuleSuite) TestDiffRefusesWholePreviewAfterTreeChanges() {
+	p := s.plan(s.inRoot(),
+		types.EditChange{Path: "a.go", Old: "x = 1", New: "x = 2", Count: 1},
+		types.EditChange{Path: "b.go", New: "package b\n", Create: true})
+	s.write("b.go", "other\n")
+	got, err := SpliceDiff(s.inRoot(), p, 1)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.Error)
+	s.Equal(string(types.EditPlanRefused), got.Error.Code)
+	s.Contains(got.Error.Message, "b.go")
+	s.Empty(got.Value)
+	s.Equal("other\n", s.read("b.go"))
 }
 
 func (s *SpliceModuleSuite) TestApplyWritesThePlan() {

@@ -215,7 +215,7 @@ func (s *BlocksSuite) TestADocumentPlansAndApplies() {
 	))
 	s.Require().Empty(parsed.Refused)
 
-	x := Expand(root, parsed.Changes, nil)
+	x := Expand(s.T().Context(), root, parsed.Changes, nil)
 	s.Require().Empty(x.Refused)
 	p := Resolve(root, Request{Sites: x.Sites, Creates: x.Creates})
 	s.Equal([]string{"b"}, p.MakesDirs())
@@ -223,7 +223,7 @@ func (s *BlocksSuite) TestADocumentPlansAndApplies() {
 
 	s.Equal("package a\n\nfunc f() { h(); h() }\n", readFile(s.T(), root, "a.go"))
 	s.Equal("package b\n", readFile(s.T(), root, "b/b.go"))
-	rerun := Expand(root, parsed.Changes, nil)
+	rerun := Expand(s.T().Context(), root, parsed.Changes, nil)
 	s.Equal(parsed.Changes, rerun.Already)
 	s.Empty(rerun.Sites)
 	s.Empty(rerun.Creates)

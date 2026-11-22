@@ -16,10 +16,10 @@ import (
 
 // Splice is the "splice" host module, the Buzz door to internal/edit.
 // No method raises: a refusal is data in the value returned, and
-// apply's failure is a Result.
+// diff and apply return failures in their Result.
 var Splice = Module{
 	Name: "splice",
-	Doc:  "Explicit file edits: literal and regex replacements and new files, planned against the tree, graded under the lease, diffed, and written all or none.",
+	Doc:  "Explicit file edits: plan literal and regex replacements and new files, grade them under the lease, preview the diff and apply the plan.",
 	Methods: []Method{
 		{
 			Name:    "replace",
@@ -65,14 +65,14 @@ var Splice = Module{
 		},
 		{
 			Name:    "diff",
-			Doc:     "Render a plan as a unified diff, one file after another, each labelled with its path and `edited`. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.",
+			Doc:     "Render a plan as a unified diff. The Result carries the complete patch or the refusal. A created file diffs against nothing. context is the unchanged lines around each hunk, 3 by default.",
 			Args:    []Arg{{Name: "plan", Object: "SplicePlan"}, {Name: "context", Optional: true, Default: 3}},
-			Returns: []Ret{{}},
+			Returns: []Ret{{Object: `result\Result::<str>`}},
 			Impl:    SpliceDiff,
 		},
 		{
 			Name:    "apply",
-			Doc:     "Plan the changes again and write every file or none. The Result fails when the plan carries refusals, when the tree changed since the plan was made, or when a write fails. A plan whose every change the tree holds succeeds and writes nothing.",
+			Doc:     "Plan the changes again and publish each file. A refusal prevents publication. A write failure triggers restoration of preceding writes and the Result reports any restoration failure. A plan whose every change the tree holds succeeds and writes nothing.",
 			Args:    []Arg{{Name: "plan", Object: "SplicePlan"}},
 			Returns: []Ret{{Object: `result\Result::<EditApplied>`}},
 			Impl:    SpliceApply,
@@ -124,6 +124,9 @@ func planEdits(ctx context.Context, changes []types.EditChange, grade func(root 
 	var denied []types.EditRefusal
 	readable := make([]types.EditChange, 0, len(changes))
 	for _, c := range changes {
+		if err := ctx.Err(); err != nil {
+			return editRun{refused: []types.EditRefusal{{Path: c.Path, Reason: err.Error()}}}
+		}
 		if !filepath.IsAbs(c.Path) && c.Path != "" {
 			if err := checkRead(ctx, filepath.Join(root, filepath.FromSlash(c.Path))); err != nil {
 				denied = append(denied, types.EditRefusal{Path: c.Path, Reason: err.Error()})
@@ -132,7 +135,7 @@ func planEdits(ctx context.Context, changes []types.EditChange, grade func(root 
 		}
 		readable = append(readable, c)
 	}
-	x := edit.Expand(root, readable, committedFiles(ctx, root))
+	x := edit.Expand(ctx, root, readable, committedFiles(ctx, root))
 	if len(changes) > 0 && len(readable) == 0 {
 		x.Refused = nil
 	}
@@ -216,7 +219,10 @@ func SplicePlan(ctx context.Context, changes []types.EditChange) (types.EditPlan
 
 // SpliceDiff is splice\diff. It renders the tree as it reads now, so
 // a file changed since the plan diffs as it would be written.
-func SpliceDiff(ctx context.Context, plan types.EditPlan, contextLines int) (string, error) {
+func SpliceDiff(ctx context.Context, plan types.EditPlan, contextLines int) (types.Result[string], error) {
+	if len(plan.Refused) > 0 {
+		return types.Fail[string](editRefused(plan.Refused)), nil
+	}
 	type contents struct{ before, after []byte }
 	seen := map[string]contents{}
 	capture := func(string) edit.Option {
@@ -225,17 +231,19 @@ func SpliceDiff(ctx context.Context, plan types.EditPlan, contextLines int) (str
 			return "", ""
 		})
 	}
-	planEdits(ctx, plan.Changes, capture)
+	if run := planEdits(ctx, plan.Changes, capture); len(run.refused) > 0 {
+		return types.Fail[string](editRefused(run.refused)), nil
+	}
 	var b strings.Builder
 	for _, rel := range slices.Sorted(maps.Keys(seen)) {
 		c := seen[rel]
 		patch, err := DiffUnified(ctx, string(c.before), string(c.after), rel, "edited", contextLines)
 		if err != nil {
-			patch = fmt.Sprintf("%s: no diff: %v\n", rel, err)
+			return types.Fail[string](types.Diagnostic{Message: fmt.Sprintf("%s: no diff: %v", rel, err)}), nil
 		}
 		b.WriteString(patch)
 	}
-	return b.String(), nil
+	return types.Ok(b.String()), nil
 }
 
 // SpliceApply is splice\apply. The error it returns is always nil: a
