@@ -167,8 +167,8 @@ func DecodeSlice[T any](v any, one func(any) (T, error)) ([]T, error) {
 }
 
 // EncodeList writes a Go slice as a Buzz list, encoding each item with one.
-func EncodeList[T any](items []T, one func(T) any) []any {
-	out := make([]any, len(items))
+func EncodeList[T, U any](items []T, one func(T) U) []U {
+	out := make([]U, len(items))
 	for i, it := range items {
 		out[i] = one(it)
 	}

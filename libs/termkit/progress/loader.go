@@ -23,8 +23,68 @@ const (
 	Column   Kind = "column"
 )
 
-// Fallback is the loader to draw when the terminal cannot show Unicode.
-const Fallback = "glyph/line"
+// LoaderName is a catalog label for display and configuration.
+type LoaderName string
+
+// RotationName selects a rotation loader.
+type RotationName string
+
+const (
+	RotationComet    RotationName = "rotation/comet·1"
+	RotationSquare   RotationName = "rotation/square·1"
+	RotationClock    RotationName = "rotation/clock·1"
+	RotationRing     RotationName = "rotation/ring·2"
+	RotationPinwheel RotationName = "rotation/pinwheel·2"
+	RotationInfinity RotationName = "rotation/infinity·2"
+)
+
+// GlyphName selects a glyph loader.
+type GlyphName string
+
+const (
+	GlyphDots     GlyphName = "glyph/dots"
+	GlyphOrbit    GlyphName = "glyph/orbit"
+	GlyphPulse    GlyphName = "glyph/pulse"
+	GlyphTriangle GlyphName = "glyph/triangle"
+	GlyphSpark    GlyphName = "glyph/spark"
+	GlyphLine     GlyphName = "glyph/line"
+)
+
+// StripName selects a strip loader.
+type StripName string
+
+const (
+	StripScanner   StripName = "strip/scanner"
+	StripEqualizer StripName = "strip/equalizer"
+	StripShade     StripName = "strip/shade"
+	StripSnake     StripName = "strip/snake"
+	StripSine      StripName = "strip/sine"
+	StripDots      StripName = "strip/dots"
+)
+
+// TextName selects a text loader.
+type TextName string
+
+const (
+	TextShimmer    TextName = "text/shimmer"
+	TextTypewriter TextName = "text/typewriter"
+)
+
+// SpanName selects a span loader.
+type SpanName string
+
+const (
+	SpanComet    SpanName = "span/comet"
+	SpanProgress SpanName = "span/progress"
+)
+
+// ColumnName selects a column loader.
+type ColumnName string
+
+const (
+	ColumnFill     ColumnName = "column/fill"
+	ColumnElevator ColumnName = "column/elevator"
+)
 
 // Loader is one named animation. Its frames are a pure function of elapsed
 // time, so the same instant always draws the same frame.
@@ -33,7 +93,7 @@ const Fallback = "glyph/line"
 // Rows are zero until set with [Loader.Width] and [Loader.Height]. A Text
 // loader's Cols is its label's width once [Loader.Label] sets one.
 type Loader struct {
-	Name     string
+	Name     LoaderName
 	Kind     Kind
 	Interval time.Duration
 	Cols     int
@@ -124,22 +184,38 @@ func trimTrailingSpace(row []cell) []cell {
 	return row
 }
 
-// Names lists every loader in catalog order.
-func Names() []string {
-	names := make([]string, len(catalog))
-	for i, l := range catalog {
-		names[i] = l.Name
-	}
-	return names
-}
+// Catalog returns every loader in display order.
+func Catalog() []Loader { return slices.Clone(catalog) }
 
-// Lookup returns the loader called name, such as "glyph/dots". An unknown name
-// is an error that lists every name there is.
-func Lookup(name string) (Loader, error) {
+// NewRotation builds the selected rotation loader.
+func NewRotation(name RotationName) (Loader, error) { return newLoader(Rotation, LoaderName(name)) }
+
+// NewGlyph builds the selected glyph loader.
+func NewGlyph(name GlyphName) (Loader, error) { return newLoader(Glyph, LoaderName(name)) }
+
+// NewStrip builds the selected strip loader.
+func NewStrip(name StripName) (Loader, error) { return newLoader(Strip, LoaderName(name)) }
+
+// NewText builds the selected text loader.
+func NewText(name TextName) (Loader, error) { return newLoader(Text, LoaderName(name)) }
+
+// NewSpan builds the selected span loader.
+func NewSpan(name SpanName) (Loader, error) { return newLoader(Span, LoaderName(name)) }
+
+// NewColumn builds the selected column loader.
+func NewColumn(name ColumnName) (Loader, error) { return newLoader(Column, LoaderName(name)) }
+
+func newLoader(kind Kind, name LoaderName) (Loader, error) {
 	for _, l := range catalog {
-		if l.Name == name {
+		if l.Kind == kind && l.Name == name {
 			return l, nil
 		}
 	}
-	return Loader{}, fmt.Errorf("progress: no loader %q, the loaders are %s", name, strings.Join(Names(), ", "))
+	var available []string
+	for _, loader := range catalog {
+		if loader.Kind == kind {
+			available = append(available, string(loader.Name))
+		}
+	}
+	return Loader{}, fmt.Errorf("progress: no %s loader %q, choose from %s", kind, name, strings.Join(available, ", "))
 }

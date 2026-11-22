@@ -321,11 +321,7 @@ func loaders(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, loaderShotRows)
 	var rows []layout.Row
 	var tall []progress.Loader
-	for _, name := range progress.Names() {
-		l, err := progress.Lookup(name)
-		if err != nil {
-			return "", err
-		}
+	for _, l := range progress.Catalog() {
 		l = l.Width(loaderSpanCols).Height(loaderColumnRows).Label("building internal/cache")
 		if l.Kind == progress.Column {
 			tall = append(tall, l)
@@ -337,7 +333,7 @@ func loaders(t screen.Theme) (string, error) {
 			width += layout.Cols(sp.Text)
 		}
 		pad := strings.Repeat(" ", max(l.Cols-width, 0)+2)
-		label = append(label, termkit.Span{Text: pad + name})
+		label = append(label, termkit.Span{Text: pad + string(l.Name)})
 		rows = append(rows, layout.Row{Label: label, Meta: l.Interval.String()})
 	}
 	for _, line := range layout.Columns(rows, shotCols-1, termkit.SGRDim, termkit.SGRReverse) {
@@ -347,7 +343,7 @@ func loaders(t screen.Theme) (string, error) {
 		for i, line := range l.Frame(loaderAt) {
 			if i == 0 {
 				line.Spans = append(line.Spans,
-					termkit.Span{Text: "  " + l.Name},
+					termkit.Span{Text: "  " + string(l.Name)},
 					termkit.Span{Text: "  " + l.Interval.String(), Style: termkit.SGRDim})
 			}
 			writeLine(s, line)

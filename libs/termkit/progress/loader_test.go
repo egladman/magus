@@ -23,32 +23,36 @@ func text(line termkit.Line) string {
 	return b.String()
 }
 
-func (s *LoaderSuite) mustLookup(name string) Loader {
-	l, err := Lookup(name)
+func (s *LoaderSuite) mustBuild(l Loader, err error) Loader {
 	s.Require().NoError(err)
 	return l
 }
 
 func (s *LoaderSuite) TestCatalogIsEliPicks() {
-	s.Equal([]string{
+	var names []LoaderName
+	for _, l := range Catalog() {
+		names = append(names, l.Name)
+	}
+	s.Equal([]LoaderName{
 		"rotation/comet·1", "rotation/square·1", "rotation/clock·1",
 		"rotation/ring·2", "rotation/pinwheel·2", "rotation/infinity·2",
 		"glyph/dots", "glyph/orbit", "glyph/pulse", "glyph/triangle", "glyph/spark", "glyph/line",
 		"strip/scanner", "strip/equalizer", "strip/shade", "strip/snake", "strip/sine", "strip/dots",
 		"text/shimmer", "text/typewriter", "span/comet", "span/progress", "column/fill", "column/elevator",
-	}, Names())
+	}, names)
 }
 
-func (s *LoaderSuite) TestLookupFailsLoudlyOnAnUnknownName() {
-	_, err := Lookup("glyph/nope")
+func (s *LoaderSuite) TestNewGlyphRejectsAnUnknownName() {
+	_, err := NewGlyph(GlyphName("glyph/nope"))
 	s.Require().Error(err)
 	s.Contains(err.Error(), `"glyph/nope"`)
 	s.Contains(err.Error(), "glyph/dots")
 }
 
 func (s *LoaderSuite) TestNoFrameEndsInASpaceExceptSpans() {
-	for _, name := range Names() {
-		l := s.mustLookup(name).Width(20).Height(8).Label("building internal/cache")
+	for _, entry := range Catalog() {
+		name := entry.Name
+		l := entry.Width(20).Height(8).Label("building internal/cache")
 		for f := range 400 {
 			for _, line := range l.Frame(time.Duration(f) * l.Interval) {
 				if l.Kind == Span {
@@ -61,8 +65,8 @@ func (s *LoaderSuite) TestNoFrameEndsInASpaceExceptSpans() {
 }
 
 func (s *LoaderSuite) TestFixedLoadersKeepTheirFootprint() {
-	for _, name := range Names() {
-		l := s.mustLookup(name)
+	for _, l := range Catalog() {
+		name := l.Name
 		if l.Kind != Glyph && l.Kind != Rotation && l.Kind != Strip {
 			continue
 		}
@@ -75,7 +79,7 @@ func (s *LoaderSuite) TestFixedLoadersKeepTheirFootprint() {
 }
 
 func (s *LoaderSuite) TestGlyphDotsCyclesInkFrames() {
-	l := s.mustLookup("glyph/dots")
+	l := s.mustBuild(NewGlyph(GlyphDots))
 	s.Equal(80*time.Millisecond, l.Interval)
 	s.Equal("⠋", text(l.Frame(0)[0]))
 	s.Equal("⠙", text(l.Frame(80 * time.Millisecond)[0]))
@@ -84,44 +88,44 @@ func (s *LoaderSuite) TestGlyphDotsCyclesInkFrames() {
 }
 
 func (s *LoaderSuite) TestFrameIsPure() {
-	l := s.mustLookup("strip/sine")
+	l := s.mustBuild(NewStrip(StripSine))
 	s.Equal(l.Frame(777*time.Millisecond), l.Frame(777*time.Millisecond))
 }
 
 func (s *LoaderSuite) TestNegativeElapsedDrawsTheFirstFrame() {
-	l := s.mustLookup("glyph/line")
+	l := s.mustBuild(NewGlyph(GlyphLine))
 	s.Equal("|", text(l.Frame(-time.Second)[0]))
 }
 
 func (s *LoaderSuite) TestCometCellTrailsTwoDots() {
-	l := s.mustLookup("rotation/comet·1")
+	l := s.mustBuild(NewRotation(RotationComet))
 	// Frame 2 lights rim dots 2, 1 and 0: (1,1), (1,0) and (0,0).
 	s.Equal(string(rune(0x2800+0x10+0x08+0x01)), text(l.Frame(2 * l.Interval)[0]))
 }
 
 func (s *LoaderSuite) TestScannerHeadStartsAtTheLeft() {
-	l := s.mustLookup("strip/scanner")
+	l := s.mustBuild(NewStrip(StripScanner))
 	s.Equal("●·······", text(l.Frame(0)[0]))
 }
 
 func (s *LoaderSuite) TestStripDotsDropsItsPadding() {
-	l := s.mustLookup("strip/dots")
+	l := s.mustBuild(NewStrip(StripDots))
 	s.Equal("···", text(l.Frame(0)[0]))
 }
 
 func (s *LoaderSuite) TestSpanFillsTheGivenWidth() {
-	l := s.mustLookup("span/comet").Width(30)
+	l := s.mustBuild(NewSpan(SpanComet)).Width(30)
 	s.Equal(30, utf8.RuneCountInString(text(l.Frame(time.Second)[0])))
 }
 
 func (s *LoaderSuite) TestSpanProgressFillsInEighths() {
-	l := s.mustLookup("span/progress").Width(10)
+	l := s.mustBuild(NewSpan(SpanProgress)).Width(10)
 	// Frame 75 is a quarter of the way: two full cells and four eighths.
 	s.Equal("██▌░░░░░░░", text(l.Frame(75 * l.Interval)[0]))
 }
 
 func (s *LoaderSuite) TestColumnFillsTheGivenHeight() {
-	l := s.mustLookup("column/elevator").Height(5)
+	l := s.mustBuild(NewColumn(ColumnElevator)).Height(5)
 	lines := l.Frame(0)
 	s.Require().Len(lines, 5)
 	s.Equal("█", text(lines[0]))
@@ -130,17 +134,17 @@ func (s *LoaderSuite) TestColumnFillsTheGivenHeight() {
 }
 
 func (s *LoaderSuite) TestWidthLeavesAFixedLoaderAlone() {
-	l := s.mustLookup("glyph/dots").Width(40)
+	l := s.mustBuild(NewGlyph(GlyphDots)).Width(40)
 	s.Equal(1, l.Cols)
 }
 
 func (s *LoaderSuite) TestTypewriterTypesTheLabel() {
-	l := s.mustLookup("text/typewriter").Label("abc")
+	l := s.mustBuild(NewText(TextTypewriter)).Label("abc")
 	s.Equal("ab", text(l.Frame(2 * l.Interval)[0]))
 }
 
 func (s *LoaderSuite) TestFallbackIsASCII() {
-	l := s.mustLookup(Fallback)
+	l := s.mustBuild(NewGlyph(GlyphLine))
 	for f := range 4 {
 		r := text(l.Frame(time.Duration(f) * l.Interval)[0])
 		s.Less(r[0], byte(0x80), r)

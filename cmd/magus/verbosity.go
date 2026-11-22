@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/egladman/magus/internal/cache"
@@ -212,11 +213,13 @@ func displayLogHandler(opts *slog.HandlerOptions) slog.Handler {
 	h := cache.NewLogHandler(os.Stderr, globalCfg.Log.Format, opts)
 	if ph, ok := h.(*cache.PrettyHandler); ok {
 		if name := globalCfg.Log.Loader; name != "" {
-			l, err := progress.Lookup(name)
-			if err == nil {
-				err = ph.SetLoader(l)
-			}
-			if err != nil {
+			loaders := progress.Catalog()
+			index := slices.IndexFunc(loaders, func(l progress.Loader) bool {
+				return l.Name == progress.LoaderName(name)
+			})
+			if index < 0 {
+				slog.Error("log.loader", "name", name, "error", "unknown loader")
+			} else if err := ph.SetLoader(loaders[index]); err != nil {
 				slog.Error("log.loader", "error", err)
 			}
 		}

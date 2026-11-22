@@ -47,7 +47,7 @@ func (s *SpinSuite) TestASecondStopIsANoOp() {
 }
 
 func (s *SpinSuite) TestSpinFramePadsTheLoaderToItsFootprint() {
-	l, err := Lookup(SpinLoader)
+	l, err := NewGlyph(GlyphDots)
 	s.Require().NoError(err)
 	frame := spinFrame(l, 0, "building", false)
 	s.True(strings.HasSuffix(frame, " building"), frame)
@@ -55,7 +55,7 @@ func (s *SpinSuite) TestSpinFramePadsTheLoaderToItsFootprint() {
 }
 
 func (s *SpinSuite) TestSpinFrameColorsOnlyWhenAsked() {
-	l, err := Lookup(SpinLoader)
+	l, err := NewGlyph(GlyphDots)
 	s.Require().NoError(err)
 	s.NotContains(spinFrame(l, 0, "x", false), "\x1b[")
 	s.Equal(spinFrame(l, 0, "x", false), termtest.StripANSI(spinFrame(l, 0, "x", true)))
