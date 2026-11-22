@@ -88,6 +88,9 @@ func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
 
 	assert.Equal(t, blocked, gradeStall(Dependencies{}, blocked, "job-a", at), "off by default")
 	assert.Equal(t, blocked, gradeStall(on, blocked, "", at), "no lease, no job to exit")
+	stale := blocked
+	stale.Rule = string(denyRuleStaleBinary)
+	assert.Equal(t, stale, gradeStall(on, stale, "job-a", at), "the stale judge can refuse the exit")
 	clearable := blocked
 	clearable.Rule = string(denyRuleLeaseGate)
 	assert.Equal(t, clearable, gradeStall(on, clearable, "job-a", at), "the worker clears lease-gate by running its check")

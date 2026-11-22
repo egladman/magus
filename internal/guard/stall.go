@@ -49,6 +49,10 @@ func stallRowKind(rule string) hint.MarkerKind {
 // The exit rides the verdict line rather than a next command: a worker is never served a
 // command that writes outside its write paths, and the job store is outside them.
 func gradeStall(deps Dependencies, judged verdict.Judgment, lease string, at location) verdict.Judgment {
+	// A stale judge can deny job exit itself. Keep its recovery instructions.
+	if judged.Rule == string(denyRuleStaleBinary) {
+		return judged
+	}
 	if judged.Decision != verdict.Deny || lease == "" || !unclearable[judged.Rule] {
 		return judged
 	}

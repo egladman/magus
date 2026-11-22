@@ -144,7 +144,17 @@ func (s *AuthorityContractSuite) TestARowWithNoAuthorityReadsTheWorkingTree() {
 func (s *AuthorityContractSuite) TestAnAuthorityCarryingAnotherContractIsRefused() {
 	moved := s.commit("another contract")
 	carryOwnContract(s.T(), s.root)
-	s.Contains(s.deny("worker", moved), fmt.Sprintf("%s at %.12s carries", s.root, moved))
+	s.git("add", "--", "internal/commands/testdata/api.lock")
+	for _, line := range []string{"./magus job exit worker --stdin", "./magus job advance worker"} {
+		s.deps.lease = "worker"
+		msg := denyContractSkew(s.T().Context(), s.deps, s.at(moved), line, DialectBash)
+		s.Contains(msg, s.root)
+		s.Contains(msg, moved[:12])
+		s.Contains(msg, "matches the working tree")
+		s.Contains(msg, "git status --short")
+		s.Contains(msg, "./magus job advance worker")
+		s.NotContains(msg, "relink")
+	}
 }
 
 func (s *AuthorityContractSuite) TestAnUnreadableAuthorityIsRefused() {

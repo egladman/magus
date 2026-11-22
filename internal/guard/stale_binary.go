@@ -91,6 +91,26 @@ func judgedContract(ctx context.Context, at location, lease, root string) (contr
 	return authorityContract(ctx, root, row.Authority)
 }
 
+// currentTreeAtOtherAuthority requires both digests. An unreadable working
+// tree or revision cannot establish which side needs repair.
+func currentTreeAtOtherAuthority(root string, skew contract.Skew) bool {
+	if skew.Revision == "" || !skew.Differs() {
+		return false
+	}
+	tree, err := contract.Check(root)
+	return err == nil && tree.Tree == skew.Binary
+}
+
+func authorityRecovery(root, lease, revision string) denial {
+	return denial{
+		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s. In a human terminal in %s, run `git status --short`.",
+			lease, revision, shellWord(root)),
+		Why: fmt.Sprintf("Review `git diff --cached` and `git diff`. Confirm the intended contract and its generating sources. If HEAD already carries it, skip the commit. Otherwise commit only reviewed paths with identical staged and working copies. Stop for conflicts or uncertain provenance. "+
+			"See docs/conventions.md#recovering-a-checkout-binary for the scoped commit. From that checkout run `./magus job advance %s`, verify its authority against `git rev-parse HEAD` with `./magus describe job %s -o 'template={{.job.authority}}'`, then retry the refused call.",
+			shellWord(lease), shellWord(lease)),
+	}
+}
+
 // authorityTrees holds each revision's contract digest, a string, by
 // authorityKey. A revision's files never change, so a later or concurrent
 // judgment reuses it. A failed read is never kept.

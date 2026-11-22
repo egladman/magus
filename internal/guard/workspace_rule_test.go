@@ -112,6 +112,19 @@ func ownCheckout(t *testing.T, ctx context.Context, hasBinary bool) string {
 	return root
 }
 
+func (s *AuthorityContractSuite) TestAnUnloadedPolicyServesHumanAuthorityRecovery() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	at := s.at(moved)
+	asked := rulesAnswer{unloaded: true, loadFailure: errMissingMember}
+	call := judgedCall{changes: true, lease: "worker"}
+	s.True(denyUnloaded(s.T().Context(), &asked, call, at))
+	s.Equal(denyRuleStaleBinary, asked.rule)
+	s.Contains(asked.answer.Reason, "matches the working tree")
+	s.Contains(asked.answer.Reason, "./magus job advance worker")
+	s.Empty(asked.next)
+}
+
 // commitAuthority commits root's tree and advances every row's Authority
 // to it. A leased call reads the contract at its authority, so a worker's
 // fixture commits what ownCheckout wrote.
