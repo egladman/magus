@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,6 +70,8 @@ func (noMessage) Error() string                { return "rendered form" }
 func (noMessage) BuzzError() map[string]string { return map[string]string{"code": "MGS9999"} }
 
 func TestCaughtValueRendersStructuredErrors(t *testing.T) {
+	machine := NewVM(context.Background())
+	caughtValue := func(err error) Value { return machine.caughtValue(nil, err) }
 	t.Run("a plain error stays a string, per upstream", func(t *testing.T) {
 		// Upstream Buzz surfaces a host failure as a str, and this package's conformance
 		// fixtures pin that. Enriching is the EMBEDDER's opt-in, not a VM default.
@@ -132,6 +135,29 @@ func TestCaughtValueRendersStructuredErrors(t *testing.T) {
 			t.Fatalf("message: got %q present=%v", got.String(), ok)
 		}
 	})
+}
+
+type nativeFailure struct{ structured }
+
+func (nativeFailure) BuzzErrorType() string { return `first\Failure` }
+
+func TestCaughtNativeErrorUsesDeclaredType(t *testing.T) {
+	machine := NewVM(context.Background())
+	env := NewEnv()
+	first := &objectDefObj{Name: "Failure", Fields: []ast.ObjField{{Name: "url"}, {Name: "message"}}}
+	second := &objectDefObj{Name: "Failure"}
+	env.Define(`first\Failure`, machine.allocObjectDef(first))
+	env.Define(`second\Failure`, machine.allocObjectDef(second))
+	env.Define("Failure", machine.allocObjectDef(second))
+	v := machine.caughtValue(env, nativeFailure{structured{msg: "failed", url: "example"}})
+	f := &frame{env: env, chunk: &Chunk{Consts: []Value{StringValue(`first\Failure`), StringValue(`second\Failure`)}}}
+	require.True(t, machine.buzzIsType(v, "Failure"))
+	assert.True(t, machine.sameTypeDef(v, f, 1))
+	assert.False(t, machine.sameTypeDef(v, f, 2))
+	fields := machine.asObject(v).Fields
+	require.Len(t, fields, 2)
+	assert.Equal(t, "example", fields[0].String())
+	assert.Equal(t, "failed", fields[1].String())
 }
 
 // invokeChunk builds `recv.name(1)` with the call on line 3 of probe.buzz.
