@@ -374,7 +374,7 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	byID := strings.Replace(claudeContinueEnvelope, `"to":"brisk-heron"`, `"to":"a1b2c3"`, 1)
 	Judge(ctx, deps, Request{Input: byID, Host: "claude-code"})
 	require.Len(t, probe.asked, 4)
-	assert.GreaterOrEqual(t, *probe.asked[3].Target.IdleMs, (10*time.Minute).Milliseconds(),
+	assert.GreaterOrEqual(t, *probe.asked[3].Target.IdleMs, (10 * time.Minute).Milliseconds(),
 		"a cold continue without human approval does not restart the worker's clock")
 }
 
