@@ -282,32 +282,35 @@ func TestProgressConstructorsUseTheirOwnNameEnum(t *testing.T) {
 	require.True(t, ok)
 	decls, err := renderModuleDecls(mod)
 	require.NoError(t, err)
-	for _, tc := range []struct{ kind, member, name string }{
-		{"Glyph", "dots", "glyph/dots"},
-		{"Rotation", "clock", "rotation/clock·1"},
-		{"Strip", "scanner", "strip/scanner"},
-		{"Text", "shimmer", "text/shimmer"},
-		{"Span", "progress", "span/progress"},
-		{"Column", "fill", "column/fill"},
-	} {
-		t.Run(tc.kind, func(t *testing.T) {
+	for _, kind := range []string{"Glyph", "Rotation", "Strip", "Text", "Span", "Column"} {
+		t.Run(kind, func(t *testing.T) {
 			ctx := t.Context()
 			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 			t.Cleanup(func() { _ = sess.Close() })
 			sess.SetNativeModule(mod.ImportPath(), bindgen.RegisterProgress(ctx, sess))
 			sess.SetModuleDecls(mod.ImportPath(), decls)
-			src := fmt.Sprintf(`import "termkit/progress";
-final name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s));`, tc.kind, tc.member)
-			require.NoError(t, sess.Exec(ctx, src))
-			assert.Equal(t, tc.name, sess.Globals()["name"].AsString())
-			raw := fmt.Sprintf(`import "termkit/progress"; _ = progress\new%s(%q);`, tc.kind, tc.name)
-			require.ErrorContains(t, sess.Exec(ctx, raw), tc.kind+"Name")
+			enum, ok := boundaryEnumNamed(kind + "Name")
+			require.True(t, ok)
+			require.NotEmpty(t, enum.Cases)
+			for _, member := range enum.Cases {
+				src := fmt.Sprintf(`import "termkit/progress";
+var name = "";
+try {
+    name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s));
+} catch (err) {
+    name = "{err}";
+}`, kind, member.Name)
+				require.NoError(t, sess.Exec(ctx, src))
+				assert.Equal(t, member.Value, sess.Globals()["name"].AsString())
+			}
+			raw := fmt.Sprintf(`import "termkit/progress"; fun rejectRaw() > int !> any { return progress\new%s(%q); }`, kind, enum.Cases[0].Value)
+			require.ErrorContains(t, sess.Exec(ctx, raw), "cannot pass str")
 			wrong := "progress\\GlyphName.dots"
-			if tc.kind == "Glyph" {
+			if kind == "Glyph" {
 				wrong = "progress\\StripName.dots"
 			}
-			mixed := fmt.Sprintf(`import "termkit/progress"; _ = progress\new%s(%s);`, tc.kind, wrong)
-			require.ErrorContains(t, sess.Exec(ctx, mixed), tc.kind+"Name")
+			mixed := fmt.Sprintf(`import "termkit/progress"; fun rejectMixed() > int !> any { return progress\new%s(%s); }`, kind, wrong)
+			require.ErrorContains(t, sess.Exec(ctx, mixed), "of type "+kind+"Name")
 		})
 	}
 }

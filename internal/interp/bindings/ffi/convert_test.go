@@ -21,6 +21,28 @@ func TestOptStrValCrossesNilAsNull(t *testing.T) {
 	assert.Equal(t, "", got.AsString())
 }
 
+func TestEnumArgumentValidatesTypeAndOrdinal(t *testing.T) {
+	type selector string
+	values := []selector{"first", "second"}
+	member := func(name string, backing vm.Value) vm.Value {
+		def := vm.EnumDefValue(name, []string{"member"}, []vm.Value{backing})
+		cases, ok := def.EnumCases()
+		require.True(t, ok)
+		return cases[0]
+	}
+	got, err := EnumArgument([]vm.Value{member("Selector", vm.IntValue(1))}, 0, "Selector", values)
+	require.NoError(t, err)
+	assert.Equal(t, selector("second"), got)
+	for _, args := range [][]vm.Value{
+		nil, {vm.StringValue("first")}, {member("Other", vm.IntValue(0))},
+		{member("Selector", vm.IntValue(-1))}, {member("Selector", vm.IntValue(2))},
+		{member("Selector", vm.StringValue("first"))},
+	} {
+		_, err := EnumArgument(args, 0, "Selector", values)
+		require.ErrorContains(t, err, "Selector")
+	}
+}
+
 func TestAnyValNamedBuzzObject(t *testing.T) {
 	t.Parallel()
 	got := AnyVal(types.BuzzObject{"major": 1, "original": "v1.2.3"})

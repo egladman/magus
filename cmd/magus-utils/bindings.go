@@ -449,7 +449,17 @@ func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg,
 	}
 	if param.Kind() == reflect.String && param.PkgPath() != "" {
 		pkgs.spell(param)
-		fmt.Fprintf(w, "\t\t%s := %s.%s(ffi.String(bzArgs, %d))\n", a.Name, pkgs.alias(param.PkgPath()), param.Name(), idx)
+		goType := pkgs.alias(param.PkgPath()) + "." + param.Name()
+		if enum, ok := buzzEnum(param); ok && enum.Closed {
+			fmt.Fprintf(w, "\t\t%s, err := ffi.EnumArgument(bzArgs, %d, %q, []%s{", a.Name, idx, enum.Name, goType)
+			for _, c := range enum.Cases {
+				fmt.Fprintf(w, "%q,", c.Value)
+			}
+			fmt.Fprintln(w, "})")
+			fmt.Fprintln(w, "\t\tif err != nil { return vm.Null, ffi.Error(err) }")
+		} else {
+			fmt.Fprintf(w, "\t\t%s := %s(ffi.String(bzArgs, %d))\n", a.Name, goType, idx)
+		}
 		return nil
 	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)

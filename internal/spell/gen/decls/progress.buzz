@@ -6,46 +6,46 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export enum<str> ColumnName {
-    fill = "column/fill",
-    elevator = "column/elevator",
+export enum ColumnName {
+    fill,
+    elevator,
 }
 
-export enum<str> GlyphName {
-    dots = "glyph/dots",
-    orbit = "glyph/orbit",
-    pulse = "glyph/pulse",
-    triangle = "glyph/triangle",
-    spark = "glyph/spark",
-    line = "glyph/line",
+export enum GlyphName {
+    dots,
+    orbit,
+    pulse,
+    triangle,
+    spark,
+    line,
 }
 
-export enum<str> RotationName {
-    comet = "rotation/comet·1",
-    square = "rotation/square·1",
-    clock = "rotation/clock·1",
-    ring = "rotation/ring·2",
-    pinwheel = "rotation/pinwheel·2",
-    infinity = "rotation/infinity·2",
+export enum RotationName {
+    comet,
+    square,
+    clock,
+    ring,
+    pinwheel,
+    infinity,
 }
 
-export enum<str> SpanName {
-    comet = "span/comet",
-    progress = "span/progress",
+export enum SpanName {
+    comet,
+    progress,
 }
 
-export enum<str> StripName {
-    scanner = "strip/scanner",
-    equalizer = "strip/equalizer",
-    shade = "strip/shade",
-    snake = "strip/snake",
-    sine = "strip/sine",
-    dots = "strip/dots",
+export enum StripName {
+    scanner,
+    equalizer,
+    shade,
+    snake,
+    sine,
+    dots,
 }
 
-export enum<str> TextName {
-    shimmer = "text/shimmer",
-    typewriter = "text/typewriter",
+export enum TextName {
+    shimmer,
+    typewriter,
 }
 
 export extern fun bar(done: int, total: int, cols: int, track: str) > {str: any};

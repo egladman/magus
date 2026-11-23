@@ -177,6 +177,23 @@ func ResultBool(v vm.Value) (bool, error) {
 	return v.AsBool(), nil
 }
 
+// EnumArgument maps a closed Buzz enum's ordinal to its Go value. The
+// generator emits the table in the same order as the Buzz declaration.
+func EnumArgument[T ~string](args []vm.Value, index int, typ string, values []T) (T, error) {
+	if index >= 0 && index < len(args) {
+		v := args[index]
+		enum, _, ok := v.EnumCase()
+		backing, _ := v.EnumValue()
+		if ok && enum == typ && backing.IsInt() {
+			ordinal := backing.AsInt()
+			if ordinal >= 0 && ordinal < int64(len(values)) {
+				return values[ordinal], nil
+			}
+		}
+	}
+	return "", fmt.Errorf("argument %d requires a case of %s", index+1, typ)
+}
+
 // ResultEnum decodes a callback's result as a case of enum typ, or its
 // backing string, refusing any other value with the cases it accepts.
 func ResultEnum(v vm.Value, typ string, cases []string) (string, error) {

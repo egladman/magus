@@ -834,9 +834,16 @@ func argumentEnum(m std.Method, i int) string {
 // enum is declared.
 func renderBuzzEnumDecl(e boundaryEnum) []byte {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
-	for _, c := range e.Cases {
-		fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
+	if e.Closed {
+		fmt.Fprintf(&b, "export enum %s {\n", e.Name)
+		for _, c := range e.Cases {
+			fmt.Fprintf(&b, "    %s,\n", c.Name)
+		}
+	} else {
+		fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
+		for _, c := range e.Cases {
+			fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
+		}
 	}
 	fmt.Fprintln(&b, "}")
 	return b.Bytes()

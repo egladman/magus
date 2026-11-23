@@ -196,8 +196,15 @@ func deriveBoundary() (boundarySet, error) {
 		return boundarySet{}, err
 	}
 	r := buzzgen.NewReach(cfg)
+	nominalInputs := map[reflect.Type]bool{}
 	for _, sig := range hostSignatures(hostmodules.All()) {
 		r.Walk(sig.Type, buzzgen.Outbound, sig.Owner)
+		for i, arg := range sig.Args {
+			param := sig.Type.In(sig.Type.NumIn() - len(sig.Args) + i)
+			if arg.Enum == "" && param.Kind() == reflect.String && param.PkgPath() != "" {
+				nominalInputs[param] = true
+			}
+		}
 	}
 	for _, op := range providerOps {
 		label := fmt.Sprintf("provider op %s.%s", op.Family, op.Op)
@@ -223,6 +230,9 @@ func deriveBoundary() (boundarySet, error) {
 	}
 	if set.enums, err = deriveEnums(r, set.prog, set.open); err != nil {
 		return boundarySet{}, err
+	}
+	for i := range set.enums {
+		set.enums[i].Closed = nominalInputs[set.enums[i].Type]
 	}
 	var claims []buzzgen.Claim
 	for _, entry := range set.types {
@@ -258,6 +268,7 @@ func hostMembers(path string) []string {
 type hostSignature struct {
 	Owner string
 	Type  reflect.Type
+	Args  []std.Arg
 }
 
 // hostSignatures lists the signature of every method the modules declare,
@@ -267,7 +278,7 @@ func hostSignatures(mods []std.Module) []hostSignature {
 	add := func(owner string, ms []std.Method) {
 		for _, m := range ms {
 			if sig := m.Signature(); sig != nil {
-				out = append(out, hostSignature{Owner: fmt.Sprintf("%s.%s", owner, m.Name), Type: sig})
+				out = append(out, hostSignature{Owner: fmt.Sprintf("%s.%s", owner, m.Name), Type: sig, Args: m.Args})
 			}
 		}
 	}
@@ -347,6 +358,8 @@ func innermost(ft reflect.Type) reflect.Type {
 }
 
 type boundaryEnum struct {
+	// Closed enums accept only nominal cases at a Go string parameter.
+	Closed bool
 	Name string
 	// Type is nil for an enum only its module setting declares, which no
 	// signature or field reaches.
