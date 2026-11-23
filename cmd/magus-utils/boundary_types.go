@@ -360,7 +360,7 @@ func innermost(ft reflect.Type) reflect.Type {
 type boundaryEnum struct {
 	// Closed enums accept only nominal cases at a Go string parameter.
 	Closed bool
-	Name string
+	Name   string
 	// Type is nil for an enum only its module setting declares, which no
 	// signature or field reaches.
 	Type  reflect.Type

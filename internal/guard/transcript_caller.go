@@ -5,8 +5,8 @@ import (
 	"cmp"
 	"io"
 	"io/fs"
-	"path"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
