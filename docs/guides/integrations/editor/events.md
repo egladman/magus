@@ -156,25 +156,20 @@ It is a TEMPLATE you own, not a package magus releases, the same arrangement as
 the [agent guard templates](../agents/guard-templates.md), and for the same
 reason ("The host wiring is yours" in [the design principles](../../../design.md)).
 
-POSIX sh and jq, nothing else. Reduced to its core it is one pipeline:
+POSIX sh, no external JSON filter. Reduced to its core it is one command:
 
 ```sh
-magus events --follow --limit 0 --type target.result | jq -r --unbuffered '
-  select(.status == "failed") | "FAIL \(.project):\(.target)"
-'
+magus events --follow --limit 0 --type target.result \\
+  -o 'template={{if eq .status "failed"}}FAIL {{.project}}:{{.target}}{{end}}'
 ```
 
 `--limit 0` replays nothing, which is what a notifier wants: waking up and
 announcing yesterday's failure is worse than staying quiet.
 
-The shipped script is that plus two things the reduction leaves out, and both are
-worth copying. It also handles `run.finished`, so a run that fails without any
-single target failing still reports. And it does not let the pipeline swallow the
-exit status: a shell pipeline exits with its LAST stage, so a `magus events` that
-dies reaches jq as a clean EOF and the script would otherwise exit 0: a
-supervisor would see a healthy subscriber that had stopped subscribing. POSIX sh
-has no `pipefail`, so the producer records its own status and the script exits
-with that.
+The shipped script is that plus handling for `run.finished`, so a run that fails
+without any single target failing still reports. Because magus renders the
+template, the subscriber exits with magus's status and needs no pipeline status
+workaround.
 
 That loop is the whole contract. An editor plugin is the same thing plus a way
 to draw on a screen.

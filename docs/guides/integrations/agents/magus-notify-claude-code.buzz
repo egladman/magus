@@ -1,0 +1,15 @@
+// Convert a Claude Code notification to a magus event.
+// Run as `magus buzz -s magus-notify-claude-code.buzz` with the event on stdin.
+import "encoding/json";
+import "io";
+import "std";
+
+fun main(args: [str]) > void !> any {
+    final event: {str: any} = json\parse(io\stdin.readAll());
+    std\print(json\stringify({
+        "api_version": "magus.event/v1alpha1",
+        "outcome": event["hook_event_name"] ?? "other",
+        "source": {"kind": "agent"},
+        "message": event["message"] ?? "",
+    }));
+}

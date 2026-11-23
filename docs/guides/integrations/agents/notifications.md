@@ -41,11 +41,12 @@ unrecognized becomes `other` and still notifies, because a missed alert is the
 failure this exists to prevent.
 
 When a host hands you JSON, shape it into the canonical envelope before piping
-it in. The command deliberately does not know host field names:
+it in. The command deliberately does not know host field names. For Claude Code,
+use [the Buzz adapter](magus-notify-claude-code.buzz); it parses the event and
+writes the canonical envelope without an external JSON filter:
 
 ```sh
-jq -c '{api_version: "magus.event/v1alpha1", outcome: .hook_event_name, source: {kind: "agent"}, message: .message}' \
-  | magus session notify --desktop
+magus buzz -s magus-notify-claude-code.buzz | magus session notify --desktop
 ```
 
 ## Wiring it per host
