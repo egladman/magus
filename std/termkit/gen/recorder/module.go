@@ -8,9 +8,9 @@ import (
 	context "context"
 	fmt "fmt"
 	lib "github.com/egladman/magus/libs/termkit/recorder"
+	libscreen "github.com/egladman/magus/libs/termkit/screen"
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
-	genscreen "github.com/egladman/magus/std/termkit/gen/screen"
 	slices "slices"
 )
 
@@ -37,7 +37,7 @@ var Module = std.Module{
 		{
 			Name:    "animate",
 			Doc:     "Animate replays one cumulative terminal and gives all frames the same height.",
-			Args:    []std.Arg{{Name: "segments"}, {Name: "width"}, {Name: "height"}, {Name: "pace"}, {Name: "theme"}},
+			Args:    []std.Arg{{Name: "segments"}, {Name: "width"}, {Name: "height"}, {Name: "pace", Object: "Pace"}, {Name: "theme", Object: "Theme"}},
 			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    ImplAnimate,
@@ -118,16 +118,8 @@ func ImplMarked(ctx context.Context, aCapture string, aMarker string) ([]string,
 }
 
 // ImplAnimate binds github.com/egladman/magus/libs/termkit/recorder.Animate.
-func ImplAnimate(ctx context.Context, aSegments []string, aWidth int, aHeight int, aPace map[string]any, aTheme map[string]any) (string, error) {
-	vPace, err := DecodePace(aPace)
-	if err != nil {
-		return "", fmt.Errorf("pace: %w", err)
-	}
-	vTheme, err := genscreen.DecodeTheme(aTheme)
-	if err != nil {
-		return "", fmt.Errorf("theme: %w", err)
-	}
-	r0, err := lib.Animate(aSegments, aWidth, aHeight, vPace, vTheme)
+func ImplAnimate(ctx context.Context, aSegments []string, aWidth int, aHeight int, aPace lib.Pace, aTheme libscreen.Theme) (string, error) {
+	r0, err := lib.Animate(aSegments, aWidth, aHeight, aPace, aTheme)
 	if err != nil {
 		return "", err
 	}

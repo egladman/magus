@@ -11,7 +11,9 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/termkit/recorder"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -329,6 +331,22 @@ func ObjectImageDocument(v imagetypes.Document, enums ffi.EnumCases) vm.Value {
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	return out
+}
+
+func ObjectTermkitSpan(v termkit.Span) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("text", vm.StringValue(v.Text))
+	out.MapSet("style", vm.StringValue(string(v.Style)))
+	out.MapSet("key", vm.StringValue(v.Key))
+	return out
+}
+
+func ObjectTermkitLine(v termkit.Line, enums ffi.EnumCases) vm.Value {
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = ObjectTermkitSpan(v.Spans[indexSpans])
+	}
+	return enums.Instance("Line", []string{"text", "style", "spans"}, []vm.Value{vm.StringValue(v.Text), vm.StringValue(string(v.Style)), vm.ListValue(itemsSpans)})
 }
 
 func ObjectExecResult(v types.ExecResult) vm.Value {
@@ -3254,6 +3272,21 @@ func ObjectShellCommand(v types.ShellCommand) vm.Value {
 	return out
 }
 
+func ObjectScreenTheme(v screen.Theme) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("background", vm.StringValue(v.Background))
+	out.MapSet("foreground", vm.StringValue(v.Foreground))
+	out.MapSet("red", vm.StringValue(v.Red))
+	out.MapSet("green", vm.StringValue(v.Green))
+	out.MapSet("yellow", vm.StringValue(v.Yellow))
+	out.MapSet("blue", vm.StringValue(v.Blue))
+	out.MapSet("magenta", vm.StringValue(v.Magenta))
+	out.MapSet("cyan", vm.StringValue(v.Cyan))
+	out.MapSet("white", vm.StringValue(v.White))
+	out.MapSet("black", vm.StringValue(v.Black))
+	return out
+}
+
 func ObjectSemverVersion(v types.SemverVersion) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("major", vm.IntValue(int64(v.Major)))
@@ -3407,6 +3440,20 @@ func ObjectTermSize(v types.TermSize) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("width", vm.IntValue(int64(v.Width)))
 	out.MapSet("height", vm.IntValue(int64(v.Height)))
+	return out
+}
+
+func ObjectTermkitEvent(v termkit.Event) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.IntValue(int64(v.Kind)))
+	out.MapSet("key", vm.IntValue(int64(v.Key)))
+	out.MapSet("rune", vm.IntValue(int64(v.Rune)))
+	out.MapSet("button", vm.IntValue(int64(v.Button)))
+	out.MapSet("row", vm.IntValue(int64(v.Row)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("press", vm.BoolValue(v.Press))
+	out.MapSet("motion", vm.BoolValue(v.Motion))
+	out.MapSet("clicks", vm.IntValue(int64(v.Clicks)))
 	return out
 }
 
@@ -6037,22 +6084,6 @@ func ObjectLimits(v types.Limits) vm.Value {
 	return out
 }
 
-func ObjectTermkitSpan(v termkit.Span) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("text", vm.StringValue(v.Text))
-	out.MapSet("style", vm.StringValue(string(v.Style)))
-	out.MapSet("key", vm.StringValue(v.Key))
-	return out
-}
-
-func ObjectTermkitLine(v termkit.Line, enums ffi.EnumCases) vm.Value {
-	itemsSpans := make([]vm.Value, len(v.Spans))
-	for indexSpans := range v.Spans {
-		itemsSpans[indexSpans] = ObjectTermkitSpan(v.Spans[indexSpans])
-	}
-	return enums.Instance("Line", []string{"text", "style", "spans"}, []vm.Value{vm.StringValue(v.Text), vm.StringValue(string(v.Style)), vm.ListValue(itemsSpans)})
-}
-
 func ObjectManagedEntries(v types.ManagedEntries) vm.Value {
 	out := vm.NewMap()
 	itemsPath := make([]vm.Value, len(v.Path))
@@ -6566,6 +6597,19 @@ func ObjectDiffReviewTarget(v difftypes.ReviewTarget) vm.Value {
 	return out
 }
 
+func ObjectScreenSVGOptions(v screen.SVGOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("fontFamily", vm.StringValue(v.FontFamily))
+	out.MapSet("fontSize", vm.IntValue(int64(v.FontSize)))
+	out.MapSet("cellWidth", vm.IntValue(int64(v.CellWidth)))
+	out.MapSet("lineHeight", vm.IntValue(int64(v.LineHeight)))
+	out.MapSet("baseline", vm.IntValue(int64(v.Baseline)))
+	out.MapSet("pad", vm.IntValue(int64(v.Pad)))
+	out.MapSet("radius", vm.IntValue(int64(v.Radius)))
+	out.MapSet("theme", ObjectScreenTheme(v.Theme))
+	return out
+}
+
 func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("command", ObjectCommand(v.Command, enums))
@@ -6801,6 +6845,15 @@ func ObjectFeedbackReadOptions(v feedback.ReadOptions) vm.Value {
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("since", vm.StringValue(v.Since))
 	out.MapSet("until", vm.StringValue(v.Until))
+	return out
+}
+
+func ObjectPickOptions(v pick.Options) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("prompt", vm.StringValue(v.Prompt))
+	out.MapSet("initialFilter", vm.StringValue(v.InitialFilter))
+	out.MapSet("initial", vm.IntValue(int64(v.Initial)))
+	out.MapSet("maxRows", vm.IntValue(int64(v.MaxRows)))
 	return out
 }
 

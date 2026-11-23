@@ -134,7 +134,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectTermkitEvent(ret0), nil
 	}))
 	m.MapSet("inputCursorPosition", vm.DirectValue("termkit.inputCursorPosition", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		input := ffi.Int(bzArgs, 0, 0)

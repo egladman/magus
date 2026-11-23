@@ -26,7 +26,7 @@ var Module = std.Module{
 			Name:    "bar",
 			Doc:     "Bar draws done of total in cols cells, filled in eighths so it moves a fraction of a cell at a time.",
 			Args:    []std.Arg{{Name: "done"}, {Name: "total"}, {Name: "cols"}, {Name: "track"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Line"}},
 			Impl:    ImplBar,
 		},
 		{
@@ -360,9 +360,9 @@ var LoaderHandles = convert.NewTable[lib.Loader]("Loader")
 var SpinnerHandles = convert.NewTable[*lib.Spinner]("Spinner")
 
 // ImplBar binds github.com/egladman/magus/libs/termkit/progress.Bar.
-func ImplBar(ctx context.Context, aDone int, aTotal int, aCols int, aTrack libtermkit.SGR) (map[string]any, error) {
+func ImplBar(ctx context.Context, aDone int, aTotal int, aCols int, aTrack libtermkit.SGR) (libtermkit.Line, error) {
 	r0 := lib.Bar(aDone, aTotal, aCols, aTrack)
-	return gentermkit.EncodeLine(r0), nil
+	return r0, nil
 }
 
 // ImplLoaderWidth binds github.com/egladman/magus/libs/termkit/progress.Loader.Width.

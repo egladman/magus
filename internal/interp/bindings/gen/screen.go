@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/termkit/gen/screen"
@@ -31,7 +32,10 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("animate", vm.DirectValue("screen.animate", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		frames := ffi.Any(bzArgs, 0)
 		holds := ffi.Any(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		opts, err := ffi.Object("screen\\animate", "opts", bzArgs, 2, decode.DecodeScreenSVGOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := screen.ImplAnimate(ctx, frames, holds, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -167,7 +171,10 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("terminalSvg", vm.DirectValue("screen.terminalSvg", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		terminal := ffi.Int(bzArgs, 0, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		opts, err := ffi.Object("screen\\terminalSvg", "opts", bzArgs, 1, decode.DecodeScreenSVGOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := screen.ImplTerminalSVG(ctx, terminal, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -179,14 +186,14 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectScreenTheme(ret0), nil
 	}))
 	m.MapSet("lightTheme", vm.DirectValue("screen.lightTheme", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := screen.ImplLightTheme(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectScreenTheme(ret0), nil
 	}))
 	m.MapSet("themeVariants", vm.DirectValue("screen.themeVariants", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := screen.ImplThemeVariants(ctx)

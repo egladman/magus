@@ -6,9 +6,33 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun animate(frames: any, holds: any, opts: {str: any}) > str !> any;
-export extern fun darkTheme() > {str: any};
-export extern fun lightTheme() > {str: any};
+export object Theme {
+    background: str = "",
+    foreground: str = "",
+    red: str = "",
+    green: str = "",
+    yellow: str = "",
+    blue: str = "",
+    magenta: str = "",
+    cyan: str = "",
+    white: str = "",
+    black: str = "",
+}
+
+export object SVGOptions {
+    fontFamily: str = "",
+    fontSize: int = 0,
+    cellWidth: int = 0,
+    lineHeight: int = 0,
+    baseline: int = 0,
+    pad: int = 0,
+    radius: int = 0,
+    theme: Theme = Theme{},
+}
+
+export extern fun animate(frames: any, holds: any, opts: SVGOptions) > str !> any;
+export extern fun darkTheme() > Theme;
+export extern fun lightTheme() > Theme;
 export extern fun new(width: int, height: int) > int;
 export extern fun terminalCrop(terminal: int, rows: int) > int !> any;
 export extern fun terminalCursor(terminal: int) > any !> any;
@@ -22,7 +46,7 @@ export extern fun terminalScrolled(terminal: int) > int !> any;
 export extern fun terminalSnapshot(terminal: int) > int !> any;
 export extern fun terminalString(terminal: int) > str !> any;
 export extern fun terminalStyleAt(terminal: int, row: int, col: int) > str !> any;
-export extern fun terminalSvg(terminal: int, opts: {str: any}) > str !> any;
+export extern fun terminalSvg(terminal: int, opts: SVGOptions) > str !> any;
 export extern fun terminalTrailingSpaceRows(terminal: int) > any !> any;
 export extern fun terminalWrite(terminal: int, p: any) > int !> any;
 export extern fun themeVariants() > any;

@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/termkit/gen/pick"
@@ -22,7 +23,10 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("one", vm.DirectValue("pick.one", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
 		items := ffi.StringSlice(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		opts, err := ffi.Object("pick\\one", "opts", bzArgs, 2, decode.DecodePickOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := pick.ImplOne(ctx, p, items, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -32,7 +36,10 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("many", vm.DirectValue("pick.many", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
 		items := ffi.StringSlice(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		opts, err := ffi.Object("pick\\many", "opts", bzArgs, 2, decode.DecodePickOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		marked := ffi.Any(bzArgs, 3)
 		ret0, err := pick.ImplMany(ctx, p, items, opts, marked)
 		if err != nil {
@@ -43,7 +50,10 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("render", vm.DirectValue("pick.render", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
 		items := ffi.StringSlice(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		opts, err := ffi.Object("pick\\render", "opts", bzArgs, 2, decode.DecodePickOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		filter := ffi.String(bzArgs, 3)
 		cursor := ffi.Int(bzArgs, 4, 0)
 		ret0, err := pick.ImplRender(ctx, p, items, opts, filter, cursor)
@@ -55,7 +65,10 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("renderMany", vm.DirectValue("pick.renderMany", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
 		items := ffi.StringSlice(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		opts, err := ffi.Object("pick\\renderMany", "opts", bzArgs, 2, decode.DecodePickOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		marked := ffi.Any(bzArgs, 3)
 		filter := ffi.String(bzArgs, 4)
 		cursor := ffi.Int(bzArgs, 5, 0)

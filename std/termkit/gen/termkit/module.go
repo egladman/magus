@@ -126,7 +126,7 @@ var Module = std.Module{
 			Name:    "input_read",
 			Doc:     "Read blocks until the user does something, and reports it.",
 			Args:    []std.Arg{{Name: "input"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Event"}},
 			Raises:  true,
 			Impl:    ImplInputRead,
 		},
@@ -909,16 +909,16 @@ func ImplInputClose(ctx context.Context, input int) error {
 }
 
 // ImplInputRead binds github.com/egladman/magus/libs/termkit.Input.Read.
-func ImplInputRead(ctx context.Context, input int) (map[string]any, error) {
+func ImplInputRead(ctx context.Context, input int) (lib.Event, error) {
 	recv, err := InputHandles.Get(input)
 	if err != nil {
-		return nil, err
+		return lib.Event{}, err
 	}
 	r0, err := recv.Read(ctx)
 	if err != nil {
-		return nil, err
+		return lib.Event{}, err
 	}
-	return EncodeEvent(r0), nil
+	return r0, nil
 }
 
 // ImplInputCursorPosition binds github.com/egladman/magus/libs/termkit.Input.CursorPosition.

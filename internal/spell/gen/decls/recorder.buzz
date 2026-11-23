@@ -17,8 +17,21 @@ export object Pace {
     }
 }
 
+export object Theme {
+    background: str = "",
+    foreground: str = "",
+    red: str = "",
+    green: str = "",
+    yellow: str = "",
+    blue: str = "",
+    magenta: str = "",
+    cyan: str = "",
+    white: str = "",
+    black: str = "",
+}
+
 extern fun recorder__Pace__hold(recv: Pace, index: int, count: int, added: int) > double;
 
-export extern fun animate(segments: [str], width: int, height: int, pace: {str: any}, theme: {str: any}) > str !> any;
+export extern fun animate(segments: [str], width: int, height: int, pace: Pace, theme: Theme) > str !> any;
 export extern fun commands(capture: str, prompt: str) > [str];
 export extern fun marked(capture: str, marker: str) > [str];

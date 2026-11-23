@@ -20,6 +20,7 @@ func RegisterLayout(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
+	enums := ffi.SessionEnums(ctx, sess, "termkit/layout")
 	m.MapSet("cols", vm.DirectValue("layout.cols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := ffi.String(bzArgs, 0)
 		ret0, err := layout.ImplCols(ctx, s)
@@ -84,7 +85,7 @@ func RegisterLayout(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectTermkitLine(ret0, enums), nil
 	}))
 	m.MapSet("maxLabel", vm.DirectValue("layout.maxLabel", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := layout.ImplMaxLabel(ctx)

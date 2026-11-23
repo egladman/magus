@@ -6,6 +6,18 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object Event {
+    kind: int = 0,
+    key: int = 0,
+    rune: int = 0,
+    button: int = 0,
+    row: int = 0,
+    col: int = 0,
+    press: bool = false,
+    motion: bool = false,
+    clicks: int = 0,
+}
+
 export object Span {
     text: str = "",
     style: str = "",
@@ -43,7 +55,7 @@ export extern fun inlineViewPaint(inlineView: int, frame: str) > bool !> any;
 export extern fun inlineViewReset(inlineView: int) > void !> any;
 export extern fun inputClose(input: int) > void !> any;
 export extern fun inputCursorPosition(input: int) > any !> any;
-export extern fun inputRead(input: int) > {str: any} !> any;
+export extern fun inputRead(input: int) > Event !> any;
 export extern fun isTerminalReader(p: int) > bool !> any;
 export extern fun isTerminalWriter(p: int) > bool !> any;
 export extern fun keyBackspace() > int;

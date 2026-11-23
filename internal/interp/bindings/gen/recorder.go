@@ -42,8 +42,14 @@ func RegisterRecorder(ctx context.Context, sess *buzz.Session) vm.Value {
 		segments := ffi.StringSlice(bzArgs, 0)
 		width := ffi.Int(bzArgs, 1, 0)
 		height := ffi.Int(bzArgs, 2, 0)
-		pace := ffi.AnyMap(bzArgs, 3)
-		theme := ffi.AnyMap(bzArgs, 4)
+		pace, err := ffi.Object("recorder\\animate", "pace", bzArgs, 3, decode.DecodeRecorderPace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		theme, err := ffi.Object("recorder\\animate", "theme", bzArgs, 4, decode.DecodeScreenTheme)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := recorder.ImplAnimate(ctx, segments, width, height, pace, theme)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

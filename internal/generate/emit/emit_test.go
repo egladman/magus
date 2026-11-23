@@ -292,6 +292,16 @@ func (s *LibModulesSuite) TestAStatefulTypeCrossesAsAHandle() {
 	s.Contains(string(src), "box int")
 }
 
+func (s *LibModulesSuite) TestRecordArgumentAndReturnKeepTheirGoType() {
+	dir := s.writeLib("package kit\n\ntype Pair struct{ A, B string }\n\nfunc Swap(p Pair) Pair { return Pair{p.B, p.A} }\n")
+	lib, err := loadLib(dir, termkitGen)
+	s.Require().NoError(err)
+	src, err := lib.emitPackage(lib.pkgs[0])
+	s.Require().NoError(err)
+	s.Contains(string(src), "func ImplSwap(ctx context.Context, aP lib.Pair) (lib.Pair, error)")
+	s.Contains(string(src), "lib.Swap(aP)")
+}
+
 func (s *LibModulesSuite) TestSnakeSplitsAcronyms() {
 	s.Equal("sgr_bold", snake("SGRBold"))
 	s.Equal("utf8_locale", snake("UTF8Locale"))

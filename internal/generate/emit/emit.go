@@ -1134,15 +1134,19 @@ func (e *moduleEmitter) arguments(fn *libFunc, b *binding) error {
 		case convBytes, convDuration, convError, convNamed, convPrim, convSlice:
 		}
 		t := tag(c)
-		b.args = append(b.args, fmt.Sprintf("{Name: %q}", prm.name))
+		arg := fmt.Sprintf("{Name: %q}", prm.name)
+		if c.kind == convNamed && c.t.kind == kindRecord {
+			arg = fmt.Sprintf("{Name: %q, Object: %q}", prm.name, c.t.name)
+		}
+		b.args = append(b.args, arg)
 		goName := "a" + upperFirst(prm.name)
 		paramType := implementationParam(t)
-		namedString := c.kind == convNamed && c.t.kind == kindBasic && c.t.basic == "string"
-		if namedString {
+		namedValue := c.kind == convNamed && (c.t.kind == kindRecord || c.t.kind == kindBasic && c.t.basic == "string")
+		if namedValue {
 			paramType = e.goExpr(c)
 		}
 		b.params = append(b.params, fmt.Sprintf("%s %s", goName, paramType))
-		direct := namedString || (c.kind == convPrim && paramType == c.prim) || c.kind == convBytes || t == "std.TypeStringSlice"
+		direct := namedValue || (c.kind == convPrim && paramType == c.prim) || c.kind == convBytes || t == "std.TypeStringSlice"
 		val := "v" + upperFirst(prm.name)
 		if direct {
 			val = goName
@@ -1166,6 +1170,10 @@ func (e *moduleEmitter) returns(b *binding) (retType, zero, retTag, ret string) 
 		return "", "", "", ""
 	case 1:
 		retTag = tag(b.results[0])
+		if result := b.results[0]; result.kind == convNamed && result.t.kind == kindRecord {
+			retType = e.goExpr(result)
+			return retType, retType + "{}", retTag, "r0"
+		}
 		retType = implementationParam(retTag)
 		return retType, zeroLiteral(retType), retTag, e.encodeTop(b.results[0], "r0", retType)
 	}
@@ -1229,7 +1237,9 @@ func (e *moduleEmitter) method(fn *libFunc, name, impl, retTag string, b *bindin
 	if len(b.args) > 0 {
 		fmt.Fprintf(&m, "\t\t\tArgs: []std.Arg{%s},\n", strings.Join(b.args, ", "))
 	}
-	if retTag != "" {
+	if len(b.results) == 1 && b.results[0].kind == convNamed && b.results[0].t.kind == kindRecord {
+		fmt.Fprintf(&m, "\t\t\tReturns: []std.Ret{{Object: %q}},\n", b.results[0].t.name)
+	} else if retTag != "" {
 		fmt.Fprintln(&m, "\t\t\tReturns: []std.Ret{{}},")
 	}
 	if b.raises || len(b.pre) > 0 {
@@ -1286,19 +1296,26 @@ func (e *moduleEmitter) value(v *libValue) error {
 	}
 	impl := "Impl" + v.name
 	src := fmt.Sprintf("%s.%s", e.pkgAlias(v.file.pkg), v.name)
-	var goT, val string
+	var goT, val, retFields string
 	switch c.kind {
 	case convError:
 		goT, val = "string", src+".Error()"
-	case convBytes, convContext, convDuration, convNamed, convPrim, convSlice, convStderr, convStdin:
+	case convNamed:
+		if c.t.kind == kindRecord {
+			goT, val = e.goExpr(c), src
+			retFields = fmt.Sprintf("Object: %q", c.t.name)
+			break
+		}
+		fallthrough
+	case convBytes, convContext, convDuration, convPrim, convSlice, convStderr, convStdin:
 		goT = implementationParam(tag(c))
 		val = e.encodeTop(c, src, goT)
 	}
 	// A method rather than a std.Field: the checker declares methods, so a
 	// script that names a value gets it checked.
 	fmt.Fprintf(&e.body, "// %s reads %s.%s.\nfunc %s(ctx context.Context) (%s, error) { return %s, nil }\n\n", impl, e.p.importPath, v.name, impl, goT, val)
-	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tReturns: []std.Ret{{}},\n\t\t\tImpl: %s,\n\t\t},\n",
-		snake(v.name), valueDoc(v), impl))
+	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tReturns: []std.Ret{{%s}},\n\t\t\tImpl: %s,\n\t\t},\n",
+		snake(v.name), valueDoc(v), retFields, impl))
 	return nil
 }
 

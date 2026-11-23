@@ -22,7 +22,9 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/termkit/recorder"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -7318,6 +7320,75 @@ func decodeDiffReviewTarget(v vm.Value, path string) (difftypes.ReviewTarget, er
 	return out, nil
 }
 
+// DecodeScreenSVGOptions decodes a Buzz SVGOptions, an object instance or a map, into a screen.SVGOptions.
+func DecodeScreenSVGOptions(v vm.Value) (screen.SVGOptions, error) {
+	return decodeScreenSVGOptions(v, "svgOptions")
+}
+
+func decodeScreenSVGOptions(v vm.Value, path string) (screen.SVGOptions, error) {
+	var out screen.SVGOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "SVGOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "fontFamily":
+			sFontFamily, err := decodeString(item, path+".fontFamily")
+			if err != nil {
+				return out, err
+			}
+			out.FontFamily = sFontFamily
+		case "fontSize":
+			nFontSize, err := decodeInt(item, path+".fontSize")
+			if err != nil {
+				return out, err
+			}
+			out.FontSize = int(nFontSize)
+		case "cellWidth":
+			nCellWidth, err := decodeInt(item, path+".cellWidth")
+			if err != nil {
+				return out, err
+			}
+			out.CellWidth = int(nCellWidth)
+		case "lineHeight":
+			nLineHeight, err := decodeInt(item, path+".lineHeight")
+			if err != nil {
+				return out, err
+			}
+			out.LineHeight = int(nLineHeight)
+		case "baseline":
+			nBaseline, err := decodeInt(item, path+".baseline")
+			if err != nil {
+				return out, err
+			}
+			out.Baseline = int(nBaseline)
+		case "pad":
+			nPad, err := decodeInt(item, path+".pad")
+			if err != nil {
+				return out, err
+			}
+			out.Pad = int(nPad)
+		case "radius":
+			nRadius, err := decodeInt(item, path+".radius")
+			if err != nil {
+				return out, err
+			}
+			out.Radius = int(nRadius)
+		case "theme":
+			xTheme, err := decodeScreenTheme(item, path+".theme")
+			if err != nil {
+				return out, err
+			}
+			out.Theme = xTheme
+		default:
+			return out, unknownMember(path, "SVGOptions", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeSandbox decodes a Buzz Sandbox, an object instance or a map, into a spells.Sandbox.
 func DecodeSandbox(v vm.Value) (spells.Sandbox, error) {
 	return decodeSandbox(v, "sandbox")
@@ -8251,6 +8322,87 @@ func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
 			}
 		default:
 			return out, unknownMember(path, "Syntax", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeScreenTheme decodes a Buzz Theme, an object instance or a map, into a screen.Theme.
+func DecodeScreenTheme(v vm.Value) (screen.Theme, error) {
+	return decodeScreenTheme(v, "theme")
+}
+
+func decodeScreenTheme(v vm.Value, path string) (screen.Theme, error) {
+	var out screen.Theme
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Theme", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "background":
+			sBackground, err := decodeString(item, path+".background")
+			if err != nil {
+				return out, err
+			}
+			out.Background = sBackground
+		case "foreground":
+			sForeground, err := decodeString(item, path+".foreground")
+			if err != nil {
+				return out, err
+			}
+			out.Foreground = sForeground
+		case "red":
+			sRed, err := decodeString(item, path+".red")
+			if err != nil {
+				return out, err
+			}
+			out.Red = sRed
+		case "green":
+			sGreen, err := decodeString(item, path+".green")
+			if err != nil {
+				return out, err
+			}
+			out.Green = sGreen
+		case "yellow":
+			sYellow, err := decodeString(item, path+".yellow")
+			if err != nil {
+				return out, err
+			}
+			out.Yellow = sYellow
+		case "blue":
+			sBlue, err := decodeString(item, path+".blue")
+			if err != nil {
+				return out, err
+			}
+			out.Blue = sBlue
+		case "magenta":
+			sMagenta, err := decodeString(item, path+".magenta")
+			if err != nil {
+				return out, err
+			}
+			out.Magenta = sMagenta
+		case "cyan":
+			sCyan, err := decodeString(item, path+".cyan")
+			if err != nil {
+				return out, err
+			}
+			out.Cyan = sCyan
+		case "white":
+			sWhite, err := decodeString(item, path+".white")
+			if err != nil {
+				return out, err
+			}
+			out.White = sWhite
+		case "black":
+			sBlack, err := decodeString(item, path+".black")
+			if err != nil {
+				return out, err
+			}
+			out.Black = sBlack
+		default:
+			return out, unknownMember(path, "Theme", key)
 		}
 	}
 	return out, nil
@@ -9288,6 +9440,51 @@ func decodeVCSCheckpoint(v vm.Value, path string) (vcstypes.Checkpoint, error) {
 			out.Preserved = sPreserved
 		default:
 			return out, unknownMember(path, "Checkpoint", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePickOptions decodes a Buzz Options, an object instance or a map, into a pick.Options.
+func DecodePickOptions(v vm.Value) (pick.Options, error) {
+	return decodePickOptions(v, "options")
+}
+
+func decodePickOptions(v vm.Value, path string) (pick.Options, error) {
+	var out pick.Options
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Options", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "prompt":
+			sPrompt, err := decodeString(item, path+".prompt")
+			if err != nil {
+				return out, err
+			}
+			out.Prompt = sPrompt
+		case "initialFilter":
+			sInitialFilter, err := decodeString(item, path+".initialFilter")
+			if err != nil {
+				return out, err
+			}
+			out.InitialFilter = sInitialFilter
+		case "initial":
+			nInitial, err := decodeInt(item, path+".initial")
+			if err != nil {
+				return out, err
+			}
+			out.Initial = int(nInitial)
+		case "maxRows":
+			nMaxRows, err := decodeInt(item, path+".maxRows")
+			if err != nil {
+				return out, err
+			}
+			out.MaxRows = int(nMaxRows)
+		default:
+			return out, unknownMember(path, "Options", key)
 		}
 	}
 	return out, nil

@@ -21,6 +21,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
+	enums := ffi.SessionEnums(ctx, sess, "termkit/progress")
 	m.MapSet("bar", vm.DirectValue("progress.bar", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		done := ffi.Int(bzArgs, 0, 0)
 		total := ffi.Int(bzArgs, 1, 0)
@@ -30,7 +31,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectTermkitLine(ret0, enums), nil
 	}))
 	m.MapSet("loaderWidth", vm.DirectValue("progress.loaderWidth", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		loader := ffi.Int(bzArgs, 0, 0)

@@ -48,7 +48,19 @@ export enum TextName {
     typewriter,
 }
 
-export extern fun bar(done: int, total: int, cols: int, track: str) > {str: any};
+export object Span {
+    text: str = "",
+    style: str = "",
+    key: str = "",
+}
+
+export object Line {
+    text: str = "",
+    style: str = "",
+    spans: [Span] = [],
+}
+
+export extern fun bar(done: int, total: int, cols: int, track: str) > Line;
 export extern fun catalog() > any;
 export extern fun column() > str;
 export extern fun columnElevator() > str;
