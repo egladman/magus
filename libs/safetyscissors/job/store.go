@@ -1395,7 +1395,7 @@ func (r grantRecord) grant(creds wireEnum[CredentialKind]) (Grant, error) {
 	var bad wireReads
 	g := Grant{Job: r.Job, Rule: r.Rule, By: r.By.origin(&bad, creds), At: r.At, Until: r.Until, Attempt: r.Attempt, Revoked: r.Revoked}
 	if err := bad.refusal(); err != nil {
-		return Grant{}, fmt.Errorf("job: grant of %s for %s: %w", r.Rule, r.Job, err)
+		return Grant{}, fmt.Errorf("read grant of %s for %s: %w", r.Rule, r.Job, err)
 	}
 	return g, nil
 }
