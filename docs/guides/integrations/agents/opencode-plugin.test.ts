@@ -202,7 +202,7 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
   const h = await hooks();
 
   await assert.rejects(
-    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git stash" } }),
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git stash", workdir: "/other" } }),
     /whole-tree git stash/,
   );
 
@@ -219,7 +219,12 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
     "-o",
     "json",
   ]);
-  assert.equal(calls[0].stdin, "git stash");
+  assert.deepEqual(sent(calls[0]), {
+    cwd: "/work",
+    hook_event_name: "PreToolUse",
+    tool_name: "bash",
+    tool_input: { command: "git stash", workdir: "/other" },
+  });
   assert.ok(
     !calls[0].argv.includes("agent"),
     "`magus agent hook` was removed; hook lives under session",
@@ -243,9 +248,9 @@ test("a call carries OpenCode's session, so push authority can tell the root fro
     "--renders-ask",
     "-o",
     "json",
-    "--session",
-    "s1",
   ]);
+  assert.equal(sent(calls[0]).session_id, "s1");
+  assert.equal(sent(calls[0]).agent_id, undefined);
 });
 
 test("a file write is judged on the path input, also over stdin", async () => {
@@ -586,7 +591,7 @@ test("permission.ask answers a human-only run's prompt, and no run magus did not
   assert.equal(calls.length, 1, "a run whose prompt magus did not configure is not judged");
 });
 
-/** Parses the Claude Code envelope the plugin piped for one call. */
+/** Parses the tool envelope the plugin sent to the guard. */
 function sent(call: SpawnCall): Record<string, unknown> {
   return JSON.parse(call.stdin) as Record<string, unknown>;
 }
@@ -850,7 +855,8 @@ test("a subagent's calls carry the root session and the child as the agent", asy
     { tool: "bash", callID: "c1", sessionID: "child" },
     { args: { command: "ls" } },
   );
-  assert.deepEqual(calls[0].argv.slice(-4), ["--session", "root", "--agent", "child"]);
+  assert.equal(sent(calls[0]).session_id, "root");
+  assert.equal(sent(calls[0]).agent_id, "child");
 
   await h["tool.execute.before"](
     { tool: "write", callID: "c2", sessionID: "child" },
@@ -876,7 +882,8 @@ test("a session.created event gives a session's parent without asking the SDK", 
     { tool: "bash", callID: "c1", sessionID: "kid" },
     { args: { command: "ls" } },
   );
-  assert.deepEqual(calls[0].argv.slice(-4), ["--session", "root", "--agent", "kid"]);
+  assert.equal(sent(calls[0]).session_id, "root");
+  assert.equal(sent(calls[0]).agent_id, "kid");
 });
 
 test("a message the person types goes to magus shell --message", async () => {
