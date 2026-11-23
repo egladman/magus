@@ -2,11 +2,13 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
@@ -114,7 +116,8 @@ func coldContinuation(ctx context.Context, at location, facts hint.Gate, address
 	return "", false
 }
 
-func coldContinuationVerdict(ctx context.Context, at location, facts hint.Gate, addressed, lease string, rendersAsk bool, judged verdict.Judgment, now time.Time) (verdict.Judgment, bool) {
+func coldContinuationVerdict(ctx context.Context, at location, facts hint.Gate, env hookRequest, lease string, req Request, judged verdict.Judgment, now time.Time) (verdict.Judgment, bool) {
+	addressed := env.Target
 	reason, cold := coldContinuation(ctx, at, facts, addressed, now)
 	if !cold {
 		return judged, false
@@ -123,11 +126,24 @@ func coldContinuationVerdict(ctx context.Context, at location, facts hint.Gate, 
 	decision := verdict.Deny
 	if lease != "" {
 		why += ". A leased worker cannot approve its own spend; take the decision to the root session for human approval."
-	} else if rendersAsk {
-		decision = verdict.Ask
-		why += ". Approve this cold continuation before the host dispatches it."
 	} else {
-		why += ". This host cannot render a human approval prompt; ask from a host that does."
+		if req.RendersAsk {
+			decision = verdict.Ask
+			why += ". Approve this cold continuation before the host dispatches it."
+		} else {
+			why += ". This host cannot render a human approval prompt."
+		}
+		row, ok := continuedJob(ctx, at, facts, addressed)
+		rule := continuationKey(facts, row, env, req.Input)
+		if ok && row.State.Live() && rule != "" && !isDryRun(ctx) {
+			spent, err := job.NewStore(at.jobs()).ConsumeGrant(ctx, row, rule)
+			if err != nil {
+				why += " Could not verify a one-use approval: " + err.Error()
+			} else if spent {
+				return judged, false
+			}
+			why += fmt.Sprintf(" To approve this exact call for five minutes, run in your terminal: magus job grant %s %s", row.ID, rule)
+		}
 	}
 	return verdict.Judgment{
 		APIVersion: judged.APIVersion,
@@ -137,6 +153,27 @@ func coldContinuationVerdict(ctx context.Context, at location, facts hint.Gate, 
 		Rule:       string(denyRuleSpawnColdContinuation),
 		Lease:      judged.Lease,
 	}, true
+}
+
+// A retry gets a new call ID even when the tool arguments match.
+func continuationKey(facts hint.Gate, row jobtypes.Job, env hookRequest, input string) string {
+	var envelope struct {
+		Args map[string]any `json:"tool_input"`
+	}
+	if codec.UnmarshalLossless([]byte(input), &envelope) != nil || envelope.Args == nil {
+		return ""
+	}
+	id := resolveAgentID(facts, env.Target)
+	rec, ok := readSpawnedAgent(facts, id)
+	if !ok || id == "" || facts.Session() == "" || env.Tool == "" {
+		return ""
+	}
+	parts := []any{facts.Session(), row.ID, row.Generation, id, rec.Model, env.Tool, envelope.Args}
+	data, err := codec.Marshal(parts)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s%x", continuationPrefix, sha256.Sum256(data))
 }
 
 // adviseContinueHandedBack tells the root the worker it continues handed its

@@ -84,6 +84,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// the session's markers twice. What it carries is the id the host gave the child,
 	// which is what lets that child's own later calls name their parent and their job.
 	if env.AfterCall {
+		if env.IsContinue {
+			recordRework(ctx, at, facts, env.Target)
+			markAgentSeen(facts, env)
+			if note := startNamedAttempt(ctx, at, facts, env, who.Agent, nil, time.Now()); note != "" {
+				return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Advise, Context: note}
+			}
+		}
 		if env.SpawnedAgent != "" {
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
@@ -194,7 +201,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if env.IsContinue && judged.Decision != verdict.Deny {
 		note := adviseContinueHandedBack(ctx, at, facts, env.Target).Say
 		judged = applyRuleFailureNote(judged, note, hint.MarkerKind(advisoryLeaseState))
-		if next, cold := coldContinuationVerdict(ctx, at, facts, env.Target, actingLease, req.RendersAsk, judged, time.Now()); cold {
+		if next, cold := coldContinuationVerdict(ctx, at, facts, env, actingLease, req, judged, time.Now()); cold {
 			judged = next
 			decided = decidedByBuiltin
 		}
@@ -213,11 +220,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		target:       resolveAgentID(facts, env.Target),
 		ruleFailures: failures,
 	})
-	if judged.Decision != verdict.Deny {
-		if env.IsContinue {
-			recordRework(ctx, at, facts, env.Target)
-		}
-		markAgentSeen(facts, env)
+	if judged.Decision != verdict.Deny && judged.Decision != verdict.Ask {
 		handed := ""
 		if env.IsSpawn {
 			if row, bound := titled(); bound {
@@ -227,11 +230,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		noteMainSpawn(at, who, actingLease, handed)
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
-		}
-		if note := startNamedAttempt(ctx, at, facts, env, who.Agent, titled, time.Now()); note != "" {
-			judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
-			if judged.Decision == verdict.Defer {
-				judged.Decision = verdict.Advise
+			if note := startNamedAttempt(ctx, at, facts, env, who.Agent, titled, time.Now()); note != "" {
+				judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+				if judged.Decision == verdict.Defer {
+					judged.Decision = verdict.Advise
+				}
 			}
 		}
 	}

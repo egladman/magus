@@ -2238,6 +2238,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			req.ChildStarted = env.AgentID
 		}
 	}
+	req.AfterCall = req.AfterCall || req.IsContinue && env.HookEventName == "PostToolUse"
 	req.Inert = req.NothingToJudge && tools.Capability(env.ToolName) == types.ToolInert &&
 		req.LoadedSkill == "" && req.ChildStarted == "" && req.AgentTranscript == ""
 	return req, true

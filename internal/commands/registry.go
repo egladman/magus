@@ -2657,8 +2657,8 @@ shows what it is doing.`,
 			Short:  "Lower one guard rule to advice for one job, typed by a person",
 			Description: "Record a person's one-time approval: the guard advises instead of refusing the named rule for the " +
 				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
-				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
-				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
+				"--revoke ends a grant early. A continue-once token approves one matching dispatch within five minutes. The only general rule grant is hooks-off. " +
+				"The guard refuses this verb to every agent and the job store refuses it from a process " +
 				"carrying a lease, so it is typed at a person's own terminal. With --commit the one positional is push-unverified: " +
 				"the waiver lets a push or `gh pr create` of that commit through and names who waived it, when and why; any other " +
 				"commit is still refused, and --revoke removes the waiver.",

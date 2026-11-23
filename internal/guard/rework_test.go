@@ -2,7 +2,9 @@ package guard
 
 import (
 	"context"
+	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,12 +194,25 @@ func TestColdContinuationWithoutHumanPromptIsDenied(t *testing.T) {
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle, Name: "brisk-heron"})
 	ageAgentSeen(t, f, "a1b2c3", time.Now().Add(-time.Hour))
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
-		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Continue the work."},"tool_use_id":"toolu_05"}`
+		`"tool_name":"SendMessage","tool_input":{"to":"a1b2c3","message":"Continue the work."},"tool_use_id":"toolu_05"}`
 
 	v := Judge(f.testContext(t), Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
 
 	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(v), v.Reason)
 	assert.Contains(t, v.Reason, "cannot render a human approval prompt")
+	reason, _, _ := strings.Cut(v.Reason, "\n")
+	fields := strings.Fields(reason)
+	rule := fields[len(fields)-1]
+	require.True(t, continuationApproval(rule), v.Reason)
+	row, ok := continuedJob(f.testContext(t), f.at, f.facts, "a1b2c3")
+	require.True(t, ok)
+	require.NoError(t, GrantJobRule(f.testContext(t), f.store, io.Discard, nil, row.ID, rule, 0))
+	retry := func(input string) verdict.Decision {
+		return Judge(f.testContext(t), Dependencies{}, Request{Input: input, Host: "claude-code"}).Decision
+	}
+	assert.Equal(t, verdict.Deny, retry(strings.Replace(continueTo, "Continue the work.", "Change scope.", 1)))
+	assert.NotEqual(t, verdict.Deny, retry(strings.Replace(continueTo, "toolu_05", "toolu_06", 1)))
+	assert.Equal(t, verdict.Deny, retry(continueTo), "a second cold retry needs another approval")
 }
 
 func int64Pointer(n int64) *int64 { return &n }
@@ -220,7 +235,9 @@ func TestAContinueJudgedByTheGuardCountsAsReworkOnce(t *testing.T) {
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`
 	Judge(f.testContext(t), deps, Request{Input: continueTo, Host: "claude-code", RendersAsk: true})
-
+	assert.Zero(t, f.rounds(t), "asking does not dispatch a turn")
+	after := strings.Replace(continueTo, "PreToolUse", "PostToolUse", 1)
+	Judge(f.testContext(t), deps, Request{Input: after, Host: "claude-code"})
 	assert.Equal(t, 1, f.rounds(t))
 }
 
