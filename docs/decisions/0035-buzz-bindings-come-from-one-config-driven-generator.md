@@ -42,8 +42,8 @@ Measured at 808419f65 on 2026-11-08 with `wc`, `grep` and `magus refs`.
   (`std/charm.go:399`) each switch on a returned `any`; `OsRetry` returns `ret[0]` raw.
   Six Impls take a callback.
 - About 25 Impl sites read `map[string]any` or `[]any` arguments by hand: `std/log.go`,
-  `std/pipe.go`, `std/magus_handle.go` (`decodeJobPut`, `decodeJobResult`),
-  `std/magus_feedback.go`, `std/magus.go:1208`, `std/merge.go:104`, `std/fmt.go:32`.
+  `std/pipe.go`, `std/handle.go` (`decodeJobPut`, `decodeJobResult`),
+  `std/feedback.go`, `std/magus.go:1208`, `std/merge.go:104`, `std/fmt.go:32`.
 - Five Impls return `any` or `map[string]any`: `MergeShallow`, `MergeDeep`, `OsRetry`,
   `PipeValue`, `MagusJobSchema`.
 - The generated declarations in `internal/spell/gen/decls/*.buzz` carry 400 `!> any`

@@ -59,7 +59,7 @@ skeptic) over the store layer:
 
 ### The doors are hand-written five times and untyped where they write
 
-- Each door is written in `std/magus_objects.go` (declaration), `std/magus_handle.go`
+- Each door is written in `std/objects.go` (declaration), `std/handle.go`
   (a forwarder over a second exported function: `MagusWorkspaceJobs` over
   `MagusListJob`, `MagusSessionMarks` over `MagusTrailMarks`), `internal/dry/host.go`
   (dry-run mirror, where `Job.wait` returns null), `internal/guard/mcp.go` (the
@@ -77,7 +77,7 @@ skeptic) over the store layer:
 `magus\ConformanceRow` and `ConformanceReport.rows` (`types/conformance.go`, proto
 `historymetrics.v1alpha1`), `ToolRow`, `ModelRow` (the same record is `ModelPricing` in
 the job store), the `{definition, rows}` fields on ModelTiers and Grouping, about 20
-"row" in the Buzz docs in `std/magus_objects.go`, and messages such as
+"row" in the Buzz docs in `std/objects.go`, and messages such as
 `magus\job: no row has id` and `is not a row id`.
 
 ### Out of scope
@@ -178,7 +178,7 @@ checks every door's dry value decodes as its declared return, extending
 `TestMagusAPIMatchesBindings` (`internal/dry/host_test.go:72`). Prior art, as input:
 kubectl's server dry-run echoes the object as stored, Terraform and Pulumi mark
 server-computed values unknown, and a branch that needs one is refused. The forwarder
-layer in `std/magus_handle.go` goes: the generated binding calls the repository verb.
+layer in `std/handle.go` goes: the generated binding calls the repository verb.
 A store gets a door when a Buzz caller first needs one.
 
 ### Write doors take boundary types
