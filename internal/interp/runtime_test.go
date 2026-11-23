@@ -941,13 +941,21 @@ func (s *BytecodeCacheSuite) TestWarmLoadCompilesNothing() {
 
 func (s *BytecodeCacheSuite) TestReadOnlyCacheVerifiesStoredChunks() {
 	s.load(s.T().Context(), s.source(), true)
-	dir := s.storeDir()
-	s.Require().NoError(os.Chmod(dir, 0o500))
-	s.T().Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	stamp := filepath.Dir(s.storeDir())
+	earlier := time.Now().Add(-time.Hour).Truncate(time.Second)
+	s.Require().NoError(os.Chtimes(stamp, earlier, earlier))
+	swept := filepath.Join(s.storeDir(), sweptMarker)
+	if err := os.Remove(swept); err != nil {
+		s.Require().ErrorIs(err, fs.ErrNotExist)
+	}
 	logs := s.captureLog()
 	marker, compiled := s.load(s.T().Context(), s.source(), true)
 	s.Equal([]any{"one", false}, []any{marker, compiled})
-	s.Contains(logs.String(), "could not sweep compiler cache")
+	info, err := os.Stat(stamp)
+	s.Require().NoError(err)
+	s.True(earlier.Equal(info.ModTime()), "warm read changed stamp to %s", info.ModTime())
+	s.NoFileExists(swept)
+	s.Zero(warnings(logs, ""), "%s", logs)
 
 	for path := range storedChunks(s.T(), s.cache) {
 		chunk, err := os.ReadFile(path)
@@ -959,7 +967,6 @@ func (s *BytecodeCacheSuite) TestReadOnlyCacheVerifiesStoredChunks() {
 	marker, compiled = s.load(s.T().Context(), s.source(), true)
 	s.Equal([]any{"one", true}, []any{marker, compiled})
 	s.Contains(logs.String(), "bytecode chunk does not verify")
-	s.Contains(logs.String(), "could not keep the compiled chunk")
 }
 
 func (s *BytecodeCacheSuite) TestEditedMagusfileCompilesAgain() {
@@ -1086,8 +1093,7 @@ func (s *BytecodeCacheSuite) TestChangedImportOfAnEarlierFileCompilesTheLaterOne
 func (s *BytecodeCacheSuite) TestChunkThatCannotBeKeptSaysSo() {
 	stamp := filepath.Dir(s.storeDir())
 	s.Require().NoError(os.MkdirAll(stamp, 0o700))
-	s.Require().NoError(os.Chmod(stamp, 0o500))
-	s.T().Cleanup(func() { _ = os.Chmod(stamp, 0o700) })
+	s.Require().NoError(os.WriteFile(s.storeDir(), nil, 0o600))
 	logs := s.captureLog()
 
 	marker, compiled := s.load(s.T().Context(), s.source(), true)
