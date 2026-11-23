@@ -397,7 +397,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), jobs: []jobtypes.Job{{ID: "root/footprint", Parent: "root", State: jobtypes.StateDeclared, ReadOnly: true}}, decision: verdict.Defer},
 		{rule: "spawn-without-job-row", name: "a spawn while the store cannot be read", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), corruptStore: true, decision: verdict.Advise, reason: "went unchecked"},
+		}), corruptStore: true, decision: verdict.Deny, reason: "Verify the job with the CLI version that wrote the store"},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
 		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateDeclared}}, decision: verdict.Deny, reason: `isolation: "worktree"`},
@@ -475,12 +475,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
-			switch {
-			case tc.corruptStore:
-				// The shared-checkout check reads the same store and fails open too, so its
-				// advice leads and the policy's is added to it.
-				assert.Contains(t, v.Context, "the lease store did not read")
-			case tc.decision != verdict.Defer:
+			if tc.decision != verdict.Defer {
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule, workspaceShellPrefix + tc.rule}, v.Rule, "the policy decided, not a built-in")
 			}
 			if tc.reason != "" {
