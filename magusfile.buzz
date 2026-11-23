@@ -874,7 +874,7 @@ export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     // every generator writing Go under internal/ or types/gen must finish first.
     ctx.needs(spells_generate, job_generate, buzz_generate, langservice_generate,
               config_generate, mocks_generate);
-    ctx.readsFiles(["cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go", "libs/clikit/**/*.go",
+    ctx.readsFiles(["cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "std/*.go", "libs/testkit/**/*.go", "libs/clikit/**/*.go",
         "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);

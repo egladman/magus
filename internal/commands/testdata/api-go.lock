@@ -896,6 +896,7 @@ github.com/egladman/magus/std.TypeStringMapMap const TypeTag = 10
 github.com/egladman/magus/std.TypeStringSlice const TypeTag = 5
 github.com/egladman/magus/std.TypeStringSliceSlice const TypeTag = 8
 github.com/egladman/magus/std.TypeTag type int
+github.com/egladman/magus/std.TypeTag.BuzzName method func() string
 github.com/egladman/magus/std.TypeTag.GoType method func() string
 github.com/egladman/magus/std.UUID var Module
 github.com/egladman/magus/std.UUIDRandomHex func(_ context.Context, n int) (string, error)
