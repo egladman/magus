@@ -1,5 +1,5 @@
 // tool-descriptions-follow-proofread-rules holds the description of every MCP tool
-// (internal/handler/mcp/gen/registry.go) and of every shipped skill (the catalog in
+// (internal/handler/mcp/registry.go) and of every shipped skill (the catalog in
 // internal/agent/catalog.go) to libs/proofread's tool-description kind, under this
 // repository's decisions table (hack/policy/proofread.buzz). A finding the table decides `deny`
 // fails; `advise` is the reader's to weigh.
@@ -21,7 +21,7 @@ import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/policy/proofread" as decisions;
 import "libs/proofread/proofread" as proofread;
 
-export final TOOLS = "internal/handler/mcp/gen/registry.go";
+export final TOOLS = "internal/handler/mcp/registry.go";
 export final SKILLS = "internal/agent/catalog.go";
 
 final JUDGE = "{proofread\home}/{proofread\command}";
@@ -37,10 +37,21 @@ export fun reads() > [str] {
 // a parameter's description is never read and a line keeps its number.
 export fun toolLines(src: str) > str {
     final kept = mut [<str>];
+    var start = 0;
+    var continued = false;
     foreach (line in src.split("\n")) {
-        if (line.trim().startsWith("Description:")) {
+        final part = line.trim();
+        if (continued and part.startsWith("\"")) {
+            final previous = kept[start].trim();
+            kept[start] = previous.sub(0, len: previous.len() - 3) + part.sub(1);
+            kept.append("");
+            continued = part.endsWith("\" +");
+        } else if (part.startsWith("Description:")) {
+            start = kept.len();
             kept.append(line);
+            continued = part.endsWith("\" +");
         } else {
+            continued = false;
             kept.append("");
         }
     }
@@ -76,7 +87,7 @@ export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Findin
             final shown = if (matched == "") "" else ": {matched}";
             found.append(Finding{ path = file, line = h.line, message = "{said}{shown} [{rule}]",
                 url = r["url"] ?? "",
-                hint = "Reword the description in " + file + "; a tool's registry entry is generated from its std module descriptor." });
+                hint = "Reword the description in " + file + "." });
         }
     }
     return found;
@@ -160,7 +171,8 @@ test "only a tool's own Description line is read, with its line number" {
     final src = "var Registry = []ToolDescriptor\{\n"
         + "\t\{\n"
         + "\t\tName:        \"client\",\n"
-        + "\t\tDescription: \"Run a program.\",\n"
+        + "\t\tDescription: \"Run a \" +\n"
+        + "\t\t\t\"program.\",\n"
         + "\t\tParams: []ParamDescriptor\{\n"
         + "\t\t\t\{Name: \"script\", Type: \"string\", Description: \"A parameter.\"\},\n"
         + "\t\t\},\n"
@@ -197,7 +209,7 @@ test "a deny is reported at its line and an advise is not" {
 
 test "the built proofread judges a description and a source with none is an error" {
     final got = check(support\fixture({
-        "internal/handler/mcp/gen/registry.go": "var x = 1\n\t\tDescription: \"A powerful tool.\",\n",
+        "internal/handler/mcp/registry.go": "var x = 1\n\t\tDescription: \"A powerful tool.\",\n",
         "internal/agent/catalog.go": "package agent\n",
     }).value!);
     assert\equal(got.len(), want: 2, message: "{support\messages(got)}");

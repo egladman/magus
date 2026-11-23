@@ -852,7 +852,6 @@ var Magus = Module{
 			},
 		},
 	},
-	MCPTools: magusMCPTools,
 }
 
 // MagusHasCharm reports whether the execution charm name is active in ctx. It
