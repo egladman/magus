@@ -6,10 +6,60 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
-export extern fun bar(done: int, total: int, cols: int, track: str) > {str: any} !> any;
+export enum<str> ColumnName {
+    fill = "column/fill",
+    elevator = "column/elevator",
+}
+
+export enum<str> GlyphName {
+    dots = "glyph/dots",
+    orbit = "glyph/orbit",
+    pulse = "glyph/pulse",
+    triangle = "glyph/triangle",
+    spark = "glyph/spark",
+    line = "glyph/line",
+}
+
+export enum<str> RotationName {
+    comet = "rotation/comet·1",
+    square = "rotation/square·1",
+    clock = "rotation/clock·1",
+    ring = "rotation/ring·2",
+    pinwheel = "rotation/pinwheel·2",
+    infinity = "rotation/infinity·2",
+}
+
+export enum<str> SpanName {
+    comet = "span/comet",
+    progress = "span/progress",
+}
+
+export enum<str> StripName {
+    scanner = "strip/scanner",
+    equalizer = "strip/equalizer",
+    shade = "strip/shade",
+    snake = "strip/snake",
+    sine = "strip/sine",
+    dots = "strip/dots",
+}
+
+export enum<str> TextName {
+    shimmer = "text/shimmer",
+    typewriter = "text/typewriter",
+}
+
+export extern fun bar(done: int, total: int, cols: int, track: str) > {str: any};
+export extern fun catalog() > any;
 export extern fun column() > str;
-export extern fun fallback() > str;
+export extern fun columnElevator() > str;
+export extern fun columnFill() > str;
 export extern fun glyph() > str;
+export extern fun glyphDots() > str;
+export extern fun glyphLine() > str;
+export extern fun glyphOrbit() > str;
+export extern fun glyphPulse() > str;
+export extern fun glyphSpark() > str;
+export extern fun glyphTriangle() > str;
 export extern fun loaderCols(loader: int) > int !> any;
 export extern fun loaderFrame(loader: int, elapsed: int) > any !> any;
 export extern fun loaderHeight(loader: int, rows: int) > int !> any;
@@ -19,12 +69,31 @@ export extern fun loaderLabel(loader: int, text: str) > int !> any;
 export extern fun loaderName(loader: int) > str !> any;
 export extern fun loaderRows(loader: int) > int !> any;
 export extern fun loaderWidth(loader: int, cols: int) > int !> any;
-export extern fun lookup(name: str) > int !> any;
-export extern fun names() > [str];
+export extern fun newColumn(name: ColumnName) > int !> any;
+export extern fun newGlyph(name: GlyphName) > int !> any;
+export extern fun newRotation(name: RotationName) > int !> any;
+export extern fun newSpan(name: SpanName) > int !> any;
+export extern fun newStrip(name: StripName) > int !> any;
+export extern fun newText(name: TextName) > int !> any;
 export extern fun rotation() > str;
+export extern fun rotationClock() > str;
+export extern fun rotationComet() > str;
+export extern fun rotationInfinity() > str;
+export extern fun rotationPinwheel() > str;
+export extern fun rotationRing() > str;
+export extern fun rotationSquare() > str;
 export extern fun span() > str;
-export extern fun spinLoader() > str;
+export extern fun spanComet() > str;
+export extern fun spanProgress() > str;
 export extern fun spinnerStop(spinner: int) > void !> any;
 export extern fun startSpinner(p: int, label: str) > int !> any;
 export extern fun strip() > str;
+export extern fun stripDots() > str;
+export extern fun stripEqualizer() > str;
+export extern fun stripScanner() > str;
+export extern fun stripShade() > str;
+export extern fun stripSine() > str;
+export extern fun stripSnake() > str;
 export extern fun text() > str;
+export extern fun textShimmer() > str;
+export extern fun textTypewriter() > str;

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/std/termkit/gen/notify"
 )
 
@@ -44,7 +45,7 @@ func RegisterNotify(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("stackNotify", vm.DirectValue("notify.stackNotify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		stack := ffi.Int(bzArgs, 0, 0)
 		text := ffi.String(bzArgs, 1)
-		style := ffi.String(bzArgs, 2)
+		style := termkit.SGR(ffi.String(bzArgs, 2))
 		ttl := ffi.Int(bzArgs, 3, 0)
 		if err := notify.ImplStackNotify(ctx, stack, text, style, ttl); err != nil {
 			return vm.Null, ffi.Error(err)
@@ -55,7 +56,7 @@ func RegisterNotify(ctx context.Context, sess *buzz.Session) vm.Value {
 		stack := ffi.Int(bzArgs, 0, 0)
 		key := ffi.String(bzArgs, 1)
 		text := ffi.String(bzArgs, 2)
-		style := ffi.String(bzArgs, 3)
+		style := termkit.SGR(ffi.String(bzArgs, 3))
 		if err := notify.ImplStackPin(ctx, stack, key, text, style); err != nil {
 			return vm.Null, ffi.Error(err)
 		}

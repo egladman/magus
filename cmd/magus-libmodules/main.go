@@ -8,13 +8,11 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 )
 
-// libModulesCommand writes one std leaf package per Go package of a library
-// module, adapting its exported API to Buzz. The Buzz import path is the
-// module's last path element, then the package's directory under it.
-func libModulesCommand() command.Command {
+// This generator builds independently of the host registry that imports its output.
+func main() {
 	var dir, outDir, genImport string
-	return command.Command{
-		Name:  "libmodules",
+	command.Main(command.Command{
+		Name:  "magus-libmodules",
 		Short: "Generate the Buzz packages of a library module",
 		Flags: []command.Flag{
 			{Name: "dir", Kind: command.String, Doc: "the library module's directory, holding its go.mod", Target: &dir},
@@ -23,9 +21,9 @@ func libModulesCommand() command.Command {
 		},
 		Run: func(context.Context, command.Invocation) error {
 			if dir == "" || outDir == "" || genImport == "" {
-				return exit.Usagef("usage: magus-utils libmodules -dir <module> -outdir <dir> -import <path>")
+				return exit.Usagef("-dir, -outdir and -import are required")
 			}
 			return emit.BuzzLibrary(dir, outDir, genImport)
 		},
-	}
+	})
 }

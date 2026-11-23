@@ -64,6 +64,10 @@ side is not: the Impl receives a `Callback`, and the `[]any` it gets back is che
 
 ## Decision
 
+The library binding producer builds as `cmd/magus-libmodules`. It can regenerate
+bindings after a library API changes because its build does not import the host
+registry that consumes those bindings.
+
 These points were decided by Eli before this record and are not reopened here: one
 generator named `buzzgen` in libs/gopherbuzz, driven by `.buzzgen.yaml` the way mockery
 is driven by its config, reading Go with go/packages; enum cases derived from constants;

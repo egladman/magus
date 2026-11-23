@@ -10,6 +10,8 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
+	libprogress "github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/std/termkit/gen/progress"
 )
 
@@ -23,7 +25,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		done := ffi.Int(bzArgs, 0, 0)
 		total := ffi.Int(bzArgs, 1, 0)
 		cols := ffi.Int(bzArgs, 2, 0)
-		track := ffi.String(bzArgs, 3)
+		track := termkit.SGR(ffi.String(bzArgs, 3))
 		ret0, err := progress.ImplBar(ctx, done, total, cols, track)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -66,16 +68,56 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.AnyVal(ret0), nil
 	}))
-	m.MapSet("names", vm.DirectValue("progress.names", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := progress.ImplNames(ctx)
+	m.MapSet("catalog", vm.DirectValue("progress.catalog", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplCatalog(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StringSliceVal(ret0), nil
+		return ffi.AnyVal(ret0), nil
 	}))
-	m.MapSet("lookup", vm.DirectValue("progress.lookup", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.String(bzArgs, 0)
-		ret0, err := progress.ImplLookup(ctx, name)
+	m.MapSet("newRotation", vm.DirectValue("progress.newRotation", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.RotationName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewRotation(ctx, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("newGlyph", vm.DirectValue("progress.newGlyph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.GlyphName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewGlyph(ctx, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("newStrip", vm.DirectValue("progress.newStrip", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.StripName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewStrip(ctx, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("newText", vm.DirectValue("progress.newText", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.TextName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewText(ctx, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("newSpan", vm.DirectValue("progress.newSpan", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.SpanName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewSpan(ctx, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("newColumn", vm.DirectValue("progress.newColumn", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		name := libprogress.ColumnName(ffi.String(bzArgs, 0))
+		ret0, err := progress.ImplNewColumn(ctx, name)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -179,15 +221,169 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StringVal(ret0), nil
 	}))
-	m.MapSet("fallback", vm.DirectValue("progress.fallback", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := progress.ImplFallback(ctx)
+	m.MapSet("rotationComet", vm.DirectValue("progress.rotationComet", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationComet(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.StringVal(ret0), nil
 	}))
-	m.MapSet("spinLoader", vm.DirectValue("progress.spinLoader", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := progress.ImplSpinLoader(ctx)
+	m.MapSet("rotationSquare", vm.DirectValue("progress.rotationSquare", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationSquare(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("rotationClock", vm.DirectValue("progress.rotationClock", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationClock(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("rotationRing", vm.DirectValue("progress.rotationRing", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationRing(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("rotationPinwheel", vm.DirectValue("progress.rotationPinwheel", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationPinwheel(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("rotationInfinity", vm.DirectValue("progress.rotationInfinity", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplRotationInfinity(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphDots", vm.DirectValue("progress.glyphDots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphDots(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphOrbit", vm.DirectValue("progress.glyphOrbit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphOrbit(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphPulse", vm.DirectValue("progress.glyphPulse", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphPulse(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphTriangle", vm.DirectValue("progress.glyphTriangle", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphTriangle(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphSpark", vm.DirectValue("progress.glyphSpark", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphSpark(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("glyphLine", vm.DirectValue("progress.glyphLine", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplGlyphLine(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripScanner", vm.DirectValue("progress.stripScanner", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripScanner(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripEqualizer", vm.DirectValue("progress.stripEqualizer", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripEqualizer(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripShade", vm.DirectValue("progress.stripShade", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripShade(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripSnake", vm.DirectValue("progress.stripSnake", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripSnake(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripSine", vm.DirectValue("progress.stripSine", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripSine(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("stripDots", vm.DirectValue("progress.stripDots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplStripDots(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("textShimmer", vm.DirectValue("progress.textShimmer", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplTextShimmer(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("textTypewriter", vm.DirectValue("progress.textTypewriter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplTextTypewriter(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("spanComet", vm.DirectValue("progress.spanComet", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplSpanComet(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("spanProgress", vm.DirectValue("progress.spanProgress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplSpanProgress(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("columnFill", vm.DirectValue("progress.columnFill", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplColumnFill(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("columnElevator", vm.DirectValue("progress.columnElevator", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := progress.ImplColumnElevator(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

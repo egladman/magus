@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	libtermkit "github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/std/termkit/gen/termkit"
 )
 
@@ -22,7 +23,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("colorize", vm.DirectValue("termkit.colorize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := ffi.String(bzArgs, 0)
-		sgr := ffi.String(bzArgs, 1)
+		sgr := libtermkit.SGR(ffi.String(bzArgs, 1))
 		ret0, err := termkit.ImplColorize(ctx, s, sgr)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

@@ -378,8 +378,8 @@ func externDecl(m std.Method) (string, error) {
 		}
 		// Same rule for a closed set of strings: the enum is what the checker should
 		// enforce, and `str` enforces nothing.
-		if a.Enum != "" {
-			typ = a.Enum
+		if name := argumentEnum(m, i); name != "" {
+			typ = name
 		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
@@ -770,8 +770,8 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		return nil
 	}
 	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
-		for _, a := range m.Args {
-			if err := add(a.Enum, m.Name); err != nil {
+		for i := range m.Args {
+			if err := add(argumentEnum(m, i), m.Name); err != nil {
 				return nil, err
 			}
 		}
@@ -783,8 +783,8 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	}
 	for _, p := range sortedProtocols(mod) {
 		for _, m := range p.Methods {
-			for _, a := range m.Args {
-				if err := add(a.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+			for i := range m.Args {
+				if err := add(argumentEnum(m, i), fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
 					return nil, err
 				}
 			}
@@ -811,6 +811,22 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		}
 	}
 	return order, nil
+}
+
+// argumentEnum also recognizes a closed string carried by the Go signature.
+func argumentEnum(m std.Method, i int) string {
+	if name := m.Args[i].Enum; name != "" {
+		return name
+	}
+	if sig := m.Signature(); sig != nil && i+1 < sig.NumIn() {
+		t := sig.In(i + 1)
+		if t.Kind() == reflect.String && t.PkgPath() != "" {
+			if enum, ok := buzzEnum(t); ok {
+				return enum.Name
+			}
+		}
+	}
+	return ""
 }
 
 // renderBuzzEnumDecl renders one enum as its Buzz declaration. It matches what the

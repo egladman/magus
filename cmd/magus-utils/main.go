@@ -30,7 +30,6 @@ func root() command.Command {
 			diffDemoCommand(),
 			goAPICommand(),
 			jobSchemaCommand(),
-			libModulesCommand(),
 			mcpToolsCommand(),
 			moduleDeclsCommand(),
 			moduleSetCommand(),

@@ -13,6 +13,8 @@ packages:
       SGR:
         config:
           open: terminal control sequences can be composed at run time
+  github.com/egladman/magus/libs/termkit/progress:
+    config: {module: progress, zeroCase: ""}
   github.com/egladman/magus/libs/termkit/recorder:
     config: {module: ""}
   github.com/egladman/magus/libs/termkit/screen:

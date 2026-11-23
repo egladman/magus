@@ -27,7 +27,7 @@ extern fun termkit__Line__spansCopy(recv: Line) > any;
 export extern fun canRender(p: int) > bool !> any;
 export extern fun captureProbe(width: int, height: int) > int;
 export extern fun clearScreen() > void !> any;
-export extern fun colorize(s: str, sgr: str) > str !> any;
+export extern fun colorize(s: str, sgr: str) > str;
 export extern fun copy(text: str) > int !> any;
 export extern fun eraseLines(n: int) > void !> any;
 export extern fun errNotATerminal() > str;

@@ -227,7 +227,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	// undeclared return, not to write one. The bodies are emitted once for the whole
 	// package by `magus-utils boundaryobjects`.
 	objects := newBuzzValueEmitter()
-	pkgs := &argPackages{module: m.Name}
+	pkgs := &argPackages{module: m.Name, impl: implPkg, implPath: implPath}
 	var members bytes.Buffer
 	for _, f := range m.Fields {
 		emitBuzzField(&members, f, implPkg)
@@ -295,7 +295,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 		if p == implPath {
 			continue
 		}
-		if alias := packageAlias(p); alias != path.Base(p) {
+		if alias := pkgs.alias(p); alias != path.Base(p) {
 			fmt.Fprintf(&b, "\t%s %q\n", alias, p)
 		} else {
 			fmt.Fprintf(&b, "\t%q\n", p)
@@ -447,6 +447,11 @@ func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg,
 		fmt.Fprintf(w, "\t\t%s := %s(sess, bzArgs, %d)\n", a.Name, callbackAdapterName(param), idx)
 		return nil
 	}
+	if param.Kind() == reflect.String && param.PkgPath() != "" {
+		pkgs.spell(param)
+		fmt.Fprintf(w, "\t\t%s := %s.%s(ffi.String(bzArgs, %d))\n", a.Name, pkgs.alias(param.PkgPath()), param.Name(), idx)
+		return nil
+	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)
 	if err != nil || handled {
 		return err
@@ -563,8 +568,21 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 // optional object argument's T, so the generated file imports them. module scopes the
 // boundary names its arguments resolve.
 type argPackages struct {
-	module string
-	paths  []string
+	module   string
+	impl     string
+	implPath string
+	paths    []string
+}
+
+func (p *argPackages) alias(importPath string) string {
+	if importPath == p.implPath {
+		return p.impl
+	}
+	name := packageAlias(importPath)
+	if name == p.impl {
+		return "lib" + name
+	}
+	return name
 }
 
 func (p *argPackages) spell(t reflect.Type) {

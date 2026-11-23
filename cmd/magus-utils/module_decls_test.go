@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -274,4 +275,39 @@ final unset = image\Digest{}.string();
 `))
 	s.Equal("sha256:ab", sess.Globals()["set"].AsString())
 	s.Empty(sess.Globals()["unset"].AsString())
+}
+
+func TestProgressConstructorsUseTheirOwnNameEnum(t *testing.T) {
+	mod, ok := hostmodules.Get("progress")
+	require.True(t, ok)
+	decls, err := renderModuleDecls(mod)
+	require.NoError(t, err)
+	for _, tc := range []struct{ kind, member, name string }{
+		{"Glyph", "dots", "glyph/dots"},
+		{"Rotation", "clock", "rotation/clock·1"},
+		{"Strip", "scanner", "strip/scanner"},
+		{"Text", "shimmer", "text/shimmer"},
+		{"Span", "progress", "span/progress"},
+		{"Column", "fill", "column/fill"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			ctx := t.Context()
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			t.Cleanup(func() { _ = sess.Close() })
+			sess.SetNativeModule(mod.ImportPath(), bindgen.RegisterProgress(ctx, sess))
+			sess.SetModuleDecls(mod.ImportPath(), decls)
+			src := fmt.Sprintf(`import "termkit/progress";
+final name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s));`, tc.kind, tc.member)
+			require.NoError(t, sess.Exec(ctx, src))
+			assert.Equal(t, tc.name, sess.Globals()["name"].AsString())
+			raw := fmt.Sprintf(`import "termkit/progress"; _ = progress\new%s(%q);`, tc.kind, tc.name)
+			require.ErrorContains(t, sess.Exec(ctx, raw), tc.kind+"Name")
+			wrong := "progress\\GlyphName.dots"
+			if tc.kind == "Glyph" {
+				wrong = "progress\\StripName.dots"
+			}
+			mixed := fmt.Sprintf(`import "termkit/progress"; _ = progress\new%s(%s);`, tc.kind, wrong)
+			require.ErrorContains(t, sess.Exec(ctx, mixed), tc.kind+"Name")
+		})
+	}
 }

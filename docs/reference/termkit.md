@@ -71,7 +71,7 @@ import "termkit/progress";
 fun main(args: [str]) > void !> any {
     final zone = termkit\newZone(termkit\systemProbe());
     final band = termkit\zoneAcquire(zone, rows: 1);
-    final dots = progress\lookup("glyph/dots");
+    final dots = progress\newGlyph(progress\GlyphName.dots);
     final frame = progress\loaderFrame(dots, elapsed: 160);
     _ = termkit\leaseSet(band, rows: frame);
     termkit\zoneClose(zone);
@@ -81,13 +81,13 @@ fun main(args: [str]) > void !> any {
 
 A Go method is a Buzz function named for its type and method: `Zone.Acquire`
 is `zoneAcquire`, taking the handle first. The bindings and declarations are
-generated from the Go source at build time by `magus-utils libmodules`, and a
+generated from the Go source at build time by `magus-libmodules`, and a
 test fails when an exported function or type has no binding.
 
 ## Loaders
 
-Every loader has a name, an interval and a fixed footprint. Look one up by name;
-an unknown name is an error that lists them all.
+Each loader kind has its own constructor and name enum. For example,
+`newGlyph` takes a `GlyphName`, and `newStrip` takes a `StripName`.
 
 | Kind       | Footprint           | Loaders                                                                |
 | ---------- | ------------------- | ---------------------------------------------------------------------- |
