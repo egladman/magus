@@ -58,7 +58,7 @@ func TestAnyValNamedBuzzObject(t *testing.T) {
 
 func TestAnyMapValNestsBuzzObject(t *testing.T) {
 	t.Parallel()
-	got := AnyMapVal(types.BuzzObject{
+	got := anyMapVal(types.BuzzObject{
 		"name":    "v0.3.0",
 		"version": types.BuzzObject{"major": 0, "minor": 3},
 	})

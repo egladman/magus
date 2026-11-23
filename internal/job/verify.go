@@ -482,33 +482,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 			" clear the plan or fork a new job rather than re-verifying a closed one", row.ID, row.State))
 	}
 
-	switch {
-	case row.Delivery == job.DeliveryFindings:
-		v.Violations = append(v.Violations, findingsViolations(rep, seen)...)
-	case row.ReadOnly && len(rep.ChangedPaths) > 0:
-		v.Violations = append(v.Violations, fmt.Sprintf("job %s is read-only and the result claims %d changed path(s)", row.ID, len(rep.ChangedPaths)))
-	case !row.ReadOnly && len(rep.ChangedPaths) == 0:
-		// A holder that wrote nothing has not done the work or has not reported it, and
-		// the two are the same thing to whoever is deciding whether to integrate. A job
-		// that genuinely writes nothing is read_only, which is the declaration that says so.
-		v.Violations = append(v.Violations, fmt.Sprintf("job %s is not read-only and the result claims no changed paths at all", row.ID))
-	case row.Integrating():
-		// The change is the merge range, and its write paths were computed from it at fork.
-	default:
-		for _, p := range rep.ChangedPaths {
-			if _, ok := job.Matching(row.Paths.Write, p); ok {
-				continue
-			}
-			// magus rewrites such a file beside a job's change (the merge driver writes
-			// .gitattributes from the output globs), so no job declares it.
-			if types.IsMagusMaintained(p) {
-				v.Notes = append(v.Notes, fmt.Sprintf("changed path %q is outside the job's write paths and is one magus maintains itself,"+
-					" regenerated beside the change, so it was not graded against them", p))
-				continue
-			}
-			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
-		}
-	}
+	checkDelivery(&v, row, rep, seen)
 	if !row.ReadOnly && !row.Integrating() && row.Delivery != job.DeliveryFindings {
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
@@ -757,6 +731,36 @@ func sortedCopy(in []string) []string {
 	out := slices.Clone(in)
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+func checkDelivery(v *Status, row job.Job, rep job.Result, seen Observed) {
+	switch {
+	case row.Delivery == job.DeliveryFindings:
+		v.Violations = append(v.Violations, findingsViolations(rep, seen)...)
+	case row.ReadOnly && len(rep.ChangedPaths) > 0:
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s is read-only and the result claims %d changed path(s)", row.ID, len(rep.ChangedPaths)))
+	case !row.ReadOnly && len(rep.ChangedPaths) == 0:
+		// A holder that wrote nothing has not done the work or has not reported it, and
+		// the two are the same thing to whoever is deciding whether to integrate. A job
+		// that genuinely writes nothing is read_only, which is the declaration that says so.
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s is not read-only and the result claims no changed paths at all", row.ID))
+	case row.Integrating():
+		// The change is the merge range, and its write paths were computed from it at fork.
+	default:
+		for _, p := range rep.ChangedPaths {
+			if _, ok := job.Matching(row.Paths.Write, p); ok {
+				continue
+			}
+			// magus rewrites such a file beside a job's change (the merge driver writes
+			// .gitattributes from the output globs), so no job declares it.
+			if types.IsMagusMaintained(p) {
+				v.Notes = append(v.Notes, fmt.Sprintf("changed path %q is outside the job's write paths and is one magus maintains itself,"+
+					" regenerated beside the change, so it was not graded against them", p))
+				continue
+			}
+			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
+		}
+	}
 }
 
 // unnamedLanded are the paths the branch committed that no claim covers.

@@ -390,8 +390,7 @@ func StringMapVal(m map[string]string) vm.Value {
 	return out
 }
 
-// AnyMapVal converts map[string]any to a Buzz map.
-func AnyMapVal(m map[string]any) vm.Value {
+func anyMapVal(m map[string]any) vm.Value {
 	out := vm.NewMap()
 	for k, v := range m {
 		out.MapSet(k, AnyVal(v))
@@ -423,7 +422,7 @@ func AnyVal(v any) vm.Value {
 		}
 		return vm.ListValue(items)
 	case map[string]any:
-		return AnyMapVal(x)
+		return anyMapVal(x)
 	// types.BuzzObject is a NAMED map[string]any, and a type switch matches on type
 	// IDENTITY, not on underlying type, so without its own case it falls through to
 	// the null below. That is not theoretical: it is what broke every NESTED boundary
@@ -432,7 +431,7 @@ func AnyVal(v any) vm.Value {
 	// encoders no longer produce one (they nest vm.Value directly), but AnyVal is also
 	// the path for a hand-written BuzzObject and for an untyped AnyMap return.
 	case types.BuzzObject:
-		return AnyMapVal(x)
+		return anyMapVal(x)
 	case map[string]string:
 		return StringMapVal(x)
 	}

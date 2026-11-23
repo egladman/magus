@@ -885,53 +885,6 @@ func (s PolicyStore) Verify(body []byte, seal string) bool {
 	return hmac.Equal([]byte(s.Seal(body)), []byte(seal))
 }
 
-// sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
-// kept in, its key and its bytes, so a chunk moved from another key, workspace
-// or compiler fails exactly as a forged one does.
-type sealedBytecodeStore struct {
-	inner  buzz.BytecodeStore
-	secret secrets.Secret
-	scope  string
-}
-
-var errUnsealedChunk = errors.New("bytecode chunk does not verify")
-
-func (s sealedBytecodeStore) Load(key string) ([]byte, error) {
-	sealed, err := s.inner.Load(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(sealed) < sha256.Size || !hmac.Equal(sealed[:sha256.Size], s.seal(key, sealed[sha256.Size:])) {
-		return nil, errUnsealedChunk
-	}
-	return sealed[sha256.Size:], nil
-}
-
-func (s sealedBytecodeStore) Store(key string, blob []byte) error {
-	now := time.Now()
-	stampErr := prepareStamp(filepath.Dir(s.scope), now)
-	if err := s.inner.Store(key, append(s.seal(key, blob), blob...)); err != nil {
-		return err
-	}
-	if stampErr != nil {
-		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(stampErr))
-	}
-	if err := sweepChunks(s.scope, now); err != nil {
-		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not sweep compiler cache", attr.Error(err))
-	}
-	return nil
-}
-
-func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
-	m := hmac.New(sha256.New, []byte(s.secret.Reveal()))
-	for _, part := range []string{s.scope, key} {
-		_, _ = m.Write([]byte(part))
-		_, _ = m.Write([]byte{0})
-	}
-	_, _ = m.Write(blob)
-	return m.Sum(nil)
-}
-
 // bytecodeSecret reads the key chunks are sealed with, creating it on first use.
 // It lives in the state dir, apart from the cache it protects.
 func bytecodeSecret() ([]byte, error) {
