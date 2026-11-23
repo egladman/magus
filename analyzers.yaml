@@ -49,13 +49,9 @@ exhaustive-switch:
     - {path: internal/guard/search.go, symbol: placeSearch}
     - {path: internal/guard/search.go, symbol: searchVerdictAt}
     - {path: internal/guard/search_pattern.go, symbol: splitAlternation}
-    - {path: internal/guard/shell.go, symbol: GradeEdit}
-    - {path: internal/guard/shell.go, symbol: fileOperands}
-    - {path: internal/guard/shell.go, symbol: filterWithoutInputDeny}
     - {path: internal/guard/stall.go, symbol: observeStall}
     - {path: internal/guard/step.go, symbol: stepDecisionRank}
     - {path: internal/guard/step.go, symbol: stepRuleJudgment}
-    - {path: internal/guard/workspace_shell.go, symbol: matchWorkspaceShell}
     - {path: internal/guard/write.go, symbol: sayUnchecked}
   # Switches a person accepted, each with the reason it stays.
   exits: []

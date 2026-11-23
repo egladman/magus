@@ -23,6 +23,40 @@ type handedScript struct {
 	read bool
 }
 
+// xargsCommand stops at the command operand. An option value can itself look
+// like a command or flag, and arguments following the command belong to it.
+func xargsCommand(words []string) []string {
+	reader := stdinReaders["xargs"]
+	for len(words) > 0 {
+		word := words[0]
+		switch {
+		case word == "--":
+			return words[1:]
+		case !isOptionWord(word, false):
+			return words
+		}
+		words = words[1:]
+		takesNext := false
+		if strings.HasPrefix(word, "--") {
+			name, _, joined := strings.Cut(word, "=")
+			kind := reader.kind(name)
+			takesNext = !joined && (kind == flagValue || kind == flagSettles)
+		} else {
+			for i := 1; i < len(word); i++ {
+				kind := reader.kind("-" + word[i:i+1])
+				if kind == flagValue || kind == flagSettles {
+					takesNext = i+1 == len(word)
+					break
+				}
+			}
+		}
+		if takesNext && len(words) > 0 {
+			words = words[1:]
+		}
+	}
+	return nil
+}
+
 // handedScripts are the scripts f's statements hand over, in walk order.
 func handedScripts(f *syntax.File, d Dialect) []handedScript {
 	piped := map[*syntax.Stmt]*syntax.Stmt{}
@@ -39,10 +73,10 @@ func handedScripts(f *syntax.File, d Dialect) []handedScript {
 				return true
 			}
 			words := literalWords(call.Args)
-			// xargs spends its stdin on arguments, so what it runs reads none.
-			fromStdin := path.Base(words[0]) != "xargs"
+			// Wrappers such as env preserve the pipe. Ordinary xargs consumes
+			// that pipe itself even when one of those wrappers launches it.
 			stdin := func() (scriptText, bool) {
-				if !fromStdin {
+				if starvedReader(call) == "xargs" {
 					return scriptText{}, false
 				}
 				return stdinText(n, piped[n])

@@ -919,6 +919,9 @@ var wrapperValueFlags = map[string]bool{
 // skipWrapperArgs consumes a wrapper's own flags and operands, returning the
 // words from the wrapped program onward.
 func skipWrapperArgs(wrapper string, words []string) []string {
+	if wrapper == "xargs" {
+		return xargsCommand(words)
+	}
 	for len(words) > 0 {
 		w := words[0]
 		switch {
