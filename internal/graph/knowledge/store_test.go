@@ -1469,3 +1469,46 @@ func TestSyncReportsManifestFailureAfterShardWrite(t *testing.T) {
 	require.Equal(t, old, store.readManifestOrNil().Shards[sh.Name].Fingerprint)
 	require.ErrorIs(t, err, os.ErrPermission)
 }
+
+func TestReadOnlySymbolBodyRecoversAfterWritableSync(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalSymbolShard("reads the index")
+	sh.Text = map[string]string{lexicalSymbolID: "frobnicator"}
+	fps := map[string]string{sh.Name: fingerprintShardContent(sh)}
+	syncLexical(t, store, nil, sh)
+	sync := func(refresh bool) (*Graph, error) {
+		return store.Sync(t.Context(), []Shard{sh}, fps, refresh)
+	}
+	match := func(g *Graph, term string) int {
+		t.Helper()
+		require.NoError(t, store.MergeSymbolShards(t.Context(), g))
+		out, err := g.QueryRanked(term, 5, 0, 0, RetrieveOptions{
+			Weights: ShippedWeights(), Lexical: store.readLexicalIndex(store.readManifestOrNil()),
+		})
+		require.NoError(t, err)
+		return out.MatchCount
+	}
+
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	g, err := sync(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, match(g, "frobnicator"))
+
+	sh.Text[lexicalSymbolID] = "wombat"
+	require.Equal(t, fps[sh.Name], fingerprintShardContent(sh))
+	_, err = sync(false)
+	require.ErrorIs(t, err, os.ErrPermission)
+	_, err = sync(true)
+	require.ErrorIs(t, err, os.ErrPermission)
+
+	require.NoError(t, os.Chmod(store.dir, 0o755))
+	g, err = sync(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, match(g, "wombat"))
+	require.Zero(t, match(g, "frobnicator"))
+}
