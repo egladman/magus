@@ -185,7 +185,8 @@ func (s *pluginSuite) TestBashJudgmentPreservesWorkingDirectory() {
 		s.Require().NoError(s.plugin.toolBefore(context.Background(), call))
 		s.Require().NotEmpty(s.magus.calls)
 		input := s.magus.calls[len(s.magus.calls)-1].Input
-		s.JSONEq(`{"hook_event_name":"PreToolUse","tool_name":"bash","session_id":"s","cwd":"/repo","tool_input":`+args+`}`, input)
+		want := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"bash","session_id":"s","cwd":"/repo","tool_input":%s}`, args)
+		s.JSONEq(want, input)
 	}
 }
 

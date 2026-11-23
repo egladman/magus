@@ -189,7 +189,11 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"first"}`, SessionID: "s", CallID: "1"})
 		results <- response{v, err}
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case early := <-results:
+		s.T().Fatalf("first command returned before reaching the native guard: %+v", early)
+	}
 	go func() {
 		defer wg.Done()
 		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"second"}`, SessionID: "s", CallID: "2"})
