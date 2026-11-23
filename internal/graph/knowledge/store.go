@@ -180,7 +180,7 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 // changed, prunes shards no longer present (free deletion/rename reconciliation),
 // and rewrites the manifest. In immutable mode it writes nothing but still
 // returns the merged graph, warning once if the persisted store is stale.
-// refresh forces every shard to be treated as stale (a full rebuild).
+// An explicit refresh forces a full rebuild and fails if the store is read-only.
 //
 // A writing Sync holds the store's cross-process lock throughout. Every query in every
 // process on the checkout builds the graph, and two unlocked Syncs interleave: one's
@@ -221,15 +221,33 @@ func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]
 		}
 		return s.sync(ctx, shards, fps, plan)
 	}
+	locked := false
 	err := file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+		locked = true
 		return s.sync(ctx, shards, fps, plan)
 	})
+	if locked {
+		return err
+	}
+	return s.readOnlySync(ctx, shards, fps, plan, err)
+}
+
+// readOnlySync is reached only before publication has changed any store files.
+func (s *Store) readOnlySync(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan, err error) error {
 	if plan.refresh || !readOnlyWriteError(err) {
 		return err
 	}
 	// Lazy readers reopen their shards from disk after this sync returns.
 	man := s.readManifestOrNil()
+	key := s.lexicalIndexKey()
+	bound := key != "" && key == lexicalShardsKey(man)
 	for _, sh := range shards {
+		if bound && lexicalClass(sh.Name) {
+			meta, ok := man.shard(sh.Name)
+			if !ok || meta.Fingerprint != fps[sh.Name] || !s.lexicalSidecarCurrent(sh.Name, fps[sh.Name], textDigest(sh.Text)) {
+				return fmt.Errorf("knowledge shard %q stale in read-only store: %w", sh.Name, err)
+			}
+		}
 		if !isLazyShard(sh.Name) {
 			continue
 		}
@@ -247,7 +265,8 @@ func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]
 	}
 	if man != nil {
 		for name := range man.Shards {
-			if isLazyShard(name) && plan.covers(shardClass(name)) && fps[name] == "" {
+			_, present := fps[name]
+			if (isLazyShard(name) || (bound && lexicalClass(name))) && plan.covers(shardClass(name)) && !present {
 				return fmt.Errorf("knowledge shard %q stale in read-only store: %w", name, err)
 			}
 		}
@@ -447,7 +466,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		lexicalMoved = lexicalMoved || len(staleText) > 0
 		if lexicalMoved {
 			if err := s.removeLexicalIndex(); err != nil {
-				return err
+				return s.readOnlySync(ctx, shards, fps, plan, err)
 			}
 		}
 	}

@@ -1427,3 +1427,45 @@ func TestDeniedLexicalInvalidationReportsStaleSymbolShard(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrPermission)
 	require.FileExists(t, store.lexicalIndexPath())
 }
+
+func TestDeniedLexicalInvalidationRejectsBodyOnlyChange(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalDocsShard("frobnicator")
+	syncLexical(t, store, nil, sh)
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	sh = lexicalDocsShard("wombat")
+	g, err := store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: fingerprintShardContent(sh)}, false)
+	if err == nil {
+		out, queryErr := g.QueryRanked("frobnicator", 5, 0, 0, RetrieveOptions{Weights: ShippedWeights(), Lexical: store.readLexicalIndex(store.readManifestOrNil())})
+		require.NoError(t, queryErr)
+		t.Fatalf("sync accepted an unpublished body edit; query returned %d old-body matches", out.MatchCount)
+	}
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestSyncReportsManifestFailureAfterShardWrite(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalDocsShard("frobnicator")
+	syncLexical(t, store, nil, sh)
+	require.NoError(t, os.Remove(store.lexicalIndexPath()))
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	old := fingerprintShardContent(sh)
+	sh.Nodes[0].Label = "changed"
+	current := fingerprintShardContent(sh)
+	_, err := store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: current}, false)
+	stored, readErr := store.readShardKeeping(sh.Name, false)
+	require.NoError(t, readErr)
+	require.Equal(t, current, stored.Fingerprint)
+	require.Equal(t, old, store.readManifestOrNil().Shards[sh.Name].Fingerprint)
+	require.ErrorIs(t, err, os.ErrPermission)
+}
