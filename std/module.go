@@ -25,34 +25,8 @@ type TypeTag int
 
 // BuzzName spells the tag in a Buzz declaration.
 func (t TypeTag) BuzzName() string {
-	switch t {
-	case TypeString:
-		return "str"
-	case TypeInt, TypeIndex:
-		return "int"
-	case TypeFloat:
-		return "double"
-	case TypeBool:
-		return "bool"
-	case TypeStringSlice:
-		return "[str]"
-	case TypeFloatSlice:
-		return "[double]"
-	case TypeByteSlice:
-		return "[int]"
-	case TypeStringSliceSlice:
-		return "[[str]]"
-	case TypeStringMapMap:
-		return "{str: {str: str}}"
-	case TypeStringMap:
-		return "{str: str}"
-	case TypeAnyMap:
-		return "{str: any}"
-	case TypeAny:
-		return "any"
-	case TypeInvalid:
-	}
-	return ""
+	_, buzzName := t.names()
+	return buzzName
 }
 
 // The TypeTag constants enumerate the parameter and return types a binding
@@ -91,34 +65,39 @@ const (
 
 // GoType returns the Go type name this tag maps to.
 func (t TypeTag) GoType() string {
+	goName, _ := t.names()
+	return goName
+}
+
+func (t TypeTag) names() (goName, buzzName string) {
 	switch t {
 	case TypeString:
-		return "string"
+		return "string", "str"
 	case TypeInt, TypeIndex:
-		return "int"
+		return "int", "int"
 	case TypeFloat:
-		return "float64"
+		return "float64", "double"
 	case TypeBool:
-		return "bool"
+		return "bool", "bool"
 	case TypeStringSlice:
-		return "[]string"
+		return "[]string", "[str]"
 	case TypeFloatSlice:
-		return "[]float64"
+		return "[]float64", "[double]"
 	case TypeByteSlice:
-		return "[]byte"
+		return "[]byte", "[int]"
 	case TypeStringSliceSlice:
-		return "[][]string"
+		return "[][]string", "[[str]]"
 	case TypeStringMapMap:
-		return "map[string]map[string]string"
+		return "map[string]map[string]string", "{str: {str: str}}"
 	case TypeStringMap:
-		return "map[string]string"
+		return "map[string]string", "{str: str}"
 	case TypeAnyMap:
-		return "map[string]any"
+		return "map[string]any", "{str: any}"
 	case TypeAny:
-		return "any"
+		return "any", "any"
 	case TypeInvalid:
 	}
-	return "<invalid>"
+	return "<invalid>", ""
 }
 
 // Arg is one positional parameter of a Method.

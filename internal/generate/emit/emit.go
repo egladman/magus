@@ -1194,9 +1194,9 @@ func (e *moduleEmitter) implementation(fn *libFunc, impl string, b *binding) str
 			retType, ret = "bool", "true"
 		}
 		payload := retType
-		retType = "types.Result[" + payload + "]"
+		retType = fmt.Sprintf("types.Result[%s]", payload)
 		zero = retType + "{}"
-		ret = "types.Ok[" + payload + "](" + ret + ")"
+		ret = fmt.Sprintf("types.Ok[%s](%s)", payload, ret)
 	}
 	var outs []string
 	for i := range b.results {
