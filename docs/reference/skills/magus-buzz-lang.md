@@ -3,8 +3,8 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12873
-skill_short_bytes: 9964
+skill_full_bytes: 13782
+skill_short_bytes: 9990
 ---
 
 # magus-buzz-lang
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `c66ee9e7bd0a` |
+| `skill-content` | `3714b78d66c0` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -218,9 +218,9 @@ List callbacks take index first: `map` and `filter` get `(index, element)`,
 
 ## Host modules: ask, never guess
 
-Import every module by its bare name (`import "fs";`), except data formats under
-`encoding/` (`import "encoding/json";`). Without import line, name is
-`undefined`. To see what module offers:
+Import the declared path, e.g. `import "fs";` or `import "termkit/recorder";`.
+Go ports: check generated signature and a working caller. Follow method bodies.
+An `extern fun` calls Go. A translated body runs in Buzz.
 
 ```sh
 magus describe modules -o name    # every module a script can import
@@ -499,9 +499,23 @@ List callbacks take the index first: `map` and `filter` get `(index, element)`,
 
 ## Host modules: ask, never guess
 
-Import every module by its bare name (`import "fs";`), except the data formats under
-`encoding/` (`import "encoding/json";`). Without the import line the name is
-`undefined`. To see what a module offers:
+Import the declared path, e.g. `import "fs";` or `import "termkit/recorder";`.
+Read the generated signature and a working caller before translating Go.
+A ported function body runs in Buzz. An `extern fun` has a Buzz signature and
+executes its registered Go implementation. Follow receiver methods too.
+The body of `Pace.hold` forwards its receiver and arguments to a Go-backed extern.
+
+Construct the typed record with `final pace = recorder\Pace{last = 1.5};` and
+call `pace.hold(0, count: 1, added: 0)`. The free function
+`recorder\animate(segments, width: w, height: h, pace: pace, theme: theme)`
+accepts typed Pace and Theme records. Its return type is `result\Result::<str>`.
+Import `"result"` when naming or constructing that type, as in
+`result\Result::<str>{value = "ok"}`. For a generated enum, use its declared
+case, e.g. `progress\ColumnName.fill` after `import "termkit/progress";`.
+Check `rendered.error != null` before
+reading `rendered.value`. A failed render carries its message in
+`rendered.error!.message`. Compare successful output and an invalid input with
+the Go original when porting a body.
 
 ```sh
 magus describe modules -o name    # every module a script can import
