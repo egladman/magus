@@ -101,7 +101,7 @@ them and magus describe job prints one job's terms.
 : The working state this job is handed, as magus vcs checkpoint -o name prints it
 
 **--delivery** *string*
-: How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
+: Deliver findings with recorded evidence, fold changes into the parent's pull request, or open a separate or stacked pull request
 
 **--deny-paths** *value*
 : A path this job may not write, carved out of its write paths; repeatable or comma-separated
