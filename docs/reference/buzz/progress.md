@@ -18,7 +18,7 @@ Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, gen
 
 Bar draws done of total in cols cells, filled in eighths so it moves a fraction of a cell at a time.
 
-**Signature:** `progress\bar(done, total, cols, track) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\bar(done, total, cols, track) -> Line` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -93,86 +93,86 @@ Catalog returns every loader in display order.
 
 NewRotation builds the selected rotation loader.
 
-**Signature:** `progress\newRotation(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newRotation(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newGlyph
 
 NewGlyph builds the selected glyph loader.
 
-**Signature:** `progress\newGlyph(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newGlyph(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newStrip
 
 NewStrip builds the selected strip loader.
 
-**Signature:** `progress\newStrip(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newStrip(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newText
 
 NewText builds the selected text loader.
 
-**Signature:** `progress\newText(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newText(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newSpan
 
 NewSpan builds the selected span loader.
 
-**Signature:** `progress\newSpan(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newSpan(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newColumn
 
 NewColumn builds the selected column loader.
 
-**Signature:** `progress\newColumn(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newColumn(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### startSpinner
 
 StartSpinner starts a loader turning beside label on out and returns at once; the caller does its blocking work and then calls [Spinner.Stop].
 
-**Signature:** `progress\startSpinner(p, label) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\startSpinner(p, label) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `p`       | `int`    |          |             |
 | `label`   | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### spinnerStop
 

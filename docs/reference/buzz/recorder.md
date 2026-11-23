@@ -44,7 +44,7 @@ Marked discards teardown after the final frame marker.
 
 Animate replays one cumulative terminal and gives all frames the same height.
 
-**Signature:** `recorder\animate(segments, width, height, pace, theme) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/recorder/module.go)
+**Signature:** `recorder\animate(segments, width, height, pace, theme) -> result\Result::<str>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/recorder/module.go)
 
 | Parameter  | Type             | Optional | Description |
 | ---------- | ---------------- | -------- | ----------- |
@@ -54,5 +54,5 @@ Animate replays one cumulative terminal and gives all frames the same height.
 | `pace`     | `map[string]any` |          |             |
 | `theme`    | `map[string]any` |          |             |
 
-**Returns:** string
+**Returns:** map[string]any
 

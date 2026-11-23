@@ -18,7 +18,7 @@ Bindings for the Go package github.com/egladman/magus/libs/termkit/pick, generat
 
 Pick blocks until the user selects an item or aborts.
 
-**Signature:** `pick\one(p, items, opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
+**Signature:** `pick\one(p, items, opts) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -26,13 +26,13 @@ Pick blocks until the user selects an item or aborts.
 | `items`   | `[]string`       |          |             |
 | `opts`    | `map[string]any` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### many
 
 Many blocks until the user marks one or more items and confirms, or aborts.
 
-**Signature:** `pick\many(p, items, opts, marked) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
+**Signature:** `pick\many(p, items, opts, marked) -> result\Result::<any>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -41,7 +41,7 @@ Many blocks until the user marks one or more items and confirms, or aborts.
 | `opts`    | `map[string]any` |          |             |
 | `marked`  | `any`            |          |             |
 
-**Returns:** any
+**Returns:** map[string]any
 
 ### render
 

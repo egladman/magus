@@ -31,7 +31,7 @@ VariantPath names the file one variant of a picture is written to, given the uns
 
 Animate renders a sequence of frames as one self-contained animated SVG.
 
-**Signature:** `screen\animate(frames, holds, opts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+**Signature:** `screen\animate(frames, holds, opts) -> result\Result::<str>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -39,7 +39,7 @@ Animate renders a sequence of frames as one self-contained animated SVG.
 | `holds`   | `any`            |          |             |
 | `opts`    | `map[string]any` |          |             |
 
-**Returns:** string
+**Returns:** map[string]any
 
 ### new
 
@@ -70,14 +70,14 @@ Fd and Write let a test hand a Terminal to code that expects one, so it drives t
 
 Calls Terminal.Write.
 
-**Signature:** `screen\terminalWrite(terminal, p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+**Signature:** `screen\terminalWrite(terminal, p) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
 | Parameter  | Type     | Optional | Description |
 | ---------- | -------- | -------- | ----------- |
 | `terminal` | `int`    |          |             |
 | `p`        | `[]byte` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### terminalRows
 
@@ -245,7 +245,7 @@ SVG renders what the terminal currently shows as a standalone SVG picture.
 
 DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI primaries, which are harsh at small sizes on a page.
 
-**Signature:** `screen\darkTheme() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+**Signature:** `screen\darkTheme() -> Theme` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
 **Returns:** map[string]any
 
@@ -253,7 +253,7 @@ DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI
 
 LightTheme renders on a page that is not dark.
 
-**Signature:** `screen\lightTheme() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
+**Signature:** `screen\lightTheme() -> Theme` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
 **Returns:** map[string]any
 

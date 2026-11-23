@@ -98,7 +98,7 @@ Tree returns the branch drawn before item i of n siblings: a tee for every item 
 
 Hints joins hints into one row no wider than width columns.
 
-**Signature:** `layout\hints(hints, width, style) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
+**Signature:** `layout\hints(hints, width, style) -> Line` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
