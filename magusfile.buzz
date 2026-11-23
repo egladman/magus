@@ -1133,12 +1133,12 @@ export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any
             "./internal/interp/bindings/", "./std/"]});
 }
 
-// Regenerates the host-module snapshot the playground's completion and hover read
-// (internal/langservice/manifest_data.go).
+// The browser reads this snapshot without linking the host modules.
 export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(job_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/job/gen/*.json"]);
+        "internal/job/gen/*.json", "internal/spell/gen/decls/**/*.buzz", "internal/spell/gen/types/*.buzz",
+        "std/lib/*.buzz", "libs/diagram/diagram.buzz", "libs/result/result.buzz", "internal/job/modeltiers.buzz", "internal/disk/*.buzz"]);
     ctx.writesFiles(["internal/langservice/manifest_data.go"]);
     _ = proc\exec("go", ["generate", "./internal/langservice"]);
 }
