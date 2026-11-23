@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestScalarMethod(t *testing.T) {
+func TestScalarFunction(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GOWORK", "off")
 	root, err := filepath.Abs("..")
@@ -41,7 +41,7 @@ func main() {
 		require.NoError(t, os.WriteFile(filepath.Join(dir,"main.go"), []byte(src), 0644))
 		p, err := Load(dir, Config{}, "example.com/body")
 		require.NoError(t,err)
-		method, err := p.ScalarMethod("example.com/body", "integer", "integerValue", "int")
+		function, err := p.ScalarFunction("example.com/body", "integer", "integerValue", "int")
 		require.NoError(t,err)
 		cmd := exec.CommandContext(t.Context(),"go","run",".")
 		cmd.Dir = dir
@@ -49,7 +49,7 @@ func main() {
 		require.NoError(t,err,"%s",native)
 		s := buzz.NewSession(t.Context())
 		t.Cleanup(func(){ require.NoError(t,s.Close()) })
-		source := "object Wrapped { data: any,\n"+method+"}\nfinal a = Wrapped{data = 17}.integerValue(); final b = Wrapped{data = false}.integerValue();"
+		source := function+"\nfinal a = integerValue(17); final b = integerValue(false);"
 		require.NoError(t,s.Exec(t.Context(),source))
 		require.Equal(t,string(native),fmt.Sprintf("%s %s\n",s.Globals()["a"].String(),s.Globals()["b"].String()))
 		require.Equal(t,fallback,s.Globals()["b"].String())

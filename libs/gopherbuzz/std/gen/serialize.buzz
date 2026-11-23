@@ -1,0 +1,77 @@
+// Code generated from gopherbuzz/std by stdgen. DO NOT EDIT.
+namespace serialize;
+import "serializecore";
+export object JsonParseError { message: str?, }
+export object Boxed {
+    q: any = null,
+    static fun init(data: any) > Boxed { return serializecore\wrap(Boxed, data); }
+    fun string() > str? { return boxedString(serializecore\raw(this)); }
+    fun stringValue() > str { return boxedStringValue(serializecore\raw(this)); }
+    fun boolean() > bool? { return boxedBoolean(serializecore\raw(this)); }
+    fun booleanValue() > bool { return boxedBooleanValue(serializecore\raw(this)); }
+    fun integer() > int? { return boxedInteger(serializecore\raw(this)); }
+    fun integerValue() > int { return boxedIntegerValue(serializecore\raw(this)); }
+    fun floating() > double? { return boxedFloating(serializecore\raw(this)); }
+    fun float() > double? { return this.floating(); }
+    fun floatingValue() > double { return boxedFloatingValue(serializecore\raw(this)); }
+    fun floatValue() > double { return this.floatingValue(); }
+    fun map() > {str: Boxed}? { return serializecore\map(Boxed, this); }
+    fun mapValue() > {str: Boxed} { return this.map() ?? {}; }
+    fun list() > [Boxed]? { return serializecore\list(Boxed, this); }
+    fun listValue() > [Boxed] { return this.list() ?? []; }
+}
+fun boxedString(data: any) > str? {
+if (data is str) {
+return data;
+}
+return null;
+}
+fun boxedStringValue(data: any) > str {
+if (data is str) {
+return data;
+}
+return "";
+}
+fun boxedBoolean(data: any) > bool? {
+if (data is bool) {
+return data;
+}
+return null;
+}
+fun boxedBooleanValue(data: any) > bool {
+if (data is bool) {
+return data;
+}
+return false;
+}
+fun boxedInteger(data: any) > int? {
+if (data is int) {
+return data;
+}
+return null;
+}
+fun boxedIntegerValue(data: any) > int {
+if (data is int) {
+return data;
+}
+return 0;
+}
+fun boxedFloating(data: any) > double? {
+if (data is double) {
+return data;
+}
+return null;
+}
+fun boxedFloatingValue(data: any) > double {
+if (data is double) {
+return data;
+}
+return 0.0;
+}
+export fun serialize(value: any) > any { return serializecore\serialize(value); }
+export fun jsonEncode(data: any) > str { return serializecore\jsonEncode(data); }
+export fun jsonDecode(json: str) > Boxed !> JsonParseError {
+    final decoded = serializecore\decode(json);
+    if (decoded.error -> message) { throw JsonParseError{message = message}; }
+    return Boxed.init(decoded.value);
+}

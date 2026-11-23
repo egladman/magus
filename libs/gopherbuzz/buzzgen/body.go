@@ -11,8 +11,9 @@ import (
 
 const scalarVM = "github.com/egladman/magus/libs/gopherbuzz/vm"
 
-// ScalarMethod binds the Go parameter to the Buzz object's data field.
-func (p *Program) ScalarMethod(pkgPath, goFunction, buzzMethod, resultType string) (string, error) {
+// ScalarFunction lowers a Go function on one VM value into a Buzz function.
+// Its caller supplies the value independently of the object's layout.
+func (p *Program) ScalarFunction(pkgPath, goFunction, buzzFunction, resultType string) (string, error) {
 	pkg, err := p.Package(pkgPath)
 	if err != nil {
 		return "", err
@@ -46,7 +47,7 @@ func (p *Program) ScalarMethod(pkgPath, goFunction, buzzMethod, resultType strin
 				return ""
 			}
 			var out strings.Builder
-			fmt.Fprintf(&out, "fun %s() > %s {\n", buzzMethod, resultType)
+			fmt.Fprintf(&out, "fun %s(data: any) > %s {\n", buzzFunction, resultType)
 			var emit func(*ast.BlockStmt) error
 			emit = func(block *ast.BlockStmt) error {
 				for _, stmt := range block.List {
@@ -61,7 +62,7 @@ func (p *Program) ScalarMethod(pkgPath, goFunction, buzzMethod, resultType strin
 						if !ok || !isParam(sel.X) || typ == "" {
 							return fmt.Errorf("%s: unsupported predicate", pkg.Fset.Position(call.Pos()))
 						}
-						fmt.Fprintf(&out, "if (this.data is %s) {\n", typ)
+						fmt.Fprintf(&out, "if (data is %s) {\n", typ)
 						if err := emit(s.Body); err != nil {
 							return err
 						}
@@ -72,7 +73,7 @@ func (p *Program) ScalarMethod(pkgPath, goFunction, buzzMethod, resultType strin
 							x := s.Results[0]
 							val = map[string]string{"Null":"null","False":"false","True":"true"}[member(x)]
 							if isParam(x) {
-								val = "this.data"
+								val = "data"
 							}
 							if c, ok := x.(*ast.CallExpr); ok && len(c.Args)==1 {
 								v := pkg.TypesInfo.Types[c.Args[0]].Value
