@@ -17,7 +17,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
-
 func TestCodexHookAttributesTheLeaseAndUsageToTheCallingRollout(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, "sessions")

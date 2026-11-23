@@ -89,4 +89,3 @@ var magusMCPTools = []MCPTool{
 		},
 	},
 }
-

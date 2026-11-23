@@ -42,7 +42,6 @@ import (
 // costStateKind holds a session main thread's costState.
 const costStateKind hint.MarkerKind = "cost-main"
 
-
 func (who hookAttribution) withTranscriptCaller(readUsage bool) hookAttribution {
 	var sample *types.ContextWindow
 	if readUsage {
