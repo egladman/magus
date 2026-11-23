@@ -22,18 +22,18 @@ func TestProjectLookup(t *testing.T) {
 			{ID: "module:magus", Kind: types.KindModule},
 		},
 	}
-	page := projectLookup(result)
-	require.Equal(t, []lookupMatch{{ID: "method:magus.where", Signature: "where(path: str) -> str"}, {ID: "project:docs"}}, page.Matches)
-	require.Equal(t, 5, page.Total)
-	require.Equal(t, 4, *page.NextOffset)
+	next := 4
+	want := lookupPage{
+		Matches: []lookupMatch{{ID: "method:magus.where", Signature: "where(path: str) -> str"}, {ID: "project:docs"}},
+		Total: 5, NextOffset: &next,
+	}
+	require.Equal(t, want, projectLookup(result))
 
 	result.MatchCount = 4
-	require.Nil(t, projectLookup(result).NextOffset)
+	want.Total, want.NextOffset = 4, nil
+	require.Equal(t, want, projectLookup(result))
 	result = types.KnowledgeQueryOutput{Answer: types.KnowledgeAnswer{Verdict: types.VerdictUnknown}}
-	empty := projectLookup(result)
-	require.Equal(t, types.VerdictUnknown, empty.Verdict)
-	require.NotNil(t, empty.Matches)
-	require.Nil(t, empty.NextOffset)
+	require.Equal(t, lookupPage{Matches: []lookupMatch{}, Verdict: types.VerdictUnknown}, projectLookup(result))
 }
 
 func TestQueryRejectsInvalidInputs(t *testing.T) {
