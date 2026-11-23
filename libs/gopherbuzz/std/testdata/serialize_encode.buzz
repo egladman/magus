@@ -1,4 +1,9 @@
 // @expect: 42
 import "serialize";
-final boxed = serialize\jsonDecode("[42]");
-final __r = boxed.listValue()[0].integerValue();
+var __r: any = null;
+try {
+    final boxed = serialize\jsonDecode("[42]");
+    __r = boxed.listValue()[0].integerValue();
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}

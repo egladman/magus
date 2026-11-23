@@ -192,7 +192,12 @@ func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	Register(s)
 	require.NoError(t, s.Exec(t.Context(), `import "serialize";
-final f = serialize\jsonDecode("[10.0]").q([0]).floatValue();`))
+var f = 0.0;
+try {
+    f = serialize\jsonDecode("[10.0]").q([0]).floatValue();
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}`))
 	assert.InDelta(t, 10.0, s.Globals()["f"].AsFloat(), 0)
 }
 
@@ -220,17 +225,26 @@ func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
 }
 
 func TestJSONDecodeRaisesTypedParseError(t *testing.T) {
-	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
-	t.Cleanup(func() { _ = s.Close() })
-	Register(s)
-	require.NoError(t, s.Exec(t.Context(), `import "serialize";
+	for _, tc := range []struct{ name, imports, decode, typ string }{
+		{"default", `import "serialize";`, `serialize\jsonDecode`, `serialize\JsonParseError`},
+		{"alias", `import "serialize" as wire;`, `wire\jsonDecode`, `wire\JsonParseError`},
+		{"two aliases", `import "serialize" as wire; import "serialize" as other;`, `wire\jsonDecode`, `other\JsonParseError`},
+		{"selective", `import jsonDecode, JsonParseError from "serialize";`, "jsonDecode", "JsonParseError"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+			t.Cleanup(func() { _ = s.Close() })
+			Register(s)
+			require.NoError(t, s.Exec(t.Context(), tc.imports+`
 var message = "";
 try {
-    _ = serialize\jsonDecode("[");
-} catch (err: serialize\JsonParseError) {
+    _ = `+tc.decode+`("[");
+} catch (err: `+tc.typ+`) {
     message = err.message ?? "";
 }`))
-	assert.Contains(t, s.Globals()["message"].AsString(), "serialize.jsonDecode:")
+			assert.Contains(t, s.Globals()["message"].AsString(), "serialize.jsonDecode:")
+		})
+	}
 }
 
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
@@ -242,7 +256,12 @@ func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	}
 	s, err := exec(`import "serialize";
 fun amount(b: serialize\Boxed) > int { return b.q(["a"]).integerValue() + b.q("a").integerValue(); }
-final n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+var n = 0;
+try {
+    n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}
 final m = amount(serialize\Boxed.init({"a": 4}));`)
 	require.NoError(t, err)
 	assert.Equal(t, int64(6), s.Globals()["n"].AsInt())

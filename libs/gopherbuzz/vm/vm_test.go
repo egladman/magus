@@ -147,6 +147,7 @@ func TestCaughtNativeErrorUsesDeclaredType(t *testing.T) {
 	first := &objectDefObj{Name: "Failure", Fields: []ast.ObjField{{Name: "url"}, {Name: "message"}}}
 	second := &objectDefObj{Name: "Failure"}
 	env.Define(`first\Failure`, machine.allocObjectDef(first))
+	env.Define(NativeTypeKey(`first\Failure`), machine.allocObjectDef(first))
 	env.Define(`second\Failure`, machine.allocObjectDef(second))
 	env.Define("Failure", machine.allocObjectDef(second))
 	v := machine.caughtValue(env, nativeFailure{structured{msg: "failed", url: "example"}})

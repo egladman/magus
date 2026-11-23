@@ -2385,9 +2385,30 @@ func (s *Session) declareObjectTypes(boundName, resolvePath, src string, prog *a
 	// annotate-only. Returning the error instead would take a working import down
 	// over a capability it never had.
 	if _, err := s.execImport(s.ctx, src); err == nil {
-		s.bindQualifiedTypes(boundName, prog)
+		s.bindNativeObjectTypes(boundName, resolvePath, prog, mod)
 	}
 	return nil
+}
+
+// A native constructor may already provide static methods on the public member.
+// The VM stores nominal identity separately so a local alias cannot shadow it.
+func (s *Session) bindNativeObjectTypes(boundName, path string, prog *ast.Program, mod vmpackage.Value) {
+	for _, stmt := range prog.Stmts {
+		obj, ok := stmt.(*ast.ObjectDecl)
+		if !ok || !obj.IsExported {
+			continue
+		}
+		def, bound := s.env.Get(obj.Name)
+		if !bound || !def.IsObjectDef() {
+			continue
+		}
+		s.env.Define(QualifiedTypeKey(boundName, obj.Name), def)
+		name := QualifiedTypeKey(strings.ReplaceAll(path, "/", `\`), obj.Name)
+		s.env.Define(vmpackage.NativeTypeKey(name), def)
+		if _, exists := mod.MapGet(obj.Name); !exists {
+			mod.MapSet(obj.Name, def)
+		}
+	}
 }
 
 // declaresOnlyObjects reports whether prog exports an object and no function
@@ -2441,7 +2462,7 @@ func (s *Session) execObjectMethods(boundName, resolvePath, src string, prog *as
 	if _, err := s.execImport(s.ctx, src); err != nil {
 		return bzz.Errorf(UnresolvedImport, "buzz: module %s: its object methods cannot load: %v", resolvePath, err)
 	}
-	s.bindQualifiedTypes(boundName, prog)
+	s.bindNativeObjectTypes(boundName, resolvePath, prog, mod)
 	return nil
 }
 

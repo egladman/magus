@@ -2148,6 +2148,10 @@ type uncaughtError struct {
 
 func (e *uncaughtError) Error() string { return e.msg }
 
+// NativeTypeKey identifies a native type across import aliases.
+// A Buzz identifier cannot shadow this binding.
+func NativeTypeKey(qualifiedName string) string { return "\x00native:" + qualifiedName }
+
 // caughtValue renders a host error as the value a `catch` binds.
 //
 // An ordinary error becomes its message, which is what upstream Buzz does and what this
@@ -2186,7 +2190,7 @@ func (vm *VM) caughtValue(env *Env, err error) Value {
 	var te TypedError
 	if errors.As(err, &te) && te.BuzzErrorType() != "" {
 		name := te.BuzzErrorType()
-		if bound, ok := env.get(name); ok && bound.tag() == tagObjectDef {
+		if bound, ok := env.get(NativeTypeKey(name)); ok && bound.tag() == tagObjectDef {
 			// A typed catch compares definition pointers. Resolve the host's exact
 			// namespace binding and lay out fields in declaration order.
 			def := vm.asObjectDef(bound)
