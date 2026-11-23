@@ -103,7 +103,7 @@ func (r jobRecord) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON reads the record, keeping the members it does not declare in Unknown.
 func (r *jobRecord) UnmarshalJSON(data []byte) error {
-	fields, err := gen.Job.Inspect(data)
+	fields, err := jobgen.Job.Inspect(data)
 	if err != nil {
 		return err
 	}
@@ -967,5 +967,5 @@ func unmarshalWithSchema(data []byte, dst any, schema *codec.ObjectSchema) error
 
 func (r *attemptRecord) UnmarshalJSON(data []byte) error {
 	type plain attemptRecord
-	return unmarshalWithSchema(data, (*plain)(r), &gen.Attempt)
+	return unmarshalWithSchema(data, (*plain)(r), &jobgen.Attempt)
 }
