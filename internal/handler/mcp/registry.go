@@ -56,20 +56,20 @@ var Registry = checkedRegistry([]ToolDescriptor{
 		},
 	},
 	{
-		Name: hint.ToolStatus.String(),
-		Description:  "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
+		Name:        hint.ToolStatus.String(),
+		Description: "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
 	},
 	{
-		Name: hint.ToolConsole.String(),
-		Description:  "Return a tokenless link to a local magus console app, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
+		Name:        hint.ToolConsole.String(),
+		Description: "Return a tokenless link to a local magus console app, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []ParamDescriptor{
 			{Name: "app", Type: schemaString, Description: "Console app to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
 			{Name: "reason", Type: schemaString, Description: "Optional brief text a compatible MCP client may show with the link."},
 		},
 	},
 	{
-		Name: hint.ToolConfig.String(),
-		Description:  "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
+		Name:        hint.ToolConfig.String(),
+		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
 		// No Member: magus\change().diff reads the working tree's changes.
