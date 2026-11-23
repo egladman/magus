@@ -6,6 +6,20 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
+export object Event {
+    kind: int = 0,
+    key: int = 0,
+    rune: int = 0,
+    button: int = 0,
+    row: int = 0,
+    col: int = 0,
+    press: bool = false,
+    motion: bool = false,
+    clicks: int = 0,
+}
+
 export object Span {
     text: str = "",
     style: str = "",
@@ -26,24 +40,24 @@ extern fun termkit__Line__spansCopy(recv: Line) > any;
 
 export extern fun canRender(p: int) > bool !> any;
 export extern fun captureProbe(width: int, height: int) > int;
-export extern fun clearScreen() > void !> any;
+export extern fun clearScreen() > result\Result::<bool>;
 export extern fun colorize(s: str, sgr: str) > str;
-export extern fun copy(text: str) > int !> any;
-export extern fun eraseLines(n: int) > void !> any;
+export extern fun copy(text: str) > result\Result::<int>;
+export extern fun eraseLines(n: int) > result\Result::<bool>;
 export extern fun errNotATerminal() > str;
 export extern fun eventKey() > int;
 export extern fun eventMouse() > int;
 export extern fun fd() > any;
 export extern fun fixedProbe(width: int, height: int) > int;
 export extern fun hyperlink(text: str, uri: str) > str;
-export extern fun inlineViewClear(inlineView: int) > void !> any;
+export extern fun inlineViewClear(inlineView: int) > result\Result::<bool> !> any;
 export extern fun inlineViewFinish(inlineView: int) > void !> any;
 export extern fun inlineViewLines(inlineView: int) > int !> any;
 export extern fun inlineViewPaint(inlineView: int, frame: str) > bool !> any;
 export extern fun inlineViewReset(inlineView: int) > void !> any;
-export extern fun inputClose(input: int) > void !> any;
+export extern fun inputClose(input: int) > result\Result::<bool> !> any;
 export extern fun inputCursorPosition(input: int) > any !> any;
-export extern fun inputRead(input: int) > {str: any} !> any;
+export extern fun inputRead(input: int) > result\Result::<Event> !> any;
 export extern fun isTerminalReader(p: int) > bool !> any;
 export extern fun isTerminalWriter(p: int) > bool !> any;
 export extern fun keyBackspace() > int;
@@ -64,12 +78,12 @@ export extern fun keyTab() > int;
 export extern fun keyUnknown() > int;
 export extern fun keyUp() > int;
 export extern fun leaseEnabled(lease: int) > bool !> any;
-export extern fun leaseGrow(lease: int, rows: int) > void !> any;
-export extern fun leaseRelease(lease: int) > void !> any;
+export extern fun leaseGrow(lease: int, rows: int) > result\Result::<bool> !> any;
+export extern fun leaseRelease(lease: int) > result\Result::<bool> !> any;
 export extern fun leaseRows(lease: int) > int !> any;
-export extern fun leaseSet(lease: int, rows: any) > bool !> any;
+export extern fun leaseSet(lease: int, rows: any) > result\Result::<bool> !> any;
 export extern fun leaseWidth(lease: int) > int !> any;
-export extern fun makeRaw(fd: int) > int !> any;
+export extern fun makeRaw(fd: int) > result\Result::<int> !> any;
 export extern fun mouseLeft() > int;
 export extern fun mouseMiddle() > int;
 export extern fun mouseNone() > int;
@@ -78,15 +92,15 @@ export extern fun mouseWheelDown() > int;
 export extern fun mouseWheelUp() > int;
 export extern fun newInlineView(p: int) > int !> any;
 export extern fun newZone(p: int) > int !> any;
-export extern fun openInput(p: int) > int !> any;
+export extern fun openInput(p: int) > result\Result::<int> !> any;
 export extern fun probeIsTerminal(probe: int, fd: int) > bool !> any;
-export extern fun probeSize(probe: int, fd: int) > any !> any;
+export extern fun probeSize(probe: int, fd: int) > result\Result::<any> !> any;
 export extern fun prose(p: int, sentences: [str]) > void !> any;
 export extern fun proseItem(p: int, label: str, sentences: [str]) > void !> any;
-export extern fun rawModeRestore(rawMode: int) > void !> any;
-export extern fun releaseStderrZone() > void !> any;
-export extern fun resetMouseTracking(p: int) > void !> any;
-export extern fun resetScrollMargins(p: int) > void !> any;
+export extern fun rawModeRestore(rawMode: int) > result\Result::<bool> !> any;
+export extern fun releaseStderrZone() > result\Result::<bool>;
+export extern fun resetMouseTracking(p: int) > result\Result::<bool> !> any;
+export extern fun resetScrollMargins(p: int) > result\Result::<bool> !> any;
 export extern fun resolveZone() > int;
 export extern fun selectMark() > str;
 export extern fun sgrBlue() > str;
@@ -108,7 +122,7 @@ export extern fun wantsColor(p: int) > bool !> any;
 export extern fun wantsHyperlinks(p: int) > bool !> any;
 export extern fun wantsUnicode(p: int) > bool !> any;
 export extern fun zoneAcquire(zone: int, rows: int) > int !> any;
-export extern fun zoneClose(zone: int) > void !> any;
+export extern fun zoneClose(zone: int) > result\Result::<bool> !> any;
 export extern fun zoneHitSpan(zone: int, row: int, col: int) > any !> any;
 export extern fun zoneHitTest(zone: int, row: int) > any !> any;
 export extern fun zoneWantsColor(zone: int) > bool !> any;

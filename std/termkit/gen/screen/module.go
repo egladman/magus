@@ -10,6 +10,7 @@ import (
 	lib "github.com/egladman/magus/libs/termkit/screen"
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
+	types "github.com/egladman/magus/types"
 	slices "slices"
 )
 
@@ -29,8 +30,8 @@ var Module = std.Module{
 		{
 			Name:    "animate",
 			Doc:     "Animate renders a sequence of frames as one self-contained animated SVG.",
-			Args:    []std.Arg{{Name: "frames"}, {Name: "holds"}, {Name: "opts"}},
-			Returns: []std.Ret{{}},
+			Args:    []std.Arg{{Name: "frames"}, {Name: "holds"}, {Name: "opts", Object: "SVGOptions"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeString.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplAnimate,
 		},
@@ -53,7 +54,7 @@ var Module = std.Module{
 			Name:    "terminal_write",
 			Doc:     "Calls Terminal.Write.",
 			Args:    []std.Arg{{Name: "terminal"}, {Name: "p"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplTerminalWrite,
 		},
@@ -156,7 +157,7 @@ var Module = std.Module{
 		{
 			Name:    "terminal_svg",
 			Doc:     "SVG renders what the terminal currently shows as a standalone SVG picture.",
-			Args:    []std.Arg{{Name: "terminal"}, {Name: "opts"}},
+			Args:    []std.Arg{{Name: "terminal"}, {Name: "opts", Object: "SVGOptions"}},
 			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    ImplTerminalSVG,
@@ -164,13 +165,13 @@ var Module = std.Module{
 		{
 			Name:    "dark_theme",
 			Doc:     "DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI primaries, which are harsh at small sizes on a page.",
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Theme"}},
 			Impl:    ImplDarkTheme,
 		},
 		{
 			Name:    "light_theme",
 			Doc:     "LightTheme renders on a page that is not dark.",
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Theme"}},
 			Impl:    ImplLightTheme,
 		},
 		{
@@ -353,24 +354,20 @@ func ImplVariantPath(ctx context.Context, aPath string, aSuffix string) (string,
 }
 
 // ImplAnimate binds github.com/egladman/magus/libs/termkit/screen.Animate.
-func ImplAnimate(ctx context.Context, aFrames any, aHolds any, aOpts map[string]any) (string, error) {
+func ImplAnimate(ctx context.Context, aFrames any, aHolds any, aOpts lib.SVGOptions) (types.Result[string], error) {
 	vFrames, err := convert.DecodeSlice(aFrames, func(x any) (*lib.Terminal, error) { return convert.Handle(TerminalHandles, x) })
 	if err != nil {
-		return "", fmt.Errorf("frames: %w", err)
+		return types.Result[string]{}, fmt.Errorf("frames: %w", err)
 	}
 	vHolds, err := convert.DecodeSlice(aHolds, func(x any) (float64, error) { return convert.Float(x) })
 	if err != nil {
-		return "", fmt.Errorf("holds: %w", err)
+		return types.Result[string]{}, fmt.Errorf("holds: %w", err)
 	}
-	vOpts, err := DecodeSVGOptions(aOpts)
+	r0, err := lib.Animate(vFrames, vHolds, aOpts)
 	if err != nil {
-		return "", fmt.Errorf("opts: %w", err)
+		return types.Result[string]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	r0, err := lib.Animate(vFrames, vHolds, vOpts)
-	if err != nil {
-		return "", err
-	}
-	return r0, nil
+	return types.Ok[string](r0), nil
 }
 
 // ImplNew binds github.com/egladman/magus/libs/termkit/screen.New.
@@ -390,16 +387,16 @@ func ImplTerminalFd(ctx context.Context, terminal int) (int, error) {
 }
 
 // ImplTerminalWrite binds github.com/egladman/magus/libs/termkit/screen.Terminal.Write.
-func ImplTerminalWrite(ctx context.Context, terminal int, aP []byte) (int, error) {
+func ImplTerminalWrite(ctx context.Context, terminal int, aP []byte) (types.Result[int], error) {
 	recv, err := TerminalHandles.Get(terminal)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{}, err
 	}
 	r0, err := recv.Write(aP)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return r0, nil
+	return types.Ok[int](r0), nil
 }
 
 // ImplTerminalRows binds github.com/egladman/magus/libs/termkit/screen.Terminal.Rows.
@@ -523,28 +520,20 @@ func ImplTerminalTrailingSpaceRows(ctx context.Context, terminal int) (any, erro
 }
 
 // ImplTerminalSVG binds github.com/egladman/magus/libs/termkit/screen.Terminal.SVG.
-func ImplTerminalSVG(ctx context.Context, terminal int, aOpts map[string]any) (string, error) {
+func ImplTerminalSVG(ctx context.Context, terminal int, aOpts lib.SVGOptions) (string, error) {
 	recv, err := TerminalHandles.Get(terminal)
 	if err != nil {
 		return "", err
 	}
-	vOpts, err := DecodeSVGOptions(aOpts)
-	if err != nil {
-		return "", fmt.Errorf("opts: %w", err)
-	}
-	r0 := recv.SVG(vOpts)
+	r0 := recv.SVG(aOpts)
 	return r0, nil
 }
 
 // ImplDarkTheme reads github.com/egladman/magus/libs/termkit/screen.DarkTheme.
-func ImplDarkTheme(ctx context.Context) (map[string]any, error) {
-	return EncodeTheme(lib.DarkTheme), nil
-}
+func ImplDarkTheme(ctx context.Context) (lib.Theme, error) { return lib.DarkTheme, nil }
 
 // ImplLightTheme reads github.com/egladman/magus/libs/termkit/screen.LightTheme.
-func ImplLightTheme(ctx context.Context) (map[string]any, error) {
-	return EncodeTheme(lib.LightTheme), nil
-}
+func ImplLightTheme(ctx context.Context) (lib.Theme, error) { return lib.LightTheme, nil }
 
 // ImplThemeVariants reads github.com/egladman/magus/libs/termkit/screen.ThemeVariants.
 func ImplThemeVariants(ctx context.Context) (any, error) {

@@ -364,7 +364,7 @@ type boundaryEnum struct {
 	// Type is nil for an enum only its module setting declares, which no
 	// signature or field reaches.
 	Type  reflect.Type
-	Cases []enumCase
+	Cases []buzzgen.EnumCase
 	// Module declares the enum in that host module's bundle although no signature or
 	// field names it: named values for a field that is a str because its set is open.
 	Module string
@@ -386,12 +386,6 @@ func (e boundaryEnum) nameIn(module string) string {
 		return e.key()
 	}
 	return e.Name
-}
-
-// enumCase is one case: the Buzz identifier and the string it carries.
-type enumCase struct {
-	Name  string
-	Value string
 }
 
 // buzzEnum returns the enum a Go type mirrors as, if any.

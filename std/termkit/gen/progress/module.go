@@ -12,6 +12,7 @@ import (
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
+	types "github.com/egladman/magus/types"
 	os "os"
 	time "time"
 )
@@ -26,7 +27,7 @@ var Module = std.Module{
 			Name:    "bar",
 			Doc:     "Bar draws done of total in cols cells, filled in eighths so it moves a fraction of a cell at a time.",
 			Args:    []std.Arg{{Name: "done"}, {Name: "total"}, {Name: "cols"}, {Name: "track"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Line"}},
 			Impl:    ImplBar,
 		},
 		{
@@ -71,55 +72,49 @@ var Module = std.Module{
 			Name:    "new_rotation",
 			Doc:     "NewRotation builds the selected rotation loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewRotation,
 		},
 		{
 			Name:    "new_glyph",
 			Doc:     "NewGlyph builds the selected glyph loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewGlyph,
 		},
 		{
 			Name:    "new_strip",
 			Doc:     "NewStrip builds the selected strip loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewStrip,
 		},
 		{
 			Name:    "new_text",
 			Doc:     "NewText builds the selected text loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewText,
 		},
 		{
 			Name:    "new_span",
 			Doc:     "NewSpan builds the selected span loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewSpan,
 		},
 		{
 			Name:    "new_column",
 			Doc:     "NewColumn builds the selected column loader.",
 			Args:    []std.Arg{{Name: "name"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplNewColumn,
 		},
 		{
 			Name:    "start_spinner",
 			Doc:     "StartSpinner starts a loader turning beside label on out and returns at once; the caller does its blocking work and then calls [Spinner.Stop].",
 			Args:    []std.Arg{{Name: "p"}, {Name: "label"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplStartSpinner,
 		},
@@ -360,9 +355,9 @@ var LoaderHandles = convert.NewTable[lib.Loader]("Loader")
 var SpinnerHandles = convert.NewTable[*lib.Spinner]("Spinner")
 
 // ImplBar binds github.com/egladman/magus/libs/termkit/progress.Bar.
-func ImplBar(ctx context.Context, aDone int, aTotal int, aCols int, aTrack libtermkit.SGR) (map[string]any, error) {
+func ImplBar(ctx context.Context, aDone int, aTotal int, aCols int, aTrack libtermkit.SGR) (libtermkit.Line, error) {
 	r0 := lib.Bar(aDone, aTotal, aCols, aTrack)
-	return gentermkit.EncodeLine(r0), nil
+	return r0, nil
 }
 
 // ImplLoaderWidth binds github.com/egladman/magus/libs/termkit/progress.Loader.Width.
@@ -416,70 +411,70 @@ func ImplCatalog(ctx context.Context) (any, error) {
 }
 
 // ImplNewRotation binds github.com/egladman/magus/libs/termkit/progress.NewRotation.
-func ImplNewRotation(ctx context.Context, aName lib.RotationName) (int, error) {
+func ImplNewRotation(ctx context.Context, aName lib.RotationName) (types.Result[int], error) {
 	r0, err := lib.NewRotation(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplNewGlyph binds github.com/egladman/magus/libs/termkit/progress.NewGlyph.
-func ImplNewGlyph(ctx context.Context, aName lib.GlyphName) (int, error) {
+func ImplNewGlyph(ctx context.Context, aName lib.GlyphName) (types.Result[int], error) {
 	r0, err := lib.NewGlyph(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplNewStrip binds github.com/egladman/magus/libs/termkit/progress.NewStrip.
-func ImplNewStrip(ctx context.Context, aName lib.StripName) (int, error) {
+func ImplNewStrip(ctx context.Context, aName lib.StripName) (types.Result[int], error) {
 	r0, err := lib.NewStrip(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplNewText binds github.com/egladman/magus/libs/termkit/progress.NewText.
-func ImplNewText(ctx context.Context, aName lib.TextName) (int, error) {
+func ImplNewText(ctx context.Context, aName lib.TextName) (types.Result[int], error) {
 	r0, err := lib.NewText(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplNewSpan binds github.com/egladman/magus/libs/termkit/progress.NewSpan.
-func ImplNewSpan(ctx context.Context, aName lib.SpanName) (int, error) {
+func ImplNewSpan(ctx context.Context, aName lib.SpanName) (types.Result[int], error) {
 	r0, err := lib.NewSpan(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplNewColumn binds github.com/egladman/magus/libs/termkit/progress.NewColumn.
-func ImplNewColumn(ctx context.Context, aName lib.ColumnName) (int, error) {
+func ImplNewColumn(ctx context.Context, aName lib.ColumnName) (types.Result[int], error) {
 	r0, err := lib.NewColumn(aName)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return LoaderHandles.Put(r0), nil
+	return types.Ok[int](LoaderHandles.Put(r0)), nil
 }
 
 // ImplStartSpinner binds github.com/egladman/magus/libs/termkit/progress.StartSpinner.
-func ImplStartSpinner(ctx context.Context, aP int, aLabel string) (int, error) {
+func ImplStartSpinner(ctx context.Context, aP int, aLabel string) (types.Result[int], error) {
 	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
 	if err != nil {
-		return 0, fmt.Errorf("p: %w", err)
+		return types.Result[int]{}, fmt.Errorf("p: %w", err)
 	}
 	r0, err := lib.StartSpinner(os.Stderr, vP, aLabel)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return SpinnerHandles.Put(r0), nil
+	return types.Ok[int](SpinnerHandles.Put(r0)), nil
 }
 
 // ImplSpinnerStop binds github.com/egladman/magus/libs/termkit/progress.Spinner.Stop.

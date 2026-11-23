@@ -68,7 +68,7 @@ var Module = std.Module{
 			Name:    "hints",
 			Doc:     "Hints joins hints into one row no wider than width columns.",
 			Args:    []std.Arg{{Name: "hints"}, {Name: "width"}, {Name: "style"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "Line"}},
 			Raises:  true,
 			Impl:    ImplHints,
 		},
@@ -202,13 +202,13 @@ func ImplTree(ctx context.Context, aI int, aN int, aAscii bool) (string, error) 
 }
 
 // ImplHints binds github.com/egladman/magus/libs/termkit/layout.Hints.
-func ImplHints(ctx context.Context, aHints any, aWidth int, aStyle libtermkit.SGR) (map[string]any, error) {
+func ImplHints(ctx context.Context, aHints any, aWidth int, aStyle libtermkit.SGR) (libtermkit.Line, error) {
 	vHints, err := convert.DecodeSlice(aHints, func(x any) (lib.Hint, error) { return DecodeHint(x) })
 	if err != nil {
-		return nil, fmt.Errorf("hints: %w", err)
+		return libtermkit.Line{}, fmt.Errorf("hints: %w", err)
 	}
 	r0 := lib.Hints(vHints, aWidth, aStyle)
-	return gentermkit.EncodeLine(r0), nil
+	return r0, nil
 }
 
 // ImplMaxLabel reads github.com/egladman/magus/libs/termkit/layout.MaxLabel.

@@ -6,6 +6,8 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
 export enum ColumnName {
     fill,
     elevator,
@@ -48,7 +50,19 @@ export enum TextName {
     typewriter,
 }
 
-export extern fun bar(done: int, total: int, cols: int, track: str) > {str: any};
+export object Span {
+    text: str = "",
+    style: str = "",
+    key: str = "",
+}
+
+export object Line {
+    text: str = "",
+    style: str = "",
+    spans: [Span] = [],
+}
+
+export extern fun bar(done: int, total: int, cols: int, track: str) > Line;
 export extern fun catalog() > any;
 export extern fun column() > str;
 export extern fun columnElevator() > str;
@@ -69,12 +83,12 @@ export extern fun loaderLabel(loader: int, text: str) > int !> any;
 export extern fun loaderName(loader: int) > str !> any;
 export extern fun loaderRows(loader: int) > int !> any;
 export extern fun loaderWidth(loader: int, cols: int) > int !> any;
-export extern fun newColumn(name: ColumnName) > int !> any;
-export extern fun newGlyph(name: GlyphName) > int !> any;
-export extern fun newRotation(name: RotationName) > int !> any;
-export extern fun newSpan(name: SpanName) > int !> any;
-export extern fun newStrip(name: StripName) > int !> any;
-export extern fun newText(name: TextName) > int !> any;
+export extern fun newColumn(name: ColumnName) > result\Result::<int>;
+export extern fun newGlyph(name: GlyphName) > result\Result::<int>;
+export extern fun newRotation(name: RotationName) > result\Result::<int>;
+export extern fun newSpan(name: SpanName) > result\Result::<int>;
+export extern fun newStrip(name: StripName) > result\Result::<int>;
+export extern fun newText(name: TextName) > result\Result::<int>;
 export extern fun rotation() > str;
 export extern fun rotationClock() > str;
 export extern fun rotationComet() > str;
@@ -86,7 +100,7 @@ export extern fun span() > str;
 export extern fun spanComet() > str;
 export extern fun spanProgress() > str;
 export extern fun spinnerStop(spinner: int) > void !> any;
-export extern fun startSpinner(p: int, label: str) > int !> any;
+export extern fun startSpinner(p: int, label: str) > result\Result::<int> !> any;
 export extern fun strip() > str;
 export extern fun stripDots() > str;
 export extern fun stripEqualizer() > str;
