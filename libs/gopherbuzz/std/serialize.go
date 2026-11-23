@@ -106,28 +106,16 @@ func makeBoxed(v vm.Value) vm.Value {
 		return makeBoxed(cur), nil
 	}))
 	m.MapSet("string", function("Boxed.string", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsString() {
-			return v, nil
-		}
-		return vm.Null, nil
+		return boxedString(v), nil
 	}))
 	m.MapSet("boolean", function("Boxed.boolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsBool() {
-			return v, nil
-		}
-		return vm.Null, nil
+		return boxedBoolean(v), nil
 	}))
 	m.MapSet("integer", function("Boxed.integer", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsInt() {
-			return v, nil
-		}
-		return vm.Null, nil
+		return boxedInteger(v), nil
 	}))
 	floating := function("Boxed.floating", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsFloat() {
-			return v, nil
-		}
-		return vm.Null, nil
+		return boxedFloating(v), nil
 	})
 	m.MapSet("floating", floating)
 	m.MapSet("float", floating) // upstream serialize names it float()
@@ -155,28 +143,16 @@ func makeBoxed(v vm.Value) vm.Value {
 		return vm.ListValue(out), nil
 	}))
 	m.MapSet("stringValue", function("Boxed.stringValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsString() {
-			return v, nil
-		}
-		return vm.StringValue(""), nil
+		return boxedStringValue(v), nil
 	}))
 	m.MapSet("booleanValue", function("Boxed.booleanValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsBool() {
-			return v, nil
-		}
-		return vm.False, nil
+		return boxedBooleanValue(v), nil
 	}))
 	m.MapSet("integerValue", function("Boxed.integerValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsInt() {
-			return v, nil
-		}
-		return vm.IntValue(0), nil
+		return boxedIntegerValue(v), nil
 	}))
 	floatingValue := function("Boxed.floatingValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if v.IsFloat() {
-			return v, nil
-		}
-		return vm.FloatValue(0), nil
+		return boxedFloatingValue(v), nil
 	})
 	m.MapSet("floatingValue", floatingValue)
 	m.MapSet("floatValue", floatingValue) // upstream serialize names it floatValue()
