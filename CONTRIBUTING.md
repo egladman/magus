@@ -723,7 +723,7 @@ Concretely:
   artifacts, and holds thin provider glue: a few lines that redirect what
   magus printed into a file the host reads, such as `>> "$GITHUB_OUTPUT"`
   or `>> "$GITHUB_STEP_SUMMARY"`. Glue moves bytes. It never decides
-  anything: no conditionals, loops, parsing (`jq`, `sed`, `awk`) or string
+  anything: no conditionals, loops, parsing or string
   building. If a step needs one of those, the work belongs in magus or a
   target, and magus should print the finished bytes.
 - **magus and the magusfile targets** hold the actual work: which projects

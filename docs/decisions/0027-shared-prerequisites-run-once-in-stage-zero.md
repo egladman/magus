@@ -115,8 +115,8 @@ match the size of the named shard's stage.
 
 ### The provider
 
-Only `.github/workflows/ci.yaml` knows GitHub. The plan job reads `stage_zero` with
-`jq` into `stage_zero_count` and `stage_zero_matrix`. The `stage-zero` job runs each
+Only `.github/workflows/ci.yaml` knows GitHub. The plan job derives
+`stage_zero_count` and `stage_zero_matrix` from `stage_zero`. The `stage-zero` job runs each
 shard as a `ci` shard runs, then `magus config cache export --to` writes the local
 tier, and the job uploads the archive with its sha256 as a run-scoped artifact. Each
 `ci` shard downloads every archive, checks each digest, and runs

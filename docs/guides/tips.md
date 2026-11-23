@@ -108,7 +108,7 @@ ProjectEntry:
   depends_on  []string
 ```
 
-Then write the template (or `jq` filter) against those keys:
+Use those keys in the output template:
 
 ```sh
 magus describe projects -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
