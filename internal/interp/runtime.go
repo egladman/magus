@@ -584,7 +584,8 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 	stamps := filepath.Join(base, "magus", name)
 	dir := filepath.Join(stamps, stamp)
 	now := time.Now()
-	switch err := os.Chtimes(dir, now, now); {
+	info, err := os.Stat(dir)
+	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("no user cache: %w", err)
@@ -592,11 +593,17 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
 	case err != nil:
 		return nil, fmt.Errorf("unusable user cache: %w", err)
+	case !info.IsDir():
+		return nil, fmt.Errorf("compiler cache %s is not a directory", dir)
+	case now.Sub(info.ModTime()) >= staleStampAge/2:
+		if err := os.Chtimes(dir, now, now); err != nil {
+			slog.With(attr.Component("interp")).Warn("could not refresh compiler cache timestamp", attr.Error(err))
+		}
 	}
 	sum := sha256.Sum256([]byte(abs))
 	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
 	if err := sweepChunks(dir, now); err != nil {
-		return nil, fmt.Errorf("sweep %s: %w", dir, err)
+		slog.With(attr.Component("interp")).Warn("could not sweep compiler cache", attr.Error(err))
 	}
 	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secrets.New(string(secret)), scope: dir}, nil
 }

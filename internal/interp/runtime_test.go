@@ -939,6 +939,29 @@ func (s *BytecodeCacheSuite) TestWarmLoadCompilesNothing() {
 	s.Equal([]any{"one", false}, []any{marker, compiled}, "the stored chunk ran")
 }
 
+func (s *BytecodeCacheSuite) TestReadOnlyCacheVerifiesStoredChunks() {
+	s.load(s.T().Context(), s.source(), true)
+	dir := s.storeDir()
+	s.Require().NoError(os.Chmod(dir, 0o500))
+	s.T().Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	logs := s.captureLog()
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", false}, []any{marker, compiled})
+	s.Contains(logs.String(), "could not sweep compiler cache")
+
+	for path := range storedChunks(s.T(), s.cache) {
+		chunk, err := os.ReadFile(path)
+		s.Require().NoError(err)
+		s.Require().NotEmpty(chunk)
+		chunk[0] ^= 1
+		s.Require().NoError(os.WriteFile(path, chunk, 0o600))
+	}
+	marker, compiled = s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+	s.Contains(logs.String(), "bytecode chunk does not verify")
+	s.Contains(logs.String(), "could not keep the compiled chunk")
+}
+
 func (s *BytecodeCacheSuite) TestEditedMagusfileCompilesAgain() {
 	s.load(s.T().Context(), s.source(), true)
 	s.w.Magusfile("import \"helper\";\nexport final marker = helper\\value() + \"!\";\n")
