@@ -245,6 +245,7 @@ var evidenceRecord = codec.ObjectSchema{Name: "evidenceRecord", Closed: true, Fi
 var resultRecord = codec.ObjectSchema{Name: "resultRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{
 	"job":                   nil,
 	"changed_paths":         nil,
+	"findings":              nil,
 	"validation":            &resultValidationRecord,
 	"verification_evidence": &codec.ObjectSchema{Element: &evidenceRecord},
 	"descendants":           nil,

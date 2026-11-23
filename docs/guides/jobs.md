@@ -84,15 +84,15 @@ scoped to the declared write paths, not every dirty file in a shared checkout.
 both the refused edit and its accepted committed form. A clean writing job still
 must return evidence, changed paths or a risk rather than an empty result.
 
-An exploratory prototype may be intentionally discarded. Remove only your own
-experimental changes, preserve others' work, and return the conclusion and its
-evidence. There is no requirement to commit a discarded prototype merely because
-it once existed. A retained written report needs a commit like any other retained
-file. If you abandon the job instead, use exit without a result: that records
-`no_return`, not a successful finding. A commit preserves the selected artifact
-and names a revision; it does not prove the conclusion. The recorded run and
-`wait` supply the mechanical evidence: command, result, freshness and footprint
-since the checkpoint (`CheckpointObserver` in `internal/job/observe.go`).
+For an experiment whose deliverable is a conclusion, fork a writing job with
+`--delivery findings`, write paths for the prototype, a checkpoint and a declared
+check. Run the check under the job lease while the prototype exists and save its
+output ref. Restore your experimental files to the checkpoint, then file the
+result with `magus job exit <id> --stdin`. Set `changed_paths` to `[]`, put the
+conclusion in the `findings` array, and include the check command and output ref
+in `validation`. The caller runs `magus job wait <id>` to verify the recorded
+check and the empty checkpoint diff. A passing findings job has no commit to
+merge. Use ordinary code delivery when the report or prototype belongs in Git.
 
 Ending a job also does not authorize losing its files. Cleanup checks the whole
 owned checkout and keeps dirty work or commits that no branch, bookmark, remote

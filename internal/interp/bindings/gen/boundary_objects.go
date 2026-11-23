@@ -912,6 +912,11 @@ func ObjectJobResult(v job.Result) vm.Value {
 		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
 	}
 	out.MapSet("requires", vm.ListValue(itemsRequires))
+	itemsFindings := make([]vm.Value, len(v.Findings))
+	for indexFindings := range v.Findings {
+		itemsFindings[indexFindings] = vm.StringValue(v.Findings[indexFindings])
+	}
+	out.MapSet("findings", vm.ListValue(itemsFindings))
 	out.MapSet("job", vm.StringValue(v.Job))
 	itemsChangedPaths := make([]vm.Value, len(v.ChangedPaths))
 	for indexChangedPaths := range v.ChangedPaths {

@@ -479,3 +479,40 @@ func (s *exitCommittedSuite) TestCommittedEditIsAccepted() {
 	s.Require().NoError(err)
 	s.NotEqual(job.StateRunning, exited.State)
 }
+
+func TestExitAndWaitForDiscardedPrototype(t *testing.T) {
+	t.Parallel()
+	const file = "internal/ledger/a.go"
+	const original = "package ledger\n"
+	repo := testkit.NewRepository(t, map[string]string{file: original})
+	row := acceptRow()
+	row.Delivery = job.DeliveryFindings
+	row.Checkpoint, row.CheckoutRoot = repo.Head(), repo.Root()
+	loc := declared(t, row)
+	result := passingResult()
+	result.ChangedPaths = nil
+	result.Findings = []string{"The prototype allocated twice per lookup."}
+	resolve := func(context.Context, string) (job.CapturedRun, error) {
+		run := passingRun
+		run.Ref, run.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+		return run, nil
+	}
+	holder := boundStore(loc, row.ID)
+	target := filepath.Join(repo.Root(), file)
+	require.NoError(t, os.WriteFile(target, []byte("package ledger // prototype\n"), 0o644))
+	_, err := Exit(t.Context(), holder, row.ID, &result, resolve)
+	require.ErrorContains(t, err, "discard the prototype")
+	require.ErrorContains(t, err, file)
+
+	require.NoError(t, os.WriteFile(target, []byte(original), 0o644))
+	exited, err := Exit(t.Context(), holder, row.ID, &result, resolve)
+	require.NoError(t, err)
+	require.Equal(t, job.StateExited, exited.State)
+	waiter := NewStore(loc)
+	status, err := Wait(t.Context(), waiter, row.ID, nil, nil, CheckpointObserver(repo.Root(), nil), nil)
+	require.NoError(t, err)
+	require.True(t, status.Verified, "%v", status.Violations)
+	assert.Equal(t, job.StatePass, storedRows(t, waiter)[row.ID].State)
+	assert.Equal(t, result.Findings, liveTry(t, waiter, row.ID).Status.Result.Findings)
+	assert.Equal(t, row.Checkpoint, repo.Head())
+}

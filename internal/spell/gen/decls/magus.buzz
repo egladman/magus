@@ -945,6 +945,7 @@ export object VerificationEvidence {
 export object JobResult {
     apiVersion: str = "",
     requires: [str] = [],
+    findings: [str] = [],
     job: str = "",
     changedPaths: [str] = [],
     validation: JobResultValidation = JobResultValidation{},

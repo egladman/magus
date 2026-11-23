@@ -128,6 +128,9 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 			return job.Job{}, fmt.Errorf("job: %s's result is refused: %s", id, unread)
 		}
 		if len(dirty) > 0 {
+			if rows[i].Delivery == job.DeliveryFindings {
+				return job.Job{}, fmt.Errorf("job: discard the prototype changes in %s (%s), then file the findings again", tree, listPaths(dirty))
+			}
 			return job.Job{}, fmt.Errorf("job: %s's checkout %s: %d path(s) in it hold uncommitted work (%s), so commit them, then file the result again",
 				id, tree, len(dirty), listPaths(dirty))
 		}
