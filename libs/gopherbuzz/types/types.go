@@ -86,10 +86,11 @@ func mutPrefix(mut bool) string {
 // FuncType is the type of a function value: its parameter types, return type
 // and the optional variadic, yield and raises markers.
 type FuncType struct {
-	Params   []Type
-	Ret      Type
-	Variadic bool // if true, caller may pass any number of args beyond len(Params)
-	Yield    Type // the *> yield type, when the function is wrapped in a fiber; nil if unannotated. Not part of TypeName/Compat — two functions differing only in Yield stay assignable.
+	RetOptional bool // The declared return type ends in ?.
+	Params      []Type
+	Ret         Type
+	Variadic    bool // if true, caller may pass any number of args beyond len(Params)
+	Yield       Type // the *> yield type, when the function is wrapped in a fiber; nil if unannotated. Not part of TypeName/Compat — two functions differing only in Yield stay assignable.
 	// Raises is true when the function declares a !> error set (or, for a host
 	// extern, is authored as raising in std.Method). Like Yield it is not part
 	// of TypeName/Compat — two functions differing only in Raises stay
@@ -129,10 +130,11 @@ func (f *FuncType) TypeName() string {
 // untracked fields (exported finals, vars) so unknown member access returns
 // Unknown instead of an error.
 type ObjectType struct {
-	Name        string
-	Fields      map[string]Type
-	Methods     map[string]*FuncType
-	IsNamespace bool
+	OptionalFields map[string]bool // Fields whose declarations end in ?.
+	Name           string
+	Fields         map[string]Type
+	Methods        map[string]*FuncType
+	IsNamespace    bool
 	// IsProtocol marks this as a `protocol` rather than an `object`: a set of method
 	// signatures that other object types declare conformance to.
 	IsProtocol bool

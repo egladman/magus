@@ -24,6 +24,57 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestSelectiveSourceImport(t *testing.T) {
+	const src = `namespace fixture;
+final secret = 20;
+export final extra = 3;
+export fun twice() > int { return secret * 2; }
+export object Box { n: int = 2, }
+`
+	for _, source := range []string{"file", "declarations"} {
+		t.Run(source, func(t *testing.T) {
+			ctx := context.Background()
+			s := NewSession(ctx, WithEmbedded())
+			defer s.Close()
+			if source == "file" {
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "fixture.buzz"), []byte(src), 0644))
+				s.SetIncludeDirs([]string{dir})
+			} else {
+				s.SetModuleDecls("fixture", src)
+			}
+			require.NoError(t, s.Exec(ctx, `import twice, Box from "fixture"; final sum = twice() + Box{}.n;`))
+			assert.Equal(t, "42", s.Globals()["sum"].String())
+			for _, hidden := range []string{"extra", "secret", "fixture"} {
+				assert.NotContains(t, s.Globals(), hidden)
+			}
+			assert.ErrorContains(t, s.Exec(ctx, `import secret from "fixture";`), "no exported member")
+			require.NoError(t, s.Exec(ctx, `import extra from "fixture"; final n = extra;`))
+			assert.Equal(t, "3", s.Globals()["n"].String())
+		})
+	}
+}
+
+func TestStrictGenericCallRequiresTypeArguments(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx)
+	defer s.Close()
+	const decl = `fun id::<T>(v: T) > T { return v; }`
+	require.NoError(t, s.Exec(ctx, decl+` final n: int = id::<int>(7);`))
+	assert.Equal(t, "7", s.Globals()["n"].String())
+	assert.ErrorContains(t, s.Exec(ctx, decl+` final n: int = id(7);`), "requires explicit type arguments")
+}
+
+func TestImportedOptionalAndInferredGenericCall(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	defer s.Close()
+	s.SetModuleDecls("maybe", `namespace maybe; export fun number() > int? { return null; }`)
+	require.NoError(t, s.Exec(ctx, `import "maybe"; fun id::<T>(v: T) > T { return v; } final n: int = id(maybe\number() ?? 7);`))
+	assert.Equal(t, "7", s.Globals()["n"].String())
+	assert.Error(t, s.Exec(ctx, `import "maybe"; fun invalid() > int { return maybe\number(); }`))
+}
+
 // TestImport_AliasKeepsAnExportThatShadowsTheImporter covers an aliased module
 // exporting a name the importer already bound. The parent globals are copied into
 // the module's sub-session so it can see host APIs, and the alias map used to skip

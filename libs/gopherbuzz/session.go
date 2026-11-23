@@ -823,7 +823,7 @@ func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]strin
 	}
 	// The names this chunk defined, kept for the aliased-import map. An export
 	// whose name the parent already bound still belongs to the module. Reading
-	// the list here is what loadImportAsAlias uses after Exec returns.
+	// the list here is what loadIsolated uses after exec returns.
 	s.chunkDefined = append(append([]string{}, chunk.Exports...), chunk.Private...)
 	for _, name := range chunk.Exports {
 		s.exportedNames[name] = true
@@ -1702,7 +1702,7 @@ func (s *Session) hidesImport(name string) bool {
 //     or no alias; confirmed in resolveImport, neither branch flattens without an
 //     explicit "as _".
 //   - ImportFile WITH a real alias: resolveImport execs it in an isolated sub-session
-//     (loadImportAsAlias), so only the qualified form can possibly reach it.
+//     (bindCachedAlias), so only the qualified form can possibly reach it.
 //
 // Everything else (ImportFile with no alias, ImportDecls always, ImportBound, whose
 // original resolution kind this call can't see) is left unreported.
@@ -1881,6 +1881,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		key := "source:" + resolvePath
 		if s.loadedPaths[key] {
 			if cached := s.importCache[key]; cached != nil {
+				if len(imp.Only) > 0 {
+					return ImportBound, s.bindSelected(boundName, imp, cached)
+				}
 				if prog, err := s.parse(src); err == nil {
 					if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
 						return ImportBound, err
@@ -1891,6 +1894,15 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			return ImportBound, nil
 		}
 		s.loadedPaths[key] = true
+		if len(imp.Only) > 0 {
+			cached, err := s.loadIsolated(ctx, src)
+			if err != nil {
+				delete(s.loadedPaths, key)
+				return ImportDecls, err
+			}
+			s.importCache[key] = cached
+			return ImportDecls, s.bindSelected(boundName, imp, cached)
+		}
 		prog, err := s.parse(src)
 		if err == nil {
 			if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
@@ -1959,6 +1971,8 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		}
 		switch {
 		case cached == nil:
+		case len(imp.Only) > 0:
+			return ImportBound, s.bindSelected(boundName, imp, cached)
 		case imp.Alias != "" && imp.Alias != "_":
 			s.bindCachedAlias(imp.Alias, cached)
 		default:
@@ -1990,24 +2004,21 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	s.importingDirs = append(s.importingDirs, moduleDir)
 	defer func() { s.importingDirs = s.importingDirs[:len(s.importingDirs)-1] }()
 
-	if imp.Alias != "" && imp.Alias != "_" {
-		// Aliased import: exec in an isolated sub-session so the file's
-		// globals don't leak into the parent env. Collect the new globals
-		// and expose them as a map bound under the alias.
-		//
-		// Collect its DECLARATIONS too, under the alias alone. Its types live
-		// nowhere else: without them `testing\PrefixMe{}` is an undefined type.
-		// The compiler reads their field defaults from ModuleTypes.
-		s.collectAliasedModule(imp.Alias, string(data))
-		if err = s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
+	if len(imp.Only) > 0 || imp.Alias != "" && imp.Alias != "_" {
+		// The importer sees only the selected names or the alias.
+		cached, err := s.loadIsolated(ctx, string(data))
+		if err != nil {
 			return ImportFile, importFailed(imp.Path, path, err)
 		}
 		if len(s.importFrames) > 0 {
 			noted.files = append(noted.files, isolatedClosure(s.lastClosure)...)
 		}
-		if m, ok := s.env.Get(imp.Alias); ok {
-			s.importCache[abs] = &cachedImport{src: string(data), names: m.MapKeys(), values: m, files: noted.files}
+		cached.files = noted.files
+		s.importCache[abs] = cached
+		if len(imp.Only) > 0 {
+			return ImportFile, s.bindSelected(boundName, imp, cached)
 		}
+		s.bindCachedAlias(imp.Alias, cached)
 		return ImportFile, nil
 	}
 	// Flat import: merge file's globals directly into this env, and
@@ -2490,7 +2501,9 @@ func (s *Session) bindNamespaceObject(name string, exports vmpackage.Value) {
 type cachedImport struct {
 	src    string
 	names  []string
-	values vmpackage.Value // map of name to value
+	values vmpackage.Value // exported names only
+	// An alias also exposes private globals from an isolated file.
+	aliasValues vmpackage.Value
 	// files is the module file and its closure, as the import that loaded it
 	// recorded them for a bytecode store. Nil when nothing was recording.
 	files []bytecodeFile
@@ -2517,6 +2530,37 @@ func (s *Session) cacheBindings(src string, names []string) *cachedImport {
 		}
 	}
 	return &cachedImport{src: src, names: m.MapKeys(), values: m}
+}
+
+// Selected functions retain their defining module's globals.
+func (s *Session) bindSelected(boundName string, imp *ast.ImportStmt, cached *cachedImport) error {
+	for _, name := range imp.Only {
+		if _, ok := cached.values.MapGet(name); !ok {
+			return bzz.Errorf(UnresolvedImport, "buzz: import %q: module has no exported member %q", imp.Path, name)
+		}
+	}
+	prog, err := s.parse(cached.src)
+	if err != nil {
+		return err
+	}
+	s.collectDecls(boundName, prog, false)
+	for _, decl := range prog.Stmts {
+		switch d := decl.(type) {
+		case *ast.ObjectDecl:
+			if d.IsExported && slices.Contains(imp.Only, d.Name) {
+				s.importedTypes = append(s.importedTypes, d)
+			}
+		case *ast.EnumDecl:
+			if d.IsExported && slices.Contains(imp.Only, d.Name) {
+				s.importedTypes = append(s.importedTypes, d)
+			}
+		}
+	}
+	for _, name := range imp.Only {
+		value, _ := cached.values.MapGet(name)
+		s.env.Define(name, value)
+	}
+	return nil
 }
 
 // bindCachedFlat binds a module another session already evaluated the way a flat
@@ -2554,15 +2598,19 @@ func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, 
 }
 
 // bindCachedAlias binds a file another session already evaluated the way an
-// aliased import binds it. See loadImportAsAlias.
+// aliased import binds it. See loadIsolated.
 func (s *Session) bindCachedAlias(alias string, c *cachedImport) {
 	s.collectAliasedModule(alias, c.src)
-	for _, n := range c.names {
-		if v, _ := c.values.MapGet(n); v.IsObjectDef() {
+	values := c.values
+	if c.aliasValues.IsMap() {
+		values = c.aliasValues
+	}
+	for _, n := range values.MapKeys() {
+		if v, _ := values.MapGet(n); v.IsObjectDef() {
 			s.env.Define(QualifiedTypeKey(alias, n), v)
 		}
 	}
-	s.env.Define(alias, c.values)
+	s.env.Define(alias, values)
 }
 
 // rememberModuleType records one exported type declaration under its module's bound
@@ -2797,9 +2845,8 @@ func (s *Session) bindNamespacePath(segments []string, exports vmpackage.Value, 
 	return nil
 }
 
-// loadImportAsAlias executes src in a sub-session that inherits the parent's
-// host globals, then binds the sub-session's new globals as a map under alias.
-func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias string) error {
+// loadIsolated keeps module globals out of the importer's scope.
+func (s *Session) loadIsolated(ctx context.Context, src string) (*cachedImport, error) {
 	sub := newSession(s.ctx, withOwner(s.owner))
 	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
@@ -2863,12 +2910,16 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	}
 
 	// Execute the imported file.
-	if err := sub.Exec(ctx, src); err != nil {
-		return err
+	sub.ownNamespace = sub.declaredNamespace(src)
+	exports, err := sub.exec(ctx, src)
+	if err != nil {
+		return nil, err
 	}
 	if s.bytecodeStore != nil {
 		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)
 	}
+
+	cached := sub.cacheBindings(src, exports)
 
 	// A name this module defines belongs in its alias map even when the parent
 	// already bound it. Skipping every host snapshot name dropped that export,
@@ -2882,17 +2933,10 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 		if _, wasHost := hostNames[name]; wasHost && !defined[name] {
 			continue
 		}
-		v := sub.env.Slots()[slot]
-		m.MapSet(name, v)
-		// An object TYPE is also bound in the parent, under QualifiedTypeKey
-		// alone: `ns\Name{...}` builds the def found there. The bare name
-		// stays the importer's own, as upstream resolves it.
-		if v.IsObjectDef() {
-			s.env.Define(QualifiedTypeKey(alias, name), v)
-		}
+		m.MapSet(name, sub.env.Slots()[slot])
 	}
-	s.env.Define(alias, m)
-	return nil
+	cached.aliasValues = m
+	return cached, nil
 }
 
 // findIncludeFile resolves an import path to a file. It first tries each

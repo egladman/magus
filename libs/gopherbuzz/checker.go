@@ -109,12 +109,9 @@ type checker struct {
 	// retOptional records that the enclosing function's return annotation ended in
 	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
 	retOptional bool
-	// The type system erases `?`, so declared optionals are kept here.
-	// Members are keyed "Object.field" and "Object.method()".
-	optFuncs   map[*types.FuncType]bool
-	optMembers map[string]bool
-	optExprs   map[ast.Node]string
-	yieldTyp   types.Type // non-nil when inside a function with a *> yield annotation
+	// optExprs names expressions that read a declared optional.
+	optExprs map[ast.Node]string
+	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !>; a call to a raising function is legal there without a surrounding
 	// try/catch, because the caller's own caller must handle it (or itself
@@ -455,6 +452,7 @@ func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []as
 			vt = c.resolveAnnot(vd.TypeAnnot)
 		}
 		nt.Fields[vd.Name] = vt
+		noteOptionalField(nt, vd.Name, vd.TypeAnnot)
 	}
 	// An exported TYPE is reachable through the namespace too, as the type value
 	// itself, so `io\File.open(...)` resolves the same static method a bare
@@ -763,7 +761,7 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	var required []string
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = c.fieldType(f.TypeAnnot)
-		c.noteOptionalMember(v.Name, f.Name, f.TypeAnnot)
+		noteOptionalField(ot, f.Name, f.TypeAnnot)
 		if f.Default == nil && !strings.HasSuffix(strings.TrimSpace(f.TypeAnnot), "?") {
 			required = append(required, f.Name)
 		}
@@ -785,22 +783,18 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	}
 	for _, m := range v.Methods {
 		ot.Methods[m.Name] = c.funDeclType(m)
-		c.noteOptionalMember(v.Name, m.Name+"()", m.RetAnnot)
 	}
 	return ot
 }
 
-// noteOptionalMember records that object.member was declared with a `?` type.
-// The type system erases optionality, so declared optionals are kept here: a
-// field as "Object.field", a method's result as "Object.method()".
-func (c *checker) noteOptionalMember(object, member, annot string) {
+func noteOptionalField(object *types.ObjectType, member, annot string) {
 	if !strings.HasSuffix(strings.TrimSpace(annot), "?") {
 		return
 	}
-	if c.optMembers == nil {
-		c.optMembers = map[string]bool{}
+	if object.OptionalFields == nil {
+		object.OptionalFields = map[string]bool{}
 	}
-	c.optMembers[object+"."+member] = true
+	object.OptionalFields[member] = true
 }
 
 // fieldType is a field's declared type, left for its reader to resolve by name
@@ -831,19 +825,8 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
 	ft := &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: fd.ErrAnnot != "", ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults, TypeParams: fd.TypeParams}
-	c.noteOptionalFunc(ft, fd.RetAnnot)
+	ft.RetOptional = strings.HasSuffix(fd.RetAnnot, "?")
 	return ft
-}
-
-// noteOptionalFunc records that ft was declared with a `?` return.
-func (c *checker) noteOptionalFunc(ft *types.FuncType, retAnnot string) {
-	if !strings.HasSuffix(strings.TrimSpace(retAnnot), "?") {
-		return
-	}
-	if c.optFuncs == nil {
-		c.optFuncs = map[*types.FuncType]bool{}
-	}
-	c.optFuncs[ft] = true
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -921,7 +904,9 @@ func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Typ
 		for i, p := range v.Params {
 			params[i] = c.resolveTypeIn(p, quals)
 		}
-		return &types.FuncType{Params: params, Ret: c.resolveTypeIn(v.Ret, quals)}
+		ft := *v
+		ft.Params, ft.Ret = params, c.resolveTypeIn(v.Ret, quals)
+		return &ft
 	}
 	return t
 }
@@ -2244,11 +2229,12 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	}
 	ft, ok := calleeTyp.(*types.FuncType)
 	argsResolved := true
-	if id, named := v.Callee.(*ast.IdentExpr); named && ok && c.optFuncs[ft] {
-		c.markOptional(v, id.Name+"()")
-	} else if m, isMember := v.Callee.(*ast.MemberExpr); isMember {
-		if what := c.optExprs[m]; strings.HasSuffix(what, "()") {
-			c.markOptional(v, what)
+	if ok && ft.RetOptional {
+		switch callee := v.Callee.(type) {
+		case *ast.IdentExpr:
+			c.markOptional(v, callee.Name+"()")
+		case *ast.MemberExpr:
+			c.markOptional(v, c.exprText(callee)+"()")
 		}
 	}
 	if ok {
@@ -2402,6 +2388,9 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	}
 	if !ft.Variadic && len(v.Args) != len(ft.Params) {
 		c.errorfc(v.Pos, ArgumentError, "wrong argument count: got %d, want %d", len(v.Args), len(ft.Params))
+	}
+	if len(ft.TypeParams) > 0 && !c.embedded {
+		c.errorfc(v.Pos, ArgumentError, "generic call requires explicit type arguments")
 	}
 	if ft.Ret == nil || ft.Ret == types.Void {
 		return types.Void
@@ -2725,15 +2714,12 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	switch t := ot.(type) {
 	case *types.ObjectType:
 		if ft, ok := t.Fields[v.Name]; ok {
-			if c.optMembers[t.Name+"."+v.Name] {
+			if t.OptionalFields[v.Name] {
 				c.markOptional(v, c.exprText(v))
 			}
 			return ft
 		}
 		if mt, ok := t.Methods[v.Name]; ok {
-			if c.optMembers[t.Name+"."+v.Name+"()"] {
-				c.markOptional(v, c.exprText(v)+"()")
-			}
 			return mt
 		}
 		if t.IsNamespace {
@@ -2945,7 +2931,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.retOptional = savedRetOpt
 
 	ft := &types.FuncType{Params: params, Ret: ret, Yield: yield, Raises: v.ErrAnnot != "", ParamNames: v.Params, ParamDefaults: v.ParamDefaults, TypeParams: v.TypeParams}
-	c.noteOptionalFunc(ft, v.RetAnnot)
+	ft.RetOptional = strings.HasSuffix(v.RetAnnot, "?")
 	return ft
 }
 
