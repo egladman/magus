@@ -3122,7 +3122,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/scipbuzz/magusfile.buzz", "libs/ssg/magusfile.buzz", "libs/ssg/*.buzz", "libs/xdg/magusfile.buzz", "libs/text/magusfile.buzz", "libs/termkit/magusfile.buzz",
                     "testdata/latex/onepage/magusfile.buzz",
                     "libs/clikit/magusfile.buzz", "libs/kustomize/*.buzz", "libs/safetyscissors/magusfile.buzz", "libs/secrets/magusfile.buzz", "libs/codec/magusfile.buzz",
-                    "libs/kustomize/testdata/*.yaml",
+                    "libs/kustomize/testdata/*.yaml", "libs/safetyscissors/.mockery.yaml",
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                     ".gitattributes", "dprint-base.json",
