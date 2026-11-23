@@ -222,7 +222,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[spells.SymbolFormat]():        {"", "scip", "go-packages", "buzz-module", "shell-script"},
 	reflect.TypeFor[types.SymbolIndexFreshness](): {"", "up-to-date", "out-of-date", "not-indexed", "unvouched"},
 	reflect.TypeFor[imagetypes.SymlinkPolicy]():   {"", "refuse", "keep", "follow"},
-	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "network", "inert"},
+	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "continues", "network", "inert"},
 	reflect.TypeFor[imagetypes.Variant]():         {"", "v1", "v2", "v3", "v8"},
 	reflect.TypeFor[spells.VersionComponent]():    {"", "major", "minor", "patch"},
 	reflect.TypeFor[job.WorkerType]():             {"resumed", "new"},

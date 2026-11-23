@@ -2064,11 +2064,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		Event:      env.HookEventName,
 		Agent:      env.AgentID,
 	}}
-	// Only a subagent's: a root session run as a named agent type carries one too, and the
-	// root is the one caller every skill tool is wired for.
-	if env.AgentID != "" {
-		req.CallerType = env.AgentType
-	}
+	if env.AgentID != "" { req.CallerType = env.AgentType }
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
@@ -2171,6 +2167,9 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	case envelopeSchedules(env.ToolInput):
 		// A prompt queued for a later turn of this session, not a brief for a new agent.
 		req.NothingToJudge, req.Schedules = true, true
+	case capability == types.ToolContinues && continuesAgent:
+		req.IsContinue, req.Tool = true, env.ToolName
+		req.Target, req.Value = continueTarget, continueMessage
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true

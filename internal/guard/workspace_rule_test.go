@@ -491,7 +491,9 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 
 	cont := Judge(ctx, unloadedDeps(), Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, verdictWithRule(verdict.Advise, string(advisorySpawnRuleFailed)), unworded(cont))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(cont),
+		"unknown continuation age and cost cannot dispatch without approval: %s", cont.Reason)
+	assert.Contains(t, cont.Context, "judged nothing", "the underlying workspace rule failure stays visible")
 }
 
 // A file write waits too while the binary cannot load the tree: the fix is a rebuild, not

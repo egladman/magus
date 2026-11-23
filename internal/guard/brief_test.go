@@ -132,7 +132,9 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 
 	Judge(ctx, deps, Request{Input: finishedSpawn(t, "orchestrator/feat guard/slice", "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 	bound := Judge(ctx, deps, Request{Input: message("brisk-heron"), Host: "claude-code"})
-	assert.NotEqual(t, verdict.Deny, bound.Decision, bound.Reason)
+	assert.Equal(t, verdict.Deny, bound.Decision, bound.Reason)
+	assert.NotContains(t, bound.Reason, string(denyRuleWorkerCheckOnly), "the recorded target still bypasses the new-worker check")
+	assert.Contains(t, bound.Reason, "context size is unknown", "the cold-dispatch gate requires cost evidence")
 }
 
 // Both a spawn and a continuation carry a brief, so both reach the rule through Judge.

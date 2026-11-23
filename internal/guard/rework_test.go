@@ -2,11 +2,14 @@ package guard
 
 import (
 	"context"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/agent/model"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
@@ -118,6 +121,95 @@ func TestRecordReworkWritesNothingInADryRun(t *testing.T) {
 	assert.Zero(t, f.rounds(t))
 }
 
+func TestColdContinuationPinsExpiryAndKnownWarmCost(t *testing.T) {
+	f := newReworkFixture(t)
+	f.putJob(t, jobtypes.StateRunning)
+	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle, Model: "sonnet", ContextTokens: int64Pointer(100)})
+	f.at.models = func() []model.Row { return []model.Row{{ID: "sonnet"}} }
+	now := time.Now().Truncate(time.Second)
+	row, ok := continuedJob(f.testContext(t), f.at, f.facts, "a1b2c3")
+	require.True(t, ok)
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *jobtypes.Job) { cur.Updated = now.Unix() })
+	require.NoError(t, err)
+
+	_, cold := coldContinuation(f.testContext(t), f.at, f.facts, "a1b2c3", now)
+	assert.False(t, cold, "known model, context, and recent activity establish a warm dispatch")
+
+	ttl := resumeTTL(accountAt(f.at.workspace)).ttl
+	_, err = f.store.Update(f.testContext(t), row.ID, func(cur *jobtypes.Job) { cur.Updated = now.Add(-ttl).Unix() })
+	require.NoError(t, err)
+	ageAgentSeen(t, f, "a1b2c3", now.Add(-ttl))
+	reason, cold := coldContinuation(f.testContext(t), f.at, f.facts, "a1b2c3", now)
+	assert.True(t, cold, "the exact TTL boundary is expired")
+	assert.Contains(t, reason, "past its")
+}
+
+func TestColdContinuationRequiresEvidenceBeforeDispatch(t *testing.T) {
+	f := newReworkFixture(t)
+	f.putJob(t, jobtypes.StateRunning)
+	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle})
+
+	reason, cold := coldContinuation(f.testContext(t), f.at, f.facts, "a1b2c3", time.Now())
+	assert.True(t, cold)
+	assert.Contains(t, reason, "context size is unknown")
+}
+
+func TestColdContinuationAsksTheRootBeforeDispatch(t *testing.T) {
+	f := newReworkFixture(t)
+	f.putJob(t, jobtypes.StateRunning)
+	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle, Name: "brisk-heron"})
+	ageAgentSeen(t, f, "a1b2c3", time.Now().Add(-time.Hour))
+	row, ok := continuedJob(f.testContext(t), f.at, f.facts, "a1b2c3")
+	require.True(t, ok)
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *jobtypes.Job) { cur.Updated = time.Now().Add(-time.Hour).Unix() })
+	require.NoError(t, err)
+	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
+		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Continue the work."},"tool_use_id":"toolu_03"}`
+
+	v := Judge(f.testContext(t), Dependencies{}, Request{Input: continueTo, Host: "claude-code", RendersAsk: true})
+
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Ask, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(v), v.Reason)
+	assert.Contains(t, v.Reason, "Approve this cold continuation")
+}
+
+func TestColdContinuationCannotBeApprovedByAWorker(t *testing.T) {
+	f := newReworkFixture(t)
+	f.putJob(t, jobtypes.StateRunning)
+	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle, Name: "brisk-heron"})
+	ageAgentSeen(t, f, "a1b2c3", time.Now().Add(-time.Hour))
+	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
+		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Continue the work."},"tool_use_id":"toolu_04"}`
+
+	v := Judge(f.testContext(t), Dependencies{}, Request{Input: continueTo, Host: "claude-code", Lease: "guard-facts", RendersAsk: true})
+
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(v), v.Reason)
+	assert.Contains(t, v.Reason, "cannot approve its own spend")
+}
+
+func TestColdContinuationWithoutHumanPromptIsDenied(t *testing.T) {
+	f := newReworkFixture(t)
+	f.putJob(t, jobtypes.StateRunning)
+	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{ID: "a1b2c3", Description: reworkTitle, Name: "brisk-heron"})
+	ageAgentSeen(t, f, "a1b2c3", time.Now().Add(-time.Hour))
+	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
+		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Continue the work."},"tool_use_id":"toolu_05"}`
+
+	v := Judge(f.testContext(t), Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
+
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(v), v.Reason)
+	assert.Contains(t, v.Reason, "cannot render a human approval prompt")
+}
+
+func int64Pointer(n int64) *int64 { return &n }
+
+func ageAgentSeen(t *testing.T, f reworkFixture, agent string, at time.Time) {
+	t.Helper()
+	kind := agentSeenKind(agent)
+	f.facts.Touch(kind)
+	path := hint.MarkerPath(f.facts.CacheDir(), f.facts.Session(), kind)
+	require.NoError(t, os.Chtimes(path, at, at))
+}
+
 func TestAContinueJudgedByTheGuardCountsAsReworkOnce(t *testing.T) {
 	f := newReworkFixture(t)
 	f.putJob(t, jobtypes.StateExited)
@@ -127,7 +219,7 @@ func TestAContinueJudgedByTheGuardCountsAsReworkOnce(t *testing.T) {
 
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`
-	Judge(f.testContext(t), deps, Request{Input: continueTo, Host: "claude-code"})
+	Judge(f.testContext(t), deps, Request{Input: continueTo, Host: "claude-code", RendersAsk: true})
 
 	assert.Equal(t, 1, f.rounds(t))
 }
@@ -153,44 +245,46 @@ func (s *ContinueToExitedWorkerSuite) continueWorker(state jobtypes.State) verdi
 	s.f.putJob(s.T(), state)
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Widen with job apply and fix the review comments."},"tool_use_id":"toolu_02"}`
-	return Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
+	return Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: continueTo, Host: "claude-code", RendersAsk: true})
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerAdvisesTheRoot() {
 	v := s.continueWorker(jobtypes.StateExited)
-	s.Equal(verdict.Advise, v.Decision)
+	s.Equal(verdict.Ask, v.Decision)
 	s.Contains(v.Context, "job guard-facts is exited; widen it yourself with `")
 	s.Contains(v.Context, "job exec guard-facts")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnEndedWorkerAdvisesTheRoot() {
 	v := s.continueWorker(jobtypes.StatePass)
-	s.Equal(verdict.Advise, v.Decision)
+	s.Equal(verdict.Ask, v.Decision)
 	s.Contains(v.Context, "job guard-facts is pass; fork a new job for more work")
 }
 
 // A continued worker is still bound: no advice and no rework round.
 func (s *ContinueToExitedWorkerSuite) TestContinueToAStoppedWorkerSaysNothing() {
 	v := s.continueWorker(jobtypes.StateRunning)
+	s.Equal(verdict.Ask, v.Decision)
 	s.NotContains(v.Context, "job guard-facts is")
 	s.Zero(s.f.rounds(s.T()))
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnOtherwiseEndedNoReturnWorkerAdvisesFork() {
 	v := s.continueWorker(jobtypes.StateNoReturn)
-	s.Equal(verdict.Advise, v.Decision)
+	s.Equal(verdict.Ask, v.Decision)
 	s.Contains(v.Context, "fork a new job for more work")
 	s.NotContains(v.Context, "job exec guard-facts")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToARunningWorkerSaysNothing() {
 	v := s.continueWorker(jobtypes.StateRunning)
+	s.Equal(verdict.Ask, v.Decision)
 	s.NotContains(v.Context, "job guard-facts is")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerNeverDenies() {
 	v := s.continueWorker(jobtypes.StateExited)
-	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
+	s.Equal(verdict.Ask, v.Decision, v.Reason)
 }
 
 func (f reworkFixture) testContext(t *testing.T) context.Context {

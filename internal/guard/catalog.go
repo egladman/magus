@@ -131,6 +131,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSpawnUnvalidated},
 	{doc: ruleDocSpawnUnisolatedRow},
 	{doc: ruleDocSpawnWarmWorker},
+	{doc: ruleDocContinueColdWorker},
 	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
 	{doc: ruleDocCheckpointState, advisory: true},
@@ -1093,6 +1094,14 @@ var ruleDocSpawnWarmWorker = types.RuleDoc{
 		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
 		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record names a new worker in agent.worker. " +
 		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
+}
+
+var ruleDocContinueColdWorker = types.RuleDoc{
+	Name:    string(denyRuleSpawnColdContinuation),
+	Catches: "dispatching another model turn to a worker whose prompt-cache warmth or cost cannot be established",
+	Why: "A continuation past the prompt-cache TTL, near a model's long-context price step, or with unknown age or cost can start new model work at a higher price. " +
+		"The root must approve it through a host prompt when one is available; a leased worker cannot approve its own spend, and a host that cannot render approval refuses it. " +
+		"A recent worker with known model and context cost stays prompt-free.",
 }
 
 var ruleDocReleaseRequested = types.RuleDoc{

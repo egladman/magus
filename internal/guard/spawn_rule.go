@@ -194,6 +194,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if env.IsContinue && judged.Decision != verdict.Deny {
 		note := adviseContinueHandedBack(ctx, at, facts, env.Target).Say
 		judged = applyRuleFailureNote(judged, note, hint.MarkerKind(advisoryLeaseState))
+		if next, cold := coldContinuationVerdict(ctx, at, facts, env.Target, actingLease, req.RendersAsk, judged, time.Now()); cold {
+			judged = next
+			decided = decidedByBuiltin
+		}
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.

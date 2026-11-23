@@ -11,6 +11,7 @@ export enum<str> ToolCapability {
     reads = "reads",
     writes = "writes",
     spawns = "spawns",
+    continues = "continues",
     network = "network",
     inert = "inert",
 }
