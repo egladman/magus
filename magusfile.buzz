@@ -399,7 +399,11 @@ export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> 
 
 // Places the development binary and its harnesses as one readiness operation.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles([".opencode/magus/magus-opencode.wasm"]);
+    ctx.writesFiles([
+        ".claude/magus/tools/*", ".codex/magus/tools/*",
+        ".cursor/magus/tools/*", ".opencode/magus/tools/*",
+        ".opencode/magus/magus-opencode.wasm",
+    ]);
     final linked = link_magus(ctx, binary: "magus");
     if (linked.error != null) { throw linked.error!; }
     final installed = hostconfig\installAndVerifyHooks(magus\CommandOptions{binary = "./magus"});
