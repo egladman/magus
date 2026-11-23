@@ -125,7 +125,7 @@ func (v SkillForm) Valid() bool      { return skillForms.Valid(v) }
 func (v SkillForm) String() string   { return enum.String(v) }
 
 // toolCapabilities orders the files of a tool rows directory, one per capability.
-var toolCapabilities = enum.Set[ToolCapability]{ToolRuns, ToolReads, ToolWrites, ToolSpawns, ToolNetwork, ToolInert}
+var toolCapabilities = enum.Set[ToolCapability]{ToolRuns, ToolReads, ToolWrites, ToolSpawns, ToolContinues, ToolNetwork, ToolInert}
 
 func (v ToolCapability) Values() []string { return toolCapabilities.Strings() }
 func (v ToolCapability) Valid() bool      { return toolCapabilities.Valid(v) }

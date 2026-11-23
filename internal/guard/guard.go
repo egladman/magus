@@ -2173,6 +2173,11 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	case envelopeSchedules(env.ToolInput):
 		// A prompt queued for a later turn of this session, not a brief for a new agent.
 		req.NothingToJudge, req.Schedules = true, true
+	case capability == types.ToolContinues && continuesAgent:
+		// A continuation and a spawn can both carry a prompt.
+		req.IsContinue = true
+		req.Tool = env.ToolName
+		req.Target, req.Value = continueTarget, continueMessage
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true
