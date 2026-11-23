@@ -1628,7 +1628,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
 	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
 	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
-	fs.StringVar(&f.Delivery, FlagJobForkDelivery, "", "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)")
+	fs.StringVar(&f.Delivery, FlagJobForkDelivery, "", "Deliver findings with recorded evidence, fold changes into the parent's pull request, or open a separate or stacked pull request")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	command.NegatedBoolVar(fs, &f.ReadOnly, FlagJobForkReadOnly)
 	fs.StringVar(&f.Checkout, FlagJobForkCheckout, "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
