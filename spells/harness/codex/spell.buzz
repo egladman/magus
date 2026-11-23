@@ -251,10 +251,12 @@ export fun mgs_listTools() > HarnessTools {
     foreach (name in ["spawn_agent", "collaborationspawn_agent"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.spawns});
     }
-    foreach (name in ["send_input", "resume_agent"]) {
+    foreach (name in ["send_input", "resume_agent", "followup_task", "collaborationfollowup_task"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.continues});
     }
-    foreach (name in ["wait_agent", "close_agent", "update_plan", "view_image", "web_search"]) {
+    // A mailbox message never starts a turn, even when the recipient is idle.
+    foreach (name in ["send_message", "collaborationsend_message", "list_agents", "collaborationlist_agents",
+                      "wait_agent", "close_agent", "update_plan", "view_image", "web_search"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.inert});
     }
     return HarnessTools{dir = TOOLS_DIR, tools = rows};
@@ -556,4 +558,10 @@ test "Codex tools distinguish dispatch from continuation" {
     assert\equal(capability["collaborationspawn_agent"] ?? "(no row)", "spawns", "new work");
     assert\equal(capability["send_input"] ?? "(no row)", "continues", "existing work");
     assert\equal(capability["resume_agent"] ?? "(no row)", "continues", "existing work");
+    foreach (name in ["followup_task", "collaborationfollowup_task"]) {
+        assert\equal(capability[name] ?? "(no row)", "continues", name);
+    }
+    foreach (name in ["send_message", "collaborationsend_message", "list_agents", "collaborationlist_agents"]) {
+        assert\equal(capability[name] ?? "(no row)", "inert", name);
+    }
 }
