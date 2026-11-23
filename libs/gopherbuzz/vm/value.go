@@ -173,11 +173,22 @@ type funObj struct {
 type directObj struct {
 	Name string
 	Fn   Callable
+	captures []Value
 }
 type objectInst struct {
 	Def    *objectDefObj
 	Fields []Value // declaration-order flat field values; indexed by def.Fields[i]
 	Mut    bool    // mutable only for `mut Foo{…}` instances (immutable by default)
+	nativePayload *nativePayload
+}
+
+// NativePayloadKey identifies the host module that owns an instance's payload.
+// Distinct keys need distinct addresses, including when allocated as globals.
+type NativePayloadKey struct{ _ byte }
+
+type nativePayload struct {
+	key   *NativePayloadKey
+	value Value
 }
 
 // methodEntry is one slot in an object type's method table (vtable). Methods are
@@ -476,6 +487,14 @@ func DirectValue(name string, fn Callable) Value {
 	return heapValue(tagDirect, newDirect(name, fn))
 }
 
+// DirectClosure keeps the Buzz values captured by a host callable reachable
+// when Buzz stores or returns the callable independently of its creator.
+func DirectClosure(name string, fn Callable, captures ...Value) Value {
+	direct := newDirect(name, fn)
+	direct.captures = captures
+	return heapValue(tagDirect, direct)
+}
+
 // newDirect builds the callable a builtin method dispatches to WITHOUT giving it
 // a Value. On the nanbox build every Value takes a slot in an append-only object
 // heap that is never reclaimed, so wrapping a bound method per property access
@@ -602,6 +621,31 @@ func (v Value) NewInstance(fields []Value) (Value, error) {
 	vals := make([]Value, len(def.Fields))
 	copy(vals, fields)
 	return heapValue(tagObject, &objectInst{Def: def, Fields: vals, Mut: true}), nil
+}
+
+// NewNativeInstance attaches a host value outside the object's Buzz fields.
+func (v Value) NewNativeInstance(key *NativePayloadKey, fields []Value, payload Value) (Value, error) {
+	if key == nil {
+		return Null, fmt.Errorf("native instance requires a payload key")
+	}
+	instance, err := v.NewInstance(fields)
+	if err != nil {
+		return Null, err
+	}
+	instance.asObject().nativePayload = &nativePayload{key: key, value: payload}
+	return instance, nil
+}
+
+// NativePayload distinguishes an attached null value from a plain Buzz object.
+func (v Value) NativePayload(key *NativePayloadKey) (Value, bool) {
+	if !v.IsObject() {
+		return Null, false
+	}
+	payload := v.asObject().nativePayload
+	if payload == nil || payload.key != key {
+		return Null, false
+	}
+	return payload.value, true
 }
 
 // ForeignStructTypes returns the C field type spellings of a zdef-declared struct

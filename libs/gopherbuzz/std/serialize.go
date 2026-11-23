@@ -13,8 +13,11 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-//go:embed serialize.buzz
+//go:embed gen/serialize.buzz
 var serializeSource string
+
+//go:embed gen/serializecore.buzz
+var serializeCoreSource string
 
 // errCircularReference is returned by serializeSerialize, encodeJSON, and
 // buzzToGo when they revisit a list or map already on their current recursion
@@ -40,147 +43,6 @@ func identityPathHas(path []vm.Value, v vm.Value) bool {
 	return false
 }
 
-// serializeModule builds the "serialize" module matching Buzz's serialize reference:
-// https://buzz-lang.dev/0.5.0/reference/std/serialize.html
-func serializeModule() vm.Value {
-	m := mod()
-
-	// Boxed constructor map: Boxed.init(data)
-	boxedDef := mod()
-	boxedDef.MapSet("init", function("Boxed.init", boxedInit))
-	m.MapSet("Boxed", boxedDef)
-
-	m.MapSet("serialize", function("serialize.serialize", serializeSerialize))
-	m.MapSet("jsonEncode", function("serialize.jsonEncode", serializeJSONEncode))
-	m.MapSet("jsonDecode", function("serialize.jsonDecode", serializeJSONDecode))
-	return m
-}
-
-// boxedInit wraps any Buzz value in a Boxed instance.
-// Buzz signature: static fun init(any data) > Boxed !> CircularReference, NotSerializable
-func boxedInit(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 {
-		return vm.Null, fmt.Errorf("Boxed.init: requires 1 argument")
-	}
-	return makeBoxed(args[0]), nil
-}
-
-// boxedRawKey is the private map key under which makeBoxed stores the
-// underlying raw value so jsonEncode can extract it without serializing
-// the native Go method values that also live in the map.
-const boxedRawKey = "\x00boxed"
-
-// makeBoxed wraps a buzz Value in a Boxed map with typed accessor methods.
-func makeBoxed(v vm.Value) vm.Value {
-	m := mod()
-	m.MapSet(boxedRawKey, v)
-
-	m.MapSet("q", function("Boxed.q", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		// Path segments come either as upstream's single list (q([any], with str
-		// keys for maps and int indices for lists) or the legacy variadic-string
-		// form (q("a", "b")). Accept both so the same source runs on both runtimes.
-		path := args
-		if len(args) == 1 && args[0].IsList() {
-			path = args[0].ListItems()
-		}
-		cur := v
-		for _, seg := range path {
-			switch {
-			case cur.IsMap() && seg.IsString():
-				got, ok := cur.MapGet(seg.AsString())
-				if !ok {
-					return makeBoxed(vm.Null), nil
-				}
-				cur = got
-			case cur.IsList() && seg.IsInt():
-				items := cur.ListItems()
-				idx := int(seg.AsInt())
-				if idx < 0 || idx >= len(items) {
-					return makeBoxed(vm.Null), nil
-				}
-				cur = items[idx]
-			default:
-				return makeBoxed(vm.Null), nil
-			}
-		}
-		return makeBoxed(cur), nil
-	}))
-	m.MapSet("string", function("Boxed.string", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedString(v), nil
-	}))
-	m.MapSet("boolean", function("Boxed.boolean", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedBoolean(v), nil
-	}))
-	m.MapSet("integer", function("Boxed.integer", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedInteger(v), nil
-	}))
-	floating := function("Boxed.floating", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedFloating(v), nil
-	})
-	m.MapSet("floating", floating)
-	m.MapSet("float", floating) // upstream serialize names it float()
-	m.MapSet("map", function("Boxed.map", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if !v.IsMap() {
-			return vm.Null, nil
-		}
-		// Return a {str: Boxed} map.
-		out := vm.NewMap()
-		for _, k := range v.MapKeys() {
-			kv, _ := v.MapGet(k)
-			out.MapSet(k, makeBoxed(kv))
-		}
-		return out, nil
-	}))
-	m.MapSet("list", function("Boxed.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if !v.IsList() {
-			return vm.Null, nil
-		}
-		items := v.ListItems()
-		out := make([]vm.Value, len(items))
-		for i, it := range items {
-			out[i] = makeBoxed(it)
-		}
-		return vm.ListValue(out), nil
-	}))
-	m.MapSet("stringValue", function("Boxed.stringValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedStringValue(v), nil
-	}))
-	m.MapSet("booleanValue", function("Boxed.booleanValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedBooleanValue(v), nil
-	}))
-	m.MapSet("integerValue", function("Boxed.integerValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedIntegerValue(v), nil
-	}))
-	floatingValue := function("Boxed.floatingValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return boxedFloatingValue(v), nil
-	})
-	m.MapSet("floatingValue", floatingValue)
-	m.MapSet("floatValue", floatingValue) // upstream serialize names it floatValue()
-	m.MapSet("mapValue", function("Boxed.mapValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if !v.IsMap() {
-			return vm.NewMap(), nil
-		}
-		out := vm.NewMap()
-		for _, k := range v.MapKeys() {
-			kv, _ := v.MapGet(k)
-			out.MapSet(k, makeBoxed(kv))
-		}
-		return out, nil
-	}))
-	m.MapSet("listValue", function("Boxed.listValue", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		if !v.IsList() {
-			return vm.ListValue(nil), nil
-		}
-		items := v.ListItems()
-		out := make([]vm.Value, len(items))
-		for i, it := range items {
-			out[i] = makeBoxed(it)
-		}
-		return vm.ListValue(out), nil
-	}))
-	return m
-}
-
 // serializeSerialize converts a Buzz value to a serializable form (same value
 // for primitives; maps and lists pass through; errors on circular structures).
 func serializeSerialize(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -197,6 +59,9 @@ func serializeSerialize(_ context.Context, args []vm.Value) (vm.Value, error) {
 // errCircularReference on the first reference cycle found (nil if v is
 // acyclic). See errCircularReference for why this exists.
 func checkCircular(v vm.Value, path []vm.Value) error {
+	if raw, ok := v.NativePayload(&boxedPayload); ok {
+		return checkCircular(raw, path)
+	}
 	switch {
 	case v.IsList():
 		if identityPathHas(path, v) {
@@ -258,6 +123,12 @@ func JSONEncode(v vm.Value) (string, error) {
 // Scalars still go through json.Marshal, so string escaping and number formatting
 // stay exactly as the standard library does them; only container ordering is ours.
 func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
+	if raw, ok := v.NativePayload(&boxedPayload); ok {
+		if identityPathHas(path, v) {
+			return errCircularReference
+		}
+		return encodeJSON(raw, buf, append(path, v))
+	}
 	// A host record with methods crosses as an instance. Only its fields are
 	// data; retain the instance on the path because MapView allocates a map.
 	if !v.IsMap() {
@@ -286,11 +157,6 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 		buf.WriteByte(']')
 		return nil
 	case v.IsMap():
-		// A Boxed value (from makeBoxed) is its raw data plus Go method values, and
-		// only the data is JSON, at any depth.
-		if raw, ok := v.MapGet(boxedRawKey); ok {
-			return encodeJSON(raw, buf, path)
-		}
 		if identityPathHas(path, v) {
 			return errCircularReference
 		}
@@ -324,28 +190,6 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 	}
 	buf.Write(b)
 	return nil
-}
-
-// jsonParseError carries the decoder's message into a Buzz catch.
-type jsonParseError struct{ cause error }
-
-func (e jsonParseError) Error() string         { return "serialize.jsonDecode: " + e.cause.Error() }
-func (e jsonParseError) Unwrap() error         { return e.cause }
-func (e jsonParseError) BuzzErrorType() string { return `serialize\JsonParseError` }
-func (e jsonParseError) BuzzError() map[string]string {
-	return map[string]string{"message": e.Error()}
-}
-
-// serializeJSONDecode decodes a JSON string to a Boxed value.
-func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
-	if len(args) < 1 || !args[0].IsString() {
-		return vm.Null, fmt.Errorf("serialize.jsonDecode: requires a str argument")
-	}
-	v, err := decodeJSON([]byte(args[0].AsString()))
-	if err != nil {
-		return vm.Null, jsonParseError{cause: err}
-	}
-	return makeBoxed(v), nil
 }
 
 // JSONDecodeValue decodes data the way serialize.jsonDecode does, integral

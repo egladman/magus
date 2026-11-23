@@ -302,6 +302,8 @@ func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
 			continue
 		}
 		switch obj := s[idx].(type) {
+		case *directObj:
+			stack = pushOwnable(stack, obj.captures...)
 		case *listObj:
 			stack = pushOwnable(stack, obj.Items...)
 		case *mapObj:
@@ -312,6 +314,9 @@ func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
 			stack = pushOwnable(stack, obj.This)
 		case *objectInst:
 			stack = pushOwnable(stack, obj.Fields...)
+			if obj.nativePayload != nil {
+				stack = pushOwnable(stack, obj.nativePayload.value)
+			}
 		case *objectDefObj:
 			for i := range obj.StaticFields {
 				stack = pushOwnable(stack, obj.StaticFields[i].Val)

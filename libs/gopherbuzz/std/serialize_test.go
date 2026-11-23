@@ -78,6 +78,14 @@ func TestBuzzToGoCircular(t *testing.T) {
 // before jsonEncode ever runs (see serializeSerialize's doc comment).
 func TestSerializeSerializeCircular(t *testing.T) {
 	l := cyclicList()
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	Register(s)
+	s.SetGlobal("cyclic", l)
+	require.NoError(t, s.Exec(t.Context(), `import "serialize"; final box = serialize\Boxed.init(cyclic);`))
+	box := s.GetGlobal("box")
+	_, err := serializeSerialize(t.Context(), []vm.Value{box})
+	require.ErrorIs(t, err, errCircularReference)
 
 	done := make(chan error, 1)
 	go func() {
@@ -98,7 +106,7 @@ func TestSerializeSerializeCircular(t *testing.T) {
 // value (serialize.jsonDecode's result) must encode as its data at any depth,
 // not as the method values a Boxed map also carries.
 func TestJSONEncodeUnwrapsBoxedAtAnyDepth(t *testing.T) {
-	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`{"n":2}`)})
+	boxed, err := decodePublicBox(t, `{"n":2}`)
 	require.NoError(t, err)
 
 	top, err := JSONEncode(boxed)
@@ -153,8 +161,7 @@ func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	f, ok := v.MapGet("f")
 	require.True(t, ok)
 	assert.True(t, f.IsFloat())
-	_, boxed := v.MapGet(boxedRawKey)
-	assert.False(t, boxed, "the value is plain, not Boxed")
+	assert.True(t, v.IsMap())
 }
 
 func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
@@ -171,7 +178,7 @@ func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
 }
 
 func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
-	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[10.0, 1e2, 2.5E-1, 7]`)})
+	boxed, err := decodePublicBox(t, `[10.0, 1e2, 2.5E-1, 7]`)
 	require.NoError(t, err)
 
 	v, err := JSONDecodeValue([]byte(`[10.0, 1e2, 2.5E-1, 7]`))
@@ -210,8 +217,24 @@ func TestJSONDecodeRefusesIntegersPastFortyEightBits(t *testing.T) {
 		assert.Contains(t, err.Error(), "Could not parse JSON: `"+lit+"` is not a number")
 	}
 
-	_, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[140737488355328]`)})
+	_, err := decodePublicBox(t, `[140737488355328]`)
 	require.Error(t, err)
+}
+
+func decodePublicBox(t *testing.T, input string) (vm.Value, error) {
+	t.Helper()
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	Register(s)
+	s.SetGlobal("testJson", vm.StringValue(input))
+	err := s.Exec(t.Context(), `import "serialize";
+var box: any = null;
+try {
+    box = serialize\jsonDecode(testJson);
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}`)
+	return s.Globals()["box"], err
 }
 
 func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {

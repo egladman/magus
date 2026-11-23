@@ -1879,10 +1879,15 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	// prevents a second exec.
 	if src, ok := s.moduleDecls[resolvePath]; ok {
 		key := "source:" + resolvePath
+		aliased := imp.Alias != "" && imp.Alias != "_"
 		if s.loadedPaths[key] {
 			if cached := s.importCache[key]; cached != nil {
 				if len(imp.Only) > 0 {
 					return ImportBound, s.bindSelected(boundName, imp, cached)
+				}
+				if aliased {
+					s.bindCachedAlias(boundName, cached)
+					return ImportBound, nil
 				}
 				if prog, err := s.parse(src); err == nil {
 					if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
@@ -1894,13 +1899,17 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			return ImportBound, nil
 		}
 		s.loadedPaths[key] = true
-		if len(imp.Only) > 0 {
+		if len(imp.Only) > 0 || aliased {
 			cached, err := s.loadIsolated(ctx, src)
 			if err != nil {
 				delete(s.loadedPaths, key)
 				return ImportDecls, err
 			}
 			s.importCache[key] = cached
+			if aliased {
+				s.bindCachedAlias(boundName, cached)
+				return ImportDecls, nil
+			}
 			return ImportDecls, s.bindSelected(boundName, imp, cached)
 		}
 		prog, err := s.parse(src)
@@ -2828,8 +2837,11 @@ func (s *Session) bindNamespacePath(segments []string, exports vmpackage.Value, 
 	}
 
 	if len(segments) == 1 {
-		if _, exists := s.env.Get(segments[0]); !exists {
-			s.env.Define(segments[0], leaf)
+		name := segments[0]
+		existing, bound := s.env.Get(name)
+		exported, sameName := exports.MapGet(name)
+		if !bound || (sameName && existing.Equal(exported)) {
+			s.env.Define(name, leaf)
 		}
 		s.declaredNamespaces[full] = importPath
 		return nil
