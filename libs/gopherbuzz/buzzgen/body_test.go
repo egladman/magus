@@ -38,20 +38,20 @@ func main() {
 `
 	for _, fallback := range []string{"0", "23"} {
 		src := strings.Replace(source, "IntValue(0)", "IntValue("+fallback+")", 1)
-		require.NoError(t, os.WriteFile(filepath.Join(dir,"main.go"), []byte(src), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0644))
 		p, err := Load(dir, Config{}, "example.com/body")
-		require.NoError(t,err)
+		require.NoError(t, err)
 		function, err := p.ScalarFunction("example.com/body", "integer", "integerValue", "int")
-		require.NoError(t,err)
-		cmd := exec.CommandContext(t.Context(),"go","run",".")
+		require.NoError(t, err)
+		cmd := exec.CommandContext(t.Context(), "go", "run", ".")
 		cmd.Dir = dir
 		native, err := cmd.CombinedOutput()
-		require.NoError(t,err,"%s",native)
+		require.NoError(t, err, "%s", native)
 		s := buzz.NewSession(t.Context())
-		t.Cleanup(func(){ require.NoError(t,s.Close()) })
-		source := function+"\nfinal a = integerValue(17); final b = integerValue(false);"
-		require.NoError(t,s.Exec(t.Context(),source))
-		require.Equal(t,string(native),fmt.Sprintf("%s %s\n",s.Globals()["a"].String(),s.Globals()["b"].String()))
-		require.Equal(t,fallback,s.Globals()["b"].String())
+		t.Cleanup(func() { require.NoError(t, s.Close()) })
+		source := function + "\nfinal a = integerValue(17); final b = integerValue(false);"
+		require.NoError(t, s.Exec(t.Context(), source))
+		require.Equal(t, string(native), fmt.Sprintf("%s %s\n", s.Globals()["a"].String(), s.Globals()["b"].String()))
+		require.Equal(t, fallback, s.Globals()["b"].String())
 	}
 }

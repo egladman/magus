@@ -58,7 +58,7 @@ func (p *Program) ScalarFunction(pkgPath, goFunction, buzzFunction, resultType s
 							return fmt.Errorf("%s: unsupported condition", pkg.Fset.Position(s.Pos()))
 						}
 						sel, ok := call.Fun.(*ast.SelectorExpr)
-						typ := map[string]string{"IsInt":"int","IsBool":"bool","IsString":"str","IsFloat":"double"}[member(call.Fun)]
+						typ := map[string]string{"IsInt": "int", "IsBool": "bool", "IsString": "str", "IsFloat": "double"}[member(call.Fun)]
 						if !ok || !isParam(sel.X) || typ == "" {
 							return fmt.Errorf("%s: unsupported predicate", pkg.Fset.Position(call.Pos()))
 						}
@@ -71,28 +71,28 @@ func (p *Program) ScalarFunction(pkgPath, goFunction, buzzFunction, resultType s
 						var val string
 						if len(s.Results) == 1 {
 							x := s.Results[0]
-							val = map[string]string{"Null":"null","False":"false","True":"true"}[member(x)]
+							val = map[string]string{"Null": "null", "False": "false", "True": "true"}[member(x)]
 							if isParam(x) {
 								val = "data"
 							}
-							if c, ok := x.(*ast.CallExpr); ok && len(c.Args)==1 {
+							if c, ok := x.(*ast.CallExpr); ok && len(c.Args) == 1 {
 								v := pkg.TypesInfo.Types[c.Args[0]].Value
 								if v != nil {
 									switch member(c.Fun) {
 									case "StringValue":
 										str := constant.StringVal(v)
-										if strings.Trim(str,"abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")=="" {
+										if strings.Trim(str, "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") == "" {
 											val = strconv.Quote(str)
 										}
 									case "IntValue":
 										n, exact := constant.Int64Val(v)
 										if exact && n >= -2147483648 && n <= 2147483647 {
-											val = strconv.FormatInt(n,10)
+											val = strconv.FormatInt(n, 10)
 										}
 									case "FloatValue":
-										f,_ := constant.Float64Val(v)
-										val = strconv.FormatFloat(f,'f',-1,64)
-										if !strings.Contains(val,".") {
+										f, _ := constant.Float64Val(v)
+										val = strconv.FormatFloat(f, 'f', -1, 64)
+										if !strings.Contains(val, ".") {
 											val += ".0"
 										}
 									}
@@ -102,9 +102,9 @@ func (p *Program) ScalarFunction(pkgPath, goFunction, buzzFunction, resultType s
 						if val == "" {
 							return fmt.Errorf("%s: unsupported return expression", pkg.Fset.Position(s.Pos()))
 						}
-						fmt.Fprintf(&out,"return %s;\n",val)
+						fmt.Fprintf(&out, "return %s;\n", val)
 					default:
-						return fmt.Errorf("%s: unsupported statement %T", pkg.Fset.Position(stmt.Pos()),stmt)
+						return fmt.Errorf("%s: unsupported statement %T", pkg.Fset.Position(stmt.Pos()), stmt)
 					}
 				}
 				return nil
@@ -112,8 +112,8 @@ func (p *Program) ScalarFunction(pkgPath, goFunction, buzzFunction, resultType s
 			if err := emit(fn.Body); err != nil {
 				return "", err
 			}
-			return out.String()+"}\n", nil
+			return out.String() + "}\n", nil
 		}
 	}
-	return "", fmt.Errorf("buzzgen: %s declares no function %s",pkgPath,goFunction)
+	return "", fmt.Errorf("buzzgen: %s declares no function %s", pkgPath, goFunction)
 }

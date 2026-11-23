@@ -171,14 +171,14 @@ type funObj struct {
 	This   Value   // non-null for bound methods; zero Value = unbound
 }
 type directObj struct {
-	Name string
-	Fn   Callable
+	Name     string
+	Fn       Callable
 	captures []Value
 }
 type objectInst struct {
-	Def    *objectDefObj
-	Fields []Value // declaration-order flat field values; indexed by def.Fields[i]
-	Mut    bool    // mutable only for `mut Foo{…}` instances (immutable by default)
+	Def           *objectDefObj
+	Fields        []Value // declaration-order flat field values; indexed by def.Fields[i]
+	Mut           bool    // mutable only for `mut Foo{…}` instances (immutable by default)
 	nativePayload *nativePayload
 }
 
