@@ -2,6 +2,8 @@ package comparison
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	tengo "github.com/d5/tengo/v2"
@@ -12,6 +14,49 @@ import (
 	vmpkg "github.com/egladman/magus/libs/gopherbuzz/vm"
 	lua "github.com/yuin/gopher-lua"
 )
+
+func tryCatchWorkload(tb testing.TB) (setup, hot string) {
+	tb.Helper()
+	path := filepath.Join("..", "upstream", "programs", "trycatch.buzz")
+	source, err := os.ReadFile(path)
+	if err != nil {
+		tb.Fatalf("read try/catch workload: %v", err)
+	}
+	setup = string(source) + `
+fun benchmarkTryCatchCheck() > void !> str {
+	if (main([""]) != 0) { throw "try/catch workload returned non-zero"; }
+}
+`
+	return setup, "benchmarkTryCatchCheck();"
+}
+
+func TestUpstreamTryCatch(t *testing.T) {
+	setup, hot := tryCatchWorkload(t)
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	if err := sess.Exec(ctx, setup); err != nil {
+		t.Fatalf("define workload: %v", err)
+	}
+	chunk, err := sess.Compile(hot)
+	if err != nil {
+		t.Fatalf("compile workload: %v", err)
+	}
+	if err := sess.ExecChunk(ctx, chunk); err != nil {
+		t.Fatalf("run workload: %v", err)
+	}
+}
+
+func BenchmarkUpstreamTryCatch(b *testing.B) {
+	setup, hot := tryCatchWorkload(b)
+	for _, mo := range modes {
+		b.Run(mo.name, func(b *testing.B) {
+			b.Run("Gopherbuzz", func(b *testing.B) {
+				benchBuzzSession(b, mo.m, false, setup, hot)
+			})
+		})
+	}
+}
 
 // BenchmarkComparison runs every workload through every engine under both
 // protocols, producing names like BenchmarkComparison/LoopSum/Warm/Gopherbuzz and
