@@ -376,6 +376,7 @@ guard-rule claimed-declaration
 guard-rule compat-marker
 guard-rule conflict-commit
 guard-rule conflict-rewrite
+guard-rule continue-cold-worker
 guard-rule copy-write
 guard-rule credential-verb
 guard-rule dependency-install
