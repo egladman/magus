@@ -911,7 +911,7 @@ type inspectedRow struct {
 func (s *Store) takeHeader(lines []codec.Line, f *Rows, log *jobsLog) ([]inspectedRow, error) {
 	var texts []inspectedRow
 	for _, line := range lines {
-		fields, err := gen.Job.Inspect(line.Text)
+		fields, err := jobgen.Job.Inspect(line.Text)
 		if err != nil {
 			return nil, s.wrap(&codec.LineError{Path: s.path, Line: line.N, Err: err})
 		}
@@ -1384,7 +1384,7 @@ type grantRecord struct {
 
 func (r *grantRecord) UnmarshalJSON(data []byte) error {
 	type plain grantRecord
-	return unmarshalWithSchema(data, (*plain)(r), &gen.Grant)
+	return unmarshalWithSchema(data, (*plain)(r), &jobgen.Grant)
 }
 
 func recordGrant(g Grant) grantRecord {
@@ -1395,7 +1395,7 @@ func (r grantRecord) grant(creds wireEnum[CredentialKind]) (Grant, error) {
 	var bad wireReads
 	g := Grant{Job: r.Job, Rule: r.Rule, By: r.By.origin(&bad, creds), At: r.At, Until: r.Until, Attempt: r.Attempt, Revoked: r.Revoked}
 	if err := bad.refusal(); err != nil {
-		return Grant{}, fmt.Errorf("job: grant of %s for %s: %w", r.Rule, r.Job, err)
+		return Grant{}, fmt.Errorf("read grant of %s for %s: %w", r.Rule, r.Job, err)
 	}
 	return g, nil
 }

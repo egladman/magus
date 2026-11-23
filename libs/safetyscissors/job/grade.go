@@ -414,12 +414,12 @@ type checkRunRecord struct {
 
 func (r *checkRunRecord) UnmarshalJSON(data []byte) error {
 	type plain checkRunRecord
-	return unmarshalWithSchema(data, (*plain)(r), &gen.CheckRun)
+	return unmarshalWithSchema(data, (*plain)(r), &jobgen.CheckRun)
 }
 
 func (r *gradeRecord) UnmarshalJSON(data []byte) error {
 	type plain gradeRecord
-	return unmarshalWithSchema(data, (*plain)(r), &gen.Grade)
+	return unmarshalWithSchema(data, (*plain)(r), &jobgen.Grade)
 }
 
 func recordCheckRun(r run) checkRunRecord {
