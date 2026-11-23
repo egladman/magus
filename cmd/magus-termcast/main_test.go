@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/libs/termkit/screen"
 )
 
@@ -74,7 +76,7 @@ func TestCaptureIsClean(t *testing.T) {
 // reporting "5 ran" three times would be a silent lie.
 func TestFramesTellTheStory(t *testing.T) {
 	capture := repositoryFile(t, capturePath)
-	segments := split(capture)
+	segments := recorder.Commands(capture, prompt)
 	if len(segments) < 4 {
 		t.Fatalf("split gave %d segments, want the session's several", len(segments))
 	}
@@ -113,11 +115,22 @@ func TestFramesTellTheStory(t *testing.T) {
 // Cheap to assert and impossible to notice by eye once the animation is looping,
 // so it is asserted.
 func TestFinalFrameShowsTheNarrowing(t *testing.T) {
-	frames, err := replay(repositoryFile(t, capturePath))
+	svg, err := render(repositoryFile(t, capturePath), screen.DarkTheme)
 	if err != nil {
-		t.Fatalf("replay: %v", err)
+		t.Fatalf("render: %v", err)
 	}
-	last := frames[len(frames)-1]
+	var animation struct {
+		Frames []struct {
+			Text []string `xml:"text"`
+		} `xml:"g"`
+	}
+	if err := xml.Unmarshal([]byte(svg), &animation); err != nil {
+		t.Fatalf("parse SVG: %v", err)
+	}
+	if len(animation.Frames) == 0 {
+		t.Fatal("animation has no frames")
+	}
+	last := strings.Join(animation.Frames[len(animation.Frames)-1].Text, "")
 	for _, want := range []string{
 		"$ magus affected ci",       // the command, so the frame is self-explaining
 		"libs/authkit",              // the edited project
@@ -125,7 +138,7 @@ func TestFinalFrameShowsTheNarrowing(t *testing.T) {
 		"git diff vs origin/main",   // computed, not fallen back to
 		"0 cached, 2 ran, 0 failed", // the payoff
 	} {
-		if last.FindRow(want) == 0 {
+		if !strings.Contains(last, want) {
 			t.Errorf("the final frame does not show %q; it has scrolled off the "+
 				"visible screen even though the capture contains it", want)
 		}
@@ -226,11 +239,11 @@ func TestCheckNoiseQuotesThreeLinesThenCounts(t *testing.T) {
 // one in the stream, so a capture without it yields no segments rather than one
 // segment holding the whole session.
 func TestSplitNeedsAPrompt(t *testing.T) {
-	if segs := split("plain output with no prompt\n"); segs != nil {
+	if segs := recorder.Commands("plain output with no prompt\n", prompt); segs != nil {
 		t.Errorf("split found %d segments in a promptless capture", len(segs))
 	}
 
-	segs := split("noise\n" + prompt + "one\n" + prompt + "two\n")
+	segs := recorder.Commands("noise\n"+prompt+"one\n"+prompt+"two\n", prompt)
 	if len(segs) != 2 {
 		t.Fatalf("split gave %d segments, want 2", len(segs))
 	}
@@ -242,9 +255,9 @@ func TestSplitNeedsAPrompt(t *testing.T) {
 	}
 }
 
-func TestReplayRejectsACaptureWithNoCommands(t *testing.T) {
-	if _, err := replay("nothing that looks like a session"); err == nil {
-		t.Error("replay accepted a capture with no command segments")
+func TestRenderRejectsACaptureWithNoCommands(t *testing.T) {
+	if _, err := render("nothing that looks like a session", screen.DarkTheme); err == nil {
+		t.Error("render accepted a capture with no command segments")
 	}
 }
 
@@ -262,62 +275,23 @@ func TestRenderFileNamesTheRemedyForAMissingCapture(t *testing.T) {
 // of the picture that is staged rather than recorded: a dense frame holds longer
 // than a sparse one, up to a cap, and the payoff frame overrides both.
 func TestPaceScalesWithWhatAFrameAdds(t *testing.T) {
-	p := pace{base: 0.28, perLine: 0.028, max: 0.85, last: 1.3}
+	p := corePace
 	for _, tc := range []struct {
 		what        string
 		i, n, added int
 		want        float64
 	}{
 		{"a frame that adds nothing still gets a beat", 0, 4, 0, 0.28},
+		{"a shorter frame still gets the minimum beat", 0, 4, -1, 0.28},
 		{"each added line buys dwell", 1, 4, 5, 0.28 + 5*0.028},
 		{"a dense frame is capped", 2, 4, 100, 0.85},
 		{"the payoff frame overrides the scale", 3, 4, 0, 1.3},
 	} {
 		// A delta, not equality: the want column is written as arithmetic
 		// (0.28 + 5*0.028) and float addition does not round-trip exactly.
-		if got := p.hold(tc.i, tc.n, tc.added); math.Abs(got-tc.want) > 1e-9 {
+		if got := p.Hold(tc.i, tc.n, tc.added); math.Abs(got-tc.want) > 1e-9 {
 			t.Errorf("%s: hold(%d, %d, %d) = %v, want %v", tc.what, tc.i, tc.n, tc.added, got, tc.want)
 		}
-	}
-}
-
-// TestHoldsPacesEveryFrame walks the real recording, because holds measures each
-// frame against its predecessor and the first against an empty screen, a shape
-// no synthetic pair of frames exercises.
-func TestHoldsPacesEveryFrame(t *testing.T) {
-	frames, err := replay(repositoryFile(t, capturePath))
-	if err != nil {
-		t.Fatalf("replay: %v", err)
-	}
-	holds := corePace.holds(frames)
-	if len(holds) != len(frames) {
-		t.Fatalf("paced %d holds for %d frames", len(holds), len(frames))
-	}
-	if holds[len(holds)-1] != corePace.last {
-		t.Errorf("the last frame holds for %v, want the payoff dwell %v", holds[len(holds)-1], corePace.last)
-	}
-	for i, h := range holds[:len(holds)-1] {
-		if h < corePace.base || h > corePace.max {
-			t.Errorf("frame %d holds for %v, outside [%v, %v]", i, h, corePace.base, corePace.max)
-		}
-	}
-}
-
-// TestAddedCountsWhatScrolledAway is the reason added() is not a subtraction of
-// row counts: a frame that filled the screen and pushed the earlier output off
-// the top added all of it, and the row count alone would report zero.
-func TestAddedCountsWhatScrolledAway(t *testing.T) {
-	frames, err := replay(repositoryFile(t, capturePath))
-	if err != nil {
-		t.Fatalf("replay: %v", err)
-	}
-	for i := 1; i < len(frames); i++ {
-		if n := added(frames[i-1], frames[i]); n < 0 {
-			t.Errorf("frame %d added %d lines; a frame can never add a negative number", i, n)
-		}
-	}
-	if n := added(frames[len(frames)-1], frames[0]); n != 0 {
-		t.Errorf("going backwards added %d lines, want the clamp to 0", n)
 	}
 }
 

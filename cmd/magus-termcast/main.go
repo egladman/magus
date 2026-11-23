@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/secrets"
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/rogpeppe/go-internal/txtar"
 )
@@ -325,119 +326,18 @@ func renderFile(path string, theme screen.Theme) (string, error) {
 // render replays the capture through the terminal emulator, snapshotting the
 // screen after each command, and animates the snapshots.
 func render(capture string, theme screen.Theme) (string, error) {
-	frames, err := replay(capture)
-	if err != nil {
-		return "", err
-	}
-	return screen.Animate(frames, corePace.holds(frames), screen.SVGOptions{Theme: theme})
-}
-
-// replay produces one frame per command: the terminal as it stood when that
-// command finished. Split out from render so a test can assert what a frame
-// SHOWS, which is not the same question as what the capture contains; a line
-// present in the bytes may have scrolled off the top before the frame was taken.
-func replay(capture string) ([]*screen.Terminal, error) {
-	segments := split(capture)
+	segments := recorder.Commands(capture, prompt)
 	if len(segments) < 2 {
-		return nil, fmt.Errorf("capture has %d command segments, expected the session's several", len(segments))
+		return "", fmt.Errorf("capture has %d command segments, expected the session's several", len(segments))
 	}
-
-	s := screen.New(cols, rows)
-	frames := make([]*screen.Terminal, 0, len(segments))
-	for i, seg := range segments {
-		if _, err := s.Write([]byte(seg)); err != nil {
-			return nil, fmt.Errorf("replay segment %d: %w", i, err)
-		}
-		frames = append(frames, s.Snapshot())
-	}
-
-	// Every frame is snapshotted after its command finished, so the band has been
-	// released and its rows are blank on all of them. Cropping to the tallest one
-	// keeps them the same size (which Animate requires) while spending no image
-	// on rows the session never wrote to.
-	used := 0
-	for _, f := range frames {
-		if u := f.LastUsedRow(); u > used {
-			used = u
-		}
-	}
-	for i, f := range frames {
-		frames[i] = f.Crop(used)
-	}
-	return frames, nil
-}
-
-// split cuts the capture into one segment per command: the prompt line and
-// everything the command printed before the next prompt.
-func split(capture string) []string {
-	parts := strings.Split(capture, prompt)
-	if len(parts) < 2 {
-		return nil
-	}
-	// parts[0] is whatever preceded the first prompt; on a pty that is the
-	// terminal's own startup noise, which belongs on the first frame rather than
-	// in a frame of its own.
-	segs := make([]string, 0, len(parts)-1)
-	for i, p := range parts[1:] {
-		if i == 0 {
-			p = fmt.Sprintf("%s%s%s", parts[0], prompt, p)
-		} else {
-			p = prompt + p
-		}
-		segs = append(segs, p)
-	}
-	return segs
-}
-
-// Frame pacing, in seconds. A reading pace, not a measurement: the capture is a
-// byte stream with no timings in it, and a frame-accurate replay of a run that
-// finishes in 281ms would be unreadable.
-//
-// Not a flat hold, which is the obvious version and reads as a slideshow: every
-// beat identical leaves the eye no rhythm to ride. A frame adding two lines is
-// taken in at a glance, and holding it as long as one adding twenty stalls the
-// sequence, so the dwell scales with what the frame actually adds.
-type pace struct {
-	base    float64 // a frame that adds nothing still needs a beat
-	perLine float64 // each added line of output buys a little dwell
-	max     float64 // past this a dense frame stalls the loop, which repeats anyway
-	last    float64 // the payoff frame; a loop that snaps back the instant the point lands reads as a glitch
+	return recorder.Animate(segments, cols, rows, corePace, theme)
 }
 
 var (
-	corePace = pace{base: 0.28, perLine: 0.028, max: 0.85, last: 1.3}
+	corePace = recorder.Pace{Base: 0.28, PerLine: 0.028, Max: 0.85, Last: 1.3}
 
 	// A higher floor, because the showcase's interactive beats move a highlight
 	// rather than adding output: line count understates what they ask the reader
 	// to find, and locating a cursor takes longer than reading one more line.
-	showcasePace = pace{base: 0.42, perLine: 0.028, max: 0.95, last: 1.5}
+	showcasePace = recorder.Pace{Base: 0.42, PerLine: 0.028, Max: 0.95, Last: 1.5}
 )
-
-func (p pace) hold(i, n, added int) float64 {
-	if i == n-1 {
-		return p.last
-	}
-	return min(p.base+p.perLine*float64(added), p.max)
-}
-
-// holds paces a whole recording, scaling each frame by what it adds over its
-// predecessor. The first frame is measured against an empty screen.
-func (p pace) holds(frames []*screen.Terminal) []float64 {
-	out := make([]float64, len(frames))
-	for i := range frames {
-		grew := frames[i].LastUsedRow() + 1
-		if i > 0 {
-			grew = added(frames[i-1], frames[i])
-		}
-		out[i] = p.hold(i, len(frames), grew)
-	}
-	return out
-}
-
-// added reports how many lines of output cur shows that prev did not, counting
-// what scrolled off the top as well as what appeared at the bottom; a frame
-// that filled the screen and pushed the earlier output away added all of it.
-func added(prev, cur *screen.Terminal) int {
-	n := (cur.LastUsedRow() - prev.LastUsedRow()) + (cur.Scrolled() - prev.Scrolled())
-	return max(n, 0)
-}
