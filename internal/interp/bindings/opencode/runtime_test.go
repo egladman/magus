@@ -42,11 +42,12 @@ func (s *runtimeSuite) TestPluginHasNoDiagnostics() {
 }
 func (s *runtimeSuite) nativeVerdict(body string, expected dispatchResult, permission string) {
 	runtime := s.open(func(context.Context, magusCall) (processOutput, error) { return processOutput{Stdout: body}, nil })
-	event := hookEvent{Kind: "before", Tool: "bash", Command: "git status", SessionID: "s", CallID: "c"}
+	event := hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"git status"}`, SessionID: "s", CallID: "c"}
 	result, err := runtime.Dispatch(context.Background(), event)
 	s.Require().NoError(err)
 	s.Equal(expected, result)
 	event.Kind = "permission"
+	event.Command = "git status"
 	result, err = runtime.Dispatch(context.Background(), event)
 	s.Require().NoError(err)
 	s.Equal(dispatchResult{Status: permission}, result)
@@ -161,7 +162,15 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 			maxActive.Store(count)
 		}
 		defer active.Add(-1)
-		if inv.Input == "first" {
+		var envelope struct {
+			ToolInput struct {
+				Command string `json:"command"`
+			} `json:"tool_input"`
+		}
+		if err := codec.Unmarshal([]byte(inv.Input), &envelope); err != nil {
+			return processOutput{}, err
+		}
+		if envelope.ToolInput.Command == "first" {
 			close(entered)
 			select {
 			case <-release:
@@ -169,7 +178,7 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 				return processOutput{}, ctx.Err()
 			}
 		}
-		encoded, _ := codec.Marshal(map[string]any{"api_version": "safetyscissors.verdict/v1alpha1", "decision": "advise", "context": inv.Input})
+		encoded, _ := codec.Marshal(map[string]any{"api_version": "safetyscissors.verdict/v1alpha1", "decision": "advise", "context": envelope.ToolInput.Command})
 		return processOutput{Stdout: string(encoded)}, nil
 	})
 	var wg sync.WaitGroup
@@ -177,13 +186,17 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 	results := make(chan response, 2)
 	go func() {
 		defer wg.Done()
-		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", Command: "first", SessionID: "s", CallID: "1"})
+		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"first"}`, SessionID: "s", CallID: "1"})
 		results <- response{v, err}
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case early := <-results:
+		s.T().Fatalf("first command returned before reaching the native guard: %+v", early)
+	}
 	go func() {
 		defer wg.Done()
-		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", Command: "second", SessionID: "s", CallID: "2"})
+		v, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"second"}`, SessionID: "s", CallID: "2"})
 		results <- response{v, err}
 	}()
 	close(release)
@@ -208,7 +221,7 @@ func (s *runtimeSuite) TestCancellationAndShutdown() {
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan error, 1)
 	go func() {
-		_, err := runtime.Dispatch(ctx, hookEvent{Kind: "before", Tool: "bash", Command: "waiting"})
+		_, err := runtime.Dispatch(ctx, hookEvent{Kind: "before", Tool: "bash", ArgsJSON: `{"command":"waiting"}`})
 		finished <- err
 	}()
 	<-entered
