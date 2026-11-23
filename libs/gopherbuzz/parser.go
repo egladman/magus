@@ -819,7 +819,7 @@ func (p *parser) skipType() error {
 		p.advance()
 		// A function TYPE may itself be generic: `fun::<C, D>() > int`. Erased like
 		// every other type parameter, so it only has to parse.
-		if _, err := p.skipTypeParams(); err != nil {
+		if _, err := p.typeParamList(); err != nil {
 			return err
 		}
 		if _, err := p.eat(token.LParen); err != nil {
@@ -1001,16 +1001,28 @@ func (p *parser) skipTypeParams() (bool, error) {
 // typeParamList consumes a DECLARATION's `::<T, U>` clause and returns its names.
 // A use site (`f::<int>()`) goes through skipTypeParams.
 func (p *parser) typeParamList() ([]string, error) {
-	from := p.pos
-	if ok, err := p.skipTypeParams(); !ok || err != nil {
-		return nil, err
+	if !(p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt) {
+		return nil, nil
 	}
+	p.pos += 3
 	var names []string
-	for _, t := range p.tokens[from+3 : p.pos-1] {
-		if t.Kind == token.Ident {
-			names = append(names, t.Val)
+	for {
+		name, err := p.eatIdent()
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, name.Val)
+		if p.check(token.Gt) {
+			break
+		}
+		if _, err := p.eat(token.Comma); err != nil {
+			return nil, err
+		}
+		if p.check(token.Gt) {
+			break
 		}
 	}
+	p.advance()
 	return names, nil
 }
 
@@ -2983,6 +2995,17 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 				return funRest{}, err
 			}
 			out.errAnnot = ea
+			for p.check(token.Comma) {
+				p.advance()
+				if p.check(token.LBrace) || !p.isTypeStart() {
+					break
+				}
+				next, err := p.readType()
+				if err != nil {
+					return funRest{}, err
+				}
+				out.errAnnot += "," + next
+			}
 		} else {
 			out.errAnnot = "any"
 		}
