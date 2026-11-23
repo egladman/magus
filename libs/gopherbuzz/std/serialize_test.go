@@ -51,6 +51,26 @@ func TestEncodeJSONCircular(t *testing.T) {
 	}
 }
 
+func BenchmarkBoxedQuery(b *testing.B) {
+	ctx := b.Context()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	b.Cleanup(func() { require.NoError(b, s.Close()) })
+	Register(s)
+	require.NoError(b, s.Exec(ctx, `import "serialize";
+final root = serialize\Boxed.init({"rows": [17, 42]});
+fun query() > int { return root.q("rows", 1).integerValue(); }`))
+	query := s.GetGlobal("query")
+	value, err := s.CallValue(ctx, query, nil)
+	require.NoError(b, err)
+	require.Equal(b, int64(42), value.AsInt())
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := s.CallValue(ctx, query, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestBuzzToGoCircular is buzzToGo's twin of TestEncodeJSONCircular.
 func TestBuzzToGoCircular(t *testing.T) {
 	l := cyclicList()
