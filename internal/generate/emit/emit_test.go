@@ -10,8 +10,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/termkit/screen"
+	"github.com/egladman/magus/libs/testkit"
 	screenbindings "github.com/egladman/magus/std/termkit/gen/screen"
 
 	"github.com/stretchr/testify/assert"

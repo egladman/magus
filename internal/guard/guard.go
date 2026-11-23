@@ -2064,7 +2064,9 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		Event:      env.HookEventName,
 		Agent:      env.AgentID,
 	}}
-	if env.AgentID != "" { req.CallerType = env.AgentType }
+	if env.AgentID != "" {
+		req.CallerType = env.AgentType
+	}
 	tool := magusToolCall(env.ToolName)
 	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
