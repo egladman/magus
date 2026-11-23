@@ -581,29 +581,18 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 	if err != nil {
 		return nil, err
 	}
-	stamps := filepath.Join(base, "magus", name)
-	dir := filepath.Join(stamps, stamp)
+	dir := filepath.Join(base, "magus", name, stamp)
 	now := time.Now()
-	info, err := os.Stat(dir)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("no user cache: %w", err)
+	if err := prepareStamp(dir, now); err != nil {
+		if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+			return nil, fmt.Errorf("unusable user cache: %w", err)
 		}
-		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
-	case err != nil:
-		return nil, fmt.Errorf("unusable user cache: %w", err)
-	case !info.IsDir():
-		return nil, fmt.Errorf("compiler cache %s is not a directory", dir)
-	case now.Sub(info.ModTime()) >= staleStampAge/2:
-		if err := os.Chtimes(dir, now, now); err != nil {
-			slog.With(attr.Component("interp")).Warn("could not refresh compiler cache timestamp", attr.Error(err))
-		}
+		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(err))
 	}
 	sum := sha256.Sum256([]byte(abs))
 	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
 	if err := sweepChunks(dir, now); err != nil {
-		slog.With(attr.Component("interp")).Warn("could not sweep compiler cache", attr.Error(err))
+		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not sweep compiler cache", attr.Error(err))
 	}
 	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secrets.New(string(secret)), scope: dir}, nil
 }
@@ -875,15 +864,17 @@ func GuardPolicyStore(root string) (PolicyStore, error) {
 
 // Prepare makes the store's directory and prunes other builds' stale ones.
 func (s PolicyStore) Prepare() error {
-	dir := filepath.Dir(s.Path)
-	now := time.Now()
+	return prepareStamp(filepath.Dir(s.Path), time.Now())
+}
+
+func prepareStamp(dir string, now time.Time) error {
 	if err := os.Chtimes(dir, now, now); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	pruneStamps(filepath.Dir(dir), s.Stamp, now.Add(-staleStampAge))
+	pruneStamps(filepath.Dir(dir), filepath.Base(dir), now.Add(-staleStampAge))
 	return nil
 }
 
