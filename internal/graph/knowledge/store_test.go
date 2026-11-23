@@ -1378,3 +1378,52 @@ func TestStorePruneToSizeRemovesLexicalSidecars(t *testing.T) {
 	assert.NoFileExists(t, capped.shardPath(docs.Name))
 	assert.NoFileExists(t, sidecar, "an evicted shard takes its sidecar with it")
 }
+
+func TestReadOnlyDirectoryServesDefaultShardsAndRejectsRefresh(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	require.NoError(t, os.Chmod(cacheDir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(cacheDir, 0o755)) })
+	if probe, err := os.CreateTemp(cacheDir, "write-probe"); err == nil {
+		require.NoError(t, probe.Close())
+		t.Skip("current user can write to a read-only directory")
+	} else {
+		require.ErrorIs(t, err, os.ErrPermission)
+	}
+
+	assemble := func([]ShardClass) (Inputs, error) { return in, nil }
+	g, err := Ensure(t.Context(), cacheDir, BuildOptions{}, DefaultClasses, assemble, nil)
+	require.NoError(t, err)
+	require.Positive(t, g.Output().NodeCount)
+	require.NoDirExists(t, StoreDir(cacheDir))
+
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	sh := Shard{Name: "pkg/a@symbols"}
+	_, err = store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: "changed"}, false)
+	require.ErrorContains(t, err, "unavailable in read-only store")
+	require.ErrorIs(t, err, os.ErrPermission)
+
+	_, err = Ensure(t.Context(), cacheDir, BuildOptions{Refresh: true}, DefaultClasses, assemble, nil)
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestDeniedLexicalInvalidationReportsStaleSymbolShard(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	shards := []Shard{{Name: "pkg/a@symbols"}}
+	_, err := store.Sync(t.Context(), shards, map[string]string{shards[0].Name: "original"}, false)
+	require.NoError(t, err)
+	require.FileExists(t, store.lexicalIndexPath())
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	} else {
+		require.ErrorIs(t, err, os.ErrPermission)
+	}
+	_, err = store.Sync(t.Context(), shards, map[string]string{shards[0].Name: "changed"}, false)
+	require.ErrorContains(t, err, "stale in read-only store")
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.FileExists(t, store.lexicalIndexPath())
+}

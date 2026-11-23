@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -215,11 +216,48 @@ func (p syncPlan) covers(c ShardClass) bool { return p.classes == nil || slices.
 // cross-process lock unless the store is immutable.
 func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan) error {
 	if s.immutable {
+		if plan.refresh {
+			return errors.New("cannot refresh a read-only knowledge store")
+		}
 		return s.sync(ctx, shards, fps, plan)
 	}
-	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+	err := file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
 		return s.sync(ctx, shards, fps, plan)
 	})
+	if plan.refresh || !readOnlyWriteError(err) {
+		return err
+	}
+	// Lazy readers reopen their shards from disk after this sync returns.
+	man := s.readManifestOrNil()
+	for _, sh := range shards {
+		if !isLazyShard(sh.Name) {
+			continue
+		}
+		meta, ok := man.shard(sh.Name)
+		if !ok {
+			return fmt.Errorf("knowledge shard %q unavailable in read-only store: %w", sh.Name, err)
+		}
+		stored, readErr := s.readShardKeeping(sh.Name, false)
+		if readErr != nil {
+			return fmt.Errorf("knowledge shard %q unavailable in read-only store: %w", sh.Name, readErr)
+		}
+		if meta.Fingerprint != fps[sh.Name] || stored.Fingerprint != meta.Fingerprint {
+			return fmt.Errorf("knowledge shard %q stale in read-only store: %w", sh.Name, err)
+		}
+	}
+	if man != nil {
+		for name := range man.Shards {
+			if isLazyShard(name) && plan.covers(shardClass(name)) && fps[name] == "" {
+				return fmt.Errorf("knowledge shard %q stale in read-only store: %w", name, err)
+			}
+		}
+	}
+	s.log.WarnContext(ctx, "knowledge store is read-only; serving the assembled graph from memory", attr.Error(err))
+	return nil
+}
+
+func readOnlyWriteError(err error) bool {
+	return errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EROFS)
 }
 
 // mergeShards merges the default shards into a fresh graph in shard-name order, the
@@ -518,7 +556,7 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 	if len(missing) == 0 && !recordIndexes && !recordReads && !recordTargetPolicies {
 		return nil
 	}
-	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+	err := file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
 		cur := s.readManifestOrNil()
 		if cur == nil || !maps.Equal(cur.inputs(), man.inputs()) || !maps.Equal(cur.Shards, man.Shards) {
 			// The store moved under this read; whoever moved it recorded its own stamps.
@@ -541,6 +579,11 @@ func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastSta
 		}
 		return s.writeManifest(*cur)
 	})
+	if readOnlyWriteError(err) {
+		s.log.DebugContext(ctx, "fresh knowledge stamps could not be recorded", attr.Error(err))
+		return nil
+	}
+	return err
 }
 
 // fastStampRecord is what recordFastStamps writes onto a manifest whose shards stay as
