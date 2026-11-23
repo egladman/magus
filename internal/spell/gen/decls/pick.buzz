@@ -6,8 +6,17 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
+export object Options {
+    prompt: str = "",
+    initialFilter: str = "",
+    initial: int = 0,
+    maxRows: int = 0,
+}
+
 export extern fun errAborted() > str;
-export extern fun many(p: int, items: [str], opts: {str: any}, marked: any) > any !> any;
-export extern fun one(p: int, items: [str], opts: {str: any}) > int !> any;
-export extern fun render(p: int, items: [str], opts: {str: any}, filter: str, cursor: int) > str !> any;
-export extern fun renderMany(p: int, items: [str], opts: {str: any}, marked: any, filter: str, cursor: int) > str !> any;
+export extern fun many(p: int, items: [str], opts: Options, marked: any) > result\Result::<any> !> any;
+export extern fun one(p: int, items: [str], opts: Options) > result\Result::<int> !> any;
+export extern fun render(p: int, items: [str], opts: Options, filter: str, cursor: int) > str !> any;
+export extern fun renderMany(p: int, items: [str], opts: Options, marked: any, filter: str, cursor: int) > str !> any;

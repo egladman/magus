@@ -662,27 +662,27 @@ func firstUnwritableLanding(source, rel string, me job.Job) string {
 	return outside
 }
 
-// reattachesOwnBranch reports `git switch -C <row id> [HEAD]` or `git checkout
-// -B <row id> [HEAD]` for a row with its own checkout. It keeps a detached
-// HEAD's commits. Any other name, start point or flag stays refused.
-func reattachesOwnBranch(c hint.Invocation, row job.Job) bool {
-	if c.Name != "git" || !row.Worktree.Standing() || vcsMutation(c) != "" {
+func workerVCSDecision(what string, r vcsRefusal, row job.Job, role string) denial {
+	if r.preparation.Reason == "" {
+		return denial{Say: workerVCSDenial(what, r, row, role)}
+	}
+	d := denial{Say: r.preparation.String()}
+	if len(r.preparation.Argv) > 0 {
+		d.Next = []types.NextStep{hint.NextForDenyRemedy(string(denyRuleLeaseVCS), r.preparation.Argv, "Attach the job branch before retrying.")}
+	}
+	return d
+}
+
+// preparesOwnCheckout checks the job and checkout named by a branch remedy.
+func preparesOwnCheckout(next types.NextStep, row job.Job, lease string) bool {
+	if next.ID != hint.DenyRemedyPrefix+string(denyRuleLeaseVCS) || row.ID != lease || !row.Worktree.Standing() || !samePath(row.CheckoutRoot, row.Worktree.Root) {
 		return false
 	}
-	g := parseGit(c.Args)
-	if g.configured || len(g.rest) < 2 || len(g.rest) > 3 || g.rest[1] != row.ID {
+	if len(next.Argv) < 3 || !samePath(next.Argv[2], row.Worktree.Root) || next.Run != hint.NextForDenyRemedy(string(denyRuleLeaseVCS), next.Argv, "").Run {
 		return false
 	}
-	if len(g.rest) == 3 && g.rest[2] != "HEAD" {
-		return false
-	}
-	switch g.sub {
-	case "switch":
-		return g.rest[0] == "-C" || g.rest[0] == "--force-create"
-	case "checkout":
-		return g.rest[0] == "-B"
-	}
-	return false
+	argv := []string{"git", "-C", next.Argv[2], "switch"}
+	return slices.Equal(next.Argv, append(argv, lease)) || slices.Equal(next.Argv, append(argv, "-c", lease))
 }
 
 func workerMayRunGit(sub string, rest []string) bool {

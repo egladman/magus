@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15610
-skill_short_bytes: 9101
+skill_full_bytes: 15139
+skill_short_bytes: 8887
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `6f863c757e1c` |
+| `skill-content` | `862100233235` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -142,11 +142,9 @@ Never pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, `wc
 - Never need to capture output: every run persists full log; failure prints path with output ref.
 
 Flag instead:
-- `-o template='{{.Field}}'`: field.
+- `-o template` lists fields. Use their JSON names in the template.
 - `-o name`: bare identifiers; `-o json`: parse.
 - `-s`: quieten.
-
-`jq` over `-o json` fine: contract, not scraped text.
 
 Piping magus INTO magus supported, encouraged; composition seam: `--stdin`.
 `--tee <file>` not composition seam: mirrors STRUCTURED output only (`-o json|yaml|jsonl|template`), never console text.
@@ -156,8 +154,7 @@ magus watch | magus affected --stdin        # changed paths -> affected set
 magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
-Pipe into magus, or `jq` over `-o json`: composition. Pipe into text filter: missing `-o`.
-Backgrounded run's capture is magus output too: grepping host's task file hits `capture-filter` guard rule. Background as `-o jsonl --tee <file>` -> contract you can `jq`; otherwise read file whole.
+Save a background run with `-o jsonl --tee <file>`. Read the failure's output ref for the full log.
 
 ## When you need finer granularity
 
@@ -412,15 +409,11 @@ Replace the filter with the flag that already does it:
 
 | Instead of | Use |
 |---|---|
-| `\| grep <field>` | `-o template='{{.Field}}'` |
+| `\| grep <field>` | `-o template` lists available fields; select one with `-o template='{{.field}}'` |
 | `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
 | `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
 | `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
 | `\| awk '{print $1}'` | `-o name` |
-| `\| jq` after `-o text` | `-o json` first, then `jq` |
-
-`jq` on `-o json` is fine: that is consuming a contract, not scraping text. The
-prohibition is on text filters standing in for an output format.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
 `--stdin`. `--tee <file>` is not a composition seam: it mirrors STRUCTURED output
@@ -432,13 +425,7 @@ magus watch | magus affected --stdin        # changed paths -> affected set
 magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
-A pipe into magus, or `jq` over `-o json`, is composition. A pipe into a text filter
-is a missing `-o`.
-
-A backgrounded run's capture is magus output too: grepping the task file your host
-wrote hits the `capture-filter` guard rule, since a grep drops the `output:` and `inspect:` lines
-under the `cause:` you matched. Background it as `-o jsonl --tee <file>` to get a
-contract you can `jq`; otherwise read the file whole.
+Save a background run with `-o jsonl --tee <file>`. Read the failure's output ref for the full log.
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
 WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).

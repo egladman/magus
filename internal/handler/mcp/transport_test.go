@@ -30,24 +30,15 @@ import (
 // constants; this golden copy is what makes that composition safe to change:
 // a constant that renders differently from the prose it replaced fails here
 // rather than reaching a client.
-const wantServerInstructions = `You are connected to a magus workspace.
-magus is a build orchestrator for multi-language monorepos.
-
-The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\graph().query, magus\graph().explain, magus\graph().path, magus\graph().refs, magus\graph().stats, magus\where, magus\change().affected, magus\change().impact, magus\run, magus\clean, magus\output, magus\history().hotspots, magus\history().affinity, magus\history().ownership, magus\history().trend, magus\workspace().volatility, magus\doctor, magus\job, magus\session). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
-
+const wantServerInstructions = `Use query to find workspace entities. For Buzz signatures call magus\describe.module("magus") through client.
+  query                   - search the workspace graph
   client                  - run Buzz against the magus client and return its value
   buzz                    - transform JSON with Buzz; no workspace access
   status                  - inspect the live concurrency pool
   config                  - view the resolved workspace config (read-only)
   diff                    - join the review session a person has open: state, comment, suggest, resolve
   console                 - return a local console link when a person asks to see it
-
-Typical flow:
-  Discover through client with the typed members (magus\describe.project, .graph and .file, magus\graph().query); they return records, not CLI text.
-  Run through client (magus\change().affected, magus\run); magus\output fetches a captured log by its ref.
-  Health: client (magus\doctor), status, config.
-
-Config mutation is intentionally not exposed. Use the magus CLI for that.`
+  splice                  - plan or apply workspace edits from a splice block document`
 
 func TestServerInstructionsRenderUnchanged(t *testing.T) {
 	t.Parallel()

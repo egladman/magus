@@ -215,12 +215,24 @@ func markFib(fb *fibObj, live map[*objectInst]bool, seen map[any]bool) {
 // guards against a cycle, which an object graph may freely contain.
 func markReachable(v Value, live map[*objectInst]bool, seen map[any]bool) {
 	switch v.tag() {
+	case tagDirect:
+		direct := v.asDirect()
+		if len(direct.captures) == 0 || seen[direct] {
+			return
+		}
+		seen[direct] = true
+		for _, captured := range direct.captures {
+			markReachable(captured, live, seen)
+		}
 	case tagObject:
 		inst := v.asObject()
 		if live[inst] {
 			return
 		}
 		live[inst] = true
+		if inst.nativePayload != nil {
+			markReachable(inst.nativePayload.value, live, seen)
+		}
 		for _, f := range inst.Fields {
 			markReachable(f, live, seen)
 		}

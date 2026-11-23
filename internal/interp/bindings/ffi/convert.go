@@ -177,6 +177,23 @@ func ResultBool(v vm.Value) (bool, error) {
 	return v.AsBool(), nil
 }
 
+// EnumArgument maps a closed Buzz enum's ordinal to its Go value. The
+// generator emits the table in the same order as the Buzz declaration.
+func EnumArgument[T ~string](args []vm.Value, index int, typ string, values []T) (T, error) {
+	if index >= 0 && index < len(args) {
+		v := args[index]
+		enum, _, ok := v.EnumCase()
+		backing, _ := v.EnumValue()
+		if ok && enum == typ && backing.IsInt() {
+			ordinal := backing.AsInt()
+			if ordinal >= 0 && ordinal < int64(len(values)) {
+				return values[ordinal], nil
+			}
+		}
+	}
+	return "", fmt.Errorf("argument %d requires a case of %s", index+1, typ)
+}
+
 // ResultEnum decodes a callback's result as a case of enum typ, or its
 // backing string, refusing any other value with the cases it accepts.
 func ResultEnum(v vm.Value, typ string, cases []string) (string, error) {
@@ -373,8 +390,7 @@ func StringMapVal(m map[string]string) vm.Value {
 	return out
 }
 
-// AnyMapVal converts map[string]any to a Buzz map.
-func AnyMapVal(m map[string]any) vm.Value {
+func anyMapVal(m map[string]any) vm.Value {
 	out := vm.NewMap()
 	for k, v := range m {
 		out.MapSet(k, AnyVal(v))
@@ -406,7 +422,7 @@ func AnyVal(v any) vm.Value {
 		}
 		return vm.ListValue(items)
 	case map[string]any:
-		return AnyMapVal(x)
+		return anyMapVal(x)
 	// types.BuzzObject is a NAMED map[string]any, and a type switch matches on type
 	// IDENTITY, not on underlying type, so without its own case it falls through to
 	// the null below. That is not theoretical: it is what broke every NESTED boundary
@@ -415,7 +431,7 @@ func AnyVal(v any) vm.Value {
 	// encoders no longer produce one (they nest vm.Value directly), but AnyVal is also
 	// the path for a hand-written BuzzObject and for an untyped AnyMap return.
 	case types.BuzzObject:
-		return AnyMapVal(x)
+		return anyMapVal(x)
 	case map[string]string:
 		return StringMapVal(x)
 	}

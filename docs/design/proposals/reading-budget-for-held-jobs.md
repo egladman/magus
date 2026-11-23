@@ -29,7 +29,7 @@ held the same way.
 The repository already had a review budget: `hack/dev/split-into-branches.buzz --by symbols`
 packs a change into a stack of branches of at most `--budget` changed lines, 400 by default,
 from the SmartBear study. That constant had one reader. It moved to
-`hack/magusfile/branch-stack.buzz` as `reviewBudget`, which both scripts already share, so
+`hack/dev/modules/branch-stack.buzz` as `reviewBudget`, which both scripts already share, so
 the split and the hold agree on one number.
 
 - Counting: `vcs\diffStat` from the job's checkpoint in its checkout, added plus deleted

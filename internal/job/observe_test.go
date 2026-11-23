@@ -554,6 +554,17 @@ func (s *landedSuite) TestARowWithNoBranchOrCheckoutSaysSoInANote() {
 	s.Contains(strings.Join(notes, "\n"), "the write paths graded changed_paths alone")
 }
 
+func (s *landedSuite) TestReadOnlyScoutDoesNotOwnAnAdoptedCheckoutHead() {
+	s.commitOwn("a.go", "package a // integration work\n")
+	s.row.ID = "read-only-scout"
+	s.row.ReadOnly = true
+	s.row.Worktree.Made = false
+	seen, err := CheckpointObserver(s.wt.Root(), nil)(s.T().Context(), s.row)
+	s.Require().NoError(err)
+	s.Empty(seen.Landed)
+	s.False(seen.LandedKnown)
+}
+
 // failingRange reads every range but the one from line.
 type failingRange struct {
 	types.VCSDriver

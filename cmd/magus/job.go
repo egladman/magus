@@ -1101,7 +1101,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	case outputName:
 		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
-		fmt.Println(job.BaseAdvice(stored))
+		fmt.Println(job.TakeAdvice(ctx, stored, configuredVCS()))
 		fmt.Printf("took %s in %s; read the spec with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
 		return nil
 	case outputJSON, outputJSONL, outputTemplate, outputYAML:

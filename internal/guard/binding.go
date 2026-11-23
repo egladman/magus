@@ -81,14 +81,15 @@ func ResolveAuthority(ctx context.Context, base Dependencies, req Request) CallA
 		unleased.Lease = req.PendingRow.ID
 		return unleased
 	}
-	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent}
+	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript}
 	if filepath.IsAbs(req.Dir) {
 		ctx = hookContextAt(ctx, base, req.Dir)
 	}
 	if env, ok := decodeHookEnvelope(req.Input, req.Tools); ok {
 		ctx = hookContextAt(ctx, base, env.Cwd)
-		who.Session = cmp.Or(who.Session, env.Who.Session)
-		who.Agent = cmp.Or(who.Agent, env.Who.Agent)
+		who = who.withEnvelopeCaller(env.Who, false)
+	} else {
+		who = who.withTranscriptCaller(false)
 	}
 	at := hookLocation(ctx, base)
 	if at.cacheDir == "" && at.rows == nil {

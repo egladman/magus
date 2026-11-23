@@ -62,7 +62,7 @@ type Options struct {
 	// keystroke from inside the input loop, so a lookup that hangs freezes the
 	// prompt, and one that errors used to be indistinguishable from one that
 	// legitimately matched nothing.
-	Query func(ctx context.Context, filter string) ([]string, error)
+	Query func(ctx context.Context, filter string) ([]string, error) `buzz:"-"`
 }
 
 // Pick blocks until the user selects an item or aborts. On success it returns

@@ -20,7 +20,7 @@ import (
 // commit in five touches it; every other commit may move Go sources and still load.
 // The paths are magus's own module, judged only in a checkout of it.
 //
-// A copy of loadContract in hack/magusfile/load-contract.buzz: Buzz reaches no Go digest.
+// Keep in sync with hack/dev/modules/load-contract.buzz.
 var (
 	loadContractDirs  = []string{"internal/spell/gen/decls/", "internal/interp/bindings/gen/"}
 	loadContractFiles = []string{"libs/gopherbuzz/checker*.go", "libs/gopherbuzz/compiler*.go"}
@@ -172,6 +172,9 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 				root, err, ward.RelinkAt(root)),
 			Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
 		}.full()
+	}
+	if currentTreeAtOtherAuthority(root, skew) {
+		return authorityRecovery(ctx, at, deps.lease, skew.Revision).full()
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; relink ./magus, alone on its line: `%s`.",

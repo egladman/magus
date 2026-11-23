@@ -10,11 +10,6 @@ import (
 	"github.com/egladman/magus/libs/termkit/internal/cells"
 )
 
-// SpinLoader is the loader a [Spinner] turns where the terminal can draw
-// Unicode: the one magus's own run band turns by default, so a script's wait
-// looks like magus's.
-const SpinLoader = "glyph/dots"
-
 // Spinner is a loader turning beside a label on one line, redrawn in place
 // until [Spinner.Stop].
 type Spinner struct {
@@ -42,11 +37,11 @@ func (s *Spinner) Stop() {
 }
 
 func startSpinner(out io.Writer, p termkit.Probe, label string, now func() time.Time) (*Spinner, error) {
-	name := SpinLoader
+	name := GlyphDots
 	if !termkit.WantsUnicode(p) {
-		name = Fallback
+		name = GlyphLine
 	}
-	l, err := Lookup(name)
+	l, err := NewGlyph(name)
 	if err != nil {
 		return nil, err
 	}

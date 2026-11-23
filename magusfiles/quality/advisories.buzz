@@ -46,7 +46,7 @@ import "semver";
 import "time";
 import "flags";
 import "result";
-import "hack/magusfile/deviations" as deviations;
+import "hack/ci/modules/deviations" as deviations;
 // Used by the test blocks, which run under buzz_test now that it globs hack/.
 import "assert";
 

@@ -270,14 +270,6 @@ func (s *LaunchSuite) TestCommandRefusesWithoutItsRuleset() {
 	assert.Contains(t, out, "landlock_restrict_self")
 }
 
-func (s *LaunchSuite) TestCommandNilPolicyIsPlain() {
-	t := s.T()
-	cmd, err := Command(context.Background(), nil, "true")
-	require.NoError(t, err)
-	assert.Equal(t, []string{"true"}, cmd.Args)
-	assert.Empty(t, cmd.ExtraFiles)
-}
-
 // A rule the building process resolved onto its own /proc entries is the child's to
 // grant itself; left in the ruleset it would hand the child the builder's descriptors.
 func (s *LaunchSuite) TestProcSelfRulesMoveToTheLauncher() {

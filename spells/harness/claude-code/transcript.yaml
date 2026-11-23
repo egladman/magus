@@ -1,0 +1,4 @@
+format: messages
+home_env: CLAUDE_CONFIG_DIR
+default_home: .claude
+store: projects

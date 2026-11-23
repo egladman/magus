@@ -3,9 +3,9 @@ import "magus/spell/buf";
 import "magus/spell/go";
 import "project/../docs";
 import "project/../console";
-import "../hack/magusfile/drift" as drift;
-import "../hack/magusfile/index" as index;
-import "../hack/magusfile/deviations" as deviations;
+import "../magusfiles/quality/drift" as drift;
+import "../magusfiles/build/index" as index;
+import "../hack/ci/modules/deviations" as deviations;
 import "fs";
 import "vcs";
 

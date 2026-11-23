@@ -48,7 +48,7 @@ func TestExcludedModules(t *testing.T) {
 		"reclaimdisk", // removes worktrees and trims the Go build cache
 		// The terminal UI library draws on a terminal, which a browser lacks.
 		"termkit", "layout", "notify", "pick", "progress", "screen",
-		"recorder", // registered only in native builds
+		"recorder", "splice", // registered only in native builds
 		// A Buzz module dry.PlaygroundSourceModules does not list.
 		"modeltiers",
 	}, got, "only the process/filesystem/network modules and unvetted Buzz modules should be excluded")

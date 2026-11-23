@@ -1,0 +1,4 @@
+format: rollout
+home_env: CODEX_HOME
+default_home: .codex
+store: sessions

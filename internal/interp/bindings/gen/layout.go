@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/std/termkit/gen/layout"
 )
 
@@ -19,6 +20,7 @@ func RegisterLayout(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
+	enums := ffi.SessionEnums(ctx, sess, "termkit/layout")
 	m.MapSet("cols", vm.DirectValue("layout.cols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := ffi.String(bzArgs, 0)
 		ret0, err := layout.ImplCols(ctx, s)
@@ -57,8 +59,8 @@ func RegisterLayout(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("columns", vm.DirectValue("layout.columns", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		rows := ffi.Any(bzArgs, 0)
 		width := ffi.Int(bzArgs, 1, 0)
-		meta := ffi.String(bzArgs, 2)
-		selected := ffi.String(bzArgs, 3)
+		meta := termkit.SGR(ffi.String(bzArgs, 2))
+		selected := termkit.SGR(ffi.String(bzArgs, 3))
 		ret0, err := layout.ImplColumns(ctx, rows, width, meta, selected)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -78,12 +80,12 @@ func RegisterLayout(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("hints", vm.DirectValue("layout.hints", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		hints := ffi.Any(bzArgs, 0)
 		width := ffi.Int(bzArgs, 1, 0)
-		style := ffi.String(bzArgs, 2)
+		style := termkit.SGR(ffi.String(bzArgs, 2))
 		ret0, err := layout.ImplHints(ctx, hints, width, style)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectTermkitLine(ret0, enums), nil
 	}))
 	m.MapSet("maxLabel", vm.DirectValue("layout.maxLabel", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := layout.ImplMaxLabel(ctx)

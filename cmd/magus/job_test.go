@@ -61,6 +61,67 @@ func execFixture(t *testing.T, rows ...jobtypes.Job) (root, cacheDir string) {
 	return seedJobStore(t, w.Root(), rows...)
 }
 
+func TestJobExecReportsDetachedCheckoutPreparation(t *testing.T) {
+	for _, tc := range []struct {
+		name                        string
+		branchState                 string
+		readOnly, attached, adopted bool
+		want                        string
+	}{
+		{name: "write without destination", want: "orchestrator"},
+		{name: "write in adopted checkout", adopted: true, want: "switch -c worker"},
+		{name: "branch at HEAD", adopted: true, branchState: "same", want: "switch worker"},
+		{name: "branch moved", adopted: true, branchState: "moved", want: "reconcile branch worker"},
+		{name: "branch in use", adopted: true, branchState: "occupied", want: "already checked out"},
+		{name: "read only", readOnly: true},
+		{name: "attached", attached: true, adopted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, _ := execRepositoryFixture(t)
+			own := filepath.Join(t.TempDir(), "worker checkout")
+			repo.Git("worktree", "add", "--detach", own)
+			switch tc.branchState {
+			case "same":
+				repo.Git("branch", "worker")
+			case "moved":
+				repo.Commit("advance", map[string]string{"change": "next"})
+				repo.Git("branch", "worker")
+			case "occupied":
+				repo.Git("switch", "-c", "worker")
+			}
+			if tc.attached {
+				repo.Git("-C", own, "switch", "-c", "worker")
+			}
+			row := jobtypes.Job{ID: "worker", State: jobtypes.StateDeclared, ReadOnly: tc.readOnly}
+			if !tc.readOnly {
+				row.Paths.Write = []string{"magus.yaml"}
+			}
+			_, cacheDir := seedJobStore(t, own, row)
+			if tc.adopted {
+				store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: own})
+				_, err := store.RecordWorktree(t.Context(), row.ID, jobtypes.Worktree{Root: own, Source: repo.Root(), Base: repo.Head()})
+				require.NoError(t, err)
+			}
+			out := captureStdout(t, func() {
+				require.NoError(t, jobExec(t.Context(), own, []string{row.ID}))
+			})
+			assert.Contains(t, out, "took worker")
+			if tc.want == "" {
+				assert.NotContains(t, out, "before editing")
+			} else {
+				assert.Contains(t, out, "before editing")
+				assert.Contains(t, out, tc.want)
+			}
+			branch := repo.Git("-C", own, "branch", "--show-current")
+			if tc.attached {
+				assert.Equal(t, "worker", strings.TrimSpace(branch))
+			} else {
+				assert.Empty(t, strings.TrimSpace(branch))
+			}
+		})
+	}
+}
+
 // execRepositoryFixture is execFixture over a git repository holding the same magus.yaml.
 func execRepositoryFixture(t *testing.T, rows ...jobtypes.Job) (repo *testkit.Repo, cacheDir string) {
 	t.Helper()

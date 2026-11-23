@@ -321,11 +321,20 @@ func TestParity_CollectorKeepsReachableObjects(t *testing.T) {
     return collected;`,
 		},
 		// The fiber cases live in testdata/gc_collect_*.buzz: the fixture runner
+		{
+			name: "a detached Boxed query retains its payload",
+			body: `
+    final query = serialize\Boxed.init([Tracked{ id = 1 }]).q;
+    gc\collect();
+    _ = query(0);
+    return collected;`,
+		},
 		// builds the same session this helper does, and a file there is round-tripped
 		// through the bytecode codec by TestBytecodeRoundTrip as well.
 	}
 	const decls = `
 import "gc";
+import "serialize";
 
 var collected = 0;
 

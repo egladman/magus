@@ -122,7 +122,7 @@ The review budget bounds what a person meets later. A settled job whose change t
 than `--review-budget` lines in its `scoped` or `full` paths is held the same way, since no
 one read it while it was integrated. Lines come from `vcs\diffStat` in the job's checkout;
 a path proven `trivial` or `mechanical` adds none. The budget defaults to, and may not
-exceed, `reviewBudget` in `hack/magusfile/branch-stack.buzz`: the same 400 lines
+exceed, `reviewBudget` in `hack/dev/modules/branch-stack.buzz`: the same 400 lines
 `split-into-branches.buzz` packs a layer to. The hold names that script's command for the
 job. The person runs it or integrates the row as it is. The mandate never splits a job.
 

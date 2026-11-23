@@ -423,6 +423,75 @@ func (s *Store) adoptCheckout(ctx context.Context, id, dir string) (job.Worktree
 	return wt, nil
 }
 
+// CheckoutPreparation describes how a writable job can leave detached HEAD.
+// Argv is an action its holder can take without forcing a branch update.
+type CheckoutPreparation struct {
+	Reason string
+	Argv   []string
+}
+
+// GitCheckoutPreparation reads the checkout and the fork's destination.
+// Taking the job alone gives no authority to choose a delivery branch.
+func GitCheckoutPreparation(ctx context.Context, row job.Job, root string, driver types.VCSDriver) CheckoutPreparation {
+	if row.ReadOnly || driver == nil || driver.Name() != "git" {
+		return CheckoutPreparation{}
+	}
+	ref, err := driver.Ref(ctx, root)
+	if err != nil {
+		return CheckoutPreparation{Reason: fmt.Sprintf("before editing, inspect the checkout at %s: %v", root, err)}
+	}
+	if ref != "" {
+		return CheckoutPreparation{}
+	}
+	reason := root + " has no branch checked out; before editing, "
+	if !row.Worktree.Standing() || !samePath(row.Worktree.Root, root) || !samePath(row.CheckoutRoot, root) || !driver.IsSecondaryCheckout(root) {
+		return CheckoutPreparation{Reason: reason + "ask the orchestrator to record a writable linked checkout for this job."}
+	}
+	heads, err := driver.BranchHeads(ctx, root)
+	if err != nil {
+		return CheckoutPreparation{Reason: fmt.Sprintf("%sinspect the local branches: %v", reason, err)}
+	}
+	argv := []string{"git", "-C", root, "switch"}
+	tip, exists := heads[row.ID]
+	if !exists {
+		return CheckoutPreparation{Reason: reason + "create the job branch at this HEAD.", Argv: append(argv, "-c", row.ID)}
+	}
+	checkouts, err := driver.RegisteredCheckouts(ctx, root)
+	if err != nil {
+		return CheckoutPreparation{Reason: fmt.Sprintf("%sinspect the registered checkouts: %v", reason, err)}
+	}
+	var head string
+	for _, checkout := range checkouts {
+		if samePath(checkout.Root, root) {
+			head = checkout.Head
+			continue
+		}
+		branch, err := driver.Ref(ctx, checkout.Root)
+		if err != nil {
+			return CheckoutPreparation{Reason: fmt.Sprintf("%sask the orchestrator to inspect checkout %s: %v", reason, checkout.Root, err)}
+		}
+		if branch == row.ID {
+			return CheckoutPreparation{Reason: fmt.Sprintf("%sask the orchestrator to reconcile %s, already checked out in %s.", reason, row.ID, checkout.Root)}
+		}
+	}
+	if head == "" || tip != head {
+		return CheckoutPreparation{Reason: fmt.Sprintf("%sask the orchestrator to reconcile branch %s at %s with this HEAD.", reason, row.ID, tip)}
+	}
+	return CheckoutPreparation{Reason: reason + "attach the job branch at this HEAD.", Argv: append(argv, row.ID)}
+}
+
+// String renders the preparation with checkout paths quoted for a shell.
+func (p CheckoutPreparation) String() string {
+	if len(p.Argv) == 0 {
+		return p.Reason
+	}
+	words := make([]string, len(p.Argv))
+	for i, arg := range p.Argv {
+		words[i] = shellQuote(arg)
+	}
+	return fmt.Sprintf("%s Run `%s`.", p.Reason, strings.Join(words, " "))
+}
+
 // OwnedCheckout is the root of the standing checkout a row records that dir lies in, "" when
 // no row records one there.
 func (s *Store) OwnedCheckout(ctx context.Context, dir string) (string, error) {

@@ -195,11 +195,10 @@ func binaryAnswers() [][]string {
 	return [][]string{{"describe"}, {"harness"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
 }
 
-// BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
-// body reaches a binaryAnswers member. The walk follows calls into the file's own helpers
-// and into functions of a Buzz module src imports ("../hack/magusfile/index"), resolved
-// against dirs in order as "<dir>/<path>.buzz" or "<dir>/magusfiles/<path>.buzz" and read
-// through read. A call it cannot follow counts as nothing, so it under-reports
+// BinaryAnswerTargets returns normalized keys for exported targets that reach
+// a binaryAnswers member. It follows calls through local and imported helpers.
+// For each dir it tries "<dir>/<path>.buzz" and "<dir>/magusfiles/<path>.buzz".
+// It uses read. Unresolved calls contribute nothing, so it under-reports
 // the way every static footprint does. A parse failure yields nil.
 func BinaryAnswerTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
 	prog, err := parsecache.Shared().ParseEmbedded(src)
@@ -582,23 +581,8 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 	if err != nil {
 		return nil, err
 	}
-	stamps := filepath.Join(base, "magus", name)
-	dir := filepath.Join(stamps, stamp)
-	now := time.Now()
-	switch err := os.Chtimes(dir, now, now); {
-	case errors.Is(err, fs.ErrNotExist):
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("no user cache: %w", err)
-		}
-		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
-	case err != nil:
-		return nil, fmt.Errorf("unusable user cache: %w", err)
-	}
 	sum := sha256.Sum256([]byte(abs))
-	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
-	if err := sweepChunks(dir, now); err != nil {
-		return nil, fmt.Errorf("sweep %s: %w", dir, err)
-	}
+	dir := filepath.Join(base, "magus", name, stamp, hex.EncodeToString(sum[:]))
 	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secrets.New(string(secret)), scope: dir}, nil
 }
 
@@ -680,6 +664,10 @@ func WithBytecodeWarnings(ctx context.Context) context.Context {
 // WithBytecodeWarnings, else per load, whose record is said.
 func warnBytecodeStore(ctx context.Context, said map[string]bool, msg string, cause error, attrs ...any) {
 	key := fmt.Sprintf("%s\x00%v", msg, cause)
+	if errors.Is(cause, fs.ErrPermission) {
+		// Each write names a new temporary file in the same store.
+		key = msg + "\x00permission"
+	}
 	if command, _ := ctx.Value(bytecodeWarningsKey{}).(*sync.Map); command != nil {
 		if _, seen := command.LoadOrStore(key, true); seen {
 			return
@@ -869,15 +857,17 @@ func GuardPolicyStore(root string) (PolicyStore, error) {
 
 // Prepare makes the store's directory and prunes other builds' stale ones.
 func (s PolicyStore) Prepare() error {
-	dir := filepath.Dir(s.Path)
-	now := time.Now()
+	return prepareStamp(filepath.Dir(s.Path), time.Now())
+}
+
+func prepareStamp(dir string, now time.Time) error {
 	if err := os.Chtimes(dir, now, now); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	pruneStamps(filepath.Dir(dir), s.Stamp, now.Add(-staleStampAge))
+	pruneStamps(filepath.Dir(dir), filepath.Base(dir), now.Add(-staleStampAge))
 	return nil
 }
 
@@ -893,42 +883,6 @@ func (s PolicyStore) Seal(body []byte) string {
 // Verify reports whether seal is Seal(body).
 func (s PolicyStore) Verify(body []byte, seal string) bool {
 	return hmac.Equal([]byte(s.Seal(body)), []byte(seal))
-}
-
-// sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
-// kept in, its key and its bytes, so a chunk moved from another key, workspace
-// or compiler fails exactly as a forged one does.
-type sealedBytecodeStore struct {
-	inner  buzz.BytecodeStore
-	secret secrets.Secret
-	scope  string
-}
-
-var errUnsealedChunk = errors.New("bytecode chunk does not verify")
-
-func (s sealedBytecodeStore) Load(key string) ([]byte, error) {
-	sealed, err := s.inner.Load(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(sealed) < sha256.Size || !hmac.Equal(sealed[:sha256.Size], s.seal(key, sealed[sha256.Size:])) {
-		return nil, errUnsealedChunk
-	}
-	return sealed[sha256.Size:], nil
-}
-
-func (s sealedBytecodeStore) Store(key string, blob []byte) error {
-	return s.inner.Store(key, append(s.seal(key, blob), blob...))
-}
-
-func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
-	m := hmac.New(sha256.New, []byte(s.secret.Reveal()))
-	for _, part := range []string{s.scope, key} {
-		_, _ = m.Write([]byte(part))
-		_, _ = m.Write([]byte{0})
-	}
-	_, _ = m.Write(blob)
-	return m.Sum(nil)
 }
 
 // bytecodeSecret reads the key chunks are sealed with, creating it on first use.

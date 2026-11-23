@@ -366,6 +366,15 @@ func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at l
 	var d denial
 	switch {
 	case holds:
+		if cause == unloadStale && call.lease != "" {
+			skew, err := judgedContract(ctx, at, call.lease, at.workspace)
+			if err == nil && currentTreeAtOtherAuthority(at.workspace, skew) {
+				d = authorityRecovery(ctx, at, call.lease, skew.Revision)
+				asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: d.full()}
+				asked.rule, asked.by, asked.next = denyRuleStaleBinary, decidedByBuiltin, nil
+				return true
+			}
+		}
 		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && (recorded || unknown):
 		broken = false

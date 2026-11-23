@@ -18,7 +18,7 @@ import (
 
 // buzzModules lists modules with generated Buzz host bindings.
 var buzzModules = []string{
-	"os", "vcs", "fs", "archive", "env", "json", "http", "charm",
+	"os", "vcs", "fs", "archive", "env", "json", "http", "charm", "splice",
 }
 
 // TestBuzzFilesUpToDate verifies that the checked-in bindings/gen/<module>.go files

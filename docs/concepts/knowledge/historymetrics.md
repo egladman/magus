@@ -105,7 +105,7 @@ Each metric is its own answer type:
   measure: each touched file of it is listed in `unmeasured` with its language and why. A
   base source an in-process indexer cannot read is an error, never a pass. Comparing the two
   measures is the analyzer's: this repository's conformance ceiling, in
-  `hack/magusfile/conformance-ceiling.buzz`, holds a changed file to the violations it held at
+  `magusfiles/quality/conformance-ceiling.buzz`, holds a changed file to the violations it held at
   the base, and an item already past its anchor to its size there.
 
 - `grouping`: what splitting work across workers cost in this workspace, read from the

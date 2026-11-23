@@ -200,9 +200,9 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 			if tt.continued {
 				time.Sleep(10 * time.Millisecond)
 				Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
-					"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
+					"session_id": "8f2c6a1e", "hook_event_name": "PostToolUse", "tool_name": "SendMessage",
 					"tool_input": map[string]any{"to": "brisk-heron", "message": "Carry on."},
-				}), Host: "claude-code"})
+				}), Host: "claude-code", RendersAsk: true})
 			}
 			v := Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",

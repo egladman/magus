@@ -131,6 +131,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSpawnUnvalidated},
 	{doc: ruleDocSpawnUnisolatedRow},
 	{doc: ruleDocSpawnWarmWorker},
+	{doc: ruleDocContinueColdWorker},
 	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
 	{doc: ruleDocCheckpointState, advisory: true},
@@ -786,7 +787,7 @@ var ruleDocLeaseVcs = types.RuleDoc{
 		"The checkout's integrator (a subagent holding an integration row, or spawned `<parent>/integrate <job>` for its row) may also rebase there onto its base, origin/<base>, a depends_on branch or a branch it integrates, and cherry-pick or revert any commit; " +
 		"a rebase that runs a command (-x, --exec), stashes, moves another ref (--update-refs), names a second branch or names no upstream is refused, and the root still pushes. " +
 		"A shell script the line runs is judged line by line, so a commit or a reset inside it gets the same verdict as one typed on the line; a script not on disk yet cannot be read, so it is refused: write it, then run it in a call of its own. " +
-		"On a detached HEAD the refusal names `git switch <job>`, or `git switch -c <job>` when the orchestrator made no branch for the job; a row with its own standing checkout gets `git switch -C <job>`, which keeps the detached commits. That line and `git checkout -B <job>` are allowed only for the row's own id, in its own checkout, with no start point but HEAD and no force or merge. " +
+		"On a detached HEAD the refusal identifies who can prepare the checkout. A worker can create its job branch at HEAD or attach it at the same commit in its fork's checkout. Force-creating a branch stays with the orchestrator. " +
 		"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
 		"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 		"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
@@ -1093,6 +1094,14 @@ var ruleDocSpawnWarmWorker = types.RuleDoc{
 		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
 		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record names a new worker in agent.worker. " +
 		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
+}
+
+var ruleDocContinueColdWorker = types.RuleDoc{
+	Name:    string(denyRuleSpawnColdContinuation),
+	Catches: "dispatching another model turn to a worker whose prompt-cache warmth or cost cannot be established",
+	Why: "A continuation past the prompt-cache TTL, near a model's long-context price step, or with unknown age or cost can start new model work at a higher price. " +
+		"The root must approve it through a host prompt when one is available; a leased worker cannot approve its own spend, and a host that cannot render approval refuses it. " +
+		"A recent worker with known model and context cost stays prompt-free.",
 }
 
 var ruleDocReleaseRequested = types.RuleDoc{

@@ -39,6 +39,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [claimed-declaration](claimed-declaration.md)             | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)             |
 | [conflict-commit](conflict-commit.md)                     | a `git commit` recording a merge conflict marker on a line it adds                                  |
 | [conflict-rewrite](conflict-rewrite.md)                   | an inline interpreter rewriting a file that holds merge conflict markers                            |
+| [continue-cold-worker](continue-cold-worker.md)           | dispatching another model turn to a worker whose prompt-cache warmth or cost cannot be established  |
 | [copy-write](copy-write.md)                               | a file copied into the workspace from outside it, judged as the file write it is                    |
 | [credential-verb](credential-verb.md)                     | an agent minting, printing, rotating or revoking a credential through the CLI                       |
 | [dependency-install](dependency-install.md)               | a raw package install that the cached install target already runs                                   |
@@ -148,19 +149,19 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [shared-checkout](shared-checkout.md)                   | a spawn into a checkout a live job already holds and writes                                     |
 | [skill-source](skill-source.md)                         | a write to an installed skill copy rather than to its source                                    |
 | [source-read](source-read.md)                           | an unbounded source read the symbol index has already answered                                  |
-| [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
-| [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
+| [spawn-above-parent-tier](spawn-above-parent-tier.md)   | a subagent spawned on a model whose tier ranks above its spawner's                              |
+| [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                        |
+| [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                           |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                     |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                      |
-| [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
-| [spawn-above-parent-tier](spawn-above-parent-tier.md)   | a subagent spawned on a model whose tier ranks above its spawner's                              |
+| [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at             |
 | [spawn-names-model](spawn-names-model.md)               | a spawn omitting its model, or (at deny) using a model outside its row's tier                   |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                    |

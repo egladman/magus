@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/libs/termkit/screen"
 )
 
@@ -103,15 +103,6 @@ func showcaseScript() []showcaseStep {
 	}
 }
 
-// showcaseFrames splits a marked capture into the byte runs behind each frame.
-func showcaseFrames(capture string) []string {
-	parts := strings.Split(capture, frameMark)
-	if len(parts) > 1 {
-		parts = parts[:len(parts)-1] // the tail after the last mark is teardown
-	}
-	return parts
-}
-
 // renderShowcase replays each marked frame and animates them.
 //
 // Cumulative, like the core loop: every frame is written into ONE screen, so
@@ -120,28 +111,11 @@ func showcaseFrames(capture string) []string {
 // property the whole design rests on, and it is only visible if the frames
 // share a screen.
 func renderShowcase(capture string, theme screen.Theme) (string, error) {
-	frames := showcaseFrames(capture)
+	frames := recorder.Marked(capture, frameMark)
 	if len(frames) < 2 {
 		return "", fmt.Errorf("showcase capture has %d frames, expected the script's several", len(frames))
 	}
-	s := screen.New(showCols, showRows)
-	shots := make([]*screen.Terminal, 0, len(frames))
-	for i, f := range frames {
-		if _, err := s.Write([]byte(f)); err != nil {
-			return "", fmt.Errorf("replay frame %d: %w", i, err)
-		}
-		shots = append(shots, s.Snapshot())
-	}
-	used := 0
-	for _, sh := range shots {
-		if u := sh.LastUsedRow(); u > used {
-			used = u
-		}
-	}
-	for i, sh := range shots {
-		shots[i] = sh.Crop(used)
-	}
-	return screen.Animate(shots, showcasePace.holds(shots), screen.SVGOptions{Theme: theme})
+	return recorder.Animate(frames, showCols, showRows, showcasePace, theme)
 }
 
 // recordShowcaseSession materializes a demo workspace and records the script

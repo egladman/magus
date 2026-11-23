@@ -91,6 +91,32 @@ func judgedContract(ctx context.Context, at location, lease, root string) (contr
 	return authorityContract(ctx, root, row.Authority)
 }
 
+// currentTreeAtOtherAuthority requires both digests. An unreadable working
+// tree or revision cannot establish which side needs repair.
+func currentTreeAtOtherAuthority(root string, skew contract.Skew) bool {
+	if skew.Revision == "" || !skew.Differs() {
+		return false
+	}
+	tree, err := contract.Check(root)
+	return err == nil && tree.Tree == skew.Binary
+}
+
+func authorityRecovery(ctx context.Context, at location, lease, revision string) denial {
+	row, ok := leaseRow(ctx, at, lease)
+	if !ok || row.CheckoutRoot == "" {
+		return denial{Say: fmt.Sprintf("Job %s uses another contract at %.12s. Ask an unleased orchestrator to locate its registered checkout before changing the job.", lease, revision)}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s. An unleased orchestrator must retire the obsolete job or reconcile its authority in %s.",
+			lease, revision, shellWord(row.CheckoutRoot)),
+		Why: fmt.Sprintf("In the registered checkout, inspect `git status --short` and confirm that the intended branch preserves the work. "+
+			"If the job is obsolete, an unleased orchestrator can close only that job with `./magus job exit %s`. "+
+			"If work continues, review the staged and working changes and verify the intended contract is committed on the intended branch. "+
+			"Only then run `./magus job advance %s` in the registered checkout and verify its authority against HEAD. See docs/conventions.md#recovering-a-checkout-binary.",
+			shellWord(lease), shellWord(lease)),
+	}
+}
+
 // authorityTrees holds each revision's contract digest, a string, by
 // authorityKey. A revision's files never change, so a later or concurrent
 // judgment reuses it. A failed read is never kept.

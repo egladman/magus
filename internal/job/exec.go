@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // ErrHeldElsewhere reports a registration against a running job another checkout holds,
@@ -66,7 +67,7 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 		return job.Job{}, err
 	}
 	base, full := facts.base, facts.full
-	return s.Mutate(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64) error {
+	return s.MutateSeeing(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64, rows []job.Job) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
 				" check the declared ids with `%s` and exec under the id the"+
@@ -80,6 +81,9 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 			}
 		}
 		if err := execRefusal(cur, here, facts); err != nil {
+			return err
+		}
+		if err := checkoutWriterConflict(*cur, here, rows); err != nil {
 			return err
 		}
 		// An exited row taken again where it was taken is its holder sent back to work: it
@@ -163,7 +167,36 @@ func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error
 	if err != nil {
 		return err
 	}
-	return execRefusal(&row, here, facts)
+	if err := execRefusal(&row, here, facts); err != nil {
+		return err
+	}
+	f, err := s.Read(ctx)
+	if err != nil {
+		return err
+	}
+	return checkoutWriterConflict(row, here, f.Jobs)
+}
+
+// Wait reads the checkout's HEAD when a writer owns the checkout. Two
+// independently graded writers cannot both own that revision.
+func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
+	if here == "" || len(row.Paths.Write) == 0 {
+		return nil
+	}
+	for _, peer := range rows {
+		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.Paths.Write) == 0 {
+			continue
+		}
+		if peer.State != job.StateRunning && peer.State != job.StateExited {
+			continue
+		}
+		if !peer.Worktree.Standing() && !row.Worktree.Standing() && peer.Parent != "" && row.Parent != "" {
+			continue
+		}
+		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s; give %s its own checkout or finish verifying %s before taking another writer here",
+			row.ID, peer.ID, here, row.ID, peer.ID)}
+	}
+	return nil
 }
 
 // untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork
@@ -270,6 +303,23 @@ func isHex(s string) bool {
 	return strings.Trim(s, "0123456789abcdef") == ""
 }
 
+// TakeAdvice reports the base and any preparation needed before editing.
+func TakeAdvice(ctx context.Context, row job.Job, opts types.VCSOptions) string {
+	base := BaseAdvice(row)
+	if row.ReadOnly {
+		return base
+	}
+	res, err := vcs.Resolve(ctx, row.CheckoutRoot, "", opts)
+	if err != nil {
+		return fmt.Sprintf("%s\ncould not inspect checkout preparation: %v", base, err)
+	}
+	prep := GitCheckoutPreparation(ctx, row, row.CheckoutRoot, res.VCS)
+	if prep.Reason == "" {
+		return base
+	}
+	return fmt.Sprintf("%s\n%s", base, prep)
+}
+
 // BaseAdvice is what the registering worker is told: what the verdict means in
 // terms of the two tokens it compared, and what to do next.
 //
@@ -302,11 +352,9 @@ func BaseAdvice(row job.Job) string {
 			" Have the orchestrator put one on the job (`magus vcs checkpoint -o name`) before the next job is cut,"+
 			" so a later reader can tell whether a worker was on the base it was given.",
 			row.ID, row.ReportedBase)
-
 	}
 	return fmt.Sprintf("recorded job %s's base as %s, and this magus does not recognize the verdict %q it computed."+
 		" Read the row itself rather than this sentence.", row.ID, row.ReportedBase, row.BaseVerdict)
-
 }
 
 // describePatchDigest is the dirty-patch half of a checkpoint token, or "none (clean tree)" when

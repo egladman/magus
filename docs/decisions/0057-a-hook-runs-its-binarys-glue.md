@@ -94,7 +94,7 @@ managed hook invocations still execute matching embedded glue.
 
 Caller-specific rule preparation stays beside grant handling in
 `internal/guard/grant.go`; `Judge` supplies the unleased-main predicate.
-Nested command launch helpers stay in `std`, grouped in `magus_command.go`.
+Nested command launch helpers stay in `std`, grouped in `command.go`.
 These groupings keep the registry and judgment files within their measured
 size ceilings while preserving their package boundaries.
 

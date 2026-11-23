@@ -789,6 +789,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
+	if req.Session != "" && req.Transcript != "" && (req.Message || req.ToolMs > 0 || !strings.HasPrefix(input, "{")) {
+		who = who.withTranscriptCaller(true)
+	}
 	if req.Message {
 		if req.DryRun {
 			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
@@ -834,17 +837,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		if callDir == "" && filepath.IsAbs(env.Cwd) {
 			callDir = env.Cwd
 		}
-		if who.Session == "" {
-			who.Session = env.Who.Session
-		}
-		if who.Transcript == "" {
-			who.Transcript = env.Who.Transcript
-		}
+		who = who.withEnvelopeCaller(env.Who, true)
 		if who.Event == "" {
 			who.Event = env.Who.Event
-		}
-		if who.Agent == "" {
-			who.Agent = env.Who.Agent
 		}
 		if req.DryRun && env.NothingToJudge && env.UnjudgedTool == "" {
 			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Defer}
@@ -1840,7 +1835,7 @@ func roleScopedCommandRules() []roleScopedRule {
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
-		{denyRuleLeaseVCS, oneString(denyLeaseScopedVCS)},
+		{denyRuleLeaseVCS, leaseVCSDenial},
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
 		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
@@ -1866,11 +1861,14 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 		return nil
 	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
-	candidates := next
-	// The apply line claims the acting lease itself, so the role filter, which reads every
-	// job verb as a write outside the lease, would drop the one remedy written for it.
-	if len(next) != 1 || !placesBinary(root, next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
-		candidates = hint.FilterServable(role, writePaths, next)
+	candidates := hint.FilterServable(role, writePaths, next)
+	// Job and Git metadata sit outside the lease's file paths.
+	// The recursive judgment still grades the command.
+	if len(next) == 1 {
+		n := next[0]
+		if n.ID == hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) || placesBinary(root, n, actingLease) || preparesOwnCheckout(n, standing.row, actingLease) {
+			candidates = next
+		}
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})
 	call := Request{
@@ -2066,8 +2064,6 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		Event:      env.HookEventName,
 		Agent:      env.AgentID,
 	}}
-	// Only a subagent's: a root session run as a named agent type carries one too, and the
-	// root is the one caller every skill tool is wired for.
 	if env.AgentID != "" {
 		req.CallerType = env.AgentType
 	}
@@ -2076,10 +2072,6 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
 	capability := tools.Capability(env.ToolName)
 	files, isPatch := envelopePatch(env.ToolInput, capability == types.ToolWrites)
-	// A tool its row names as anything but a writer carries no patch in any field.
-	if capability != "" && capability != types.ToolWrites {
-		isPatch = false
-	}
 	command := cmp.Or(envelopeString(env.ToolInput, "command"), envelopeString(env.ToolInput, "cmd"))
 	switch {
 	case tool != "":
@@ -2094,11 +2086,11 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		root, _ := workspace.FindRoot(env.Cwd)
 		req.Value = buildCall(tool, env.ToolInput, root)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
-	case tools.Capability(env.ToolName) == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
+	case capability == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that
 		// touches nothing has nothing to judge whatever its fields are called.
 		req.NothingToJudge = true
-	case isPatch:
+	case isPatch && (capability == "" || capability == types.ToolWrites):
 		// A patch is a write, whichever field the host put it in. Ahead of the command arm
 		// because one host sends it as `command`, where it would be judged as a shell line.
 		if len(files) == 0 {
@@ -2173,6 +2165,9 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	case envelopeSchedules(env.ToolInput):
 		// A prompt queued for a later turn of this session, not a brief for a new agent.
 		req.NothingToJudge, req.Schedules = true, true
+	case capability == types.ToolContinues && continuesAgent:
+		req.IsContinue, req.Tool = true, env.ToolName
+		req.Target, req.Value = continueTarget, continueMessage
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true
@@ -2243,6 +2238,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			req.ChildStarted = env.AgentID
 		}
 	}
+	req.AfterCall = req.AfterCall || req.IsContinue && env.HookEventName == "PostToolUse"
 	req.Inert = req.NothingToJudge && tools.Capability(env.ToolName) == types.ToolInert &&
 		req.LoadedSkill == "" && req.ChildStarted == "" && req.AgentTranscript == ""
 	return req, true
@@ -2411,6 +2407,10 @@ type hookRequest struct {
 // inside the judged text because the guard's verdict must never depend on it.
 type hookAttribution struct {
 	Host string
+	// The transcript and hook must agree on the session or parent.
+	transcriptRole    types.AgentThread
+	transcriptUsage   types.ContextWindow
+	conflictingCaller bool
 	// Form is the form of the installed hook that called, such as sh or buzz.
 	Form       string
 	Session    string
@@ -2854,7 +2854,7 @@ func appendToolTime(ctx context.Context, location location, who hookAttribution,
 		return
 	}
 	lease, _ := resolveActingLease(who, location, "")
-	thread, from := callerThread(location.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	facts := types.AgentFacts{
 		Thread: thread, ThreadFrom: from,
 		CallDigest: req.CallDigest, ResultDigest: req.ResultDigest,
@@ -2905,7 +2905,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	}
 	facts := hint.NewGate(location.cacheDir, who.factsKey())
 	lease, _ := resolveActingLease(who, location, "")
-	thread, from := callerThread(location.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	cost := types.AgentFacts{Thread: thread, ThreadFrom: from, Billing: accountAt(location.workspace).billing}
 	setContext(&cost, callerContext(location, who, thread, facts))
 	recordAgentCalls(ctx, cost, nil)

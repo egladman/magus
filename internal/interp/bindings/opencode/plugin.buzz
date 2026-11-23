@@ -54,7 +54,7 @@ export fun dispatch(event: {str: str}) > {str: str} {
     final tool = event["tool"] ?? "";
     var mode = "envelope";
     var payload = event["args"] ?? `{}`;
-    if (tool == "bash") { mode = "command"; payload = event["command"] ?? ""; }
+    if (kind == "permission" and tool == "bash") { mode = "command"; payload = event["command"] ?? ""; }
     if (tool == "edit" or tool == "write") { mode = "path"; payload = event["path"] ?? ""; }
     if (payload == "") { return result(false, reason: "", context: "", status: "", mcp: "false"); }
     final verdict = opencode\judge(event, mode: mode, payload: payload);

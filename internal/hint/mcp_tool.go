@@ -19,16 +19,16 @@ type ToolName string
 // to concatenate a tool name into prose so the reference tracks a rename.
 func (t ToolName) String() string { return string(t) }
 
-// The full set of MCP tools. std/magus.go names every tool through one of these, and
-// the generated catalog (internal/handler/mcp/gen) carries the rendered string, so
-// this block is the one place a tool name is spelled by hand.
+// The MCP handler and agent instructions share these tool names.
 const (
 	ToolClient  ToolName = "client"
+	ToolQuery   ToolName = "query"
 	ToolStatus  ToolName = "status"
 	ToolConfig  ToolName = "config"
 	ToolDiff    ToolName = "diff"
 	ToolConsole ToolName = "console"
 	ToolBuzz    ToolName = "buzz"
+	ToolSplice  ToolName = "splice"
 )
 
 // AllToolNames is every declared tool-name constant, for the drift test to walk.
@@ -36,7 +36,7 @@ const (
 // this file and fails if a declaration is missing, the way a hand-maintained
 // list cannot.
 var AllToolNames = []ToolName{
-	ToolClient, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz,
+	ToolClient, ToolQuery, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz, ToolSplice,
 }
 
 // LookupTool resolves a declared tool name, reporting false for one nobody declares.
@@ -54,9 +54,7 @@ func LookupTool(name string) (ToolName, bool) {
 }
 
 // ClientCallBound is how long one direct call to the client tool may run. A call
-// a host runs as an MCP task has no bound; the host cancels it instead. Declared
-// here rather than beside the handler so the generated tool description (std,
-// which cannot import the handler) renders the same value the handler enforces.
+// a host runs as an MCP task has no bound; the host cancels it instead.
 const ClientCallBound time.Duration = 10 * time.Minute
 
 // ClientBoundSentence is the one sentence that describes ClientCallBound wherever

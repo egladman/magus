@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"slices"
@@ -23,7 +24,13 @@ const PushUnverifiedRule = "push-unverified"
 // writes the grant as the structured record instead of the sentence.
 func GrantJobRule(ctx context.Context, store *job.Store, out io.Writer, emit func(jobtypes.Grant) error, id, rule string, lasting time.Duration) error {
 	var until int64
-	if lasting > 0 {
+	once := continuationApproval(rule)
+	if once && lasting != 0 {
+		return exit.Usagef("continuation approvals expire after five minutes and allow one dispatch")
+	}
+	if once {
+		until = time.Now().Add(5 * time.Minute).Unix()
+	} else if lasting > 0 {
 		until = time.Now().Add(lasting).Unix()
 	}
 	g, err := store.Grant(ctx, id, rule, until)
@@ -32,6 +39,10 @@ func GrantJobRule(ctx context.Context, store *job.Store, out io.Writer, emit fun
 	}
 	if emit != nil {
 		return emit(g)
+	}
+	if once {
+		fmt.Fprintf(out, "approved one matching continuation of %s until %s\n", id, time.Unix(g.Until, 0).Format(time.RFC3339))
+		return nil
 	}
 	ends := "when the job ends"
 	if g.Until != 0 {
@@ -114,8 +125,19 @@ func fullCommit(ctx context.Context, dir, rev string) (string, error) {
 // GrantableRule refuses a rule the guard does not let a person grant, naming the ones it
 // does.
 func GrantableRule(rule string) error {
-	if slices.Contains(GrantableRules(), rule) {
+	if slices.Contains(GrantableRules(), rule) || continuationApproval(rule) {
 		return nil
 	}
 	return exit.Usagef("magus job grant: %q is not grantable; grantable rules: %s", rule, strings.Join(GrantableRules(), ", "))
+}
+
+const continuationPrefix = "continue-once-"
+
+func continuationApproval(rule string) bool {
+	digest, ok := strings.CutPrefix(rule, continuationPrefix)
+	if !ok || len(digest) != 64 || digest != strings.ToLower(digest) {
+		return false
+	}
+	_, err := hex.DecodeString(digest)
+	return err == nil
 }

@@ -99,10 +99,21 @@ export fun linkFresh() > result\Result::<bool> {
 // readLibFiles declares what a lib module's run reads. Restated in full because readsFiles
 // replaces the project baseline.
 export fun readLibFiles(ctx: magus\Context) > void !> any {
-    ctx.readsFiles(["**/*.go", "go.mod", "go.sum",
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "analyzers.yaml",
                     "../../.golangci.yml", "../testpairing/.custom-gcl.yml",
                     "../testpairing/**/*.go", "../testpairing/go.mod", "../testpairing/go.sum",
                     "../conventions/**/*.go", "../conventions/go.mod", "../conventions/go.sum"]);
+}
+
+// golangci-lint cannot see the module policy our custom analyzers read.
+fun cacheDir(root: str, dir: str) > result\Result::<str> {
+    try {
+        final policy = root + "/" + dir + "/analyzers.yaml";
+        final key = if (fs\exists(policy)) crypto\sha256File(policy) else "no-policy";
+        return result\ok::<str>(root + "/.magus/golangci-lint/" + key);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "read analyzer policy for {dir}");
+    }
 }
 
 // run executes the custom build with the workspace config. dir is workspace-relative.
@@ -116,7 +127,11 @@ export fun run(dir: str, args: [str]) > result\Result::<bool> {
         final bin = built.value!;
         // An in-checkout cache: golangci-lint keys findings by absolute path, so sibling
         // worktrees would replay each other's. The go spell's sandbox entry reaches only its ops.
-        os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
+        final cache = cacheDir(root, dir: dir);
+        if (cache.error -> e) {
+            return result\Result::<bool>{ error = e };
+        }
+        os\withEnv({"GOLANGCI_LINT_CACHE": cache.value!}, callback: fun () > void !> any {
             _ = proc\exec(bin, args: ["run", "--config", root + "/.golangci.yml"] + args, dir: root + "/" + dir);
         });
         return result\ok::<bool>(true);
@@ -228,7 +243,11 @@ export fun issuesAt(dir: str, packages: [str], files: [str]) > result\Result::<[
         final bin = built.value!;
         final args = reportArgs(root, dir: dir, packages: packages);
         var run = proc\ExecResult{};
-        os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
+        final cache = cacheDir(root, dir: dir);
+        if (cache.error -> e) {
+            return result\Result::<[str]>{ error = e };
+        }
+        os\withEnv({"GOLANGCI_LINT_CACHE": cache.value!}, callback: fun () > void !> any {
             run = proc\exec(bin, args: args, dir: root + "/" + dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
         });
         return reportOf(run, root: root, dir: dir, packages: packages, files: files);
@@ -269,6 +288,22 @@ test "a file go's ./... leaves out names no package" {
         "_tools/d.go", ".github/e.go", "internal/job/f.go"], libs: ["libs/x"]);
     assert\equal(got["."], want: ["./internal/job"], message: "testdata, vendor, _ and . dirs are left out");
     assert\equal(got["libs/x"] == null, want: true, message: "a lib's testdata is left out too");
+}
+
+test "changing only analyzer policy selects a new cache" {
+    final root = fs\tempDir("analyzer-policy");
+    final policy = root + "/analyzers.yaml";
+    final absent = cacheDir(root, dir: ".").value!;
+    fs\writeFile(policy, content: "clikitmain:\n  baseline: []\n");
+    final first = cacheDir(root, dir: ".").value!;
+    fs\writeFile(policy, content: "# no baselines\n");
+    final changed = cacheDir(root, dir: ".").value!;
+    fs\writeFile(policy, content: "clikitmain:\n  baseline: []\n");
+    final restored = cacheDir(root, dir: ".").value!;
+    fs\removeAll(root);
+    assert\equal(first != absent, want: true, message: "adding a policy changes the cache");
+    assert\equal(changed != first, want: true, message: "editing policy changes the cache");
+    assert\equal(restored, want: first, message: "identical policy can reuse earlier findings");
 }
 
 test "a build linked from other linter sources is linked again" {

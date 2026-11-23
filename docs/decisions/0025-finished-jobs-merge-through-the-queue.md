@@ -125,7 +125,7 @@ it is today: once on the final tree, and in PR CI.
 - `--depth` defaults to 1 for `jobs`: one candidate at a time, each over every change ahead of
   it, so a batch of N passing jobs costs one verification of their merge. A deeper run is the
   person's flag.
-- A candidate whose diff touches the load contract (the paths `hack/magusfile/load-contract`
+- A candidate whose diff touches the load contract (the paths `hack/dev/modules/load-contract`
   lists) builds its own `./magus` before its hook runs, as the checkout bootstrap does.
 - A red candidate is bisected the way the queue already does it: the change whose own delta
   fails is kicked back, and the changes above it rebuild without it.

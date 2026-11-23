@@ -510,7 +510,7 @@ export fun modulePath(gomod: str) > str {
     foreach (line in gomod.split("\n")) {
         // .trim(), because go.mod permits any run of whitespace after the keyword and
         // a bare sub() keeps it: `module  path` yielded a leading space here. Same parse
-        // as hack/magusfile/coverage.buzz's modulePath, which must agree with this one.
+        // as the coverage module's modulePath.
         if (line.startsWith("module ")) { return line.sub("module ".len()).trim(); }
     }
     return "";
@@ -541,8 +541,7 @@ test "reads the module path and ignores a require of a similar name" {
     final gomod = "module example.com/root\n\ngo 1.26\n\nrequire (\n\tmodule-ish/x v1.0.0\n)\n";
     std\assert(modulePath(gomod) == "example.com/root", message: "declared path");
     std\assert(modulePath("go 1.26\n") == "", message: "no module line");
-    // Same case hack/magusfile/coverage.buzz pins: a bare sub() kept the extra space
-    // here, so the two parsers disagreed on a legal go.mod.
+    // The coverage parser also trims whitespace after the module keyword.
     std\assert(modulePath("module  example.com/root\n") == "example.com/root", message: "two spaces after the keyword");
 }
 

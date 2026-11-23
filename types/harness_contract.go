@@ -49,6 +49,8 @@ const (
 	ToolReads  ToolCapability = "reads"
 	ToolWrites ToolCapability = "writes"
 	ToolSpawns ToolCapability = "spawns"
+	// ToolContinues sends work to an existing agent.
+	ToolContinues ToolCapability = "continues"
 	// ToolNetwork reaches the network and touches no workspace file: a browser.
 	ToolNetwork ToolCapability = "network"
 	// ToolInert touches no workspace file and runs nothing: a plan, a todo list, a web

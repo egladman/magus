@@ -225,13 +225,8 @@ func wordCompletions(src, before string) []Completion {
 
 // ModuleCallCandidates returns every module and namespace-member name in the
 // manifest, spelled the way Buzz source actually calls it: the bare module
-// name, and "module\name" for each field or method. Sig already carries that
-// call form up to its arguments (generated once, from the same declaration
-// BuzzSignature renders it from), so cutting it there is what keeps this list
-// from drifting into the dotted, snake_case form the Go descriptor declares
-// members under. The interactive REPL reads this manifest through this
-// function; `magus buzz lsp` reads it through CompleteAt, so a spelling fix to
-// the generated manifest reaches both.
+// name, and "module\name" for each field or method. Generic functions use
+// their bare member name here, since the caller supplies the type arguments.
 func ModuleCallCandidates() []string {
 	out := make([]string, 0, len(modules)*4)
 	for _, m := range modules {
@@ -240,9 +235,7 @@ func ModuleCallCandidates() []string {
 			out = append(out, fmt.Sprintf(`%s\%s`, m.Name, f.Name))
 		}
 		for _, meth := range m.Methods {
-			if name, _, ok := strings.Cut(meth.Sig, "("); ok {
-				out = append(out, name)
-			}
+			out = append(out, fmt.Sprintf(`%s\%s`, m.Name, meth.Name))
 		}
 	}
 	return out
@@ -256,12 +249,10 @@ func completionKind(k symbolKind) CompletionKind {
 		return KindType
 	case symConstant:
 		return KindConstant
-
 	}
 	// Unreachable: scanSymbols only produces the three kinds above. A new
 	// symbolKind should be classified explicitly, not silently labeled here.
 	return KindConstant
-
 }
 
 // lineStart returns the index just past the last newline in s (0 if none), i.e.

@@ -227,7 +227,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	// undeclared return, not to write one. The bodies are emitted once for the whole
 	// package by `magus-utils boundaryobjects`.
 	objects := newBuzzValueEmitter()
-	pkgs := &argPackages{module: m.Name}
+	pkgs := &argPackages{module: m.Name, impl: implPkg, implPath: implPath}
 	var members bytes.Buffer
 	for _, f := range m.Fields {
 		emitBuzzField(&members, f, implPkg)
@@ -295,7 +295,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 		if p == implPath {
 			continue
 		}
-		if alias := packageAlias(p); alias != path.Base(p) {
+		if alias := pkgs.alias(p); alias != path.Base(p) {
 			fmt.Fprintf(&b, "\t%s %q\n", alias, p)
 		} else {
 			fmt.Fprintf(&b, "\t%q\n", p)
@@ -447,6 +447,13 @@ func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg,
 		fmt.Fprintf(w, "\t\t%s := %s(sess, bzArgs, %d)\n", a.Name, callbackAdapterName(param), idx)
 		return nil
 	}
+	if param.Kind() == reflect.String && param.PkgPath() != "" {
+		pkgs.spell(param)
+		goType := fmt.Sprintf("%s.%s", pkgs.alias(param.PkgPath()), param.Name())
+		enum, _ := buzzEnum(param)
+		emit.NamedStringArgument(w, a.Name, goType, idx, enum.Name, enum.Cases, enum.Closed)
+		return nil
+	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)
 	if err != nil || handled {
 		return err
@@ -563,8 +570,21 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 // optional object argument's T, so the generated file imports them. module scopes the
 // boundary names its arguments resolve.
 type argPackages struct {
-	module string
-	paths  []string
+	module   string
+	impl     string
+	implPath string
+	paths    []string
+}
+
+func (p *argPackages) alias(importPath string) string {
+	if importPath == p.implPath {
+		return p.impl
+	}
+	name := packageAlias(importPath)
+	if name == p.impl {
+		return "lib" + name
+	}
+	return name
 }
 
 func (p *argPackages) spell(t reflect.Type) {
@@ -644,6 +664,12 @@ func objectName(goType reflect.Type) string {
 // at generate time with "declares Object X but its Impl returns Y", naming neither the
 // switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
+	if arg, ok := emit.ResultArgument(t); ok {
+		if arg.Kind() != reflect.Struct {
+			return fmt.Sprintf(`result\Result::<%s>`, std.GoTypeTag(arg).BuzzName())
+		}
+		return fmt.Sprintf(`result\Result::<%s>`, buzzName(arg))
+	}
 	return buzzName(t)
 }
 
@@ -777,6 +803,9 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string, pkgs *argPackag
 }
 
 func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
+	if arg, ok := emit.ResultArgument(t); ok && arg.Kind() == reflect.Struct && !isBoundaryType(arg) {
+		return fmt.Errorf("unsupported result payload %s: unregistered boundary struct", arg)
+	}
 	if e.emitted[t] {
 		return nil
 	}
@@ -810,6 +839,13 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 			buzzName(t), strings.Join(names, ", "), strings.Join(values, ", "))
 	} else {
 		fmt.Fprintln(&body, "\tout := vm.NewMap()")
+		if _, ok := emit.ResultArgument(t); ok {
+			fmt.Fprintln(&body, "\tif v.Error != nil {")
+			fmt.Fprintln(&body, "\t\tout.MapSet(\"value\", vm.Null)")
+			fmt.Fprintln(&body, "\t\tout.MapSet(\"error\", ObjectDiagnostic(*v.Error))")
+			fmt.Fprintln(&body, "\t\treturn out")
+			fmt.Fprintln(&body, "\t}")
+		}
 		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
 			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
@@ -856,6 +892,9 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
 	{path: "github.com/egladman/magus/libs/termkit", alias: "termkit", prefix: "Termkit"},
+	{path: "github.com/egladman/magus/libs/termkit/layout", alias: "layout", prefix: "Layout"},
+	{path: "github.com/egladman/magus/libs/termkit/pick", alias: "pick", prefix: "Pick"},
+	{path: "github.com/egladman/magus/libs/termkit/progress", alias: "progress", prefix: "Progress"},
 	{path: "github.com/egladman/magus/libs/termkit/recorder", alias: "recorder", prefix: "Recorder"},
 	{path: "github.com/egladman/magus/libs/termkit/screen", alias: "screen", prefix: "Screen"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/job", alias: "job", prefix: "Job"},
@@ -878,11 +917,32 @@ func typePackage(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
+	if t.PkgPath() == "" {
+		if t == reflect.TypeFor[any]() {
+			return "any"
+		}
+		return t.String()
+	}
+	if arg, ok := emit.ResultArgument(t); ok {
+		return fmt.Sprintf("%s.Result[%s]", typePackage(t).alias, qualifyType(arg))
+	}
 	return fmt.Sprintf("%s.%s", typePackage(t).alias, t.Name())
 }
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
+	if t.PkgPath() == "" {
+		if t.Kind() == reflect.Slice {
+			return "SliceOf" + typeIdent(t.Elem())
+		}
+		if t == reflect.TypeFor[any]() {
+			return "Any"
+		}
+		return strings.ToUpper(t.Name()[:1]) + t.Name()[1:]
+	}
+	if arg, ok := emit.ResultArgument(t); ok {
+		return "ResultOf" + typeIdent(arg)
+	}
 	prefix := typePackage(t).prefix
 	if strings.HasPrefix(t.Name(), prefix) {
 		return t.Name()

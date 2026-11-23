@@ -98,7 +98,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 				Kind: types.SpawnKindSpawn, Host: "claude-code", Session: "8f2c6a1e", Model: "sonnet",
 				AgentType: "general-purpose", Description: "orchestrator/brisk-heron/implement adr 0002",
 				Name: "brisk-heron", Prompt: "Implement ADR 0002.", Background: true, Isolated: true,
-				Role: types.AgentRoleRoot, Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
+				Role: types.AgentRoleRoot, Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred,
 			},
 		},
 		{
@@ -136,7 +136,12 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			ctx, _ := spawnFixture(t)
 			probe := &spawnRuleProbe{}
 			v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: tc.event, Host: tc.host})
-			assert.Equal(t, verdict.Defer, v.Decision)
+			if tc.want.Kind == types.SpawnKindContinue {
+				assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(v),
+					"unknown continuation cost cannot dispatch without a prompt: %s", v.Reason)
+			} else {
+				assert.Equal(t, verdict.Defer, v.Decision)
+			}
 			require.Len(t, probe.asked, 1, "the rule is asked once per event")
 			at, _ := ctx.Value(locationKey{}).(location)
 			tc.want.Checkout = at.workspace
@@ -369,8 +374,8 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	byID := strings.Replace(claudeContinueEnvelope, `"to":"brisk-heron"`, `"to":"a1b2c3"`, 1)
 	Judge(ctx, deps, Request{Input: byID, Host: "claude-code"})
 	require.Len(t, probe.asked, 4)
-	assert.Less(t, *probe.asked[3].Target.IdleMs, time.Minute.Milliseconds(),
-		"a continue by name restarted the clock a continue by id reads")
+	assert.GreaterOrEqual(t, *probe.asked[3].Target.IdleMs, (10 * time.Minute).Milliseconds(),
+		"a cold continue without human approval does not restart the worker's clock")
 }
 
 // finishedSpawnEnvelope is claudeSpawnEnvelope's call after it ran, naming the child's id.

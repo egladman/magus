@@ -46,20 +46,22 @@ func (c *fakeClient) env(name string) string                     { return c.vars
 type recorder struct {
 	mu     sync.Mutex
 	stdout string
-	calls  [][]string
+	calls  []magusCall
 }
 
 func (r *recorder) invoke(_ context.Context, in magusCall) (processOutput, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.calls = append(r.calls, in.Args)
+	r.calls = append(r.calls, in)
 	return processOutput{Stdout: r.stdout}, nil
 }
 
 func (r *recorder) ran(args ...string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.ContainsFunc(r.calls, func(call []string) bool { return slices.Equal(call[:min(len(call), len(args))], args) })
+	return slices.ContainsFunc(r.calls, func(call magusCall) bool {
+		return slices.Equal(call.Args[:min(len(call.Args), len(args))], args)
+	})
 }
 
 type pluginSuite struct {
@@ -171,6 +173,21 @@ func (s *pluginSuite) TestToolBeforeBlocksADeniedCommand() {
 func (s *pluginSuite) TestToolBeforeSkipsAnEditWithoutAPath() {
 	s.Require().NoError(s.plugin.toolBefore(context.Background(), toolCall{Session: "s", Tool: "edit", Args: []byte(`{}`)}))
 	s.Empty(s.magus.calls)
+}
+
+func (s *pluginSuite) TestBashJudgmentPreservesWorkingDirectory() {
+	for _, args := range []string{
+		`{"command":"git status"}`,
+		`{"command":"git status","workdir":"subdir"}`,
+		`{"command":"git status","workdir":"/other/checkout"}`,
+	} {
+		call := toolCall{Session: "s", Tool: "bash", CallID: "c", Args: []byte(args)}
+		s.Require().NoError(s.plugin.toolBefore(context.Background(), call))
+		s.Require().NotEmpty(s.magus.calls)
+		input := s.magus.calls[len(s.magus.calls)-1].Input
+		want := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"bash","session_id":"s","cwd":"/repo","tool_input":%s}`, args)
+		s.JSONEq(want, input)
+	}
 }
 
 func (s *pluginSuite) TestToolBeforeAddsTheFilePathToAnotherTool() {

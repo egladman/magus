@@ -54,3 +54,50 @@ type EditRefusal struct {
 	Rule   string `json:"rule,omitempty"   yaml:"rule,omitempty"`
 	Reason string `json:"reason"           yaml:"reason"`
 }
+
+// EditChange is one change an edit plan makes: a literal
+// replacement, a regex replacement or a new file. Path is
+// workspace-relative.
+type EditChange struct {
+	Path string `json:"path"          yaml:"path"`
+	Old  string `json:"old,omitempty" yaml:"old,omitempty"`
+	New  string `json:"new"           yaml:"new"`
+	// Count is how many times the file must hold Old: 1 or -1,
+	// every occurrence. Any other value is refused, so a zero
+	// value is loud.
+	Count int `json:"count" yaml:"count"`
+	// Regex reads Old as an RE2 pattern and New as its expansion.
+	Regex bool `json:"regex,omitempty" yaml:"regex,omitempty"`
+	// Create writes a new file holding New; Old is empty.
+	Create bool `json:"create,omitempty" yaml:"create,omitempty"`
+}
+
+// EditDocument is the changes a block document carries. A
+// document with refusals carries no changes, so none of it is
+// planned by accident.
+type EditDocument struct {
+	Changes []EditChange  `json:"changes"           yaml:"changes"`
+	Refused []EditRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+}
+
+// EditPlan is a set of changes resolved against the tree, before
+// anything is written. A plan whose every change is already
+// applied has NothingToDo set and is applicable.
+type EditPlan struct {
+	Digest      string        `json:"digest"               yaml:"digest"`
+	Changes     []EditChange  `json:"changes"              yaml:"changes"`
+	Files       []EditedFile  `json:"files"                yaml:"files"`
+	Spans       []EditSpan    `json:"spans"                yaml:"spans"`
+	MakesDirs   []string      `json:"makes_dirs,omitempty" yaml:"makes_dirs,omitempty"`
+	Already     []EditChange  `json:"already,omitempty"    yaml:"already,omitempty"`
+	Refused     []EditRefusal `json:"refused,omitempty"    yaml:"refused,omitempty"`
+	NothingToDo bool          `json:"nothing_to_do"        yaml:"nothing_to_do"`
+}
+
+// EditApplied is what applying an edit plan wrote. Already
+// counts the changes the tree held before the apply.
+type EditApplied struct {
+	Written     []EditedFile `json:"written"       yaml:"written"`
+	Already     int          `json:"already"       yaml:"already"`
+	NothingToDo bool         `json:"nothing_to_do" yaml:"nothing_to_do"`
+}

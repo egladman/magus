@@ -1095,15 +1095,21 @@ targeted read would beat, and the top repo-wide greps whose pattern is a real
 identifier, each with the graph command its shape routes to (`magus refs` for a
 symbol, `magus query` for a diagnostic code or a Buzz op).
 
-magus analyzes commands; it never reads a host's session logs, so extraction is
-yours. For Claude Code, whose sessions are JSONL under `~/.claude/projects/`:
+magus analyzes commands; it never reads a host's session logs. Give it shell
+commands one per line, either on stdin or in a file with `--commands`:
 
 ```sh
-cat ~/.claude/projects/*/*.jsonl \
-  | jq -r '.message.content[]? | select(.type=="tool_use" and .name=="Bash")
-           | (.input.command | split("\n")[0])' \
-  | magus agent adoption
+magus agent adoption --commands commands.txt -o json
 ```
+
+For example, these two command lines:
+
+```text
+rg -n "foo" .
+magus query "foo"
+```
+
+produce a record with `total: 2`, `text_searches: 1` and `graph_verbs: 1`.
 
 A 1:20 ratio means the graph is barely used. The levers that move it are an
 easier query grammar to reach for (`kind=x`, `id=~re`) and the advisory that

@@ -720,6 +720,55 @@ Pages under about 45 seconds get no chip at all. The whole calculation is
 
 ## Recovering a checkout binary
 
+If the host requests trust for a checkout, review that checkout and resolve
+the host's trust prompt first. For a missing checkout binary, follow the
+bootstrap command in the guard denial. For a binary whose contract differs
+from the working tree, use the relink command for the named checkout.
+
+If the guard says the binary matches the working tree but names a different
+job authority, a human can recover in a terminal. Change to the checkout in
+the denial and replace the example job ID below with the ID it names.
+
+```sh
+job=example-job
+git status --short
+git diff --cached --name-status
+git rev-parse HEAD
+./magus describe job "$job" -o json
+```
+
+Confirm HEAD is the intended checkpoint. If the generated contract is still
+staged, replace the two example paths with the exact generated paths under
+review. Identify their generating sources and review the staged patch.
+
+```sh
+set -- path/to/first-output path/to/second-output
+./magus describe file "$@"
+git diff --cached -- "$@"
+git diff -- "$@"
+```
+
+The last command must print nothing because a path-scoped commit uses the
+working copies. Stop for conflicts, uncertain provenance, or failed checks.
+When the outputs match the intended committed sources and the checks pass,
+commit the reviewed paths. Skip this step if HEAD already carries the contract.
+
+```sh
+git commit --only -m "regenerate the checkout contract" -- "$@"
+```
+
+Once the intended checkpoint is committed, advance the job from that checkout.
+Run each command after the preceding one succeeds.
+
+```sh
+./magus job advance "$job"
+./magus describe job "$job" -o 'template={{.job.authority}}'
+git rev-parse HEAD
+```
+
+The two revisions must match before the worker retries the refused call.
+Review each affected job before advancing it.
+
 When this repository's binary cannot load its sources or current store schema,
 run `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --recover`.
 Recovery stops the daemon and rebuilds from the current working tree. It permits

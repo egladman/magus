@@ -17,12 +17,15 @@ import (
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -406,7 +409,7 @@ func refsRenameCommand(ctx context.Context, root string, opts output.Options, g 
 		return refuse(refused...)
 	}
 
-	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(edit.RenameGrade(ctx, guardDependencies(ctx, root), ws, dryRun)))
+	plan := edit.Resolve(ws.Root(), edit.Request{Sites: sites}, edit.WithGrade(renameGrade(ctx, guardDependencies(ctx, root), ws, dryRun)))
 	if refused := plan.Refused(); len(refused) > 0 {
 		return refuse(refused...)
 	}
@@ -682,6 +685,16 @@ func refsAgain(fs *flag.FlagSet, pos []string, drop ...string) string {
 		again += " " + shellArg(p)
 	}
 	return again
+}
+
+// Use the guard dependencies for the caller's --root. Resolving ws.Root()
+// again can load a second workspace when the caller used a symlink.
+// Dry runs leave the guard trail untouched.
+func renameGrade(ctx context.Context, deps guard.Dependencies, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
+	ctx = recorder.ContextWithEntryPoint(ctx, job.EntryPointCLI)
+	return func(rel string, before, after []byte) (string, string) {
+		return guard.GradeEdit(ctx, deps, ws, rel, before, after, guard.EditGrade{DryRun: dryRun})
+	}
 }
 
 // refsOccurrencePage reads the paging flags and trailing paths into a page, and spells

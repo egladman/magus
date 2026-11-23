@@ -647,7 +647,13 @@ func (p *plugin) describeCall(ctx context.Context, event *hookEvent, call toolCa
 	fields := call.fields()
 	switch call.Tool {
 	case "bash":
-		return p.describeCommand(event, fields), nil
+		command := argString(fields, "command")
+		if command == "" {
+			return false, nil
+		}
+		event.ArgsJSON = string(call.Args)
+		event.Promptable = p.asksBefore(command)
+		return true, nil
 	case "edit", "write":
 		event.Path = argString(fields, "filePath", "file_path", "path")
 		return event.Path != "", nil
@@ -657,15 +663,6 @@ func (p *plugin) describeCall(ctx context.Context, event *hookEvent, call toolCa
 		return describeTask(event, call, fields)
 	}
 	return p.describeOther(ctx, event, call, fields, identity)
-}
-
-func (p *plugin) describeCommand(event *hookEvent, fields map[string]any) bool {
-	event.Command = argString(fields, "command")
-	if event.Command == "" {
-		return false
-	}
-	event.Promptable = p.asksBefore(event.Command)
-	return true
 }
 
 func describePatch(event *hookEvent, fields map[string]any) bool {

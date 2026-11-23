@@ -56,6 +56,19 @@ func TestParse_GenericObjectInstanceKeepsItsArguments(t *testing.T) {
 	assert.Equal(t, "Result", is.TypeName, "the VM erases type arguments, so `is` tests the bare name")
 }
 
+func TestParse_NamespacedErrorSet(t *testing.T) {
+	prog, err := ParseEmbedded(`fun fetch() > void !> io\ReadError, net\Timeout {}`)
+	require.NoError(t, err)
+	assert.Equal(t, `io\ReadError,net\Timeout`, prog.Stmts[0].(*ast.FunDecl).ErrAnnot)
+}
+
+func TestParse_RejectDefaultGenericParameter(t *testing.T) {
+	for _, src := range []string{`fun id::<T = int>(v: T) > T { return v; }`, `object Box::<T = int> { value: T, }`} {
+		_, err := ParseEmbedded(src)
+		assert.ErrorContains(t, err, "expected")
+	}
+}
+
 func TestParse_InvalidSyntax(t *testing.T) {
 	t.Run("incomplete function", func(t *testing.T) {
 		_, err := ParseEmbedded(`fun (`)

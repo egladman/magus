@@ -183,6 +183,14 @@ semver.satisfies
 sort.natural
 sort.semver
 sort.strings
+splice.apply
+splice.blocks
+splice.create
+splice.diff
+splice.plan
+splice.replace
+splice.replaceAll
+splice.replaceRegex
 strings.camelCase
 strings.capitalize
 strings.collapseWs

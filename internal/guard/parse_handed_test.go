@@ -46,6 +46,10 @@ func (s *HandedScriptSuite) TestAShellGivenAFileReadsNoStdin() {
 
 func (s *HandedScriptSuite) TestXargsHandsNoStdinToItsShell() {
 	s.Empty(s.handed("echo x | xargs sh"))
+	s.Empty(s.handed("echo x | env xargs sh"))
+	s.Require().Len(s.handed("echo 'echo x' | xargs --arg-file=items sh"), 1)
+	s.Require().Len(s.handed("echo 'echo x' | xargs -a items sh"), 1)
+	s.Require().Len(s.handed("echo 'echo x' | env sh"), 1)
 }
 
 func (s *HandedScriptSuite) TestAPipeIntoAReaderIsNoScript() {

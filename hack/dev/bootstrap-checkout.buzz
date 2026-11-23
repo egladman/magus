@@ -38,7 +38,7 @@ import "std";
 import "vcs";
 
 import "assert";
-import "./hack/magusfile/bootstrap-timing" as timing;
+import "./hack/dev/modules/bootstrap-timing" as timing;
 
 final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --verify-ready | --recover | --onto <ref>] [--install <p,q|none>]";
 final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}\n\n--onto <ref> resumes work in a checkout made for something else: it fast-forwards the clean checkout onto <ref> (a dirty tree or a non-fast-forward refuses, and nothing is reset), places ./magus (built when it cannot load the tree), installs dependencies and every harness, ends running rows whose head is already in <ref>, then prunes rows nobody collected like `magus job prune`. It prints a line per thing done. It never fetches.\n--recover only places ./magus from a dirty tree: nothing moves and no row changes. --onto shares its daemon stop and build, and refuses a dirty tree.";

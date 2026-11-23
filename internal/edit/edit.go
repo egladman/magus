@@ -3,6 +3,7 @@ package edit
 import (
 	"bytes"
 	"cmp"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/egladman/magus/types"
 )
@@ -26,6 +28,13 @@ var ErrRefused = errors.New("edit: refused, nothing written")
 // back, so the tree holds part of the edit.
 var ErrRestoreFailed = errors.New("edit: restore failed")
 
+const (
+	noSuchFile     = "no such file"
+	notLocal       = "not a path inside the workspace"
+	createdMode    = fs.FileMode(0o644)
+	createdDirMode = fs.FileMode(0o755)
+)
+
 // Site replaces the bytes at [Start, End) of Path, which must be Old, with New.
 type Site struct {
 	Path       string
@@ -33,17 +42,25 @@ type Site struct {
 	Old, New   string
 }
 
+// Request is every write one plan makes: sites in files that
+// exist, and files that do not exist yet.
+type Request struct {
+	Sites   []Site
+	Creates []Creation
+}
+
 // Option configures [Resolve].
 type Option func(*options)
 
 type options struct {
 	grade  func(path string, before, after []byte) (rule, reason string)
-	rename func(oldpath, newpath string) error
+	rename func(root *os.Root, oldpath, newpath string) error
 }
 
-// WithGrade refuses every file for which grade returns a reason. It sees each file's bytes
-// before and after, so a grader can place the change, and it runs only for files whose
-// every site resolved.
+// WithGrade refuses every file for which grade returns a reason.
+// It sees each file's bytes before and after, so a grader can
+// place the change. It runs only for files whose every site
+// resolved. Before is nil for a created file.
 func WithGrade(grade func(path string, before, after []byte) (rule, reason string)) Option {
 	return func(o *options) { o.grade = grade }
 }
@@ -52,49 +69,79 @@ func WithGrade(grade func(path string, before, after []byte) (rule, reason strin
 // before and after. A plan with refusals cannot be applied.
 type Plan struct {
 	opts    options
+	root    string
 	files   []*fileEdit
 	refused []types.EditRefusal
 }
 
 type fileEdit struct {
 	path          string // workspace-relative, slash-separated
-	abs           string
 	mode          fs.FileMode
 	before, after []byte
 	digestBefore  string
 	digestAfter   string
 	spans         []types.EditSpan
+	created       bool
+	// makesDirs are the missing parents of a created file.
+	makesDirs []string
 }
 
 // span is a resolved site as byte offsets into the file's original bytes, end exclusive.
 type span struct {
 	start, end int
-	at         types.EditPosition
+	at, until  types.EditPosition
 	repl       string
 }
 
-// Resolve reads every file sites name under root and resolves every site, collecting every
-// refusal rather than stopping at the first. It writes nothing.
-func Resolve(root string, sites []Site, opts ...Option) *Plan {
-	p := &Plan{opts: options{rename: os.Rename}}
+// Resolve reads every file req names under root and resolves
+// every site and creation. It collects every refusal rather
+// than stopping at the first, and writes nothing. An empty
+// request is an applicable plan that writes nothing.
+func Resolve(root string, req Request, opts ...Option) *Plan {
+	p := &Plan{root: root}
 	for _, opt := range opts {
 		opt(&p.opts)
 	}
-	if len(sites) == 0 {
-		p.refuse(types.EditRefusal{Reason: "nothing to edit"})
-	}
 	byPath := map[string][]Site{}
-	for _, s := range sites {
-		rel := path.Clean(filepath.ToSlash(s.Path))
-		if s.Path == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
-			p.refuse(types.EditRefusal{Path: s.Path, Reason: "not a path inside the workspace"})
+	for _, s := range req.Sites {
+		rel, ok := localPath(s.Path)
+		if !ok {
+			p.refuse(types.EditRefusal{Path: s.Path, Reason: notLocal})
 			continue
 		}
 		byPath[rel] = append(byPath[rel], s)
 	}
+	creates := map[string]string{}
+	for _, c := range req.Creates {
+		rel, ok := localPath(c.Path)
+		_, edited := byPath[rel]
+		_, twice := creates[rel]
+		switch {
+		case !ok:
+			p.refuse(types.EditRefusal{Path: c.Path, Reason: notLocal})
+		case edited:
+			p.refuse(types.EditRefusal{Path: rel, Reason: "both created and edited; create it with its final content"})
+		case twice:
+			p.refuse(types.EditRefusal{Path: rel, Reason: "created twice; keep one creation"})
+		default:
+			creates[rel] = c.Content
+		}
+	}
 	for _, rel := range slices.Sorted(maps.Keys(byPath)) {
-		if f := p.readFile(root, rel, byPath[rel]); f != nil {
+		if f := p.readFile(rel, byPath[rel]); f != nil {
 			p.files = append(p.files, f)
+		}
+	}
+	for _, rel := range slices.Sorted(maps.Keys(creates)) {
+		if f := p.createFile(rel, creates[rel]); f != nil {
+			p.files = append(p.files, f)
+		}
+	}
+	slices.SortFunc(p.files, func(a, b *fileEdit) int { return cmp.Compare(a.path, b.path) })
+	dirs := p.MakesDirs()
+	for _, f := range p.files {
+		if f.created && slices.Contains(dirs, f.path) {
+			p.refuse(types.EditRefusal{Path: f.path, Reason: "created as a file and as the parent of another creation"})
 		}
 	}
 	return p
@@ -102,41 +149,60 @@ func Resolve(root string, sites []Site, opts ...Option) *Plan {
 
 func (p *Plan) refuse(r types.EditRefusal) { p.refused = append(p.refused, r) }
 
-// readFile resolves every site of one file, or refuses and returns nil.
-func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
-	refuseFile := func(reason string) *fileEdit {
-		p.refuse(types.EditRefusal{Path: rel, Reason: reason})
-		return nil
+func (p *Plan) abs(rel string) string { return filepath.Join(p.root, filepath.FromSlash(rel)) }
+
+// localPath cleans p to slash form, or reports that it leaves the
+// workspace.
+func localPath(p string) (string, bool) {
+	rel := path.Clean(filepath.ToSlash(p))
+	return rel, p != "" && filepath.IsLocal(filepath.FromSlash(rel))
+}
+
+// readRegular reads rel under root, or says why a rename could
+// not safely replace it.
+func readRegular(root, rel string) ([]byte, fs.FileMode, string) {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, 0, err.Error()
 	}
-	abs := filepath.Join(root, filepath.FromSlash(rel))
-	info, err := os.Lstat(abs)
+	defer r.Close()
+	info, err := r.Lstat(filepath.FromSlash(rel))
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return refuseFile("no such file")
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+		// a.go/b under a regular a.go is as absent as any missing path.
+		return nil, 0, noSuchFile
 	case err != nil:
-		return refuseFile(err.Error())
+		return nil, 0, err.Error()
 	case !info.Mode().IsRegular():
 		// A rename over a symlink replaces the link, not the file it names.
-		return refuseFile(fmt.Sprintf("not a regular file (%s)", info.Mode().Type().String()))
+		return nil, 0, fmt.Sprintf("not a regular file (%s)", info.Mode().Type().String())
 	}
-	if !insideRoot(root, abs) {
-		return refuseFile("resolves outside the workspace through a symlinked directory")
-	}
-	before, err := os.ReadFile(abs)
+	body, err := r.ReadFile(filepath.FromSlash(rel))
 	if err != nil {
-		return refuseFile(err.Error())
+		return nil, 0, err.Error()
+	}
+	return body, info.Mode().Perm(), ""
+}
+
+// readFile resolves every site of one file, or refuses and returns nil.
+func (p *Plan) readFile(rel string, sites []Site) *fileEdit {
+	before, mode, reason := readRegular(p.root, rel)
+	if reason != "" {
+		p.refuse(types.EditRefusal{Path: rel, Reason: reason})
+		return nil
 	}
 
 	ok := true
 	spans := make([]span, 0, len(sites))
+	lines := indexLines(before)
 	for _, s := range sites {
-		start, end, reason := byteRange(before, s)
+		start, end, reason := lines.byteRange(before, s)
 		if reason != "" {
 			p.refuse(types.EditRefusal{Path: rel, Line: s.Start.Line, Column: s.Start.Column, Reason: reason})
 			ok = false
 			continue
 		}
-		spans = append(spans, span{start: start, end: end, at: s.Start, repl: s.New})
+		spans = append(spans, span{start: start, end: end, at: s.Start, until: s.End, repl: s.New})
 	}
 	if !ok {
 		return nil
@@ -157,15 +223,68 @@ func (p *Plan) readFile(root, rel string, sites []Site) *fileEdit {
 		return nil
 	}
 
-	f := &fileEdit{path: rel, abs: abs, mode: info.Mode().Perm(), before: before, digestBefore: digest(before)}
+	f := &fileEdit{path: rel, mode: mode, before: before, digestBefore: digest(before)}
 	f.after = compose(before, spans)
 	f.digestAfter = digest(f.after)
 	for _, s := range spans {
-		f.spans = append(f.spans, types.EditSpan{Path: rel, Start: positionAt(before, s.start), End: positionAt(before, s.end)})
+		f.spans = append(f.spans, types.EditSpan{Path: rel, Start: s.at, End: s.until})
 	}
+	return p.graded(f)
+}
+
+// createFile plans a new file and the parents it needs, or
+// refuses and returns nil.
+func (p *Plan) createFile(rel, content string) *fileEdit {
+	refuseFile := func(reason string) {
+		p.refuse(types.EditRefusal{Path: rel, Reason: reason})
+	}
+	var missing []string
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		refuseFile(err.Error())
+		return nil
+	}
+	defer root.Close()
+	if parent := path.Dir(rel); parent != "." {
+		parts := strings.Split(parent, "/")
+		for i := range parts {
+			dir := strings.Join(parts[:i+1], "/")
+			info, err := root.Stat(filepath.FromSlash(dir))
+			switch {
+			case errors.Is(err, fs.ErrNotExist):
+				missing = append(missing, dir)
+			case err != nil:
+				if !insideRoot(p.root, p.abs(dir)) {
+					refuseFile("resolves outside the workspace through a symlinked directory")
+					return nil
+				}
+				refuseFile(err.Error())
+				return nil
+			case !info.IsDir():
+				refuseFile(dir + " is not a directory")
+				return nil
+			}
+		}
+	}
+	if _, err := root.Lstat(filepath.FromSlash(rel)); err == nil {
+		refuseFile("already exists; change it with old and new")
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		refuseFile(err.Error())
+		return nil
+	}
+	after := []byte(content)
+	return p.graded(&fileEdit{
+		path: rel, mode: createdMode, after: after, digestAfter: digest(after),
+		created: true, makesDirs: missing,
+	})
+}
+
+// graded returns f, or nil when the grader refuses it.
+func (p *Plan) graded(f *fileEdit) *fileEdit {
 	if p.opts.grade != nil {
-		if rule, reason := p.opts.grade(rel, f.before, f.after); reason != "" {
-			p.refuse(types.EditRefusal{Path: rel, Rule: rule, Reason: reason})
+		if rule, reason := p.opts.grade(f.path, f.before, f.after); reason != "" {
+			p.refuse(types.EditRefusal{Path: f.path, Rule: rule, Reason: reason})
 			return nil
 		}
 	}
@@ -187,12 +306,12 @@ func insideRoot(root, abs string) bool {
 
 // byteRange resolves a site's positions to offsets into content and checks that they hold
 // Old, or says why not.
-func byteRange(content []byte, s Site) (int, int, string) {
-	start, ok := offsetAt(content, s.Start)
+func (lines lineOffsets) byteRange(content []byte, s Site) (int, int, string) {
+	start, ok := lines.offsetAt(content, s.Start)
 	if !ok {
 		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file", s.Start.Line, s.Start.Column)
 	}
-	end, ok := offsetAt(content, s.End)
+	end, ok := lines.offsetAt(content, s.End)
 	if !ok || end < start {
 		return 0, 0, fmt.Sprintf("%d:%d is not a position in the file after the start", s.End.Line, s.End.Column)
 	}
@@ -202,26 +321,34 @@ func byteRange(content []byte, s Site) (int, int, string) {
 	return start, end, ""
 }
 
+// lineOffsets includes the empty line after a final newline.
+type lineOffsets []int
+
+func indexLines(content []byte) lineOffsets {
+	lines := make(lineOffsets, 1, bytes.Count(content, []byte{'\n'})+1)
+	for offset, c := range content {
+		if c == '\n' {
+			lines = append(lines, offset+1)
+		}
+	}
+	return lines
+}
+
 // offsetAt is the byte offset of a 1-based line and column. A column may sit one past the
 // line's last byte, where an exclusive end lands, but never past its terminator.
-func offsetAt(content []byte, at types.EditPosition) (int, bool) {
-	if at.Line < 1 || at.Column < 1 {
+func (lines lineOffsets) offsetAt(content []byte, at types.EditPosition) (int, bool) {
+	if at.Line < 1 || at.Line > len(lines) || at.Column < 1 {
 		return 0, false
 	}
-	lineStart := 0
-	for range at.Line - 1 {
-		nl := bytes.IndexByte(content[lineStart:], '\n')
-		if nl < 0 {
-			return 0, false
-		}
-		lineStart += nl + 1
-	}
+	lineStart := lines[at.Line-1]
 	lineEnd := len(content)
-	if nl := bytes.IndexByte(content[lineStart:], '\n'); nl >= 0 {
-		lineEnd = lineStart + nl
+	if at.Line < len(lines) {
+		lineEnd = lines[at.Line] - 1
 	}
-	off := lineStart + at.Column - 1
-	return off, off <= lineEnd
+	if at.Column-1 > lineEnd-lineStart {
+		return 0, false
+	}
+	return lineStart + (at.Column - 1), true
 }
 
 // positionAt is the 1-based line and byte column of offset.
@@ -252,7 +379,9 @@ func digest(content []byte) string {
 // Refused lists every reason the plan cannot be applied, in the order found.
 func (p *Plan) Refused() []types.EditRefusal { return slices.Clone(p.refused) }
 
-// Files are the files the plan rewrites, sorted by path. Empty for a refused plan.
+// Files are the files the plan writes, sorted by path.
+// DigestBefore is empty for a created file. Empty for a refused
+// plan.
 func (p *Plan) Files() []types.EditedFile {
 	if len(p.refused) > 0 {
 		return nil
@@ -276,52 +405,126 @@ func (p *Plan) Spans() []types.EditSpan {
 	return out
 }
 
-// Apply writes every file of the plan or none of them, and runs no VCS command. It stages
-// every file as a temp sibling and renames each over its original; when a rename fails, it
-// re-stages the original bytes of every file already replaced and renames them back. The
-// error says whether that restore held.
+// Digest is `sha256:` over each file's path, digest before and
+// digest after, sorted by path. Two plans with one digest write
+// the same bytes over the same bytes. Empty for a refused plan.
+func (p *Plan) Digest() string {
+	if len(p.refused) > 0 {
+		return ""
+	}
+	h := sha256.New()
+	for _, f := range p.files {
+		fmt.Fprintf(h, "%s\x00%s\x00%s\n", f.path, f.digestBefore, f.digestAfter)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+}
+
+// MakesDirs are the workspace-relative directories [Plan.Apply]
+// creates for new files, sorted, so a parent comes before its
+// children. Empty for a refused plan.
+func (p *Plan) MakesDirs() []string {
+	if len(p.refused) > 0 {
+		return nil
+	}
+	var dirs []string
+	for _, f := range p.files {
+		dirs = append(dirs, f.makesDirs...)
+	}
+	slices.Sort(dirs)
+	return slices.Compact(dirs)
+}
+
+// Apply stages every file before publishing them individually. On failure
+// it attempts to restore preceding writes. Readers may see intermediate states.
 func (p *Plan) Apply() error {
 	if len(p.refused) > 0 {
 		return ErrRefused
 	}
+	var made []string
+	if len(p.files) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	rename := p.opts.rename
+	if rename == nil {
+		rename = (*os.Root).Rename
+	}
 	staged := make([]string, len(p.files))
-	discard := func() {
+	discard := func() error {
+		var errs []error
 		for _, s := range staged {
 			if s != "" {
-				_ = os.Remove(s)
+				errs = append(errs, root.Remove(s))
 			}
+		}
+		return errors.Join(append(errs, removeDirs(root, made))...)
+	}
+	for _, dir := range p.MakesDirs() {
+		err := root.Mkdir(dir, createdDirMode)
+		if err != nil && !errors.Is(err, fs.ErrExist) {
+			return errors.Join(fmt.Errorf("make %s, nothing written: %w", dir, err), discard())
+		}
+		if err == nil {
+			made = append(made, dir)
 		}
 	}
 	for i, f := range p.files {
-		s, err := stage(f.abs, f.after, f.mode)
+		s, err := stage(root, f.path, f.after, f.mode)
 		if err != nil {
-			discard()
-			return fmt.Errorf("stage %s, nothing written: %w", f.path, err)
+			return errors.Join(fmt.Errorf("stage %s, nothing written: %w", f.path, err), discard())
 		}
 		staged[i] = s
 	}
 	for i, f := range p.files {
-		err := checkUnchanged(f)
+		err := checkUnchanged(root, f)
 		if err == nil {
-			err = p.opts.rename(staged[i], f.abs)
+			if f.created {
+				err = root.Link(staged[i], f.path)
+			} else {
+				err = rename(root, staged[i], f.path)
+			}
 		}
 		if err != nil {
-			discard()
 			failed := fmt.Errorf("edit: write %s: %w", f.path, err)
-			if rerr := p.restore(p.files[:i]); rerr != nil {
+			rerr := errors.Join(restore(root, rename, p.files[:i]), discard())
+			if rerr != nil {
 				return errors.Join(failed, fmt.Errorf("%w: %w", ErrRestoreFailed, rerr))
 			}
 			return fmt.Errorf("every file written before it was restored: %w", failed)
 		}
-		staged[i] = ""
+		if !f.created {
+			staged[i] = ""
+		}
 	}
-	return nil
+	made = nil
+	return discard()
+}
+
+// removeDirs removes the directories Apply made, innermost first.
+func removeDirs(root *os.Root, made []string) error {
+	var errs []error
+	for _, d := range slices.Backward(made) {
+		if err := root.Remove(d); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // checkUnchanged refuses a file another writer changed between Resolve and its rename,
 // which the rename would otherwise silently discard.
-func checkUnchanged(f *fileEdit) error {
-	now, err := os.ReadFile(f.abs)
+func checkUnchanged(root *os.Root, f *fileEdit) error {
+	if f.created {
+		if _, err := root.Lstat(f.path); !errors.Is(err, fs.ErrNotExist) {
+			return errors.New("created on disk since it was planned")
+		}
+		return nil
+	}
+	now, err := root.ReadFile(f.path)
 	if err != nil {
 		return err
 	}
@@ -331,14 +534,20 @@ func checkUnchanged(f *fileEdit) error {
 	return nil
 }
 
-func (p *Plan) restore(files []*fileEdit) error {
+func restore(root *os.Root, rename func(*os.Root, string, string) error, files []*fileEdit) error {
 	var errs []error
 	for _, f := range files {
-		s, err := stage(f.abs, f.before, f.mode)
+		if f.created {
+			if err := root.Remove(f.path); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", f.path, err))
+			}
+			continue
+		}
+		s, err := stage(root, f.path, f.before, f.mode)
 		if err == nil {
-			err = p.opts.rename(s, f.abs)
+			err = rename(root, s, f.path)
 			if err != nil {
-				_ = os.Remove(s)
+				err = errors.Join(err, root.Remove(s))
 			}
 		}
 		if err != nil {
@@ -350,12 +559,12 @@ func (p *Plan) restore(files []*fileEdit) error {
 
 // stage writes content to a synced temp sibling of abs, so the rename that lands it stays
 // on one filesystem.
-func stage(abs string, content []byte, mode fs.FileMode) (string, error) {
-	tmp, err := os.CreateTemp(filepath.Dir(abs), fmt.Sprintf(".%s.magus-edit-*", filepath.Base(abs)))
+func stage(root *os.Root, rel string, content []byte, mode fs.FileMode) (string, error) {
+	name := path.Join(path.Dir(rel), fmt.Sprintf(".%s.magus-edit-%s", path.Base(rel), rand.Text()))
+	tmp, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
-	name := tmp.Name()
 	_, err = tmp.Write(content)
 	if err == nil {
 		err = tmp.Chmod(mode)
@@ -367,8 +576,7 @@ func stage(abs string, content []byte, mode fs.FileMode) (string, error) {
 		err = cerr
 	}
 	if err != nil {
-		_ = os.Remove(name)
-		return "", err
+		return "", errors.Join(err, root.Remove(name))
 	}
 	return name, nil
 }

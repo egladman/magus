@@ -293,7 +293,7 @@ export fun skipped(path: str) > bool {
             return true;
         }
     }
-    return ["CHANGELOG.md", "AGENTS.md", "hack/dev/update-magus-module-calls.buzz", "std/magus_handle.go", "internal/interp/bindings/buzz.go"].indexOf(path) != null;
+    return ["CHANGELOG.md", "AGENTS.md", "hack/dev/update-magus-module-calls.buzz", "std/handle.go", "internal/interp/bindings/buzz.go"].indexOf(path) != null;
 }
 
 fun candidate(path: str) > bool {

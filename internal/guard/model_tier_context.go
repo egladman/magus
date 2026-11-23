@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
 )
 
 // advisoryModelTierContextCap advises a leased worker whose context passed the cap of the
@@ -27,7 +28,18 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	if s, _ := deps.setting(string(advisoryModelTierContextCap)); s.Decision == builtin.Off {
 		return advice{}
 	}
-	tokens := reportedContext(facts, who.Agent)
+	// Taking a job changes the main thread's write scope. Its context still
+	// belongs to the integrating session, even while the worker row is live.
+	thread, _ := callerThread(who, lease)
+	if thread == types.AgentThreadMain {
+		return advice{}
+	}
+	tokens := int64(0)
+	if usage := callerContext(at, who, thread, facts); usage != nil {
+		tokens = usage.Tokens
+	} else if thread == types.AgentThreadUnknown {
+		tokens = readCostState(facts).Tokens
+	}
 	if tokens <= 0 {
 		return advice{}
 	}
@@ -39,6 +51,12 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 	if limit <= 0 || tokens <= limit {
 		return advice{}
 	}
+	if thread == types.AgentThreadUnknown {
+		return advice{
+			Say: fmt.Sprintf("magus workspace: cannot attribute the session context to a worker on lease %s. The session has %s tokens and the %s tier caps workers at %s.", me.ID, kTokens(tokens), me.ModelTier.Name, kTokens(limit)),
+			Why: "This host supplied no worker identity. Use an identified worker for this lease so its own context can be measured.",
+		}
+	}
 	return advice{
 		Say: fmt.Sprintf("magus workspace: lease %s runs at model tier %s, which caps a worker's context at %s tokens, and yours has reached %s: report what you have and stop.",
 			me.ID, me.ModelTier.Name, kTokens(limit), kTokens(tokens)),
@@ -46,20 +64,6 @@ func adviseModelTierContext(ctx context.Context, deps Dependencies, at location,
 			"Whether the rest of the job is re-forked at a higher tier or split smaller is the root's call, and it needs your report to make it.",
 			me.ModelTier.Name, me.ModelTier.Rank),
 	}
-}
-
-// reportedContext is the caller's context in tokens as its host last reported it: a
-// subagent's from the usage recorded for it, a session's own from its transcript. Zero
-// when nothing was reported.
-func reportedContext(facts hint.Gate, agentID string) int64 {
-	if agentID == "" {
-		return readCostState(facts).Tokens
-	}
-	rec, _ := readSpawnedAgent(facts, agentID)
-	if rec.ContextTokens == nil {
-		return 0
-	}
-	return *rec.ContextTokens
 }
 
 // tierContextCap is the context cap of the tier row was forked at, 0 for none. The answer

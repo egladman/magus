@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -443,6 +444,21 @@ func execRedirectsStdin(f *syntax.File) bool {
 		return !found
 	})
 	return found
+}
+
+// Name the tool so a pipeline diagnostic identifies the stage missing input.
+func filterWithoutInputDeny(tool string) string {
+	var lead string
+	switch stdinReaders[tool].operands {
+	case operandsAreInput, operandsOrCwd:
+		lead = fmt.Sprintf("`%s` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n", tool)
+	case operandsAreScript:
+		lead = fmt.Sprintf("`%[1]s` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`%[1]s - <<'EOF'` ... `EOF`), or write the program to a file and run `%[1]s <file>`.\n", tool)
+	case operandsNeverInput, operandsAreCommand:
+		lead = fmt.Sprintf("`%s` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\nIts operands are never input. ", tool)
+	}
+	return lead +
+		"As written it reads the shell's own stdin: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
 }
 
 // starvedReader names the tool when call provably reads stdin, or returns "".

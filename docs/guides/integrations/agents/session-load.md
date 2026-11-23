@@ -187,8 +187,7 @@ magus buzz -s magus-session-load-claude-code.buzz               # extract and lo
 magus buzz -s magus-session-load-claude-code.buzz -- --stdout   # read the stream yourself
 ```
 
-Each adapter is Buzz, run by `magus buzz`, so it needs neither a POSIX shell nor
-`jq`.
+Run each adapter with `magus buzz`.
 
 Declare it instead, and you stop running it by hand:
 

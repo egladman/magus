@@ -18,7 +18,7 @@ Bindings for the Go package github.com/egladman/magus/libs/termkit/progress, gen
 
 Bar draws done of total in cols cells, filled in eighths so it moves a fraction of a cell at a time.
 
-**Signature:** `progress\bar(done, total, cols, track) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\bar(done, total, cols, track) -> Line` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -81,38 +81,98 @@ Frame draws the frame elapsed after the animation started, one Line per row.
 
 **Returns:** any
 
-### names
+### catalog
 
-Names lists every loader in catalog order.
+Catalog returns every loader in display order.
 
-**Signature:** `progress\names() -> []string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\catalog() -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** []string
+**Returns:** any
 
-### lookup
+### newRotation
 
-Lookup returns the loader called name, such as "glyph/dots".
+NewRotation builds the selected rotation loader.
 
-**Signature:** `progress\lookup(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\newRotation(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `name`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
+
+### newGlyph
+
+NewGlyph builds the selected glyph loader.
+
+**Signature:** `progress\newGlyph(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### newStrip
+
+NewStrip builds the selected strip loader.
+
+**Signature:** `progress\newStrip(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### newText
+
+NewText builds the selected text loader.
+
+**Signature:** `progress\newText(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### newSpan
+
+NewSpan builds the selected span loader.
+
+**Signature:** `progress\newSpan(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+
+**Returns:** map[string]any
+
+### newColumn
+
+NewColumn builds the selected column loader.
+
+**Signature:** `progress\newColumn(name) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+
+**Returns:** map[string]any
 
 ### startSpinner
 
 StartSpinner starts a loader turning beside label on out and returns at once; the caller does its blocking work and then calls [Spinner.Stop].
 
-**Signature:** `progress\startSpinner(p, label) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\startSpinner(p, label) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `p`       | `int`    |          |             |
 | `label`   | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### spinnerStop
 
@@ -232,19 +292,195 @@ The footprints.
 
 **Returns:** string
 
-### fallback
+### rotationComet
 
-Fallback is the loader to draw when the terminal cannot show Unicode.
+The value of RotationComet.
 
-**Signature:** `progress\fallback() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\rotationComet() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 **Returns:** string
 
-### spinLoader
+### rotationSquare
 
-SpinLoader is the loader a [Spinner] turns where the terminal can draw Unicode: the one magus's own run band turns by default, so a script's wait looks like magus's.
+The value of RotationSquare.
 
-**Signature:** `progress\spinLoader() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+**Signature:** `progress\rotationSquare() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### rotationClock
+
+The value of RotationClock.
+
+**Signature:** `progress\rotationClock() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### rotationRing
+
+The value of RotationRing.
+
+**Signature:** `progress\rotationRing() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### rotationPinwheel
+
+The value of RotationPinwheel.
+
+**Signature:** `progress\rotationPinwheel() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### rotationInfinity
+
+The value of RotationInfinity.
+
+**Signature:** `progress\rotationInfinity() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphDots
+
+The value of GlyphDots.
+
+**Signature:** `progress\glyphDots() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphOrbit
+
+The value of GlyphOrbit.
+
+**Signature:** `progress\glyphOrbit() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphPulse
+
+The value of GlyphPulse.
+
+**Signature:** `progress\glyphPulse() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphTriangle
+
+The value of GlyphTriangle.
+
+**Signature:** `progress\glyphTriangle() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphSpark
+
+The value of GlyphSpark.
+
+**Signature:** `progress\glyphSpark() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### glyphLine
+
+The value of GlyphLine.
+
+**Signature:** `progress\glyphLine() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripScanner
+
+The value of StripScanner.
+
+**Signature:** `progress\stripScanner() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripEqualizer
+
+The value of StripEqualizer.
+
+**Signature:** `progress\stripEqualizer() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripShade
+
+The value of StripShade.
+
+**Signature:** `progress\stripShade() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripSnake
+
+The value of StripSnake.
+
+**Signature:** `progress\stripSnake() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripSine
+
+The value of StripSine.
+
+**Signature:** `progress\stripSine() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### stripDots
+
+The value of StripDots.
+
+**Signature:** `progress\stripDots() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### textShimmer
+
+The value of TextShimmer.
+
+**Signature:** `progress\textShimmer() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### textTypewriter
+
+The value of TextTypewriter.
+
+**Signature:** `progress\textTypewriter() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### spanComet
+
+The value of SpanComet.
+
+**Signature:** `progress\spanComet() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### spanProgress
+
+The value of SpanProgress.
+
+**Signature:** `progress\spanProgress() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### columnFill
+
+The value of ColumnFill.
+
+**Signature:** `progress\columnFill() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
+
+**Returns:** string
+
+### columnElevator
+
+The value of ColumnElevator.
+
+**Signature:** `progress\columnElevator() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
 **Returns:** string
 

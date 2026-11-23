@@ -44,29 +44,33 @@ Hyperlink makes text a real clickable link to uri, for terminals that support OS
 
 ClearScreen erases the screen and homes the cursor, the repaint a full-screen refresh loop issues before redrawing (`magus server status --watch`).
 
-**Signature:** `termkit\clearScreen()` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\clearScreen() -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+
+**Returns:** map[string]any
 
 ### eraseLines
 
 EraseLines erases n lines ending at the cursor and leaves the cursor at column 0 of the topmost erased line, the redraw step for an in-place list that grows and shrinks (the picker).
 
-**Signature:** `termkit\eraseLines(n)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\eraseLines(n) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `n`       | `int` |          |             |
 
+**Returns:** map[string]any
+
 ### copy
 
 Copy puts text on the SYSTEM clipboard using OSC 52, reporting whether it was attempted and how much was sent.
 
-**Signature:** `termkit\copy(text) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\copy(text) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `text`    | `string` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### newInlineView
 
@@ -106,11 +110,13 @@ Lines reports how many rows the block currently occupies.
 
 Clear erases the block, leaving the terminal as though the view never drew.
 
-**Signature:** `termkit\inlineViewClear(inlineView)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\inlineViewClear(inlineView) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter    | Type  | Optional | Description |
 | ------------ | ----- | -------- | ----------- |
 | `inlineView` | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### inlineViewPaint
 
@@ -139,39 +145,43 @@ Finish moves off the block so a shell prompt does not land on its last line.
 
 ResetMouseTracking turns mouse reporting off unconditionally.
 
-**Signature:** `termkit\resetMouseTracking(p)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\resetMouseTracking(p) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `p`       | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### openInput
 
 OpenInput puts in into raw mode, turns on mouse reporting on out, and returns the session that reads from it.
 
-**Signature:** `termkit\openInput(p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\openInput(p) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `p`       | `int` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### inputClose
 
 Close turns mouse reporting off and restores the terminal.
 
-**Signature:** `termkit\inputClose(input)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\inputClose(input) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `input`   | `int` |          |             |
 
+**Returns:** map[string]any
+
 ### inputRead
 
 Read blocks until the user does something, and reports it.
 
-**Signature:** `termkit\inputRead(input) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\inputRead(input) -> result\Result::<Event>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
@@ -340,33 +350,37 @@ ProseItem writes label and its sentences as one paragraph whose continuation lin
 
 MakeRaw switches the terminal behind fd into raw mode, so a reader receives each keystroke as it is typed rather than a line at a time.
 
-**Signature:** `termkit\makeRaw(fd) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\makeRaw(fd) -> result\Result::<int>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `fd`      | `int` |          |             |
 
-**Returns:** int
+**Returns:** map[string]any
 
 ### rawModeRestore
 
 Restore puts the terminal back the way MakeRaw found it.
 
-**Signature:** `termkit\rawModeRestore(rawMode)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\rawModeRestore(rawMode) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `rawMode` | `int` |          |             |
 
+**Returns:** map[string]any
+
 ### resetScrollMargins
 
 ResetScrollMargins clears any DECSTBM margins on w unconditionally.
 
-**Signature:** `termkit\resetScrollMargins(p)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\resetScrollMargins(p) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `p`       | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### newZone
 
@@ -392,7 +406,9 @@ StderrZone returns the process-wide owner of standard error's bottom rows.
 
 ReleaseStderrZone closes the process-wide zone and forgets it, handing back its rows and scroll margins.
 
-**Signature:** `termkit\releaseStderrZone()` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\releaseStderrZone() -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+
+**Returns:** map[string]any
 
 ### zoneWantsColor
 
@@ -443,24 +459,26 @@ Enabled reports whether this lease has rows on a real terminal.
 
 Set replaces this lease's band and repaints the zone, reporting whether the rows actually reached the terminal.
 
-**Signature:** `termkit\leaseSet(lease, rows) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\leaseSet(lease, rows) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `lease`   | `int` |          |             |
 | `rows`    | `any` |          |             |
 
-**Returns:** bool
+**Returns:** map[string]any
 
 ### leaseRelease
 
 Release gives this lease's rows back and repaints without them.
 
-**Signature:** `termkit\leaseRelease(lease)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\leaseRelease(lease) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `lease`   | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### zoneHitTest
 
@@ -505,12 +523,14 @@ HitSpan reports which keyed span a click at (row, col) landed on.
 
 Grow enlarges this lease to rows.
 
-**Signature:** `termkit\leaseGrow(lease, rows)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\leaseGrow(lease, rows) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `lease`   | `int` |          |             |
 | `rows`    | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### leaseRows
 
@@ -528,11 +548,13 @@ Rows reports how many rows this lease holds, for a caller bounds-checking an ind
 
 Close releases every lease and hands the terminal back.
 
-**Signature:** `termkit\zoneClose(zone)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\zoneClose(zone) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `zone`    | `int` |          |             |
+
+**Returns:** map[string]any
 
 ### probeIsTerminal
 
@@ -551,14 +573,14 @@ Calls Probe.IsTerminal.
 
 Calls Probe.Size.
 
-**Signature:** `termkit\probeSize(probe, fd) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
+**Signature:** `termkit\probeSize(probe, fd) -> result\Result::<any>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `probe`   | `int` |          |             |
 | `fd`      | `int` |          |             |
 
-**Returns:** any
+**Returns:** map[string]any
 
 ### sgrBold
 

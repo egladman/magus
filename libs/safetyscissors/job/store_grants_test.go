@@ -69,6 +69,36 @@ func (s *StoreGrantsSuite) TestTheLastLinePerJobAndRuleWins() {
 	s.Zero(grants[0].Until)
 }
 
+func (s *StoreGrantsSuite) TestConcurrentConsumersSpendOneGrant() {
+	ctx := s.T().Context()
+	row := s.running()
+	const rule = "continue-once"
+	_, err := s.store.Grant(ctx, row.ID, rule, s.store.Now().Unix()+60)
+	s.Require().NoError(err)
+	spent, err := s.store.As(Actor{Lease: row.ID}).ConsumeGrant(ctx, row, rule)
+	s.Require().Error(err)
+	s.False(spent)
+
+	type result struct {
+		spent bool
+		err   error
+	}
+	start := make(chan struct{})
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			<-start
+			spent, err := s.store.ConsumeGrant(ctx, row, rule)
+			results <- result{spent, err}
+		}()
+	}
+	close(start)
+	first, second := <-results, <-results
+	s.Require().NoError(first.err)
+	s.Require().NoError(second.err)
+	s.NotEqual(first.spent, second.spent)
+}
+
 func (s *StoreGrantsSuite) TestAGrantLapsesAtItsDuration() {
 	now := s.store.Now().Unix()
 	_, err := s.store.Grant(s.T().Context(), "a", "hooks-off", now+60)

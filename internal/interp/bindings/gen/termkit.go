@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	libtermkit "github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/std/termkit/gen/termkit"
 )
 
@@ -22,7 +23,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("colorize", vm.DirectValue("termkit.colorize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := ffi.String(bzArgs, 0)
-		sgr := ffi.String(bzArgs, 1)
+		sgr := libtermkit.SGR(ffi.String(bzArgs, 1))
 		ret0, err := termkit.ImplColorize(ctx, s, sgr)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -39,17 +40,19 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StringVal(ret0), nil
 	}))
 	m.MapSet("clearScreen", vm.DirectValue("termkit.clearScreen", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		if err := termkit.ImplClearScreen(ctx); err != nil {
+		ret0, err := termkit.ImplClearScreen(ctx)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("eraseLines", vm.DirectValue("termkit.eraseLines", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		n := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplEraseLines(ctx, n); err != nil {
+		ret0, err := termkit.ImplEraseLines(ctx, n)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("copy", vm.DirectValue("termkit.copy", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		text := ffi.String(bzArgs, 0)
@@ -57,7 +60,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newInlineView", vm.DirectValue("termkit.newInlineView", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -84,10 +87,11 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("inlineViewClear", vm.DirectValue("termkit.inlineViewClear", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		inlineView := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplInlineViewClear(ctx, inlineView); err != nil {
+		ret0, err := termkit.ImplInlineViewClear(ctx, inlineView)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("inlineViewPaint", vm.DirectValue("termkit.inlineViewPaint", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		inlineView := ffi.Int(bzArgs, 0, 0)
@@ -107,10 +111,11 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("resetMouseTracking", vm.DirectValue("termkit.resetMouseTracking", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplResetMouseTracking(ctx, p); err != nil {
+		ret0, err := termkit.ImplResetMouseTracking(ctx, p)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("openInput", vm.DirectValue("termkit.openInput", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -118,14 +123,15 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("inputClose", vm.DirectValue("termkit.inputClose", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		input := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplInputClose(ctx, input); err != nil {
+		ret0, err := termkit.ImplInputClose(ctx, input)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("inputRead", vm.DirectValue("termkit.inputRead", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		input := ffi.Int(bzArgs, 0, 0)
@@ -133,7 +139,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectResultOfTermkitEvent(ret0), nil
 	}))
 	m.MapSet("inputCursorPosition", vm.DirectValue("termkit.inputCursorPosition", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		input := ffi.Int(bzArgs, 0, 0)
@@ -253,21 +259,23 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("rawModeRestore", vm.DirectValue("termkit.rawModeRestore", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		rawMode := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplRawModeRestore(ctx, rawMode); err != nil {
+		ret0, err := termkit.ImplRawModeRestore(ctx, rawMode)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("resetScrollMargins", vm.DirectValue("termkit.resetScrollMargins", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplResetScrollMargins(ctx, p); err != nil {
+		ret0, err := termkit.ImplResetScrollMargins(ctx, p)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("newZone", vm.DirectValue("termkit.newZone", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -285,10 +293,11 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("releaseStderrZone", vm.DirectValue("termkit.releaseStderrZone", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		if err := termkit.ImplReleaseStderrZone(ctx); err != nil {
+		ret0, err := termkit.ImplReleaseStderrZone(ctx)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("zoneWantsColor", vm.DirectValue("termkit.zoneWantsColor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		zone := ffi.Int(bzArgs, 0, 0)
@@ -329,14 +338,15 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.BoolVal(ret0), nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("leaseRelease", vm.DirectValue("termkit.leaseRelease", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		lease := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplLeaseRelease(ctx, lease); err != nil {
+		ret0, err := termkit.ImplLeaseRelease(ctx, lease)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("zoneHitTest", vm.DirectValue("termkit.zoneHitTest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		zone := ffi.Int(bzArgs, 0, 0)
@@ -368,10 +378,11 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("leaseGrow", vm.DirectValue("termkit.leaseGrow", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		lease := ffi.Int(bzArgs, 0, 0)
 		rows := ffi.Int(bzArgs, 1, 0)
-		if err := termkit.ImplLeaseGrow(ctx, lease, rows); err != nil {
+		ret0, err := termkit.ImplLeaseGrow(ctx, lease, rows)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("leaseRows", vm.DirectValue("termkit.leaseRows", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		lease := ffi.Int(bzArgs, 0, 0)
@@ -383,10 +394,11 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("zoneClose", vm.DirectValue("termkit.zoneClose", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		zone := ffi.Int(bzArgs, 0, 0)
-		if err := termkit.ImplZoneClose(ctx, zone); err != nil {
+		ret0, err := termkit.ImplZoneClose(ctx, zone)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("probeIsTerminal", vm.DirectValue("termkit.probeIsTerminal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		probe := ffi.Int(bzArgs, 0, 0)
@@ -404,7 +416,7 @@ func RegisterTermkit(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyVal(ret0), nil
+		return ObjectResultOfAny(ret0), nil
 	}))
 	m.MapSet("sgrBold", vm.DirectValue("termkit.sgrBold", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := termkit.ImplSGRBold(ctx)

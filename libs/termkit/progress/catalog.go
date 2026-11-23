@@ -25,30 +25,30 @@ const (
 )
 
 var catalog = []Loader{
-	braille1("rotation/comet·1", 70, acc, cometCell),
-	cycle("rotation/square·1", Rotation, 130, warn, "◰◳◲◱"),
-	cycle("rotation/clock·1", Rotation, 130, acc2, "◴◷◶◵"),
-	braille2("rotation/ring·2", 60, acc, ringFrame),
-	braille2("rotation/pinwheel·2", 80, warn, pinwheelFrame),
-	braille2("rotation/infinity·2", 50, acc2, infinityFrame),
-	cycle("glyph/dots", Glyph, 80, acc, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-	cycle("glyph/orbit", Glyph, 80, acc, "⣾⣽⣻⢿⡿⣟⣯⣷"),
-	cycle("glyph/pulse", Glyph, 120, acc2, "⠀⣀⣤⣶⣿⣶⣤⣀"),
-	cycle("glyph/triangle", Glyph, 120, acc2, "◢◣◤◥"),
-	cycle("glyph/spark", Glyph, 110, warn, "·✢✳✶✻✽✻✶✳✢"),
-	cycle("glyph/line", Glyph, 120, mid, `|/-\`),
-	strip("strip/scanner", 70, scannerFrame),
-	strip("strip/equalizer", 90, equalizerFrame),
-	strip("strip/shade", 90, shadeFrame),
-	strip("strip/snake", 70, snakeFrame),
-	strip("strip/sine", 60, sineFrame),
-	strip("strip/dots", 300, dotsFrame),
-	{Name: "text/shimmer", Kind: Text, Interval: 60 * time.Millisecond, Rows: 1, frame: shimmerFrame},
-	{Name: "text/typewriter", Kind: Text, Interval: 70 * time.Millisecond, Rows: 1, frame: typewriterFrame},
-	{Name: "span/comet", Kind: Span, Interval: 30 * time.Millisecond, Rows: 1, frame: spanCometFrame},
-	{Name: "span/progress", Kind: Span, Interval: 40 * time.Millisecond, Rows: 1, frame: spanProgressFrame},
-	{Name: "column/fill", Kind: Column, Interval: 60 * time.Millisecond, Cols: 1, frame: fillFrame},
-	{Name: "column/elevator", Kind: Column, Interval: 80 * time.Millisecond, Cols: 1, frame: elevatorFrame},
+	braille1(LoaderName(RotationComet), 70, acc, cometCell),
+	cycle(LoaderName(RotationSquare), Rotation, 130, warn, "◰◳◲◱"),
+	cycle(LoaderName(RotationClock), Rotation, 130, acc2, "◴◷◶◵"),
+	braille2(LoaderName(RotationRing), 60, acc, ringFrame),
+	braille2(LoaderName(RotationPinwheel), 80, warn, pinwheelFrame),
+	braille2(LoaderName(RotationInfinity), 50, acc2, infinityFrame),
+	cycle(LoaderName(GlyphDots), Glyph, 80, acc, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
+	cycle(LoaderName(GlyphOrbit), Glyph, 80, acc, "⣾⣽⣻⢿⡿⣟⣯⣷"),
+	cycle(LoaderName(GlyphPulse), Glyph, 120, acc2, "⠀⣀⣤⣶⣿⣶⣤⣀"),
+	cycle(LoaderName(GlyphTriangle), Glyph, 120, acc2, "◢◣◤◥"),
+	cycle(LoaderName(GlyphSpark), Glyph, 110, warn, "·✢✳✶✻✽✻✶✳✢"),
+	cycle(LoaderName(GlyphLine), Glyph, 120, mid, `|/-\`),
+	strip(LoaderName(StripScanner), 70, scannerFrame),
+	strip(LoaderName(StripEqualizer), 90, equalizerFrame),
+	strip(LoaderName(StripShade), 90, shadeFrame),
+	strip(LoaderName(StripSnake), 70, snakeFrame),
+	strip(LoaderName(StripSine), 60, sineFrame),
+	strip(LoaderName(StripDots), 300, dotsFrame),
+	{Name: LoaderName(TextShimmer), Kind: Text, Interval: 60 * time.Millisecond, Rows: 1, frame: shimmerFrame},
+	{Name: LoaderName(TextTypewriter), Kind: Text, Interval: 70 * time.Millisecond, Rows: 1, frame: typewriterFrame},
+	{Name: LoaderName(SpanComet), Kind: Span, Interval: 30 * time.Millisecond, Rows: 1, frame: spanCometFrame},
+	{Name: LoaderName(SpanProgress), Kind: Span, Interval: 40 * time.Millisecond, Rows: 1, frame: spanProgressFrame},
+	{Name: LoaderName(ColumnFill), Kind: Column, Interval: 60 * time.Millisecond, Cols: 1, frame: fillFrame},
+	{Name: LoaderName(ColumnElevator), Kind: Column, Interval: 80 * time.Millisecond, Cols: 1, frame: elevatorFrame},
 }
 
 func ms(n int) time.Duration { return time.Duration(n) * time.Millisecond }
@@ -59,7 +59,7 @@ func jsRound(x float64) int { return int(math.Floor(x + 0.5)) }
 
 func row(cells ...cell) [][]cell { return [][]cell{cells} }
 
-func cycle(name string, kind Kind, every int, style termkit.SGR, frames string) Loader {
+func cycle(name LoaderName, kind Kind, every int, style termkit.SGR, frames string) Loader {
 	runes := []rune(frames)
 	return Loader{Name: name, Kind: kind, Interval: ms(every), Cols: 1, Rows: 1,
 		frame: func(_ Loader, f int) [][]cell {
@@ -67,7 +67,7 @@ func cycle(name string, kind Kind, every int, style termkit.SGR, frames string) 
 		}}
 }
 
-func strip(name string, every int, frame func(f int) []cell) Loader {
+func strip(name LoaderName, every int, frame func(f int) []cell) Loader {
 	return Loader{Name: name, Kind: Strip, Interval: ms(every), Cols: stripCols, Rows: 1,
 		frame: func(_ Loader, f int) [][]cell { return [][]cell{frame(f)} }}
 }
@@ -104,12 +104,12 @@ func braille(cols int, on pixels) string {
 	return b.String()
 }
 
-func braille1(name string, every int, style termkit.SGR, frame func(f int) pixels) Loader {
+func braille1(name LoaderName, every int, style termkit.SGR, frame func(f int) pixels) Loader {
 	return Loader{Name: name, Kind: Rotation, Interval: ms(every), Cols: 1, Rows: 1,
 		frame: func(_ Loader, f int) [][]cell { return row(cell{braille(1, frame(f)), style}) }}
 }
 
-func braille2(name string, every int, style termkit.SGR, frame func(f int) pixels) Loader {
+func braille2(name LoaderName, every int, style termkit.SGR, frame func(f int) pixels) Loader {
 	return Loader{Name: name, Kind: Rotation, Interval: ms(every), Cols: 2, Rows: 1,
 		frame: func(_ Loader, f int) [][]cell { return row(cell{braille(2, frame(f)), style}) }}
 }

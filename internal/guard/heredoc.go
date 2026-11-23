@@ -158,6 +158,7 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 	return Judge(ctx, deps, Request{
 		Input: string(envelope), DryRun: true, Dir: callDir, Lease: lease,
 		Host: req.Host, Form: req.Form, Session: who.Session, Agent: who.Agent, Window: req.Window,
+		Transcript:         who.Transcript,
 		ObservesSkillLoads: req.ObservesSkillLoads,
 	})
 }

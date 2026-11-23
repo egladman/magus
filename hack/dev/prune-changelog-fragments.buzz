@@ -640,9 +640,7 @@ fun filesIndexed(paths: [str]) > result\Result::<{str: bool}> {
     }
 }
 
-// parseFragment splits a fragment into its group heading and its entry lines. The grammar
-// itself is hack/magusfile/changelog.buzz's, which `magus run lint .` enforces; that module
-// parses embedded, so a strict script cannot import it.
+// The changelog parser runs embedded. A strict script cannot import it.
 export fun parseFragment(path: str, text: str) > Fragment {
     var group = "";
     final entry = mut [<str>];

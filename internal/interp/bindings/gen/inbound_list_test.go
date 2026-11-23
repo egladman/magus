@@ -13,7 +13,9 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/termkit/recorder"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -49,6 +51,11 @@ var inboundTypes = []inboundType{
 	{Name: "DiscoveredProject", Zero: spells.DiscoveredProject{}, Encode: func(v any) vm.Value { return ObjectDiscoveredProject(v.(spells.DiscoveredProject), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiscoveredProject(v) }},
 	{Name: "DiscoveryGap", Zero: spells.DiscoveryGap{}, Encode: func(v any) vm.Value { return ObjectDiscoveryGap(v.(spells.DiscoveryGap)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiscoveryGap(v) }},
 	{Name: "Document", Zero: imagetypes.Document{}, Encode: func(v any) vm.Value { return ObjectImageDocument(v.(imagetypes.Document), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDocument(v) }},
+	{Name: "EditChange", Zero: types.EditChange{}, Encode: func(v any) vm.Value { return ObjectEditChange(v.(types.EditChange)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditChange(v) }},
+	{Name: "EditPosition", Zero: types.EditPosition{}, Encode: func(v any) vm.Value { return ObjectEditPosition(v.(types.EditPosition)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditPosition(v) }},
+	{Name: "EditRefusal", Zero: types.EditRefusal{}, Encode: func(v any) vm.Value { return ObjectEditRefusal(v.(types.EditRefusal)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditRefusal(v) }},
+	{Name: "EditSpan", Zero: types.EditSpan{}, Encode: func(v any) vm.Value { return ObjectEditSpan(v.(types.EditSpan)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditSpan(v) }},
+	{Name: "EditedFile", Zero: types.EditedFile{}, Encode: func(v any) vm.Value { return ObjectEditedFile(v.(types.EditedFile)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditedFile(v) }},
 	{Name: "ExecOptions", Zero: types.ExecOptions{}, Encode: func(v any) vm.Value { return ObjectExecOptions(v.(types.ExecOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeExecOptions(v) }},
 	{Name: "File", Zero: imagetypes.File{}, Encode: func(v any) vm.Value { return ObjectImageFile(v.(imagetypes.File)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageFile(v) }},
 	{Name: "ForgeCheck", Zero: types.ForgeCheck{}, Encode: func(v any) vm.Value { return ObjectForgeCheck(v.(types.ForgeCheck)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeForgeCheck(v) }},
@@ -146,6 +153,7 @@ var inboundTypes = []inboundType{
 	{Name: "RetryOptions", Zero: types.RetryOptions{}, Encode: func(v any) vm.Value { return ObjectRetryOptions(v.(types.RetryOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRetryOptions(v) }},
 	{Name: "ReviewComment", Zero: difftypes.ReviewComment{}, Encode: func(v any) vm.Value { return ObjectDiffReviewComment(v.(difftypes.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewComment(v) }},
 	{Name: "ReviewTarget", Zero: difftypes.ReviewTarget{}, Encode: func(v any) vm.Value { return ObjectDiffReviewTarget(v.(difftypes.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewTarget(v) }},
+	{Name: "SVGOptions", Zero: screen.SVGOptions{}, Encode: func(v any) vm.Value { return ObjectScreenSVGOptions(v.(screen.SVGOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeScreenSVGOptions(v) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any) vm.Value { return ObjectSandbox(v.(spells.Sandbox), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSandbox(v) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSandboxAllow(v) }},
 	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any) vm.Value { return ObjectSandboxCache(v.(spells.SandboxCache)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSandboxCache(v) }},
@@ -157,11 +165,13 @@ var inboundTypes = []inboundType{
 	{Name: "SkillsOptions", Zero: types.SkillsOptions{}, Encode: func(v any) vm.Value { return ObjectSkillsOptions(v.(types.SkillsOptions), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSkillsOptions(v) }},
 	{Name: "Span", Zero: termkit.Span{}, Encode: func(v any) vm.Value { return ObjectTermkitSpan(v.(termkit.Span)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTermkitSpan(v) }},
 	{Name: "Spec", Zero: imagetypes.Spec{}, Encode: func(v any) vm.Value { return ObjectImageSpec(v.(imagetypes.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSpec(v) }},
+	{Name: "SplicePlan", Zero: types.EditPlan{}, Encode: func(v any) vm.Value { return ObjectEditPlan(v.(types.EditPlan)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditPlan(v) }},
 	{Name: "Strings", Zero: types.Strings{}, Encode: func(v any) vm.Value { return ObjectStrings(v.(types.Strings)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStrings(v) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStubSyntax(v) }},
 	{Name: "SymbolIndexer", Zero: spells.SymbolIndexer{}, Encode: func(v any) vm.Value { return ObjectSymbolIndexer(v.(spells.SymbolIndexer), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSymbolIndexer(v) }},
 	{Name: "Symlink", Zero: imagetypes.Symlink{}, Encode: func(v any) vm.Value { return ObjectImageSymlink(v.(imagetypes.Symlink)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSymlink(v) }},
 	{Name: "Syntax", Zero: spells.Syntax{}, Encode: func(v any) vm.Value { return ObjectSyntax(v.(spells.Syntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSyntax(v) }},
+	{Name: "Theme", Zero: screen.Theme{}, Encode: func(v any) vm.Value { return ObjectScreenTheme(v.(screen.Theme)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeScreenTheme(v) }},
 	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},
 	{Name: "Tool", Zero: spells.Tool{}, Encode: func(v any) vm.Value { return ObjectTool(v.(spells.Tool), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTool(v) }},
 	{Name: "Tree", Zero: imagetypes.Tree{}, Encode: func(v any) vm.Value { return ObjectImageTree(v.(imagetypes.Tree), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageTree(v) }},
@@ -182,6 +192,7 @@ var inboundTypes = []inboundType{
 	{Name: "magus\\agent\\Worker", Zero: job.Worker{}, Encode: func(v any) vm.Value { return ObjectJobWorker(v.(job.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobWorker(v) }},
 	{Name: "magus\\feedback\\ReadOptions", Zero: feedback.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectFeedbackReadOptions(v.(feedback.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeFeedbackReadOptions(v) }},
 	{Name: "magus\\vcs\\Checkpoint", Zero: vcstypes.Checkpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(vcstypes.Checkpoint)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCheckpoint(v) }},
+	{Name: "pick\\Options", Zero: pick.Options{}, Encode: func(v any) vm.Value { return ObjectPickOptions(v.(pick.Options)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodePickOptions(v) }},
 	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
 }
 
@@ -216,7 +227,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[spells.SymbolFormat]():        {"", "scip", "go-packages", "buzz-module", "shell-script"},
 	reflect.TypeFor[types.SymbolIndexFreshness](): {"", "up-to-date", "out-of-date", "not-indexed", "unvouched"},
 	reflect.TypeFor[imagetypes.SymlinkPolicy]():   {"", "refuse", "keep", "follow"},
-	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "network", "inert"},
+	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "continues", "network", "inert"},
 	reflect.TypeFor[imagetypes.Variant]():         {"", "v1", "v2", "v3", "v8"},
 	reflect.TypeFor[spells.VersionComponent]():    {"", "major", "minor", "patch"},
 	reflect.TypeFor[job.WorkerType]():             {"resumed", "new"},

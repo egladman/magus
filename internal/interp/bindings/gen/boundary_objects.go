@@ -11,7 +11,9 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/termkit/recorder"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -329,6 +331,22 @@ func ObjectImageDocument(v imagetypes.Document, enums ffi.EnumCases) vm.Value {
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	return out
+}
+
+func ObjectTermkitSpan(v termkit.Span) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("text", vm.StringValue(v.Text))
+	out.MapSet("style", vm.StringValue(string(v.Style)))
+	out.MapSet("key", vm.StringValue(v.Key))
+	return out
+}
+
+func ObjectTermkitLine(v termkit.Line, enums ffi.EnumCases) vm.Value {
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = ObjectTermkitSpan(v.Spans[indexSpans])
+	}
+	return enums.Instance("Line", []string{"text", "style", "spans"}, []vm.Value{vm.StringValue(v.Text), vm.StringValue(string(v.Style)), vm.ListValue(itemsSpans)})
 }
 
 func ObjectExecResult(v types.ExecResult) vm.Value {
@@ -894,6 +912,11 @@ func ObjectJobResult(v job.Result) vm.Value {
 		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
 	}
 	out.MapSet("requires", vm.ListValue(itemsRequires))
+	itemsFindings := make([]vm.Value, len(v.Findings))
+	for indexFindings := range v.Findings {
+		itemsFindings[indexFindings] = vm.StringValue(v.Findings[indexFindings])
+	}
+	out.MapSet("findings", vm.ListValue(itemsFindings))
 	out.MapSet("job", vm.StringValue(v.Job))
 	itemsChangedPaths := make([]vm.Value, len(v.ChangedPaths))
 	for indexChangedPaths := range v.ChangedPaths {
@@ -3206,6 +3229,54 @@ func ObjectMarkdownSection(v types.MarkdownSection) vm.Value {
 	return out
 }
 
+func ObjectResultOfBool(v types.Result[bool]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.BoolValue(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
+func ObjectResultOfInt(v types.Result[int]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.IntValue(int64(v.Value)))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
+func ObjectResultOfAny(v types.Result[any]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
 func ObjectPipeRecord(v types.PipeRecord) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
@@ -3254,6 +3325,37 @@ func ObjectShellCommand(v types.ShellCommand) vm.Value {
 	return out
 }
 
+func ObjectResultOfString(v types.Result[string]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.StringValue(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
+func ObjectScreenTheme(v screen.Theme) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("background", vm.StringValue(v.Background))
+	out.MapSet("foreground", vm.StringValue(v.Foreground))
+	out.MapSet("red", vm.StringValue(v.Red))
+	out.MapSet("green", vm.StringValue(v.Green))
+	out.MapSet("yellow", vm.StringValue(v.Yellow))
+	out.MapSet("blue", vm.StringValue(v.Blue))
+	out.MapSet("magenta", vm.StringValue(v.Magenta))
+	out.MapSet("cyan", vm.StringValue(v.Cyan))
+	out.MapSet("white", vm.StringValue(v.White))
+	out.MapSet("black", vm.StringValue(v.Black))
+	return out
+}
+
 func ObjectSemverVersion(v types.SemverVersion) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("major", vm.IntValue(int64(v.Major)))
@@ -3273,10 +3375,164 @@ func ObjectSemverNext(v types.SemverNext) vm.Value {
 	return out
 }
 
+func ObjectEditChange(v types.EditChange) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("old", vm.StringValue(v.Old))
+	out.MapSet("new", vm.StringValue(v.New))
+	out.MapSet("count", vm.IntValue(int64(v.Count)))
+	out.MapSet("regex", vm.BoolValue(v.Regex))
+	out.MapSet("create", vm.BoolValue(v.Create))
+	return out
+}
+
+func ObjectEditRefusal(v types.EditRefusal) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("column", vm.IntValue(int64(v.Column)))
+	out.MapSet("rule", vm.StringValue(v.Rule))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectEditDocument(v types.EditDocument) vm.Value {
+	out := vm.NewMap()
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectEditChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	itemsRefused := make([]vm.Value, len(v.Refused))
+	for indexRefused := range v.Refused {
+		itemsRefused[indexRefused] = ObjectEditRefusal(v.Refused[indexRefused])
+	}
+	out.MapSet("refused", vm.ListValue(itemsRefused))
+	return out
+}
+
+func ObjectEditedFile(v types.EditedFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("digestBefore", vm.StringValue(v.DigestBefore))
+	out.MapSet("digestAfter", vm.StringValue(v.DigestAfter))
+	return out
+}
+
+func ObjectEditPosition(v types.EditPosition) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("column", vm.IntValue(int64(v.Column)))
+	return out
+}
+
+func ObjectEditSpan(v types.EditSpan) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("start", ObjectEditPosition(v.Start))
+	out.MapSet("end", ObjectEditPosition(v.End))
+	return out
+}
+
+func ObjectEditPlan(v types.EditPlan) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	itemsChanges := make([]vm.Value, len(v.Changes))
+	for indexChanges := range v.Changes {
+		itemsChanges[indexChanges] = ObjectEditChange(v.Changes[indexChanges])
+	}
+	out.MapSet("changes", vm.ListValue(itemsChanges))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = ObjectEditedFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsSpans := make([]vm.Value, len(v.Spans))
+	for indexSpans := range v.Spans {
+		itemsSpans[indexSpans] = ObjectEditSpan(v.Spans[indexSpans])
+	}
+	out.MapSet("spans", vm.ListValue(itemsSpans))
+	itemsMakesDirs := make([]vm.Value, len(v.MakesDirs))
+	for indexMakesDirs := range v.MakesDirs {
+		itemsMakesDirs[indexMakesDirs] = vm.StringValue(v.MakesDirs[indexMakesDirs])
+	}
+	out.MapSet("makesDirs", vm.ListValue(itemsMakesDirs))
+	itemsAlready := make([]vm.Value, len(v.Already))
+	for indexAlready := range v.Already {
+		itemsAlready[indexAlready] = ObjectEditChange(v.Already[indexAlready])
+	}
+	out.MapSet("already", vm.ListValue(itemsAlready))
+	itemsRefused := make([]vm.Value, len(v.Refused))
+	for indexRefused := range v.Refused {
+		itemsRefused[indexRefused] = ObjectEditRefusal(v.Refused[indexRefused])
+	}
+	out.MapSet("refused", vm.ListValue(itemsRefused))
+	out.MapSet("nothingToDo", vm.BoolValue(v.NothingToDo))
+	return out
+}
+
+func ObjectEditApplied(v types.EditApplied) vm.Value {
+	out := vm.NewMap()
+	itemsWritten := make([]vm.Value, len(v.Written))
+	for indexWritten := range v.Written {
+		itemsWritten[indexWritten] = ObjectEditedFile(v.Written[indexWritten])
+	}
+	out.MapSet("written", vm.ListValue(itemsWritten))
+	out.MapSet("already", vm.IntValue(int64(v.Already)))
+	out.MapSet("nothingToDo", vm.BoolValue(v.NothingToDo))
+	return out
+}
+
+func ObjectResultOfEditApplied(v types.Result[types.EditApplied]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", ObjectEditApplied(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
 func ObjectTermSize(v types.TermSize) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("width", vm.IntValue(int64(v.Width)))
 	out.MapSet("height", vm.IntValue(int64(v.Height)))
+	return out
+}
+
+func ObjectTermkitEvent(v termkit.Event) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.IntValue(int64(v.Kind)))
+	out.MapSet("key", vm.IntValue(int64(v.Key)))
+	out.MapSet("rune", vm.IntValue(int64(v.Rune)))
+	out.MapSet("button", vm.IntValue(int64(v.Button)))
+	out.MapSet("row", vm.IntValue(int64(v.Row)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("press", vm.BoolValue(v.Press))
+	out.MapSet("motion", vm.BoolValue(v.Motion))
+	out.MapSet("clicks", vm.IntValue(int64(v.Clicks)))
+	return out
+}
+
+func ObjectResultOfTermkitEvent(v types.Result[termkit.Event]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", ObjectTermkitEvent(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
 	return out
 }
 
@@ -5907,22 +6163,6 @@ func ObjectLimits(v types.Limits) vm.Value {
 	return out
 }
 
-func ObjectTermkitSpan(v termkit.Span) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("text", vm.StringValue(v.Text))
-	out.MapSet("style", vm.StringValue(string(v.Style)))
-	out.MapSet("key", vm.StringValue(v.Key))
-	return out
-}
-
-func ObjectTermkitLine(v termkit.Line, enums ffi.EnumCases) vm.Value {
-	itemsSpans := make([]vm.Value, len(v.Spans))
-	for indexSpans := range v.Spans {
-		itemsSpans[indexSpans] = ObjectTermkitSpan(v.Spans[indexSpans])
-	}
-	return enums.Instance("Line", []string{"text", "style", "spans"}, []vm.Value{vm.StringValue(v.Text), vm.StringValue(string(v.Style)), vm.ListValue(itemsSpans)})
-}
-
 func ObjectManagedEntries(v types.ManagedEntries) vm.Value {
 	out := vm.NewMap()
 	itemsPath := make([]vm.Value, len(v.Path))
@@ -6436,6 +6676,19 @@ func ObjectDiffReviewTarget(v difftypes.ReviewTarget) vm.Value {
 	return out
 }
 
+func ObjectScreenSVGOptions(v screen.SVGOptions) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("fontFamily", vm.StringValue(v.FontFamily))
+	out.MapSet("fontSize", vm.IntValue(int64(v.FontSize)))
+	out.MapSet("cellWidth", vm.IntValue(int64(v.CellWidth)))
+	out.MapSet("lineHeight", vm.IntValue(int64(v.LineHeight)))
+	out.MapSet("baseline", vm.IntValue(int64(v.Baseline)))
+	out.MapSet("pad", vm.IntValue(int64(v.Pad)))
+	out.MapSet("radius", vm.IntValue(int64(v.Radius)))
+	out.MapSet("theme", ObjectScreenTheme(v.Theme))
+	return out
+}
+
 func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("command", ObjectCommand(v.Command, enums))
@@ -6671,6 +6924,15 @@ func ObjectFeedbackReadOptions(v feedback.ReadOptions) vm.Value {
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("since", vm.StringValue(v.Since))
 	out.MapSet("until", vm.StringValue(v.Until))
+	return out
+}
+
+func ObjectPickOptions(v pick.Options) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("prompt", vm.StringValue(v.Prompt))
+	out.MapSet("initialFilter", vm.StringValue(v.InitialFilter))
+	out.MapSet("initial", vm.IntValue(int64(v.Initial)))
+	out.MapSet("maxRows", vm.IntValue(int64(v.MaxRows)))
 	return out
 }
 

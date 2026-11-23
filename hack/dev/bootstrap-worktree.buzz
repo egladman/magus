@@ -90,11 +90,12 @@ export fun checkReusable(stamped: str, digest: str) > result\Result::<bool> {
 // reads the Go input digest the binary was built with.
 final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary().stamp);`;
 
-// needsDetach is whether the recorded base diverged from the checkpoint on a tree with no
-// tracked edits, where moving onto the checkpoint loses nothing.
-export fun needsDetach(row: Row, trackedClean: bool) > bool {
-    final sameTree = row.baseVerdict == "match" or (row.baseVerdict == "revision-match" and trackedClean);
-    return row.checkpoint != "" and !sameTree and trackedClean;
+// A previous claim's reported base can predate this worktree.
+fun checkHead(row: Row, head: str) > result\Result::<bool> {
+    if (row.checkpoint != "" and row.checkpoint.split("+")[0] != head) {
+        return result\fail::<bool>("bootstrap-worktree: job {row.id} has checkpoint {row.checkpoint}, but this checkout is at {head}; bootstrap in a worktree at the checkpoint");
+    }
+    return result\ok::<bool>(true);
 }
 
 // checkFit fails with every way the taken lease is unfit for a worker in root.
@@ -296,6 +297,19 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
     }
     final main = found.value!;
     final origin = if (source == "") main else source;
+    final jobRow = rowOf(fun (args: [str]) > result\Result::<str> => magusAt("{origin}/magus", root: origin, args: args), job: job);
+    if (jobRow.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    try {
+        final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout.trim();
+        final checked = checkHead(jobRow.value!, head: head);
+        if (checked.error -> err) {
+            return result\Result::<Row>{ error = err };
+        }
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: read HEAD in {root}");
+    }
     final local = "{root}/magus";
     final binary = reusable(root, source: origin);
     if (binary.error -> why) {
@@ -329,14 +343,6 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
                 return result\ok::<bool>((vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true }).code) == 0);
             } catch (err: any) {
                 return result\caught::<bool>(err, doing: "bootstrap-worktree: diff the tracked files against HEAD");
-            }
-        },
-        detach: fun (checkpoint: str) > result\Result::<bool> {
-            try {
-                _ = vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
-                return result\ok::<bool>(true);
-            } catch (err: any) {
-                return result\caught::<bool>(err, doing: "bootstrap-worktree: switch --detach {checkpoint}");
             }
         },
     );
@@ -376,7 +382,7 @@ fun heldElsewhere(run: fun (args: [str]) > result\Result::<str>, job: str, execE
 // run executes a magus subcommand and returns its output. When the exec fails on a running
 // job, its holder already holds the lease: that is said on stderr, and the row comes back
 // with no id, taken by nobody here.
-export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>, detach: fun (checkpoint: str) > result\Result::<bool>) > result\Result::<Row> {
+export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>) > result\Result::<Row> {
     final took = run(["job", "exec", job]);
     if (took.error -> e) {
         return heldElsewhere(run, job: job, execError: e);
@@ -390,27 +396,7 @@ export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: s
     if (first.error -> err) {
         return result\Result::<Row>{ error = err };
     }
-    var row = first.value!;
-    final clean = trackedClean();
-    if (clean.error -> err) {
-        return result\Result::<Row>{ error = err };
-    }
-    if (needsDetach(row, trackedClean: clean.value!)) {
-        final moved = detach(row.checkpoint);
-        if (moved.error -> err) {
-            return result\Result::<Row>{ error = err };
-        }
-        std\print("detached onto the checkpoint {row.checkpoint}; the base had diverged and the tracked files were clean");
-        final retaken = run(["job", "exec", job]);
-        if (retaken.error -> err) {
-            return result\Result::<Row>{ error = err };
-        }
-        final second = rowOf(run, job: job);
-        if (second.error -> err) {
-            return result\Result::<Row>{ error = err };
-        }
-        row = second.value!;
-    }
+    final row = first.value!;
     final cleanNow = trackedClean();
     if (cleanNow.error -> err) {
         return result\Result::<Row>{ error = err };
@@ -591,41 +577,16 @@ test "the lease is taken before the graph is built" {
         job: "agent-scripts",
         main: "/work/magus",
         trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(true),
-        detach: fun (checkpoint: str) > result\Result::<bool> {
-            ran.append("detach " + checkpoint);
-            return result\ok::<bool>(true);
-        },
     );
     assert\isTrue(taken.error == null, message: "the bootstrap succeeds");
     assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
 }
 
-test "a diverged clean worktree is detached onto the checkpoint and the lease retaken" {
-    final diverged = fs\readFile("hack/testdata/bootstrap-diverged.json");
-    final matched = fs\readFile("hack/testdata/bootstrap-match.json");
-    final ran = mut [<str>];
-    var described = 0;
-    final taken = claimThenIndex(
-        fun (args: [str]) > result\Result::<str> {
-            ran.append(args.join(" "));
-            if (args[0] == "describe") {
-                described += 1;
-                return result\ok::<str>(if (described == 1) diverged else matched);
-            }
-            return result\ok::<str>("");
-        },
-        root: WT,
-        job: "agent-scripts",
-        main: MAIN,
-        trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(true),
-        detach: fun (checkpoint: str) > result\Result::<bool> {
-            ran.append("detach " + checkpoint);
-            return result\ok::<bool>(true);
-        },
-    );
-    final row = taken.value!;
-    assert\equal(row.baseVerdict, want: "match", message: "row read after the retake");
-    assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|detach 7472f16fc709ab3827cd38ff281fecc0a217ca88|job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
+test "bootstrap refuses a checkout ahead of the job before placing its binary" {
+    final row = fixture("bootstrap-diverged.json");
+    final refused = checkHead(row, head: row.reportedBase);
+    assert\isTrue(refused.error!.message.indexOf(row.checkpoint) != null, message: "name the checkpoint");
+    assert\isTrue(checkHead(row, head: row.checkpoint).error == null, message: "a fresh checkout at the checkpoint passes despite a previous divergent claim");
 }
 
 test "a diverged worktree with tracked edits is still refused and not detached" {
@@ -640,14 +601,10 @@ test "a diverged worktree with tracked edits is still refused and not detached" 
         job: "agent-scripts",
         main: MAIN,
         trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(false),
-        detach: fun (checkpoint: str) > result\Result::<bool> {
-            ran.append("detach " + checkpoint);
-            return result\ok::<bool>(true);
-        },
     );
     final said = refused.error!.message;
     assert\equal(said.indexOf("verdict diverged") != null, want: true, message: said);
-    assert\equal(ran.indexOf("detach 7472f16fc709ab3827cd38ff281fecc0a217ca88"), want: null, message: "no detach");
+    assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json", message: "refuse before indexing");
 }
 
 test "an ended job is refused" {

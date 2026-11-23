@@ -51,6 +51,26 @@ func TestEncodeJSONCircular(t *testing.T) {
 	}
 }
 
+func BenchmarkBoxedQuery(b *testing.B) {
+	ctx := b.Context()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	b.Cleanup(func() { require.NoError(b, s.Close()) })
+	Register(s)
+	require.NoError(b, s.Exec(ctx, `import "serialize";
+final root = serialize\Boxed.init({"rows": [17, 42]});
+fun query() > int { return root.q("rows", 1).integerValue(); }`))
+	query := s.GetGlobal("query")
+	value, err := s.CallValue(ctx, query, nil)
+	require.NoError(b, err)
+	require.Equal(b, int64(42), value.AsInt())
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := s.CallValue(ctx, query, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestBuzzToGoCircular is buzzToGo's twin of TestEncodeJSONCircular.
 func TestBuzzToGoCircular(t *testing.T) {
 	l := cyclicList()
@@ -78,6 +98,14 @@ func TestBuzzToGoCircular(t *testing.T) {
 // before jsonEncode ever runs (see serializeSerialize's doc comment).
 func TestSerializeSerializeCircular(t *testing.T) {
 	l := cyclicList()
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	Register(s)
+	s.SetGlobal("cyclic", l)
+	require.NoError(t, s.Exec(t.Context(), `import "serialize"; final box = serialize\Boxed.init(cyclic);`))
+	box := s.GetGlobal("box")
+	_, err := serializeSerialize(t.Context(), []vm.Value{box})
+	require.ErrorIs(t, err, errCircularReference)
 
 	done := make(chan error, 1)
 	go func() {
@@ -98,7 +126,7 @@ func TestSerializeSerializeCircular(t *testing.T) {
 // value (serialize.jsonDecode's result) must encode as its data at any depth,
 // not as the method values a Boxed map also carries.
 func TestJSONEncodeUnwrapsBoxedAtAnyDepth(t *testing.T) {
-	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`{"n":2}`)})
+	boxed, err := decodePublicBox(t, `{"n":2}`)
 	require.NoError(t, err)
 
 	top, err := JSONEncode(boxed)
@@ -153,8 +181,7 @@ func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	f, ok := v.MapGet("f")
 	require.True(t, ok)
 	assert.True(t, f.IsFloat())
-	_, boxed := v.MapGet(boxedRawKey)
-	assert.False(t, boxed, "the value is plain, not Boxed")
+	assert.True(t, v.IsMap())
 }
 
 func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
@@ -171,7 +198,7 @@ func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
 }
 
 func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
-	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[10.0, 1e2, 2.5E-1, 7]`)})
+	boxed, err := decodePublicBox(t, `[10.0, 1e2, 2.5E-1, 7]`)
 	require.NoError(t, err)
 
 	v, err := JSONDecodeValue([]byte(`[10.0, 1e2, 2.5E-1, 7]`))
@@ -192,7 +219,12 @@ func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	Register(s)
 	require.NoError(t, s.Exec(t.Context(), `import "serialize";
-final f = serialize\jsonDecode("[10.0]").q([0]).floatValue();`))
+var f = 0.0;
+try {
+    f = serialize\jsonDecode("[10.0]").q([0]).floatValue();
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}`))
 	assert.InDelta(t, 10.0, s.Globals()["f"].AsFloat(), 0)
 }
 
@@ -205,8 +237,24 @@ func TestJSONDecodeRefusesIntegersPastFortyEightBits(t *testing.T) {
 		assert.Contains(t, err.Error(), "Could not parse JSON: `"+lit+"` is not a number")
 	}
 
-	_, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[140737488355328]`)})
+	_, err := decodePublicBox(t, `[140737488355328]`)
 	require.Error(t, err)
+}
+
+func decodePublicBox(t *testing.T, input string) (vm.Value, error) {
+	t.Helper()
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	Register(s)
+	s.SetGlobal("testJson", vm.StringValue(input))
+	err := s.Exec(t.Context(), `import "serialize";
+var box: any = null;
+try {
+    box = serialize\jsonDecode(testJson);
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}`)
+	return s.Globals()["box"], err
 }
 
 func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
@@ -219,6 +267,29 @@ func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
 	assert.Equal(t, int64(-5), items[2].AsInt())
 }
 
+func TestJSONDecodeRaisesTypedParseError(t *testing.T) {
+	for _, tc := range []struct{ name, imports, decode, typ string }{
+		{"default", `import "serialize";`, `serialize\jsonDecode`, `serialize\JsonParseError`},
+		{"alias", `import "serialize" as wire;`, `wire\jsonDecode`, `wire\JsonParseError`},
+		{"two aliases", `import "serialize" as wire; import "serialize" as other;`, `wire\jsonDecode`, `other\JsonParseError`},
+		{"selective", `import jsonDecode, JsonParseError from "serialize";`, "jsonDecode", "JsonParseError"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+			t.Cleanup(func() { _ = s.Close() })
+			Register(s)
+			require.NoError(t, s.Exec(t.Context(), tc.imports+`
+var message = "";
+try {
+    _ = `+tc.decode+`("[");
+} catch (err: `+tc.typ+`) {
+    message = err.message ?? "";
+}`))
+			assert.Contains(t, s.Globals()["message"].AsString(), "serialize.jsonDecode:")
+		})
+	}
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {
@@ -228,7 +299,12 @@ func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	}
 	s, err := exec(`import "serialize";
 fun amount(b: serialize\Boxed) > int { return b.q(["a"]).integerValue() + b.q("a").integerValue(); }
-final n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+var n = 0;
+try {
+    n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+} catch (err: serialize\JsonParseError) {
+    throw err;
+}
 final m = amount(serialize\Boxed.init({"a": 4}));`)
 	require.NoError(t, err)
 	assert.Equal(t, int64(6), s.Globals()["n"].AsInt())

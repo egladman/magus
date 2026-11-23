@@ -103,7 +103,7 @@ func (r jobRecord) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON reads the record, keeping the members it does not declare in Unknown.
 func (r *jobRecord) UnmarshalJSON(data []byte) error {
-	fields, err := gen.Job.Inspect(data)
+	fields, err := jobgen.Job.Inspect(data)
 	if err != nil {
 		return err
 	}
@@ -797,6 +797,7 @@ type attemptStatusRecord struct {
 type resultRecord struct {
 	Job                  string                 `json:"job,omitempty"`
 	ChangedPaths         []string               `json:"changed_paths"`
+	Findings             []string               `json:"findings,omitempty"`
 	Validation           resultValidationRecord `json:"validation,omitzero"`
 	VerificationEvidence []evidenceRecord       `json:"verification_evidence,omitempty"`
 	Descendants          []string               `json:"descendants,omitempty"`
@@ -896,6 +897,7 @@ func recordResult(r *Result) *resultRecord {
 	}
 	out := &resultRecord{
 		Job: r.Job, ChangedPaths: slices.Clone(r.ChangedPaths), Validation: resultValidationRecord(r.Validation),
+		Findings:    slices.Clone(r.Findings),
 		Descendants: slices.Clone(r.Descendants), UnresolvedRisks: slices.Clone(r.UnresolvedRisks),
 		FollowUps: slices.Clone(r.FollowUps), ObservedGeneration: r.ObservedGeneration,
 	}
@@ -913,6 +915,7 @@ func (r *resultRecord) result() *Result {
 	}
 	out := &Result{
 		Job: r.Job, ChangedPaths: r.ChangedPaths, Validation: ResultValidation(r.Validation),
+		Findings:    slices.Clone(r.Findings),
 		Descendants: r.Descendants, UnresolvedRisks: r.UnresolvedRisks, FollowUps: r.FollowUps,
 		ObservedGeneration: r.ObservedGeneration,
 	}
@@ -967,5 +970,5 @@ func unmarshalWithSchema(data []byte, dst any, schema *codec.ObjectSchema) error
 
 func (r *attemptRecord) UnmarshalJSON(data []byte) error {
 	type plain attemptRecord
-	return unmarshalWithSchema(data, (*plain)(r), &gen.Attempt)
+	return unmarshalWithSchema(data, (*plain)(r), &jobgen.Attempt)
 }

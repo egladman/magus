@@ -15,7 +15,7 @@ Three parts, each with one job:
 - **The analyzers judge.** The Go analyzers in `libs/conventions` and
   `libs/testpairing` run inside golangci-lint. The Buzz rules in `hack/lint`
   run through `hack/lint/run.buzz`, and the conformance ceiling policy is
-  `hack/magusfile/conformance-ceiling.buzz`.
+  `magusfiles/quality/conformance-ceiling.buzz`.
 - **`analyzers.yaml` configures them.** Each project root holds its own. An
   analyzer judges a file by the file of the project that owns it, and a project
   with none gets the strict defaults

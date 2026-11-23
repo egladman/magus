@@ -791,8 +791,10 @@ func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceReposit
 	switch v.Decision {
 	case verdict.Deny, verdict.Ask:
 		return v.Rule, strings.TrimSpace(v.Reason)
+	case "", verdict.Defer, verdict.Advise:
+		return "", ""
 	}
-	return "", ""
+	return v.Rule, fmt.Sprintf("cannot grade edit: unknown decision %q", v.Decision)
 }
 
 // declaredOutput reports a path the workspace declares as an output,
@@ -1159,6 +1161,8 @@ func fileOperands(c hint.Invocation) []string {
 			}
 		case flagPair:
 			i += 2
+		case flagBool, flagOptional, flagSettles, flagUnknown:
+			continue
 		}
 	}
 	if modeled && !programFromFlag && r.program > 0 {
@@ -2430,20 +2434,6 @@ func probesForeignProcess(c hint.Invocation) bool {
 	words := magusSubcommandWords(c.Args)
 	return hint.ServerStatus.MatchedBy(words) || hint.LsJobs.MatchedBy(words) || hint.DescribeJob.MatchedBy(words) ||
 		(len(words) > 0 && words[0] == "job")
-}
-
-// filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
-// tell which stage was left without input.
-func filterWithoutInputDeny(tool string) string {
-	lead := fmt.Sprintf("`%s` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n", tool)
-	switch stdinReaders[tool].operands {
-	case operandsAreScript:
-		lead = fmt.Sprintf("`%[1]s` reads its program from a stdin nothing on this line feeds; put the heredoc on that command (`%[1]s - <<'EOF'` ... `EOF`), or write the program to a file and run `%[1]s <file>`.\n", tool)
-	case operandsNeverInput, operandsAreCommand:
-		lead = fmt.Sprintf("`%s` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\nIts operands are never input. ", tool)
-	}
-	return lead +
-		"As written it reads the shell's own stdin: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
 }
 
 // mintedLogNote names where the output already lives, and ONLY for a verb that mints one.

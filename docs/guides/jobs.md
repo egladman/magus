@@ -61,6 +61,56 @@ output refs read `out<hex>`, the two parts that change from run to run.
 
 <!--diagram:job-records-->
 
+## Research, experiments and commits
+
+The job's declared capability decides whether a commit is required. Calling its
+holder a researcher, reviewer or implementer changes no exit rule.
+
+A read-only job can file findings with `magus job exit <id> --stdin` without
+creating a commit. With no check or postcondition and no unresolved risk, filing
+its result records `pass` immediately; a read-only job with a check remains
+`exited` for its caller to verify. Exiting without a result records `no_return`,
+so send the findings back to the caller as well. These cases are pinned by
+`TestExitPassesAReadOnlyRowNothingElseGrades` in `internal/job/lifecycle_test.go`.
+A prototype that writes repository files needs a writing job even when its goal
+is only to answer a research question.
+
+For a writing job, filing a result refuses uncommitted paths covered by that
+job's write paths. Commit the source, tests or notes you intend to retain before
+filing; merely listing them in `changed_paths` is insufficient. The check is
+scoped to the declared write paths, not every dirty file in a shared checkout.
+`Exit` in `internal/job/lifecycle.go` calls `uncommitted` in
+`internal/job/end.go`; `TestExitCommitted` in `internal/job/end_test.go` checks
+both the refused edit and its accepted committed form. A clean writing job still
+must return evidence, changed paths or a risk rather than an empty result.
+
+For an experiment whose deliverable is a conclusion, fork a writing job with
+`--delivery findings`, write paths for the prototype, a checkpoint and a declared
+check. Run the check under the job lease while the prototype exists and save its
+output ref. Restore your experimental files to the checkpoint, then file the
+result with `magus job exit <id> --stdin`. Set `changed_paths` to `[]`, put the
+conclusion in the `findings` array, and include the check command and output ref
+in `validation`. The caller runs `magus job wait <id>` to verify the recorded
+check and the empty checkpoint diff. A passing findings job has no commit to
+merge. Use ordinary code delivery when the report or prototype belongs in Git.
+
+Ending a job also does not authorize losing its files. Cleanup checks the whole
+owned checkout and keeps dirty work or commits that no branch, bookmark, remote
+or base names. Adopted checkouts are never removed by magus. See `removeWorktree`
+in `internal/job/worktree.go` and the clean, dirty and stranded checkout cases in
+`internal/job/worktree_test.go`. This retention check has a wider scope than the
+write-path check at exit.
+
+Passing a job selects nothing for integration. The integrator explicitly names
+the jobs or branches to land, for example
+`magus buzz hack/dev/merge-job-branches.buzz -- --jobs pricing,tax --into landing --apply --verify`.
+The script's `planned` function requires exactly one of `--jobs`, `--branches`
+or `--stack`; selecting every passed job is not a default. Keep an unwanted
+research branch out of that selection and record `left_unmerged` when its
+commits are intentionally retained off the landing branch. `job wait
+--integration` grades the selected merged work; it does not merge it. ADR 0025's
+proposal to make `pass` queue intent is marked **proposed**, not current policy.
+
 ## One person, two worktrees
 
 Ana's shop prices things in whole units, and she wants cents. Two halves can move

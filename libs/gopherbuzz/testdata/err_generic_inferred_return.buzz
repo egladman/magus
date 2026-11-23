@@ -1,6 +1,5 @@
-// Upstream refuses any call to a generic that names no type arguments.
-// TypeChecker.zig reports "Return value" on the unresolved result.
-// Here E is inferred from the argument, and it is not a D.
+// Embedded mode infers E from the argument, and it is not a D.
+// Upstream mode also reports the missing type arguments at the call.
 // @error: want R::<int, D>
 object D {
     name: str,

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"maps"
 	"os"
@@ -21,13 +20,8 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-func runModuleDecls(args []string) error {
-	fs := flag.NewFlagSet("moduledecls", flag.ExitOnError)
-	outDir := fs.String("outdir", "", "output directory for the per-module .buzz declarations")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *outDir == "" {
+func writeModuleDecls(outDir string) error {
+	if outDir == "" {
 		return fmt.Errorf("usage: magus-utils moduledecls -outdir <dir>")
 	}
 
@@ -63,12 +57,12 @@ func runModuleDecls(args []string) error {
 		if missing := undeclaredTypeNames(prog); len(missing) > 0 {
 			return fmt.Errorf("generated declarations for %s name undeclared types: %s", mod.Name, strings.Join(missing, ", "))
 		}
-		if err := emit.File(filepath.Join(*outDir, mod.Name+".buzz"), b.Bytes()); err != nil {
+		if err := emit.File(filepath.Join(outDir, mod.Name+".buzz"), b.Bytes()); err != nil {
 			return fmt.Errorf("write %s: %w", mod.Name, err)
 		}
 	}
 	for _, module := range nestedModules() {
-		if err := writeNamespaceDecls(*outDir, module); err != nil {
+		if err := writeNamespaceDecls(outDir, module); err != nil {
 			return fmt.Errorf("namespace %s: %w", module, err)
 		}
 	}
@@ -130,6 +124,9 @@ func renderNamespaceDecls(module string) (string, error) {
 // module's own that src names a type of.
 func namespaceImports(module, src string) string {
 	var b strings.Builder
+	if strings.Contains(src, `result\Result::<`) {
+		b.WriteString("import \"result\";\n")
+	}
 	for _, nested := range nestedModules() {
 		if nested != module && strings.Contains(src, qualifiedName(nested, "")) {
 			fmt.Fprintf(&b, "import %q;\n", nested)
@@ -375,8 +372,8 @@ func externDecl(m std.Method) (string, error) {
 		}
 		// Same rule for a closed set of strings: the enum is what the checker should
 		// enforce, and `str` enforces nothing.
-		if a.Enum != "" {
-			typ = a.Enum
+		if name := argumentEnum(m, i); name != "" {
+			typ = name
 		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
@@ -441,41 +438,10 @@ func optionalDefault(m std.Method, i int) (string, error) {
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
 func buzzArgType(t std.TypeTag) (string, error) {
-	if name := buzzTypeName(t); name != "" {
+	if name := t.BuzzName(); name != "" {
 		return name, nil
 	}
 	return "", fmt.Errorf("no Buzz annotation for type tag %d", t)
-}
-
-func buzzTypeName(t std.TypeTag) string {
-	switch t {
-	case std.TypeString:
-		return "str"
-	case std.TypeInt, std.TypeIndex:
-		return "int"
-	case std.TypeFloat:
-		return "double"
-	case std.TypeBool:
-		return "bool"
-	case std.TypeStringSlice:
-		return "[str]"
-	case std.TypeFloatSlice:
-		return "[double]"
-	case std.TypeByteSlice:
-		return "[int]"
-	case std.TypeStringSliceSlice:
-		return "[[str]]"
-	case std.TypeStringMapMap:
-		return "{str: {str: str}}"
-	case std.TypeStringMap:
-		return "{str: str}"
-	case std.TypeAnyMap:
-		return "{str: any}"
-	case std.TypeAny:
-		return "any"
-	case std.TypeInvalid:
-	}
-	return ""
 }
 
 // buzzDefault renders the default an optional parameter declares, so a caller may
@@ -713,7 +679,15 @@ func methodObjects(m std.Method) []string {
 	for _, a := range m.Args {
 		out = append(out, strings.Trim(a.Object, "[]"))
 	}
-	for _, r := range m.Returns {
+	for i, r := range m.Returns {
+		if sig := m.Signature(); sig != nil && i < sig.NumOut() {
+			if arg, ok := emit.ResultArgument(sig.Out(i)); ok {
+				if arg.Kind() == reflect.Struct {
+					out = append(out, buzzName(arg))
+				}
+				continue
+			}
+		}
 		out = append(out, strings.Trim(r.Object, "[]"))
 	}
 	return out
@@ -759,8 +733,8 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		return nil
 	}
 	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
-		for _, a := range m.Args {
-			if err := add(a.Enum, m.Name); err != nil {
+		for i := range m.Args {
+			if err := add(argumentEnum(m, i), m.Name); err != nil {
 				return nil, err
 			}
 		}
@@ -772,8 +746,8 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	}
 	for _, p := range sortedProtocols(mod) {
 		for _, m := range p.Methods {
-			for _, a := range m.Args {
-				if err := add(a.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+			for i := range m.Args {
+				if err := add(argumentEnum(m, i), fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
 					return nil, err
 				}
 			}
@@ -802,17 +776,27 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	return order, nil
 }
 
+// argumentEnum also recognizes a closed string carried by the Go signature.
+func argumentEnum(m std.Method, i int) string {
+	if name := m.Args[i].Enum; name != "" {
+		return name
+	}
+	if sig := m.Signature(); sig != nil && i+1 < sig.NumIn() {
+		t := sig.In(i + 1)
+		if t.Kind() == reflect.String && t.PkgPath() != "" {
+			if enum, ok := buzzEnum(t); ok {
+				return enum.Name
+			}
+		}
+	}
+	return ""
+}
+
 // renderBuzzEnumDecl renders one enum as its Buzz declaration. It matches what the
 // types generator emits into an object mirror, so a reader sees one form wherever an
 // enum is declared.
 func renderBuzzEnumDecl(e boundaryEnum) []byte {
-	var b bytes.Buffer
-	fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
-	for _, c := range e.Cases {
-		fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
-	}
-	fmt.Fprintln(&b, "}")
-	return b.Bytes()
+	return emit.BuzzEnum(e.Name, e.Closed, e.Cases)
 }
 
 // buzzBuiltinTypes are the type names the Buzz type parser knows without a declaration.

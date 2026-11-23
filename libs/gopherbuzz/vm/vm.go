@@ -2148,6 +2148,10 @@ type uncaughtError struct {
 
 func (e *uncaughtError) Error() string { return e.msg }
 
+// NativeTypeKey identifies a native type across import aliases.
+// A Buzz identifier cannot shadow this binding.
+func NativeTypeKey(qualifiedName string) string { return "\x00native:" + qualifiedName }
+
 // caughtValue renders a host error as the value a `catch` binds.
 //
 // An ordinary error becomes its message, which is what upstream Buzz does and what this
@@ -2166,7 +2170,7 @@ func (e *uncaughtError) Error() string { return e.msg }
 //
 // A throw from another VM is caught as the value thrown. A host that
 // wrapped one keeps its wrapping message.
-func caughtValue(err error) Value {
+func (vm *VM) caughtValue(env *Env, err error) Value {
 	if ue, ok := err.(*uncaughtError); ok {
 		return ue.value
 	}
@@ -2185,7 +2189,21 @@ func caughtValue(err error) Value {
 	// else stays a map, which is all `catch (e)` ever needed.
 	var te TypedError
 	if errors.As(err, &te) && te.BuzzErrorType() != "" {
-		return errorObjectValue(te.BuzzErrorType(), fields)
+		name := te.BuzzErrorType()
+		if bound, ok := env.get(NativeTypeKey(name)); ok && bound.tag() == tagObjectDef {
+			// A typed catch compares definition pointers. Resolve the host's exact
+			// namespace binding and lay out fields in declaration order.
+			def := vm.asObjectDef(bound)
+			values := make([]Value, len(def.Fields))
+			for i, field := range def.Fields {
+				values[i] = Null
+				if value, found := fields[field.Name]; found {
+					values[i] = StringValue(value)
+				}
+			}
+			return heapValue(tagObject, &objectInst{Def: def, Fields: values})
+		}
+		return errorObjectValue(name, fields)
 	}
 	m := NewMap()
 	for k, v := range fields {
@@ -2536,7 +2554,7 @@ func (vm *VM) raiseHostError(err error) bool {
 	vm.frames = vm.frames[:entry.frameIdx+1]
 	vm.stack = vm.stack[:entry.stackLen]
 	vm.frames[len(vm.frames)-1].ip = entry.catchIP
-	caught := caughtValue(err)
+	caught := vm.caughtValue(vm.frames[len(vm.frames)-1].env, err)
 	vm.adopt(caught)
 	vm.push(caught)
 	return true

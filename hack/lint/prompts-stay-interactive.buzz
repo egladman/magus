@@ -184,7 +184,7 @@ test "a guard in another function does not count" {
 test "a guarded prompt outside main is reported" {
     final src = "export fun ask() > bool !> any \{\n    if (!term\\isInteractive()) \{\n        return false;\n    }\n"
         + "    return term\\confirm(\"go?\");\n}\n";
-    assert\equal(support\messages(judge("hack/magusfile/ask.buzz", src: src)),
+    assert\equal(support\messages(judge("magusfiles/quality/ask.buzz", src: src)),
         want: ["term\\confirm in fun ask, outside a script's main"], message: "finding");
 }
 
@@ -207,8 +207,8 @@ test "an unattended script takes no prompt, guarded or not" {
 
 test "a module importing the helper is reported at the import" {
     final src = "namespace x;\n\nimport \"hack/lib/prompt\";\n\nexport fun measure() > void \{}\n";
-    final got = judge("hack/magusfile/measure.buzz", src: src);
-    assert\equal(support\messages(got), want: ["hack/magusfile/measure.buzz imports hack/lib/prompt but has no main, so whatever imports it can prompt"], message: "finding");
+    final got = judge("magusfiles/quality/measure.buzz", src: src);
+    assert\equal(support\messages(got), want: ["magusfiles/quality/measure.buzz imports hack/lib/prompt but has no main, so whatever imports it can prompt"], message: "finding");
     assert\equal(got[0].line, want: 3, message: "the import line");
 }
 

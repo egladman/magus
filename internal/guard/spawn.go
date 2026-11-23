@@ -335,23 +335,22 @@ func envelopeSchedules(input map[string]any) bool {
 	})
 }
 
-// envelopeTarget is the agent a call addresses: `to` on one host, `target` on another.
+// envelopeTarget reads the addressee in each host's envelope.
 func envelopeTarget(input map[string]any) string {
-	return cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"))
+	return cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"), envelopeString(input, "threadId"))
 }
 
-// envelopeContinuation reads a message to an agent that already exists, with the text it
-// carries. A structured message has no text to hand a rule, so it yields "".
+// envelopeContinuation reads the addressee and text of a follow-up.
 func envelopeContinuation(input map[string]any) (target, message string, ok bool) {
 	target = envelopeTarget(input)
 	if target == "" {
 		return "", "", false
 	}
 	_, hasItems := input["items"].([]any)
-	if input["message"] == nil && !hasItems {
+	if input["message"] == nil && input["prompt"] == nil && !hasItems {
 		return "", "", false
 	}
-	return target, cmp.Or(envelopeString(input, "message"), envelopeItemsText(input)), true
+	return target, cmp.Or(envelopeString(input, "message"), envelopeString(input, "prompt"), envelopeItemsText(input)), true
 }
 
 // envelopeItemsText joins the text parts of an `items` list, the form a host uses to hand

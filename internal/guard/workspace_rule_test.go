@@ -112,6 +112,19 @@ func ownCheckout(t *testing.T, ctx context.Context, hasBinary bool) string {
 	return root
 }
 
+func (s *AuthorityContractSuite) TestAnUnloadedPolicyServesHumanAuthorityRecovery() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	at := s.at(moved)
+	asked := rulesAnswer{unloaded: true, loadFailure: errMissingMember}
+	call := judgedCall{changes: true, lease: "worker"}
+	s.True(denyUnloaded(s.T().Context(), &asked, call, at))
+	s.Equal(denyRuleStaleBinary, asked.rule)
+	s.Contains(asked.answer.Reason, "matches the working tree")
+	s.Contains(asked.answer.Reason, "./magus job advance worker")
+	s.Empty(asked.next)
+}
+
 // commitAuthority commits root's tree and advances every row's Authority
 // to it. A leased call reads the contract at its authority, so a worker's
 // fixture commits what ownCheckout wrote.
@@ -478,7 +491,9 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 
 	cont := Judge(ctx, unloadedDeps(), Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, verdictWithRule(verdict.Advise, string(advisorySpawnRuleFailed)), unworded(cont))
+	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnColdContinuation)}, judgedAs(cont),
+		"unknown continuation age and cost cannot dispatch without approval: %s", cont.Reason)
+	assert.Contains(t, cont.Context, "judged nothing", "the underlying workspace rule failure stays visible")
 }
 
 // A file write waits too while the binary cannot load the tree: the fix is a rebuild, not

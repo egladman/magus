@@ -175,6 +175,6 @@ func spawnerModel(at location, who hookAttribution, lease string) spawnedOn {
 		}
 		return spawnedOn{model: session, says: "the session's model, which this agent inherited"}
 	}
-	thread, from := callerThread(at.cacheDir, who, lease)
+	thread, from := callerThread(who, lease)
 	return spawnedOn{model: session, proven: thread == types.AgentThreadMain && from == types.ThreadReported, says: "this session's model"}
 }

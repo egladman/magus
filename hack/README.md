@@ -13,7 +13,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `remote/` | prefixes that run a command somewhere else | a person or an agent |
 | `bench/` | measurements of magus itself | a person comparing two builds |
 | `ci/` | workflow steps, and the scripts that act on pull requests and the repository | CI, the merge queue, a maintainer |
-| `magusfile/` | modules with no `main` | magusfiles and CI, through targets |
+| `../magusfiles/` | modules for build, quality and release targets | the root magusfile |
 | `lib/` | modules a script's `main` imports and no magusfile, hook or target may | the scripts in `dev/`, `remote/` and `bench/` |
 | `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `conventions` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
@@ -94,7 +94,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | `magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <sha,...\|ref> --title <text> --body-file <file> [--dry-run]` | refuses a branch name taken locally or on origin, switches to it from a fresh origin/main, cherry-picks the commits, makes the checkout verify-ready, runs the pr-title, pr-description and pr-changelog targets, then pushes and runs `gh pr create`; stops at the first failed step, never enables auto-merge; `--dry-run` prints the steps; at a terminal it asks which commits when `--from` is left off and confirms once before the push and pull request | a fetch, three targets, a push |
 | `magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--stack] [--push] [--dry-run]` | per branch in order: switches to it here (or, when another worktree has it checked out, works in that worktree), makes it verify-ready, runs `magus vcs resolve --against` `--base` (default origin/main), commits the merge and pushes only with `--push`. The branches are independent by default, each merging the base; `--stack` makes each merge the branch before it instead. Works on local branches origin lacks. Stops at the first source conflict and lists the files; a rerun commits a settled merge left in progress. Refuses a dirty tree, naming it; every failed git call prints its stderr. At a terminal it asks for a missing `--branches`, whether they are a `--stack`, and whether to `--push`; with no terminal a missing `--branches` is an error naming it | one merge and one regeneration per branch, and a push each with `--push` |
 | `magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches <a,b,c> [--base <ref>] [--push] [--dry-run]` | for branches still carrying a squash-merged pull request's commits: finds the newest merged head the first branch carries (a branch origin lacks is read from its local ref, left out of the fetch and pushed new with `-u`) (`gh pr list --state merged`), forks a `job fork --checkout` row, and per branch runs `git rebase --onto` the base (the first) or the rebased branch below, takes the replayed side of a generated conflict, makes the checkout verify-ready, runs `magus affected ci` with the checkout's own ./magus, commits its regeneration and, only with `--push`, pushes with `--force-with-lease` and ends the job; without it the branches are rebased in the checkout, the push each would run is printed, and the checkout and job are kept; stops at the first source conflict, aborts the rebase and lists the files; `--dry-run` prints the steps. At a terminal it asks for a missing `--branches` and whether to `--push` | a fetch, a gh query, then a rebase and the gate per branch, and a push each with `--push` |
-| `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: magus's results as typed Buzz values, where a shell pipes `-o json` into jq | needs the code index |
+| `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: typed Buzz examples for reading and projecting magus results without reparsing `-o json` | needs the code index |
 | `magus buzz hack/dev/ls-uncommitted.buzz` | read-only: uncommitted files by owning project and declared role | grows with tree size |
 | `magus buzz hack/dev/ls-worktrees.buzz -- [--dirty \| --unaccounted]` | read-only: every worktree with its uncommitted files, unpushed commits and job; `--dirty` lists only the worktrees with something to lose, `--unaccounted` lists instead what the work ledger says nothing accounts for | grows with the number of worktrees |
 | `magus buzz hack/dev/ls-test-failures.buzz -- [--ref <output-ref>]` | read-only: a failed Go test run as `file:line: message` lines | none |
@@ -165,40 +165,39 @@ workflow has no terminal and passes every argument as a flag, so nothing asks th
 `ci/completion-checks/` holds the shell scripts the root `completion-test` target runs in
 each shell's official image.
 
-## magusfile/
+## Imported modules
 
-Targets import these; each runs through its target rather than by hand.
+Build targets, scripts and guard policies import these modules.
 
 | module | holds |
 | --- | --- |
-| `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
-| `hack/magusfile/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
-| `hack/magusfile/bootstrap-slow-steps_test.buzz` | that bootstrap-checkout names every step past its bound and still finishes, checked by `buzz-test` |
-| `hack/magusfile/bootstrap-timing.buzz` | the warm-cache bound of each bootstrap step and the line a slow one prints; it reports, never refuses |
-| `hack/magusfile/buzz-coverage.buzz` | the `magus buzz -t` runs `buzz-test` makes, one per module, and the LCOV tracefile their fragments join into |
-| `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
-| `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
-| `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
-| `hack/magusfile/conformance-ceiling.buzz` | the conformance ceiling policy: which metrics a changed file may not hold more violations of than it held at the base revision |
-| `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
-| `hack/magusfile/coverage_test.buzz` | the coverage module's profile path for a full or narrowed run, checked by `buzz-test` |
-| `hack/magusfile/deviations.buzz` | a gate's ledger of the findings a person permitted |
-| `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
-| `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
-| `hack/magusfile/image.buzz` | magus's own container images: the static and dynamic variants, their pinned distroless bases, and the OCI layout image-build assembles |
-| `hack/magusfile/image_test.buzz` | the image variants' platforms, tags and layout, checked by `buzz-test` without docker |
-| `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
-| `hack/magusfile/library-bindings.buzz` | TermKit's generated Go-to-Buzz leaf bindings, written before boundary reflection; one local Go generator run |
-| `hack/magusfile/load-contract.buzz` | which changed paths a magus built before a merge needs to load the merged tree, and why a merged guard policy does not load |
-| `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
-| `hack/magusfile/model-tiers.buzz` | the model IDs each wired harness spawns for a job tier; pure lookup |
-| `hack/magusfile/recompose.buzz` | the rewrite of a merged stack into one commit per job branch above the pushed floor, with the merged tree kept byte for byte |
-| `hack/magusfile/regressions.buzz` | which merged pull request turned a check on main red and which open one fixes it; pure logic over the board's gh reads |
-| `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
-| `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
-| `hack/magusfile/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |
-| `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
-| `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
+| `hack/policy/model-tiers.buzz` | the model IDs each harness selects for a job tier |
+| `magusfiles/quality/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
+| `magusfiles/quality/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
+| `hack/dev/modules/bootstrap-slow-steps_test.buzz` | that bootstrap-checkout names every step past its bound and still finishes, checked by `buzz-test` |
+| `hack/dev/modules/bootstrap-timing.buzz` | the warm-cache bound of each bootstrap step and the line a slow one prints; it reports, never refuses |
+| `magusfiles/quality/buzz-coverage.buzz` | the `magus buzz -t` runs `buzz-test` makes, one per module, and the LCOV tracefile their fragments join into |
+| `hack/dev/modules/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
+| `magusfiles/release/changelog.buzz` | the changelog fragments' one grammar and renderer |
+| `magusfiles/release/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
+| `magusfiles/quality/conformance-ceiling.buzz` | the conformance ceiling policy: which metrics a changed file may not hold more violations of than it held at the base revision |
+| `magusfiles/quality/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
+| `magusfiles/quality/coverage_test.buzz` | the coverage module's profile path for a full or narrowed run, checked by `buzz-test` |
+| `hack/ci/modules/deviations.buzz` | a gate's ledger of the findings a person permitted |
+| `magusfiles/quality/drift.buzz` | drift measured by content, for every generated-file gate |
+| `magusfiles/build/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
+| `magusfiles/build/image.buzz` | magus's own container images: the static and dynamic variants, their pinned distroless bases, and the OCI layout image-build assembles |
+| `magusfiles/build/image_test.buzz` | the image variants' platforms, tags and layout, checked by `buzz-test` without docker |
+| `magusfiles/build/index.buzz` | each project's MAGUS.md routing index, which the root index links |
+| `hack/dev/modules/load-contract.buzz` | which changed paths a magus built before a merge needs to load the merged tree, and why a merged guard policy does not load |
+| `hack/dev/modules/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
+| `hack/dev/modules/recompose.buzz` | the rewrite of a merged stack into one commit per job branch above the pushed floor, with the merged tree kept byte for byte |
+| `hack/ci/modules/regressions.buzz` | which merged pull request turned a check on main red and which open one fixes it; pure logic over the board's gh reads |
+| `magusfiles/release/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
+| `magusfiles/quality/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
+| `magusfiles/quality/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |
+| `magusfiles/release/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
+| `magusfiles/release/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 
 ## lib/
 

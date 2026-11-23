@@ -1,14 +1,10 @@
 package edit
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,19 +36,4 @@ func RenameBlindSpots(id, language string, cov knowledge.Coverage) []types.EditR
 		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s changed after its %s was built; refresh with `%s`", stale.Project, index, hint.GraphBuild)})
 	}
 	return blind
-}
-
-// RenameGrade grades each rewritten file through [guard.GradeEdit],
-// the grader a Buzz fs write meets too,
-// so the two cannot differ on a lease or claim verdict.
-// Under a dry run the guard records nothing.
-//
-// deps are the guard's dependencies for the --root ws was loaded with, as typed:
-// ws.Root() can be another spelling of the same workspace,
-// which the memoized load would read as a second one.
-func RenameGrade(ctx context.Context, deps guard.Dependencies, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
-	ctx = recorder.ContextWithEntryPoint(ctx, job.EntryPointCLI)
-	return func(rel string, before, after []byte) (string, string) {
-		return guard.GradeEdit(ctx, deps, ws, rel, before, after, guard.EditGrade{DryRun: dryRun})
-	}
 }

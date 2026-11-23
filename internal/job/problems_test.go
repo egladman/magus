@@ -353,8 +353,14 @@ func TestDelivery(t *testing.T) {
 
 func (s *deliverySuite) TestEachDeliveryIsAccepted() {
 	for _, d := range job.Deliveries() {
-		s.Require().NoError(ValidateDeclaration(job.Declaration{ID: "worker", Delivery: d}), d)
+		rec := job.Declaration{ID: "worker", Delivery: d, Check: fixtureCheck(types.LeaseCheck{Target: "test", Project: "."})}
+		s.Require().NoError(ValidateDeclaration(rec), d)
 	}
+}
+
+func (s *deliverySuite) TestFindingsRequiresRecordedEvidence() {
+	err := ValidateDeclaration(job.Declaration{ID: "worker", Delivery: job.DeliveryFindings})
+	s.Require().ErrorContains(err, "requires a check")
 }
 
 func (s *deliverySuite) TestAnUnknownDeliveryIsRefusedNamingTheSet() {

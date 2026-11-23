@@ -2,13 +2,10 @@
 # The smallest useful magus event subscriber: print every target failure as it
 # happens, anywhere in the workspace.
 #
-# This is the whole contract. `magus events` writes one JSON object per line;
-# you read lines and switch on .type. There is nothing else to learn - every
-# other integration in this directory is this loop plus a way to draw on a
-# screen.
+# `magus events` streams records through its native Go template renderer, so
+# this subscriber needs no JSON parser or pipeline.
 #
-# POSIX sh, no bashisms. jq does the parsing, the same way the agent guard
-# templates in ../agents/ use it.
+# POSIX sh, no bashisms.
 #
 #   ./magus-events-watch.sh              # watch the workspace you are in
 #   ./magus-events-watch.sh /path/repo   # watch another one
@@ -22,7 +19,7 @@ root=${1:-}
 # --limit 0 replays nothing. A notifier that announces yesterday's failure the
 # moment you start it is worse than one that stays quiet, so history is skipped
 # and only what happens from now on is reported.
-set -- events --follow --limit 0 --type target.result,run.finished
+set -- events --follow --limit 0 --type target.result,run.finished -o 'template={{if and (eq .type "target.result") (eq .status "failed")}}FAIL  {{.project}}:{{.target}}   magus query output {{if .ref}}{{.ref}}{{else}}-{{end}}{{else if and (eq .type "run.finished") (eq .status "fail")}}---   run {{.inv}} failed{{end}}'
 [ -n "$root" ] && set -- --root "$root" "$@"
 
 # Prefer the workspace's own ./magus over PATH: a repository that builds magus
@@ -34,28 +31,4 @@ set -- events --follow --limit 0 --type target.result,run.finished
 	exit 127
 }
 
-command -v jq >/dev/null 2>&1 || {
-	echo "jq not found; this template parses with jq" >&2
-	exit 127
-}
-
-# --unbuffered makes jq flush each line as it arrives; without it a quiet period
-# holds finished events in jq's buffer and looks like a build that never ran.
-#
-# A pipeline exits with its LAST stage, so a `magus events` that dies reaches jq
-# as a clean EOF and this would exit 0 - a supervisor sees a healthy subscriber
-# that stopped subscribing. POSIX sh has no pipefail, hence the status file.
-rc=$(mktemp) || exit 1
-trap 'rm -f "$rc"' EXIT INT TERM
-
-{ "$MAGUS_BIN" "$@"; echo $? >"$rc"; } | jq -r --unbuffered '
-	if .type == "target.result" and .status == "failed" then
-		"FAIL  \(.project):\(.target)   magus query output \(.ref // "-")"
-	elif .type == "run.finished" and .status == "fail" then
-		"---   run \(.inv) failed"
-	else
-		empty
-	end
-'
-
-exit "$(cat "$rc")"
+exec "$MAGUS_BIN" "$@"

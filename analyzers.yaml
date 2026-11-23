@@ -49,13 +49,9 @@ exhaustive-switch:
     - {path: internal/guard/search.go, symbol: placeSearch}
     - {path: internal/guard/search.go, symbol: searchVerdictAt}
     - {path: internal/guard/search_pattern.go, symbol: splitAlternation}
-    - {path: internal/guard/shell.go, symbol: GradeEdit}
-    - {path: internal/guard/shell.go, symbol: fileOperands}
-    - {path: internal/guard/shell.go, symbol: filterWithoutInputDeny}
     - {path: internal/guard/stall.go, symbol: observeStall}
     - {path: internal/guard/step.go, symbol: stepDecisionRank}
     - {path: internal/guard/step.go, symbol: stepRuleJudgment}
-    - {path: internal/guard/workspace_shell.go, symbol: matchWorkspaceShell}
     - {path: internal/guard/write.go, symbol: sayUnchecked}
   # Switches a person accepted, each with the reason it stays.
   exits: []
@@ -96,9 +92,6 @@ clikitmain:
     cmd/magus/watch.go: 1
     cmd/magus/where.go: 6
     cmd/magus/x.go: 1
-    # moduledecls still parses its own -outdir: the file belongs to another
-    # change in flight, so magus-utils hands the flag back to it.
-    cmd/magus-utils/module_decls.go: 2
   # - {path, reason}
   exits: []
 
@@ -112,14 +105,14 @@ no-throw:
     throw: {}
     buzz-error-signature:
       hack/dev/bootstrap-checkout.buzz: 2
-      hack/magusfile/advisories.buzz: 3
-      hack/magusfile/bootstrap-timing.buzz: 2
-      hack/magusfile/changelog.buzz: 3
-      hack/magusfile/drift.buzz: 1
-      hack/magusfile/index.buzz: 1
-      hack/magusfile/releases.buzz: 10
-      hack/magusfile/ruledocs.buzz: 2
-      hack/magusfile/run-golangci.buzz: 2
+      magusfiles/quality/advisories.buzz: 3
+      hack/dev/modules/bootstrap-timing.buzz: 2
+      magusfiles/release/changelog.buzz: 3
+      magusfiles/quality/drift.buzz: 1
+      magusfiles/build/index.buzz: 1
+      magusfiles/release/releases.buzz: 10
+      magusfiles/quality/ruledocs.buzz: 2
+      magusfiles/quality/run-golangci.buzz: 2
       hack/policy/guard.buzz: 2
       hack/policy/stale.buzz: 1
       spells/golang/golangci.buzz: 2

@@ -209,7 +209,7 @@ Magus stages also pass each other typed records rather than text. A run, an
 `affected` run or a `magus buzz` script whose stdout another magus reads writes the
 records [`-o jsonl`](../reference/manpage/magus-run.md) writes there, and prints its
 usual prose on stderr, so a person still reads the run. Nothing changes when the reader
-is a terminal, a file or another tool like `jq`, and an explicit `-o` always wins.
+is a terminal, a file or another tool, and an explicit `-o` always wins.
 Projects flow forward: a run that names no projects runs on the projects its upstream
 ran on, the way `xargs` takes its arguments, and one that names projects runs exactly
 those.
@@ -266,8 +266,7 @@ shard from a drifted tree.
 
 The upstream is proven from the kernel, never taken on trust: the run follows its stdin
 back to the processes writing it, and counts one as a magus stage only when it runs the
-same magus executable. Tools in between, like `magus ... | jq ... | magus ...` or
-`| tee log |`, are followed through the same way: the run reads which pipes they hold,
+same magus executable. The run follows intermediate processes such as `tee log` by reading which pipes they hold,
 never their arguments. Input that no magus feeds, like `echo x | cat | magus run ...`,
 proves nothing, so a lock held elsewhere is refused as above. Two different magus
 binaries also meet as strangers, and so does everything on Windows, where no kernel

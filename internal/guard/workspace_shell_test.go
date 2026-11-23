@@ -10,6 +10,16 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
+func TestWorkspaceShellRefusesUnsupportedDecision(t *testing.T) {
+	t.Parallel()
+	for _, decision := range []verdict.Decision{"", verdict.Defer, verdict.Ask, "unknown"} {
+		rules := []WorkspaceShellRule{{Name: "echo-rule", Decision: decision, Program: "echo"}}
+		v := matchWorkspaceShell(rules, "echo hello", DialectBash)
+		assert.Equal(t, denyRuleName("workspace:echo-rule"), v.Rule.Name)
+		assert.Contains(t, v.Deny, "expected deny or advise")
+	}
+}
+
 func TestWorkspaceShellDenyStrengthensAPass(t *testing.T) {
 	t.Parallel()
 	deps := testDependencies()

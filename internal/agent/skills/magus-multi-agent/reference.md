@@ -372,91 +372,29 @@ Run workers non-blocking by default. Block on one only when your next action nee
 result. An agent spawned only to wait, poll, or repeat the root's discovery is not an
 edit job and spends budget for nothing.
 
-## Observe through the correct control plane
+## Observe a running job
 
-Track the job tree, agent state, messages, and completion in the provider's agent or
-task view. Use it to keep the store aware of descendants.
+Use the provider's task view for agent state and completion. For job progress,
+read the events in `{{cmd "job watch"}} <job>`. It combines recorded calls,
+runs and changes under the write paths. A contested path credits neither holder.
+Use `{{cmd "describe job"}} <job>` for completion and the console link for a
+person following the job. Message a worker to change its assignment.
 
-A person at a terminal watches processes and shared workspace resources with magus:
+A worker blocked on input or approval pipes the request to
+`{{cmd "session notify"}} --outcome waiting` or `--outcome permission`,
+respectively, and keeps its row open. Across worktrees,
+`{{cmd "session attention"}}` lists the repository's requests. Its `-q` form
+exits 1 when empty. The worker waits for the orchestrator or a person to run
+`{{cmd "session dispose"}} <id> --reason "<why>"`.
 
-```sh
-magus server status --watch=15s
-```
+Audit runs across worktrees with `{{cmd "session"}} --since 2h -o json`.
+Each invocation records target outcomes and the caller's claimed lease,
+spawner and parent span. An empty lease leaves the run unattributed.
 
-It shows magus process state, lock holders, and shared-service state and adoption. It
-does not show an agent thinking without running a magus process. It is for that person:
-an agent never starts it, or a sleep or tick loop, as a background task, and never
-replaces it with repeated `ps` or a waiting agent. An agent waits for its own run's
-completion notice; the root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>`
-only when it needs to know.
-
-To wait for a process you did not start to end, use your host's own wait or monitor
-tool{{if .Full}}: a shell loop holds your tool slot for the whole wait{{end}}.
-
-### "How is it going" is a read, never a message
-
-Never message a worker to ask how it is doing. The question costs it the turn it was
-in, and what comes back is its account of itself, not what happened{{if .Full}}. Three reads answer it and none of them needs the
-worker's cooperation: a changed file is the filesystem reporting a fact, a tool
-call is what the guard already recorded, and a gate is graded against evidence
-magus is holding anyway{{else}}. Three reads answer it without touching the
-worker{{end}}.
-
-| you want | read |
-| --- | --- |
-| to hand the question to a person | the console link every verb that names a job prints |
-| to watch it happen | `{{cmd "job watch"}} <job>` |
-| to know whether it is finished | `{{cmd "describe job"}} <job>` |
-
-`{{cmd "job watch"}}` prints one line per event until you interrupt it. It merges files
-changed under the job's write paths, the guard's tool calls under its lease, and the
-runs recorded against it. A file is attributed by WRITE PATH and by nothing the worker says{{if .Full}}: the write paths are proven disjoint when the job forks, so the
-path alone names the holder. Where two live jobs do cover one path the line says
-`contested`, names both, and attributes it to neither; there is nothing in a path
-to break that tie with, and naming one would tell you a file moved under a worker
-that never touched it{{else}}, so the worker cannot make it quiet{{end}}.
-
-Message a worker only to CHANGE what it was handed. Anything you merely want to KNOW
-is one of the three reads above.
-
-A blocked worker RAISES; it never stalls quietly.
-
-- Piping the block to `{{cmd "session notify"}} --outcome waiting` (blocked on input) or
-  `--outcome permission` (blocked on approval) opens a durable request in this
-  repository. No other outcome opens one.
-- `{{cmd "session attention"}}` lists what is open{{if .Full}}, keyed by repository identity rather
-  than by checkout path, so a request raised inside a worker's own isolated tree is
-  listed in yours{{end}}. `{{cmd "session attention"}} -q` prints nothing and exits 1 on an empty
-  queue: the form to test from a loop.
-- Nothing closes a request by itself. The orchestrator, or any human, disposes it
-  with `{{cmd "session dispose"}} <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
-  request magus could answer on its own would not have needed a person{{end}}.
-- A worker that raised one waits for the disposition; it never chooses for itself.
-  It does not exit its row first: ending its turn leaves the row open and the worker resumable.
-
-`{{cmd "session"}}` is how the root audits what a job RAN, as opposed to what it reported.
-`{{cmd "session"}} --since 2h -o json` answers what the fleet has been doing.
-
-{{if .Full}}Each invocation carries the job it was launched under (the same `magus.lease` channel).
-It also carries its claimed spawner label and parent span, and the targets it finished
-with their outcomes. The store is keyed by repository identity, so a worker in its own
-worktree is still listed.
-Attribution is cooperative and every one of those values is a CLAIM magus records
-rather than corroborates: an empty lease means the invocation claimed none, which
-makes it unattributed, never an error; its OS user says whose account ran it.{{else}}Each
-invocation carries its lease, its claimed spawner and parent span, and the targets
-it ran with their outcomes. A worker in its own worktree is still listed.{{end}}
-
-{{if .Full}}Course-correct at explicit checkpoints: after a child proposes new
-descendants, when a worker discovers a new API or generated-output dependency,
-when ownership drifts, when criteria repeatedly fail, and when status shows
-unexpected lock contention or service failure. Pause only the affected branch,
-update the jobs and ordering, then resume work that remains independent. Never
-guess a PID or signal from stale output; use current status and the host's normal
-process controls.{{else}}Re-plan when nesting, dependencies, ownership, failing criteria, locks, or
-services change. Update the jobs before resuming affected work, and never act on a
-guessed or stale PID.{{end}} A running worker keeps the constraints it was handed.
-Tightening them means cancel and respawn, not a message sent mid-flight.
+Revisit ownership and ordering when a new dependency, repeated failure or
+resource conflict affects the plan. Pause the affected branch and update its
+jobs. Tightening a running worker's constraints requires cancelling and
+respawning it. Use current status before acting on a process.
 
 ## Integrate and verify
 

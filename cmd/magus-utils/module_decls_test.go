@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -13,8 +14,20 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/std"
 )
+
+func TestModuleDeclsFlags(t *testing.T) {
+	run := scribe("moduledecls")
+	require.EqualError(t, run(nil), "usage: magus-utils moduledecls -outdir <dir>")
+	require.Error(t, run([]string{"-outdir"}))
+	require.Error(t, run([]string{"-unknown"}))
+
+	dir := t.TempDir()
+	require.NoError(t, run([]string{"-outdir", dir + "/unused", "-outdir", dir}))
+	require.FileExists(t, dir+"/fs.buzz")
+}
 
 // A namespace's Objects are declared like a signature's objects are: with everything
 // they reference, ahead of their first use.
@@ -274,4 +287,43 @@ final unset = image\Digest{}.string();
 `))
 	s.Equal("sha256:ab", sess.Globals()["set"].AsString())
 	s.Empty(sess.Globals()["unset"].AsString())
+}
+
+func TestProgressConstructorsUseTheirOwnNameEnum(t *testing.T) {
+	mod, ok := hostmodules.Get("progress")
+	require.True(t, ok)
+	decls, err := renderModuleDecls(mod)
+	require.NoError(t, err)
+	for _, kind := range []string{"Glyph", "Rotation", "Strip", "Text", "Span", "Column"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx := t.Context()
+			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+			t.Cleanup(func() { _ = sess.Close() })
+			sess.SetNativeModule(mod.ImportPath(), bindgen.RegisterProgress(ctx, sess))
+			sess.SetModuleDecls(result.ModulePath, result.Source)
+			sess.SetModuleDecls(mod.ImportPath(), namespaceImports(mod.Name, decls)+decls)
+			enum, ok := boundaryEnumNamed(kind + "Name")
+			require.True(t, ok)
+			require.NotEmpty(t, enum.Cases)
+			for _, member := range enum.Cases {
+				src := fmt.Sprintf(`import "termkit/progress";
+var name = "";
+try {
+    name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s).value!);
+} catch (err) {
+    name = "{err}";
+}`, kind, member.Name)
+				require.NoError(t, sess.Exec(ctx, src))
+				assert.Equal(t, member.Value, sess.Globals()["name"].AsString())
+			}
+			raw := fmt.Sprintf(`import "termkit/progress"; fun rejectRaw() > int !> any { return progress\new%s(%q); }`, kind, enum.Cases[0].Value)
+			require.ErrorContains(t, sess.Exec(ctx, raw), "cannot pass str")
+			wrong := "progress\\GlyphName.dots"
+			if kind == "Glyph" {
+				wrong = "progress\\StripName.dots"
+			}
+			mixed := fmt.Sprintf(`import "termkit/progress"; fun rejectMixed() > int !> any { return progress\new%s(%s); }`, kind, wrong)
+			require.ErrorContains(t, sess.Exec(ctx, mixed), fmt.Sprintf("of type %sName", kind))
+		})
+	}
 }

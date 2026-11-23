@@ -2620,10 +2620,14 @@ func validationNamesGate(validation string) bool {
 // anything the orchestrator reads. So is an init that creates a repository outside the
 // checkout, and the verbs after it on the same line inside that repository.
 func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
+	return leaseVCSDenial(ctx, deps, actingLease, command).full()
+}
+
+func leaseVCSDenial(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" || helpOnlyLine(command, DialectBash) {
-		return ""
+		return denial{}
 	}
-	if reason := denyLeaseScriptVCS(ctx, deps, actingLease, command, 0); reason != "" {
+	if reason := denyLeaseScriptVCS(ctx, deps, actingLease, command, 0); reason.Say != "" {
 		return reason
 	}
 	return denyLeaseLineVCS(ctx, deps, actingLease, command)
@@ -2632,18 +2636,18 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 // denyLeaseLineVCS judges the verbs typed on the line, a script's body being
 // one such line. It parses before reading the ledger: every call under a bound
 // lease reaches this rule, and most are not version control.
-func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
+func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	cmds, ok := ParseCommands(command)
 	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" || workerVCSMovesRefs(c) }) {
-		return ""
+		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok {
-		return ""
+		return denial{}
 	}
 	role := workerRole(me, deps.caller)
 	if role == "" {
-		return ""
+		return denial{}
 	}
 	integrator := integratesOwnCheckout(deps, me)
 	lands := func(c hint.Invocation) bool { return workerLands(c) || integrator && integratorLands(c) }
@@ -2652,7 +2656,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		placed = func(c hint.Invocation) bool { return lands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
 	}
 	// Rendered words drop a loop's variable; the located call has it bound.
-	placedByWords := func(c hint.Invocation) bool { return movesNamedPaths(c) || reattachesOwnBranch(c, me) }
+	placedByWords := movesNamedPaths
 	// A line that creates a repository is located call by call, whatever else it runs:
 	// the verbs after the init may belong to the repository it made.
 	creates := slices.ContainsFunc(cmds, isInit)
@@ -2667,9 +2671,9 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 					if addsScratchCheckout(command, cwd) {
 						continue
 					}
-					return checkoutAddDenial(fmt.Sprintf("`%s`", command), me, role)
+					return denial{Say: checkoutAddDenial(fmt.Sprintf("`%s`", command), me, role)}
 				}
-				return workerVCSDenial(fmt.Sprintf("`%s`", command), vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
+				return workerVCSDecision(fmt.Sprintf("`%s`", command), vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
 			}
 		}
 	}
@@ -2681,7 +2685,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 	calls, ok := locateCallsAt(command, d, deps.callShellDir(), matches, false)
 	if !ok {
 		unparsed := vcsRefusal{op: "commit", kind: vcsOpLands, why: "The line does not parse, so where it commits cannot be read."}
-		return workerVCSDenial(fmt.Sprintf("`%s`", command), unparsed, me, role)
+		return workerVCSDecision(fmt.Sprintf("`%s`", command), unparsed, me, role)
 	}
 	envDir, envWhy := gitDirAssigned(command, d)
 	var fresh []string
@@ -2714,13 +2718,13 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated, integrator)
 		if r.refused() {
-			return workerVCSDenial(fmt.Sprintf("`%s`", command), r, me, role)
+			return workerVCSDecision(fmt.Sprintf("`%s`", command), r, me, role)
 		}
 		if r.kind == vcsOpInit {
 			fresh = append(fresh, r.dest)
 		}
 	}
-	return ""
+	return denial{}
 }
 
 // nonLiteralInit says why a shell line's init cannot be placed, "" when every word of it is
@@ -2764,7 +2768,7 @@ func vcsCommandRefusal(ctx context.Context, row jobtypes.Job, backend string, ar
 	if !r.refused() {
 		return nil
 	}
-	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), r, row, workerRole(row, job.Caller{})))
+	return errors.New(workerVCSDecision(fmt.Sprintf("`vcs\\cmd(%q)`", args), r, row, workerRole(row, job.Caller{})).full())
 }
 
 // gitLocationVars are the environment variables that move git's repository, work tree or
@@ -2947,6 +2951,7 @@ const (
 
 // vcsRefusal is lease-vcs's answer for one call.
 type vcsRefusal struct {
+	preparation job.CheckoutPreparation
 	// op names the mutation as the deny words it, "" for a call that mutates nothing.
 	op   string
 	kind vcsOpKind
@@ -2984,9 +2989,6 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 	if movesNamedPaths(inv) {
 		return moveRefusal(ctx, opts, row, inv, site, unlocated)
 	}
-	if reattachesOwnBranch(inv, row) {
-		return refMoveRefusal(ctx, opts, row.Worktree.Root, inv, site, unlocated)
-	}
 	op := workerVCSOp(inv)
 	if root := refMoveRoot(row); op == "" && root != "" && workerVCSMovesRefs(inv) {
 		return refMoveRefusal(ctx, opts, root, inv, site, unlocated)
@@ -3001,7 +3003,7 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 	case unlocated != "":
 		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
 	}
-	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
+	why, base, prep := commitRefusal(ctx, opts, row, inv.Name, site)
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
 		why = mergeRefusal(operand, base, row)
 	}
@@ -3018,7 +3020,7 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 	if why == "" {
 		return vcsRefusal{op: op, kind: vcsOpOutside, why: commitPathsRefusal(ctx, opts, row, inv, site)}
 	}
-	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
+	return vcsRefusal{op: op, kind: vcsOpLands, why: why, preparation: prep}
 }
 
 // rowRegenerates reports what a row may commit beyond its write paths. An
@@ -3176,17 +3178,17 @@ func pickPathsRefusal(ctx context.Context, row jobtypes.Job, inv hint.Invocation
 // a script hides every verb from a rule reading the line. A script that cannot
 // be read, or that nests past the bound, is refused: scripts calling each other
 // never reach a last line to judge.
-func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command string, depth int) string {
+func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command string, depth int) denial {
 	d := effectiveDialect(deps.ShellDialect)
 	runs := scriptRuns(command, d)
 	if len(runs) == 0 {
-		return ""
+		return denial{}
 	}
 	if _, live := actingLiveLease(ctx, deps, lease); !live {
-		return ""
+		return denial{}
 	}
 	if depth > writeScanDepth {
-		return fmt.Sprintf("magus workspace: these scripts nest deeper than %d calls, or call each other, so what they run cannot be read. Run the innermost one in a call of its own.", writeScanDepth)
+		return denial{Say: fmt.Sprintf("magus workspace: these scripts nest deeper than %d calls, or call each other, so what they run cannot be read. Run the innermost one in a call of its own.", writeScanDepth)}
 	}
 	start := deps.callShellDir()
 	judged := map[scriptRun]bool{}
@@ -3196,27 +3198,27 @@ func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command s
 		}
 		judged[run] = true
 		for _, at := range scriptRunDirs(command, d, start, run) {
-			if reason := denyScriptRunVCS(ctx, deps, lease, run, at, depth); reason != "" {
+			if reason := denyScriptRunVCS(ctx, deps, lease, run, at, depth); reason.Say != "" {
 				return reason
 			}
 		}
 	}
-	return ""
+	return denial{}
 }
 
 // denyScriptRunVCS judges one script run from at, the directory its relative
 // paths and its own lines resolve against.
-func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run scriptRun, at shellDir, depth int) string {
+func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run scriptRun, at shellDir, depth int) denial {
 	file := run.path
 	if !filepath.IsAbs(file) {
 		if !at.known {
 			if run.lang != scriptNone && run.lang != scriptShell {
-				return ""
+				return denial{}
 			}
-			return fmt.Sprintf("magus workspace: this line runs %s from a directory only running the line can reveal. Name the script by its absolute path, or cd to a literal path.", run.path)
+			return denial{Say: fmt.Sprintf("magus workspace: this line runs %s from a directory only running the line can reveal. Name the script by its absolute path, or cd to a literal path.", run.path)}
 		}
 		if at.dir == "" {
-			return ""
+			return denial{}
 		}
 		file = filepath.Join(at.dir, file)
 	}
@@ -3226,26 +3228,27 @@ func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run 
 		lang = detectScriptLang(file, body)
 	}
 	if lang != scriptShell {
-		return ""
+		return denial{}
 	}
 	if !read {
 		if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
-			return ""
+			return denial{}
 		}
-		return fmt.Sprintf("magus workspace: this line runs %s, not on disk yet, so it cannot be read. Write the script first, then run it in a call of its own.", run.path)
+		return denial{Say: fmt.Sprintf("magus workspace: this line runs %s, not on disk yet, so it cannot be read. Write the script first, then run it in a call of its own.", run.path)}
 	}
 	if helpOnlyLine(body, DialectBash) {
-		return ""
+		return denial{}
 	}
 	deps.callDir, deps.callDirUnread = at.dir, !at.known
 	reason := denyLeaseScriptVCS(ctx, deps, lease, body, depth+1)
-	if reason == "" {
+	if reason.Say == "" {
 		reason = denyLeaseLineVCS(ctx, deps, lease, body)
 	}
-	if reason == "" {
-		return ""
+	if reason.Say == "" {
+		return denial{}
 	}
-	return fmt.Sprintf("`%s`: %s\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed.", run.path, reason, run.path)
+	reason.Say = fmt.Sprintf("`%s`: %s\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed.", run.path, reason.Say, run.path)
+	return reason
 }
 
 // scriptRunDirs are the directories the line runs run from, in order. A call
@@ -3680,61 +3683,53 @@ func inFreshRepository(inv hint.Invocation, site vcsSite, unlocated string, fres
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the
 // lease's own checkout, a secondary one, on a named branch other than the base. base is
 // the base branch that checkout resolves, read only when why is "".
-func commitRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.Job, backend string, site vcsSite) (why, base string) {
+func commitRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.Job, backend string, site vcsSite) (why, base string, prep job.CheckoutPreparation) {
 	if row.CheckoutRoot == "" {
 		// A fork records the checkout; job exec binds it and
 		// records the base.
 		if own := row.Worktree; own.Standing() {
 			return fmt.Sprintf("The lease records no checkout_root until its holder takes the job in %s, the checkout its fork made or adopted: run `cd %s && %s`, then commit there.",
-				own.Root, own.Root, hint.JobExec.With(row.ID)), ""
+				own.Root, own.Root, hint.JobExec.With(row.ID)), "", prep
 		}
-		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", ""
+		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", "", prep
 	}
 	root, ok := siteCheckout(ctx, opts, backend, site)
 	if !ok {
-		return "Which checkout it commits in cannot be read.", ""
+		return "Which checkout it commits in cannot be read.", "", prep
 	}
 	if !samePath(root, row.CheckoutRoot) {
-		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot), ""
+		return fmt.Sprintf("It commits in %s, and the lease was taken in %s.", root, row.CheckoutRoot), "", prep
 	}
 	opts.Name = backend
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil || res.VCS == nil {
-		return fmt.Sprintf("Version control is disabled or unresolvable for %s, so its branch cannot be read.", root), ""
+		return fmt.Sprintf("Version control is disabled or unresolvable for %s, so its branch cannot be read.", root), "", prep
 	}
 	if !res.VCS.IsSecondaryCheckout(root) {
-		return root + " is the repository's primary checkout, the one the orchestrator integrates in.", ""
+		return root + " is the repository's primary checkout, the one the orchestrator integrates in.", "", prep
 	}
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
-	case err != nil || ref == "":
-		return fmt.Sprintf("%s has no branch checked out; %s", root, switchToJobBranch(backend, row)), ""
+	case err != nil:
+		return fmt.Sprintf("Cannot read the branch in %s: %v.", root, err), "", prep
+	case ref == "":
+		if backend == "git" {
+			prep = job.GitCheckoutPreparation(ctx, row, root, res.VCS)
+			if prep.Reason != "" {
+				return prep.Reason, "", prep
+			}
+		}
+		return fmt.Sprintf("%s has no branch checked out.", root), "", prep
 	case isBaseBranch(ref, res.Base):
-		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), ""
+		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), "", prep
 	}
-	return "", res.Base
+	return "", res.Base, prep
 }
 
 // isBaseBranch reports whether ref names the branch base tracks: base itself, or its last
 // segment for a remote-tracking base such as origin/main.
 func isBaseBranch(ref, base string) bool {
 	return ref == base || ref == path.Base(base)
-}
-
-// switchToJobBranch is the line that puts a detached checkout on the job's branch, named
-// after the job as the orchestrator names it, or creates that branch when it does not exist.
-// A detached HEAD is never a place to commit: the orchestrator lands a branch, and a commit
-// on no branch is one it cannot name.
-//
-// A row with its own checkout gets the line that keeps the detached commits.
-func switchToJobBranch(backend string, row jobtypes.Job) string {
-	switch {
-	case backend != "git":
-		return fmt.Sprintf("check out a branch named %s first.", row.ID)
-	case row.Worktree.Standing():
-		return fmt.Sprintf("run `git switch -C %s`, which puts that branch on this HEAD and keeps the commits made here.", row.ID)
-	}
-	return fmt.Sprintf("run `git switch %s`, or `git switch -c %s` when no such branch exists.", row.ID, row.ID)
 }
 
 // siteCheckout resolves site to the root of the checkout it stands in.

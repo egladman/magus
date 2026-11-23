@@ -202,18 +202,15 @@ Replace the filter with the flag that already does it:{{end}}
 
 {{if .Full}}| Instead of | Use |
 |---|---|
-| `\| grep <field>` | `-o template='{{"{{.Field}}"}}'` |
+| `\| grep <field>` | `-o template` lists available fields; select one with `-o template='{{"{{.field}}"}}'` |
 | `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
 | `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
 | `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
 | `\| awk '{print $1}'` | `-o name` |
-| `\| jq` after `-o text` | `-o json` first, then `jq` |{{else}}Flag instead:
-- `-o template='{{"{{.Field}}"}}'`: field.
+{{else}}Flag instead:
+- `-o template` lists fields. Use their JSON names in the template.
 - `-o name`: bare identifiers; `-o json`: parse.
 - `-s`: quieten.{{end}}
-
-{{if .Full}}`jq` on `-o json` is fine: that is consuming a contract, not scraping text. The
-prohibition is on text filters standing in for an output format.{{else}}`jq` over `-o json` fine: contract, not scraped text.{{end}}
 
 {{if .Full}}**Piping magus INTO magus is supported and encouraged.** The composition seam is
 `--stdin`. `--tee <file>` is not a composition seam: it mirrors STRUCTURED output
@@ -226,14 +223,7 @@ magus watch | magus affected --stdin        # changed paths -> affected set
 magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
-{{if .Full}}A pipe into magus, or `jq` over `-o json`, is composition. A pipe into a text filter
-is a missing `-o`.
-
-A backgrounded run's capture is magus output too: grepping the task file your host
-wrote hits the `capture-filter` guard rule, since a grep drops the `output:` and `inspect:` lines
-under the `cause:` you matched. Background it as `-o jsonl --tee <file>` to get a
-contract you can `jq`; otherwise read the file whole.{{else}}Pipe into magus, or `jq` over `-o json`: composition. Pipe into text filter: missing `-o`.
-Backgrounded run's capture is magus output too: grepping host's task file hits `capture-filter` guard rule. Background as `-o jsonl --tee <file>` -> contract you can `jq`; otherwise read file whole.{{end}}{{if .Full}}
+Save a background run with `-o jsonl --tee <file>`. Read the failure's output ref for the full log.{{if .Full}}
 
 WRONG: `{{cmd "run"}} test | head -50` (drops the failing tail that matters).
 WRONG: `{{cmd "query"}} "kind=target" -o name | grep -c .` (use the JSON count).

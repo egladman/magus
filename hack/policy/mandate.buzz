@@ -17,7 +17,7 @@ import "encoding/json";
 import "magus";
 import "magus/check";
 import "vcs";
-import "./hack/magusfile/branch-stack" as branchstack;
+import "./hack/dev/modules/branch-stack" as branchstack;
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 

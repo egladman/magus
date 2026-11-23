@@ -1,11 +1,11 @@
 import "magus";
 import "result";
-import "../hack/magusfile/toolchain-policy" as policy;
-import "../hack/magusfile/advisories" as advisories;
-import "../hack/magusfile/drift" as drift;
-import "../hack/magusfile/index" as index;
-import "../hack/magusfile/ruledocs" as ruledocs;
-import "../hack/magusfile/changelog" as changelog;
+import "../magusfiles/release/toolchain-policy" as policy;
+import "../magusfiles/quality/advisories" as advisories;
+import "../magusfiles/quality/drift" as drift;
+import "../magusfiles/build/index" as index;
+import "../magusfiles/quality/ruledocs" as ruledocs;
+import "../magusfiles/release/changelog" as changelog;
 import "lib/dictionary" as dictionary;
 import "fs";
 import "os";
@@ -237,7 +237,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-skilldocs/**/*.go"),
         workspace\file("cmd/magus/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
         workspace\file("cmd/magus/starter/*.buzz"), workspace\file("cmd/magus/completions/*"),
-        workspace\file("hack/magusfile/ruledocs.buzz"),
+        workspace\file("magusfiles/quality/ruledocs.buzz"),
         "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
         "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../*_test.go"]);
@@ -280,7 +280,7 @@ export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> an
     // Key the source too: a fresh checkout may not have the built binary yet.
     ctx.readsFiles([proofreadmod\file("**/*.go"), proofreadmod\file("go.mod"), proofreadmod\file("go.sum"),
         proofreadmod\file("proofread.buzz"), proofreadmod\file("internal/wordclass/gen/model.gz"),
-        proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz")]);
+        proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("magusfiles/quality/ruledocs.buzz")]);
     ctx.writesFiles(["reference/proofread/*.md"]);
     ruledocs\writeProofread("reference/proofread",
         raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".").stdout);
@@ -374,8 +374,8 @@ fun isDecimalCopySuffix(suffix: str) > bool {
 // Uncommitted: a committed page would conflict in every pull request.
 export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["templates/changelog.mustache", workspace\file("releases/*.yaml"),
-        workspace\file("changes/unreleased/*.md"), workspace\file("hack/magusfile/changelog.buzz"),
-        workspace\file("hack/magusfile/commits.buzz")]);
+        workspace\file("changes/unreleased/*.md"), workspace\file("magusfiles/release/changelog.buzz"),
+        workspace\file("magusfiles/release/commits.buzz")]);
     ctx.writesFiles(["changelog.md"]);
     // Entry links resolve from the repo root for GitHub; this page sits inside docs/.
     final page = changelog\render(fs\readFile("templates/changelog.mustache"),

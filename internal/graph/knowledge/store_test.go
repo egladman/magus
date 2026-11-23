@@ -1378,3 +1378,137 @@ func TestStorePruneToSizeRemovesLexicalSidecars(t *testing.T) {
 	assert.NoFileExists(t, capped.shardPath(docs.Name))
 	assert.NoFileExists(t, sidecar, "an evicted shard takes its sidecar with it")
 }
+
+func TestReadOnlyDirectoryServesDefaultShardsAndRejectsRefresh(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	require.NoError(t, os.Chmod(cacheDir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(cacheDir, 0o755)) })
+	if probe, err := os.CreateTemp(cacheDir, "write-probe"); err == nil {
+		require.NoError(t, probe.Close())
+		t.Skip("current user can write to a read-only directory")
+	} else {
+		require.ErrorIs(t, err, os.ErrPermission)
+	}
+
+	assemble := func([]ShardClass) (Inputs, error) { return in, nil }
+	g, err := Ensure(t.Context(), cacheDir, BuildOptions{}, DefaultClasses, assemble, nil)
+	require.NoError(t, err)
+	require.Positive(t, g.Output().NodeCount)
+	require.NoDirExists(t, StoreDir(cacheDir))
+
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	sh := Shard{Name: "pkg/a@symbols"}
+	_, err = store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: "changed"}, false)
+	require.ErrorContains(t, err, "unavailable in read-only store")
+	require.ErrorIs(t, err, os.ErrPermission)
+
+	_, err = Ensure(t.Context(), cacheDir, BuildOptions{Refresh: true}, DefaultClasses, assemble, nil)
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestDeniedLexicalInvalidationReportsStaleSymbolShard(t *testing.T) {
+	cacheDir := t.TempDir()
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	shards := []Shard{{Name: "pkg/a@symbols"}}
+	_, err := store.Sync(t.Context(), shards, map[string]string{shards[0].Name: "original"}, false)
+	require.NoError(t, err)
+	require.FileExists(t, store.lexicalIndexPath())
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	} else {
+		require.ErrorIs(t, err, os.ErrPermission)
+	}
+	_, err = store.Sync(t.Context(), shards, map[string]string{shards[0].Name: "changed"}, false)
+	require.ErrorContains(t, err, "stale in read-only store")
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.FileExists(t, store.lexicalIndexPath())
+}
+
+func TestDeniedLexicalInvalidationRejectsBodyOnlyChange(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalDocsShard("frobnicator")
+	syncLexical(t, store, nil, sh)
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	sh = lexicalDocsShard("wombat")
+	g, err := store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: fingerprintShardContent(sh)}, false)
+	if err == nil {
+		out, queryErr := g.QueryRanked("frobnicator", 5, 0, 0, RetrieveOptions{Weights: ShippedWeights(), Lexical: store.readLexicalIndex(store.readManifestOrNil())})
+		require.NoError(t, queryErr)
+		t.Fatalf("sync accepted an unpublished body edit; query returned %d old-body matches", out.MatchCount)
+	}
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestSyncReportsManifestFailureAfterShardWrite(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalDocsShard("frobnicator")
+	syncLexical(t, store, nil, sh)
+	require.NoError(t, os.Remove(store.lexicalIndexPath()))
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	old := fingerprintShardContent(sh)
+	sh.Nodes[0].Label = "changed"
+	current := fingerprintShardContent(sh)
+	_, err := store.Sync(t.Context(), []Shard{sh}, map[string]string{sh.Name: current}, false)
+	stored, readErr := store.readShardKeeping(sh.Name, false)
+	require.NoError(t, readErr)
+	require.Equal(t, current, stored.Fingerprint)
+	require.Equal(t, old, store.readManifestOrNil().Shards[sh.Name].Fingerprint)
+	require.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestReadOnlySymbolBodyRecoversAfterWritableSync(t *testing.T) {
+	store := NewStore(t.TempDir(), false, 0, nil, nil)
+	sh := lexicalSymbolShard("reads the index")
+	sh.Text = map[string]string{lexicalSymbolID: "frobnicator"}
+	fps := map[string]string{sh.Name: fingerprintShardContent(sh)}
+	syncLexical(t, store, nil, sh)
+	sync := func(refresh bool) (*Graph, error) {
+		return store.Sync(t.Context(), []Shard{sh}, fps, refresh)
+	}
+	match := func(g *Graph, term string) int {
+		t.Helper()
+		require.NoError(t, store.MergeSymbolShards(t.Context(), g))
+		out, err := g.QueryRanked(term, 5, 0, 0, RetrieveOptions{
+			Weights: ShippedWeights(), Lexical: store.readLexicalIndex(store.readManifestOrNil()),
+		})
+		require.NoError(t, err)
+		return out.MatchCount
+	}
+
+	require.NoError(t, os.Chmod(store.dir, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(store.dir, 0o755)) })
+	if f, err := os.CreateTemp(store.dir, "write-probe"); err == nil {
+		require.NoError(t, f.Close())
+		t.Skip("current user can write to a read-only directory")
+	}
+	g, err := sync(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, match(g, "frobnicator"))
+
+	sh.Text[lexicalSymbolID] = "wombat"
+	require.Equal(t, fps[sh.Name], fingerprintShardContent(sh))
+	_, err = sync(false)
+	require.ErrorIs(t, err, os.ErrPermission)
+	_, err = sync(true)
+	require.ErrorIs(t, err, os.ErrPermission)
+
+	require.NoError(t, os.Chmod(store.dir, 0o755))
+	g, err = sync(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, match(g, "wombat"))
+	require.Zero(t, match(g, "frobnicator"))
+}

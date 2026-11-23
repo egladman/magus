@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
@@ -171,4 +173,44 @@ func leased(t testing.TB, ctx context.Context, lease string) context.Context {
 	ctx, err := jobtypes.WithLease(ctx, lease)
 	require.NoError(t, err)
 	return ctx
+}
+
+func TestSpliceApplyThroughBuzzLease(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m := openSandboxed(t, types.SandboxModeBestEffort)
+	root := m.ws.Root
+	const lease = "splice/writer"
+	const allowed = "pkg/allowed.txt"
+	require.NoError(t, os.Mkdir(filepath.Join(root, "pkg"), 0o755))
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: root})
+	_, err := store.Update(t.Context(), lease, func(cur *jobtypes.Job) {
+		*cur = jobtypes.Job{ID: lease, Parent: "splice/root", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{allowed}}}
+	})
+	require.NoError(t, err)
+	ctx, err := m.ApplySandbox(leased(t, t.Context(), lease))
+	require.NoError(t, err)
+	const script = `import "magus";
+import "splice";
+import "result";
+export fun apply(ctx: magus\Context, args: [str]) > str {
+    final change = splice\create(args[0], "written");
+    final outcome: result\Result::<splice\EditApplied> = splice\apply(splice\plan([change]));
+    if (outcome.error != null) {
+        return outcome.error!.code;
+    }
+    return outcome.value!.written[0].path;
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(script), 0o644))
+	got, err := interp.RunDir(ctx, root, "apply", []string{allowed})
+	require.NoError(t, err)
+	require.Equal(t, allowed, got)
+	body, err := os.ReadFile(filepath.Join(root, allowed))
+	require.NoError(t, err)
+	assert.Equal(t, "written", string(body))
+
+	got, err = interp.RunDir(ctx, root, "apply", []string{"denied.txt"})
+	require.NoError(t, err)
+	assert.Equal(t, string(types.EditPlanRefused), got)
+	assert.NoFileExists(t, filepath.Join(root, "denied.txt"))
 }

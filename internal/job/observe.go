@@ -172,7 +172,8 @@ func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row job.
 // one is left out. A shared checkout's HEAD is not row's.
 func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string, row job.Job) ([]string, bool, string) {
 	var tips []string
-	ownHead := tree == row.CheckoutRoot && (row.Worktree.Standing() || row.Parent == "")
+	ownsCheckout := row.Worktree.Standing() && (row.Worktree.Made || !row.ReadOnly)
+	ownHead := tree == row.CheckoutRoot && (ownsCheckout || row.Parent == "")
 	if head, err := driver.FindCommit(ctx, tree, ""); err == nil && ownHead {
 		tips = append(tips, head.ID)
 	}

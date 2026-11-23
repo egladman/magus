@@ -26,7 +26,7 @@ func ceilingFixture(t *testing.T, model string, reported bool) (context.Context,
 	deps.ModelTiers = func() *tier.Set { return set }
 	at := hookLocation(ctx, deps)
 	if reported {
-		hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
+		reportedMainTranscript(t, "s")
 	}
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Model: model})
@@ -44,7 +44,7 @@ func judgeSpawnBy(ctx context.Context, t *testing.T, deps Dependencies, agent, m
 	if agent != "" {
 		env["agent_id"] = agent
 	}
-	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, env)})
+	return Judge(ctx, deps, Request{Host: "claude-code", Transcript: fixtureMainTranscript("s"), Input: hookJSON(t, env)})
 }
 
 // spoken splits a judgment into its shape, to compare whole, and the text it said, to

@@ -12,7 +12,7 @@ import "semver";
 import "template";
 import "serialize";
 import "encoding/yaml";
-import "hack/magusfile/commits" as commits;
+import "magusfiles/release/commits" as commits;
 
 // FRAGMENT_DIR holds one file per unreleased entry.
 export final FRAGMENT_DIR = "changes/unreleased/";

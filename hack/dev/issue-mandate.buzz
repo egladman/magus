@@ -18,7 +18,7 @@ import "vcs";
 import "flags";
 import "magus";
 import "./hack/policy/mandate" as mandate;
-import "./hack/magusfile/branch-stack" as branchstack;
+import "./hack/dev/modules/branch-stack" as branchstack;
 
 final USAGE = "usage: magus buzz hack/dev/issue-mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b [--review-budget <lines>] | revoke | report";
 
@@ -143,7 +143,7 @@ fun reviewBudget(text: str) > result\Result::<int> {
         return result\fail::<int>("mandate issue: --review-budget takes a positive number of lines, and got {shown(text)}");
     }
     if (budget! > branchstack\reviewBudget) {
-        return result\fail::<int>("mandate issue: --review-budget {budget!} is above the {branchstack\reviewBudget} lines one review reads well (hack/magusfile/branch-stack.buzz)");
+        return result\fail::<int>("mandate issue: --review-budget {budget!} is above the {branchstack\reviewBudget} lines one review reads well (hack/dev/modules/branch-stack.buzz)");
     }
     return result\ok::<int>(budget!);
 }

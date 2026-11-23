@@ -511,6 +511,7 @@ func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
 	store, err := workingCopyBytecodeStore(t.TempDir())
 	require.NoError(t, err)
 	require.NotNil(t, store)
+	require.NoError(t, store.Store("chunk", []byte("compiled")))
 	assert.NoDirExists(t, old)
 	assert.DirExists(t, recent)
 	assert.DirExists(t, filepath.Join(stamps, compilerStamp()))
@@ -939,6 +940,36 @@ func (s *BytecodeCacheSuite) TestWarmLoadCompilesNothing() {
 	s.Equal([]any{"one", false}, []any{marker, compiled}, "the stored chunk ran")
 }
 
+func (s *BytecodeCacheSuite) TestReadOnlyCacheVerifiesStoredChunks() {
+	s.load(s.T().Context(), s.source(), true)
+	stamp := filepath.Dir(s.storeDir())
+	earlier := time.Now().Add(-time.Hour).Truncate(time.Second)
+	s.Require().NoError(os.Chtimes(stamp, earlier, earlier))
+	swept := filepath.Join(s.storeDir(), sweptMarker)
+	if err := os.Remove(swept); err != nil {
+		s.Require().ErrorIs(err, fs.ErrNotExist)
+	}
+	logs := s.captureLog()
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", false}, []any{marker, compiled})
+	info, err := os.Stat(stamp)
+	s.Require().NoError(err)
+	s.True(earlier.Equal(info.ModTime()), "warm read changed stamp to %s", info.ModTime())
+	s.NoFileExists(swept)
+	s.Zero(warnings(logs, ""), "%s", logs)
+
+	for path := range storedChunks(s.T(), s.cache) {
+		chunk, err := os.ReadFile(path)
+		s.Require().NoError(err)
+		s.Require().NotEmpty(chunk)
+		chunk[0] ^= 1
+		s.Require().NoError(os.WriteFile(path, chunk, 0o600))
+	}
+	marker, compiled = s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+	s.Contains(logs.String(), "bytecode chunk does not verify")
+}
+
 func (s *BytecodeCacheSuite) TestEditedMagusfileCompilesAgain() {
 	s.load(s.T().Context(), s.source(), true)
 	s.w.Magusfile("import \"helper\";\nexport final marker = helper\\value() + \"!\";\n")
@@ -1004,6 +1035,17 @@ func (s *BytecodeCacheSuite) TestNoBuildIDCompilesEveryLoadAndSaysSo() {
 	s.Contains(logs.String(), "no build id")
 }
 
+func (s *BytecodeCacheSuite) TestDeniedTemporaryChunksWarnOncePerCommand() {
+	logs := s.captureLog()
+	ctx := WithBytecodeWarnings(s.T().Context())
+	for _, path := range []string{".partial-1", ".partial-2"} {
+		err := &os.PathError{Op: "open", Path: path, Err: os.ErrPermission}
+		warnBytecodeStore(ctx, nil, "could not keep the compiled chunk", err)
+	}
+	s.Equal(1, warnings(logs, "could not keep the compiled chunk"))
+	s.Contains(logs.String(), ".partial-1")
+}
+
 func (s *BytecodeCacheSuite) TestReaderLoadKeepsNothingAndSaysSo() {
 	logs := s.captureLog()
 	read := func(path string) ([]byte, error) { return os.ReadFile(path) }
@@ -1063,8 +1105,7 @@ func (s *BytecodeCacheSuite) TestChangedImportOfAnEarlierFileCompilesTheLaterOne
 func (s *BytecodeCacheSuite) TestChunkThatCannotBeKeptSaysSo() {
 	stamp := filepath.Dir(s.storeDir())
 	s.Require().NoError(os.MkdirAll(stamp, 0o700))
-	s.Require().NoError(os.Chmod(stamp, 0o500))
-	s.T().Cleanup(func() { _ = os.Chmod(stamp, 0o700) })
+	s.Require().NoError(os.WriteFile(s.storeDir(), nil, 0o600))
 	logs := s.captureLog()
 
 	marker, compiled := s.load(s.T().Context(), s.source(), true)
@@ -1080,7 +1121,7 @@ func (s *BytecodeCacheSuite) TestCacheThatIsNotADirectorySaysSo() {
 
 	_, compiled := s.load(s.T().Context(), s.source(), true)
 	s.True(compiled)
-	s.Equal(1, warnings(logs, "no sealed bytecode store"), "%s", logs)
+	s.Equal(1, warnings(logs, "could not keep the compiled chunk"), "%s", logs)
 }
 
 // A daemon serves many commands, and each one that compiles every load is told.

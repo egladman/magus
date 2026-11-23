@@ -31,7 +31,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/std"
 )
 
 // uaCtxKey keys the client's HTTP User-Agent in a request context. It is set by
@@ -114,48 +113,22 @@ func toolLine(t hint.ToolName, desc string) string {
 	return fmt.Sprintf("  %-*s- %s", toolColumn, t, desc)
 }
 
-// clientMembers are the magus\ members the instructions name, by their std
-// descriptor names; member renders them as Buzz spells them.
-// TestServerInstructionsNameRealMembers holds each to a declared member.
-var clientMembers = []string{
-	"describe", "graph().query", "graph().explain", "graph().path", "graph().refs", "graph().stats", "where",
-	"change().affected", "change().impact", "run", "clean", "output", "history().hotspots", "history().affinity", "history().ownership", "history().trend", "workspace().volatility", "doctor", "job", "session",
-}
-
-// member renders one magus\ member as a script calls it.
-func member(name string) string { return `magus\` + std.CamelCase(name) }
-
-func members(names ...string) string {
-	out := make([]string, len(names))
-	for i, name := range names {
-		out[i] = member(name)
-	}
-	return strings.Join(out, ", ")
-}
+const clientDiscovery = `magus\describe.module("magus")`
 
 // serverInstructions is the system-level hint sent to the client during
 // the initialize handshake. Every tool name is rendered from a hint.ToolName
 // constant rather than spelled out, so a rename is a compile error here instead
 // of a block of prose that quietly names tools the server no longer registers.
 var serverInstructions = strings.Join([]string{
-	"You are connected to a magus workspace.",
-	"magus is a build orchestrator for multi-language monorepos.",
-	"",
-	fmt.Sprintf("The workspace is the %s tool: a Buzz program that imports \"magus\" and calls its members (%s). Call magus\\describe.module(\"magus\") for the signatures. The tools below are the operations that module does not cover.", hint.ToolClient.String(), members(clientMembers...)),
-	"",
+	fmt.Sprintf(`Use %s to find workspace entities. For Buzz signatures call %s through %s.`, hint.ToolQuery, clientDiscovery, hint.ToolClient),
+	toolLine(hint.ToolQuery, "search the workspace graph"),
 	toolLine(hint.ToolClient, "run Buzz against the magus client and return its value"),
 	toolLine(hint.ToolBuzz, "transform JSON with Buzz; no workspace access"),
 	toolLine(hint.ToolStatus, "inspect the live concurrency pool"),
 	toolLine(hint.ToolConfig, "view the resolved workspace config (read-only)"),
 	toolLine(hint.ToolDiff, "join the review session a person has open: state, comment, suggest, resolve"),
 	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
-	"",
-	"Typical flow:",
-	fmt.Sprintf("  Discover through %s with the typed members (%s.project, .graph and .file, %s); they return records, not CLI text.", hint.ToolClient.String(), member("describe"), member("graph().query")),
-	fmt.Sprintf("  Run through %s (%s); %s fetches a captured log by its ref.", hint.ToolClient.String(), members("change().affected", "run"), member("output")),
-	fmt.Sprintf("  Health: %s (%s), %s, %s.", hint.ToolClient.String(), member("doctor"), hint.ToolStatus.String(), hint.ToolConfig.String()),
-	"",
-	"Config mutation is intentionally not exposed. Use the magus CLI for that.",
+	toolLine(hint.ToolSplice, "plan or apply workspace edits from a splice block document"),
 }, "\n")
 
 // agentFromRequest extracts the client name/version from an initialize request.

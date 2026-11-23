@@ -2436,7 +2436,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "check", Kind: command.String, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
 				{Name: "model", Kind: command.String, Doc: "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier"},
 				{Name: "brief-format", Kind: command.String, Doc: "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides"},
-				{Name: "delivery", Kind: command.String, Doc: "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"},
+				{Name: "delivery", Kind: command.String, Doc: "Deliver findings with recorded evidence, fold changes into the parent's pull request, or open a separate or stacked pull request"},
 				{Name: "read-only", Kind: command.Bool, Default: false, Doc: "A job that gathers evidence and writes nothing"},
 				{Name: "checkout", Kind: command.String, Doc: "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work"},
 			},
@@ -2657,8 +2657,8 @@ shows what it is doing.`,
 			Short:  "Lower one guard rule to advice for one job, typed by a person",
 			Description: "Record a person's one-time approval: the guard advises instead of refusing the named rule for the " +
 				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
-				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
-				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
+				"--revoke ends a grant early. A continue-once token approves one matching dispatch within five minutes. The only general rule grant is hooks-off. " +
+				"The guard refuses this verb to every agent and the job store refuses it from a process " +
 				"carrying a lease, so it is typed at a person's own terminal. With --commit the one positional is push-unverified: " +
 				"the waiver lets a push or `gh pr create` of that commit through and names who waived it, when and why; any other " +
 				"commit is still refused, and --revoke removes the waiver.",

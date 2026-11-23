@@ -549,15 +549,6 @@ github.com/egladman/magus/std.LogError func(ctx context.Context, message string,
 github.com/egladman/magus/std.LogInfo func(ctx context.Context, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogTrace func(ctx context.Context, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogWarn func(ctx context.Context, message string, attrs map[string]any) error
-github.com/egladman/magus/std.MCPParam type struct
-github.com/egladman/magus/std.MCPParam.Doc field string
-github.com/egladman/magus/std.MCPParam.Name field string
-github.com/egladman/magus/std.MCPParam.Required field bool
-github.com/egladman/magus/std.MCPParam.Type field TypeTag
-github.com/egladman/magus/std.MCPTool type struct
-github.com/egladman/magus/std.MCPTool.Doc field string
-github.com/egladman/magus/std.MCPTool.Name field string
-github.com/egladman/magus/std.MCPTool.Params field []MCPParam
 github.com/egladman/magus/std.Magus var Module
 github.com/egladman/magus/std.MagusAbandonJob func(ctx context.Context, id string) (github.com/egladman/magus/libs/safetyscissors/job.Job, error)
 github.com/egladman/magus/std.MagusAffected func(ctx context.Context, base string) (github.com/egladman/magus/types.AffectedResult, error)
@@ -729,7 +720,6 @@ github.com/egladman/magus/std.Module.CallbackObjects field []string
 github.com/egladman/magus/std.Module.Doc field string
 github.com/egladman/magus/std.Module.Fields field []Field
 github.com/egladman/magus/std.Module.ImportPath method func() string
-github.com/egladman/magus/std.Module.MCPTools field []MCPTool
 github.com/egladman/magus/std.Module.Methods field []Method
 github.com/egladman/magus/std.Module.Name field string
 github.com/egladman/magus/std.Module.Namespaces field []Namespace
@@ -832,6 +822,15 @@ github.com/egladman/magus/std.SourceModule.Name field string
 github.com/egladman/magus/std.SourceModule.Path field string
 github.com/egladman/magus/std.SourceModule.Source field string
 github.com/egladman/magus/std.SourceModulesAsModules func() []Module
+github.com/egladman/magus/std.Splice var Module
+github.com/egladman/magus/std.SpliceApply func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan) (github.com/egladman/magus/types.Result[github.com/egladman/magus/types.EditApplied], error)
+github.com/egladman/magus/std.SpliceBlocks func(_ context.Context, text string, name string) (github.com/egladman/magus/types.EditDocument, error)
+github.com/egladman/magus/std.SpliceCreate func(_ context.Context, path string, content string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceDiff func(ctx context.Context, plan github.com/egladman/magus/types.EditPlan, contextLines int) (github.com/egladman/magus/types.Result[string], error)
+github.com/egladman/magus/std.SplicePlan func(ctx context.Context, changes []github.com/egladman/magus/types.EditChange) (github.com/egladman/magus/types.EditPlan, error)
+github.com/egladman/magus/std.SpliceReplace func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceReplaceAll func(_ context.Context, path string, old string, repl string) (github.com/egladman/magus/types.EditChange, error)
+github.com/egladman/magus/std.SpliceReplaceRegex func(_ context.Context, path string, pattern string, template string) (github.com/egladman/magus/types.EditChange, error)
 github.com/egladman/magus/std.StatusError type struct
 github.com/egladman/magus/std.StatusError.Body field string
 github.com/egladman/magus/std.StatusError.BuzzError method(ptr) func() map[string]string
@@ -897,6 +896,7 @@ github.com/egladman/magus/std.TypeStringMapMap const TypeTag = 10
 github.com/egladman/magus/std.TypeStringSlice const TypeTag = 5
 github.com/egladman/magus/std.TypeStringSliceSlice const TypeTag = 8
 github.com/egladman/magus/std.TypeTag type int
+github.com/egladman/magus/std.TypeTag.BuzzName method func() string
 github.com/egladman/magus/std.TypeTag.GoType method func() string
 github.com/egladman/magus/std.UUID var Module
 github.com/egladman/magus/std.UUIDRandomHex func(_ context.Context, n int) (string, error)
@@ -1860,6 +1860,30 @@ github.com/egladman/magus/types.DutyNotesVerify const Duty = "notes-verify"
 github.com/egladman/magus/types.EdgeDirection type string
 github.com/egladman/magus/types.EdgeIn const EdgeDirection = "in"
 github.com/egladman/magus/types.EdgeOut const EdgeDirection = "out"
+github.com/egladman/magus/types.EditApplied type struct
+github.com/egladman/magus/types.EditApplied.Already field int "json:\"already\"       yaml:\"already\""
+github.com/egladman/magus/types.EditApplied.NothingToDo field bool "json:\"nothing_to_do\" yaml:\"nothing_to_do\""
+github.com/egladman/magus/types.EditApplied.Written field []EditedFile "json:\"written\"       yaml:\"written\""
+github.com/egladman/magus/types.EditChange type struct
+github.com/egladman/magus/types.EditChange.Count field int "json:\"count\" yaml:\"count\""
+github.com/egladman/magus/types.EditChange.Create field bool "json:\"create,omitempty\" yaml:\"create,omitempty\""
+github.com/egladman/magus/types.EditChange.New field string "json:\"new\"           yaml:\"new\""
+github.com/egladman/magus/types.EditChange.Old field string "json:\"old,omitempty\" yaml:\"old,omitempty\""
+github.com/egladman/magus/types.EditChange.Path field string "json:\"path\"          yaml:\"path\""
+github.com/egladman/magus/types.EditChange.Regex field bool "json:\"regex,omitempty\" yaml:\"regex,omitempty\""
+github.com/egladman/magus/types.EditDocument type struct
+github.com/egladman/magus/types.EditDocument.Changes field []EditChange "json:\"changes\"           yaml:\"changes\""
+github.com/egladman/magus/types.EditDocument.Refused field []EditRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.EditPlan type struct
+github.com/egladman/magus/types.EditPlan.Already field []EditChange "json:\"already,omitempty\"    yaml:\"already,omitempty\""
+github.com/egladman/magus/types.EditPlan.Changes field []EditChange "json:\"changes\"              yaml:\"changes\""
+github.com/egladman/magus/types.EditPlan.Digest field string "json:\"digest\"               yaml:\"digest\""
+github.com/egladman/magus/types.EditPlan.Files field []EditedFile "json:\"files\"                yaml:\"files\""
+github.com/egladman/magus/types.EditPlan.MakesDirs field []string "json:\"makes_dirs,omitempty\" yaml:\"makes_dirs,omitempty\""
+github.com/egladman/magus/types.EditPlan.NothingToDo field bool "json:\"nothing_to_do\"        yaml:\"nothing_to_do\""
+github.com/egladman/magus/types.EditPlan.Refused field []EditRefusal "json:\"refused,omitempty\"    yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.EditPlan.Spans field []EditSpan "json:\"spans\"                yaml:\"spans\""
+github.com/egladman/magus/types.EditPlanRefused const DiagnosticCode = "MGS1063"
 github.com/egladman/magus/types.EditPosition type struct
 github.com/egladman/magus/types.EditPosition.Column field int "json:\"column\" yaml:\"column\""
 github.com/egladman/magus/types.EditPosition.Line field int "json:\"line\"   yaml:\"line\""
@@ -4344,6 +4368,7 @@ github.com/egladman/magus/types.ToolCapability type string
 github.com/egladman/magus/types.ToolCapability.String method func() string
 github.com/egladman/magus/types.ToolCapability.Valid method func() bool
 github.com/egladman/magus/types.ToolCapability.Values method func() []string
+github.com/egladman/magus/types.ToolContinues const ToolCapability = "continues"
 github.com/egladman/magus/types.ToolDefinition const untyped string = "A tool is a binary a spell drives. magus probes its version on every run, because that version keys the cache. A project may also hold it to a window - an inclusive min and an exclusive below - intersected with what the declaring spell requires."
 github.com/egladman/magus/types.ToolHostFile const untyped string = "host"
 github.com/egladman/magus/types.ToolInert const ToolCapability = "inert"

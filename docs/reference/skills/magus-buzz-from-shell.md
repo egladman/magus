@@ -1,15 +1,15 @@
 ---
 title: magus-buzz-from-shell
 generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
-description: "Rewrite a shell script as idiomatic Buzz, not a line-by-line port."
+description: "Rewrite a shell script as idiomatic Buzz."
 tags: [agents, skills, magus-buzz-from-shell]
-skill_full_bytes: 15523
-skill_short_bytes: 13211
+skill_full_bytes: 15362
+skill_short_bytes: 13041
 ---
 
 # magus-buzz-from-shell
 
-Rewrite a shell script as idiomatic Buzz, not a line-by-line port. Use BEFORE porting a .sh file to Buzz, or when Buzz runs curl, jq, sed, tar or git through proc\exec. Not for Buzz syntax (magus-buzz-lang).
+Rewrite a shell script as idiomatic Buzz. Use before porting a .sh file or replacing external processes with Buzz host modules. For syntax, use magus-buzz-lang.
 
 Install it, rather than copying from this page:
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `deb41fc81d7a` |
+| `skill-content` | `052af6acab31` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -57,7 +57,7 @@ magus agent install --tar | tar -xO -f - magus-buzz-from-shell/SKILL.md
 # Rewriting shell as Buzz
 
 Port what script DOES, never its lines.
-Line-by-line port: every `curl`/`jq`/`sed` becomes `proc\exec`, temp files and traps survive only to feed them, result still parses text.
+Use the host modules for HTTP and structured data.
 `proc\exec` only for real external program script exists to run.
 Syntax: magus-buzz-lang; load it first.
 
@@ -104,7 +104,7 @@ shell: Buzz
 - `trap 'rm -rf "$TMP"' EXIT`: usually nothing; keep data in memory
 - `curl -fsSL --retry 5 URL`: `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })`
 - `curl -o file URL`: `http\download(url, dest: file)`
-- `jq`, `yq`: `json\parse`, `yaml\parse`, then index; `json\stringify`
+- JSON and YAML: `json\parse`, `yaml\parse`, then index; `json\stringify`
 - `grep PAT file`, `grep -c`: `fs\readLines(file).filter(...)`, `.len()`
 - `sed 's/a/b/g'`: `text.replace("a", with: "b")`
 - `cut -d: -f2`, `awk '{print $2}'`: `line.split(":")[1]`, `strings\fields(line)[1]`
@@ -125,7 +125,7 @@ shell: Buzz
 - `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
 - `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
 - `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
+- Magus queries: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
 - `magus run t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script
 
 ## Pairs
@@ -160,7 +160,6 @@ fun main(args: [str]) > void !> any {
 ```sh
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$API&offset=$o" -o "$TMP/page.json"
-jq -e '(.rows | length) == 100' "$TMP/page.json" >/dev/null || exit 1
 ```
 
 ```buzz
@@ -179,7 +178,8 @@ fun fetchPage(api: str, offset: int) > [any] !> any {
 }
 ```
 
-Temp dir and trap existed because `jq` reads files; body in memory -> both go. No `retry` argument: request runs once. Real directory needed: [reference.md](reference.md#a-temp-directory-that-must-exist).
+Parse the response body in memory and validate the row count before returning. Without a
+`retry` argument the request runs once. [Temporary directories](reference.md#a-temp-directory-that-must-exist)
 
 ### Digests, counts and key=value files
 
@@ -460,7 +460,7 @@ magus agent install --tar | tar -xO -f - magus-buzz-from-shell-full/SKILL.md
 # Rewriting shell as Buzz
 
 A shell script ported line by line into Buzz is worse than the shell it replaced.
-Every `curl`, `jq` and `sed` becomes a `proc\exec` call with a hand-built argument list.
+Every `curl` and `sed` becomes a `proc\exec` call with a hand-built argument list.
 The temp files and traps survive only to feed those tools, and the result still parses text.
 
 Port what the script DOES instead. Name its inputs and outputs, and decide whether it
@@ -538,7 +538,7 @@ assuming a row's call takes the arguments you expect.
 | `trap 'rm -rf "$TMP"' EXIT` | usually nothing: keep the data in memory |
 | `curl -fsSL --retry 5 URL` | `http\get(url, opts: http\Options{ fail = true }, retry: http\Retry{ attempts = 5 })` |
 | `curl -o file URL` | `http\download(url, dest: file)` |
-| `jq`, `yq` | `json\parse`, `yaml\parse`, then index; `json\stringify` |
+| JSON and YAML | `json\parse`, `yaml\parse`, then index; `json\stringify` |
 | `grep PAT file`, `grep -c` | `fs\readLines(file).filter(...)`, `.len()` |
 | `sed 's/a/b/g'` | `text.replace("a", with: "b")` |
 | `cut -d: -f2`, `awk '{print $2}'` | `line.split(":")[1]`, `strings\fields(line)[1]` |
@@ -559,7 +559,7 @@ assuming a row's call takes the arguments you expect.
 | `git ...` | `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for the rest |
 | `( cd d && tool )` | `proc\exec("tool", args: [...], dir: d)` |
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
-| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
+| Magus queries | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
 | `magus run t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |
 
 ## Pairs
@@ -597,7 +597,6 @@ when the message you would write says more than the raised one.
 ```sh
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$API&offset=$o" -o "$TMP/page.json"
-jq -e '(.rows | length) == 100' "$TMP/page.json" >/dev/null || exit 1
 ```
 
 ```buzz
@@ -616,10 +615,8 @@ fun fetchPage(api: str, offset: int) > [any] !> any {
 }
 ```
 
-The temp directory and its trap existed because `jq` reads files. With the body in memory
-both go. Without a `retry` argument a request runs exactly once. When a real directory is
-needed, [reference.md](reference.md#a-temp-directory-that-must-exist) removes it on both
-paths.
+Parse the response body in memory and validate the row count before returning. Without a
+`retry` argument the request runs once. [Temporary directories](reference.md#a-temp-directory-that-must-exist)
 
 ### Digests, counts and key=value files
 

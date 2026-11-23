@@ -61,6 +61,13 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 			if advise.Context == "" {
 				advise = ShellVerdict{Context: r.Reason, Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)}}
 			}
+			continue
+		case verdict.Defer, verdict.Ask:
+			// Workspace shell declarations support only deny and advise.
+		}
+		return ShellVerdict{
+			Deny: fmt.Sprintf("workspace shell rule %s has decision %q; expected deny or advise", r.Name, r.Decision),
+			Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)},
 		}
 	}
 	return advise

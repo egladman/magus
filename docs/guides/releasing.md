@@ -230,7 +230,7 @@ the release checks confirm the workflow still contains it. Edit one side alone a
 rehearsal names it. They also confirm the root tag matches the trigger and that no module
 tag does, so a library bump cannot start a release run. Every `upload-artifact` step in
 `release.yaml` must list each tool's archive glob (`TOOLS` in
-`hack/magusfile/releases.buzz`), and the checks name a step that misses one.
+`magusfiles/release/releases.buzz`), and the checks name a step that misses one.
 `release-publish` then refuses a release where a static magus archive has no `proofread`
 archive beside it.
 

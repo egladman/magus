@@ -64,10 +64,8 @@ fun lineage(title: str) > Lineage? {
     return Lineage{ parent = head.sub(0, len: head.len() - role.len() - 1), role = role, job = words[1] };
 }
 
-// decideSpawn denies a spawn that names no live job row, then a code-changing worker that
-// would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
-// unreadable says why: the row rule then advises and never denies. A continue starts
-// nothing, so it passes both.
+// A new worker needs a verified job before it starts. Continuations retain
+// their existing binding and the guard checks their dispatch cost separately.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str, once: fun (key: str) > bool) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.defer();
@@ -97,9 +95,8 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: st
 // `<parent>/<job>`, the same resolution the guard binds with.
 fun decideNamedJob(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (rows == null) {
-        return magus\guard.advise("The job store could not be read ({unreadable}), so whether this spawn "
-            + "names a live job row went unchecked and it passes. Its child will not be bound to a lease. "
-            + "Run `magus doctor` and `magus ls jobs` to see why the store fails to load.");
+        return magus\guard.deny("the judging CLI cannot bind a new worker until it can read the job store\n"
+            + "{unreadable}. Verify the job with the CLI version that wrote the store, then retry from that checkout.");
     }
     final line = lineage(spawn.title);
     if (line == null) {
@@ -274,11 +271,11 @@ test "a leased spawner hands out only its own tree" {
     std\assert(unleased.reason.indexOf("a child of") == null, message: "an orchestrator's remedy names no lease");
 }
 
-test "an unreadable store advises and never denies" {
+test "an unreadable store denies a new worker before dispatch" {
     final v = judged(request("orchestrator/review anything", isolated: false), rows: null, unreadable: "job store schema 10 is newer than 9");
-    std\assert(v.decision == magus\GuardDecision.advise, message: "fails open");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "a review worker also needs a verified lease");
     std\assert(v.reason.indexOf("schema 10") != null, message: "names the cause");
-    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == magus\GuardDecision.deny, message: "isolation still denies");
+    std\assert(judged(request("orchestrator/feat anything", isolated: true), rows: null, unreadable: "permission denied").decision == magus\GuardDecision.deny, message: "isolation cannot establish a lease");
 }
 
 test "the isolation refusal gives its rationale with the first refusal only" {

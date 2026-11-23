@@ -63,12 +63,9 @@ func goKey(ref buzzgen.TypeRef) string {
 }
 
 func newBoundaryEnum(e buzzgen.Enum, rt reflect.Type, ref buzzgen.TypeRef) boundaryEnum {
-	out := boundaryEnum{Name: e.Name, Type: rt, goKey: goKey(ref)}
+	out := boundaryEnum{Name: e.Name, Type: rt, goKey: goKey(ref), Cases: e.Cases}
 	if ref.Settings.Module != nil {
 		out.Module = *ref.Settings.Module
-	}
-	for _, c := range e.Cases {
-		out.Cases = append(out.Cases, enumCase{Name: c.Name, Value: c.Value})
 	}
 	return out
 }

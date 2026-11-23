@@ -273,22 +273,31 @@ func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		toolInput, message string
+		tool, toolInput, message, target string
 	}{
-		"send_input":    {`{"target":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","message":"Also check the tests.","interrupt":false}`, "Also check the tests."},
-		"followup_task": {`{"target":"/root/audit_guard","message":"Now the hook path."}`, "Now the hook path."},
-		"items":         {`{"target":"/root/audit_guard","items":[{"type":"text","text":"Now the hook path."}]}`, "Now the hook path."},
-		"to":            {`{"to":"brisk-heron","message":"Carry on."}`, "Carry on."},
+		"send_input":    {"send_input", `{"target":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","message":"Also check the tests.","interrupt":false}`, "Also check the tests.", "019e4c22-1b3d-7e90-8c44-5a6f7d8e9012"},
+		"followup_task": {"x", `{"target":"/root/audit_guard","message":"Now the hook path."}`, "Now the hook path.", "/root/audit_guard"},
+		"items":         {"x", `{"target":"/root/audit_guard","items":[{"type":"text","text":"Now the hook path."}]}`, "Now the hook path.", "/root/audit_guard"},
+		"to":            {"x", `{"to":"brisk-heron","message":"Carry on."}`, "Carry on.", "brisk-heron"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			req, ok := decodeTestEnvelope(t, fmt.Sprintf(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":%s}`, tc.toolInput))
+			req, ok := decodeTestEnvelope(t, fmt.Sprintf(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":%q,"tool_input":%s}`, tc.tool, tc.toolInput))
 			require.True(t, ok)
-			assert.True(t, req.IsContinue)
-			assert.False(t, req.IsSpawn)
-			assert.Equal(t, tc.message, req.Value)
-			assert.NotEmpty(t, req.Target)
+			assert.Equal(t, hookRequest{
+				Value: tc.message, IsContinue: true, Target: tc.target, Tool: tc.tool,
+				Who: hookAttribution{Session: "s1", Event: "PreToolUse"},
+			}, req)
 		})
 	}
+
+	t.Run("Codex threadId and prompt is a continuation, not a spawn", func(t *testing.T) {
+		req, ok := decodeTestEnvelope(t, `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"resume_agent","tool_input":{"threadId":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","prompt":"Also check the tests."}}`)
+		require.True(t, ok)
+		assert.Equal(t, hookRequest{
+			Value: "Also check the tests.", IsContinue: true, Target: "019e4c22-1b3d-7e90-8c44-5a6f7d8e9012", Tool: "resume_agent",
+			Who: hookAttribution{Session: "s1", Event: "PreToolUse"},
+		}, req)
+	})
 
 	t.Run("a target with no message is not a continuation", func(t *testing.T) {
 		req, ok := decodeTestEnvelope(t, `{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"close_agent","tool_input":{"target":"/root/audit_guard"}}`)

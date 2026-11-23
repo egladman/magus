@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
@@ -261,7 +262,7 @@ func (s *BandSuite) TestProgressBarIsTwentyCells() {
 
 func (s *BandSuite) TestConfiguredLoaderDrawsInThePaddedSlot() {
 	sc, h := s.handler(100)
-	s.Require().NoError(h.SetLoader(mustLoader("strip/scanner")))
+	s.Require().NoError(h.SetLoader(mustLoader(progress.NewStrip(progress.StripScanner))))
 	s.pool(h, 2, 0)
 	row := sc.Row(bandScreenRows)
 	s.True(strings.HasPrefix(row, "●······· 2/8 slots"), row)
@@ -269,7 +270,7 @@ func (s *BandSuite) TestConfiguredLoaderDrawsInThePaddedSlot() {
 
 func (s *BandSuite) TestALoaderWithoutAFixedFootprintIsRefused() {
 	_, h := s.handler(100)
-	err := h.SetLoader(mustLoader("span/comet"))
+	err := h.SetLoader(mustLoader(progress.NewSpan(progress.SpanComet)))
 	s.Require().Error(err)
 	s.Contains(err.Error(), "span/comet is a span loader")
 }

@@ -27,10 +27,9 @@ const (
 )
 
 // defaultLoader is the band's spinner when the config names none.
-var defaultLoader = mustLoader("glyph/dots")
+var defaultLoader = mustLoader(progress.NewGlyph(progress.GlyphDots))
 
-func mustLoader(name string) progress.Loader {
-	l, err := progress.Lookup(name)
+func mustLoader(l progress.Loader, err error) progress.Loader {
 	if err != nil {
 		panic(err)
 	}
@@ -65,7 +64,7 @@ func (h *PrettyHandler) inFlightLocked() bool {
 // cannot draw Unicode.
 func (h *PrettyHandler) activeLoader() progress.Loader {
 	if !termkit.WantsUnicode(h.probe) {
-		return mustLoader(progress.Fallback)
+		return mustLoader(progress.NewGlyph(progress.GlyphLine))
 	}
 	if h.loader.Name == "" {
 		return defaultLoader

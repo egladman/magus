@@ -572,7 +572,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 
 	body, err := loggedPayload(dir, got.Request.Ref)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path

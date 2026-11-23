@@ -39,13 +39,15 @@ Stderr returns the process-wide notification band on standard error, creating it
 
 ReleaseStderr stops the process's notification band and hands back every leased row on standard error.
 
-**Signature:** `notify\releaseStderr()` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+**Signature:** `notify\releaseStderr() -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+
+**Returns:** map[string]any
 
 ### stackNotify
 
 Notify pushes a notification onto the stack, to be shown for ttl.
 
-**Signature:** `notify\stackNotify(stack, text, style, ttl)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+**Signature:** `notify\stackNotify(stack, text, style, ttl) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -54,11 +56,13 @@ Notify pushes a notification onto the stack, to be shown for ttl.
 | `style`   | `string` |          |             |
 | `ttl`     | `int`    |          |             |
 
+**Returns:** map[string]any
+
 ### stackPin
 
 Pin raises a notification about a CONDITION that is currently true, and keeps it until [Stack.Clear] retracts it.
 
-**Signature:** `notify\stackPin(stack, key, text, style)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+**Signature:** `notify\stackPin(stack, key, text, style) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -67,24 +71,30 @@ Pin raises a notification about a CONDITION that is currently true, and keeps it
 | `text`    | `string` |          |             |
 | `style`   | `string` |          |             |
 
+**Returns:** map[string]any
+
 ### stackClear
 
 Clear retracts the pinned notification named by key, if it is showing.
 
-**Signature:** `notify\stackClear(stack, key)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+**Signature:** `notify\stackClear(stack, key) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `stack`   | `int`    |          |             |
 | `key`     | `string` |          |             |
 
+**Returns:** map[string]any
+
 ### stackClose
 
 Close stops the sweeper and gives the band back.
 
-**Signature:** `notify\stackClose(stack)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
+**Signature:** `notify\stackClose(stack) -> result\Result::<bool>` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `stack`   | `int` |          |             |
+
+**Returns:** map[string]any
 

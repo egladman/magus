@@ -13,6 +13,10 @@ packages:
       SGR:
         config:
           open: terminal control sequences can be composed at run time
+  github.com/egladman/magus/libs/termkit/pick:
+    config: {module: pick}
+  github.com/egladman/magus/libs/termkit/progress:
+    config: {module: progress, zeroCase: ""}
   github.com/egladman/magus/libs/termkit/recorder:
     config: {module: ""}
   github.com/egladman/magus/libs/termkit/screen:
@@ -185,6 +189,7 @@ packages:
       DriftResult: {config: {mirror: DriftResultRecord}}
       DriftResultRecord: {config: {name: DriftResult}}
       EdgeDirection: {config: {cases: {"out": outward, "in": inward}}}
+      EditPlan: {config: {name: SplicePlan}}
       HTTPOptions: {config: {name: Options, module: http}}
       HTTPResponse: {config: {name: Response, module: http}}
       HTTPRetry: {config: {name: Retry, module: http}}
