@@ -4,7 +4,7 @@ import "env";
 import "crypto";
 import "magus";
 import "project/../.." as workspace;
-import "../../hack/magusfile/advisories" as advisories;
+import "../../magusfiles/quality/advisories" as advisories;
 import "embed/sources";
 import "embed/holdout";
 import "embed/pairs";

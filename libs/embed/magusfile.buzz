@@ -1,6 +1,6 @@
 import "magus";
-import "../../hack/magusfile/advisories" as advisories;
-import "../../hack/magusfile/run-golangci" as golangci;
+import "../../magusfiles/quality/advisories" as advisories;
+import "../../magusfiles/quality/run-golangci" as golangci;
 
 import "magus/spell/go";
 

@@ -125,7 +125,7 @@ knowledge:
   # layout: libs/gopherbuzz follows upstream Buzz, and cmd/magus is the one binary that
   # imports every package. Writing checks replaces the defaults whole, so every check is
   # restated here. Which checks hold a change to its base's counts is the lint target's
-  # policy (hack/magusfile/conformance-ceiling.buzz).
+  # policy (magusfiles/quality/conformance-ceiling.buzz).
   conformance:
     exclude: ["libs/gopherbuzz/**"]
     checks:

@@ -162,9 +162,8 @@ type Project struct {
 	// by everyone who reads the project, and is per project, which also means `console`
 	// and `docs` can hold different policies instead of sharing one workspace-wide map.
 	//
-	// Sharing is an explicit import of a shared MODULE, never ambient inheritance: see
-	// hack/magusfile/toolchain-policy.buzz, imported the same way hack/magusfile/advisories.buzz already is.
-	// There is no special root project and nothing is inherited by position in the tree.
+	// Projects import shared policy modules explicitly. Their position in the
+	// tree grants no policy, even to the root project.
 	//
 	// Deliberately not `import "project/.." as root`. That handle exposes only a
 	// project's `export fun` targets, read statically from the AST so an import can

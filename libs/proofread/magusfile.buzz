@@ -3,9 +3,9 @@
 
 import "magus";
 import "fs";
-import "../../hack/magusfile/advisories" as advisories;
-import "../../hack/magusfile/index" as index;
-import "../../hack/magusfile/run-golangci" as golangci;
+import "../../magusfiles/quality/advisories" as advisories;
+import "../../magusfiles/build/index" as index;
+import "../../magusfiles/quality/run-golangci" as golangci;
 import "./proofread" as proofread;
 
 import "magus/spell/go";

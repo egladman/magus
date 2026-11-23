@@ -33,7 +33,7 @@ a verdict nobody in the repository can read or change.
 ## Enforced by
 
 - `hack/lint/code-stays-within-the-conformance-ceiling.buzz` judges with the
-  policy in `hack/magusfile/conformance-ceiling.buzz`; magus supplies only the
+  policy in `magusfiles/quality/conformance-ceiling.buzz`; magus supplies only the
   head and base measures.
 - Every rule names its tier: mechanical and measured rules fail, judgment
   rules advise (`hack/lint/rules-name-their-tier.buzz`).

@@ -9,10 +9,10 @@ import "result";
 import "serialize";
 import "std";
 import "vcs";
-import "hack/magusfile/branch-stack" as stack;
+import "hack/dev/modules/branch-stack" as stack;
 import "hack/dev/bootstrap-checkout" as bootstrap;
-import "hack/magusfile/recompose" as rc;
-import "hack/magusfile/load-contract" as lc;
+import "hack/dev/modules/recompose" as rc;
+import "hack/dev/modules/load-contract" as lc;
 
 import "assert";
 

@@ -399,7 +399,7 @@ export object Listing {
 final WATCHED = {
     "proto/buf.yaml": "the buf configuration: check its breaking: block",
     "proto/magusfile.buzz": "the proto gate",
-    "hack/magusfile/deviations.buzz": "the code that matches ledger lines",
+    "hack/ci/modules/deviations.buzz": "the code that matches ledger lines",
 };
 
 // patchAdded is the lines a unified diff adds, without the file header.
@@ -692,7 +692,7 @@ test "edits to what decides a gate are listed" {
     final got = listChanges([
         Changed{ path = "proto/buf.yaml" },
         Changed{ path = "proto/magusfile.buzz" },
-        Changed{ path = "hack/magusfile/deviations.buzz" },
+        Changed{ path = "hack/ci/modules/deviations.buzz" },
         Changed{ path = ".github/workflows/ci.yaml" },
         Changed{ path = "README.md" },
     ]);

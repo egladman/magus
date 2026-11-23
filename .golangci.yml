@@ -1,7 +1,7 @@
 version: "2"
 
 run:
-  # Each checkout keeps its own golangci-lint cache (hack/magusfile/run-golangci.buzz),
+  # Each checkout keeps its own golangci-lint cache (magusfiles/quality/run-golangci.buzz),
   # so parallel runners in sibling checkouts do not contend for the temp-dir lock.
   allow-parallel-runners: true
 

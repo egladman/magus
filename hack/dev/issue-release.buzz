@@ -20,7 +20,7 @@ import "result";
 import "term";
 import "std";
 import "hack/lib/prompt";
-import "hack/magusfile/releases" as releases;
+import "magusfiles/release/releases" as releases;
 
 final USAGE = "usage: magus buzz hack/dev/release.buzz -- [--module <key>]... [--bump <key>=<patch|minor|major>]... [--yes]";
 final HELP = "cost: one dry run of `magus run release`\n{USAGE}";

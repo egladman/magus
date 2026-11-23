@@ -52,8 +52,8 @@ import "./hack/policy/verdict" as verdict;
 import "./hack/policy/commits" as subjects;
 import "./hack/policy/comments" as comments;
 import "./hack/policy/proofread" as decisions;
-import "./hack/magusfile/commits" as conventional;
-import "./hack/magusfile/changelog" as entries;
+import "./magusfiles/release/commits" as conventional;
+import "./magusfiles/release/changelog" as entries;
 import "./libs/proofread/proofread" as proofread;
 
 // HYGIENE_TARGETS are the magus targets CI's hygiene job runs over a pull request. The

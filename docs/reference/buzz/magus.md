@@ -97,7 +97,7 @@ Run `magus run <args>` recursively in the target's project directory and capture
 
 One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context, or inside a guard rule from the checkout the guard judges; raises MGS1022 outside both.
 
-**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go)
+**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/graph.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -147,7 +147,7 @@ True when execution charm `name` is active, letting a target body branch on a ch
 
 The workspace this call reads, as a Workspace whose methods are the job store, the run-outcome reads, the skills, disk reclaim and drift diagnosis. dir names the checkout whose branch forkFacts and unmerged read; empty is the workspace root. Raises MGS1022 outside a workspace.
 
-**Signature:** `magus\workspace([dir]) -> Workspace` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\workspace([dir]) -> Workspace` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -159,7 +159,7 @@ The workspace this call reads, as a Workspace whose methods are the job store, t
 
 The knowledge graph at its current symbol index: {digest, indexed, projects, gaps}, digest a hex SHA-256 over each loaded project's symbol shard fingerprint. Its methods (query, explain, path, refs, stats, neighborhood, dir, dirs, layer, projectGraph, imports, symbols, precedents, unreferenced, duplication) answer from that index and raise once it moved, naming the projects whose index came or went. A target writes the Graph as a declared output that a reader of the index keys its cache on. indexed is false and digest empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises MGS1022 outside a workspace, and when the gap probe cannot run. languages names the languages whose symbol indexes to freshen; empty is every index.
 
-**Signature:** `magus\graph([languages]) -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\graph([languages]) -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter   | Type       | Optional | Description |
 | ----------- | ---------- | -------- | ----------- |
@@ -171,7 +171,7 @@ The knowledge graph at its current symbol index: {digest, indexed, projects, gap
 
 A change against base, as a Change whose methods (tier, diff, impact, affected, conformance, mergeBase) read that change. base "" is the configured base, as `magus affected` and `magus diff` read it. opts.rev reviews a committed range base...head and opts.patch a unified diff instead of the working tree. The Change records the tree it was built on (at, the checkpoint, and files, a digest of each dirty path), and each method raises once that tree moved, naming the paths that moved. Raises MGS1022 outside a workspace.
 
-**Signature:** `magus\change([base], [opts]) -> Change` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\change([base], [opts]) -> Change` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -184,7 +184,7 @@ A change against base, as a Change whose methods (tier, diff, impact, affected, 
 
 The window of version-control history a metric reads, as a History whose methods are hotspots, affinity, ownership and trend. opts is a HistoryMetricsOptions: commits (default 500), since, dir, and files for file granularity. Raises MGS1022 outside a workspace.
 
-**Signature:** `magus\history([opts]) -> History` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\history([opts]) -> History` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -196,7 +196,7 @@ The window of version-control history a metric reads, as a History whose methods
 
 One row of the declared job store, as a Job whose methods are exit, wait and register. The store is what an orchestrating agent said about work it handed out: rows are DECLARATIONS, gating no run; the agent guard reads them to grade a write. An id no row carries raises. Raises MGS1022 outside a workspace.
 
-**Signature:** `magus\job(id) -> Job` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\job(id) -> Job` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -208,7 +208,7 @@ One row of the declared job store, as a Job whose methods are exit, wait and reg
 
 Which session's guard record a read covers, as a Session whose methods are trail, marks and mark. opts.session is the host's session id, empty for the one with the newest observation; opts.since is a duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, default now. An unknown option raises, and MGS1022 outside a workspace.
 
-**Signature:** `magus\session([opts]) -> Session` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\session([opts]) -> Session` - [source](https://github.com/egladman/magus/blob/main/std/handle.go)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |

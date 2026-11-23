@@ -11,7 +11,7 @@ date: 2026-11-03
 
 ## Context
 
-Coverage is gated once per repository (`hack/magusfile/coverage.buzz`) and says nothing
+Coverage is gated once per repository (`magusfiles/quality/coverage.buzz`) and says nothing
 about a function. That file names the failure it fears: tests written to defend a number,
 which execute code and assert nothing. Agents produce them cheaply. Before this work magus
 had no per-function complexity, no per-function coverage it trusted (the `@coverage` shard
@@ -290,5 +290,5 @@ Decided by the parent session, logged for Eli: the rule, `Change.risk` and their
 land, and `hack/lint/run.buzz` does not list the rule yet. The follow-up is one line in
 `hack/lint/run.buzz` and the warm in `lint_rules`, once main's CI has published the base
 profile for a merge base that includes this change. The touched magusfile targets `test`
-and `buzz_test` moved their logic into `hack/magusfile/coverage.buzz` and
-`hack/magusfile/buzz-coverage.buzz`, which buzz-test measures, so they score under 3.
+and `buzz_test` moved their logic into [hack/magusfile/coverage.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/coverage.buzz) and
+[hack/magusfile/buzz-coverage.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/buzz-coverage.buzz), which buzz-test measures, so they score under 3.

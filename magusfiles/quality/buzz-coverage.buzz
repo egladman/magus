@@ -86,7 +86,7 @@ export fun runs() > result\Result::<[Run]> {
         modes.append(false);
         skips.append("");
     }
-    foreach (dir in ["hack/magusfile", "hack/policy"]) {
+    foreach (dir in ["magusfiles/*", "hack/dev/modules", "hack/ci/modules", "hack/policy"]) {
         patterns.append(dir + "/*.buzz");
         modes.append(true);
         skips.append("");
@@ -203,7 +203,10 @@ test "every lint rule is its own run and no spell example is" {
     assert\equal(modules.indexOf("hack/lint/run.buzz") != null, want: true, message: "the runner");
     assert\equal(modules.indexOf("hack/lint/touched-functions-keep-change-risk-under-10.buzz") != null, want: true,
         message: "a rule");
-    assert\equal(modules.indexOf("hack/magusfile/buzz-coverage.buzz") != null, want: true, message: "this module");
+    foreach (mod in ["magusfiles/quality/buzz-coverage.buzz", "hack/ci/modules/deviations.buzz",
+                    "hack/dev/modules/branch-stack.buzz", "magusfiles/release/commits.buzz"]) {
+        assert\equal(modules.indexOf(mod) != null, want: true, message: mod);
+    }
     foreach (mod in modules) {
         assert\equal(mod.startsWith("spells/examples/"), want: false, message: "{mod} is an example");
     }
@@ -218,7 +221,7 @@ test "a run that wrote nothing keeps no fragment" {
 
 test "a run's fragment is kept rebased" {
     final fragments = mut [<str>];
-    final kept = keep(fragments, run: Run{ argv = [<str>], fragment = "hack/magusfile/buzz-coverage.buzz", oldPrefix = "import", newPrefix = "IMPORT" });
+    final kept = keep(fragments, run: Run{ argv = [<str>], fragment = "magusfiles/quality/buzz-coverage.buzz", oldPrefix = "import", newPrefix = "IMPORT" });
     assert\equal(kept.error == null, want: true, message: "no error");
     assert\equal(fragments[0].startsWith("IMPORT \"fs\";"), want: true, message: "read and rebased");
 }

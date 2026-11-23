@@ -4,8 +4,8 @@
 import "magus";
 import "project/../../../.." as workspace;
 import "./lib/embed" as embed;
-import "../../../../hack/magusfile/drift" as drift;
-import "../../../../hack/magusfile/index" as index;
+import "../../../../magusfiles/quality/drift" as drift;
+import "../../../../magusfiles/build/index" as index;
 
 import "proc";
 import "fs";

@@ -195,11 +195,10 @@ func binaryAnswers() [][]string {
 	return [][]string{{"describe"}, {"harness"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
 }
 
-// BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
-// body reaches a binaryAnswers member. The walk follows calls into the file's own helpers
-// and into functions of a Buzz module src imports ("../hack/magusfile/index"), resolved
-// against dirs in order as "<dir>/<path>.buzz" or "<dir>/magusfiles/<path>.buzz" and read
-// through read. A call it cannot follow counts as nothing, so it under-reports
+// BinaryAnswerTargets returns normalized keys for exported targets that reach
+// a binaryAnswers member. It follows calls through local and imported helpers.
+// For each dir it tries "<dir>/<path>.buzz" and "<dir>/magusfiles/<path>.buzz".
+// It uses read. Unresolved calls contribute nothing, so it under-reports
 // the way every static footprint does. A parse failure yields nil.
 func BinaryAnswerTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
 	prog, err := parsecache.Shared().ParseEmbedded(src)
