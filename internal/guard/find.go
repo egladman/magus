@@ -562,6 +562,9 @@ func parseRgFiles(c hint.Invocation) (rgFilesCall, bool) {
 	addGlob := func(g string) bool {
 		neg := strings.HasPrefix(g, "!")
 		g = strings.TrimPrefix(g, "!")
+		// A leading **/ also matches zero directories, so **/name selects the
+		// same basenames as name throughout each search root.
+		g = strings.TrimPrefix(g, "**/")
 		if strings.Contains(g, "/") || g == "" {
 			return false
 		}
@@ -581,6 +584,10 @@ func parseRgFiles(c hint.Invocation) (rgFilesCall, bool) {
 		switch {
 		case a == "--files":
 			listing = true
+		case strings.HasPrefix(a, "-g") && len(a) > 2:
+			if !addGlob(a[2:]) {
+				return rgFilesCall{}, false
+			}
 		case flag == "-g" || flag == "--glob":
 			if !hasVal {
 				if i+1 >= len(c.Args) {

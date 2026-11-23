@@ -77,6 +77,19 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 	assert.Contains(t, storedVerdict(t, ctx.Value(locationKey{}).(location).cacheDir, glob.Reason), "file:internal/api/gen/handler.go",
 		"the answer itself is in the stored verdict")
 
+	// Codex displays Search and sends its shell command to PreToolUse.
+	for _, command := range []string{
+		"rg --files -g '**/handler.go' internal/api",
+		"rg --files -g'handler.go' internal/api",
+	} {
+		search := Judge(ctx, deps, Request{Input: envelope("exec_command", map[string]any{"cmd": command, "workdir": root})})
+		assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSearchTranslation)}, judgedAs(search), command)
+		details := storedVerdict(t, ctx.Value(locationKey{}).(location).cacheDir, search.Reason)
+		assert.Contains(t, details, "query kind=file", command)
+		assert.Contains(t, details, "file:internal/api/handler.go", command)
+		assert.Contains(t, details, "file:internal/api/gen/handler.go", command)
+	}
+
 	text := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{"pattern": "serves one request", "path": "internal"})})
 	assert.NotEqual(t, verdict.Deny, text.Decision, text.Reason)
 
