@@ -23,6 +23,38 @@ import (
 // emits per-VM marshaling that produces or consumes that Go type.
 type TypeTag int
 
+// BuzzName spells the tag in a Buzz declaration.
+func (t TypeTag) BuzzName() string {
+	switch t {
+	case TypeString:
+		return "str"
+	case TypeInt, TypeIndex:
+		return "int"
+	case TypeFloat:
+		return "double"
+	case TypeBool:
+		return "bool"
+	case TypeStringSlice:
+		return "[str]"
+	case TypeFloatSlice:
+		return "[double]"
+	case TypeByteSlice:
+		return "[int]"
+	case TypeStringSliceSlice:
+		return "[[str]]"
+	case TypeStringMapMap:
+		return "{str: {str: str}}"
+	case TypeStringMap:
+		return "{str: str}"
+	case TypeAnyMap:
+		return "{str: any}"
+	case TypeAny:
+		return "any"
+	case TypeInvalid:
+	}
+	return ""
+}
+
 // The TypeTag constants enumerate the parameter and return types a binding
 // field or method can declare; TypeInvalid is the zero value.
 const (

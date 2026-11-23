@@ -54,7 +54,7 @@ func RegisterRecorder(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StringVal(ret0), nil
+		return ObjectResultOfString(ret0), nil
 	}))
 	m.MapSet("recorder__Pace__hold", vm.DirectValue("recorder.recorder__Pace__hold", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("recorder\\recorder__Pace__hold", "recv", bzArgs, 0, decode.DecodeRecorderPace)

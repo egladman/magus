@@ -3224,6 +3224,54 @@ func ObjectMarkdownSection(v types.MarkdownSection) vm.Value {
 	return out
 }
 
+func ObjectResultOfBool(v types.Result[bool]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.BoolValue(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
+func ObjectResultOfInt(v types.Result[int]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.IntValue(int64(v.Value)))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
+func ObjectResultOfAny(v types.Result[any]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", ffi.AnyVal(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
+	return out
+}
+
 func ObjectPipeRecord(v types.PipeRecord) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
@@ -3269,6 +3317,22 @@ func ObjectShellCommand(v types.ShellCommand) vm.Value {
 		itemsArgs[indexArgs] = vm.StringValue(v.Args[indexArgs])
 	}
 	out.MapSet("args", vm.ListValue(itemsArgs))
+	return out
+}
+
+func ObjectResultOfString(v types.Result[string]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", vm.StringValue(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
 	return out
 }
 
@@ -3402,17 +3466,6 @@ func ObjectEditPlan(v types.EditPlan) vm.Value {
 	return out
 }
 
-func ObjectResultOfString(v types.Result[string]) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("value", vm.StringValue(v.Value))
-	optError := vm.Null
-	if v.Error != nil {
-		optError = ObjectDiagnostic((*v.Error))
-	}
-	out.MapSet("error", optError)
-	return out
-}
-
 func ObjectEditApplied(v types.EditApplied) vm.Value {
 	out := vm.NewMap()
 	itemsWritten := make([]vm.Value, len(v.Written))
@@ -3427,6 +3480,11 @@ func ObjectEditApplied(v types.EditApplied) vm.Value {
 
 func ObjectResultOfEditApplied(v types.Result[types.EditApplied]) vm.Value {
 	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
 	out.MapSet("value", ObjectEditApplied(v.Value))
 	optError := vm.Null
 	if v.Error != nil {
@@ -3454,6 +3512,22 @@ func ObjectTermkitEvent(v termkit.Event) vm.Value {
 	out.MapSet("press", vm.BoolValue(v.Press))
 	out.MapSet("motion", vm.BoolValue(v.Motion))
 	out.MapSet("clicks", vm.IntValue(int64(v.Clicks)))
+	return out
+}
+
+func ObjectResultOfTermkitEvent(v types.Result[termkit.Event]) vm.Value {
+	out := vm.NewMap()
+	if v.Error != nil {
+		out.MapSet("value", vm.Null)
+		out.MapSet("error", ObjectDiagnostic(*v.Error))
+		return out
+	}
+	out.MapSet("value", ObjectTermkitEvent(v.Value))
+	optError := vm.Null
+	if v.Error != nil {
+		optError = ObjectDiagnostic((*v.Error))
+	}
+	out.MapSet("error", optError)
 	return out
 }
 

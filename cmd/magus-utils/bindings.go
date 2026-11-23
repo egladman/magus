@@ -449,17 +449,9 @@ func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg,
 	}
 	if param.Kind() == reflect.String && param.PkgPath() != "" {
 		pkgs.spell(param)
-		goType := pkgs.alias(param.PkgPath()) + "." + param.Name()
-		if enum, ok := buzzEnum(param); ok && enum.Closed {
-			fmt.Fprintf(w, "\t\t%s, err := ffi.EnumArgument(bzArgs, %d, %q, []%s{", a.Name, idx, enum.Name, goType)
-			for _, c := range enum.Cases {
-				fmt.Fprintf(w, "%q,", c.Value)
-			}
-			fmt.Fprintln(w, "})")
-			fmt.Fprintln(w, "\t\tif err != nil { return vm.Null, ffi.Error(err) }")
-		} else {
-			fmt.Fprintf(w, "\t\t%s := %s(ffi.String(bzArgs, %d))\n", a.Name, goType, idx)
-		}
+		goType := fmt.Sprintf("%s.%s", pkgs.alias(param.PkgPath()), param.Name())
+		enum, _ := buzzEnum(param)
+		emit.NamedStringArgument(w, a.Name, goType, idx, enum.Name, enum.Cases, enum.Closed)
 		return nil
 	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)
@@ -673,8 +665,8 @@ func objectName(goType reflect.Type) string {
 // switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
 	if arg, ok := emit.ResultArgument(t); ok {
-		if arg == reflect.TypeFor[string]() {
-			return `result\Result::<str>`
+		if arg.Kind() != reflect.Struct {
+			return fmt.Sprintf(`result\Result::<%s>`, std.GoTypeTag(arg).BuzzName())
 		}
 		return fmt.Sprintf(`result\Result::<%s>`, buzzName(arg))
 	}
@@ -811,8 +803,8 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string, pkgs *argPackag
 }
 
 func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
-	if arg, ok := emit.ResultArgument(t); ok && arg != reflect.TypeFor[string]() && (arg.Kind() != reflect.Struct || !isBoundaryType(arg)) {
-		return fmt.Errorf("unsupported result payload %s: expected string or a named boundary struct", arg)
+	if arg, ok := emit.ResultArgument(t); ok && arg.Kind() == reflect.Struct && !isBoundaryType(arg) {
+		return fmt.Errorf("unsupported result payload %s: unregistered boundary struct", arg)
 	}
 	if e.emitted[t] {
 		return nil
@@ -847,6 +839,13 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 			buzzName(t), strings.Join(names, ", "), strings.Join(values, ", "))
 	} else {
 		fmt.Fprintln(&body, "\tout := vm.NewMap()")
+		if _, ok := emit.ResultArgument(t); ok {
+			fmt.Fprintln(&body, "\tif v.Error != nil {")
+			fmt.Fprintln(&body, "\t\tout.MapSet(\"value\", vm.Null)")
+			fmt.Fprintln(&body, "\t\tout.MapSet(\"error\", ObjectDiagnostic(*v.Error))")
+			fmt.Fprintln(&body, "\t\treturn out")
+			fmt.Fprintln(&body, "\t}")
+		}
 		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
 			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
@@ -918,8 +917,11 @@ func typePackage(t reflect.Type) boundaryPackage {
 // qualifyType renders t as a generated file spells it ("types.FileInfo",
 // "queuetypes.Change").
 func qualifyType(t reflect.Type) string {
-	if t == reflect.TypeFor[string]() {
-		return t.Name()
+	if t.PkgPath() == "" {
+		if t == reflect.TypeFor[any]() {
+			return "any"
+		}
+		return t.String()
 	}
 	if arg, ok := emit.ResultArgument(t); ok {
 		return fmt.Sprintf("%s.Result[%s]", typePackage(t).alias, qualifyType(arg))
@@ -929,8 +931,14 @@ func qualifyType(t reflect.Type) string {
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
-	if t == reflect.TypeFor[string]() {
-		return "String"
+	if t.PkgPath() == "" {
+		if t.Kind() == reflect.Slice {
+			return "SliceOf" + typeIdent(t.Elem())
+		}
+		if t == reflect.TypeFor[any]() {
+			return "Any"
+		}
+		return strings.ToUpper(t.Name()[:1]) + t.Name()[1:]
 	}
 	if arg, ok := emit.ResultArgument(t); ok {
 		return "ResultOf" + typeIdent(arg)

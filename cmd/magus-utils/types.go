@@ -169,11 +169,7 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// bundled per module, and a cross-file reference would need an import the bundle
 	// has no way to supply.
 	for _, e := range enumsUsedBy(rt) {
-		fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
-		for _, c := range e.Cases {
-			fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
-		}
-		fmt.Fprintln(&b, "}")
+		b.Write(renderBuzzEnumDecl(e))
 		fmt.Fprintln(&b)
 	}
 	body, err := renderBuzzMirrorDecl(name, rt)

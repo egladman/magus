@@ -11,6 +11,7 @@ import (
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
 	gentermkit "github.com/egladman/magus/std/termkit/gen/termkit"
+	types "github.com/egladman/magus/types"
 	os "os"
 	slices "slices"
 )
@@ -25,7 +26,7 @@ var Module = std.Module{
 			Name:    "one",
 			Doc:     "Pick blocks until the user selects an item or aborts.",
 			Args:    []std.Arg{{Name: "p"}, {Name: "items"}, {Name: "opts", Object: "Options"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplOne,
 		},
@@ -33,7 +34,7 @@ var Module = std.Module{
 			Name:    "many",
 			Doc:     "Many blocks until the user marks one or more items and confirms, or aborts.",
 			Args:    []std.Arg{{Name: "p"}, {Name: "items"}, {Name: "opts", Object: "Options"}, {Name: "marked"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeAny.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplMany,
 		},
@@ -106,33 +107,33 @@ func DecodeOptions(v any) (lib.Options, error) {
 }
 
 // ImplOne binds github.com/egladman/magus/libs/termkit/pick.One.
-func ImplOne(ctx context.Context, aP int, aItems []string, aOpts lib.Options) (int, error) {
+func ImplOne(ctx context.Context, aP int, aItems []string, aOpts lib.Options) (types.Result[int], error) {
 	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
 	if err != nil {
-		return 0, fmt.Errorf("p: %w", err)
+		return types.Result[int]{}, fmt.Errorf("p: %w", err)
 	}
 	r0, err := lib.One(ctx, os.Stdin, os.Stderr, vP, aItems, aOpts)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return r0, nil
+	return types.Ok[int](r0), nil
 }
 
 // ImplMany binds github.com/egladman/magus/libs/termkit/pick.Many.
-func ImplMany(ctx context.Context, aP int, aItems []string, aOpts lib.Options, aMarked any) (any, error) {
+func ImplMany(ctx context.Context, aP int, aItems []string, aOpts lib.Options, aMarked any) (types.Result[any], error) {
 	vP, err := convert.Handle(gentermkit.ProbeHandles, aP)
 	if err != nil {
-		return nil, fmt.Errorf("p: %w", err)
+		return types.Result[any]{}, fmt.Errorf("p: %w", err)
 	}
 	vMarked, err := convert.DecodeSlice(aMarked, func(x any) (int, error) { return convert.Int(x) })
 	if err != nil {
-		return nil, fmt.Errorf("marked: %w", err)
+		return types.Result[any]{}, fmt.Errorf("marked: %w", err)
 	}
 	r0, err := lib.Many(ctx, os.Stdin, os.Stderr, vP, aItems, aOpts, vMarked)
 	if err != nil {
-		return nil, err
+		return types.Result[any]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return convert.EncodeList(r0, func(x int) any { return x }), nil
+	return types.Ok[any](convert.EncodeList(r0, func(x int) any { return x })), nil
 }
 
 // ImplRender binds github.com/egladman/magus/libs/termkit/pick.Render.

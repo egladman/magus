@@ -6,6 +6,8 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
 export object Theme {
     background: str = "",
     foreground: str = "",
@@ -30,7 +32,7 @@ export object SVGOptions {
     theme: Theme = Theme{},
 }
 
-export extern fun animate(frames: any, holds: any, opts: SVGOptions) > str !> any;
+export extern fun animate(frames: any, holds: any, opts: SVGOptions) > result\Result::<str> !> any;
 export extern fun darkTheme() > Theme;
 export extern fun lightTheme() > Theme;
 export extern fun new(width: int, height: int) > int;
@@ -48,6 +50,6 @@ export extern fun terminalString(terminal: int) > str !> any;
 export extern fun terminalStyleAt(terminal: int, row: int, col: int) > str !> any;
 export extern fun terminalSvg(terminal: int, opts: SVGOptions) > str !> any;
 export extern fun terminalTrailingSpaceRows(terminal: int) > any !> any;
-export extern fun terminalWrite(terminal: int, p: any) > int !> any;
+export extern fun terminalWrite(terminal: int, p: any) > result\Result::<int> !> any;
 export extern fun themeVariants() > any;
 export extern fun variantPath(path: str, suffix: str) > str;

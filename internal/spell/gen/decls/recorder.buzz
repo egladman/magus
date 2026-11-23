@@ -6,6 +6,8 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
 export object Pace {
     base: double = 0.0,
     perLine: double = 0.0,
@@ -32,6 +34,6 @@ export object Theme {
 
 extern fun recorder__Pace__hold(recv: Pace, index: int, count: int, added: int) > double;
 
-export extern fun animate(segments: [str], width: int, height: int, pace: Pace, theme: Theme) > str !> any;
+export extern fun animate(segments: [str], width: int, height: int, pace: Pace, theme: Theme) > result\Result::<str>;
 export extern fun commands(capture: str, prompt: str) > [str];
 export extern fun marked(capture: str, marker: str) > [str];

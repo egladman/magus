@@ -31,7 +31,7 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("many", vm.DirectValue("pick.many", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -45,7 +45,7 @@ func RegisterPick(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyVal(ret0), nil
+		return ObjectResultOfAny(ret0), nil
 	}))
 	m.MapSet("render", vm.DirectValue("pick.render", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)

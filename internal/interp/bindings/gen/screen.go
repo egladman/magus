@@ -40,7 +40,7 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.StringVal(ret0), nil
+		return ObjectResultOfString(ret0), nil
 	}))
 	m.MapSet("new", vm.DirectValue("screen.new", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		width := ffi.Int(bzArgs, 0, 0)
@@ -66,7 +66,7 @@ func RegisterScreen(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("terminalRows", vm.DirectValue("screen.terminalRows", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		terminal := ffi.Int(bzArgs, 0, 0)

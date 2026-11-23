@@ -14,6 +14,7 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/std"
 )
 
@@ -288,7 +289,8 @@ func TestProgressConstructorsUseTheirOwnNameEnum(t *testing.T) {
 			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 			t.Cleanup(func() { _ = sess.Close() })
 			sess.SetNativeModule(mod.ImportPath(), bindgen.RegisterProgress(ctx, sess))
-			sess.SetModuleDecls(mod.ImportPath(), decls)
+			sess.SetModuleDecls(result.ModulePath, result.Source)
+			sess.SetModuleDecls(mod.ImportPath(), namespaceImports(mod.Name, decls)+decls)
 			enum, ok := boundaryEnumNamed(kind + "Name")
 			require.True(t, ok)
 			require.NotEmpty(t, enum.Cases)
@@ -296,7 +298,7 @@ func TestProgressConstructorsUseTheirOwnNameEnum(t *testing.T) {
 				src := fmt.Sprintf(`import "termkit/progress";
 var name = "";
 try {
-    name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s));
+    name = progress\loaderName(progress\new%[1]s(progress\%[1]sName.%[2]s).value!);
 } catch (err) {
     name = "{err}";
 }`, kind, member.Name)
@@ -310,7 +312,7 @@ try {
 				wrong = "progress\\StripName.dots"
 			}
 			mixed := fmt.Sprintf(`import "termkit/progress"; fun rejectMixed() > int !> any { return progress\new%s(%s); }`, kind, wrong)
-			require.ErrorContains(t, sess.Exec(ctx, mixed), "of type "+kind+"Name")
+			require.ErrorContains(t, sess.Exec(ctx, mixed), fmt.Sprintf("of type %sName", kind))
 		})
 	}
 }

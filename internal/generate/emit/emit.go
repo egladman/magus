@@ -52,12 +52,8 @@ func File(path string, data []byte) error {
 	return os.WriteFile(path, data, FileMode)
 }
 
-// Go gofmts data before writing it.
-//
-// The format step is the guard that matters: a template that emits unparsable Go
-// fails HERE, naming the file, rather than at the next build with an error pointing
-// into generated output nobody wrote by hand.
-func Go(path string, data []byte) error {
+// Format before writing so a broken template reports its output path.
+func writeGo(path string, data []byte) error {
 	formatted, err := format.Source(data)
 	if err != nil {
 		return fmt.Errorf("gofmt %s: %w", path, err)
@@ -71,7 +67,7 @@ func GoTemplate(path string, tmpl *template.Template, data any) error {
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return fmt.Errorf("template %s: %w", path, err)
 	}
-	if err := Go(path, buf.Bytes()); err != nil {
+	if err := writeGo(path, buf.Bytes()); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -1192,6 +1188,16 @@ func (e *moduleEmitter) implementation(fn *libFunc, impl string, b *binding) str
 	}
 	invoke := fmt.Sprintf("%s(%s)", callee, strings.Join(b.call, ", "))
 	retType, zero, retTag, ret := e.returns(b)
+	if b.raises {
+		e.use("types", "github.com/egladman/magus/types")
+		if retType == "" {
+			retType, ret = "bool", "true"
+		}
+		payload := retType
+		retType = "types.Result[" + payload + "]"
+		zero = retType + "{}"
+		ret = "types.Ok[" + payload + "](" + ret + ")"
+	}
 	var outs []string
 	for i := range b.results {
 		outs = append(outs, fmt.Sprintf("r%d", i))
@@ -1201,10 +1207,8 @@ func (e *moduleEmitter) implementation(fn *libFunc, impl string, b *binding) str
 	}
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "// %s binds %s.%s.\nfunc %s(%s) ", impl, e.p.importPath, fn.qualified(), impl, strings.Join(b.params, ", "))
-	zeroRet := "err"
 	if retType != "" {
 		fmt.Fprintf(&w, "(%s, error) {\n", retType)
-		zeroRet = zero + ", err"
 	} else {
 		w.WriteString("error {\n")
 	}
@@ -1217,12 +1221,14 @@ func (e *moduleEmitter) implementation(fn *libFunc, impl string, b *binding) str
 	switch {
 	case len(outs) == 0:
 		fmt.Fprintf(&w, "%s\nreturn nil\n}\n\n", invoke)
-	case len(b.results) == 0:
-		fmt.Fprintf(&w, "return %s\n}\n\n", invoke)
 	default:
-		fmt.Fprintf(&w, "%s := %s\n", strings.Join(outs, ", "), invoke)
+		assign := ":="
+		if len(b.results) == 0 && len(b.pre) > 0 {
+			assign = "="
+		}
+		fmt.Fprintf(&w, "%s %s %s\n", strings.Join(outs, ", "), assign, invoke)
 		if b.raises {
-			fmt.Fprintf(&w, "if err != nil {\nreturn %s\n}\n", zeroRet)
+			fmt.Fprintf(&w, "if err != nil {\nreturn %s{Error: &types.Diagnostic{Message: err.Error()}}, nil\n}\n", retType)
 		}
 		fmt.Fprintf(&w, "return %s, nil\n}\n\n", ret)
 	}
@@ -1237,12 +1243,20 @@ func (e *moduleEmitter) method(fn *libFunc, name, impl, retTag string, b *bindin
 	if len(b.args) > 0 {
 		fmt.Fprintf(&m, "\t\t\tArgs: []std.Arg{%s},\n", strings.Join(b.args, ", "))
 	}
-	if len(b.results) == 1 && b.results[0].kind == convNamed && b.results[0].t.kind == kindRecord {
+	if b.raises {
+		payload := "std.TypeBool.BuzzName()"
+		if len(b.results) == 1 && b.results[0].kind == convNamed && b.results[0].t.kind == kindRecord {
+			payload = fmt.Sprintf("%q", b.results[0].t.name)
+		} else if len(b.results) > 0 {
+			payload = retTag + ".BuzzName()"
+		}
+		fmt.Fprintf(&m, "\t\t\tReturns: []std.Ret{{Object: %q + %s + %q}},\n", `result\Result::<`, payload, ">")
+	} else if len(b.results) == 1 && b.results[0].kind == convNamed && b.results[0].t.kind == kindRecord {
 		fmt.Fprintf(&m, "\t\t\tReturns: []std.Ret{{Object: %q}},\n", b.results[0].t.name)
 	} else if retTag != "" {
 		fmt.Fprintln(&m, "\t\t\tReturns: []std.Ret{{}},")
 	}
-	if b.raises || len(b.pre) > 0 {
+	if len(b.pre) > 0 {
 		m.WriteString("\t\t\tRaises: true,\n")
 	}
 	fmt.Fprintf(&m, "\t\t\tImpl: %s,\n\t\t},\n", impl)
