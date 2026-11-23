@@ -1,4 +1,4 @@
-package std
+package boxed
 
 import "github.com/egladman/magus/libs/gopherbuzz/vm"
 

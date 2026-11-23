@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-const stdPackage = "github.com/egladman/magus/libs/gopherbuzz/std"
+const scalarPackage = "github.com/egladman/magus/libs/gopherbuzz/std/internal/boxed"
 
 // SerializeCore describes the primitives supplied by the Go codec and VM.
 func SerializeCore() []byte {
@@ -32,7 +32,7 @@ func SerializeCore() []byte {
 // Serialize renders the public serialize module. Its scalar functions come from
 // the Go package that implements the same operations on native VM values.
 func Serialize(moduleRoot string) ([]byte, error) {
-	program, err := buzzgen.Load(moduleRoot, buzzgen.Config{}, stdPackage)
+	program, err := buzzgen.Load(moduleRoot, buzzgen.Config{}, scalarPackage)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func Serialize(moduleRoot string) ([]byte, error) {
 				result += "?"
 			}
 			function := "boxed" + scalar.goName + suffix
-			body, err := program.ScalarFunction(stdPackage, function, function, result)
+			body, err := program.ScalarFunction(scalarPackage, function, function, result)
 			if err != nil {
 				return nil, err
 			}
