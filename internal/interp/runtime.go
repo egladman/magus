@@ -581,19 +581,8 @@ func sealedBytecodeStoreUnder(name, projectDir string) (buzz.BytecodeStore, erro
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(base, "magus", name, stamp)
-	now := time.Now()
-	if err := prepareStamp(dir, now); err != nil {
-		if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
-			return nil, fmt.Errorf("unusable user cache: %w", err)
-		}
-		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(err))
-	}
 	sum := sha256.Sum256([]byte(abs))
-	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
-	if err := sweepChunks(dir, now); err != nil {
-		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not sweep compiler cache", attr.Error(err))
-	}
+	dir := filepath.Join(base, "magus", name, stamp, hex.EncodeToString(sum[:]))
 	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secrets.New(string(secret)), scope: dir}, nil
 }
 
@@ -915,6 +904,13 @@ func (s sealedBytecodeStore) Load(key string) ([]byte, error) {
 }
 
 func (s sealedBytecodeStore) Store(key string, blob []byte) error {
+	now := time.Now()
+	if err := prepareStamp(filepath.Dir(s.scope), now); err != nil {
+		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(err))
+	}
+	if err := sweepChunks(s.scope, now); err != nil {
+		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not sweep compiler cache", attr.Error(err))
+	}
 	return s.inner.Store(key, append(s.seal(key, blob), blob...))
 }
 

@@ -511,6 +511,7 @@ func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
 	store, err := workingCopyBytecodeStore(t.TempDir())
 	require.NoError(t, err)
 	require.NotNil(t, store)
+	require.NoError(t, store.Store("chunk", []byte("compiled")))
 	assert.NoDirExists(t, old)
 	assert.DirExists(t, recent)
 	assert.DirExists(t, filepath.Join(stamps, compilerStamp()))
@@ -1109,7 +1110,7 @@ func (s *BytecodeCacheSuite) TestCacheThatIsNotADirectorySaysSo() {
 
 	_, compiled := s.load(s.T().Context(), s.source(), true)
 	s.True(compiled)
-	s.Equal(1, warnings(logs, "no sealed bytecode store"), "%s", logs)
+	s.Equal(1, warnings(logs, "could not keep the compiled chunk"), "%s", logs)
 }
 
 // A daemon serves many commands, and each one that compiles every load is told.
