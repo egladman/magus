@@ -92,8 +92,6 @@ clikitmain:
     cmd/magus/watch.go: 1
     cmd/magus/where.go: 6
     cmd/magus/x.go: 1
-    # moduledecls still parses its own -outdir: the file belongs to another
-    # change in flight, so magus-utils hands the flag back to it.
   # - {path, reason}
   exits: []
 
