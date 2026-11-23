@@ -17,10 +17,6 @@ fun module_dir(mod: any) > str {
     return serialize\Boxed.init(mod).q("dir").stringValue();
 }
 
-fun module_path(mod: any) > str {
-    return serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
-}
-
 fun replace_path(base: str, to: str) > result\Result::<str> {
     try {
         final rel = path\rel(base, target: to);
@@ -63,53 +59,57 @@ fun sorted_keys(values: {str: any}) > [str] {
 // caller's context. Only replacements whose old path names a workspace module are
 // touched; third-party replacements are deliberately preserved.
 export fun replaceArgs(currentJSON: str, modules: [any]) > result\Result::<[str]> {
-	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
-    var current: any = null;
-    var byPath: mut {str: any} = mut {};
-    foreach (mod in modules) {
-        final name = module_path(mod);
-        if (name == "") { continue; }
-        byPath[name] = mod;
-        if (name == currentName) { current = mod; }
-    }
-    if (current == null) { return result\fail::<[str]>("gomod.replaceArgs: no workspace Go module named " + currentName); }
-
-    final parsed = serialize\jsonDecode(module_json(current));
-    var desired: mut {str: str} = mut {};
-    foreach (require in parsed.q("Require").listValue()) {
-        final name = require.q("Path").stringValue();
-        final provider = byPath[name];
-        if (provider == null) { continue; }
-        final same = same_path(module_dir(provider), right: module_dir(current));
-        if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
-        if (same.value!) { continue; }
-        final relative = replace_path(module_dir(current), to: module_dir(provider));
-        if (relative.error -> err) { return result\Result::<[str]>{ error = err }; }
-        desired[name] = relative.value!;
-    }
-
-    final existing = workspace_replaces(parsed, byPath: byPath);
-
-    var all: mut {str: bool} = mut {};
-    foreach (name, _ in desired) { all[name] = true; }
-    foreach (name, _ in existing) { all[name] = true; }
-
-    var drops: mut [str] = mut [<str>];
-    var replacements: mut [str] = mut [<str>];
-    foreach (name in sorted_keys(all)) {
-        final wanted = desired[name];
-        final found = existing[name];
-        var correct = false;
-        if (wanted != null and found != null and found.len() == 1) {
-            final dir = module_dir(current);
-            final same = same_path(dir + "/" + found[0], right: dir + "/" + wanted);
-            if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
-            correct = same.value!;
+    try {
+        final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
+        var current: any = null;
+        var byPath: mut {str: any} = mut {};
+        foreach (mod in modules) {
+            final name = serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
+            if (name == "") { continue; }
+            byPath[name] = mod;
+            if (name == currentName) { current = mod; }
         }
-        if (found != null and correct == false) { drops.append("-dropreplace=" + name); }
-        if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
+        if (current == null) { return result\fail::<[str]>("gomod.replaceArgs: no workspace Go module named " + currentName); }
+
+        final parsed = serialize\jsonDecode(module_json(current));
+        var desired: mut {str: str} = mut {};
+        foreach (require in parsed.q("Require").listValue()) {
+            final name = require.q("Path").stringValue();
+            final provider = byPath[name];
+            if (provider == null) { continue; }
+            final same = same_path(module_dir(provider), right: module_dir(current));
+            if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
+            if (same.value!) { continue; }
+            final relative = replace_path(module_dir(current), to: module_dir(provider));
+            if (relative.error -> err) { return result\Result::<[str]>{ error = err }; }
+            desired[name] = relative.value!;
+        }
+
+        final existing = workspace_replaces(parsed, byPath: byPath);
+
+        var all: mut {str: bool} = mut {};
+        foreach (name, _ in desired) { all[name] = true; }
+        foreach (name, _ in existing) { all[name] = true; }
+
+        var drops: mut [str] = mut [<str>];
+        var replacements: mut [str] = mut [<str>];
+        foreach (name in sorted_keys(all)) {
+            final wanted = desired[name];
+            final found = existing[name];
+            var correct = false;
+            if (wanted != null and found != null and found.len() == 1) {
+                final dir = module_dir(current);
+                final same = same_path(dir + "/" + found[0], right: dir + "/" + wanted);
+                if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
+                correct = same.value!;
+            }
+            if (found != null and correct == false) { drops.append("-dropreplace=" + name); }
+            if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
+        }
+        return result\ok::<[str]>(drops + replacements);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "gomod: derive workspace module replacements");
     }
-    return result\ok::<[str]>(drops + replacements);
 }
 
 // replaceWorkspaceModules points every workspace-local requirement in this project's
@@ -167,4 +167,19 @@ test "keeps a correct parent replacement and ignores third-party replacements" {
         {"dir": "/repo/libs/diag", "json": diag},
     ]);
     std\assert(got.value!.join("|") == "", message: "preserve correct and external replacements");
+}
+
+test "reports malformed current module JSON" {
+    final got = replaceArgs("invalid JSON", modules: []);
+    std\assert(got.error != null, message: "malformed current JSON returns an error");
+    std\assert(got.error!.message.indexOf("gomod: derive workspace module replacements") != null, message: "decode error identifies the operation");
+    std\assert(got.value == null, message: "malformed current JSON returns no flags");
+}
+
+test "reports malformed workspace module JSON" {
+    final current = `{"Module":{"Path":"example.com/root"}}`;
+    final got = replaceArgs(current, modules: [{"dir": "/repo", "json": "invalid JSON"}]);
+    std\assert(got.error != null, message: "malformed workspace JSON returns an error");
+    std\assert(got.error!.message.indexOf("invalid") != null, message: "decode error preserves the parser diagnostic");
+    std\assert(got.value == null, message: "malformed workspace JSON returns no flags");
 }
