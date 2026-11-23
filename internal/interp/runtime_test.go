@@ -1035,6 +1035,17 @@ func (s *BytecodeCacheSuite) TestNoBuildIDCompilesEveryLoadAndSaysSo() {
 	s.Contains(logs.String(), "no build id")
 }
 
+func (s *BytecodeCacheSuite) TestDeniedTemporaryChunksWarnOncePerCommand() {
+	logs := s.captureLog()
+	ctx := WithBytecodeWarnings(s.T().Context())
+	for _, path := range []string{".partial-1", ".partial-2"} {
+		err := &os.PathError{Op: "open", Path: path, Err: os.ErrPermission}
+		warnBytecodeStore(ctx, nil, "could not keep the compiled chunk", err)
+	}
+	s.Equal(1, warnings(logs, "could not keep the compiled chunk"))
+	s.Contains(logs.String(), ".partial-1")
+}
+
 func (s *BytecodeCacheSuite) TestReaderLoadKeepsNothingAndSaysSo() {
 	logs := s.captureLog()
 	read := func(path string) ([]byte, error) { return os.ReadFile(path) }

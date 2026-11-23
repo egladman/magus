@@ -664,6 +664,10 @@ func WithBytecodeWarnings(ctx context.Context) context.Context {
 // WithBytecodeWarnings, else per load, whose record is said.
 func warnBytecodeStore(ctx context.Context, said map[string]bool, msg string, cause error, attrs ...any) {
 	key := fmt.Sprintf("%s\x00%v", msg, cause)
+	if errors.Is(cause, fs.ErrPermission) {
+		// Each write names a new temporary file in the same store.
+		key = msg + "\x00permission"
+	}
 	if command, _ := ctx.Value(bytecodeWarningsKey{}).(*sync.Map); command != nil {
 		if _, seen := command.LoadOrStore(key, true); seen {
 			return
@@ -905,13 +909,17 @@ func (s sealedBytecodeStore) Load(key string) ([]byte, error) {
 
 func (s sealedBytecodeStore) Store(key string, blob []byte) error {
 	now := time.Now()
-	if err := prepareStamp(filepath.Dir(s.scope), now); err != nil {
-		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(err))
+	stampErr := prepareStamp(filepath.Dir(s.scope), now)
+	if err := s.inner.Store(key, append(s.seal(key, blob), blob...)); err != nil {
+		return err
+	}
+	if stampErr != nil {
+		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not refresh compiler cache timestamp", attr.Error(stampErr))
 	}
 	if err := sweepChunks(s.scope, now); err != nil {
 		slog.With(attr.Component("interp")).WarnContext(context.Background(), "could not sweep compiler cache", attr.Error(err))
 	}
-	return s.inner.Store(key, append(s.seal(key, blob), blob...))
+	return nil
 }
 
 func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
