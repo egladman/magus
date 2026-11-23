@@ -352,6 +352,7 @@ var defaults = map[string]decision{
 	"spawn-unvalidated":     Deny,
 	"spawn-unisolated-row":  Deny,
 	"spawn-warm-worker":     Deny,
+	"continue-cold-worker":  Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,

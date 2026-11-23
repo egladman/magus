@@ -131,7 +131,7 @@ func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
 	v := Judge(f.testContext(t), Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
 		"tool_input": map[string]any{"to": warmAgent, "message": "The order test regressed; fix it."},
-	}), Host: "claude-code"})
+	}), Host: "claude-code", RendersAsk: true})
 
 	assert.NotEqual(t, verdict.Deny, v.Decision, v.Reason)
 }

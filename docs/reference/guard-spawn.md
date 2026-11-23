@@ -147,7 +147,7 @@ Both sides load the root magusfile alone, never the whole workspace; see
 | ----------- | ------------------------------- | ----------------- | --------------- |
 | Claude Code | `Agent`, `Task`                 | `SendMessage`     | `SubagentStop`  |
 | Cursor      | `Task` on `preToolUse`          | none the host has | not reported    |
-| Codex       | `spawn_agent` on `PreToolUse`   | none the host has | not reported    |
+| Codex       | `spawn_agent`, `collaborationspawn_agent` | `send_input`, `resume_agent` | not reported    |
 | OpenCode    | `task` on `tool.execute.before` | none the host has | not reported    |
 
 Each change to the effective rules is recorded once on the activity trail as a
