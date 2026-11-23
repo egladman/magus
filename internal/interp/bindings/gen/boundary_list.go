@@ -10,6 +10,8 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -167,6 +169,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "EvaluatedTarget", Zero: types.EvaluatedTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectEvaluatedTarget(v.(types.EvaluatedTarget), enums)
 	}},
+	{Name: "Event", Zero: termkit.Event{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermkitEvent(v.(termkit.Event)) }},
 	{Name: "ExecResult", Zero: types.ExecResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectExecResult(v.(types.ExecResult)) }},
 	{Name: "ExplainResult", Zero: types.KnowledgeExplainOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeExplainOutput(v.(types.KnowledgeExplainOutput), enums)
@@ -279,6 +282,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
+	{Name: "Line", Zero: termkit.Line{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermkitLine(v.(termkit.Line), enums) }},
 	{Name: "ListPullsRequest", Zero: types.ListPullsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectListPullsRequest(v.(types.ListPullsRequest)) }},
 	{Name: "ListedWorkspace", Zero: types.ListedWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectListedWorkspace(v.(types.ListedWorkspace)) }},
 	{Name: "MCPTool", Zero: types.MCPTool{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPTool(v.(types.MCPTool)) }},
@@ -408,6 +412,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "ShippedAgent", Zero: types.ShippedAgent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShippedAgent(v.(types.ShippedAgent)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
+	{Name: "Span", Zero: termkit.Span{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermkitSpan(v.(termkit.Span)) }},
 	{Name: "Spawn", Zero: feedback.Spawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackSpawn(v.(feedback.Spawn)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget), enums) }},
@@ -442,6 +447,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TargetRun", Zero: daemon.TargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusTargetRun(v.(daemon.TargetRun), enums) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
+	{Name: "Theme", Zero: screen.Theme{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectScreenTheme(v.(screen.Theme)) }},
 	{Name: "TierEvidence", Zero: check.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectCheckTierEvidence(v.(check.TierEvidence), enums)
 	}},

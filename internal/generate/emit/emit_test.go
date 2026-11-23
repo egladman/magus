@@ -5,14 +5,80 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"text/template"
 	"time"
+
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/termkit/screen"
+	screenbindings "github.com/egladman/magus/std/termkit/gen/screen"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
+
+func TestGeneratedRecordsRejectUnknownFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		decode func(any) (any, error)
+		key    string
+		value  any
+		want   any
+		zero   any
+	}{
+		{
+			name: "theme", decode: func(v any) (any, error) { return screenbindings.DecodeTheme(v) },
+			key: "background", value: "#ffffff", want: screen.Theme{Background: "#ffffff"}, zero: screen.Theme{},
+		},
+		{
+			name: "options", decode: func(v any) (any, error) { return screenbindings.DecodeSVGOptions(v) },
+			key: "fontSize", value: 18, want: screen.SVGOptions{FontSize: 18}, zero: screen.SVGOptions{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("unknown field", func(t *testing.T) {
+				got, err := tc.decode(map[string]any{tc.key: tc.value, "typo": true})
+				require.EqualError(t, err, `unknown field "typo"`)
+				assert.Equal(t, tc.zero, got)
+			})
+			t.Run("field casing", func(t *testing.T) {
+				key := strings.ToUpper(tc.key[:1]) + tc.key[1:]
+				got, err := tc.decode(map[string]any{key: tc.value})
+				require.EqualError(t, err, fmt.Sprintf("unknown field %q", key))
+				assert.Equal(t, tc.zero, got)
+			})
+			t.Run("stable error order", func(t *testing.T) {
+				got, err := tc.decode(map[string]any{"zeta": true, "alpha": true})
+				require.EqualError(t, err, `unknown field "alpha"`)
+				assert.Equal(t, tc.zero, got)
+			})
+			t.Run("partial record", func(t *testing.T) {
+				got, err := tc.decode(map[string]any{tc.key: tc.value})
+				require.NoError(t, err)
+				assert.Equal(t, tc.want, got)
+			})
+			t.Run("empty record", func(t *testing.T) {
+				got, err := tc.decode(map[string]any{})
+				require.NoError(t, err)
+				assert.Equal(t, tc.zero, got)
+			})
+		})
+	}
+}
+
+func TestGeneratedRecordRejectsUnknownNestedFields(t *testing.T) {
+	got, err := screenbindings.DecodeSVGOptions(map[string]any{
+		"theme": map[string]any{"unexpected": "#ffffff"},
+	})
+
+	require.EqualError(t, err, `theme: unknown field "unexpected"`)
+	assert.Equal(t, screen.SVGOptions{}, got)
+}
 
 // TestFileLeavesUnchangedFileAlone pins the mtime behavior the cache
 // depends on. Rewriting identical bytes marks every downstream target dirty, so
@@ -55,7 +121,7 @@ func TestFileCreatesMissingFile(t *testing.T) {
 // broken Go must fail naming the file, not at the next build inside generated output.
 func TestGoRejectsUnparsable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broken.go")
-	err := Go(path, []byte("package p\nfunc ("))
+	err := writeGo(path, []byte("package p\nfunc ("))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gofmt")
 	assert.NoFileExists(t, path, "a file that failed to format must not be written")
@@ -63,7 +129,7 @@ func TestGoRejectsUnparsable(t *testing.T) {
 
 func TestGoFormats(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ok.go")
-	require.NoError(t, Go(path, []byte("package p\nvar  x   =  1")))
+	require.NoError(t, writeGo(path, []byte("package p\nvar  x   =  1")))
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "package p\n\nvar x = 1\n", string(got))
@@ -292,10 +358,33 @@ func (s *LibModulesSuite) TestAStatefulTypeCrossesAsAHandle() {
 	s.Contains(string(src), "box int")
 }
 
+func (s *LibModulesSuite) TestRecordArgumentAndReturnKeepTheirGoType() {
+	dir := s.writeLib("package kit\n\ntype Pair struct{ A, B string }\n\nfunc Swap(p Pair) Pair { return Pair{p.B, p.A} }\n")
+	lib, err := loadLib(dir, termkitGen)
+	s.Require().NoError(err)
+	src, err := lib.emitPackage(lib.pkgs[0])
+	s.Require().NoError(err)
+	s.Contains(string(src), "func ImplSwap(ctx context.Context, aP lib.Pair) (lib.Pair, error)")
+	s.Contains(string(src), "lib.Swap(aP)")
+}
+
 func (s *LibModulesSuite) TestSnakeSplitsAcronyms() {
 	s.Equal("sgr_bold", snake("SGRBold"))
 	s.Equal("utf8_locale", snake("UTF8Locale"))
 	s.Equal("new_zone", snake("NewZone"))
+}
+
+func (s *LibModulesSuite) TestFallibleCallsCarryTheirPayloadInResult() {
+	dir := s.writeLib("package kit\n\ntype Pair struct{ A, B string }\nfunc Read() (Pair, error) { return Pair{}, nil }\nfunc Close() error { return nil }\n")
+	lib, err := loadLib(dir, termkitGen)
+	s.Require().NoError(err)
+	src, err := lib.emitPackage(lib.pkgs[0])
+	s.Require().NoError(err)
+	s.Contains(string(src), "(types.Result[lib.Pair], error)")
+	s.Contains(string(src), "types.Ok[lib.Pair](r0)")
+	s.Contains(string(src), "(types.Result[bool], error)")
+	s.Contains(string(src), "types.Ok[bool](true)")
+	s.NotContains(string(src), "Raises:")
 }
 
 type ShadowInner struct {

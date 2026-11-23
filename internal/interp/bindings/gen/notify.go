@@ -37,45 +37,50 @@ func RegisterNotify(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.IntVal(ret0), nil
 	}))
 	m.MapSet("releaseStderr", vm.DirectValue("notify.releaseStderr", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		if err := notify.ImplReleaseStderr(ctx); err != nil {
+		ret0, err := notify.ImplReleaseStderr(ctx)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("stackNotify", vm.DirectValue("notify.stackNotify", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		stack := ffi.Int(bzArgs, 0, 0)
 		text := ffi.String(bzArgs, 1)
 		style := termkit.SGR(ffi.String(bzArgs, 2))
 		ttl := ffi.Int(bzArgs, 3, 0)
-		if err := notify.ImplStackNotify(ctx, stack, text, style, ttl); err != nil {
+		ret0, err := notify.ImplStackNotify(ctx, stack, text, style, ttl)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("stackPin", vm.DirectValue("notify.stackPin", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		stack := ffi.Int(bzArgs, 0, 0)
 		key := ffi.String(bzArgs, 1)
 		text := ffi.String(bzArgs, 2)
 		style := termkit.SGR(ffi.String(bzArgs, 3))
-		if err := notify.ImplStackPin(ctx, stack, key, text, style); err != nil {
+		ret0, err := notify.ImplStackPin(ctx, stack, key, text, style)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("stackClear", vm.DirectValue("notify.stackClear", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		stack := ffi.Int(bzArgs, 0, 0)
 		key := ffi.String(bzArgs, 1)
-		if err := notify.ImplStackClear(ctx, stack, key); err != nil {
+		ret0, err := notify.ImplStackClear(ctx, stack, key)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	m.MapSet("stackClose", vm.DirectValue("notify.stackClose", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		stack := ffi.Int(bzArgs, 0, 0)
-		if err := notify.ImplStackClose(ctx, stack); err != nil {
+		ret0, err := notify.ImplStackClose(ctx, stack)
+		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return vm.Null, nil
+		return ObjectResultOfBool(ret0), nil
 	}))
 	return m
 }

@@ -6,10 +6,12 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "result";
+
 export extern fun new(z: int, max: int) > int !> any;
-export extern fun releaseStderr() > void !> any;
-export extern fun stackClear(stack: int, key: str) > void !> any;
-export extern fun stackClose(stack: int) > void !> any;
-export extern fun stackNotify(stack: int, text: str, style: str, ttl: int) > void !> any;
-export extern fun stackPin(stack: int, key: str, text: str, style: str) > void !> any;
+export extern fun releaseStderr() > result\Result::<bool>;
+export extern fun stackClear(stack: int, key: str) > result\Result::<bool> !> any;
+export extern fun stackClose(stack: int) > result\Result::<bool> !> any;
+export extern fun stackNotify(stack: int, text: str, style: str, ttl: int) > result\Result::<bool> !> any;
+export extern fun stackPin(stack: int, key: str, text: str, style: str) > result\Result::<bool> !> any;
 export extern fun stderr() > int;

@@ -444,41 +444,10 @@ func optionalDefault(m std.Method, i int) (string, error) {
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
 func buzzArgType(t std.TypeTag) (string, error) {
-	if name := buzzTypeName(t); name != "" {
+	if name := t.BuzzName(); name != "" {
 		return name, nil
 	}
 	return "", fmt.Errorf("no Buzz annotation for type tag %d", t)
-}
-
-func buzzTypeName(t std.TypeTag) string {
-	switch t {
-	case std.TypeString:
-		return "str"
-	case std.TypeInt, std.TypeIndex:
-		return "int"
-	case std.TypeFloat:
-		return "double"
-	case std.TypeBool:
-		return "bool"
-	case std.TypeStringSlice:
-		return "[str]"
-	case std.TypeFloatSlice:
-		return "[double]"
-	case std.TypeByteSlice:
-		return "[int]"
-	case std.TypeStringSliceSlice:
-		return "[[str]]"
-	case std.TypeStringMapMap:
-		return "{str: {str: str}}"
-	case std.TypeStringMap:
-		return "{str: str}"
-	case std.TypeAnyMap:
-		return "{str: any}"
-	case std.TypeAny:
-		return "any"
-	case std.TypeInvalid:
-	}
-	return ""
 }
 
 // buzzDefault renders the default an optional parameter declares, so a caller may
@@ -833,20 +802,7 @@ func argumentEnum(m std.Method, i int) string {
 // types generator emits into an object mirror, so a reader sees one form wherever an
 // enum is declared.
 func renderBuzzEnumDecl(e boundaryEnum) []byte {
-	var b bytes.Buffer
-	if e.Closed {
-		fmt.Fprintf(&b, "export enum %s {\n", e.Name)
-		for _, c := range e.Cases {
-			fmt.Fprintf(&b, "    %s,\n", c.Name)
-		}
-	} else {
-		fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
-		for _, c := range e.Cases {
-			fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
-		}
-	}
-	fmt.Fprintln(&b, "}")
-	return b.Bytes()
+	return emit.BuzzEnum(e.Name, e.Closed, e.Cases)
 }
 
 // buzzBuiltinTypes are the type names the Buzz type parser knows without a declaration.

@@ -10,6 +10,7 @@ import (
 	lib "github.com/egladman/magus/libs/termkit"
 	std "github.com/egladman/magus/std"
 	convert "github.com/egladman/magus/std/termkit/convert"
+	types "github.com/egladman/magus/types"
 	os "os"
 	slices "slices"
 )
@@ -35,24 +36,23 @@ var Module = std.Module{
 			Impl:    ImplHyperlink,
 		},
 		{
-			Name:   "clear_screen",
-			Doc:    "ClearScreen erases the screen and homes the cursor, the repaint a full-screen refresh loop issues before redrawing (`magus server status --watch`).",
-			Raises: true,
-			Impl:   ImplClearScreen,
+			Name:    "clear_screen",
+			Doc:     "ClearScreen erases the screen and homes the cursor, the repaint a full-screen refresh loop issues before redrawing (`magus server status --watch`).",
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Impl:    ImplClearScreen,
 		},
 		{
-			Name:   "erase_lines",
-			Doc:    "EraseLines erases n lines ending at the cursor and leaves the cursor at column 0 of the topmost erased line, the redraw step for an in-place list that grows and shrinks (the picker).",
-			Args:   []std.Arg{{Name: "n"}},
-			Raises: true,
-			Impl:   ImplEraseLines,
+			Name:    "erase_lines",
+			Doc:     "EraseLines erases n lines ending at the cursor and leaves the cursor at column 0 of the topmost erased line, the redraw step for an in-place list that grows and shrinks (the picker).",
+			Args:    []std.Arg{{Name: "n"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Impl:    ImplEraseLines,
 		},
 		{
 			Name:    "copy",
 			Doc:     "Copy puts text on the SYSTEM clipboard using OSC 52, reporting whether it was attempted and how much was sent.",
 			Args:    []std.Arg{{Name: "text"}},
-			Returns: []std.Ret{{}},
-			Raises:  true,
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Impl:    ImplCopy,
 		},
 		{
@@ -79,11 +79,12 @@ var Module = std.Module{
 			Impl:    ImplInlineViewLines,
 		},
 		{
-			Name:   "inline_view_clear",
-			Doc:    "Clear erases the block, leaving the terminal as though the view never drew.",
-			Args:   []std.Arg{{Name: "inlineView"}},
-			Raises: true,
-			Impl:   ImplInlineViewClear,
+			Name:    "inline_view_clear",
+			Doc:     "Clear erases the block, leaving the terminal as though the view never drew.",
+			Args:    []std.Arg{{Name: "inlineView"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplInlineViewClear,
 		},
 		{
 			Name:    "inline_view_paint",
@@ -101,32 +102,34 @@ var Module = std.Module{
 			Impl:   ImplInlineViewFinish,
 		},
 		{
-			Name:   "reset_mouse_tracking",
-			Doc:    "ResetMouseTracking turns mouse reporting off unconditionally.",
-			Args:   []std.Arg{{Name: "p"}},
-			Raises: true,
-			Impl:   ImplResetMouseTracking,
+			Name:    "reset_mouse_tracking",
+			Doc:     "ResetMouseTracking turns mouse reporting off unconditionally.",
+			Args:    []std.Arg{{Name: "p"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplResetMouseTracking,
 		},
 		{
 			Name:    "open_input",
 			Doc:     "OpenInput puts in into raw mode, turns on mouse reporting on out, and returns the session that reads from it.",
 			Args:    []std.Arg{{Name: "p"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplOpenInput,
 		},
 		{
-			Name:   "input_close",
-			Doc:    "Close turns mouse reporting off and restores the terminal.",
-			Args:   []std.Arg{{Name: "input"}},
-			Raises: true,
-			Impl:   ImplInputClose,
+			Name:    "input_close",
+			Doc:     "Close turns mouse reporting off and restores the terminal.",
+			Args:    []std.Arg{{Name: "input"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplInputClose,
 		},
 		{
 			Name:    "input_read",
 			Doc:     "Read blocks until the user does something, and reports it.",
 			Args:    []std.Arg{{Name: "input"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + "Event" + ">"}},
 			Raises:  true,
 			Impl:    ImplInputRead,
 		},
@@ -236,23 +239,25 @@ var Module = std.Module{
 			Name:    "make_raw",
 			Doc:     "MakeRaw switches the terminal behind fd into raw mode, so a reader receives each keystroke as it is typed rather than a line at a time.",
 			Args:    []std.Arg{{Name: "fd"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeInt.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplMakeRaw,
 		},
 		{
-			Name:   "raw_mode_restore",
-			Doc:    "Restore puts the terminal back the way MakeRaw found it.",
-			Args:   []std.Arg{{Name: "rawMode"}},
-			Raises: true,
-			Impl:   ImplRawModeRestore,
+			Name:    "raw_mode_restore",
+			Doc:     "Restore puts the terminal back the way MakeRaw found it.",
+			Args:    []std.Arg{{Name: "rawMode"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplRawModeRestore,
 		},
 		{
-			Name:   "reset_scroll_margins",
-			Doc:    "ResetScrollMargins clears any DECSTBM margins on w unconditionally.",
-			Args:   []std.Arg{{Name: "p"}},
-			Raises: true,
-			Impl:   ImplResetScrollMargins,
+			Name:    "reset_scroll_margins",
+			Doc:     "ResetScrollMargins clears any DECSTBM margins on w unconditionally.",
+			Args:    []std.Arg{{Name: "p"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplResetScrollMargins,
 		},
 		{
 			Name:    "new_zone",
@@ -269,10 +274,10 @@ var Module = std.Module{
 			Impl:    ImplStderrZone,
 		},
 		{
-			Name:   "release_stderr_zone",
-			Doc:    "ReleaseStderrZone closes the process-wide zone and forgets it, handing back its rows and scroll margins.",
-			Raises: true,
-			Impl:   ImplReleaseStderrZone,
+			Name:    "release_stderr_zone",
+			Doc:     "ReleaseStderrZone closes the process-wide zone and forgets it, handing back its rows and scroll margins.",
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Impl:    ImplReleaseStderrZone,
 		},
 		{
 			Name:    "zone_wants_color",
@@ -308,16 +313,17 @@ var Module = std.Module{
 			Name:    "lease_set",
 			Doc:     "Set replaces this lease's band and repaints the zone, reporting whether the rows actually reached the terminal.",
 			Args:    []std.Arg{{Name: "lease"}, {Name: "rows"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplLeaseSet,
 		},
 		{
-			Name:   "lease_release",
-			Doc:    "Release gives this lease's rows back and repaints without them.",
-			Args:   []std.Arg{{Name: "lease"}},
-			Raises: true,
-			Impl:   ImplLeaseRelease,
+			Name:    "lease_release",
+			Doc:     "Release gives this lease's rows back and repaints without them.",
+			Args:    []std.Arg{{Name: "lease"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplLeaseRelease,
 		},
 		{
 			Name:    "zone_hit_test",
@@ -344,11 +350,12 @@ var Module = std.Module{
 			Impl:    ImplZoneHitSpan,
 		},
 		{
-			Name:   "lease_grow",
-			Doc:    "Grow enlarges this lease to rows.",
-			Args:   []std.Arg{{Name: "lease"}, {Name: "rows"}},
-			Raises: true,
-			Impl:   ImplLeaseGrow,
+			Name:    "lease_grow",
+			Doc:     "Grow enlarges this lease to rows.",
+			Args:    []std.Arg{{Name: "lease"}, {Name: "rows"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplLeaseGrow,
 		},
 		{
 			Name:    "lease_rows",
@@ -359,11 +366,12 @@ var Module = std.Module{
 			Impl:    ImplLeaseRows,
 		},
 		{
-			Name:   "zone_close",
-			Doc:    "Close releases every lease and hands the terminal back.",
-			Args:   []std.Arg{{Name: "zone"}},
-			Raises: true,
-			Impl:   ImplZoneClose,
+			Name:    "zone_close",
+			Doc:     "Close releases every lease and hands the terminal back.",
+			Args:    []std.Arg{{Name: "zone"}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeBool.BuzzName() + ">"}},
+			Raises:  true,
+			Impl:    ImplZoneClose,
 		},
 		{
 			Name:    "probe_is_terminal",
@@ -377,7 +385,7 @@ var Module = std.Module{
 			Name:    "probe_size",
 			Doc:     "Calls Probe.Size.",
 			Args:    []std.Arg{{Name: "probe"}, {Name: "fd"}},
-			Returns: []std.Ret{{}},
+			Returns: []std.Ret{{Object: "result\\Result::<" + std.TypeAny.BuzzName() + ">"}},
 			Raises:  true,
 			Impl:    ImplProbeSize,
 		},
@@ -800,22 +808,30 @@ func ImplHyperlink(ctx context.Context, aText string, aUri string) (string, erro
 }
 
 // ImplClearScreen binds github.com/egladman/magus/libs/termkit.ClearScreen.
-func ImplClearScreen(ctx context.Context) error {
-	return lib.ClearScreen(os.Stderr)
+func ImplClearScreen(ctx context.Context) (types.Result[bool], error) {
+	err := lib.ClearScreen(os.Stderr)
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplEraseLines binds github.com/egladman/magus/libs/termkit.EraseLines.
-func ImplEraseLines(ctx context.Context, aN int) error {
-	return lib.EraseLines(os.Stderr, aN)
+func ImplEraseLines(ctx context.Context, aN int) (types.Result[bool], error) {
+	err := lib.EraseLines(os.Stderr, aN)
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplCopy binds github.com/egladman/magus/libs/termkit.Copy.
-func ImplCopy(ctx context.Context, aText string) (int, error) {
+func ImplCopy(ctx context.Context, aText string) (types.Result[int], error) {
 	r0, err := lib.Copy(os.Stderr, aText)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return r0, nil
+	return types.Ok[int](r0), nil
 }
 
 // ImplNewInlineView binds github.com/egladman/magus/libs/termkit.NewInlineView.
@@ -849,12 +865,16 @@ func ImplInlineViewLines(ctx context.Context, inlineView int) (int, error) {
 }
 
 // ImplInlineViewClear binds github.com/egladman/magus/libs/termkit.InlineView.Clear.
-func ImplInlineViewClear(ctx context.Context, inlineView int) error {
+func ImplInlineViewClear(ctx context.Context, inlineView int) (types.Result[bool], error) {
 	recv, err := InlineViewHandles.Get(inlineView)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Clear()
+	err = recv.Clear()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplInlineViewPaint binds github.com/egladman/magus/libs/termkit.InlineView.Paint.
@@ -878,47 +898,55 @@ func ImplInlineViewFinish(ctx context.Context, inlineView int) error {
 }
 
 // ImplResetMouseTracking binds github.com/egladman/magus/libs/termkit.ResetMouseTracking.
-func ImplResetMouseTracking(ctx context.Context, aP int) error {
+func ImplResetMouseTracking(ctx context.Context, aP int) (types.Result[bool], error) {
 	vP, err := convert.Handle(ProbeHandles, aP)
 	if err != nil {
-		return fmt.Errorf("p: %w", err)
+		return types.Result[bool]{}, fmt.Errorf("p: %w", err)
 	}
-	return lib.ResetMouseTracking(os.Stderr, vP)
+	err = lib.ResetMouseTracking(os.Stderr, vP)
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplOpenInput binds github.com/egladman/magus/libs/termkit.OpenInput.
-func ImplOpenInput(ctx context.Context, aP int) (int, error) {
+func ImplOpenInput(ctx context.Context, aP int) (types.Result[int], error) {
 	vP, err := convert.Handle(ProbeHandles, aP)
 	if err != nil {
-		return 0, fmt.Errorf("p: %w", err)
+		return types.Result[int]{}, fmt.Errorf("p: %w", err)
 	}
 	r0, err := lib.OpenInput(os.Stdin, os.Stderr, vP)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return InputHandles.Put(r0), nil
+	return types.Ok[int](InputHandles.Put(r0)), nil
 }
 
 // ImplInputClose binds github.com/egladman/magus/libs/termkit.Input.Close.
-func ImplInputClose(ctx context.Context, input int) error {
+func ImplInputClose(ctx context.Context, input int) (types.Result[bool], error) {
 	recv, err := InputHandles.Get(input)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Close()
+	err = recv.Close()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplInputRead binds github.com/egladman/magus/libs/termkit.Input.Read.
-func ImplInputRead(ctx context.Context, input int) (map[string]any, error) {
+func ImplInputRead(ctx context.Context, input int) (types.Result[lib.Event], error) {
 	recv, err := InputHandles.Get(input)
 	if err != nil {
-		return nil, err
+		return types.Result[lib.Event]{}, err
 	}
 	r0, err := recv.Read(ctx)
 	if err != nil {
-		return nil, err
+		return types.Result[lib.Event]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return EncodeEvent(r0), nil
+	return types.Ok[lib.Event](r0), nil
 }
 
 // ImplInputCursorPosition binds github.com/egladman/magus/libs/termkit.Input.CursorPosition.
@@ -1042,25 +1070,29 @@ func ImplProseItem(ctx context.Context, aP int, aLabel string, aSentences []stri
 }
 
 // ImplMakeRaw binds github.com/egladman/magus/libs/termkit.MakeRaw.
-func ImplMakeRaw(ctx context.Context, aFd int) (int, error) {
+func ImplMakeRaw(ctx context.Context, aFd int) (types.Result[int], error) {
 	vFd, err := convert.IntAs[uintptr](aFd)
 	if err != nil {
-		return 0, fmt.Errorf("fd: %w", err)
+		return types.Result[int]{}, fmt.Errorf("fd: %w", err)
 	}
 	r0, err := lib.MakeRaw(vFd)
 	if err != nil {
-		return 0, err
+		return types.Result[int]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return RawModeHandles.Put(r0), nil
+	return types.Ok[int](RawModeHandles.Put(r0)), nil
 }
 
 // ImplRawModeRestore binds github.com/egladman/magus/libs/termkit.RawMode.Restore.
-func ImplRawModeRestore(ctx context.Context, rawMode int) error {
+func ImplRawModeRestore(ctx context.Context, rawMode int) (types.Result[bool], error) {
 	recv, err := RawModeHandles.Get(rawMode)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Restore()
+	err = recv.Restore()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplLineSpansCopy binds github.com/egladman/magus/libs/termkit.Line.SpansCopy.
@@ -1070,12 +1102,16 @@ func ImplLineSpansCopy(ctx context.Context, recv lib.Line) (any, error) {
 }
 
 // ImplResetScrollMargins binds github.com/egladman/magus/libs/termkit.ResetScrollMargins.
-func ImplResetScrollMargins(ctx context.Context, aP int) error {
+func ImplResetScrollMargins(ctx context.Context, aP int) (types.Result[bool], error) {
 	vP, err := convert.Handle(ProbeHandles, aP)
 	if err != nil {
-		return fmt.Errorf("p: %w", err)
+		return types.Result[bool]{}, fmt.Errorf("p: %w", err)
 	}
-	return lib.ResetScrollMargins(os.Stderr, vP)
+	err = lib.ResetScrollMargins(os.Stderr, vP)
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplNewZone binds github.com/egladman/magus/libs/termkit.NewZone.
@@ -1095,8 +1131,12 @@ func ImplStderrZone(ctx context.Context) (int, error) {
 }
 
 // ImplReleaseStderrZone binds github.com/egladman/magus/libs/termkit.ReleaseStderrZone.
-func ImplReleaseStderrZone(ctx context.Context) error {
-	return lib.ReleaseStderrZone()
+func ImplReleaseStderrZone(ctx context.Context) (types.Result[bool], error) {
+	err := lib.ReleaseStderrZone()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplZoneWantsColor binds github.com/egladman/magus/libs/termkit.Zone.WantsColor.
@@ -1136,29 +1176,33 @@ func ImplLeaseEnabled(ctx context.Context, lease int) (bool, error) {
 }
 
 // ImplLeaseSet binds github.com/egladman/magus/libs/termkit.Lease.Set.
-func ImplLeaseSet(ctx context.Context, lease int, aRows any) (bool, error) {
+func ImplLeaseSet(ctx context.Context, lease int, aRows any) (types.Result[bool], error) {
 	recv, err := LeaseHandles.Get(lease)
 	if err != nil {
-		return false, err
+		return types.Result[bool]{}, err
 	}
 	vRows, err := convert.DecodeSlice(aRows, func(x any) (lib.Line, error) { return DecodeLine(x) })
 	if err != nil {
-		return false, fmt.Errorf("rows: %w", err)
+		return types.Result[bool]{}, fmt.Errorf("rows: %w", err)
 	}
 	r0, err := recv.Set(vRows)
 	if err != nil {
-		return false, err
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return r0, nil
+	return types.Ok[bool](r0), nil
 }
 
 // ImplLeaseRelease binds github.com/egladman/magus/libs/termkit.Lease.Release.
-func ImplLeaseRelease(ctx context.Context, lease int) error {
+func ImplLeaseRelease(ctx context.Context, lease int) (types.Result[bool], error) {
 	recv, err := LeaseHandles.Get(lease)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Release()
+	err = recv.Release()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplZoneHitTest binds github.com/egladman/magus/libs/termkit.Zone.HitTest.
@@ -1192,12 +1236,16 @@ func ImplZoneHitSpan(ctx context.Context, zone int, aRow int, aCol int) (any, er
 }
 
 // ImplLeaseGrow binds github.com/egladman/magus/libs/termkit.Lease.Grow.
-func ImplLeaseGrow(ctx context.Context, lease int, aRows int) error {
+func ImplLeaseGrow(ctx context.Context, lease int, aRows int) (types.Result[bool], error) {
 	recv, err := LeaseHandles.Get(lease)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Grow(aRows)
+	err = recv.Grow(aRows)
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplLeaseRows binds github.com/egladman/magus/libs/termkit.Lease.Rows.
@@ -1211,12 +1259,16 @@ func ImplLeaseRows(ctx context.Context, lease int) (int, error) {
 }
 
 // ImplZoneClose binds github.com/egladman/magus/libs/termkit.Zone.Close.
-func ImplZoneClose(ctx context.Context, zone int) error {
+func ImplZoneClose(ctx context.Context, zone int) (types.Result[bool], error) {
 	recv, err := ZoneHandles.Get(zone)
 	if err != nil {
-		return err
+		return types.Result[bool]{}, err
 	}
-	return recv.Close()
+	err = recv.Close()
+	if err != nil {
+		return types.Result[bool]{Error: &types.Diagnostic{Message: err.Error()}}, nil
+	}
+	return types.Ok[bool](true), nil
 }
 
 // ImplProbeIsTerminal binds github.com/egladman/magus/libs/termkit.Probe.IsTerminal.
@@ -1234,20 +1286,20 @@ func ImplProbeIsTerminal(ctx context.Context, probe int, aFd int) (bool, error) 
 }
 
 // ImplProbeSize binds github.com/egladman/magus/libs/termkit.Probe.Size.
-func ImplProbeSize(ctx context.Context, probe int, aFd int) (any, error) {
+func ImplProbeSize(ctx context.Context, probe int, aFd int) (types.Result[any], error) {
 	recv, err := ProbeHandles.Get(probe)
 	if err != nil {
-		return nil, err
+		return types.Result[any]{}, err
 	}
 	vFd, err := convert.IntAs[uintptr](aFd)
 	if err != nil {
-		return nil, fmt.Errorf("fd: %w", err)
+		return types.Result[any]{}, fmt.Errorf("fd: %w", err)
 	}
 	r0, r1, err := recv.Size(vFd)
 	if err != nil {
-		return nil, err
+		return types.Result[any]{Error: &types.Diagnostic{Message: err.Error()}}, nil
 	}
-	return []any{r0, r1}, nil
+	return types.Ok[any]([]any{r0, r1}), nil
 }
 
 // ImplSGRBold reads github.com/egladman/magus/libs/termkit.SGRBold.

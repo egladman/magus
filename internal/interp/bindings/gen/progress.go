@@ -21,6 +21,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
 	m := vm.NewMap()
+	enums := ffi.SessionEnums(ctx, sess, "termkit/progress")
 	m.MapSet("bar", vm.DirectValue("progress.bar", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		done := ffi.Int(bzArgs, 0, 0)
 		total := ffi.Int(bzArgs, 1, 0)
@@ -30,7 +31,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.AnyMapVal(ret0), nil
+		return ObjectTermkitLine(ret0, enums), nil
 	}))
 	m.MapSet("loaderWidth", vm.DirectValue("progress.loaderWidth", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		loader := ffi.Int(bzArgs, 0, 0)
@@ -84,7 +85,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newGlyph", vm.DirectValue("progress.newGlyph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name, err := ffi.EnumArgument(bzArgs, 0, "GlyphName", []libprogress.GlyphName{"glyph/dots", "glyph/orbit", "glyph/pulse", "glyph/triangle", "glyph/spark", "glyph/line"})
@@ -95,7 +96,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newStrip", vm.DirectValue("progress.newStrip", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name, err := ffi.EnumArgument(bzArgs, 0, "StripName", []libprogress.StripName{"strip/scanner", "strip/equalizer", "strip/shade", "strip/snake", "strip/sine", "strip/dots"})
@@ -106,7 +107,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newText", vm.DirectValue("progress.newText", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name, err := ffi.EnumArgument(bzArgs, 0, "TextName", []libprogress.TextName{"text/shimmer", "text/typewriter"})
@@ -117,7 +118,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newSpan", vm.DirectValue("progress.newSpan", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name, err := ffi.EnumArgument(bzArgs, 0, "SpanName", []libprogress.SpanName{"span/comet", "span/progress"})
@@ -128,7 +129,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("newColumn", vm.DirectValue("progress.newColumn", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name, err := ffi.EnumArgument(bzArgs, 0, "ColumnName", []libprogress.ColumnName{"column/fill", "column/elevator"})
@@ -139,7 +140,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("startSpinner", vm.DirectValue("progress.startSpinner", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		p := ffi.Int(bzArgs, 0, 0)
@@ -148,7 +149,7 @@ func RegisterProgress(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.IntVal(ret0), nil
+		return ObjectResultOfInt(ret0), nil
 	}))
 	m.MapSet("spinnerStop", vm.DirectValue("progress.spinnerStop", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		spinner := ffi.Int(bzArgs, 0, 0)
