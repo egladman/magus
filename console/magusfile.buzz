@@ -1,9 +1,9 @@
 import "magus";
 import "proc";
 import "result";
-import "../hack/magusfile/advisories" as advisories;
-import "../hack/magusfile/toolchain-policy" as policy;
-import "../hack/magusfile/index" as index;
+import "../magusfiles/quality/advisories" as advisories;
+import "../magusfiles/release/toolchain-policy" as policy;
+import "../magusfiles/build/index" as index;
 import "fs";
 import "proc";
 import "std";

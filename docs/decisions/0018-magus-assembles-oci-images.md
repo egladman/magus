@@ -48,7 +48,7 @@ layout to a registry. `Index` joins single-platform layouts into one image index
 | -------------------------------------------------------------------------------------------- | ----- |
 | `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | done  |
 | The std `image` module, trampolines generated like `archive`                                 | done  |
-| Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | done  |
+| Our own static image Spec, a Buzz file under [hack/magusfile/](https://github.com/egladman/magus/tree/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/) that `magusfile.buzz` imports | done  |
 | Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | done  |
 | The release path publishes the layout instead of running `docker buildx`                     | done  |
 
@@ -190,7 +190,7 @@ files and settings while Go owns the bytes.
    What the dynamic image gives is Buzz FFI on glibc: purego's dynamic import needs the
    loader `distroless/cc` carries. So it is built `CGO_ENABLED=0` without `noffi`, on
    `distroless/cc:nonroot` pinned by digest, and no package layer is needed. Both specs
-   live in `hack/magusfile/image.buzz`, and both Dockerfiles are deleted.
+   live in [hack/magusfile/image.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/image.buzz), and both Dockerfiles are deleted.
 3. **Assemble debugging and output verbs (D6).** Receipt/trace, size inventory, and Layout
    as the primary artifact are the stance (see the 2026-10-26 amendment). Open: whether a
    first-class `magus image inspect` / layout-to-tar / debugger-style step flags are needed

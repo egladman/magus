@@ -2,8 +2,8 @@
 // nothing in the magus module imports this module.
 
 import "magus";
-import "../../hack/magusfile/index" as index;
-import "../../hack/magusfile/run-golangci" as golangci;
+import "../../magusfiles/build/index" as index;
+import "../../magusfiles/quality/run-golangci" as golangci;
 
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.

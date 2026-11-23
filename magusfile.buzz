@@ -1,17 +1,16 @@
 import "magus";
-import "./hack/magusfile/toolchain-policy" as policy;
-import "./hack/magusfile/drift" as drift;
-import "./hack/magusfile/library-bindings" as librarybindings;
-import "./hack/magusfile/run-golangci" as golangci;
-import "./hack/magusfile/harness" as hostconfig;
+import "./magusfiles/release/toolchain-policy" as policy;
+import "./magusfiles/quality/drift" as drift;
+import "./magusfiles/quality/run-golangci" as golangci;
+import "./magusfiles/build/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
-import "./hack/magusfile/toolchain" as toolchains;
-import "./hack/magusfile/commits" as commits;
+import "./magusfiles/release/toolchain" as toolchains;
+import "./magusfiles/release/commits" as commits;
 import "./hack/policy/commits" as wording;
 import "./hack/policy/pull_requests" as descriptions;
-import "./hack/magusfile/changelog" as changelog;
-import "./hack/magusfile/advisories" as advisories;
-import "./hack/magusfile/deviations" as deviations;
+import "./magusfiles/release/changelog" as changelog;
+import "./magusfiles/quality/advisories" as advisories;
+import "./hack/ci/modules/deviations" as deviations;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
@@ -46,16 +45,16 @@ import "magus/spell/bash";
 import "magus/spell/buzz";
 
 import "image";
-import "./hack/magusfile/image" as images;
-import "./hack/magusfile/badges" as badges;
-import "./hack/magusfile/coverage" as cov;
-import "./hack/magusfile/buzz-coverage" as buzzcov;
+import "./magusfiles/build/image" as images;
+import "./magusfiles/quality/badges" as badges;
+import "./magusfiles/quality/coverage" as cov;
+import "./magusfiles/quality/buzz-coverage" as buzzcov;
 
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
-import "./hack/magusfile/releases" as releases;
+import "./magusfiles/release/releases" as releases;
 import "./libs/proofread/proofread" as proofread;
-import "./hack/magusfile/mockassert" as mockassert;
+import "./hack/dev/modules/mockassert" as mockassert;
 import "spells/golang/gomod";
 
 import "project/libs/gopherbuzz";
@@ -108,7 +107,7 @@ import "spells/github/review" as ghReview;
 magus\review.provider(ghReview);
 
 import "magus/modeltiers" as modeltiers;
-import "./hack/magusfile/model-tiers" as tierhost;
+import "./hack/policy/model-tiers" as tierhost;
 
 // The return value is the harness id a hosts key has to be. claude-code-mod wires
 // settings, not a model, so it stays out of the map.
@@ -1099,10 +1098,12 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "types", "-from", "internal/queue/provider/host.go"]);
 }
 
-// Boundary generation reflects over these library bindings.
 export fun termkit_bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["std/termkit/gen/**/*.go"]);
-    librarybindings\generate(ctx, args: args);
+    ctx.readsFiles(["libs/termkit/**/*.go", "internal/generate/emit/*.go",
+        "cmd/magus-libmodules/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"]);
+    _ = proc\exec("go", ["run", "./cmd/magus-libmodules", "-dir", "libs/termkit",
+        "-outdir", "std/termkit/gen", "-import", "github.com/egladman/magus/std/termkit/gen"]);
 }
 
 // Regenerates the Go host bindings from std.Module declarations.
@@ -1175,8 +1176,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
               buzz_generate, config_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
-        "hack/magusfile/mockassert.buzz",
-        "internal/spell/gen/types/*.buzz",
+        "hack/dev/modules/mockassert.buzz", "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go"]);
     ctx.writesFiles(["**/gen/*test/*.go", "**/mocks_test.go"]);
@@ -3018,7 +3018,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate, textsearch\install, symbol_digest_generate);
     ctx.readsFiles(["gen/symbol-index.json"]);
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
-        "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "magusfiles/*/*.buzz", "hack/dev/modules/*.buzz", "hack/ci/modules/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml",
         ".github/workflows/queue-intent.yaml", ".github/workflows/deliberate-break.yaml"]);
     // lcov.info is the profile the buzz spell declares for change risk.
@@ -3174,7 +3174,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 // naming each file and the command that merges it. It only reads: magus never writes
 // host config. The reads are what `magus describe harness` plans from.
 export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["magusfile.buzz", "hack/magusfile/harness.buzz", "spells/harness/**/*.buzz",
+    ctx.readsFiles(["magusfile.buzz", "magusfiles/build/harness.buzz", "spells/harness/**/*.buzz",
                     ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                     ".codex/rules/*.rules", "opencode.json"]);
     final plans = magus\describe.harness();

@@ -46,9 +46,9 @@ import "term";
 import "time";
 import "vcs";
 import "hack/lib/prompt";
-import "hack/magusfile/commits" as commits;
+import "magusfiles/release/commits" as commits;
 import "hack/dev/rebase-branches-onto-base" as rebaseonto;
-import "hack/magusfile/regressions" as regressions;
+import "hack/ci/modules/regressions" as regressions;
 import "../../.github/actions/advice/diagram-link" as diagramlink;
 
 import "assert";

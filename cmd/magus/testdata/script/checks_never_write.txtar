@@ -3,7 +3,7 @@
 # the tree against the snapshot it took first, and puts every path back before it throws.
 # drift.buzz is the real file, copied from the repository through the templates path.
 
-cp $__MAGUS_TEMPLATES/../../../../hack/magusfile/drift.buzz drift.buzz
+cp $__MAGUS_TEMPLATES/../../../../magusfiles/quality/drift.buzz drift.buzz
 
 exec git init
 exec git config user.email test@example.com

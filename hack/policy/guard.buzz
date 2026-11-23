@@ -59,8 +59,8 @@
 //   change-role-spawn-not-isolated (deny, spawn): a code-changing worker sharing a checkout.
 //   commit-subject (deny): a message recorded with -m by git, hg or sl commit, or jj commit
 //     or describe, that carries an attribution or a body, or whose subject breaks the form
-//     its branch takes: the conventional subject hack/magusfile/commits.buzz defines on the base
-//     branch, one lowercase imperative line anywhere else.
+//     its branch takes. The base uses conventional subjects. Other branches
+//     take one lowercase imperative line.
 //   pull-request-text (deny, named): a pull request title, description or review reply,
 //     posted by any forge command its table lists, with a finding proofread in
 //     libs/proofread decides deny under hack/policy/proofread.buzz, a description past
@@ -118,7 +118,7 @@ import "./hack/policy/sealed" as sealed;
 import "./hack/policy/branches" as branches;
 import "./hack/policy/mandate" as mandate;
 import "./hack/policy/version-bumps" as versions;
-import "./hack/magusfile/commits" as conventional;
+import "./magusfiles/release/commits" as conventional;
 
 // noForge is a verb that recognizes no command as opening a pull request.
 fun noForge(argv: [str]) > {str: str}? {

@@ -74,7 +74,7 @@ the stable part of a finding. Each field rename yields two findings,
 
 ### Security scans want the same thing, with a different lifetime
 
-`hack/magusfile/advisories.buzz` judges `pnpm audit` and `govulncheck` itself. A
+`magusfiles/quality/advisories.buzz` judges `pnpm audit` and `govulncheck` itself. A
 finding with no installable patch, or one younger than the ten-day `minimumReleaseAge`, is
 deferred automatically: printed, never fatal, and blocking on its own the day the patch
 matures. A finding the base already carried is let through on a change and fails main.
@@ -97,7 +97,7 @@ already has. The inventory, from `magus query "kind=symbol ..."` and `magus refs
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `types.Finding` (`magus/lint` in Buzz)        | Path, Line, Col, Rule, Message, Fix, URL                                                                      | 38 Buzz files: every `hack/lint` rule, docs conventions                |
 | `spells.Diagnostic`                           | File, Line, Col, Severity, Code, Message                                                                      | nothing outside its tests; `ParseDiagnostics` has no production caller |
-| `Finding` in `hack/magusfile/advisories.buzz` | id, installed, summary, fix, actionable, deferral                                                             | the two security gates                                                 |
+| `Finding` in `magusfiles/quality/advisories.buzz` | id, installed, summary, fix, actionable, deferral                                                             | the two security gates                                                 |
 | `types.JobProblem`                            | Code, Field, Subject, Message, Fix, Edit                                                                      | job record validation                                                  |
 | `types.JobWaiver`                             | Code, Subject, Reason; `Waives` matches code and subject, a glob for two codes; `Waivable` limits which codes | job records (MGS3043, MGS3044, gate not run)                           |
 | proofread `Finding` and suppressions          | rule, span, reason required; unused is PRF1090                                                                | `libs/proofread`, a library that never imports magus                   |
@@ -469,7 +469,7 @@ owns the base: magus does, for every op declaring `compares-base`. The `gha` cha
 ### 2026-10-24: reopened to reuse the finding and waiver records
 
 Before any code landed, Eli asked that the security scans in
-`hack/magusfile/advisories.buzz` use the same mechanism, and then stopped the build: the
+[hack/magusfile/advisories.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/advisories.buzz) use the same mechanism, and then stopped the build: the
 draft's `AcceptedFinding` and `AcceptedEntry` repeated `types.Finding` and
 `types.JobWaiver`. The draft code was deleted unmerged. Context gained the scans'
 lifetime, the measured buf exit status and fingerprint, the inventory of existing
@@ -507,7 +507,7 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 
 - **The ledger** is `<project>/<gate>.deviations.jsonl`, one Deviation per line, so the
   draft's `accepted.jsonl`, `target`, `op` and `findings` fields are gone.
-- **The judgment** is `hack/magusfile/deviations.buzz`. `permitAdded` counts the lines the
+- **The judgment** is `hack/ci/modules/deviations.buzz`. `permitAdded` counts the lines the
   tree holds more copies of than the base, which also covers uncommitted work. Go adds
   one generic op option, `allowFailure`, and no `compares-base` or parser.
 - **Scans are not built.** `advisories.buzz` keeps its policy and "no allowlist to rot"

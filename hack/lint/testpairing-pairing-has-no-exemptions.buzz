@@ -28,7 +28,7 @@ final NAMED = std\pattern(`//nolint:([\w,.-]+)`);
 final FIX = "Pair the test file instead: move its tests into the _test.go of the file they exercise, or move the code it owns into a same-stem .go file.";
 
 export fun reads() > [str] {
-    return [".golangci.yml", "magusfile.buzz", "hack/magusfile/run-golangci.buzz", "**/*_test.go",
+    return [".golangci.yml", "magusfile.buzz", "magusfiles/quality/run-golangci.buzz", "**/*_test.go",
             "libs/conventions/**/*_test.go",
             "libs/diagnostics/**/*_test.go", "libs/diagram/**/*_test.go",
             "libs/gopherbuzz/**/*_test.go", "libs/proofread/**/*_test.go",
@@ -40,7 +40,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (f in files) {
         final isConfig = f.value == ".golangci.yml";
-        final isRun = f.value == "magusfile.buzz" or f.value == "hack/magusfile/run-golangci.buzz";
+        final isRun = f.value == "magusfile.buzz" or f.value == "magusfiles/quality/run-golangci.buzz";
         if (!isConfig and !isRun and f.value.indexOf("/testdata/") != null) {
             continue;
         }

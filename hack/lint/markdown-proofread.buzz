@@ -30,8 +30,7 @@
 //     steps that open with their verb, and no word telling the reader a step is easy.
 //   - A changelog fragment (FRAGMENTS) is judged as a changelog: its group heading names one
 //     of the six Keep a Changelog groups and an entry says what changed for the user, not
-//     only a Go identifier. hack/magusfile/changelog.buzz holds the grammar these rules sit
-//     beside.
+//     only a Go identifier. The release changelog module owns the grammar.
 //
 // .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
 // enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
@@ -104,8 +103,7 @@ final GUIDES = ["docs/guides/**"];
 // index, the standard and the refusals table beside them stay reference pages.
 final PRINCIPLES = ["docs/design/principles/*.md", "docs/design/judgment/*.md"];
 
-// FRAGMENTS are the changelog fragments: one Keep a Changelog group heading and one entry
-// each, which changes/README.md describes and hack/magusfile/changelog.buzz parses.
+// FRAGMENTS follows the format in changes/README.md.
 final FRAGMENTS = ["changes/unreleased/*.md"];
 
 // kindOf is proofread's kind for the hand-written file at rel: a skill body the

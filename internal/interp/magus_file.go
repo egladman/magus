@@ -187,7 +187,7 @@ func (p *ImportProbes) MarkNotSpell(path string, size int64, modTime time.Time) 
 //	  itself imports is not part of the key, so an edit to it mid-run is not seen
 //	  until the run ends.
 //	assumes: the key is absolute; a relative import string such as
-//	  ../../hack/magusfile/index names a different file from each project.
+//	  ../../magusfiles/build/index names a different file from each project.
 func (p *ImportProbes) SpellAt(path, dir, src string) (spec spells.Descriptor, notSpell, known bool) {
 	if p == nil {
 		return spells.Descriptor{}, false, false

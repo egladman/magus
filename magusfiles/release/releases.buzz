@@ -1,0 +1,1034 @@
+// releases is the version-selection machinery behind the root magusfile's
+// `release` and `release-index` targets: which modules version independently,
+// what each is at now, what it may legally move to next, the one manifest edit
+// a Go release needs, and the names a release-index publish commits under.
+//
+// A sibling module rather than part of magusfile.buzz because none of this is
+// magus's build - it is a body of rules about semantic versioning that the build
+// merely calls. Named `releases`, not `release`, because a target of the same name
+// SHADOWS an import and nulls its members. The importer must also ALIAS it: an
+// unaliased import flat-merges these exports into the magusfile's scope, where
+// magus reads every exported fun as a target and rejects one whose first parameter
+// is not a magus\Context (MGS1008). Both hazards are why docs/magusfile.buzz
+// imports its sibling SSG as `renderer`.
+//
+// Everything here COMPUTES; nothing decides. Choosing which of the three candidate
+// versions a change deserves is a judgment about what breaks for a consumer, and
+// that belongs to a human. See the `release` target for the policy that uses these.
+import "result";
+import "vcs";
+import "semver";
+import "crypto";
+import "encoding/json";
+import "fs";
+import "serialize";
+import "std"; // assert, for the in-file test blocks below
+import "assert";
+
+// releasableModules enumerates every independently-versioned project: one whose
+// resolved spells declare a manifest (spells.Spell.Manifests, the language's
+// go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually
+// present in its directory - types.ProjectEntry.Manifests, read by the caller via
+// magus\describe.project() and passed in as projects, already did the "does the candidate
+// file exist" filesystem check. Taking the inventory as a parameter rather than calling
+// magus\describe.project() itself keeps this module doing what its header promises - COMPUTING,
+// not reading the workspace - and releases.buzz has no reason to import "magus"
+// only to hand every entry straight to a foreach.
+//
+// Declaration beats inference here because inference already guessed wrong
+// twice. A `libs/` location rule missed every independently-versioned project
+// OUTSIDE libs/ (console, docs each ship their own package.json) - being visible
+// and unreleased is a fact a human can act on, being invisible is not. npm's
+// "private" flag was tried next and is wrong for a different reason: private is a
+// PUBLISH flag (don't push to a registry), not a version flag - a private
+// package.json still carries a real version that can drift out of sync with the
+// rest of the workspace, so filtering on it silently dropped projects that DO
+// version, they just don't publish. This target reports what CARRIES A VERSION;
+// the human still decides what to actually release.
+//
+// key/prefix mirror what Go requires of a nested module's tags, and work just as
+// well for the others: the root releases as `vX.Y.Z`, a project at libs/foo as
+// `libs/foo/vX.Y.Z`. key is the same string a human types, so what you name is
+// exactly what gets tagged.
+//
+// gomodule is the Go module path when the RESOLVED manifest (manifests[0], the
+// first candidate present - see spells.Spell.Manifests's ordering contract) is
+// go.mod, "" otherwise. It decides whether releasing a project also has to
+// repoint the root's go.mod - a non-Go project is tag-only, because nothing in
+// go.mod requires it.
+export fun releasableModules(projects: [any]) > [{str: str}] {
+    // projects is [any], not [ProjectEntry]: releases.buzz imports no "magus" (see
+    // header), so it has no way to name that type, and reads each entry by bracket
+    // key instead of dot field the way this file's own {str: str} records already do.
+    var mods = mut [];
+    foreach (p in projects) {
+        final manifests = p["manifests"];
+        if (manifests.len() == 0) { continue; } // no manifest present: not independently versioned
+        final path = "{p["path"]}";
+        final isRoot = path == ".";
+        final manifest = manifests[0]; // first-existing-file-wins
+        var gomodule = "";
+        // The root's own go.mod is never repointed to itself; gomodule only
+        // matters for a NESTED module the root's go.mod can require.
+        if (manifest == "go.mod" and !isRoot) {
+            gomodule = "github.com/egladman/magus/" + path;
+        }
+        var key = path;
+        var prefix = path + "/";
+        var root = "";
+        if (isRoot) {
+            key = "magus";
+            prefix = "";
+            root = "yes";
+        }
+        mods.append({"key": key, "prefix": prefix, "gomodule": gomodule,
+                     "dir": path, "root": root});
+    }
+    return mods;
+}
+
+// isReleaseTag reports whether name is a ROOT release tag: "v" followed by a
+// digit, with no module prefix.
+//
+// A `v*` refspec is not a version filter: this repository's `verified-refinements`
+// tag matches the glob and has been read once as the current release. The "/" check
+// makes the answer root-specific, so a caller handed the unfiltered tag list cannot
+// take libs/gopherbuzz/v0.1.0 for the magus release beside it.
+//
+// A name shape rather than a semver parse, because parsing says what a tag means
+// and this says which tags are eligible to be asked. docs/site/release.buzz keeps
+// its own isVersionTag: self-contained on lib/text, it unit-tests inside the docs
+// project.
+export fun isReleaseTag(name: str) > bool {
+    if (!name.startsWith("v")) { return false; }
+    if (name.indexOf("/") != null) { return false; }
+    if (name.len() < 2) { return false; }
+    final b = name.byte(1);
+    return b >= 48 and b <= 57;
+}
+
+test "isReleaseTag accepts root release tags and rejects the lookalikes" {
+    std\assert(isReleaseTag("v0.4.0"), message: "a plain release tag");
+    std\assert(isReleaseTag("v1.0.0-rc.1"), message: "a prerelease suffix");
+    std\assert(!isReleaseTag("verified-refinements"), message: "the tag that caused this");
+    std\assert(!isReleaseTag("vendor"), message: "a word starting with v");
+    std\assert(!isReleaseTag("libs/gopherbuzz/v0.1.0"), message: "a nested module's tag is not the root's");
+    std\assert(!isReleaseTag("0.4.0"), message: "no leading v");
+    std\assert(!isReleaseTag("v"), message: "nothing after the v");
+    std\assert(!isReleaseTag(""), message: "the empty name");
+}
+
+// rootReleaseTag returns the first ROOT release tag in names, or "" when none is there.
+// isReleaseTag rejects a "/", so no separate prefix filter is needed.
+//
+// Shared by the magusfile's exact_release_tag and by the release checks, which ask
+// what version a commit would stamp once tags exist that do not yet. A second
+// implementation of the rule could drift from this one.
+export fun rootReleaseTag(names: [str]) > str {
+    foreach (n in names) {
+        if (isReleaseTag(n)) { return n; }
+    }
+    return "";
+}
+
+test "the root release tag is picked out of a mixed tag set" {
+    std\assert(rootReleaseTag(["libs/diagnostics/v0.1.0", "v0.4.0"]) == "v0.4.0",
+        message: "the root tag wins over a namespaced one at any position");
+    std\assert(rootReleaseTag(["libs/diagnostics/v0.1.0"]) == "",
+        message: "a library-only release stamps no root version");
+    std\assert(rootReleaseTag(["verified-refinements", "v1.0.0"]) == "v1.0.0",
+        message: "a `v*` lookalike is not a release tag");
+    std\assert(rootReleaseTag([<str>]) == "", message: "an untagged commit");
+}
+
+// matchesGlob reports whether name matches pattern, where a single "*" stands for any run
+// of characters that does not cross "/".
+//
+// The "/" restriction is the semantics of both the shell glob release.yaml's upload step
+// expands and the ref filter its `v*` tag trigger applies, and it is what a version
+// carrying a "/" violates: the v0.4.0 assets were named
+// magus_libs/diagnostics/v0.1.0_<os>_<arch>.tar.gz, real files under
+// dist/magus_libs/diagnostics/ that dist/magus_*.tar.gz could not see. A prefix/suffix
+// test calls that a match.
+//
+// One star, because both patterns this checks have one. A starless pattern is an equality
+// test; a second star raises rather than being read as a literal.
+export fun matchesGlob(pattern: str, name: str) > bool !> any {
+    final star = pattern.indexOf("*");
+    if (star == null) { return pattern == name; }
+    final head = pattern.sub(0, star);
+    final tail = pattern.sub(star + 1);
+    if (tail.indexOf("*") != null) {
+        throw "matchesGlob: `" + pattern + "` has more than one `*`, which this matcher does not model";
+    }
+    if (name.len() < head.len() + tail.len()) { return false; }
+    if (!name.startsWith(head)) { return false; }
+    if (!name.endsWith(tail)) { return false; }
+    return name.sub(head.len(), len: name.len() - head.len() - tail.len()).indexOf("/") == null;
+}
+
+test "a glob star stays inside one path segment" {
+    std\assert(matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_v0.4.0_linux_amd64_static.tar.gz"),
+        message: "the name a healthy release writes");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz",
+        name: "dist/magus_libs/diagnostics/v0.1.0_linux_amd64_static.tar.gz"),
+        message: "the name the v0.4.0 release wrote, which the upload never found");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", name: "dist/SHA256SUMS"), message: "a different asset");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_.tar.gz.other"), message: "trailing text");
+    std\assert(matchesGlob("dist/magus_*.tar.gz", name: "dist/magus_.tar.gz"), message: "an empty star");
+    std\assert(matchesGlob("v*", name: "v0.4.0"), message: "the workflow's tag trigger");
+    std\assert(!matchesGlob("v*", name: "libs/gopherbuzz/v0.1.0"), message: "a nested tag starts no release run");
+    std\assert(matchesGlob("exact", name: "exact"), message: "a starless pattern is equality");
+    std\assert(!matchesGlob("exact", name: "exactly"), message: "a starless pattern is not a prefix test");
+}
+
+// toSlash rewrites a path's separators to "/", as Go's filepath.ToSlash does.
+//
+// An asset glob is workflow vocabulary: actions/upload-artifact and the publish shell
+// speak "/" on every runner, and the uploader normalizes separators before matching.
+// fs\join speaks the OS. Anything checked against one of those globs goes through here
+// first. A backslash then reads as a separator on every platform, stricter than Linux
+// alone requires and intended: an asset name carrying one is unbuildable on the Windows
+// runner. A version carrying "/" still fails, so this cannot mask what the glob catches.
+export fun toSlash(path: str) > str {
+    return path.replace("\\", with: "/");
+}
+
+test "a windows-joined asset path matches the upload glob" {
+    // The v0.4.1 windows job, which refused this exact name.
+    std\assert(matchesGlob("dist/magus_*.tar.gz",
+        name: toSlash("dist\\magus_v0.4.1_windows_amd64_static.tar.gz")),
+        message: "a backslash-joined asset is what the uploader collects");
+    std\assert(matchesGlob("dist/magus_*.tar.gz",
+        name: toSlash("dist/magus_v0.4.1_linux_amd64_static.tar.gz")),
+        message: "a slash-joined asset is unchanged");
+    std\assert(!matchesGlob("dist/magus_*.tar.gz",
+        name: toSlash("dist\\magus_libs/diagnostics/v0.1.0_windows_amd64_static.tar.gz")),
+        message: "normalizing the join still refuses a version carrying a separator");
+    std\assert(toSlash("a\\b\\c") == "a/b/c", message: "every separator, not the first");
+    std\assert(toSlash("") == "", message: "the empty path");
+}
+
+// TOOLS are the binaries a release archives per platform, side by side in dist/ and under
+// one SHA256SUMS. proofread ships here because `go install` refuses its module: the
+// libs/conventions go.mod keeps a replace directive.
+export final TOOLS = ["magus", "proofread"];
+
+// assetName names tool's archive for one platform. The tool leads, so `magus self update`
+// and the installer, which ask for magus_<version>_<os>_<arch>_static.tar.gz, never
+// select another tool's archive.
+export fun assetName(tool: str, version: str, goos: str, goarch: str, suffix: str) > str {
+    return tool + "_" + version + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+}
+
+// assetGlob is the pattern release.yaml uploads tool's archives with and release-publish
+// collects them by.
+export fun assetGlob(tool: str) > str {
+    return "dist/" + tool + "_*.tar.gz";
+}
+
+// missingStaticTools names the archives a release lacks among names: every platform with a
+// static magus archive ships every tool's static archive beside it. A dynamic archive is
+// magus alone.
+export fun missingStaticTools(names: [str]) > [str] {
+    final missing = mut [<str>];
+    foreach (name in names) {
+        if (!name.startsWith("magus_") or !name.endsWith("_static.tar.gz")) { continue; }
+        final rest = name.sub("magus_".len());
+        foreach (tool in TOOLS) {
+            final want = tool + "_" + rest;
+            if (names.indexOf(want) == null) { missing.append(want); }
+        }
+    }
+    return missing;
+}
+
+test "a release ships proofread beside magus under names that never collide" {
+    std\assert(TOOLS.indexOf("magus") != null, message: "magus is released");
+    std\assert(TOOLS.indexOf("proofread") != null, message: "proofread is released");
+    final proofread = "dist/" + assetName("proofread", version: "v1.0.0", goos: "linux", goarch: "amd64", suffix: "_static");
+    final magus = "dist/" + assetName("magus", version: "v1.0.0", goos: "linux", goarch: "amd64", suffix: "_static");
+    assert\equal(proofread, want: "dist/proofread_v1.0.0_linux_amd64_static.tar.gz", message: "the proofread asset");
+    assert\equal(magus, want: "dist/magus_v1.0.0_linux_amd64_static.tar.gz", message: "the name self update asks for");
+    std\assert(matchesGlob(assetGlob("proofread"), name: proofread), message: "the upload collects proofread");
+    std\assert(!matchesGlob(assetGlob("magus"), name: proofread), message: "magus's glob never sees proofread");
+    std\assert(!matchesGlob(assetGlob("proofread"), name: magus), message: "proofread's glob never sees magus");
+}
+
+test "every static platform ships proofread" {
+    final linux = ["magus_v1.0.0_linux_amd64_static.tar.gz", "proofread_v1.0.0_linux_amd64_static.tar.gz"];
+    assert\equal(missingStaticTools(linux), want: [<str>], message: "complete");
+    assert\equal(missingStaticTools(linux + ["magus_v1.0.0_linux_amd64.tar.gz"]), want: [<str>],
+        message: "a dynamic archive is magus alone");
+    assert\equal(missingStaticTools(linux + ["magus_v1.0.0_darwin_arm64_static.tar.gz"]),
+        want: ["proofread_v1.0.0_darwin_arm64_static.tar.gz"], message: "an upload that dropped proofread");
+}
+
+// Publication is write-once. A unit is created when nothing is published under its name,
+// kept when something is, and replaced only when the run carries the mutable charm. Kept
+// is not skipped: the caller still verifies what is there and reads it from then on, so a
+// rerun converges on the published bytes instead of on a rebuild of them.
+export final CREATE = "create";
+export final KEEP = "keep";
+export final REPLACE = "replace";
+
+// publishAction is what a publishing target does with a unit, given whether one is already
+// published under its name and whether the run is mutable.
+export fun publishAction(published: bool, mutable: bool) > str {
+    if (!published) { return CREATE; }
+    if (mutable) { return REPLACE; }
+    return KEEP;
+}
+
+test "publication is write-once unless the run is mutable" {
+    std\assert(publishAction(published: false, mutable: false) == CREATE, message: "a new unit is created");
+    std\assert(publishAction(published: false, mutable: true) == CREATE, message: "mutable changes nothing new");
+    std\assert(publishAction(published: true, mutable: false) == KEEP, message: "the default keeps what is published");
+    std\assert(publishAction(published: true, mutable: true) == REPLACE, message: "only mutable replaces");
+}
+
+// sumsProblems checks a downloaded release against its SHA256SUMS: the version header names
+// tag, and every file it lists is present (have maps a file name to its sha256) with the
+// digest it lists. It returns one line per problem, [] for a release that verifies. A
+// release missing an archive was interrupted mid-upload; replacing it takes the mutable charm.
+export fun sumsProblems(tag: str, sums: str, have: {str: str}) > [str] {
+    final problems = mut [<str>];
+    var header = "";
+    var listed = 0;
+    foreach (line in sums.split("\n")) {
+        final l = line.trim();
+        if (l == "") { continue; }
+        if (l.startsWith("version:")) {
+            header = l.sub("version:".len()).trim();
+            continue;
+        }
+        final parts = l.split("  ");
+        if (parts.len() != 2) {
+            problems.append("SHA256SUMS line is not `<sha256>  <file>`: {l}");
+            continue;
+        }
+        listed = listed + 1;
+        final name = parts[1].trim();
+        final got = have[name];
+        if (got == null) {
+            problems.append("{name}: listed in SHA256SUMS, missing from the release");
+        } else if (got! != parts[0]) {
+            problems.append("{name}: sha256 {got!}, SHA256SUMS lists {parts[0]}");
+        }
+    }
+    if (header != tag) {
+        problems.append("SHA256SUMS names version `{header}`, not {tag}");
+    }
+    if (listed == 0) {
+        problems.append("SHA256SUMS lists no archives");
+    }
+    return problems;
+}
+
+test "a release verifies only when every listed archive is present with its digest" {
+    final sums = "version: v1.0.0\naaa  magus_linux.tar.gz\nbbb  magus_darwin.tar.gz\n";
+    final both = {"magus_linux.tar.gz": "aaa", "magus_darwin.tar.gz": "bbb"};
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: both).len(), want: 0, message: "complete");
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: {"magus_linux.tar.gz": "aaa"}),
+        want: ["magus_darwin.tar.gz: listed in SHA256SUMS, missing from the release"], message: "interrupted upload");
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: {"magus_linux.tar.gz": "aaa", "magus_darwin.tar.gz": "ccc"}),
+        want: ["magus_darwin.tar.gz: sha256 ccc, SHA256SUMS lists bbb"], message: "replaced bytes");
+    assert\equal(sumsProblems("v2.0.0", sums: sums, have: both),
+        want: ["SHA256SUMS names version `v1.0.0`, not v2.0.0"], message: "another release's sums");
+    assert\equal(sumsProblems("v1.0.0", sums: "version: v1.0.0\n", have: {}),
+        want: ["SHA256SUMS lists no archives"], message: "empty");
+}
+
+// manifestBranch is the branch a release's manifest rides to main's index. One per tag,
+// so a rerun force-pushes the same branch instead of opening a second.
+export fun manifestBranch(tag: str) > str {
+    return "release-manifest/" + tag;
+}
+
+test "a manifest branch is named for its tag" {
+    assert\equal(manifestBranch("v1.0.0-rc.1"), want: "release-manifest/v1.0.0-rc.1", message: "branch");
+}
+
+// manifestWithVersion returns the SHA256SUMS content with the leading `version: <v>` line
+// selfupdate's ParseManifest requires: the header binds the signed manifest to one
+// release, and every shipped parser refuses a manifest without it. Idempotent - a
+// manifest already carrying a version line comes back unchanged. sha256sum(1) warns on
+// the line and still verifies the rest, and the install script's own filter reads only
+// 64-hex-digit lines, so the file stays consumable everywhere it is documented.
+export fun manifestWithVersion(manifest: str, version: str) > str {
+    if (manifest.startsWith("version:") or manifest.indexOf("\nversion:") != null) {
+        return manifest;
+    }
+    return "version: " + version + "\n" + manifest;
+}
+
+test "the manifest gains its version header exactly once" {
+    final sums = "abc123  magus_v0.4.2_linux_amd64_static.tar.gz\n";
+    final headed = manifestWithVersion(sums, version: "v0.4.2");
+    std\assert(headed.startsWith("version: v0.4.2\n"), message: "the header leads");
+    std\assert(headed.endsWith(sums), message: "the entries are untouched");
+    std\assert(manifestWithVersion(headed, version: "v0.4.2") == headed,
+        message: "a headed manifest is unchanged");
+}
+
+// KEYRING is the release keyring in the tree being released: the keys selfupdate embeds
+// and trusts, exactly one of them active.
+export final KEYRING = "internal/selfupdate/release-keys.json";
+
+// activeReleaseKey is the hex public key of the one active entry in keyring, the
+// release-keys.json text. Raises unless exactly one entry is active, as selfupdate
+// refuses to start on any other ring.
+export fun activeReleaseKey(keyring: str) > str !> any {
+    final keys = serialize\Boxed.init(json\parse(keyring)).q(["keys"]).listValue();
+    final active = mut [<str>];
+    foreach (k in keys) {
+        if (k.q(["state"]).stringValue() == "active") {
+            active.append(k.q(["key"]).stringValue());
+        }
+    }
+    if (active.len() != 1) {
+        throw "{KEYRING} holds {active.len()} active keys, want exactly 1";
+    }
+    return active[0];
+}
+
+test "the active release key is the one active entry" {
+    final ring = "\{\"keys\": [\{\"state\": \"retired\", \"key\": \"aa\"}, \{\"state\": \"active\", \"key\": \"bb\"}, \{\"state\": \"standby\", \"key\": \"cc\"}]}";
+    std\assert(activeReleaseKey(ring) == "bb", message: "the active entry");
+    var raised = "";
+    try {
+        _ = activeReleaseKey("\{\"keys\": [\{\"state\": \"standby\", \"key\": \"cc\"}]}");
+    } catch (e: str) {
+        raised = e;
+    }
+    std\assert(raised == "{KEYRING} holds 0 active keys, want exactly 1", message: "no active key raises");
+    std\assert(activeReleaseKey(fs\readFile(KEYRING)).len() == 64, message: "this repository's ring names one 32-byte key");
+}
+
+// verifySignature raises unless sig, the raw bytes of the .sig file at sigPath, is an
+// Ed25519 signature over data by the hex public key pubHex.
+export fun verifySignature(data: str, sig: str, pubHex: str, sigPath: str) > void !> any {
+    if (sig.len() != 64) {
+        throw "{sigPath} is {sig.len()} bytes, want 64";
+    }
+    if (!crypto\verify(crypto\SignAlgorithm.Ed25519, data: data, sigHex: sig.hex(), pubHex: pubHex)) {
+        throw "signature check failed: {sigPath} does not match the active release key";
+    }
+}
+
+// raised is what verifySignature raised, or "" when it returned.
+fun raised(data: str, sig: str, pubHex: str) > str {
+    try {
+        verifySignature(data, sig: sig, pubHex: pubHex, sigPath: "S.sig");
+    } catch (e: str) {
+        return e;
+    } catch (e) {
+        return "{e}";
+    }
+    return "";
+}
+
+test "a signature verifies only over its own data, key and length" {
+    // RFC 8032 section 7.1, TEST 2: the one-byte message "r".
+    final rfc8032Pub = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+    final sig = "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00".bin();
+    std\assert(raised("r", sig: sig, pubHex: rfc8032Pub) == "", message: "the RFC vector verifies");
+    std\assert(raised("s", sig: sig, pubHex: rfc8032Pub).startsWith("signature check failed: S.sig"),
+        message: "other data raises");
+    std\assert(raised("r", sig: "too short", pubHex: rfc8032Pub) == "S.sig is 9 bytes, want 64",
+        message: "a truncated .sig raises by length");
+}
+
+// currentVersion returns a module's highest STABLE released version, or "" when
+// it has never had one. Compared on the PARSED major/minor/patch, not the tag
+// text, because string order puts v0.10.0 before v0.9.0.
+//
+// Prereleases are skipped: per semver.org item 9 a prerelease has LOWER
+// precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not
+// v0.4.0 released and must not become the base the next version is computed from
+// - otherwise cutting rc1 would silently advance everyone's floor.
+//
+// Build metadata does NOT disqualify a tag. Item 10 says metadata is ignored when
+// determining precedence, so v1.0.0+ci42 IS v1.0.0; excluding it would re-offer a
+// version already released.
+export fun currentVersion(prefix: str) > str !> any {
+    var best = "";
+    var bestMajor = 0 - 1;
+    var bestMinor = 0 - 1;
+    var bestPatch = 0 - 1;
+    foreach (t in vcs\tags(pattern: prefix + "v*")) {
+        // A bare "v*" also matches libs/foo/v1.2.3, so the prefix is checked
+        // exactly - otherwise the root would adopt a nested module's tag.
+        if (t.prefix != prefix) { continue; }
+        if (t.version.original == "") { continue; } // an annotated non-version tag
+        if (t.version.prerelease != "") { continue; } // anticipates a release, is not one
+        final newer = t.version.major > bestMajor
+            or (t.version.major == bestMajor and t.version.minor > bestMinor)
+            or (t.version.major == bestMajor and t.version.minor == bestMinor
+                and t.version.patch > bestPatch);
+        if (newer) {
+            bestMajor = t.version.major;
+            bestMinor = t.version.minor;
+            bestPatch = t.version.patch;
+            best = t.version.original;
+        }
+    }
+    return best;
+}
+
+// nextVersions returns the three legal next versions for a module currently at cur.
+// An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
+// of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
+// special case someone has to remember.
+export fun nextVersions(cur: str) > SemverNext !> any {
+    if (cur == "") { return semver\next("0.0.0"); }
+    return semver\next(cur);
+}
+
+// isCandidate reports whether v is one of the three versions nextVersions offers,
+// comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
+// minor candidate. A prerelease of a legal next version is itself legal; that is
+// how you cut an rc without first inventing a version nobody agreed to.
+export fun isCandidate(v: str, cur: str) > bool !> any {
+    final want = semver\parse(v);
+    final n = nextVersions(cur);
+    foreach (c in [n.patch, n.minor, n.major]) {
+        final cv = semver\parse(c);
+        if (cv.major == want.major and cv.minor == want.minor and cv.patch == want.patch) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// modulePath returns the path go.mod declares, or "" when it declares none.
+//
+// Needed for Go's major-version suffix rule, which applies to the path: from v2 on
+// it must end in /vN, so a v2.0.0 tag beside a go.mod still naming the v1 path is
+// uninstallable. The tag alone cannot tell you that.
+export fun modulePath(gomod: str) > str {
+    foreach (line in gomod.split("\n")) {
+        // .trim(), because go.mod permits any run of whitespace after the keyword and
+        // a bare sub() keeps it: `module  path` yielded a leading space here. Same parse
+        // as the coverage module's modulePath.
+        if (line.startsWith("module ")) { return line.sub("module ".len()).trim(); }
+    }
+    return "";
+}
+
+// needsMajorSuffix reports whether releasing major from the module at path would
+// publish a tag Go cannot resolve.
+//
+// From v2 on, Go wants the path to end in /vN, and `go get` resolves the path. A
+// v2.0.0 tag beside a go.mod naming the v1 path is uninstallable, and semver has
+// no opinion, so the survey offers that candidate like any other. A non-Go module
+// passes "" and never hits the rule.
+export fun needsMajorSuffix(path: str, major: int) > bool {
+    if (path == "" or major < 2) { return false; }
+    return !path.endsWith("/v" + major);
+}
+
+test "the major suffix rule starts at v2 and only for Go modules" {
+    std\assert(needsMajorSuffix("example.com/m", major: 2), message: "v2 without a suffix is refused");
+    std\assert(!needsMajorSuffix("example.com/m/v2", major: 2), message: "v2 with the suffix is fine");
+    std\assert(needsMajorSuffix("example.com/m/v2", major: 3), message: "a stale suffix is refused");
+    std\assert(!needsMajorSuffix("example.com/m", major: 1), message: "v1 has no suffix rule");
+    std\assert(!needsMajorSuffix("example.com/m", major: 0), message: "v0 has no suffix rule");
+    std\assert(!needsMajorSuffix("", major: 4), message: "a non-Go module is never subject to it");
+}
+
+test "reads the module path and ignores a require of a similar name" {
+    final gomod = "module example.com/root\n\ngo 1.26\n\nrequire (\n\tmodule-ish/x v1.0.0\n)\n";
+    std\assert(modulePath(gomod) == "example.com/root", message: "declared path");
+    std\assert(modulePath("go 1.26\n") == "", message: "no module line");
+    // The coverage parser also trims whitespace after the module keyword.
+    std\assert(modulePath("module  example.com/root\n") == "example.com/root", message: "two spaces after the keyword");
+}
+
+// releaseIndexPaths lists every tracked path a release-index publish commit may
+// carry: the manifests, the signed pair, and the fragments the cut folded and
+// deleted. The commit stages exactly this list, so
+// a stray dirty file elsewhere in the tree can never be swept into the automation's
+// commit. docs/gen/public/release names the directory, not the two files: .gitignore
+// re-includes exactly index.json and index.json.sig under it. changes, not
+// changes/unreleased: the cut can delete every fragment, and git refuses a pathspec
+// that matches nothing, while changes/README.md always matches.
+export fun releaseIndexPaths() > [str] {
+    return ["releases", "docs/gen/public/release", "changes"];
+}
+
+test "the publish paths carry the index pair, the manifests and the folded fragments" {
+    final paths = releaseIndexPaths();
+    std\assert(paths.indexOf("docs/gen/public/release") != null, message: "the signed pair's directory");
+    std\assert(paths.indexOf("releases") != null, message: "the manifests the index derives from");
+    std\assert(paths.indexOf("changes") != null, message: "the fragments the cut deleted");
+    std\assert(paths.indexOf("CHANGELOG.md") == null, message: "the changelog is rendered, never committed");
+}
+
+// releaseIndexBranch names the branch a publish rides. Derived from the commit the
+// index was built at, so a re-run of a failed publish converges on the same branch
+// and its force-push replaces the earlier attempt instead of littering.
+export fun releaseIndexBranch(short: str) > str {
+    return "release-index/" + short;
+}
+
+test "the publish branch is derived from the commit" {
+    std\assert(releaseIndexBranch("abc1234") == "release-index/abc1234",
+        message: "the short id names the branch");
+}
+
+// releaseIndexSubject is the commit subject and the pull request title, a conventional
+// subject so the pull request passes the title check pr-title holds every other one to.
+// reason is a sentence fragment naming what produced the index: "the v0.4.0 release",
+// "a manual refresh".
+export fun releaseIndexSubject(reason: str) > str {
+    return "chore(release): sign the release index for " + reason;
+}
+
+test "the subject folds the reason in" {
+    final s = releaseIndexSubject("the v0.4.0 release");
+    std\assert(s == "chore(release): sign the release index for the v0.4.0 release",
+        message: "subject shape");
+}
+
+// releaseIndexPrBody is the pull request description: why merging is the publish step,
+// for the reviewer standing furthest from this code.
+export fun releaseIndexPrBody() > str {
+    return "Opened by `magus run release-index`.\n\n"
+        + "`magus self update` fetches `public/release/index.json` and refuses to run\n"
+        + "without a matching `index.json.sig`, so the signed pair has to reach main\n"
+        + "before the site redeploys. Merging is what publishes it: the next push to\n"
+        + "main renders the docs site, which copies the tracked pair out verbatim\n"
+        + "rather than regenerating it.";
+}
+
+// releaseIndexPrFallback is the warning for a refused pull request creation. It names
+// the one manual step left, because the pushed branch is already the deliverable and
+// the job must not fail over the missing courtesy of opening it.
+export fun releaseIndexPrFallback(repository: str, branch: str) > str {
+    return "release-index: could not open the pull request; the signed branch is pushed"
+        + " - open it at https://github.com/" + repository + "/pull/new/" + branch;
+}
+
+test "the fallback names the branch URL" {
+    final msg = releaseIndexPrFallback("egladman/magus", branch: "release-index/abc1234");
+    std\assert(msg.indexOf("https://github.com/egladman/magus/pull/new/release-index/abc1234") != null,
+        message: "the manual step is a clickable URL");
+    std\assert(msg.indexOf("pushed") != null, message: "says the branch already made it");
+}
+
+// MODULE_ROOT is the root module's path; every in-repo module's path starts with it.
+export final MODULE_ROOT = "github.com/egladman/magus";
+
+// moduleDir is the repository directory of the module at path: "." for the root, "" for
+// a module outside this repository.
+export fun moduleDir(path: str) > str {
+    if (path == MODULE_ROOT) { return "."; }
+    if (!path.startsWith(MODULE_ROOT + "/")) { return ""; }
+    return path.sub(MODULE_ROOT.len() + 1);
+}
+
+// tagName is the tag Go resolves version of the module at dir through: the bare version
+// for the root, the directory then the version for a nested module.
+export fun tagName(dir: str, version: str) > str {
+    if (dir == ".") { return version; }
+    return dir + "/" + version;
+}
+
+// gomodDir is the directory of the go.mod at path, "." for the root's.
+export fun gomodDir(path: str) > str {
+    if (path == "go.mod") { return "."; }
+    return path.sub(0, len: path.len() - "/go.mod".len());
+}
+
+test "in-repo module paths, directories and tags" {
+    assert\equal(moduleDir(MODULE_ROOT), want: ".", message: "the root");
+    assert\equal(moduleDir(MODULE_ROOT + "/libs/codec"), want: "libs/codec", message: "a nested module");
+    assert\equal(moduleDir("github.com/egladman/magusx"), want: "", message: "a lookalike path");
+    assert\equal(moduleDir("golang.org/x/sys"), want: "", message: "an outside module");
+    assert\equal(tagName(".", version: "v0.5.0"), want: "v0.5.0", message: "the root tag");
+    assert\equal(tagName("libs/codec", version: "v0.1.0"), want: "libs/codec/v0.1.0", message: "a nested tag");
+    assert\equal(gomodDir("go.mod"), want: ".", message: "the root go.mod");
+    assert\equal(gomodDir("libs/proofread/train/go.mod"), want: "libs/proofread/train", message: "a nested go.mod");
+}
+
+// inRepoRequires lists gomod's requires of in-repo modules as {"module", "version"}, from
+// a `require path version` line or a line of a require block. A replace never counts.
+export fun inRepoRequires(gomod: str) > [{str: str}] {
+    final found = mut [<{str: str}>];
+    var block = false;
+    foreach (raw in gomod.split("\n")) {
+        var line = raw.trim();
+        final comment = line.indexOf("//");
+        if (comment -> at) { line = line.sub(0, len: at).trim(); }
+        if (line == "") { continue; }
+        if (block) {
+            if (line == ")") {
+                block = false;
+                continue;
+            }
+        } else if (line == "require (") {
+            block = true;
+            continue;
+        } else if (line.startsWith("require ")) {
+            line = line.sub("require ".len()).trim();
+        } else {
+            continue;
+        }
+        final fields = line.split(" ").filter(fun (i: int, f: str) > bool => f != "");
+        if (fields.len() != 2 or moduleDir(fields[0]) == "") { continue; }
+        found.append({"module": fields[0], "version": fields[1]});
+    }
+    return found;
+}
+
+test "the in-repo requires of both require forms, and no replace" {
+    final gomod = "module example.com/m\n\nrequire " + MODULE_ROOT + "/libs/xdg v0.1.0\n\nrequire (\n"
+        + "\tgolang.org/x/sys v0.30.0\n\t" + MODULE_ROOT + "/libs/codec v0.1.0\n"
+        + "\t" + MODULE_ROOT + "/libs/diagnostics v0.2.0 // indirect\n)\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final got = inRepoRequires(gomod);
+    assert\equal(got.len(), want: 3, message: "two in a block, one on its own line");
+    assert\equal(got[0]["module"]!, want: MODULE_ROOT + "/libs/xdg", message: "the single-line form");
+    assert\equal(got[1]["version"]!, want: "v0.1.0", message: "a block line");
+    assert\equal(got[2]["version"]!, want: "v0.2.0", message: "an indirect require, comment dropped");
+}
+
+// isPseudoVersion reports whether v is a Go pseudo-version, which names a commit rather
+// than a tag: a 14-digit UTC timestamp then a 12-hex-digit revision, after a "-" or a ".".
+// The zero placeholder v0.0.0-00010101000000-000000000000 is one.
+export fun isPseudoVersion(v: str) > bool {
+    final parts = v.split("-");
+    if (parts.len() < 3) { return false; }
+    final rev = parts[parts.len() - 1];
+    final stampField = parts[parts.len() - 2].split(".");
+    final stamp = stampField[stampField.len() - 1];
+    if (rev.len() != 12 or stamp.len() != 14) { return false; }
+    for (var i = 0; i < 14; i = i + 1) {
+        final b = stamp.byte(i);
+        if (b < 48 or b > 57) { return false; }
+    }
+    for (var i = 0; i < 12; i = i + 1) {
+        final b = rev.byte(i);
+        if (!((b >= 48 and b <= 57) or (b >= 97 and b <= 102))) { return false; }
+    }
+    return true;
+}
+
+test "pseudo-versions in every form Go mints, and tags that are not" {
+    std\assert(isPseudoVersion("v0.0.0-00010101000000-000000000000"), message: "the zero placeholder");
+    std\assert(isPseudoVersion("v0.39.1-0.20260109155911-b69ac100ecb7"), message: "after a release");
+    std\assert(isPseudoVersion("v1.2.0-rc.1.0.20260109155911-b69ac100ecb7"), message: "after a prerelease");
+    std\assert(!isPseudoVersion("v0.1.0"), message: "a release");
+    std\assert(!isPseudoVersion("v0.0.0"), message: "the bare zero version");
+    std\assert(!isPseudoVersion("v0.5.0-rc.1"), message: "a prerelease");
+    std\assert(!isPseudoVersion("v0.0.0-00010101000000-00000000000z"), message: "a revision that is not hex");
+}
+
+// PinPlan is what stands between a release and its tags in the in-repo requires: the
+// legal versions requires name that nobody tagged and this run does not release
+// (directory to version), and the requires no run can release past.
+export object PinPlan {
+    missing: {str: str},
+    problems: [str],
+}
+
+// pinPlan checks every in-repo require in gomods (go.mod path to its text) against tags,
+// the tag names that exist, and releasing, each directory this run releases to its new
+// version. A require of a module being released is rewritten to the new version, so it
+// passes. One naming a missing tag is missing when legal(dir, version) says that version
+// is a legal next one, so naming it in the run would cut it. A pseudo-version, an illegal
+// missing version, and two go.mods requiring different missing versions of one module are
+// problems.
+export fun pinPlan(gomods: {str: str}, tags: [str], releasing: {str: str}, legal: fun (dir: str, version: str) > bool !> any) > PinPlan !> any {
+    final missing = mut {<str: str>};
+    final problems = mut [<str>];
+    final paths = gomods.keys().cloneMutable();
+    _ = paths.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (path in paths) {
+        foreach (req in inRepoRequires(gomods[path]!)) {
+            final module = req["module"]!;
+            final version = req["version"]!;
+            final dir = moduleDir(module);
+            if (isPseudoVersion(version)) {
+                problems.append(path + " requires " + module + " at the pseudo-version " + version
+                    + ", which names a commit rather than a tag; require a tag");
+                continue;
+            }
+            if (releasing[dir] != null) { continue; }
+            final tag = tagName(dir, version: version);
+            if (tags.indexOf(tag) != null) { continue; }
+            final other = missing[dir];
+            if (other -> v) {
+                if (v != version) {
+                    problems.append(path + " requires " + module + " " + version + " and another go.mod requires "
+                        + v + ", neither of them tagged; require one version");
+                }
+                continue;
+            }
+            if (!legal(dir, version: version)) {
+                problems.append(path + " requires " + module + " " + version + ", and " + tag
+                    + " does not exist and is not a legal next version to release");
+                continue;
+            }
+            missing[dir] = version;
+        }
+    }
+    return PinPlan{ missing = missing, problems = problems };
+}
+
+// missingTagsRefusal is the refusal for missing, the untagged versions requires name
+// (directory to version): each as the module@version a run names, in dependency order
+// by gomods, then the release invocation args extended by them, which cuts them all.
+export fun missingTagsRefusal(missing: {str: str}, gomods: {str: str}, args: [str]) > str !> any {
+    final deps = mut {<str: [str]>};
+    foreach (dir, version in missing) {
+        final on = mut [<str>];
+        final gomod = gomods[if (dir == ".") "go.mod" else dir + "/go.mod"];
+        if (gomod -> text) {
+            foreach (req in inRepoRequires(text)) {
+                final dep = moduleDir(req["module"]!);
+                if (missing[dep] != null) { on.append(dep); }
+            }
+        }
+        deps[dir] = on;
+    }
+    final named = mut [<str>];
+    foreach (dir in releaseOrder(missing.keys(), deps: deps)) {
+        final key = if (dir == ".") "magus" else dir;
+        named.append(key + "@" + missing[dir]!.sub(1));
+    }
+    return "requires name tags that do not exist: " + named.join(", ") + ". Release them in this run: `magus run release -- "
+        + (args + named).join(" ") + "`";
+}
+
+test "a release names the untagged requires in dependency order, with the run that adds them" {
+    final gomods = {"libs/safetyscissors/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.1.0
+",
+        "libs/codec/go.mod": "module " + MODULE_ROOT + "/libs/codec
+"};
+    final got = missingTagsRefusal({"libs/safetyscissors": "v0.1.0", "libs/codec": "v0.1.0", "libs/apiversion": "v0.1.0"},
+        gomods: gomods, args: ["magus@0.5.0"]);
+    assert\equal(got, want: "requires name tags that do not exist: libs/apiversion@0.1.0, libs/codec@0.1.0, "
+        + "libs/safetyscissors@0.1.0. Release them in this run: `magus run release -- magus@0.5.0 libs/apiversion@0.1.0 "
+        + "libs/codec@0.1.0 libs/safetyscissors@0.1.0`", message: got);
+}
+
+test "a release finds the untagged requires, and refuses a commit or a version it cannot release" {
+    final head = "module " + MODULE_ROOT + "\n\nrequire (\n\t" + MODULE_ROOT + "/libs/codec v0.1.0\n\t"
+        + MODULE_ROOT + "/libs/xdg v0.1.0\n\t" + MODULE_ROOT + "/libs/text v0.2.0\n)\n";
+    final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n";
+    final legal = fun (dir: str, version: str) > bool => version == "v0.1.0";
+    final plan = pinPlan({"go.mod": head, "libs/safetyscissors/go.mod": lib}, tags: ["libs/xdg/v0.1.0"],
+        releasing: {".": "v0.5.0", "libs/text": "v0.2.0"}, legal: legal);
+    assert\equal(plan.missing, want: {"libs/codec": "v0.1.0"}, message: "the untagged codec, once for both go.mods");
+    assert\equal(plan.problems, want: [<str>], message: "xdg is tagged, text is released in the run");
+
+    final pseudo = "require " + MODULE_ROOT + "/libs/embed v0.0.0-00010101000000-000000000000\n";
+    final refused = pinPlan({"libs/train/go.mod": pseudo, "go.mod": "require " + MODULE_ROOT + "/libs/codec v0.3.0\n"},
+        tags: [<str>], releasing: {<str: str>}, legal: legal);
+    assert\equal(refused.missing, want: {<str: str>}, message: "nothing missing to name");
+    assert\equal(refused.problems.len(), want: 2, message: "the pseudo-version and the illegal version");
+    std\assert(refused.problems[0].startsWith("go.mod requires " + MODULE_ROOT + "/libs/codec v0.3.0"),
+        message: "go.mod sorts first: {refused.problems[0]}");
+    std\assert(refused.problems[1].indexOf("pseudo-version") != null, message: refused.problems[1]);
+
+    final split = pinPlan({"a/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.1.0\n",
+        "b/go.mod": "require " + MODULE_ROOT + "/libs/codec v0.0.1\n"}, tags: [<str>], releasing: {<str: str>},
+        legal: fun (dir: str, version: str) > bool => true);
+    assert\equal(split.problems.len(), want: 1, message: "two untagged versions of one module");
+}
+
+// releaseOrder is dirs in dependency order: each after every directory deps lists for it,
+// ties by name. A cycle raises, since no order tags it.
+export fun releaseOrder(dirs: [str], deps: {str: [str]}) > [str] !> any {
+    final pending = dirs.cloneMutable();
+    _ = pending.sort(fun (a: str, b: str) > bool => a < b);
+    final order = mut [<str>];
+    while (pending.len() > 0) {
+        var next = "";
+        foreach (d in pending) {
+            var ready = true;
+            foreach (dep in deps[d] ?? [<str>]) {
+                if (pending.indexOf(dep) != null) { ready = false; }
+            }
+            if (ready) {
+                next = d;
+                break;
+            }
+        }
+        if (next == "") {
+            throw "release: the modules " + pending.join(", ") + " require each other, so no order tags them";
+        }
+        order.append(next);
+        _ = pending.remove(pending.indexOf(next)!);
+    }
+    return order;
+}
+
+test "modules release after what they require, the root last" {
+    final order = releaseOrder([".", "libs/safetyscissors", "libs/codec", "libs/apiversion", "libs/clikit"],
+        deps: {".": ["libs/safetyscissors", "libs/codec", "libs/apiversion", "libs/clikit"],
+               "libs/safetyscissors": ["libs/apiversion", "libs/codec"], "libs/clikit": ["libs/apiversion"]});
+    assert\equal(order, want: ["libs/apiversion", "libs/clikit", "libs/codec", "libs/safetyscissors", "."],
+        message: "dependency order, ties by name");
+    var raised = "";
+    try {
+        _ = releaseOrder(["a", "b"], deps: {"a": ["b"], "b": ["a"]});
+    } catch (e: str) {
+        raised = e;
+    }
+    std\assert(raised.indexOf("require each other") != null, message: "a cycle raises");
+}
+
+// rewriteRequire points go.mod's require for module at version, keeping the line's
+// indentation and any trailing comment. The `replace` directive names the same module and
+// is not touched: it is the local-development path, ignored by every downstream consumer.
+export fun rewriteRequire(gomod: str, module: str, version: str) > result\Result::<str> {
+    final kept = mut [<str>];
+    var found = false;
+    foreach (line in gomod.split("\n")) {
+        final found_at = line.indexOf(module + " v");
+        if (found_at == null or line.indexOf("=>") != null) {
+            kept.append(line);
+            continue;
+        }
+        final at = found_at!;
+        final lead = line.sub(0, len: at).trim();
+        if (lead != "" and lead != "require") {
+            kept.append(line);
+            continue;
+        }
+        final rest = line.sub(at + module.len() + 1);
+        var suffix = "";
+        if (rest.indexOf(" ") -> end) { suffix = rest.sub(end); }
+        kept.append(line.sub(0, len: at) + module + " " + version + suffix);
+        found = true;
+    }
+    if (!found) { return result\fail::<str>("release: go.mod has no require line for " + module); }
+    return result\ok::<str>(kept.join("\n"));
+}
+
+test "a require moves to the new version and keeps its comment" {
+    final gomod = "require (\n\t" + MODULE_ROOT + "/libs/diagnostics v0.2.0 // indirect\n\t"
+        + MODULE_ROOT + "/libs/text v0.1.0\n\t" + MODULE_ROOT + "/libs/textsearch v0.1.0\n)\n\n"
+        + "replace " + MODULE_ROOT + "/libs/text => ./libs/text\n";
+    final got = rewriteRequire(rewriteRequire(gomod, module: MODULE_ROOT + "/libs/diagnostics", version: "v0.3.0").value!,
+        module: MODULE_ROOT + "/libs/text", version: "v0.2.0").value!;
+    std\assert(got.indexOf("libs/diagnostics v0.3.0 // indirect\n") != null, message: got);
+    std\assert(got.indexOf("libs/text v0.2.0\n") != null, message: got);
+    std\assert(got.indexOf("libs/textsearch v0.1.0") != null, message: "a longer path is another module");
+    std\assert(got.indexOf("libs/text => ./libs/text") != null, message: "the replace stays");
+}
+
+// dropInRepoReplaces removes gomod's replace directives for in-repo modules, single-line
+// or in a block, and keeps the rest. A release commit carries the result, so `go install
+// <module>@<version>` accepts the module: it refuses any go.mod with a replace.
+export fun dropInRepoReplaces(gomod: str) > str {
+    final kept = mut [<str>];
+    var block = false;
+    foreach (line in gomod.split("\n")) {
+        final t = line.trim();
+        if (t == "replace (") {
+            block = true;
+            kept.append(line);
+            continue;
+        }
+        if (block and t == ")") { block = false; }
+        var directive = "";
+        if (t.startsWith("replace ")) {
+            directive = t.sub("replace ".len());
+        } else if (block) {
+            directive = t;
+        }
+        final fields = directive.split(" ");
+        if (directive != "" and directive.indexOf("=>") != null and moduleDir(fields[0]) != "") { continue; }
+        kept.append(line);
+    }
+    return kept.join("\n");
+}
+
+test "a release commit's go.mod keeps no in-repo replace" {
+    final gomod = "module " + MODULE_ROOT + "\n\nreplace " + MODULE_ROOT + "/libs/codec => ./libs/codec\n\n"
+        + "replace golang.org/x/sys => ../sys\n\nreplace (\n\t" + MODULE_ROOT + "/libs/xdg => ./libs/xdg\n)\n";
+    final got = dropInRepoReplaces(gomod);
+    std\assert(got.indexOf("libs/codec =>") == null, message: "a single-line replace goes");
+    std\assert(got.indexOf("libs/xdg =>") == null, message: "a block line goes");
+    std\assert(got.indexOf("golang.org/x/sys => ../sys") != null, message: "an outside replace stays");
+    assert\equal(inRepoRequires(got).len(), want: 0, message: "and no require appears");
+}
+
+// releaseName names what a release cuts for its commit subjects: the root tag and how many
+// module tags ride with it, or the module tags themselves when three or fewer, so a
+// subject stays one short line.
+export fun releaseName(tags: [str]) > str {
+    final root = rootReleaseTag(tags);
+    if (root != "") {
+        final nested = tags.len() - 1;
+        if (nested == 0) { return root; }
+        if (nested == 1) { return root + " and 1 module tag"; }
+        return root + " and {nested} module tags";
+    }
+    if (tags.len() <= 3) { return tags.join(" "); }
+    return "{tags.len()} module tags";
+}
+
+test "a release subject stays one short line" {
+    assert\equal(releaseName(["v0.5.0"]), want: "v0.5.0", message: "the root alone");
+    assert\equal(releaseName(["libs/codec/v0.1.0", "v0.5.0"]), want: "v0.5.0 and 1 module tag", message: "one beside the root");
+    assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0", "v0.5.0"]), want: "v0.5.0 and 2 module tags", message: "several");
+    assert\equal(releaseName(["libs/a/v0.1.0", "libs/b/v0.1.0"]), want: "libs/a/v0.1.0 libs/b/v0.1.0", message: "a few modules");
+    assert\equal(releaseName(["libs/a/v1", "libs/b/v1", "libs/c/v1", "libs/d/v1"]), want: "4 module tags", message: "many modules");
+}
+
+// Pinned is what a release commit does to the go.mods: next is each changed go.mod's
+// text on the release commit (path to text), and restored is the text main carries after
+// it for each go.mod whose in-repo replaces the release commit drops.
+export object Pinned {
+    next: {str: str},
+    restored: {str: str},
+}
+
+// pinGomods points every in-repo require of a module in releasing (directory to new
+// version) at that version, and drops the in-repo replaces of each released module's own
+// go.mod, so `go install` accepts it. A go.mod with nothing to change is in neither map.
+export fun pinGomods(gomods: {str: str}, releasing: {str: str}) > Pinned !> any {
+    final next = mut {<str: str>};
+    final restored = mut {<str: str>};
+    foreach (path, text in gomods) {
+        var pinned = text;
+        foreach (req in inRepoRequires(text)) {
+            final version = releasing[moduleDir(req["module"]!)];
+            if (version -> v) {
+                final rewritten = rewriteRequire(pinned, module: req["module"]!, version: v);
+                if (rewritten.error != null) {
+                    throw rewritten.error!.message;
+                }
+                pinned = rewritten.value!;
+            }
+        }
+        final dropped = dropInRepoReplaces(pinned);
+        if (releasing[gomodDir(path)] != null and dropped != pinned) {
+            restored[path] = pinned;
+            pinned = dropped;
+        }
+        if (pinned != text) { next[path] = pinned; }
+    }
+    return Pinned{ next = next, restored = restored };
+}
+
+test "a release pins requires everywhere and drops replaces only where it releases" {
+    final lib = "module " + MODULE_ROOT + "/libs/safetyscissors\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final app = "module " + MODULE_ROOT + "/libs/clikit\n\nrequire " + MODULE_ROOT + "/libs/codec v0.1.0\n\n"
+        + "replace " + MODULE_ROOT + "/libs/codec => ../codec\n";
+    final quiet = "module " + MODULE_ROOT + "/libs/xdg\n";
+    final got = pinGomods({"libs/safetyscissors/go.mod": lib, "libs/clikit/go.mod": app, "libs/xdg/go.mod": quiet},
+        releasing: {"libs/safetyscissors": "v0.2.0", "libs/codec": "v0.2.0"});
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("libs/codec v0.2.0") != null, message: "pinned");
+    std\assert(got.next["libs/safetyscissors/go.mod"]!.indexOf("=>") == null, message: "a released module drops its replace");
+    std\assert(got.restored["libs/safetyscissors/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "and gets it back");
+    std\assert(got.next["libs/clikit/go.mod"]!.indexOf("libs/codec => ../codec") != null, message: "an unreleased module keeps its replace");
+    std\assert(got.restored["libs/clikit/go.mod"] == null, message: "so nothing restores it");
+    std\assert(got.next["libs/xdg/go.mod"] == null, message: "an untouched go.mod is not in the commit");
+}

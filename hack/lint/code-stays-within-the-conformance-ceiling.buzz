@@ -1,7 +1,7 @@
 // Tier 2, measured shape: a file the change touches may not hold more violations of a metric
 // the conformance ceiling policy checks than it held at the base revision, and an item already
 // past its anchor there may not grow; a drop is progress. Tier 3, judgment: every other metric
-// is advice. magus measures the head and the base; hack/magusfile/conformance-ceiling judges.
+// is advice. The imported ceiling module judges the measurements.
 namespace conformanceceilingrule;
 
 import "assert";
@@ -9,7 +9,7 @@ import "std";
 import "vcs";
 import "magus";
 import "magus/lint";
-import "hack/magusfile/conformance-ceiling" as ceiling;
+import "magusfiles/quality/conformance-ceiling" as ceiling;
 
 // reads keys conventions on every Go source the lens measures and the policy
 // beside it: a tree glob stops at a nested project, so each project holding Go
@@ -17,7 +17,7 @@ import "hack/magusfile/conformance-ceiling" as ceiling;
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/diagram/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/text/**/*.go", "libs/xdg/**/*.go",
-        "libs/clikit/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
+        "libs/clikit/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go", "magusfiles/quality/conformance-ceiling.buzz", "magus.yaml"];
 }
 
 // check fails each conformance ceiling the change crossed, each item past its anchor that

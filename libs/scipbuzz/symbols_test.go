@@ -23,18 +23,18 @@ func magusKey(t *testing.T, symbol string) string {
 }
 
 func TestWorkspaceSymbolParsesWithAPackage(t *testing.T) {
-	sym := declSymbol("hack/magusfile/drift.buzz", kindFun, "check")
-	require.Equal(t, "scip-buzz buzz . . `hack/magusfile/drift.buzz`/check().", sym)
+	sym := declSymbol("magusfiles/quality/drift.buzz", kindFun, "check")
+	require.Equal(t, "scip-buzz buzz . . `magusfiles/quality/drift.buzz`/check().", sym)
 
 	parsed, err := scip.ParseSymbol(sym)
 	require.NoError(t, err)
 	require.Equal(t, "scip-buzz", parsed.Scheme)
 	require.Equal(t, &scip.Package{Manager: "buzz"}, parsed.Package, "`.` parses to an empty name and version")
 	require.Equal(t, []*scip.Descriptor{
-		{Name: "hack/magusfile/drift.buzz", Suffix: scip.Descriptor_Namespace},
+		{Name: "magusfiles/quality/drift.buzz", Suffix: scip.Descriptor_Namespace},
 		{Name: "check", Suffix: scip.Descriptor_Method},
 	}, parsed.Descriptors)
-	require.Equal(t, "buzz `hack/magusfile/drift.buzz`/check().", magusKey(t, sym))
+	require.Equal(t, "buzz `magusfiles/quality/drift.buzz`/check().", magusKey(t, sym))
 }
 
 func TestDeclSymbolSuffixes(t *testing.T) {

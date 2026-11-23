@@ -19,7 +19,7 @@ import "magus";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
-import "./hack/magusfile/commits" as conventional;
+import "./magusfiles/release/commits" as conventional;
 
 // One subject cap everywhere: pr-title and the commit-msg hook read the same one.
 final maxSubject = conventional\maxLength();

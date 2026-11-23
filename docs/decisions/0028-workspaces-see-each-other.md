@@ -305,7 +305,7 @@ A path into another workspace is the path through its link, everywhere it appear
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | shell, editor, grep    | `.magus/workspaces/magus/.golangci.yml`                                                                                                                                                                |
 | read pattern           | `ctx.readsFiles([".magus/workspaces/magus/.golangci.yml"])`                                                                                                                                            |
-| Buzz import            | `import ".magus/workspaces/magus/hack/magusfile/run-golangci";`                                                                                                                                        |
+| Buzz import            | `import ".magus/workspaces/magus/magusfiles/quality/run-golangci";`                                                                                                                                        |
 | CLI path argument      | `magus describe file .magus/workspaces/magus/internal/config/config.go`                                                                                                                                |
 | node id                | `file:.magus/workspaces/magus/internal/config/config.go`, `project:.magus/workspaces/magus/docs`, `target:.magus/workspaces/magus/docs:build`, `docsection:.magus/workspaces/magus/docs/design.md#...` |
 | cache key line         | `.magus/workspaces/magus/.golangci.yml <digest>`                                                                                                                                                       |
@@ -500,7 +500,7 @@ with a composing call; round 7 reverses that and fixes the rules at the source:
 
 ```buzz
 // buzzed/magusfile.buzz: the whole adoption
-import ".magus/workspaces/magus/hack/magusfile/run-golangci" as golangci;
+import ".magus/workspaces/magus/magusfiles/quality/run-golangci" as golangci;
 golangci.run({config: ".magus/workspaces/magus/.golangci.yml"});
 ```
 
@@ -684,7 +684,7 @@ reason.
 
 Pieces the prototype put in the wrong layer:
 
-- `hack/magusfile/run-golangci.buzz` (fbe021cb9) composes the golangci config and builds
+- [hack/magusfile/run-golangci.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/run-golangci.buzz) (fbe021cb9) composes the golangci config and builds
   custom-gcl in repository Buzz. That is a Go mechanism, so it belongs in spells/golang;
   the proof's import of it through the link goes away with it.
 - `types.ShareKind` and `ShareLint` (types/use.go) name a lint tool's kind in Go core.
@@ -881,7 +881,7 @@ generated go.work and the pnpm and uv refusal.
 
 Adds the table of core against spells under Eli's layering rule, moves go.work, the pnpm
 and uv refusals, Cargo and tool identity into their spells, and names the prototype's
-`hack/magusfile/run-golangci.buzz` and `types.ShareKind` as pieces in the wrong layer.
+[hack/magusfile/run-golangci.buzz](https://github.com/egladman/magus/blob/73a13324df6902d0517c88b56f65a14e12dad85e/hack/magusfile/run-golangci.buzz) and `types.ShareKind` as pieces in the wrong layer.
 
 ### 2026-11-06: round 9, and an inert-linter finding
 
@@ -927,7 +927,7 @@ main holds:
   none is configured only for magus's module.
 - The branch `portable-lint-finish` took the `in-module` route, conflicts with main, and
   is superseded.
-- The adoption sample under decision 7 imports `hack/magusfile/run-golangci`; the module
+- The adoption sample under decision 7 imports `magusfiles/quality/run-golangci`; the module
   main ships is `spells/golang/golangci` (`buildFrom`, `lintWith`).
 
 [Connect two workspaces](../guides/connecting-workspaces.md) documents what main does.

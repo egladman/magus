@@ -29,7 +29,7 @@
 // same name.
 namespace splitintobranches;
 
-import "hack/magusfile/branch-stack" as branchstack;
+import "hack/dev/modules/branch-stack" as branchstack;
 import "flags";
 import "fs";
 import "magus";

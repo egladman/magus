@@ -2,7 +2,7 @@
 import "magus";
 import "fs";
 import "proc";
-import "../../hack/magusfile/index" as index;
+import "../../magusfiles/build/index" as index;
 import "./kustomize" as kustomize;
 
 magus\project({

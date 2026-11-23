@@ -45,7 +45,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 test "a script importing flags, and a module without main, pass" {
     final got = check(support\fixture({
         "hack/dev/ls-things.buzz": "namespace x;\n\nimport \"flags\";\n\nexport fun main(args: [str]) > void \{}\n",
-        "hack/magusfile/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
+        "magusfiles/quality/drift.buzz": "namespace drift;\n\nexport fun measure() > void \{}\n",
     }).value!);
     assert\equal(got.len(), want: 0, message: "clean");
 }

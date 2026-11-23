@@ -1,0 +1,57 @@
+namespace loadcontract;
+
+import "result";
+import "serialize";
+
+import "assert";
+
+// CONTRACT_DIRS and loadContract are the load contract: what a magus built before a change
+// needs to load the tree after it. A copy of loadContract in internal/guard/load_contract.go,
+// since neither can read the other.
+final CONTRACT_DIRS = ["internal/spell/gen/decls/", "internal/interp/bindings/gen/"];
+
+export fun loadContract(p: str) > bool {
+    if (p.endsWith("_test.go")) { return false; }
+    if (p.endsWith("api.lock") or p.endsWith("api-go.lock")) { return true; }
+    foreach (d in CONTRACT_DIRS) {
+        if (p.startsWith(d)) { return true; }
+    }
+    if (!p.startsWith("libs/gopherbuzz/") or !p.endsWith(".go")) { return false; }
+    final name = p.sub("libs/gopherbuzz/".len(), len: p.len() - "libs/gopherbuzz/".len());
+    return name.indexOf("/") == null and (name.startsWith("checker") or name.startsWith("compiler"));
+}
+
+export fun contractPaths(changed: [str]) > [str] {
+    return changed.filter(fun (index: int, p: str) > bool => loadContract(p));
+}
+
+// policyFailure reads the verdict the merged ./magus gave a state-changing line, as a hook
+// would ask it, and says why the guard policy does not load, "" when it does.
+export fun policyFailure(verdictJSON: str) > result\Result::<str> {
+    try {
+        final v = serialize\jsonDecode(verdictJSON);
+        final rule = v.q("rule").stringValue();
+        final said = v.q("reason").stringValue() + v.q("context").stringValue();
+        if (rule == "policy-unloaded" or rule == "stale-binary" or said.indexOf("judged nothing") != null) {
+            return result\ok::<str>("{rule}: {said}");
+        }
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "merge-job-branches: read the guard verdict");
+    }
+}
+
+test "the load contract is the decls, the API locks, the bindings and the Buzz checker" {
+    assert\equal(contractPaths(["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+        "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go",
+        "libs/gopherbuzz/checker_test.go", "libs/gopherbuzz/vm.go", "libs/gopherbuzz/docs/checker.go", "run.go", "docs/a.md"]),
+        want: ["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
+            "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go"],
+        message: "only the paths a binary built before them cannot load past");
+}
+
+test "policyFailure names a policy the merged binary cannot load" {
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"workspace:command\",\"context\":\"fine\"}").value!, want: "", message: "a loaded policy");
+    assert\equal(policyFailure("\{\"decision\":\"deny\",\"rule\":\"policy-unloaded\",\"reason\":\"line 3: bad\"}").value!, want: "policy-unloaded: line 3: bad", message: "a broken policy");
+    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"command-rule-failed\",\"context\":\"the rule judged nothing\"}").value!.startsWith("command-rule-failed"), want: true, message: "a rule that judged nothing");
+}

@@ -14,7 +14,7 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize]
     # What pr-deliberate-break lists. It is not a required check, so a pull request
-    # touching none of these shows no row. hack/magusfile/deviations.buzz's tests hold
+    # touching none of these shows no row. hack/ci/modules/deviations.buzz's tests hold
     # its WATCHED files to this list.
     paths:
       - '**/*deviations.jsonl*'
@@ -22,7 +22,7 @@ on:
       - 'magus.yaml'
       - 'proto/buf.yaml'
       - 'proto/magusfile.buzz'
-      - 'hack/magusfile/deviations.buzz'
+      - 'hack/ci/modules/deviations.buzz'
 
 concurrency:
   group: deliberate-break-${{ github.event.pull_request.number }}
