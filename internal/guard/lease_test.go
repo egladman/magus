@@ -2341,8 +2341,8 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 
 	r.git(wt, "checkout", "-q", "--detach")
 	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"),
-		fmt.Sprintf("has no branch checked out; run `git switch %s`, or `git switch -c %s` when no such branch exists.", worker.ID, worker.ID),
-		"a detached HEAD names the line that puts it on the job's branch")
+		"ask the orchestrator to record a writable linked checkout for this job.",
+		"taking the lease alone does not authorize a delivery branch")
 
 	primary := worker
 	primary.ID = "harness/primary"

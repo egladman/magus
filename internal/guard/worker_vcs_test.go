@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/clikit/output"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -677,16 +680,16 @@ type WorkerReattachSuite struct{ judgedWorker }
 
 func TestWorkerReattachSuite(t *testing.T) { suite.Run(t, new(WorkerReattachSuite)) }
 
-func (s *WorkerReattachSuite) TestSwitchForceCreateOnItsOwnBranchPasses() {
-	s.Empty(s.from(s.own, "git switch -C "+s.worker.ID))
+func (s *WorkerReattachSuite) TestSwitchForceCreateOnItsOwnBranchIsRefused() {
+	s.Contains(s.from(s.own, "git switch -C "+s.worker.ID), "`git switch`")
 }
 
-func (s *WorkerReattachSuite) TestCheckoutBOnItsOwnBranchPasses() {
-	s.Empty(s.from(s.own, "git checkout -B "+s.worker.ID))
+func (s *WorkerReattachSuite) TestCheckoutBOnItsOwnBranchIsRefused() {
+	s.Contains(s.from(s.own, "git checkout -B "+s.worker.ID), "`git checkout`")
 }
 
-func (s *WorkerReattachSuite) TestAStartPointOfHEADPasses() {
-	s.Empty(s.from(s.own, fmt.Sprintf("git switch -C %s HEAD", s.worker.ID)))
+func (s *WorkerReattachSuite) TestAnExplicitHEADStillRefusesForceCreate() {
+	s.Contains(s.from(s.own, fmt.Sprintf("git switch -C %s HEAD", s.worker.ID)), "`git switch`")
 }
 
 func (s *WorkerReattachSuite) TestAnotherBranchNameIsRefused() {
@@ -710,11 +713,11 @@ func (s *WorkerReattachSuite) TestAMergeIsRefused() {
 }
 
 func (s *WorkerReattachSuite) TestAVariableBesideTheNameIsRefused() {
-	s.Contains(s.from(s.own, fmt.Sprintf(`git switch -C "$prefix"%s`, s.worker.ID)), "not one literal string")
+	s.Contains(s.from(s.own, fmt.Sprintf(`git switch -C "$prefix"%s`, s.worker.ID)), "`git switch`")
 }
 
-func (s *WorkerReattachSuite) TestFromAnotherCheckoutItNamesItsOwn() {
-	s.Contains(s.from(s.repo.main, "git switch -C "+s.worker.ID), fmt.Sprintf("`git -C %s switch -C %s`", s.own, s.worker.ID))
+func (s *WorkerReattachSuite) TestForceCreateInAnotherCheckoutIsRefused() {
+	s.Contains(s.from(s.repo.main, "git switch -C "+s.worker.ID), "`git switch`")
 }
 
 func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
@@ -732,14 +735,63 @@ func TestDetachedWorkerSuite(t *testing.T) { suite.Run(t, new(DetachedWorkerSuit
 
 func (s *DetachedWorkerSuite) SetupTest() {
 	s.build()
+	s.worker.Authority = "rev-a"
 	s.ledger()
 }
 
-func (s *DetachedWorkerSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
+func (c *remedyContractSuite) TestLeaseVcs() {
+	s := new(DetachedWorkerSuite)
+	s.SetT(c.T())
+	s.SetupTest()
 	s.repo.git(s.own, "switch", "--detach")
-	reason := s.from(s.own, "git commit -m done")
-	s.Contains(reason, "has no branch checked out")
-	s.Contains(reason, fmt.Sprintf("`git switch -C %s`", s.worker.ID))
+	const rel = "cmd/magus/change.txt"
+	target := filepath.Join(s.own, rel)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(target), 0o755))
+	s.Require().NoError(os.WriteFile(target, []byte("old\n"), 0o644))
+	patch := filepath.Join(s.T().TempDir(), "change.patch")
+	s.Require().NoError(os.WriteFile(patch, []byte(gitDiffTouching(rel)), 0o644))
+	line := "git apply " + patch
+	deps := withSetting(string(denyRuleStall), builtin.Advise)
+	req := Request{Input: line, Dir: s.own, Session: "s", Host: "test-host", Lease: s.worker.ID}
+	block := Judge(s.testContext(), deps, req)
+	s.Require().Equal(string(denyRuleLeaseVCS), block.Rule, block.Reason)
+	var stderr strings.Builder
+	s.Require().Error(verdictExit(&stderr, output.Options{Format: output.JSON}, block))
+	s.T().Logf("worker first line: %s", stderr.String())
+	s.Contains(stderr.String(), "create the job branch at this HEAD")
+	s.NotContains(block.Reason, "Only the root")
+	gate := stallGate(hookLocation(s.testContext(), deps).cacheDir, s.worker.ID)
+	s.Equal(1, readStall(gate).Level)
+	s.Require().NotEmpty(block.NextSteps)
+	want := []string{"git", "-C", s.own, "switch", "-c", s.worker.ID}
+	s.Equal(want, block.NextSteps[0].Argv)
+	gradeServed(s.T(), s.testContext(), deps, req, "lease holder", block.NextSteps[0].ID, block.NextSteps[0].Run)
+	s.repo.git(s.own, want[1:]...)
+	retry := Judge(s.testContext(), deps, req)
+	s.Require().NotEqual("deny", string(retry.Decision), retry.Reason)
+	s.repo.git(s.own, "apply", patch)
+	contents, err := os.ReadFile(target)
+	s.Require().NoError(err)
+	s.Equal("new\n", string(contents))
+}
+
+func (s *DetachedWorkerSuite) TestADetachedCheckoutWithoutADestinationNamesTheOrchestrator() {
+	s.repo.git(s.own, "switch", "--detach")
+	row := s.worker
+	row.Worktree = nil
+	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []jobtypes.Job{row}})
+	deps := withSetting(string(denyRuleStall), builtin.Advise)
+	block := Judge(ctx, deps, Request{Input: "git commit -m done", Dir: s.own, Session: "s", Host: "test-host", Lease: row.ID})
+	s.Require().Equal(string(denyRuleLeaseVCS), block.Rule, block.Reason)
+	var stderr strings.Builder
+	s.Require().Error(verdictExit(&stderr, output.Options{Format: output.JSON}, block))
+	line := stderr.String()
+	s.T().Logf("orchestrator first line: %s", line)
+	s.Contains(line, "ask the orchestrator to record a writable linked checkout")
+	s.Contains(line, "Only the root can clear this")
+	s.NotContains(line, "git switch")
+	gate := stallGate(hookLocation(ctx, deps).cacheDir, row.ID)
+	s.Equal(3, readStall(gate).Level)
 }
 
 // UnboundCommitSuite is a worker whose row has a checkout from its fork, before

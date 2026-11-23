@@ -53,7 +53,7 @@ func gradeStall(deps Dependencies, judged verdict.Judgment, lease string, at loc
 	if judged.Rule == string(denyRuleStaleBinary) {
 		return judged
 	}
-	if judged.Decision != verdict.Deny || lease == "" || !unclearable[judged.Rule] {
+	if judged.Decision != verdict.Deny || lease == "" || !rootOnlyStall(judged) {
 		return judged
 	}
 	if deps.settingLookup(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(judged.Rule)) {
@@ -110,12 +110,23 @@ func stallRun(s builtin.Setting) int {
 	return 4
 }
 
-// stallLevel is the level a refusal of rule reaches, given the gauge before it.
-func stallLevel(rec stallRecord, rule string, s builtin.Setting) int {
+func rootOnlyStall(judged verdict.Judgment) bool {
+	if judged.Rule == string(denyRuleLeaseVCS) {
+		for _, next := range judged.NextSteps {
+			if next.ID == hint.DenyRemedyPrefix+judged.Rule {
+				return false
+			}
+		}
+	}
+	return unclearable[judged.Rule]
+}
+
+// stallLevel is the level this refusal reaches, given the gauge before it.
+func stallLevel(rec stallRecord, judged verdict.Judgment, s builtin.Setting) int {
 	switch {
-	case unclearable[rule]:
+	case rootOnlyStall(judged):
 		return 3
-	case rec.Last == rule || rec.Run+1 >= stallRun(s):
+	case rec.Last == judged.Rule || rec.Run+1 >= stallRun(s):
 		return 2
 	}
 	return 1
@@ -130,7 +141,7 @@ func observeStall(ctx context.Context, at location, who hookAttribution, lease s
 	s := recalledSettings(at.cacheDir)[string(denyRuleStall)]
 	switch judged.Decision {
 	case verdict.Deny:
-		level := stallLevel(rec, judged.Rule, s)
+		level := stallLevel(rec, judged, s)
 		rec.Refusals++
 		rec.Run++
 		rec.Last = judged.Rule

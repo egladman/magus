@@ -1835,7 +1835,7 @@ func roleScopedCommandRules() []roleScopedRule {
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
 		{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
-		{denyRuleLeaseVCS, oneString(denyLeaseScopedVCS)},
+		{denyRuleLeaseVCS, leaseVCSDenial},
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
 		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
@@ -1861,11 +1861,14 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 		return nil
 	}
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
-	candidates := next
-	// The apply line claims the acting lease itself, so the role filter, which reads every
-	// job verb as a write outside the lease, would drop the one remedy written for it.
-	if len(next) != 1 || !placesBinary(root, next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
-		candidates = hint.FilterServable(role, writePaths, next)
+	candidates := hint.FilterServable(role, writePaths, next)
+	// Job and Git metadata sit outside the lease's file paths.
+	// The recursive judgment still grades the command.
+	if len(next) == 1 {
+		n := next[0]
+		if n.ID == hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) || placesBinary(root, n, actingLease) || preparesOwnCheckout(n, standing.row, actingLease) {
+			candidates = next
+		}
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})
 	call := Request{

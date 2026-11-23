@@ -68,12 +68,12 @@ func (s *HookRowAppendSuite) TestACompatRowAppends() {
 func TestStallLevel(t *testing.T) {
 	t.Parallel()
 	light := builtin.Setting{Decision: builtin.Advise}
-	assert.Equal(t, 3, stallLevel(stallRecord{}, string(denyRuleLeaseWrite), light), "a refusal only the root can clear")
-	assert.Equal(t, 1, stallLevel(stallRecord{}, string(denyRuleSedInPlace), light))
-	assert.Equal(t, 2, stallLevel(stallRecord{Run: 1, Last: string(denyRuleSedInPlace)}, string(denyRuleSedInPlace), light), "the same rule again")
-	assert.Equal(t, 1, stallLevel(stallRecord{Run: 2, Last: string(denyRuleRawTool)}, string(denyRuleSedInPlace), light))
-	assert.Equal(t, 2, stallLevel(stallRecord{Run: 3, Last: string(denyRuleRawTool)}, string(denyRuleSedInPlace), light), "a run of four")
-	assert.Equal(t, 2, stallLevel(stallRecord{Run: 2, Last: string(denyRuleRawTool)}, string(denyRuleSedInPlace), builtin.Setting{Decision: builtin.Advise, Calls: 3}))
+	assert.Equal(t, 3, stallLevel(stallRecord{}, verdict.Judgment{Rule: string(denyRuleLeaseWrite)}, light), "a refusal only the root can clear")
+	assert.Equal(t, 1, stallLevel(stallRecord{}, verdict.Judgment{Rule: string(denyRuleSedInPlace)}, light))
+	assert.Equal(t, 2, stallLevel(stallRecord{Run: 1, Last: string(denyRuleSedInPlace)}, verdict.Judgment{Rule: string(denyRuleSedInPlace)}, light), "the same rule again")
+	assert.Equal(t, 1, stallLevel(stallRecord{Run: 2, Last: string(denyRuleRawTool)}, verdict.Judgment{Rule: string(denyRuleSedInPlace)}, light))
+	assert.Equal(t, 2, stallLevel(stallRecord{Run: 3, Last: string(denyRuleRawTool)}, verdict.Judgment{Rule: string(denyRuleSedInPlace)}, light), "a run of four")
+	assert.Equal(t, 2, stallLevel(stallRecord{Run: 2, Last: string(denyRuleRawTool)}, verdict.Judgment{Rule: string(denyRuleSedInPlace)}, builtin.Setting{Decision: builtin.Advise, Calls: 3}))
 }
 
 func TestGradeStallNamesTheExitOnTheVerdictLine(t *testing.T) {
