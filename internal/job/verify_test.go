@@ -75,6 +75,30 @@ func acceptRow() job.Job {
 	}
 }
 
+func TestFindingsDelivery(t *testing.T) {
+	row := acceptRow()
+	row.Delivery = job.DeliveryFindings
+	rep := passingResult()
+	rep.ChangedPaths = nil
+	rep.Findings = []string{"The nested lookup made 54 allocations."}
+	seen := claimed(rep)
+	grade := func() Status { return VerifyGates(row, rep, passingRun, nil, nil, seen) }
+	got := grade()
+	require.True(t, got.Verified, "%v", got.Violations)
+
+	seen.Changed = []string{"scratch.go"}
+	assert.False(t, grade().Verified)
+	seen.Changed = nil
+	seen.ChangedKnown = false
+	assert.False(t, grade().Verified)
+	seen.ChangedKnown = true
+	rep.Findings = []string{"  "}
+	assert.False(t, grade().Verified)
+	rep.Findings = []string{"The nested lookup made 54 allocations."}
+	rep.Validation.OutputRef = ""
+	assert.False(t, grade().Verified)
+}
+
 func passingResult() job.Result {
 	return job.Result{
 		Schema:       job.Schema{Version: job.ResultAPIVersion},

@@ -670,7 +670,9 @@ func resultShape(row job.Job) string {
 		ChangedPaths:    []string{},
 		UnresolvedRisks: []string{},
 	}
-	if !row.ReadOnly {
+	if row.Delivery == job.DeliveryFindings {
+		shape.Findings = []string{"<conclusion supported by the check output>"}
+	} else if !row.ReadOnly {
 		shape.ChangedPaths = []string{"<each file you changed>"}
 	}
 	for _, postcondition := range row.EffectivePostconditions() {
@@ -685,6 +687,9 @@ func resultShape(row job.Job) string {
 	encoded, err := codec.MarshalIndent(shape, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("the shape did not encode: %v", err)
+	}
+	if row.Delivery == job.DeliveryFindings {
+		return string(encoded) + "\nDiscard scratch edits and cite the completed check."
 	}
 	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or verification_evidence entry.",
 		encoded, OwedNoSeat)

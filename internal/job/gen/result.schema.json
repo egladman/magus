@@ -20,6 +20,12 @@
       },
       "description": "Requires names the features a reader must implement to act on this record at all. A reader lacking one treats the record as read-only; the records around it stay usable. Set only for content an older reader would act on wrongly, never for an added field it can ignore."
     },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "job": {
       "type": "string"
     },

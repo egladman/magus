@@ -247,6 +247,7 @@ const (
 // Result is the result a holder files for a job.
 type Result struct {
 	Schema               `yaml:",inline"`
+	Findings             []string               `json:"findings,omitempty" yaml:"findings,omitempty"`
 	Job                  string                 `json:"job,omitempty" yaml:"job,omitempty"`
 	ChangedPaths         []string               `json:"changed_paths" yaml:"changed_paths"`
 	Validation           ResultValidation       `json:"validation,omitzero" yaml:"validation,omitempty"`

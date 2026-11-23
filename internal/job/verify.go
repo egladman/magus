@@ -127,6 +127,25 @@ type Observed struct {
 	tries job.Attempts
 }
 
+// A findings job may use its write paths as scratch. Its output is the
+// recorded conclusion and the check that supports it.
+func findingsViolations(rep job.Result, seen Observed) []string {
+	var violations []string
+	if len(rep.Findings) == 0 || slices.ContainsFunc(rep.Findings, func(s string) bool { return strings.TrimSpace(s) == "" }) {
+		violations = append(violations, "file a nonempty conclusion in findings")
+	}
+	if rep.Validation.OutputRef == "" {
+		violations = append(violations, "a findings delivery requires recorded output from its declared check")
+	}
+	if !seen.ChangedKnown {
+		violations = append(violations, "could not verify that the prototype was discarded")
+	}
+	if len(rep.ChangedPaths) != 0 || len(seen.Changed) != 0 {
+		violations = append(violations, "a findings delivery must return its checkout to its checkpoint")
+	}
+	return violations
+}
+
 // GreenGate is a passing ci gate and what changed since it.
 type GreenGate struct {
 	// Commit is the revision the gate ran at; empty means there is no gate.
@@ -464,6 +483,8 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 	}
 
 	switch {
+	case row.Delivery == job.DeliveryFindings:
+		v.Violations = append(v.Violations, findingsViolations(rep, seen)...)
 	case row.ReadOnly && len(rep.ChangedPaths) > 0:
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s is read-only and the result claims %d changed path(s)", row.ID, len(rep.ChangedPaths)))
 	case !row.ReadOnly && len(rep.ChangedPaths) == 0:
@@ -488,7 +509,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
 		}
 	}
-	if !row.ReadOnly && !row.Integrating() {
+	if !row.ReadOnly && !row.Integrating() && row.Delivery != job.DeliveryFindings {
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
 	}

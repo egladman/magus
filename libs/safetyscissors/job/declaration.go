@@ -274,6 +274,12 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 		invalid("parent_head", "parent_head is the base of a stacked job's pull request, and this job is not stacked",
 			"drop parent_head, or set delivery to "+DeliveryStacked)
 	}
+	if d.Delivery == DeliveryFindings && d.Check.IsZero() {
+		invalid("check", "a findings delivery requires a check to witness its evidence", "declare the check whose output supports the findings")
+	}
+	if d.Delivery == DeliveryFindings && len(d.Integrates) != 0 {
+		invalid("integrates", "a findings delivery produces no branch to integrate", "use a separate integration job")
+	}
 	if d.Weight != nil && !ValidWeight(*d.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *d.Weight),
 			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultWeight))
@@ -430,11 +436,13 @@ const (
 	DeliverySeparate = "separate"
 	// DeliveryStacked opens a pull request based on the parent's head.
 	DeliveryStacked = "stacked"
+	// DeliveryFindings returns evidence to the parent without a code change.
+	DeliveryFindings = "findings"
 )
 
 // Deliveries is the closed set [Job.Delivery] takes.
 func Deliveries() []string {
-	return []string{DeliveryFold, DeliverySeparate, DeliveryStacked}
+	return []string{DeliveryFold, DeliverySeparate, DeliveryStacked, DeliveryFindings}
 }
 
 // StateVocabulary is the closed set of job states, as an error quotes it. Shared by
