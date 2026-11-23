@@ -174,7 +174,7 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 		}.full()
 	}
 	if currentTreeAtOtherAuthority(root, skew) {
-		return authorityRecovery(root, deps.lease, skew.Revision).full()
+		return authorityRecovery(ctx, at, deps.lease, skew.Revision).full()
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; relink ./magus, alone on its line: `%s`.",

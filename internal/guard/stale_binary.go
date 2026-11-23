@@ -101,12 +101,18 @@ func currentTreeAtOtherAuthority(root string, skew contract.Skew) bool {
 	return err == nil && tree.Tree == skew.Binary
 }
 
-func authorityRecovery(root, lease, revision string) denial {
+func authorityRecovery(ctx context.Context, at location, lease, revision string) denial {
+	row, ok := leaseRow(ctx, at, lease)
+	if !ok || row.CheckoutRoot == "" {
+		return denial{Say: fmt.Sprintf("Job %s uses another contract at %.12s. Ask an unleased orchestrator to locate its registered checkout before changing the job.", lease, revision)}
+	}
 	return denial{
-		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s. In a human terminal in %s, run `git status --short`.",
-			lease, revision, shellWord(root)),
-		Why: fmt.Sprintf("Review `git diff --cached` and `git diff`. Confirm the intended contract and its generating sources. If HEAD already carries it, skip the commit. Otherwise commit only reviewed paths with identical staged and working copies. Stop for conflicts or uncertain provenance. "+
-			"See docs/conventions.md#recovering-a-checkout-binary for the scoped commit. From that checkout run `./magus job advance %s`, verify its authority against `git rev-parse HEAD` with `./magus describe job %s -o 'template={{.job.authority}}'`, then retry the refused call.",
+		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s. An unleased orchestrator must retire the obsolete job or reconcile its authority in %s.",
+			lease, revision, shellWord(row.CheckoutRoot)),
+		Why: fmt.Sprintf("In the registered checkout, inspect `git status --short` and confirm that the intended branch preserves the work. "+
+			"If the job is obsolete, an unleased orchestrator can close only that job with `./magus job exit %s`. "+
+			"If work continues, review the staged and working changes and verify the intended contract is committed on the intended branch. "+
+			"Only then run `./magus job advance %s` in the registered checkout and verify its authority against HEAD. See docs/conventions.md#recovering-a-checkout-binary.",
 			shellWord(lease), shellWord(lease)),
 	}
 }

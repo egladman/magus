@@ -117,7 +117,7 @@ func (s *AuthorityContractSuite) commit(msg string) string {
 // authority.
 func (s *AuthorityContractSuite) at(authority string) location {
 	return location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir(),
-		rows: authorityRows{{ID: "worker", Authority: authority}}}
+		rows: authorityRows{{ID: "worker", Authority: authority, CheckoutRoot: s.root}}}
 }
 
 func (s *AuthorityContractSuite) deny(lease, authority string) string {
@@ -159,6 +159,26 @@ func (s *AuthorityContractSuite) TestAnAuthorityCarryingAnotherContractIsRefused
 
 func (s *AuthorityContractSuite) TestAnUnreadableAuthorityIsRefused() {
 	s.Contains(s.deny("worker", "0123456789abcdef0123456789abcdef01234567"), "cannot read the contract")
+}
+
+func (s *AuthorityContractSuite) TestRecoveryNamesTheJobCheckoutWhenTheCallLandsElsewhere() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	checkout := s.T().TempDir()
+	at := s.at(moved)
+	at.rows = authorityRows{{ID: "worker", Authority: moved, CheckoutRoot: checkout}}
+	s.deps.lease = "worker"
+	reason := denyContractSkew(s.T().Context(), s.deps, at, "./magus job advance worker", DialectBash)
+	summary, _, _ := strings.Cut(reason, "\n")
+	s.Contains(summary, checkout)
+	s.NotContains(summary, s.root)
+	s.Contains(summary, "unleased orchestrator")
+	s.Contains(reason, "job exit worker")
+
+	asked := rulesAnswer{unloaded: true, loadFailure: errMissingMember}
+	s.Require().True(denyUnloaded(s.T().Context(), &asked, judgedCall{changes: true, lease: "worker"}, at))
+	s.Equal(denyRuleStaleBinary, asked.rule)
+	s.Equal(reason, asked.answer.Reason)
 }
 
 func (s *AuthorityContractSuite) TestALeasedLoadFailureMatchingItsAuthorityIsNotStale() {
