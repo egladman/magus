@@ -897,7 +897,7 @@ func recordResult(r *Result) *resultRecord {
 	}
 	out := &resultRecord{
 		Job: r.Job, ChangedPaths: slices.Clone(r.ChangedPaths), Validation: resultValidationRecord(r.Validation),
-		Findings: slices.Clone(r.Findings),
+		Findings:    slices.Clone(r.Findings),
 		Descendants: slices.Clone(r.Descendants), UnresolvedRisks: slices.Clone(r.UnresolvedRisks),
 		FollowUps: slices.Clone(r.FollowUps), ObservedGeneration: r.ObservedGeneration,
 	}
@@ -915,7 +915,7 @@ func (r *resultRecord) result() *Result {
 	}
 	out := &Result{
 		Job: r.Job, ChangedPaths: r.ChangedPaths, Validation: ResultValidation(r.Validation),
-		Findings: slices.Clone(r.Findings),
+		Findings:    slices.Clone(r.Findings),
 		Descendants: r.Descendants, UnresolvedRisks: r.UnresolvedRisks, FollowUps: r.FollowUps,
 		ObservedGeneration: r.ObservedGeneration,
 	}
