@@ -350,6 +350,16 @@ func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
 	return nil
 }
 
+// jsonParseError carries the decoder's message into a Buzz catch.
+type jsonParseError struct{ cause error }
+
+func (e jsonParseError) Error() string         { return "serialize.jsonDecode: " + e.cause.Error() }
+func (e jsonParseError) Unwrap() error         { return e.cause }
+func (e jsonParseError) BuzzErrorType() string { return `serialize\JsonParseError` }
+func (e jsonParseError) BuzzError() map[string]string {
+	return map[string]string{"message": e.Error()}
+}
+
 // serializeJSONDecode decodes a JSON string to a Boxed value.
 func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsString() {
@@ -357,7 +367,7 @@ func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	v, err := decodeJSON([]byte(args[0].AsString()))
 	if err != nil {
-		return vm.Null, fmt.Errorf("serialize.jsonDecode: %w", err)
+		return vm.Null, jsonParseError{cause: err}
 	}
 	return makeBoxed(v), nil
 }

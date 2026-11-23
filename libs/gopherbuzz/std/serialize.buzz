@@ -12,8 +12,8 @@ namespace serialize;
 ///     field of type `any`, the spelling the generated declarations use for one.
 ///   - `serialize` stands where upstream has `serializeValue`, and `floating` and
 ///     `floatingValue` are spellings upstream does not have.
-///   - Nothing declares a raise; upstream raises CircularReference and
-///     NotSerializable from init and jsonEncode, and JsonParseError from jsonDecode.
+///   - Upstream init and jsonEncode also raise CircularReference
+///     and NotSerializable.
 
 /// Wraps deserialized data, for example decoded JSON.
 export object Boxed {
@@ -48,5 +48,9 @@ export extern fun serialize(value: any) > any;
 /// Encodes data as a JSON string.
 export extern fun jsonEncode(data: any) > str;
 
+export object JsonParseError {
+    message: str?,
+}
+
 /// Decodes a JSON string into a `Boxed`.
-export extern fun jsonDecode(json: str) > Boxed;
+export extern fun jsonDecode(json: str) > Boxed !> JsonParseError;

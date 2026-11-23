@@ -219,6 +219,20 @@ func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
 	assert.Equal(t, int64(-5), items[2].AsInt())
 }
 
+func TestJSONDecodeRaisesTypedParseError(t *testing.T) {
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = s.Close() })
+	Register(s)
+	require.NoError(t, s.Exec(t.Context(), `import "serialize";
+var message = "";
+try {
+    _ = serialize\jsonDecode("[");
+} catch (err: serialize\JsonParseError) {
+    message = err.message ?? "";
+}`))
+	assert.Contains(t, s.Globals()["message"].AsString(), "serialize.jsonDecode:")
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {
