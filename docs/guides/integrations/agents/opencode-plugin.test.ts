@@ -202,7 +202,10 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
   const h = await hooks();
 
   await assert.rejects(
-    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git stash", workdir: "/other" } }),
+    h["tool.execute.before"](
+      { tool: "bash", callID: "c1" },
+      { args: { command: "git stash", workdir: "/other" } },
+    ),
     /whole-tree git stash/,
   );
 
