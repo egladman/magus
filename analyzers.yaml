@@ -94,7 +94,6 @@ clikitmain:
     cmd/magus/x.go: 1
     # moduledecls still parses its own -outdir: the file belongs to another
     # change in flight, so magus-utils hands the flag back to it.
-    cmd/magus-utils/module_decls.go: 2
   # - {path, reason}
   exits: []
 
