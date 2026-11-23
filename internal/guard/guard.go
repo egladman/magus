@@ -2072,10 +2072,6 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
 	capability := tools.Capability(env.ToolName)
 	files, isPatch := envelopePatch(env.ToolInput, capability == types.ToolWrites)
-	// A tool its row names as anything but a writer carries no patch in any field.
-	if capability != "" && capability != types.ToolWrites {
-		isPatch = false
-	}
 	command := cmp.Or(envelopeString(env.ToolInput, "command"), envelopeString(env.ToolInput, "cmd"))
 	switch {
 	case tool != "":
@@ -2090,11 +2086,11 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		root, _ := workspace.FindRoot(env.Cwd)
 		req.Value = buildCall(tool, env.ToolInput, root)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
-	case tools.Capability(env.ToolName) == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
+	case capability == types.ToolInert && envelopeString(env.ToolInput, "skill") == "":
 		// Ahead of every shape: a web fetch's prompt is no spawn's brief, and a tool that
 		// touches nothing has nothing to judge whatever its fields are called.
 		req.NothingToJudge = true
-	case isPatch:
+	case isPatch && (capability == "" || capability == types.ToolWrites):
 		// A patch is a write, whichever field the host put it in. Ahead of the command arm
 		// because one host sends it as `command`, where it would be judged as a shell line.
 		if len(files) == 0 {
