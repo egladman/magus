@@ -38,40 +38,6 @@ func validateModule(m Module) error {
 			}
 		}
 	}
-	return validateMCPTools(m)
-}
-
-// validateMCPTools checks the module's MCP tools: unique tool names, unique
-// parameter names within a tool, and a schema-representable type on every parameter.
-func validateMCPTools(m Module) error {
-	seen := map[string]bool{}
-	for _, tool := range m.MCPTools {
-		if tool.Name == "" {
-			return fmt.Errorf("mcp tool: empty Name")
-		}
-		if seen[tool.Name] {
-			return fmt.Errorf("mcp tool %q: declared twice", tool.Name)
-		}
-		seen[tool.Name] = true
-		if tool.Doc == "" {
-			return fmt.Errorf("mcp tool %q: empty Doc, the description is what an agent picks the tool by", tool.Name)
-		}
-		params := map[string]bool{}
-		for _, p := range tool.Params {
-			if p.Name == "" {
-				return fmt.Errorf("mcp tool %q: empty param Name", tool.Name)
-			}
-			if params[p.Name] {
-				return fmt.Errorf("mcp tool %q: param %q declared twice", tool.Name, p.Name)
-			}
-			params[p.Name] = true
-			switch p.Type {
-			case TypeString, TypeInt, TypeFloat, TypeBool, TypeStringSlice, TypeAnyMap:
-			case TypeAny, TypeByteSlice, TypeFloatSlice, TypeIndex, TypeInvalid, TypeStringMap, TypeStringMapMap, TypeStringSliceSlice:
-				return fmt.Errorf("mcp tool %q: param %q has type %s, which has no supported JSON schema shape", tool.Name, p.Name, p.Type.GoType())
-			}
-		}
-	}
 	return nil
 }
 

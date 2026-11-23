@@ -218,7 +218,6 @@ magus\project({
         "langservice-generate": {"integrates": "regenerates the language service manifest"},
         "magusfile-api-generate": {"integrates": "regenerates the magusfile API lock"},
         "man-generate": {"integrates": "regenerates the man pages"},
-        "mcp-tools-generate": {"integrates": "regenerates the MCP tool registry"},
         "mocks-generate": {"integrates": "regenerates the mocks"},
         "proofread-decisions-generate": {"integrates": "regenerates the proofread decisions"},
         "skills-generate": {"integrates": "regenerates the installed skills"},
@@ -857,7 +856,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Both lines compile internal/spell, which go:embeds generated files, so every generator
     // writing Go under internal/ or types/gen must finish first or MGS4008 refuses the run.
     ctx.needs(spells_generate, job_generate, buzz_generate, langservice_generate,
-              mcp_tools_generate, config_generate, mocks_generate);
+              config_generate, mocks_generate);
     ctx.readsFiles(["cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
         "libs/clikit/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
@@ -875,7 +874,7 @@ export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The packages are type-checked from source and the root embeds generated files, so
     // every generator writing Go under internal/ or types/gen must finish first.
     ctx.needs(spells_generate, job_generate, buzz_generate, langservice_generate,
-              mcp_tools_generate, config_generate, mocks_generate);
+              config_generate, mocks_generate);
     ctx.readsFiles(["cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go", "libs/clikit/**/*.go",
         "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
@@ -1143,17 +1142,6 @@ export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
     _ = proc\exec("go", ["generate", "./internal/langservice"]);
 }
 
-// Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the
-// same std descriptors buzz_generate reads.
-export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(spells_generate, job_generate, langservice_generate);
-    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
-        "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
-    ctx.writesFiles(["internal/handler/mcp/gen/registry.go"]);
-    _ = proc\exec("go", ["generate", "./internal/handler/mcp"]);
-}
-
 // Regenerates the published job schemas (internal/job/gen/*.schema.json) from the
 // structs that decode a job declaration and a holder's result.
 export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
@@ -1185,7 +1173,7 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     // mockery type-checks packages that import the bindings and config gen packages.
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
-              buzz_generate, config_generate, mcp_tools_generate);
+              buzz_generate, config_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
         "hack/magusfile/mockassert.buzz",
         "internal/spell/gen/types/*.buzz",

@@ -549,15 +549,6 @@ github.com/egladman/magus/std.LogError func(ctx context.Context, message string,
 github.com/egladman/magus/std.LogInfo func(ctx context.Context, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogTrace func(ctx context.Context, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogWarn func(ctx context.Context, message string, attrs map[string]any) error
-github.com/egladman/magus/std.MCPParam type struct
-github.com/egladman/magus/std.MCPParam.Doc field string
-github.com/egladman/magus/std.MCPParam.Name field string
-github.com/egladman/magus/std.MCPParam.Required field bool
-github.com/egladman/magus/std.MCPParam.Type field TypeTag
-github.com/egladman/magus/std.MCPTool type struct
-github.com/egladman/magus/std.MCPTool.Doc field string
-github.com/egladman/magus/std.MCPTool.Name field string
-github.com/egladman/magus/std.MCPTool.Params field []MCPParam
 github.com/egladman/magus/std.Magus var Module
 github.com/egladman/magus/std.MagusAbandonJob func(ctx context.Context, id string) (github.com/egladman/magus/libs/safetyscissors/job.Job, error)
 github.com/egladman/magus/std.MagusAffected func(ctx context.Context, base string) (github.com/egladman/magus/types.AffectedResult, error)
@@ -729,7 +720,6 @@ github.com/egladman/magus/std.Module.CallbackObjects field []string
 github.com/egladman/magus/std.Module.Doc field string
 github.com/egladman/magus/std.Module.Fields field []Field
 github.com/egladman/magus/std.Module.ImportPath method func() string
-github.com/egladman/magus/std.Module.MCPTools field []MCPTool
 github.com/egladman/magus/std.Module.Methods field []Method
 github.com/egladman/magus/std.Module.Name field string
 github.com/egladman/magus/std.Module.Namespaces field []Namespace

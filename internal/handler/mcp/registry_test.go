@@ -15,6 +15,40 @@ import (
 	"github.com/egladman/magus/std"
 )
 
+func TestValidateRegistryRejectsMalformedTools(t *testing.T) {
+	tests := []struct {
+		name string
+		tool ToolDescriptor
+		want string
+	}{
+		{"name is required", ToolDescriptor{Description: "d"}, "empty Name"},
+		{"doc is required", ToolDescriptor{Name: "m_a"}, "empty description"},
+		{
+			"param type must have a schema shape",
+			ToolDescriptor{Name: "m_a", Description: "d", Params: []ParamDescriptor{{Name: "p", Type: "unsupported"}}},
+			"has no supported JSON schema shape",
+		},
+		{
+			"param names are unique",
+			ToolDescriptor{Name: "m_a", Description: "d", Params: []ParamDescriptor{{Name: "p", Type: schemaString}, {Name: "p", Type: schemaString}}},
+			`param "p" declared twice`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateRegistry([]ToolDescriptor{tc.tool})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+
+	t.Run("duplicate tool names are refused", func(t *testing.T) {
+		err := validateRegistry([]ToolDescriptor{{Name: "m_a", Description: "d"}, {Name: "m_a", Description: "d"}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `mcp tool "m_a": declared twice`)
+	})
+}
+
 func TestRegistry_NonEmpty(t *testing.T) {
 	require.NotEmpty(t, Registry, "Registry is empty; every magus MCP deployment needs at least one tool")
 }
@@ -37,11 +71,7 @@ func TestRegistry_AllParamsHaveNames(t *testing.T) {
 	}
 }
 
-// TestRegistry_EveryToolHasADriver walks the REAL catalog against the REAL driver
-// set, both directions. registerTools panics on either mismatch, but only when a
-// server is actually built, which no unit test does and which a server does once at
-// startup: the catalog is generated now, so a descriptor edit that adds a tool with
-// no handler behind it should fail here rather than at somebody's first run.
+// Catch missing drivers and missing descriptors before server startup.
 func TestRegistry_EveryToolHasADriver(t *testing.T) {
 	drivers := map[string]bool{}
 	for _, d := range allToolDrivers(Options{Magus: fixtureMagus(t)}) {
@@ -56,7 +86,7 @@ func TestRegistry_EveryToolHasADriver(t *testing.T) {
 	}
 	for name := range drivers {
 		assert.Truef(t, described[name],
-			"driver %q has no catalog entry and would mount nowhere; declare an MCPTool for it on std.Magus", name)
+			"driver %q has no catalog entry; add its descriptor to Registry", name)
 	}
 }
 
@@ -124,13 +154,8 @@ func TestClientTimeoutIsItsOwnBound(t *testing.T) {
 	}
 }
 
-// TestRegistry_HandlersReadTheDeclaredParams closes the one unenforced half of "the
-// catalog is generated from the descriptor": every driver reads its params by string
-// literal (paramString(req.Params, "project", ...)), so a param renamed on std.Magus
-// changes the schema while the handler silently reads a key that is no longer sent and
-// takes its default. Asserting each declared name appears as a literal in the handler
-// sources is the cheap drift catch; it does not prove the literal is read for THAT tool,
-// which the per-tool tests do.
+// Drivers read request parameters by name. Exclude the catalog itself so a
+// declaration cannot supply the only occurrence of its own parameter name.
 func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 	t.Parallel()
 
@@ -139,7 +164,7 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 	var sources []byte
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		if name == "registry.go" || e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
 		b, err := os.ReadFile(name)
@@ -150,7 +175,7 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 		for _, p := range d.Params {
 			read := bytes.Contains(sources, []byte(fmt.Sprintf("\"%s\"", p.Name)))
 			assert.Truef(t, read,
-				"tool %q declares param %q on std.Magus, but no handler in this package reads that name; the schema advertises a param the driver ignores", d.Name, p.Name)
+				"tool %q declares param %q but no handler in this package reads that name", d.Name, p.Name)
 		}
 	}
 }

@@ -160,15 +160,15 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 			propOpts = append(propOpts, mcplib.Description(p.Description))
 		}
 		switch p.Type {
-		case "string":
+		case schemaString:
 			opts = append(opts, mcplib.WithString(p.Name, propOpts...))
-		case "boolean":
+		case schemaBoolean:
 			opts = append(opts, mcplib.WithBoolean(p.Name, propOpts...))
-		case "number":
+		case schemaNumber:
 			opts = append(opts, mcplib.WithNumber(p.Name, propOpts...))
-		case "object":
+		case schemaObject:
 			opts = append(opts, mcplib.WithObject(p.Name, propOpts...))
-		case "string_array":
+		case schemaStringArray:
 			opts = append(opts, mcplib.WithArray(p.Name, append(propOpts, mcplib.WithStringItems())...))
 		default:
 			panic(fmt.Sprintf("mcp: tool %q param %q has unknown type %q", d.Name, p.Name, p.Type))

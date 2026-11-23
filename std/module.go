@@ -425,43 +425,6 @@ type Module struct {
 	// getRandomValues. The test is whether the BROWSER can provide it, not whether
 	// the operation sounds pure.
 	WASM bool
-	// MCPTools is the module's MCP tools, the ones an MCP client sees. The
-	// generated registry (internal/handler/mcp/gen) is emitted from this, so the
-	// tool catalog derives from the same descriptor as the bindings, the checker
-	// declarations and the reference docs.
-	MCPTools []MCPTool
-}
-
-// MCPTool is one MCP tool of a module.
-//
-// It hangs off the MODULE rather than being a flag on Method because the two
-// sets are not in bijection: every remaining tool needs state or a process
-// boundary no Buzz member has (the diff tool wants the server's live review
-// session; client runs a script in its own worker).
-type MCPTool struct {
-	// Name is the tool name an MCP client calls, e.g. "config". Bound to a
-	// hint.ToolName constant on the handler side, which is what keeps the two
-	// spellings from drifting.
-	Name string
-	// Doc is the tool description sent to the client. Agent-facing prose, so it is
-	// authored here rather than inherited from the member: a member's Doc teaches a
-	// Buzz caller about return-type annotations and raising, which is noise in a
-	// tool manifest an agent pays context for.
-	Doc string
-	// Params are the tool's named parameters. Authored rather than derived from the
-	// member's Args because a Buzz member takes positional args plus one opts map,
-	// and an opts map carries no names for the schema to read.
-	Params []MCPParam
-}
-
-// MCPParam is one named parameter of an MCPTool. Type is restricted to the
-// JSON-schema shapes the MCP tool builder supports: string, number, boolean,
-// an array of strings, and an untyped object for a strict downstream decoder.
-type MCPParam struct {
-	Name     string
-	Type     TypeTag
-	Required bool
-	Doc      string
 }
 
 // ImportPath returns the path a magusfile imports this module by: Path when it

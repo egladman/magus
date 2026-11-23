@@ -224,46 +224,6 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 	}
 }
 
-// TestValidateModuleRejectsMalformedMCPTools covers the MCP-tool half of
-// validation.
-func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
-	base := Method{Name: "look", Doc: "d", Impl: covImplementationStringString, Args: []Arg{{Name: "s"}}, Returns: []Ret{{}}}
-	tests := []struct {
-		name string
-		tool MCPTool
-		want string
-	}{
-		{"name is required", MCPTool{Doc: "d"}, "empty Name"},
-		{"doc is required", MCPTool{Name: "m_a"}, "empty Doc"},
-		{
-			"param type must have a schema shape",
-			MCPTool{Name: "m_a", Doc: "d", Params: []MCPParam{{Name: "p", Type: TypeStringSliceSlice}}},
-			"has no supported JSON schema shape",
-		},
-		{
-			"param names are unique",
-			MCPTool{Name: "m_a", Doc: "d", Params: []MCPParam{{Name: "p", Type: TypeString}, {Name: "p", Type: TypeString}}},
-			`param "p" declared twice`,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateModule(Module{Name: "covmcp", Methods: []Method{base}, MCPTools: []MCPTool{tc.tool}})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.want)
-		})
-	}
-
-	t.Run("duplicate tool names are refused", func(t *testing.T) {
-		err := ValidateModule(Module{
-			Name:     "covmcp",
-			MCPTools: []MCPTool{{Name: "m_a", Doc: "d"}, {Name: "m_a", Doc: "d"}},
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `mcp tool "m_a": declared twice`)
-	})
-}
-
 // TestIndexModulesPanicsRatherThanIndexingABadModule covers both of the registry's
 // refusals. It indexes a throwaway list, so the real registry is untouched.
 func TestIndexModulesPanicsRatherThanIndexingABadModule(t *testing.T) {
