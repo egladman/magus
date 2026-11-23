@@ -155,7 +155,7 @@ host, where the Go reader needs a fixed shape.
 ### The codemod
 
 > Superseded in its targets by the 2026-11-19 amendment: the rewrites use `Error` for
-> `Diagnostic`, and `result\Result::<T, Error>`, `result\ok(v)` and `result\err(e)` for the
+> `Diagnostic`, and `Result::<T, Error>`, `ok::<T, Error>(v)` and `err::<T, Error>(e)` for the
 > constructors, with `result\caught` staying in `result`. The one-commit break and the
 > changelog entry stand.
 
@@ -336,7 +336,8 @@ The decision:
    `ok`, `err` and `caught`, and `libs/result` folds into it. `Error` is today's Diagnostic under
    a new name, with the fields `code`, `message`, `hint` and `url`. `fix` becomes `hint`, the word
    compilers use. `Error` names no magus concept, so it stays in std. Code reads
-   `Result::<int, Error>`, `ok(v)` and `err(e)`. The module is not named `errors`, because upstream
+   `Result::<int, Error>`, `ok::<int, Error>(v)` and `err::<int, Error>(e)`. Both constructors
+   name the success and error types at every call. The module is not named `errors`, because upstream
    Buzz already ships a std `errors` module. This replaces the `magus/diagnostic` proposal and the
    `magus/errors` pick.
 2. **The import.** Files use `import "result" as _;`. That is upstream Buzz syntax, already used
@@ -346,7 +347,7 @@ The decision:
 
    ```buzz
    if (r.error -> e) {
-       return err(e);
+       return err::<int, Error>(e);
    }
    final v = r.value!;
    ```
