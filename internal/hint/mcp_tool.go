@@ -22,6 +22,7 @@ func (t ToolName) String() string { return string(t) }
 // The MCP handler and agent instructions share these tool names.
 const (
 	ToolClient  ToolName = "client"
+	ToolQuery   ToolName = "query"
 	ToolStatus  ToolName = "status"
 	ToolConfig  ToolName = "config"
 	ToolDiff    ToolName = "diff"
@@ -35,7 +36,7 @@ const (
 // this file and fails if a declaration is missing, the way a hand-maintained
 // list cannot.
 var AllToolNames = []ToolName{
-	ToolClient, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz, ToolSplice,
+	ToolClient, ToolQuery, ToolStatus, ToolConfig, ToolDiff, ToolConsole, ToolBuzz, ToolSplice,
 }
 
 // LookupTool resolves a declared tool name, reporting false for one nobody declares.

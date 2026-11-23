@@ -24,16 +24,16 @@ const (
 // Registry supplies both the server registration and workspace introspection.
 var Registry = checkedRegistry([]ToolDescriptor{
 	{
+		Name:        hint.ToolQuery.String(),
+		Description: "Search the workspace graph for projects, targets, files, symbols and their signatures. Pass next_offset to read another page.",
+		Params: []ParamDescriptor{
+			{Name: "terms", Type: schemaString, Description: "Magus query terms, for example kind=spell."},
+			{Name: "offset", Type: schemaNumber, Description: "Starting match index. Defaults to zero."},
+		},
+	},
+	{
 		Name: hint.ToolClient.String(),
-		Description: "Run a Buzz program against the magus client and return its value. " +
-			"Define `main(args: [str])`; the return value arrives under `json`, and std\\print text under `stdout`. " +
-			"`import \"magus\"` is required to call the workspace. Importable: std, math, crypto, serialize, buffer, and the WASM-marked host modules except env. " +
-			"File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. " +
-			"Call `magus\\describe.module(\"magus\")` for signatures. Strict mode: label arguments after the first; annotate every parameter. " +
-			"`magus\\graph().dir`, `magus\\graph().dirs`, `magus\\graph().layer` and `magus\\graph().neighborhood` return typed records (Dir, [Dir], Layer, NeighborhoodResult) with imports, declared calls and layers; a missing directory raises MGS7005 and an undeclared layer MGS7006. " +
-			"Variables do not persist; filter large results before returning them. " +
-			"Each call runs in a separate process, bounded at 10 minutes unless an MCP task host runs it. " +
-			"Example: `import \"magus\"; fun main(args: [str]) > any !> str { return magus\\graph().query(\"kind=spell\"); }`",
+		Description: `Query the workspace or run a target from a Buzz main(args: [str]). Import "magus" and call magus\describe.module("magus") for signatures. Return a value as json or print to stdout. Filter large results before returning.`,
 		Params: []ParamDescriptor{
 			{Name: "script", Type: schemaString, Description: "Inline Buzz source. Exactly one of script or path."},
 			{Name: "path", Type: schemaString, Description: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},

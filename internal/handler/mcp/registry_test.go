@@ -110,33 +110,18 @@ func TestMCPToolNamesResolve(t *testing.T) {
 	}
 }
 
-// The instructions name magus\ members by their descriptor names, so each must be a
-// member std.Magus declares; a renamed member fails here rather than in an agent.
-func TestServerInstructionsNameRealMembers(t *testing.T) {
+func TestServerInstructionsNameDiscoveryMethod(t *testing.T) {
 	t.Parallel()
-
-	members := map[string]bool{}
-	for _, m := range std.Magus.Methods {
-		members[m.Name] = true
-	}
 	for _, ns := range std.Magus.Namespaces {
-		members[ns.Name] = true
-	}
-	for _, root := range std.Magus.Methods {
-		for _, ret := range root.Returns {
-			for _, object := range std.Magus.Objects {
-				if object.Name != ret.Object {
-					continue
-				}
-				for _, method := range object.Methods {
-					members[fmt.Sprintf("%s().%s", std.CamelCase(root.Name), std.BuzzMethodName(method))] = true
-				}
+		for _, method := range ns.Methods {
+			call := fmt.Sprintf(`magus\%s.%s("magus")`, ns.Name, std.BuzzMethodName(method))
+			if call == clientDiscovery {
+				assert.Contains(t, serverInstructions, call)
+				return
 			}
 		}
 	}
-	for _, name := range clientMembers {
-		assert.Truef(t, members[name], "the instructions name magus\\%s, which std.Magus does not declare", name)
-	}
+	t.Fatalf("MCP discovery call %q has no declared method", clientDiscovery)
 }
 
 // A direct client call is bounded by hint.ClientCallBound whatever target_timeout

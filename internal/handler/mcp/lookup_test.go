@@ -1,10 +1,15 @@
 package mcp
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -29,4 +34,33 @@ func TestProjectLookup(t *testing.T) {
 	require.Equal(t, types.VerdictUnknown, empty.Verdict)
 	require.NotNil(t, empty.Matches)
 	require.Nil(t, empty.NextOffset)
+}
+
+func TestQueryRejectsInvalidInputs(t *testing.T) {
+	tool := queryTool{}
+	for _, params := range []map[string]any{
+		{},
+		{"terms": " "},
+		{"terms": "kind=project", "offset": -1.0},
+		{"terms": "kind=project", "offset": 0.5},
+		{"terms": "kind=project", "offset": "1"},
+	} {
+		_, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: params})
+		require.Error(t, err)
+	}
+}
+
+func TestQueryReturnsWorkspaceMatches(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	m, err := magus.Open(t.Context(), root, magus.WithSpawnRule(tier.Ceiling))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+	tool := queryTool{workspace: m}
+	response, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"terms": "kind=project"}})
+	require.NoError(t, err)
+	page, ok := response.Data.(lookupPage)
+	require.True(t, ok)
+	require.NotEmpty(t, page.Matches)
+	require.LessOrEqual(t, len(page.Matches), lookupPageSize)
 }

@@ -56,6 +56,7 @@ type mcpCLIEquivalent struct {
 // them being written for MCP. The client tool is absent: what it does is its script, which
 // clientCall reads.
 var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
+	hint.ToolQuery:  {command: hint.Query, operands: []string{"terms"}},
 	hint.ToolDiff:   {command: hint.Diff},
 	hint.ToolStatus: {command: hint.ServerStatus},
 	hint.ToolConfig: {command: hint.ConfigView},
@@ -68,6 +69,7 @@ var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 // transform where `magus buzz` runs a script). A tool absent here is not judged read-only,
 // and TestEveryMCPToolIsClassifiedForAStaleBinary fails until a new one is added.
 var mcpReadOnlyTools = map[hint.ToolName]func(input map[string]any) bool{
+	hint.ToolQuery:   func(map[string]any) bool { return true },
 	hint.ToolStatus:  func(map[string]any) bool { return true },
 	hint.ToolConfig:  func(map[string]any) bool { return true },
 	hint.ToolConsole: func(map[string]any) bool { return true },

@@ -187,6 +187,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		consoleUnavailable = "mcp.address is not loopback"
 	}
 	return []spells.Driver{
+		&queryTool{workspace: opts.Magus},
 		&clientTool{root: opts.Magus.Root(), timeout: hint.ClientCallBound},
 		&buzzTool{root: opts.Magus.Root(), timeout: cmp.Or(opts.Config.TargetTimeout, buzzDefaultTimeout)},
 		&statusTool{opts: opts},
