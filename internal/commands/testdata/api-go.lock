@@ -4368,6 +4368,7 @@ github.com/egladman/magus/types.ToolCapability type string
 github.com/egladman/magus/types.ToolCapability.String method func() string
 github.com/egladman/magus/types.ToolCapability.Valid method func() bool
 github.com/egladman/magus/types.ToolCapability.Values method func() []string
+github.com/egladman/magus/types.ToolContinues const ToolCapability = "continues"
 github.com/egladman/magus/types.ToolDefinition const untyped string = "A tool is a binary a spell drives. magus probes its version on every run, because that version keys the cache. A project may also hold it to a window - an inclusive min and an exclusive below - intersected with what the declaring spell requires."
 github.com/egladman/magus/types.ToolHostFile const untyped string = "host"
 github.com/egladman/magus/types.ToolInert const ToolCapability = "inert"
