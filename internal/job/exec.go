@@ -67,7 +67,7 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 		return job.Job{}, err
 	}
 	base, full := facts.base, facts.full
-	return s.Mutate(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64) error {
+	return s.MutateSeeing(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64, rows []job.Job) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
 				" check the declared ids with `%s` and exec under the id the"+
@@ -81,6 +81,9 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 			}
 		}
 		if err := execRefusal(cur, here, facts); err != nil {
+			return err
+		}
+		if err := checkoutWriterConflict(*cur, here, rows); err != nil {
 			return err
 		}
 		// An exited row taken again where it was taken is its holder sent back to work: it
@@ -164,7 +167,36 @@ func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error
 	if err != nil {
 		return err
 	}
-	return execRefusal(&row, here, facts)
+	if err := execRefusal(&row, here, facts); err != nil {
+		return err
+	}
+	f, err := s.Read(ctx)
+	if err != nil {
+		return err
+	}
+	return checkoutWriterConflict(row, here, f.Jobs)
+}
+
+// Wait reads the checkout's HEAD when a writer owns the checkout. Two
+// independently graded writers cannot both own that revision.
+func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
+	if here == "" || len(row.Paths.Write) == 0 {
+		return nil
+	}
+	for _, peer := range rows {
+		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.Paths.Write) == 0 {
+			continue
+		}
+		if peer.State != job.StateRunning && peer.State != job.StateExited {
+			continue
+		}
+		if !peer.Worktree.Standing() && !row.Worktree.Standing() && peer.Parent != "" && row.Parent != "" {
+			continue
+		}
+		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s; give %s its own checkout or finish verifying %s before taking another writer here",
+			row.ID, peer.ID, here, row.ID, peer.ID)}
+	}
+	return nil
 }
 
 // untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork

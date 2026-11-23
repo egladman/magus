@@ -46,8 +46,8 @@ func (s *ExecRefusalSuite) linked(name, rev string) string {
 }
 
 // answers plants row and asks both: the question first, since exec writes.
-func (s *ExecRefusalSuite) answers(row job.Job, here string) (asked, took error) {
-	plant(s.T(), s.store, row)
+func (s *ExecRefusalSuite) answers(row job.Job, here string, peers ...job.Job) (asked, took error) {
+	plant(s.T(), s.store, append(peers, row)...)
 	asked = s.store.ExecRefusal(s.T().Context(), row, here)
 	_, took = NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: here}).Exec(s.T().Context(), row.ID)
 	return asked, took
@@ -59,6 +59,36 @@ func (s *ExecRefusalSuite) adoptedRow() job.Job {
 
 func (s *ExecRefusalSuite) TestAFreshCheckoutAtTheCheckpointIsRefusedByNeither() {
 	asked, took := s.answers(s.adoptedRow(), s.linked("fresh", s.checkpoint))
+	s.NoError(asked)
+	s.NoError(took)
+}
+
+func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
+	peer := s.adoptedRow()
+	peer.ID = "compile"
+	peer.Paths.Write = []string{"compiler.go"}
+	peer.CheckoutRoot = s.landing
+	peer.State = job.StateRunning
+	row := s.adoptedRow()
+	row.Paths.Write = []string{"bench.go"}
+	asked, took := s.answers(row, s.landing, peer)
+	s.Require().ErrorIs(asked, ErrHeldElsewhere)
+	s.Require().ErrorIs(took, ErrHeldElsewhere)
+	s.Equal(asked.Error(), took.Error())
+	s.Contains(took.Error(), "compile")
+
+	peer.State = job.StateExited
+	asked, took = s.answers(row, s.landing, peer)
+	s.ErrorIs(asked, ErrHeldElsewhere)
+	s.ErrorIs(took, ErrHeldElsewhere)
+
+	asked, took = s.answers(row, s.linked("bench", s.checkpoint), peer)
+	s.NoError(asked)
+	s.NoError(took)
+
+	row.Paths.Write = nil
+	row.ReadOnly = true
+	asked, took = s.answers(row, s.landing, peer)
 	s.NoError(asked)
 	s.NoError(took)
 }
