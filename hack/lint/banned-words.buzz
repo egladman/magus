@@ -14,6 +14,8 @@
 //
 // "acts in place" is refused in prose and as an identifier (actsInPlace).
 // It names no operation; say what the code touches.
+// Readiness slogans require observed usage or test evidence; literal production
+// environments and deployment instructions pass.
 //
 // Tier 1, mechanical: the fix is a word, and SANCTIONED names a finding kept on purpose
 // with why.
@@ -54,6 +56,8 @@ final LANES_ARE_ROUTING = ["libs/diagram/diagram.buzz"];
 // SANCTIONED holds each finding kept on purpose, by "<path>: <matched text>", with why. An
 // entry that no longer has a finding is itself a finding, so the list only shrinks.
 export final SANCTIONED = {
+    "libs/proofread/internal/calibrate/cases/staccato.txtar: Production-ready": "the prose calibration fixture deliberately uses a readiness slogan",
+    "libs/proofread/internal/calibrate/cases/condescension.txtar: production-ready": "the prose calibration fixture deliberately uses a readiness slogan",
     "libs/embed/rankeval/results.go: corpus": "the ranker comment names the standard retrieval input",
     "libs/embed/search_test.go: corpus": "the CoIR data layout and export protocol fix this term",
     "libs/embed/search_test.go: TestExternalHarnessDedupeCorpus": "the test names the external evaluation layout it covers",
@@ -87,7 +91,7 @@ final VERB_FORM = std\pattern(`^(?:un|re)?surfac(?:e|es|ed|ing)$`);
 final VERB_TEST = std\pattern(`^Test[A-Za-z0-9_]*Surfaces[A-Z]`);
 
 final MENTIONS = ["`surface`", "`surfaces`", "`lane`", "`lanes`", "`corpus`", "`corpora`",
-    "`recipe`", "`recipes`", "`ratchet`", "`ratchets`"];
+    "`recipe`", "`recipes`", "`ratchet`", "`ratchets`", "`production-ready`", "`production ready`"];
 
 final SURFACE_FIX = "Say what the thing is: the CLI, the MCP tools, the console page, the API. A verb "
     + "this refuses reads better reworded (\"appears on\", \"shows\").";
@@ -98,6 +102,8 @@ final RECIPE_FIX = "Say what it is: a Spec, a target, the steps, or the make rul
 final RATCHET_FIX = "Say what it holds: a ceiling, a count that may only fall, or the allow list.";
 final ACTS_IN_PLACE = std\pattern(`(?i)\bact(?:s|ed|ing)?[ _-]?in[ _-]?place`);
 final ACTS_IN_PLACE_FIX = "Say what it touches: the repository it runs in, the file it rewrites.";
+final READINESS_CLAIM = std\pattern(`(?i)\bproduction(?:-|[ \t]+)ready\b`);
+final READINESS_FIX = "Give specific observed usage or test evidence instead of a readiness claim.";
 
 export fun check(files: [Path]) > [Finding] !> any {
     final found = findings(files);
@@ -168,7 +174,7 @@ export fun fileFindings(rel: str, src: str) > result\Result::<[Finding]> {
     final lower = src.lower();
     if (lower.indexOf("surface") == null and lower.indexOf("lane") == null
         and lower.indexOf("corp") == null and lower.indexOf("recipe") == null and lower.indexOf("ratchet") == null
-        and lower.indexOf("place") == null) {
+        and lower.indexOf("place") == null and lower.indexOf("production") == null) {
         return result\ok::<[Finding]>([<Finding>]);
     }
     var lanesAllowed = false;
@@ -186,6 +192,15 @@ export fun fileFindings(rel: str, src: str) > result\Result::<[Finding]> {
             line = line.replace(m, with: " ".repeat(m.len()));
         }
         final low = line.lower();
+        if (low.indexOf("production") != null) {
+            var next = 0;
+            foreach (m in READINESS_CLAIM.matchAll(line) ?? [<[str]>]) {
+                final at = line.indexOf(m[0], from: next) ?? 0;
+                next = at + m[0].len();
+                found.append(Finding{ path = rel, line = n, col = at + 1,
+                    message = "\"{m[0]}\" makes a readiness claim", hint = READINESS_FIX });
+            }
+        }
         if (low.indexOf("surface") != null) {
             foreach (finding in nounFindings(rel, line: line, n: n)) { found.append(finding); }
         }
@@ -316,6 +331,20 @@ fun lines(rel: str, src: str) > [str] {
         acc.append("{f.line}:{f.col} {f.message}");
     }
     return acc;
+}
+
+test "readiness claims require evidence regardless of case or separator" {
+    assert\equal(lines("a.md", src: "Production-ready\nproduction ready\nPRODUCTION READY\nproduction-ready; production ready"),
+        want: ["1:1 \"Production-ready\" makes a readiness claim",
+            "2:1 \"production ready\" makes a readiness claim",
+            "3:1 \"PRODUCTION READY\" makes a readiness claim",
+            "4:1 \"production-ready\" makes a readiness claim",
+            "4:19 \"production ready\" makes a readiness claim"], message: "readiness claims");
+}
+
+test "production environments and deployment facts are literal; backtick mentions pass" {
+    assert\equal(lines("a.md", src: "Deploy to the production environment.\nProduction deployments use TLS.\nTests passed against the production database.\nThe readiness probe returned 200.\n`production-ready` and `production ready` name the refused phrases.\nproduction readiness; preproduction-ready"),
+        want: [<str>], message: "deployment facts and mentions");
 }
 
 test "a determiner or quantifier before surface refuses the noun, matched for number" {
