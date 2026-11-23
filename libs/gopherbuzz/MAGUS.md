@@ -6,17 +6,18 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/gopherbuzz`
 
-| Target           | What it does                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                                     |
-| `format`         |                                                                                           |
-| `golangci-lint`  | The tree-wide conventions over this module, through .magus/custom-gcl.                    |
-| `fuzz`           | Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it. |
-| `buzz-build`     | Compiles the standalone buzz CLI, stamped with this module's version, not magus's.        |
-| `ci`             | The anchor `magus affected ci` keys off.                                                  |
-| `conformance`    | Runs the upstream buzz suite at the pinned commit against the allowlist.                  |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                          |
-| `lint`           |                                                                                           |
-| `build`          |                                                                                           |
-| `test`           | Runs the suite with -race under the default tags, then again under buzz_safe.             |
-| `buzzbench-test` | Runs the benchmarks/comparison module's tests, which test's ./...                         |
+| Target               | What it does                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `generate`           | Regenerates MAGUS.md.                                                                     |
+| `format`             |                                                                                           |
+| `golangci-lint`      | The tree-wide conventions over this module, through .magus/custom-gcl.                    |
+| `fuzz`               | Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it. |
+| `buzz-build`         | Compiles the standalone buzz CLI, stamped with this module's version, not magus's.        |
+| `ci`                 | The anchor `magus affected ci` keys off.                                                  |
+| `conformance`        | Runs the upstream buzz suite at the pinned commit against the allowlist.                  |
+| `serialize-generate` |                                                                                           |
+| `index-generate`     | Renders MAGUS.md, this project's target catalog.                                          |
+| `lint`               |                                                                                           |
+| `build`              |                                                                                           |
+| `test`               | Runs the suite with -race under the default tags, then again under buzz_safe.             |
+| `buzzbench-test`     | Runs the benchmarks/comparison module's tests, which test's ./...                         |
