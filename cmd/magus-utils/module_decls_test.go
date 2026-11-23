@@ -18,6 +18,17 @@ import (
 	"github.com/egladman/magus/std"
 )
 
+func TestModuleDeclsFlags(t *testing.T) {
+	run := scribe("moduledecls")
+	require.EqualError(t, run(nil), "usage: magus-utils moduledecls -outdir <dir>")
+	require.Error(t, run([]string{"-outdir"}))
+	require.Error(t, run([]string{"-unknown"}))
+
+	dir := t.TempDir()
+	require.NoError(t, run([]string{"-outdir", dir + "/unused", "-outdir", dir}))
+	require.FileExists(t, dir+"/fs.buzz")
+}
+
 // A namespace's Objects are declared like a signature's objects are: with everything
 // they reference, ahead of their first use.
 func TestCollectMirrorsVisitsNamespaceObjects(t *testing.T) {

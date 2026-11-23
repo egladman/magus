@@ -39,9 +39,6 @@ func root() command.Command {
 	}
 }
 
-// moduleDeclsCommand declares moduledecls, whose own flag parsing lives in
-// module_decls.go: another change owns that file, so this hands it its one flag
-// back as arguments until that file declares its command here.
 func moduleDeclsCommand() command.Command {
 	var outDir string
 	return command.Command{
@@ -50,8 +47,8 @@ func moduleDeclsCommand() command.Command {
 		Flags: []command.Flag{
 			{Name: "outdir", Kind: command.String, Doc: "output directory for the per-module .buzz declarations", Target: &outDir},
 		},
-		Run: func(_ context.Context, inv command.Invocation) error {
-			return runModuleDecls(append([]string{"-outdir", outDir}, inv.Args...))
+		Run: func(context.Context, command.Invocation) error {
+			return writeModuleDecls(outDir)
 		},
 	}
 }

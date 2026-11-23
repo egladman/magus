@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"maps"
 	"os"
@@ -21,13 +20,8 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-func runModuleDecls(args []string) error {
-	fs := flag.NewFlagSet("moduledecls", flag.ExitOnError)
-	outDir := fs.String("outdir", "", "output directory for the per-module .buzz declarations")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *outDir == "" {
+func writeModuleDecls(outDir string) error {
+	if outDir == "" {
 		return fmt.Errorf("usage: magus-utils moduledecls -outdir <dir>")
 	}
 
@@ -63,12 +57,12 @@ func runModuleDecls(args []string) error {
 		if missing := undeclaredTypeNames(prog); len(missing) > 0 {
 			return fmt.Errorf("generated declarations for %s name undeclared types: %s", mod.Name, strings.Join(missing, ", "))
 		}
-		if err := emit.File(filepath.Join(*outDir, mod.Name+".buzz"), b.Bytes()); err != nil {
+		if err := emit.File(filepath.Join(outDir, mod.Name+".buzz"), b.Bytes()); err != nil {
 			return fmt.Errorf("write %s: %w", mod.Name, err)
 		}
 	}
 	for _, module := range nestedModules() {
-		if err := writeNamespaceDecls(*outDir, module); err != nil {
+		if err := writeNamespaceDecls(outDir, module); err != nil {
 			return fmt.Errorf("namespace %s: %w", module, err)
 		}
 	}
