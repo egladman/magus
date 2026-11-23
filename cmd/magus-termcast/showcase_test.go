@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/termkit/recorder"
 	"github.com/egladman/magus/libs/termkit/screen"
 )
 
@@ -40,7 +41,7 @@ func TestShowcaseCaptureIsClean(t *testing.T) {
 // exiting, not a frame, and rendering them would end the animation on a shell
 // prompt instead of on the view the beat was about.
 func TestShowcaseFramesDropTheTeardown(t *testing.T) {
-	frames := showcaseFrames("first" + frameMark + "second" + frameMark + "exit\n")
+	frames := recorder.Marked("first"+frameMark+"second"+frameMark+"exit\n", frameMark)
 	if len(frames) != 2 {
 		t.Fatalf("got %d frames, want 2", len(frames))
 	}
@@ -50,7 +51,7 @@ func TestShowcaseFramesDropTheTeardown(t *testing.T) {
 
 	// An unmarked capture is one run of bytes, and there is no teardown tail to
 	// trim off it.
-	if frames := showcaseFrames("unmarked"); len(frames) != 1 || frames[0] != "unmarked" {
+	if frames := recorder.Marked("unmarked", frameMark); len(frames) != 1 || frames[0] != "unmarked" {
 		t.Errorf("unmarked capture gave %q", frames)
 	}
 }
