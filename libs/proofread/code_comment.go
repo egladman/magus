@@ -104,7 +104,7 @@ var codeCommentTexts = map[Rule]ruleText{
 		code:      "PRF5015",
 		dimension: DimensionStance,
 		catches:   "I, me, my, we, us or our in a code comment",
-		why: "House style: a comment states what the code does and why, not who chose it or how it felt.",
+		why:       "House style: a comment states what the code does and why, not who chose it or how it felt.",
 	},
 }
 
