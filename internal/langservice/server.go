@@ -279,7 +279,6 @@ func completionItemKind(k CompletionKind) int {
 		// Text
 	}
 	return 1
-
 }
 
 // --- position <-> byte offset (LSP positions count UTF-16 code units) ---

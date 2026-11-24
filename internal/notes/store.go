@@ -307,10 +307,8 @@ func Dir(root string, scope Scope, declared string) (string, error) {
 		return sharedDir(root, declared)
 	case ScopePrivate:
 		return privateDir(root, declared)
-
 	}
 	return "", fmt.Errorf("notes: unknown scope %q (want %q or %q)", scope, ScopeShared, ScopePrivate)
-
 }
 
 // sharedDir resolves the TEAM's notes directory, which must stay inside the checkout.

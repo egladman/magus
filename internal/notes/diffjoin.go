@@ -40,10 +40,8 @@ func (m MatchStrength) rank() int {
 		return 2
 	case MatchNeighbor:
 		return 1
-
 	}
 	return 0
-
 }
 
 // ResolvedAnchor is one anchor, the note that declares it, and what checking it found.
