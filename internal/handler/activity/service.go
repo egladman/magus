@@ -363,10 +363,8 @@ func encodeKind(k journal.CallKind) activityv1.Kind {
 		return activityv1.Kind_KIND_CREDENTIAL_GRANT
 	case journal.CallKindGuardPolicy:
 		return activityv1.Kind_KIND_GUARD_POLICY
-
 	}
 	return activityv1.Kind_KIND_UNSPECIFIED
-
 }
 
 func encodeOutcome(o journal.Outcome) activityv1.Outcome {
@@ -375,8 +373,6 @@ func encodeOutcome(o journal.Outcome) activityv1.Outcome {
 		return activityv1.Outcome_OUTCOME_OK
 	case journal.OutcomeError:
 		return activityv1.Outcome_OUTCOME_ERROR
-
 	}
 	return activityv1.Outcome_OUTCOME_UNSPECIFIED
-
 }

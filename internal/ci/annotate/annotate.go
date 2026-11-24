@@ -48,14 +48,12 @@ func (l Level) String() string {
 		return "warning"
 	case LevelNotice:
 		return "notice"
-
 	}
 	// Notice is spelled out above so an unknown level cannot silently become it.
 	// This function decides how loudly a finding is reported, and defaulting to the
 	// QUIETEST token means a level added upstream, or an int a spell handed in, gets
 	// downgraded rather than noticed.
 	return "unknown"
-
 }
 
 // Group describes a foldable section of the job log.

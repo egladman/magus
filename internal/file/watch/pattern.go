@@ -30,10 +30,8 @@ func ValidatePattern(p types.IgnorePattern) error {
 		return nil
 	case "":
 		return fmt.Errorf("ignore: type is empty (use glob, regex, or literal)")
-
 	}
 	return fmt.Errorf("ignore: unknown type %q (use glob, regex, or literal)", p.Type)
-
 }
 
 // IgnorePatterns returns a predicate that matches when any pattern matches abs path relative to wsRoot.
