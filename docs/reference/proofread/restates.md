@@ -26,9 +26,10 @@ House style: the doc stub rule with the code as the symbol. "Reset the margin" o
 
 The code is `PRF6007`. The decision depends on the kind of text judged:
 
-| Kind         | Default |
-| ------------ | ------- |
-| `stylesheet` | off     |
+| Kind           | Default |
+| -------------- | ------- |
+| `stylesheet`   | off     |
+| `code-comment` | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

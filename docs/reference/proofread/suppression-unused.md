@@ -48,6 +48,7 @@ The code is `PRF1090`. The decision depends on the kind of text judged:
 | `agent-reply`        | deny    |
 | `tool-description`   | deny    |
 | `stylesheet`         | deny    |
+| `code-comment`       | deny    |
 
 ## Changing it
 
