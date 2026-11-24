@@ -54,7 +54,7 @@ func TestSplicePublicProtocolPlansAndApplies(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("before\n"), 0o644))
 	tool := &spliceTool{workspace: m}
 	handler := authorize(declaredParams(descriptor(t, hint.ToolSplice), adapt(tool)))
-	ctx := recorder.ContextWithCredential(bgContext(), auth.CredentialStdio())
+	ctx := recorder.ContextWithCredential(bgCtx(), auth.CredentialStdio())
 	doc := "## file.txt\n```old\nbefore\n```\n```new\nafter\n```\n"
 
 	preview, err := handler(ctx, callRequest(tool.Name(), map[string]any{"document": doc}))
@@ -200,7 +200,7 @@ func TestSplicePublicProtocolRejectsUnknownParameter(t *testing.T) {
 	tool := &spliceTool{workspace: m}
 	desc := descriptor(t, hint.ToolSplice)
 	handler := authorize(declaredParams(desc, adapt(tool)))
-	ctx := recorder.ContextWithCredential(bgContext(), auth.CredentialStdio())
+	ctx := recorder.ContextWithCredential(bgCtx(), auth.CredentialStdio())
 	result, err := handler(ctx, callRequest(tool.Name(), map[string]any{"document": "", "surprise": true}))
 	require.NoError(t, err)
 	require.NotNil(t, result)

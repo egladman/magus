@@ -79,7 +79,7 @@ func useStandInMagus(t *testing.T) {
 
 func callBuzz(t *testing.T, tool *buzzTool, args map[string]any) *mcplib.CallToolResult {
 	t.Helper()
-	res, err := adapt(tool)(bgContext(), callRequest(hint.ToolBuzz.String(), args))
+	res, err := adapt(tool)(bgCtx(), callRequest(hint.ToolBuzz.String(), args))
 	require.NoError(t, err)
 	return res
 }
@@ -112,7 +112,7 @@ func TestBuzzToolRoundTripsInputThroughServeStdio(t *testing.T) {
 	outR, outW := io.Pipe()
 	served := make(chan error, 1)
 	go func() {
-		served <- ServeStdio(bgContext(), Options{Magus: m, Logger: quietLogger(), Version: "test"}, inR, outW)
+		served <- ServeStdio(bgCtx(), Options{Magus: m, Logger: quietLogger(), Version: "test"}, inR, outW)
 		_ = outW.Close()
 	}()
 	lines := bufio.NewScanner(outR)
