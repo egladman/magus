@@ -127,7 +127,7 @@ func TestClientToolBoundsADirectCall(t *testing.T) {
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	tool := &clientTool{root: m.Root(), timeout: 300 * time.Millisecond}
-	res, err := adapt(tool)(bgCtx(), callRequest(hint.ToolClient.String(), map[string]any{"script": loopForever}))
+	res, err := adapt(tool)(bgContext(), callRequest(hint.ToolClient.String(), map[string]any{"script": loopForever}))
 	require.NoError(t, err)
 	require.True(t, res.IsError)
 	assert.Equal(t, "[MGS3034] client: script timed out after 300ms; run it as an MCP task, or through the Buzz CLI", firstLine(allText(res)))
@@ -146,7 +146,7 @@ func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) 
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	srv := buildServer(Options{Magus: m, Logger: quietLogger(), Version: "test"}, quietLogger(), &mcpserver.Hooks{}, func(context.Context) origin.Client { return origin.Client{Name: "task-test"} })
-	ctx := recorder.ContextWithCredential(bgCtx(), auth.CredentialStdio())
+	ctx := recorder.ContextWithCredential(bgContext(), auth.CredentialStdio())
 	send := func(frame string) codec.RawMessage {
 		t.Helper()
 		raw, err := codec.Marshal(srv.HandleMessage(ctx, []byte(frame)))
