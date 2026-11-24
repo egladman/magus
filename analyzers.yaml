@@ -1325,7 +1325,7 @@ proofread:
     internal/interactive/x_pick.go: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 4, comment-first-person: 1}
     internal/interactive/x_pick_test.go: {code-comment-sentence: 1}
     internal/interp/bindings/buzz.go: {code-comment-budget: 12, code-comment-sentence: 16, comment-caps: 6, doc-path: 1}
-    internal/interp/bindings/buzz_test.go: {code-comment-budget: 11, code-comment-sentence: 18, comment-caps: 5, comment-first-person: 2, comment-history: 1, doc-path: 1}
+    internal/interp/bindings/buzz_test.go: {code-comment-budget: 11, code-comment-sentence: 17, comment-caps: 5, comment-first-person: 2, comment-history: 1, doc-path: 1}
     internal/interp/bindings/call_op.go: {code-comment-budget: 2, code-comment-sentence: 3}
     internal/interp/bindings/call_op_test.go: {code-comment-sentence: 1}
     internal/interp/bindings/ci_provider.go: {code-comment-budget: 6, code-comment-sentence: 8}
