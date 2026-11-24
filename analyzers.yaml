@@ -1460,7 +1460,7 @@ proofread:
     internal/job/evidence/observe_test.go: {code-comment-sentence: 1}
     internal/job/evidence/symbols.go: {code-comment-budget: 5, code-comment-sentence: 9, comment-caps: 3}
     internal/job/evidence/symbols_test.go: {code-comment-sentence: 2}
-    internal/job/exec.go: {code-comment-budget: 7, code-comment-sentence: 14, comment-caps: 9, doc-path: 1}
+    internal/job/exec.go: {code-comment-budget: 7, code-comment-sentence: 13, comment-caps: 9, doc-path: 1}
     internal/job/exec_test.go: {code-comment-budget: 1, code-comment-sentence: 12, comment-caps: 4, provenance: 1}
     internal/job/feed.go: {code-comment-budget: 7, code-comment-sentence: 18, comment-caps: 23}
     internal/job/feed_test.go: {code-comment-budget: 2, code-comment-sentence: 8, comment-caps: 8}
