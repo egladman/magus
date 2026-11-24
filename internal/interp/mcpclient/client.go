@@ -216,12 +216,12 @@ func renameEntry(src string) string {
 	}
 	depth := 0
 	for i, tok := range toks {
-		switch {
-		case tok.Kind == token.LBrace:
+		switch tok.Kind {
+		case token.LBrace:
 			depth++
-		case tok.Kind == token.RBrace:
+		case token.RBrace:
 			depth--
-		case tok.Kind == token.Fun:
+		case token.Fun:
 			if depth != 0 || i+1 == len(toks) {
 				continue
 			}
