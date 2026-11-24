@@ -25,7 +25,7 @@ magus query output out1a2b3c
 
 In the docs:
 
-- [span](../reference/buzz/progress.md#span)
+- [newSpan](../reference/buzz/progress.md#newspan)
 - [zoneHitSpan](../reference/buzz/termkit.md#zonehitspan)
 
 In the code (`magus refs <name>` lists every site):
