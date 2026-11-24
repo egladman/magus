@@ -100,6 +100,7 @@ var JobResultSchema = FormatLedger{
 	Name:     "job-result",
 	Type:     reflect.TypeFor[job.Result](),
 	Version:  job.ResultAPIVersion,
+	Added:    map[string]APIVersion{"findings": job.ResultAPIVersion},
 	Reserved: []string{"gate_evidence", "schema_version"},
 }
 

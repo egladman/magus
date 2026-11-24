@@ -100,7 +100,7 @@ func checkOp(fd *ast.FunDecl, op decode.ContractFunc) []string {
 }
 
 // resultAnnotation is the Result annotation an op that can fail declares for returns.
-func resultAnnotation(returns string) string { return `result\Result::<` + returns + ">" }
+func resultAnnotation(returns string) string { return fmt.Sprintf(`result\Result::<%s>`, returns) }
 
 // checkSignature holds an export to fn's parameter types and return type. Parameter names
 // are the spell's own; a function whose Params is empty takes none.
