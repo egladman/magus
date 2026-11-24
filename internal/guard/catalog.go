@@ -592,7 +592,8 @@ var ruleDocSiblingCheckout = types.RuleDoc{
 	Name:    string(denyRuleSiblingCheckout),
 	Catches: "a magus command relocated into another checkout, judging a tree nobody ships",
 	Why: "A binary links the spell sources of the tree it was built from, so a verdict it reaches about a DIFFERENT checkout describes a tree that exists nowhere, and anything it regenerates lands there unmarked. " +
-		"Run magus from the workspace it belongs to and name the project as an argument; a different workspace is `--root <path>`.",
+		"Run magus from the workspace it belongs to and name the project as an argument; a different workspace is `--root <path>`. " +
+		"A checkout a job made or adopted is its holder's and its root's own. So is the checkout of a live job the line's own BAGGAGE lease names, unless the caller is bound to another job.",
 }
 
 var ruleDocStaleBinary = types.RuleDoc{

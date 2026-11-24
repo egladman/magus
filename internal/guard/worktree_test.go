@@ -490,6 +490,37 @@ func TestOwnsCheckoutIsTheHoldersAndTheRoots(t *testing.T) {
 	assert.False(t, ownsCheckout(ctx, unspawned, at, wt), "an agent no spawn record attributes to the job")
 }
 
+// A line whose BAGGAGE names a live row runs magus as its holder. The row's
+// checkout is the line's own, unless the caller is bound to another row.
+func TestLineLeaseOwnsALiveRowsCheckout(t *testing.T) {
+	r := newWorktreeRepository(t)
+	wt := r.add("adopted")
+	row := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: wt, Worktree: &jobtypes.Worktree{Root: wt, Source: r.main}}
+	other := jobtypes.Job{ID: "other", State: jobtypes.StateRunning}
+	ended := row
+	ended.ID, ended.State = "w0", jobtypes.StatePass
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []jobtypes.Job{row, other, ended}})
+	at := location{cacheDir: t.TempDir(), workspace: r.main}
+	unbound := Dependencies{caller: job.Caller{Host: "claude", Session: "s1", Agent: "agent-a1b2c3"}}
+
+	assert.True(t, lineLeaseOwnsCheckout(ctx, unbound, at, "w1", wt), "an unbound caller naming the live row")
+	bound := unbound
+	bound.lease = "w1"
+	assert.True(t, lineLeaseOwnsCheckout(ctx, bound, at, "w1", wt), "a caller bound to the same row")
+	assert.False(t, lineLeaseOwnsCheckout(ctx, unbound, at, "other", wt), "another row's lease")
+	assert.False(t, lineLeaseOwnsCheckout(ctx, unbound, at, "w0", wt), "an ended row")
+	assert.False(t, lineLeaseOwnsCheckout(ctx, unbound, at, "", wt), "no lease on the line")
+	bound.lease = "other"
+	assert.False(t, lineLeaseOwnsCheckout(ctx, bound, at, "w1", wt), "a caller bound to another row")
+
+	unspawned := rootSession(t, nil)
+	unspawned.caller = unbound.caller
+	leased := fmt.Sprintf("export BAGGAGE=magus.lease=w1; cd %s && ./magus run lint .", wt)
+	assert.True(t, lineOwns(ctx, unspawned, at, leased, DialectBash)(wt), "the line's own lease owns the checkout")
+	plain := fmt.Sprintf("cd %s && ./magus run lint .", wt)
+	assert.False(t, lineOwns(ctx, unspawned, at, plain, DialectBash)(wt), "without the lease the checkout stays a sibling")
+}
+
 func TestWorktreeRemovePassesCommitsYourCheckoutHoldsUnderNewHashes(t *testing.T) {
 	r := newWorktreeRepository(t)
 	wt, row := r.workerWorktree(jobtypes.StatePass)
