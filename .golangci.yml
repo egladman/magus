@@ -586,6 +586,7 @@ linters:
             - worktree  # git's own term
             - identity  # an English word; id.go and entity.go only make it look like id + entity
             - baseline  # one word, proofread's own; not base + line
+            - models    # an ordinary English word, not mode + ls
 
       nameoutput:
         type: module
