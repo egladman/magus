@@ -261,7 +261,12 @@ func (s *StoreSuite) TestAMigrationReReadsTheFileUnderTheLock() {
 	<-held
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.open(WithMigrations("safetyscissors.job/v1alpha2", migrate)).List(s.T().Context())
+		st, err := Open(s.T().Context(), Config{Dir: s.dir}, append(writable(), WithMigrations("safetyscissors.job/v1alpha2", migrate))...)
+		if err != nil {
+			done <- err
+			return
+		}
+		_, err = st.List(s.T().Context())
 		done <- err
 	}()
 	time.Sleep(50 * time.Millisecond)

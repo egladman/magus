@@ -381,34 +381,35 @@ func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hook
 	if row.Validated == 0 {
 		return denyRuleSpawnUnvalidated, denySpawnUnvalidated(row), true
 	}
-	if d, shared := denyUnisolatedRow(env.Spawn.Isolated, row, at.workspace); shared {
+	if d, shared := denyUnisolatedRow(env.Spawn.Isolated, row); shared {
 		return denyRuleSpawnUnisolatedRow, d, true
 	}
 	d, warm := denyWarmSpawn(ctx, at, facts, row, env.Spawn.Description)
 	return denyRuleSpawnWarmWorker, d, warm
 }
 
-// denyUnisolatedRow refuses host isolation for a writing row bound to
-// the spawner's own checkout.
-func denyUnisolatedRow(isolated bool, row jobtypes.Job, workspace string) (denial, bool) {
-	if !isolated || !rowSharesCheckout(row, workspace) {
+// denyUnisolatedRow refuses host isolation for a writing row whose fork
+// made its checkout: the worker lands in a checkout it cannot take the row in.
+func denyUnisolatedRow(isolated bool, row jobtypes.Job) (denial, bool) {
+	if !isolated || !takenOnlyInMadeCheckout(row) {
 		return denial{}, false
 	}
 	return denial{
-		Say: fmt.Sprintf("job %s writes and has no checkout of its own, so its worker would edit %s even with host isolation: `%s` gives it one.",
-			row.ID, workspace, hint.JobFork.With(row.ID, "--checkout", "<dir>")),
-		Why: "`job exec` binds a row to the checkout it runs in. A row forked from this checkout without --checkout binds here, " +
-			"and the host's worktree isolation cannot move that binding, so the worker writes into this tree beside the spawner and its other workers.",
+		Say: fmt.Sprintf("job %s is taken only in %s, the checkout its fork made: spawn it without isolation, or fork it again without --checkout.",
+			row.ID, row.Worktree.Root),
+		Why: "`job exec` takes a row whose fork made a checkout there and nowhere else. " +
+			"A host-isolated worker starts in a fresh checkout of its own, which exec refuses for this row, " +
+			"and the host refuses its edits in the made checkout because that checkout belongs to another worktree.",
 	}, true
 }
 
-// rowSharesCheckout is true when a writing row's worker would take the
-// spawner's checkout.
-func rowSharesCheckout(row jobtypes.Job, workspace string) bool {
+// takenOnlyInMadeCheckout reports whether a writing row's worker must take
+// it in the checkout its fork made. Exec adopts any other checkout for it.
+func takenOnlyInMadeCheckout(row jobtypes.Job) bool {
 	if row.ReadOnly {
 		return false
 	}
-	return !row.Worktree.Standing() || row.Worktree.Root == workspace
+	return row.Worktree.Standing() && row.Worktree.Made
 }
 
 // spawnIsolated reports whether the child runs outside this checkout: the spawn asked for

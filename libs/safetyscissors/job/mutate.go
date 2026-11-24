@@ -409,9 +409,10 @@ func (w *rowWrite) stamp() {
 	// The record keeps what a newer writer stored; see [Rows].
 	row.Unknown = prev.Unknown
 	row.ModelTier = prev.ModelTier
-	// Only an exec rebinding an untaken row writes the worktree record. The next attempt
-	// keeps a checkout that stands and forgets one that was removed.
-	if w.kind != AsExec || !rebindsAdopted(prev, *row) {
+	// Only an exec adopting a checkout for an untaken row writes the
+	// worktree record. The next attempt keeps a checkout that stands and
+	// forgets one that was removed.
+	if w.kind != AsExec || !adoptsUntaken(prev, *row) {
 		row.Worktree = prev.Clone().Worktree
 	}
 	if w.refork && row.Worktree != nil {
@@ -476,7 +477,24 @@ func (w *rowWrite) conclude(ctx context.Context) error {
 	default:
 		row.Authority = prev.Authority
 	}
+	row.ForkedIn = prev.ForkedIn
+	if w.kind == AsDeclaration && (!w.exists() || w.refork) {
+		row.ForkedIn = w.s.forkedIn()
+	}
 	return nil
+}
+
+// forkedIn is the absolute root a fork through this store runs in, "" when
+// it names none.
+func (s *Store) forkedIn() string {
+	if s.root == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(s.root)
+	if err != nil {
+		return ""
+	}
+	return abs
 }
 
 // place stores the row in the ledger.
@@ -537,11 +555,17 @@ func widens(held, next []string) bool {
 	})
 }
 
-// rebindsAdopted reports whether row moves prev, which nobody took, from one checkout its
-// fork adopted to another adopted one.
-func rebindsAdopted(prev, row Job) bool {
-	return prev.CheckoutRoot == "" && prev.Worktree.Standing() && !prev.Worktree.Made &&
-		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
+// adoptsUntaken reports whether row binds prev, which nobody took, to a
+// checkout it adopts. prev had none, or one its fork adopted elsewhere. A
+// checkout a fork made stays its job's.
+func adoptsUntaken(prev, row Job) bool {
+	if prev.CheckoutRoot != "" || !row.Worktree.Standing() || row.Worktree.Made {
+		return false
+	}
+	if !prev.Worktree.Standing() {
+		return true
+	}
+	return !prev.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
 }
 
 // samePath compares two absolute paths by where they land, symlinks resolved. A copy of

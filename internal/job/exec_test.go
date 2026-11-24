@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -63,7 +64,7 @@ func (s *ExecRefusalSuite) TestAFreshCheckoutAtTheCheckpointIsRefusedByNeither()
 	s.NoError(took)
 }
 
-func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
+func (s *ExecRefusalSuite) TestDisjointWritersCoWriteOneCheckout() {
 	peer := s.adoptedRow()
 	peer.ID = "compile"
 	peer.Paths.Write = []string{"compiler.go"}
@@ -71,6 +72,37 @@ func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
 	peer.State = job.StateRunning
 	row := s.adoptedRow()
 	row.Paths.Write = []string{"bench.go"}
+	asked, took := s.answers(row, s.landing, peer)
+	s.NoError(asked)
+	s.NoError(took)
+}
+
+func (s *ExecRefusalSuite) TestDeclarationsOfOneFileCoWriteButOneDeclarationDoesNot() {
+	peer := s.adoptedRow()
+	peer.ID = "compile"
+	peer.Paths.Write = []string{"compiler.go#Parse"}
+	peer.CheckoutRoot = s.landing
+	peer.State = job.StateRunning
+	row := s.adoptedRow()
+	row.Paths.Write = []string{"compiler.go#Lex"}
+	asked, took := s.answers(row, s.landing, peer)
+	s.NoError(asked)
+	s.NoError(took)
+
+	row.Paths.Write = []string{"compiler.go#Parse"}
+	asked, took = s.answers(row, s.landing, peer)
+	s.ErrorIs(asked, ErrHeldElsewhere)
+	s.ErrorIs(took, ErrHeldElsewhere)
+}
+
+func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
+	peer := s.adoptedRow()
+	peer.ID = "compile"
+	peer.Paths.Write = []string{"compiler.go"}
+	peer.CheckoutRoot = s.landing
+	peer.State = job.StateRunning
+	row := s.adoptedRow()
+	row.Paths.Write = []string{"compiler.go"}
 	asked, took := s.answers(row, s.landing, peer)
 	s.Require().ErrorIs(asked, ErrHeldElsewhere)
 	s.Require().ErrorIs(took, ErrHeldElsewhere)
@@ -91,6 +123,75 @@ func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
 	asked, took = s.answers(row, s.landing, peer)
 	s.NoError(asked)
 	s.NoError(took)
+}
+
+// writers are a writer running where the fork ran, in landing, and a writer
+// forked there that nobody took.
+func (s *ExecRefusalSuite) writers() (peer, row job.Job) {
+	peer = job.Job{ID: "compile", State: job.StateRunning, Checkpoint: s.checkpoint, CheckoutRoot: s.landing, ForkedIn: s.landing, Paths: job.Paths{Write: []string{"compiler.go"}}}
+	row = job.Job{ID: "w1", State: job.StateDeclared, Checkpoint: s.checkpoint, ForkedIn: s.landing, Paths: job.Paths{Write: []string{"bench.go"}}}
+	return peer, row
+}
+
+func (s *ExecRefusalSuite) execIn(root, id string) (job.Job, error) {
+	return NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: root}).Exec(s.T().Context(), id)
+}
+
+// One writer is the common case: no other row is bound anywhere.
+func (s *ExecRefusalSuite) TestExecAdoptsAHostWorktreeForTheFirstWriter() {
+	_, row := s.writers()
+	host := s.linked("host", s.checkpoint)
+	plant(s.T(), s.store, row)
+	took, err := s.execIn(host, row.ID)
+	s.Require().NoError(err)
+	s.Require().True(took.Worktree.Standing())
+	s.Equal(host, took.Worktree.Root)
+	s.False(took.Worktree.Made, "the host made it, so the job's end never removes it")
+	s.Equal(host, took.CheckoutRoot)
+	s.Contains(TakeAdvice(s.T().Context(), took, types.VCSOptions{}), "job w1 adopted the checkout "+host)
+
+	stored, err := s.store.List(s.T().Context())
+	s.Require().NoError(err)
+	i := slices.IndexFunc(stored, func(r job.Job) bool { return r.ID == row.ID })
+	s.Require().GreaterOrEqual(i, 0)
+	s.Equal(host, stored[i].Worktree.Root)
+}
+
+func (s *ExecRefusalSuite) TestASecondWriterInAnAdoptedCheckoutPasses() {
+	peer, row := s.writers()
+	host := s.linked("host", s.checkpoint)
+	asked, took := s.answers(row, host, peer)
+	s.NoError(asked)
+	s.NoError(took)
+
+	third := row
+	third.ID = "w2"
+	adopted, err := s.store.List(s.T().Context())
+	s.Require().NoError(err)
+	asked, took = s.answers(third, host, adopted...)
+	s.ErrorIs(asked, ErrHeldElsewhere, "the adopted checkout is w1's alone")
+	s.ErrorIs(took, ErrHeldElsewhere)
+}
+
+func (s *ExecRefusalSuite) TestTheForkersOwnCheckoutIsNotAdopted() {
+	_, row := s.writers()
+	plant(s.T(), s.store, row)
+	took, err := s.execIn(s.landing, row.ID)
+	s.Require().NoError(err)
+	s.False(took.Worktree.Standing(), "a worker the host did not isolate works in the spawner's checkout")
+	s.Equal(s.landing, took.CheckoutRoot)
+	s.NotContains(TakeAdvice(s.T().Context(), took, types.VCSOptions{}), "adopted")
+}
+
+func (s *ExecRefusalSuite) TestARowWhoseForkRecordedNoCheckoutIsNotAdopted() {
+	_, row := s.writers()
+	row.ForkedIn = ""
+	host := s.linked("host", s.checkpoint)
+	plant(s.T(), s.store, row)
+	took, err := s.execIn(host, row.ID)
+	s.Require().NoError(err)
+	s.False(took.Worktree.Standing())
+	s.Equal(host, took.CheckoutRoot)
 }
 
 func (s *ExecRefusalSuite) TestACheckoutNotAtTheCheckpointIsRefusedByBoth() {

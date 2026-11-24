@@ -3230,6 +3230,12 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Job.CheckoutRoot = sCheckoutRoot
+		case "forkedIn":
+			sForkedIn, err := decodeString(item, path+".forkedIn")
+			if err != nil {
+				return out, err
+			}
+			out.Job.ForkedIn = sForkedIn
 		case "worktree":
 			if !item.IsNull() {
 				var optWorktree job.Worktree

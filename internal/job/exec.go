@@ -44,6 +44,8 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 // second taker would silently move that grade off the holder's tree; the job moves only
 // once its holder ends it and it is declared again, which clears the checkout. A job that
 // owns a checkout (see [job.Job.Worktree]) is taken there and nowhere else.
+// A writing job with none, taken in a linked checkout the host isolated its
+// worker in, adopts that checkout, and [TakeAdvice] says so.
 //
 // THE BASE VERDICT IS A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
 // leave the orchestrator with no record that a worker went to the wrong base, which is the
@@ -126,16 +128,22 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (exec
 }
 
 // execRefusal is why Exec refuses row in the checkout here, nil for none.
-// An adopted checkout nobody took moves to here, on row, when here is at
-// the row's checkpoint.
+// It moves row to facts.moved. A row with no checkout moves at any base,
+// since the base verdict is a fact. An adopted checkout nobody took moves
+// only when here is at the row's checkpoint.
 func execRefusal(row *job.Job, here string, facts execFacts) error {
-	if facts.moved != nil && row.CheckoutRoot == "" && row.Worktree.Standing() && !row.Worktree.Made && !row.State.Terminal() {
-		switch compareBase(withFullRevision(row.Checkpoint, facts.full), withFullRevision(facts.base, facts.full)) {
-		case job.BaseMatch, job.BaseRevisionMatch, job.BaseUnknown:
+	if facts.moved != nil && row.CheckoutRoot == "" && (!row.Worktree.Standing() || !row.Worktree.Made) && !row.State.Terminal() {
+		switch {
+		case !row.Worktree.Standing():
 			row.Worktree = facts.moved
-		case job.BaseDiverged:
-			return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
-				row.ID, row.Worktree.Root, here, checkpointRevision(row.Checkpoint), checkpointRevision(facts.base))}
+		default:
+			switch compareBase(withFullRevision(row.Checkpoint, facts.full), withFullRevision(facts.base, facts.full)) {
+			case job.BaseMatch, job.BaseRevisionMatch, job.BaseUnknown:
+				row.Worktree = facts.moved
+			case job.BaseDiverged:
+				return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
+					row.ID, row.Worktree.Root, here, checkpointRevision(row.Checkpoint), checkpointRevision(facts.base))}
+			}
 		}
 	}
 	// A session resuming that work in the same checkout takes it back.
@@ -177,14 +185,17 @@ func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error
 	return checkoutWriterConflict(row, here, f.Jobs)
 }
 
-// Wait reads the checkout's HEAD when a writer owns the checkout. Two
-// independently graded writers cannot both own that revision.
+// checkoutWriterConflict refuses a second writer only on a real overlap
+// with a live one here. Disjoint paths co-write, as the fork proved.
 func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
-	if here == "" || len(row.Paths.Write) == 0 {
+	if here == "" || len(row.HardPaths()) == 0 {
 		return nil
 	}
 	for _, peer := range rows {
-		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.Paths.Write) == 0 {
+		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.HardPaths()) == 0 {
+			continue
+		}
+		if !hardPathsOverlap(row, peer) {
 			continue
 		}
 		if peer.State != job.StateRunning && peer.State != job.StateExited {
@@ -193,21 +204,37 @@ func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
 		if !peer.Worktree.Standing() && !row.Worktree.Standing() && peer.Parent != "" && row.Parent != "" {
 			continue
 		}
-		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s; give %s its own checkout or finish verifying %s before taking another writer here",
+		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s and their write paths overlap; give %s its own checkout or finish verifying %s before taking another writer here",
 			row.ID, peer.ID, here, row.ID, peer.ID)}
 	}
 	return nil
 }
 
-// untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork
-// adopted a checkout other than this one: a worker the host isolated in a fresh linked
-// checkout binds the job here instead. nil when row is any other, or this is no linked checkout.
+// hardPathsOverlap matches claims the way [Store.WriteProof] does, so
+// the refusal and the recorded proof cannot disagree.
+func hardPathsOverlap(row, peer job.Job) bool {
+	for _, mine := range row.HardPaths() {
+		for _, theirs := range peer.HardPaths() {
+			if job.PathsIntersect(mine, theirs) && !job.ReleasedReach(peer, theirs, mine) && !job.ReleasedReach(row, mine, theirs) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// untakenElsewhere is this checkout adopted for row, which nobody took: a
+// worker the host isolated here binds the job here. Row's fork adopted
+// another checkout, or row owns none (see [hostIsolated]).
 func (s *Store) untakenElsewhere(ctx context.Context, row job.Job) *job.Worktree {
-	if s.root == "" || row.CheckoutRoot != "" || !row.Worktree.Standing() || row.Worktree.Made {
+	if s.root == "" || row.CheckoutRoot != "" || row.Worktree.Standing() && row.Worktree.Made {
 		return nil
 	}
 	here, err := filepath.Abs(s.root)
-	if err != nil || samePath(here, row.Worktree.Root) {
+	if err != nil {
+		return nil
+	}
+	if row.Worktree.Standing() && samePath(here, row.Worktree.Root) || !row.Worktree.Standing() && !hostIsolated(row, here) {
 		return nil
 	}
 	wt, err := s.adoptCheckout(ctx, row.ID, here)
@@ -215,6 +242,13 @@ func (s *Store) untakenElsewhere(ctx context.Context, row job.Job) *job.Worktree
 		return nil
 	}
 	return &wt
+}
+
+// hostIsolated reports whether writing row is taken at here, a checkout
+// other than the one its fork ran in. The forker's own checkout is never
+// adopted; a row whose fork recorded none adopts nothing.
+func hostIsolated(row job.Job, here string) bool {
+	return len(row.Paths.Write) > 0 && row.ForkedIn != "" && !samePath(row.ForkedIn, here)
 }
 
 // fullRevisions maps the revision half of each token to the full revision this checkout's
@@ -303,9 +337,14 @@ func isHex(s string) bool {
 	return strings.Trim(s, "0123456789abcdef") == ""
 }
 
-// TakeAdvice reports the base and any preparation needed before editing.
+// TakeAdvice reports the base, the checkout row adopted where it was taken,
+// and any preparation needed before editing.
 func TakeAdvice(ctx context.Context, row job.Job, opts types.VCSOptions) string {
 	base := BaseAdvice(row)
+	if row.Worktree.Standing() && !row.Worktree.Made && samePath(row.Worktree.Root, row.CheckoutRoot) {
+		base = fmt.Sprintf("%s\njob %s adopted the checkout %s: wait grades it there, and it is taken there and nowhere else.",
+			base, row.ID, row.Worktree.Root)
+	}
 	if row.ReadOnly {
 		return base
 	}

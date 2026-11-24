@@ -575,6 +575,33 @@ func ownedCheckouts(ctx context.Context, deps Dependencies, at location) []strin
 	return roots
 }
 
+// lineOwns reports which checkouts line may run magus in: the caller's own,
+// and the one of the live row its BAGGAGE names.
+func lineOwns(ctx context.Context, deps Dependencies, at location, line string, d Dialect) func(root string) bool {
+	lease := ""
+	if f, err := parseFile(line, d); err == nil {
+		lease = lineBaggageLease(f)
+	}
+	return func(root string) bool {
+		return ownsCheckout(ctx, deps, at, root) || lineLeaseOwnsCheckout(ctx, deps, at, lease, root)
+	}
+}
+
+// lineLeaseOwnsCheckout reports whether lease, the one a line's own BAGGAGE
+// names, is a live row whose standing checkout is root. A caller bound to
+// another row cannot claim that row's checkout by naming its lease.
+func lineLeaseOwnsCheckout(ctx context.Context, deps Dependencies, at location, lease, root string) bool {
+	if lease == "" || deps.lease != "" && deps.lease != lease {
+		return false
+	}
+	rows, err := jobRowsAt(ctx, at)
+	if err != nil {
+		return false
+	}
+	i := slices.IndexFunc(rows, func(row job.Job) bool { return row.ID == lease })
+	return i >= 0 && rows[i].State.Live() && rows[i].Worktree.Standing() && samePath(rows[i].Worktree.Root, root)
+}
+
 // mayWorkIn reports whether the caller is row's holder or its root: the session holding row
 // or a job row descends from, a caller holding no job that no session spawned, or an agent
 // spawned for row whose binding the call does not carry yet.
