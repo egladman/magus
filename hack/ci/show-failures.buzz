@@ -29,11 +29,11 @@ export fun parseFilter(argv: [str]) > result\Result::<Filter> {
     try {
         final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run"]);
         if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-            return result\fail("failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}");
+            return result\fail::<Filter>("failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}");
         }
         final run = parsed.values["--run"] ?? "";
         if (run != "" and (std\parseInt(run) ?? 0) <= 0) {
-            return result\fail("failures: --run \"{run}\" is not a run id\n{usage}");
+            return result\fail::<Filter>("failures: --run \"{run}\" is not a run id\n{usage}");
         }
         return result\ok::<Filter>(Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run });
     } catch (err: any) {
@@ -135,7 +135,7 @@ fun capture(cmd: str, args: [str]) > result\Result::<str> {
     try {
         final res = proc\exec(cmd, args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
         if (!res.ok) {
-            return result\fail("failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}");
+            return result\fail::<str>("failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}");
         }
         return result\ok::<str>(res.stdout);
     } catch (err: any) {
