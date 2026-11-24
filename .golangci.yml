@@ -629,12 +629,9 @@ linters:
               Opts,
               Str,
               Strs,
-              Err,
               Cmd,
               Cwd,
-              Prev,
               Impl,
-              Repo,
             ]
           # ADR 0030: row is a persistence word. The SDK and the domain types name
           # the thing a row stores.
