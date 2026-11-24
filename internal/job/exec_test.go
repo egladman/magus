@@ -64,7 +64,7 @@ func (s *ExecRefusalSuite) TestAFreshCheckoutAtTheCheckpointIsRefusedByNeither()
 	s.NoError(took)
 }
 
-func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
+func (s *ExecRefusalSuite) TestDisjointWritersCoWriteOneCheckout() {
 	peer := s.adoptedRow()
 	peer.ID = "compile"
 	peer.Paths.Write = []string{"compiler.go"}
@@ -72,6 +72,37 @@ func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
 	peer.State = job.StateRunning
 	row := s.adoptedRow()
 	row.Paths.Write = []string{"bench.go"}
+	asked, took := s.answers(row, s.landing, peer)
+	s.NoError(asked)
+	s.NoError(took)
+}
+
+func (s *ExecRefusalSuite) TestDeclarationsOfOneFileCoWriteButOneDeclarationDoesNot() {
+	peer := s.adoptedRow()
+	peer.ID = "compile"
+	peer.Paths.Write = []string{"compiler.go#Parse"}
+	peer.CheckoutRoot = s.landing
+	peer.State = job.StateRunning
+	row := s.adoptedRow()
+	row.Paths.Write = []string{"compiler.go#Lex"}
+	asked, took := s.answers(row, s.landing, peer)
+	s.NoError(asked)
+	s.NoError(took)
+
+	row.Paths.Write = []string{"compiler.go#Parse"}
+	asked, took = s.answers(row, s.landing, peer)
+	s.ErrorIs(asked, ErrHeldElsewhere)
+	s.ErrorIs(took, ErrHeldElsewhere)
+}
+
+func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
+	peer := s.adoptedRow()
+	peer.ID = "compile"
+	peer.Paths.Write = []string{"compiler.go"}
+	peer.CheckoutRoot = s.landing
+	peer.State = job.StateRunning
+	row := s.adoptedRow()
+	row.Paths.Write = []string{"compiler.go"}
 	asked, took := s.answers(row, s.landing, peer)
 	s.Require().ErrorIs(asked, ErrHeldElsewhere)
 	s.Require().ErrorIs(took, ErrHeldElsewhere)

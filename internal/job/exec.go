@@ -185,14 +185,17 @@ func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error
 	return checkoutWriterConflict(row, here, f.Jobs)
 }
 
-// Wait reads the checkout's HEAD when a writer owns the checkout. Two
-// independently graded writers cannot both own that revision.
+// checkoutWriterConflict refuses a second writer only on a real overlap
+// with a live one here. Disjoint paths co-write, as the fork proved.
 func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
-	if here == "" || len(row.Paths.Write) == 0 {
+	if here == "" || len(row.HardPaths()) == 0 {
 		return nil
 	}
 	for _, peer := range rows {
-		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.Paths.Write) == 0 {
+		if peer.ID == row.ID || peer.CheckoutRoot != here || len(peer.HardPaths()) == 0 {
+			continue
+		}
+		if !hardPathsOverlap(row, peer) {
 			continue
 		}
 		if peer.State != job.StateRunning && peer.State != job.StateExited {
@@ -201,10 +204,23 @@ func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
 		if !peer.Worktree.Standing() && !row.Worktree.Standing() && peer.Parent != "" && row.Parent != "" {
 			continue
 		}
-		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s; give %s its own checkout or finish verifying %s before taking another writer here",
+		return heldError{fmt.Sprintf("job: %s and %s would be graded against the same HEAD in %s and their write paths overlap; give %s its own checkout or finish verifying %s before taking another writer here",
 			row.ID, peer.ID, here, row.ID, peer.ID)}
 	}
 	return nil
+}
+
+// hardPathsOverlap matches claims the way [Store.WriteProof] does, so
+// the refusal and the recorded proof cannot disagree.
+func hardPathsOverlap(row, peer job.Job) bool {
+	for _, mine := range row.HardPaths() {
+		for _, theirs := range peer.HardPaths() {
+			if job.PathsIntersect(mine, theirs) && !job.ReleasedReach(peer, theirs, mine) && !job.ReleasedReach(row, mine, theirs) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // untakenElsewhere is this checkout adopted for row, which nobody took: a
