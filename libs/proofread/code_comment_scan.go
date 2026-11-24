@@ -11,17 +11,17 @@ import (
 type SourceLanguage string
 
 const (
-	// LanguageGo is Go.
+	// LanguageGo reads a .go file: its doc comments by Go's exported names.
 	LanguageGo SourceLanguage = "go"
 	// LanguageTypeScript is TypeScript, .tsx included.
 	LanguageTypeScript SourceLanguage = "ts"
-	// LanguageBuzz is Buzz.
+	// LanguageBuzz reads a .buzz file, where export marks the public API.
 	LanguageBuzz SourceLanguage = "buzz"
 )
 
-// LanguageOf returns the language p's extension names, and false for a path
-// in none of them.
-func LanguageOf(p string) (SourceLanguage, bool) {
+// PathLanguage returns the language p's extension names, and false for a
+// path in none of them.
+func PathLanguage(p string) (SourceLanguage, bool) {
 	switch path.Ext(p) {
 	case ".go":
 		return LanguageGo, true

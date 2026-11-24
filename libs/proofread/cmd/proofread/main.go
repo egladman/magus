@@ -372,13 +372,6 @@ func runKind(kind proofread.Kind, o *kindOptions, args []string, stdin io.Reader
 		proofread.WithKinds(t.kinds...),
 	}
 
-	codeOpts, err := codeCommentOptions(kind, o)
-	if err != nil {
-		return failure(stderr, err)
-	}
-
-	opts = append(opts, codeOpts...)
-
 	if o.futureSections != "" {
 		opts = append(opts, proofread.WithFutureSections(strings.Split(o.futureSections, ",")...))
 	}
@@ -566,6 +559,13 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {
 	cmd, _ := kindCommand(kind)
 
+	codeOpts, err := codeCommentOptions(kind, &kindOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	opts = append(slices.Clone(opts), codeOpts...)
+
 	switch {
 	case cmd.input == inputSymbols:
 		if len(paths) > 0 {
@@ -605,7 +605,7 @@ func judgeFiles(paths []string, kind proofread.Kind, t table, opts []proofread.O
 		fileOpts := append(slices.Clone(opts), proofread.WithDecisions(t.decisionsAt(p)))
 
 		if kind == proofread.KindCodeComment {
-			lang, ok := proofread.LanguageOf(p)
+			lang, ok := proofread.PathLanguage(p)
 			if !ok {
 				return nil, fmt.Errorf("%s is not Go, TypeScript or Buzz, the languages code-comment reads", p)
 			}

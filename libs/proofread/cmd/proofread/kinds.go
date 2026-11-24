@@ -46,7 +46,7 @@ func codeCommentOptions(kind proofread.Kind, o *kindOptions) ([]proofread.Option
 	case o.stdin && o.language == "":
 		return nil, errors.New("code-comment --stdin needs --language go, ts or buzz")
 	case !o.stdin && o.language != "":
-		return nil, errors.New("--language names the language of stdin; a file's comes from its extension")
+		return nil, errors.New("--language names the language of stdin, and a file's comes from its extension")
 	case o.stdin:
 		lang, ok := proofread.ParseLanguage(o.language)
 		if !ok {

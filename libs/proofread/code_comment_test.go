@@ -11,7 +11,7 @@ func judgeGo(src string, opts ...Option) []Finding {
 	return JudgeText(src, KindCodeComment, append([]Option{WithLanguage(LanguageGo)}, opts...)...)
 }
 
-func rulesOf(found []Finding) []Rule {
+func distinctRules(found []Finding) []Rule {
 	var out []Rule
 
 	for _, f := range found {
@@ -26,7 +26,7 @@ func rulesOf(found []Finding) []Rule {
 func assertRules(t *testing.T, found []Finding, want ...Rule) {
 	t.Helper()
 
-	if got := rulesOf(found); !slices.Equal(got, want) {
+	if got := distinctRules(found); !slices.Equal(got, want) {
 		t.Errorf("rules = %v, want %v; findings %#v", got, want, found)
 	}
 }

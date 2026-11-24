@@ -531,7 +531,7 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 		{"a loosened comment budget", []string{"code-comment", "--stdin", "--language", "go", "--budgets", `{"inline":{"words":31}}`},
 			"proofread: --budgets: comment budget inline.words is 31, over the strict 30: a project may only tighten it\n"},
 		{"a code file in no language", []string{"code-comment", page}, "proofread: " + page + " is not Go, TypeScript or Buzz, the languages code-comment reads\n"},
-		{"--language on another kind", []string{"reference", "--language", "go", page},
+		{"--language on another kind", []string{"reference", "-minimum", "0", "--language", "go", page},
 			"proofread: --language and --budgets judge code-comment, not reference\n"},
 		{"--stdin for a kind read from files", []string{"reference", "--stdin"}, "proofread: a reference is read from files, not stdin\n"},
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
