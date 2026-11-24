@@ -25,7 +25,7 @@ const (
 	// by default where history ships off.
 	RuleCommentHistory Rule = "comment-history"
 	// RuleProvenance reports a date, a pull request or issue number, a commit
-	// hash or an incident in a code comment.
+	// hash or a retold failure in a code comment.
 	RuleProvenance Rule = "provenance"
 	// RuleDocPath reports a code comment that cites a design page, a decision
 	// record or a Markdown file.
@@ -484,14 +484,16 @@ var docPathSpans = []spanFinding{
 
 func docPath(in input) []Finding { return scanSpans(in, docPathSpans) }
 
-var capitalWord = regexp.MustCompile(`\b[A-Z]{2,}\b`)
+// capitalWord matches a word in capitals. Group 1 is a `$` before it, an
+// environment variable, and group 3 a `.ext` after it, a file name.
+var capitalWord = regexp.MustCompile(`(\$?)\b([A-Z]{2,})\b(\.[a-z]+)?`)
 
 // shortShouts are the two- and three-letter words that read as shouting in
 // capitals. A longer all-caps word shouts unless it is an acronym.
 var shortShouts = wordSet("no", "not", "all", "any", "and", "or", "but", "nor", "yes", "why", "how", "who",
 	"now", "new", "old", "one", "two", "off", "out", "may", "can", "bad", "big", "few", "own", "is", "be",
 	"it", "if", "at", "on", "in", "to", "up", "so", "as", "by", "of", "do", "we", "me", "my", "the", "too",
-	"use", "set", "get", "run", "end", "add")
+	"use", "set", "run", "end", "add")
 
 // acronyms are the all-caps words of four letters or more that name a thing.
 var acronyms = wordSet("json", "jsonl", "ndjson", "yaml", "toml", "http", "https", "html", "ascii", "posix",
@@ -501,21 +503,39 @@ var acronyms = wordSet("json", "jsonl", "ndjson", "yaml", "toml", "http", "https
 	"home", "term", "sigint", "sigterm", "sigkill", "sighup", "sigpipe", "eintr", "eagain", "enoent", "eperm",
 	"eacces", "eexist", "ebadf", "econnrefused", "ietf", "ieee", "unix", "ecdsa", "hmac", "mime", "gzip",
 	"zstd", "jpeg", "webp", "pkce", "saml", "oidc", "xpos", "upos", "penn", "fifo", "lifo", "sqlite",
-	"tsconfig", "pnpm", "npmrc", "mise", "magus")
+	"tsconfig", "pnpm", "npmrc", "mise", "magus", "head", "fetch_head", "orig_head", "readme", "license", "baggage",
+	"tmpdir", "user", "shell", "editor", "lang", "post", "patch", "delete", "options", "trace", "connect")
 
 func commentCaps(in input) []Finding {
-	return scanSpans(in, []spanFinding{{
-		re:      capitalWord,
-		message: "Write %q in lowercase: capitals add no fact, so say why it matters instead.",
-		keepMatch: func(m string) bool {
-			w := strings.ToLower(m)
-			if in.code.idents[m] || acronyms[w] {
-				return false
+	var out []Finding
+
+	for _, para := range paragraphs(in.prose, blankBackticks) {
+		text := blankQuoted(para.text)
+
+		for _, at := range capitalWord.FindAllStringSubmatchIndex(text, -1) {
+			m := text[at[4]:at[5]]
+			if at[3] > at[2] || at[7] > at[6] || !shouts(m, in.code.idents) {
+				continue
 			}
 
-			return len(m) > 3 || shortShouts[w]
-		},
-	}})
+			out = append(out, Finding{
+				Message: fmt.Sprintf("Write %q in lowercase: capitals add no fact, so say why it matters instead.", m),
+				Match:   m, Line: para.lineAt(at[4]),
+			})
+		}
+	}
+
+	return out
+}
+
+// shouts reports whether the capital word m is an ordinary word shouted.
+func shouts(m string, idents map[string]bool) bool {
+	w := strings.ToLower(m)
+	if idents[m] || acronyms[w] {
+		return false
+	}
+
+	return len(m) > 3 || shortShouts[w]
 }
 
 var firstPersonCode = regexp.MustCompile(`\b(?:I|[Ww]e|us|[Oo]urs?|me|[Mm]y)\b`)
