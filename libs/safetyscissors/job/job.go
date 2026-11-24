@@ -577,6 +577,9 @@ type Job struct {
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
+	// ForkedIn is the absolute root of the checkout its fork ran in. The
+	// store stamps it, "" when it names no root.
+	ForkedIn string `json:"forked_in,omitempty" yaml:"forked_in,omitempty"`
 	// Worktree is the checkout a fork made or adopted for this job (see [Declaration.Checkout]), nil
 	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
 	// fork that made it and the removal at the job's end write it.

@@ -81,6 +81,7 @@ type jobStatus struct {
 	Registered            int64                        `json:"registered,omitzero"`
 	HolderStopped         int64                        `json:"holder_stopped,omitzero"`
 	CheckoutRoot          string                       `json:"checkout_root,omitempty"`
+	ForkedIn              string                       `json:"forked_in,omitempty"`
 	Worktree              *worktreeRecord              `json:"worktree,omitzero"`
 	EndReason             string                       `json:"end_reason,omitempty"`
 	Created               int64                        `json:"created"`
@@ -188,7 +189,7 @@ func recordStatus(row Job, prev jobStatus) jobStatus {
 		WriteProof: string(row.WriteProof), Validated: row.Validated,
 		ReportedBase: row.ReportedBase, BaseVerdict: string(row.BaseVerdict),
 		RegisteredBy: recordOrigin(row.RegisteredBy), Authority: row.Authority, Registered: row.Registered,
-		HolderStopped: row.HolderStopped, CheckoutRoot: row.CheckoutRoot, EndReason: row.EndReason,
+		HolderStopped: row.HolderStopped, CheckoutRoot: row.CheckoutRoot, ForkedIn: row.ForkedIn, EndReason: row.EndReason,
 		Created: row.Created, Updated: row.Updated, Deadline: row.Deadline,
 		Integration: recordIntegration(row.Integration), WaiterEvidence: recordIntegration(row.WaiterEvidence),
 		Unknown: prev.Unknown,
@@ -284,6 +285,7 @@ func (st jobStatus) populate(row *Job, bad *wireReads, creds wireEnum[Credential
 	row.ReportedBase, row.BaseVerdict = st.ReportedBase, wireBaseVerdict().read(st.BaseVerdict, bad)
 	row.RegisteredBy, row.Authority, row.Registered = st.RegisteredBy.origin(bad, creds), st.Authority, st.Registered
 	row.HolderStopped, row.CheckoutRoot, row.EndReason = st.HolderStopped, st.CheckoutRoot, st.EndReason
+	row.ForkedIn = st.ForkedIn
 	row.Created, row.Updated, row.Deadline = st.Created, st.Updated, st.Deadline
 	row.Integration, row.WaiterEvidence = st.Integration.integration(), st.WaiterEvidence.integration()
 	for _, c := range st.Claims {

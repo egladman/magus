@@ -202,6 +202,31 @@ func (s *MutateSuite) TestAnExecAdoptsACheckoutOnlyForAnUntakenRow() {
 	s.Equal(host, row.Worktree.Root)
 }
 
+func (s *MutateSuite) TestAForkRecordsTheCheckoutItRanIn() {
+	forker, other := s.T().TempDir(), s.T().TempDir()
+	dir := s.T().TempDir()
+	open := func(root string) *Store {
+		st, err := Open(s.T().Context(), Config{Dir: dir}, append(writable(), WithRoot(root))...)
+		s.Require().NoError(err)
+		return st
+	}
+
+	row, err := open(forker).Update(s.T().Context(), "a", func(r *Job) { r.ForkedIn = other })
+	s.Require().NoError(err)
+	s.Equal(forker, row.ForkedIn, "the store stamps it, whatever the caller wrote")
+
+	row, err = open(other).Mutate(s.T().Context(), "a", AsExec, func(cur *Job, _ bool, _ int64) error {
+		cur.State, cur.ForkedIn = StateRunning, other
+		return nil
+	})
+	s.Require().NoError(err)
+	s.Equal(forker, row.ForkedIn, "a taker elsewhere keeps the fork's checkout")
+
+	unrooted, err := s.open().Update(s.T().Context(), "b", func(*Job) {})
+	s.Require().NoError(err)
+	s.Empty(unrooted.ForkedIn, "a store that names no root records none")
+}
+
 func (s *MutateSuite) TestAWideningOfTheWritePathsKeepsTheGeneration() {
 	prev := Job{Paths: Paths{Write: []string{"internal/job/store.go"}}, Generation: 2}
 	widened := Job{Paths: Paths{Write: []string{"internal/**"}}}

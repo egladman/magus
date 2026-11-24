@@ -58,7 +58,7 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	notes, err := Exit(t.Context(), s, "notes", &job.Result{}, none)
 	require.NoError(t, err)
-	notes.Generation, notes.RegisteredBy = 0, job.Origin{}
+	notes.Generation, notes.RegisteredBy, notes.ForkedIn = 0, job.Origin{}, ""
 	notes.Created, notes.Updated, notes.PostconditionAttempts = 0, 0, nil
 	assert.Equal(t, job.Job{ID: "notes", ReadOnly: true, State: job.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")

@@ -1020,6 +1020,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		BaseVerdict:  got.BaseVerdict,
 		RegisteredBy: got.RegisteredBy,
 		Authority:    got.Authority,
+		ForkedIn:     got.ForkedIn,
 		Registered:   got.Registered,
 		CheckoutRoot: abs,
 		Generation:   1,

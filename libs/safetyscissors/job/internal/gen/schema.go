@@ -203,6 +203,7 @@ var jobStatus = codec.ObjectSchema{Name: "jobStatus", Closed: false, Fields: map
 	"registered":             nil,
 	"holder_stopped":         nil,
 	"checkout_root":          nil,
+	"forked_in":              nil,
 	"worktree":               &worktreeRecord,
 	"end_reason":             nil,
 	"created":                nil,

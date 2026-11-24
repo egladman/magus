@@ -331,6 +331,7 @@ func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 func claimedView(stored job.Job) job.Job {
 	v := stored.Clone()
 	v.Requires, v.Created, v.Updated, v.Generation, v.RegisteredBy = nil, 0, 0, 0, job.Origin{}
+	v.ForkedIn = ""
 	for i := range v.Claims {
 		v.Claims[i].At, v.Claims[i].By = 0, job.Origin{}
 	}

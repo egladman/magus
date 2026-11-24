@@ -124,7 +124,7 @@ func releasedPaths(row job.Job) []string {
 // comparison covers every other field.
 func stamped(want, got job.Job) job.Job {
 	want.Requires, want.RegisteredBy, want.Created, want.Updated = got.Requires, got.RegisteredBy, got.Created, got.Updated
-	want.Authority = got.Authority
+	want.Authority, want.ForkedIn = got.Authority, got.ForkedIn
 	want.Generation = got.Generation
 	return want
 }
@@ -194,7 +194,7 @@ func TestStoreRoundTrip(t *testing.T) {
 				// Timestamps are the store's, not the fixture's;
 				// assert them separately and compare the declared facts here.
 				assert.Equal(t, recorder.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
-				w.Created, w.Updated, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].RegisteredBy
+				w.Created, w.Updated, w.RegisteredBy, w.ForkedIn = got[i].Created, got[i].Updated, got[i].RegisteredBy, got[i].ForkedIn
 				require.Len(t, got[i].Releases, len(w.Releases))
 				for j := range w.Releases {
 					w.Releases[j].ReleasedAt = got[i].Releases[j].ReleasedAt
@@ -618,6 +618,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Validated:    stored.Validated,
 				RegisteredBy: stored.RegisteredBy,
 				Authority:    head,
+				ForkedIn:     repo.Root(),
 			}, stored)
 		})
 	}

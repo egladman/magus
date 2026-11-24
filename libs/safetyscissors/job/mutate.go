@@ -477,7 +477,24 @@ func (w *rowWrite) conclude(ctx context.Context) error {
 	default:
 		row.Authority = prev.Authority
 	}
+	row.ForkedIn = prev.ForkedIn
+	if w.kind == AsDeclaration && (!w.exists() || w.refork) {
+		row.ForkedIn = w.s.forkedIn()
+	}
 	return nil
+}
+
+// forkedIn is the absolute root a fork through this store runs in, "" when
+// it names none.
+func (s *Store) forkedIn() string {
+	if s.root == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(s.root)
+	if err != nil {
+		return ""
+	}
+	return abs
 }
 
 // place stores the row in the ledger.
