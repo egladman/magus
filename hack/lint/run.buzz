@@ -150,7 +150,8 @@ final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store
 
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
 // files would each be reported twice. They are untracked, not always ignored.
-final PRUNED_PATHS = {".claude/worktrees": true};
+// .claude/tmp is gitignored agent scratch; prune it, since .claude is walked.
+final PRUNED_PATHS = {".claude/worktrees": true, ".claude/tmp": true};
 
 // KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
 // diagrams import their observed halves, and the tool descriptions are judged from the MCP

@@ -594,7 +594,8 @@ type auditFile struct {
 // auditSkipDirs are trees whose .buzz files no magus host loads: testdata holds
 // fixtures that are wrong on purpose, and benchmarks/upstream is upstream Buzz's own
 // benchmark set, run by upstream Buzz.
-var auditSkipDirs = []string{".git", "node_modules", "testdata", filepath.Join("libs", "gopherbuzz", "benchmarks", "upstream")}
+// .claude/tmp is agent scratch the lint walk prunes too.
+var auditSkipDirs = []string{".git", "node_modules", "testdata", filepath.Join("libs", "gopherbuzz", "benchmarks", "upstream"), filepath.Join(".claude", "tmp")}
 
 // auditBundles are the declaration bundles assembled from generated mirrors. A
 // mirror alone references types its bundle declares before it, so each is checked as
