@@ -7,3 +7,89 @@ clikitmain:
     hint: "declare the command as a libs/clikit command.Command, each flag storing into its Target, and run it with command.Main"
   # file: count of hand-parsed reads (a flag defined or parsed through package flag, or os.Args)
   baseline: {}
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    agent_reply.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    agent_reply_test.go: {code-comment-sentence: 1}
+    author_voice.go: {code-comment-budget: 4, code-comment-sentence: 6, doc-path: 1}
+    catalog.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    changelog.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    changelog_test.go: {doc-path: 1}
+    cmd/proofread/baseline.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    cmd/proofread/format.go: {code-comment-budget: 3, code-comment-sentence: 4}
+    cmd/proofread/hook.go: {code-comment-budget: 1}
+    cmd/proofread/hook_test.go: {code-comment-sentence: 1}
+    cmd/proofread/main.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    cmd/proofread/main_test.go: {code-comment-sentence: 1}
+    cmd/proofread/metrics.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    cmd/proofread/outcomes.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-history: 1}
+    cmd/proofread/voice.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    coldread.go: {code-comment-budget: 7, code-comment-sentence: 10, comment-caps: 4, comment-history: 1}
+    coldread_test.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    commit.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    commit_test.go: {code-comment-budget: 1, provenance: 1}
+    compact.go: {code-comment-budget: 1, code-comment-sentence: 4, provenance: 1}
+    css.go: {code-comment-budget: 3, code-comment-sentence: 3}
+    css_rules.go: {code-comment-budget: 4, code-comment-sentence: 5}
+    dates.go: {code-comment-budget: 2, code-comment-sentence: 1, provenance: 1}
+    dates_test.go: {doc-path: 1}
+    declared_test.go: {doc-path: 1}
+    density.go: {code-comment-budget: 6, code-comment-sentence: 9, comment-history: 1}
+    diagnostic.go: {code-comment-sentence: 2}
+    evidence.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    first_person.go: {code-comment-budget: 1, comment-caps: 1, comment-first-person: 2}
+    grade.go: {code-comment-sentence: 2}
+    grade_test.go: {comment-caps: 1}
+    guide.go: {code-comment-budget: 8, code-comment-sentence: 14, comment-first-person: 1}
+    guide_test.go: {doc-path: 8}
+    help_test.go: {code-comment-sentence: 1}
+    internal/calibrate/calibrate.go: {code-comment-budget: 3, code-comment-sentence: 12, comment-caps: 2, comment-history: 1}
+    internal/calibrate/calibrate_test.go: {doc-path: 1}
+    internal/calibrate/round.go: {code-comment-sentence: 1}
+    internal/calibrate/round_test.go: {code-comment-sentence: 1, comment-caps: 1}
+    internal/calibrate/separation.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    internal/wordclass/model.go: {code-comment-sentence: 2, comment-caps: 3}
+    internal/wordclass/split.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    issue.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    kinds.go: {code-comment-sentence: 1}
+    kinds_test.go: {doc-path: 1}
+    list.go: {code-comment-budget: 3, code-comment-sentence: 7}
+    metrics.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    prefilter.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    prefilter_test.go: {code-comment-sentence: 1}
+    proofread.go: {code-comment-budget: 4, code-comment-sentence: 24, comment-caps: 1, comment-first-person: 7, doc-path: 3}
+    proofread_test.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    protect.go: {code-comment-sentence: 1}
+    review.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 6}
+    review_test.go: {code-comment-sentence: 2}
+    rule_word.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    rule_word_test.go: {code-comment-sentence: 1}
+    rules.go: {code-comment-budget: 4, code-comment-sentence: 10, doc-path: 1, provenance: 1}
+    rules_test.go: {comment-history: 1}
+    shape.go: {code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 2}
+    shape_grammar.go: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 3, provenance: 1}
+    shape_grammar_test.go: {code-comment-budget: 1, comment-caps: 6}
+    shape_test.go: {code-comment-budget: 2, code-comment-sentence: 1}
+    shape_words.go: {code-comment-sentence: 1}
+    skill.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    skill_rules.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    skill_test.go: {comment-history: 1}
+    slop.go: {code-comment-budget: 11, code-comment-sentence: 18, doc-path: 1, provenance: 1}
+    slop_test.go: {doc-path: 4}
+    suppress.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    terse.go: {code-comment-budget: 2, code-comment-sentence: 3, provenance: 1}
+    text.go: {code-comment-budget: 8, code-comment-sentence: 14}
+    text_test.go: {code-comment-sentence: 5, doc-path: 1}
+    tone.go: {code-comment-budget: 15, code-comment-sentence: 26, comment-caps: 2, doc-path: 1}
+    tone_test.go: {doc-path: 4, provenance: 13}
+    tool.go: {code-comment-sentence: 2}
+    triad.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    uniform.go: {code-comment-budget: 1, doc-path: 1}
+    voice.go: {code-comment-budget: 9, code-comment-sentence: 12, comment-history: 2, doc-path: 1, provenance: 2}
+    voice_drift.go: {code-comment-budget: 4, code-comment-sentence: 5, provenance: 1}
+    voice_drift_test.go: {code-comment-budget: 1}
+    voice_test.go: {doc-path: 9, provenance: 5}
