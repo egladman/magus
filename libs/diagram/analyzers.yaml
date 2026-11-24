@@ -4,3 +4,12 @@
 
 no-throw:
   baseline: {}
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    diagram.buzz: {code-comment-budget: 74, code-comment-sentence: 121, comment-caps: 4, comment-history: 3, doc-path: 1}
+    embed.go: {code-comment-budget: 2}
+    embed_test.go: {code-comment-sentence: 1}

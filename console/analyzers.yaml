@@ -8,3 +8,323 @@ exhaustive-switch:
   baseline: []
   # Switches a person accepted, each with the reason it stays.
   exits: []
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    magusfile.buzz: {code-comment-sentence: 2, doc-path: 3}
+    src/apps/activity/adapter.test.ts: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 2}
+    src/apps/activity/adapter.ts: {code-comment-budget: 3, code-comment-sentence: 8, comment-caps: 3}
+    src/apps/activity/demo.ts: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 2}
+    src/apps/activity/lineage.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 2}
+    src/apps/activity/lineage.ts: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 3}
+    src/apps/activity/main-dom.test.ts: {code-comment-budget: 3, code-comment-sentence: 8, comment-caps: 6}
+    src/apps/activity/main.ts: {code-comment-budget: 35, code-comment-sentence: 39, comment-caps: 19, comment-history: 1}
+    src/apps/apps.test.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/apps/dashboard/charts/uplot.ts: {code-comment-budget: 3, code-comment-sentence: 5}
+    src/apps/dashboard/demo.ts: {banner: 8, code-comment-budget: 26, code-comment-sentence: 39, comment-caps: 20, comment-history: 2}
+    src/apps/dashboard/main-dom.test.ts: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 11}
+    src/apps/dashboard/main.ts: {banner: 8, code-comment-budget: 27, code-comment-sentence: 33, comment-caps: 23, comment-history: 6}
+    src/apps/dashboard/plan/demo.test.ts: {code-comment-budget: 1, code-comment-sentence: 3}
+    src/apps/dashboard/plan/demo.ts: {code-comment-budget: 4, code-comment-sentence: 13, comment-caps: 9}
+    src/apps/dashboard/plan/feed.test.ts: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 4}
+    src/apps/dashboard/plan/feed.ts: {code-comment-budget: 8, code-comment-sentence: 10, comment-caps: 6}
+    src/apps/dashboard/plan/jobs.test.ts: {banner: 8, code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 6}
+    src/apps/dashboard/plan/jobs.ts: {banner: 5, code-comment-budget: 16, code-comment-sentence: 41, comment-caps: 21, comment-history: 1, provenance: 1}
+    src/apps/dashboard/plan/main-dom.test.ts: {banner: 11, code-comment-budget: 22, code-comment-sentence: 32, comment-caps: 45, comment-history: 1}
+    src/apps/dashboard/plan/main.ts: {banner: 5, code-comment-budget: 91, code-comment-sentence: 119, comment-caps: 107, comment-history: 4, doc-path: 1}
+    src/apps/dashboard/plan/run.test.ts: {banner: 7, code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 8}
+    src/apps/dashboard/plan/run.ts: {banner: 5, code-comment-budget: 12, code-comment-sentence: 23, comment-caps: 25}
+    src/apps/dashboard/scroll.ts: {code-comment-sentence: 1}
+    src/apps/dashboard/state.ts: {banner: 9, code-comment-budget: 15, code-comment-sentence: 25, comment-caps: 23, comment-first-person: 1, comment-history: 3}
+    src/apps/dashboard/tiles/activity.ts: {code-comment-budget: 18, code-comment-sentence: 20, comment-caps: 13, comment-first-person: 2, comment-history: 2}
+    src/apps/dashboard/tiles/agents.ts: {code-comment-budget: 11, code-comment-sentence: 16, comment-caps: 5}
+    src/apps/dashboard/tiles/alerts-dom.test.ts: {code-comment-budget: 5, code-comment-sentence: 4, comment-caps: 3, comment-history: 1}
+    src/apps/dashboard/tiles/alerts.ts: {code-comment-budget: 16, code-comment-sentence: 22, comment-caps: 8, comment-history: 2}
+    src/apps/dashboard/tiles/attention-dom.test.ts: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 3, comment-history: 1}
+    src/apps/dashboard/tiles/attention.ts: {banner: 1, code-comment-budget: 24, code-comment-sentence: 35, comment-caps: 20, comment-first-person: 1, comment-history: 2}
+    src/apps/dashboard/tiles/attentionQueue.test.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1}
+    src/apps/dashboard/tiles/attentionQueue.ts: {banner: 3, code-comment-budget: 10, code-comment-sentence: 18, comment-caps: 11}
+    src/apps/dashboard/tiles/bigPicture.ts: {code-comment-budget: 9, code-comment-sentence: 17, comment-caps: 22, comment-first-person: 1, comment-history: 5}
+    src/apps/dashboard/tiles/broker.ts: {code-comment-budget: 2, code-comment-sentence: 3}
+    src/apps/dashboard/tiles/buzz.ts: {code-comment-sentence: 1, comment-caps: 1}
+    src/apps/dashboard/tiles/cacheRate.ts: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
+    src/apps/dashboard/tiles/cacheRateSeries.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/cacheRateSeries.ts: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 5, comment-first-person: 1}
+    src/apps/dashboard/tiles/cacheStats.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-history: 1}
+    src/apps/dashboard/tiles/card-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/card.ts: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 7, comment-history: 1}
+    src/apps/dashboard/tiles/config.ts: {code-comment-budget: 3, code-comment-sentence: 1, comment-history: 1}
+    src/apps/dashboard/tiles/density.ts: {code-comment-budget: 5, code-comment-sentence: 6, comment-caps: 1}
+    src/apps/dashboard/tiles/gantt-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/gantt.ts: {code-comment-budget: 12, code-comment-sentence: 14, comment-caps: 6}
+    src/apps/dashboard/tiles/historymetrics.ts: {banner: 7, code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 2, comment-history: 1}
+    src/apps/dashboard/tiles/jobs-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/apps/dashboard/tiles/jobs.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/latency.ts: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 1, comment-first-person: 1}
+    src/apps/dashboard/tiles/locks-dom.test.ts: {code-comment-sentence: 1}
+    src/apps/dashboard/tiles/locks.ts: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 2, comment-history: 1}
+    src/apps/dashboard/tiles/mcp.ts: {comment-caps: 1}
+    src/apps/dashboard/tiles/menu-dom.test.ts: {comment-history: 1}
+    src/apps/dashboard/tiles/menu.ts: {code-comment-sentence: 1}
+    src/apps/dashboard/tiles/pool.ts: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 3}
+    src/apps/dashboard/tiles/rotator-dom.test.ts: {code-comment-sentence: 1}
+    src/apps/dashboard/tiles/rotator.ts: {code-comment-budget: 5, code-comment-sentence: 8, comment-caps: 1, comment-first-person: 1}
+    src/apps/dashboard/tiles/sandbox.ts: {code-comment-sentence: 1, comment-caps: 1}
+    src/apps/dashboard/tiles/server.ts: {code-comment-sentence: 1}
+    src/apps/dashboard/tiles/services.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/apps/dashboard/tiles/split.ts: {code-comment-budget: 6, code-comment-sentence: 13, comment-caps: 14, comment-history: 2}
+    src/apps/dashboard/tiles/targets.ts: {comment-caps: 1}
+    src/apps/dashboard/tiles/toolchain-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/toolchain.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/dashboard/tiles/utilization.ts: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 2}
+    src/apps/dashboard/tiles/widgets.ts: {code-comment-sentence: 2, comment-caps: 2}
+    src/apps/dashboard/tiles/workspaces.ts: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 3}
+    src/apps/dashboard/transport.ts: {banner: 6, code-comment-budget: 13, code-comment-sentence: 15, comment-caps: 10, comment-history: 3}
+    src/apps/diff/agent.ts: {code-comment-sentence: 2}
+    src/apps/diff/demo-dom.test.ts: {code-comment-budget: 20, code-comment-sentence: 26, comment-caps: 13, comment-history: 1}
+    src/apps/diff/demo.test.ts: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 4, comment-history: 1}
+    src/apps/diff/demo.ts: {code-comment-budget: 18, code-comment-sentence: 26, comment-caps: 10}
+    src/apps/diff/fixtures.test.ts: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    src/apps/diff/fixtures.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 5}
+    src/apps/diff/main.ts: {banner: 9, code-comment-budget: 147, code-comment-sentence: 177, comment-caps: 95, comment-history: 13}
+    src/apps/diff/markdown.test.ts: {code-comment-sentence: 2, comment-caps: 1}
+    src/apps/diff/markdown.ts: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 7, comment-history: 1}
+    src/apps/diff/order.test.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 6, comment-history: 1}
+    src/apps/diff/order.ts: {code-comment-budget: 10, code-comment-sentence: 16, comment-caps: 18}
+    src/apps/diff/outline-dom.test.ts: {code-comment-sentence: 1}
+    src/apps/diff/outline.test.ts: {code-comment-sentence: 1}
+    src/apps/diff/outline.ts: {code-comment-sentence: 3}
+    src/apps/diff/parse.test.ts: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 3, comment-history: 2}
+    src/apps/diff/parse.ts: {code-comment-budget: 8, code-comment-sentence: 17, comment-caps: 10, comment-history: 4}
+    src/apps/diff/pf.ts: {code-comment-sentence: 7, comment-caps: 1, doc-path: 1}
+    src/apps/diff/readingorder.test.ts: {code-comment-sentence: 1}
+    src/apps/diff/readingorder.ts: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    src/apps/diff/review-dom.test.ts: {banner: 1, code-comment-budget: 1, code-comment-sentence: 6, comment-history: 3}
+    src/apps/diff/rows.test.ts: {code-comment-budget: 13, code-comment-sentence: 13, comment-caps: 12, comment-history: 2}
+    src/apps/diff/rows.ts: {code-comment-budget: 21, code-comment-sentence: 44, comment-caps: 21, comment-history: 7}
+    src/apps/diff/session.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    src/apps/diff/session.ts: {code-comment-budget: 15, code-comment-sentence: 40, comment-caps: 16, comment-history: 3}
+    src/apps/diff/syntax-palette.test.ts: {code-comment-budget: 2, code-comment-sentence: 3}
+    src/apps/diff/syntax.test.ts: {code-comment-sentence: 1}
+    src/apps/diff/syntax.ts: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 13}
+    src/apps/diff/threads.test.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-history: 1}
+    src/apps/graph/cards.test.ts: {code-comment-sentence: 2, comment-history: 1}
+    src/apps/graph/cards.ts: {code-comment-budget: 8, code-comment-sentence: 8, comment-caps: 4}
+    src/apps/graph/diagrams/api.ts: {code-comment-sentence: 1}
+    src/apps/graph/diagrams/diagram-link.test.ts: {banner: 1, code-comment-budget: 1}
+    src/apps/graph/diagrams/flow.ts: {code-comment-budget: 1}
+    src/apps/graph/diagrams/interact.ts: {code-comment-sentence: 3, comment-first-person: 2}
+    src/apps/graph/diagrams/main-dom.test.ts: {banner: 1, code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 25, comment-first-person: 1}
+    src/apps/graph/diagrams/main.ts: {code-comment-budget: 5, code-comment-sentence: 6}
+    src/apps/graph/diagrams/view-dom.test.ts: {code-comment-sentence: 1}
+    src/apps/graph/diagrams/view.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/graph/diagrams/wasm-real.test.ts: {code-comment-sentence: 1, comment-caps: 1}
+    src/apps/graph/diagrams/wasm.ts: {code-comment-sentence: 2}
+    src/apps/graph/duration.ts: {code-comment-budget: 1, code-comment-sentence: 3}
+    src/apps/graph/flow.ts: {code-comment-sentence: 2}
+    src/apps/graph/layout.test.ts: {banner: 2, code-comment-sentence: 1, comment-caps: 2}
+    src/apps/graph/layout.ts: {banner: 7, code-comment-budget: 13, code-comment-sentence: 14, comment-caps: 7, comment-first-person: 6}
+    src/apps/graph/main.ts: {banner: 23, code-comment-budget: 256, code-comment-sentence: 318, comment-caps: 196, comment-first-person: 8, comment-history: 52, provenance: 6}
+    src/apps/graph/notice-dom.test.ts: {code-comment-sentence: 1, comment-caps: 1}
+    src/apps/graph/notice.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-history: 1}
+    src/apps/graph/querybuilder-dom.test.ts: {code-comment-sentence: 1, comment-caps: 1}
+    src/apps/graph/querybuilder.ts: {banner: 3, code-comment-budget: 13, code-comment-sentence: 18, comment-caps: 9}
+    src/apps/graph/radial.test.ts: {code-comment-budget: 2, code-comment-sentence: 2}
+    src/apps/graph/radial.ts: {banner: 3, code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 2}
+    src/apps/graph/scaffold-dom.test.ts: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 5, comment-history: 3}
+    src/apps/graph/shapes.ts: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 3}
+    src/apps/graph/target-adapter.ts: {code-comment-budget: 1, code-comment-sentence: 1, comment-history: 1, restates: 1}
+    src/apps/graph/types.ts: {banner: 1, code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 1}
+    src/apps/graph/viewport.test.ts: {comment-caps: 1}
+    src/apps/graph/viewport.ts: {code-comment-budget: 4, code-comment-sentence: 8, comment-caps: 3}
+    src/apps/graph/views.test.ts: {code-comment-budget: 5, code-comment-sentence: 5, comment-caps: 1, comment-history: 1}
+    src/apps/graph/views.ts: {code-comment-budget: 5, code-comment-sentence: 11, comment-caps: 15, comment-history: 1}
+    src/apps/index.ts: {code-comment-sentence: 1}
+    src/apps/logs/demo.ts: {code-comment-budget: 5, code-comment-sentence: 12, comment-caps: 7, comment-history: 2}
+    src/apps/logs/dom.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 8, comment-caps: 6, comment-first-person: 1}
+    src/apps/logs/filter.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 5, comment-history: 1}
+    src/apps/logs/fragment.ts: {banner: 1, code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    src/apps/logs/live.ts: {code-comment-budget: 7, code-comment-sentence: 9, comment-caps: 5}
+    src/apps/logs/logs-dom.test.ts: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 27}
+    src/apps/logs/main.ts: {banner: 4, code-comment-budget: 34, code-comment-sentence: 50, comment-caps: 25, comment-history: 3}
+    src/apps/logs/model.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 1}
+    src/apps/logs/query.ts: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 3}
+    src/apps/logs/render.ts: {banner: 1, code-comment-budget: 6, code-comment-sentence: 6, comment-caps: 2}
+    src/apps/logs/runindex.test.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 5}
+    src/apps/logs/runindex.ts: {banner: 1, code-comment-budget: 16, code-comment-sentence: 26, comment-caps: 19}
+    src/apps/logs/runtree.ts: {code-comment-budget: 35, code-comment-sentence: 46, comment-caps: 27, comment-first-person: 1, comment-history: 2}
+    src/apps/logs/search.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/apps/logs/share.ts: {banner: 2, code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 1}
+    src/apps/logs/state.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    src/apps/logs/waterfall.ts: {code-comment-budget: 7, code-comment-sentence: 8, comment-caps: 2}
+    src/apps/manifest.ts: {code-comment-sentence: 2}
+    src/apps/notes/app.ts: {code-comment-budget: 1, comment-caps: 1}
+    src/apps/notes/demo.test.ts: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 2}
+    src/apps/notes/demo.ts: {code-comment-budget: 11, code-comment-sentence: 11, comment-caps: 7, comment-history: 2, doc-path: 1}
+    src/apps/notes/main-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/notes/main.ts: {banner: 2, code-comment-budget: 22, code-comment-sentence: 39, comment-caps: 11, comment-first-person: 3, comment-history: 2}
+    src/apps/notes/markdown-dom.test.ts: {code-comment-sentence: 2}
+    src/apps/notes/markdown.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 5}
+    src/apps/notes/transcript.test.ts: {code-comment-sentence: 2}
+    src/apps/notes/transcript.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 2}
+    src/apps/pulls/demo.ts: {comment-caps: 1}
+    src/apps/runs/app.ts: {code-comment-budget: 1, comment-caps: 1}
+    src/apps/runs/main-dom.test.ts: {code-comment-budget: 8, code-comment-sentence: 8, comment-caps: 23, comment-history: 1}
+    src/apps/runs/main.ts: {code-comment-budget: 20, code-comment-sentence: 30, comment-caps: 10}
+    src/apps/settings/confirm.ts: {code-comment-sentence: 1}
+    src/apps/settings/controls.ts: {code-comment-sentence: 2}
+    src/apps/settings/install.ts: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 5}
+    src/apps/settings/license.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 2}
+    src/apps/settings/main-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2}
+    src/apps/settings/main.ts: {banner: 5, code-comment-budget: 24, code-comment-sentence: 38, comment-caps: 14, comment-history: 3}
+    src/apps/settings/model.test.ts: {banner: 3, code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1}
+    src/apps/settings/model.ts: {banner: 2, code-comment-budget: 7, code-comment-sentence: 12, comment-caps: 4, comment-history: 1}
+    src/apps/settings/tokens.ts: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 4}
+    src/apps/shortcuts/app.ts: {comment-history: 1}
+    src/apps/shortcuts/main-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-history: 1}
+    src/apps/shortcuts/main.ts: {code-comment-budget: 4, code-comment-sentence: 8, comment-caps: 4}
+    src/apps/tools/demo.ts: {code-comment-sentence: 1}
+    src/apps/tools/main-dom.test.ts: {code-comment-budget: 2, code-comment-sentence: 4}
+    src/apps/tools/main.ts: {code-comment-budget: 4, code-comment-sentence: 6, comment-history: 1}
+    src/apps/tools/model.test.ts: {code-comment-budget: 1}
+    src/apps/tools/model.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/apps/tools/transport.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/desktop/activityDrawer-dom.test.ts: {banner: 1, code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 6}
+    src/desktop/activityDrawer.test.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 4}
+    src/desktop/activityDrawer.ts: {banner: 2, code-comment-budget: 14, code-comment-sentence: 35, comment-caps: 16, doc-path: 1}
+    src/desktop/app-navigation.ts: {code-comment-sentence: 1}
+    src/desktop/badges.test.ts: {code-comment-sentence: 3, comment-caps: 2}
+    src/desktop/badges.ts: {code-comment-budget: 3, code-comment-sentence: 11, comment-caps: 4, provenance: 3}
+    src/desktop/cast.test.ts: {code-comment-sentence: 2}
+    src/desktop/cast.ts: {code-comment-budget: 5, code-comment-sentence: 8, comment-caps: 11}
+    src/desktop/cheatsheet-dom.test.ts: {code-comment-sentence: 1, comment-history: 1}
+    src/desktop/cheatsheet.ts: {code-comment-budget: 6, code-comment-sentence: 3, comment-caps: 1}
+    src/desktop/commandBar-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 3}
+    src/desktop/commandBar.test.ts: {banner: 1, code-comment-budget: 2, code-comment-sentence: 3}
+    src/desktop/commandBar.ts: {code-comment-budget: 17, code-comment-sentence: 19, comment-caps: 11, comment-history: 1, doc-path: 1}
+    src/desktop/commands.test.ts: {banner: 1, code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1, comment-first-person: 1}
+    src/desktop/commands.ts: {banner: 4, code-comment-budget: 13, code-comment-sentence: 18, comment-caps: 24, comment-first-person: 2}
+    src/desktop/connectPrompt-dom.test.ts: {code-comment-budget: 2, code-comment-sentence: 2}
+    src/desktop/connectPrompt.ts: {code-comment-budget: 3, code-comment-sentence: 9, comment-caps: 3, comment-history: 1}
+    src/desktop/connection.ts: {code-comment-budget: 2, code-comment-sentence: 3}
+    src/desktop/contextMenu.ts: {code-comment-budget: 3, code-comment-sentence: 3}
+    src/desktop/demo-scenario.test.ts: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
+    src/desktop/demo-scenario.ts: {banner: 4, code-comment-budget: 24, code-comment-sentence: 41, comment-caps: 33, comment-history: 2}
+    src/desktop/home-dom.test.ts: {code-comment-sentence: 1, comment-caps: 1, comment-history: 1}
+    src/desktop/home.ts: {code-comment-budget: 20, code-comment-sentence: 29, comment-caps: 22, comment-history: 1}
+    src/desktop/keybindings-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1, comment-history: 1, provenance: 1}
+    src/desktop/keybindings.test.ts: {code-comment-sentence: 1}
+    src/desktop/keybindings.ts: {code-comment-budget: 5, code-comment-sentence: 9, comment-caps: 7}
+    src/desktop/launcher-live-dom.test.ts: {code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 2}
+    src/desktop/layoutPrefs.ts: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 3}
+    src/desktop/main.ts: {banner: 1, code-comment-budget: 121, code-comment-sentence: 138, comment-caps: 84, comment-history: 14}
+    src/desktop/modal.ts: {code-comment-budget: 2, code-comment-sentence: 4}
+    src/desktop/page.ts: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 6}
+    src/desktop/panel.ts: {code-comment-budget: 2, code-comment-sentence: 3}
+    src/desktop/pulse.test.ts: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 1, provenance: 1}
+    src/desktop/pulse.ts: {code-comment-budget: 2, code-comment-sentence: 2}
+    src/desktop/share.ts: {code-comment-budget: 4, code-comment-sentence: 9, comment-history: 1}
+    src/desktop/shell-connect-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1, comment-history: 1}
+    src/desktop/sidebar-dom.test.ts: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 7}
+    src/desktop/sidebar.test.ts: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 4, comment-history: 1}
+    src/desktop/sidebar.ts: {code-comment-budget: 23, code-comment-sentence: 41, comment-caps: 26, comment-history: 1}
+    src/desktop/sigil.test.ts: {code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 2}
+    src/desktop/sigil.ts: {code-comment-budget: 6, code-comment-sentence: 14, comment-caps: 20}
+    src/desktop/standalone.ts: {code-comment-budget: 8, code-comment-sentence: 16, comment-caps: 13, comment-first-person: 1, comment-history: 1}
+    src/desktop/status-dom.test.ts: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 4}
+    src/desktop/status.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 5}
+    src/desktop/statusbar.ts: {banner: 2, code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 2}
+    src/desktop/tabBar-dom.test.ts: {banner: 3, code-comment-sentence: 5, comment-caps: 2}
+    src/desktop/tabBar.test.ts: {banner: 1, code-comment-budget: 1, code-comment-sentence: 1}
+    src/desktop/tabBar.ts: {code-comment-budget: 14, code-comment-sentence: 18, comment-caps: 10, comment-history: 1}
+    src/desktop/tabs.test.ts: {code-comment-sentence: 2, comment-caps: 1, comment-history: 1}
+    src/desktop/tabs.ts: {code-comment-budget: 5, code-comment-sentence: 14, comment-caps: 4, comment-history: 1}
+    src/desktop/theme-color.test.ts: {code-comment-budget: 1, code-comment-sentence: 1, provenance: 1}
+    src/desktop/tileView-dom.test.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 6, comment-caps: 3}
+    src/desktop/tileView.ts: {code-comment-budget: 27, code-comment-sentence: 28, comment-caps: 14, comment-history: 6}
+    src/desktop/tiling.test.ts: {banner: 2, code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 3}
+    src/desktop/tiling.ts: {code-comment-budget: 4, code-comment-sentence: 13, comment-caps: 9, comment-history: 1}
+    src/desktop/toolbar.ts: {code-comment-budget: 3, code-comment-sentence: 8, comment-caps: 8, comment-first-person: 1}
+    src/desktop/view.test.ts: {comment-history: 1}
+    src/desktop/view.ts: {banner: 4, code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 6}
+    src/desktop/zoomControl-dom.test.ts: {comment-caps: 2}
+    src/desktop/zoomControl.ts: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 7, comment-history: 2}
+    src/gen/buf/validate/validate_pb.ts: {banner: 1, code-comment-budget: 195, code-comment-sentence: 40, comment-caps: 27, comment-first-person: 6, comment-history: 2}
+    src/gen/google/rpc/status_pb.ts: {code-comment-budget: 3, code-comment-sentence: 1, comment-caps: 9}
+    src/gen/magus/activity/v1alpha1/activity_pb.ts: {code-comment-budget: 20, code-comment-sentence: 25, comment-caps: 16}
+    src/gen/magus/graph/v1alpha1/graph_pb.ts: {code-comment-budget: 14, code-comment-sentence: 11, comment-caps: 17}
+    src/gen/magus/historymetrics/v1alpha1/historymetrics_pb.ts: {code-comment-budget: 1, code-comment-sentence: 1, doc-path: 1}
+    src/gen/magus/job/v1alpha1/job_pb.ts: {code-comment-budget: 20, code-comment-sentence: 18, comment-caps: 9}
+    src/gen/magus/metrics/v1alpha1/metrics_pb.ts: {code-comment-budget: 6, code-comment-sentence: 10, comment-caps: 8, comment-history: 1}
+    src/gen/magus/notes/v1alpha1/notes_pb.ts: {code-comment-budget: 16, code-comment-sentence: 21, comment-caps: 13}
+    src/gen/magus/pulls/v1alpha1/pulls_pb.ts: {code-comment-budget: 1, code-comment-sentence: 5}
+    src/gen/magus/query/v1alpha1/query_pb.ts: {code-comment-budget: 1, comment-caps: 4}
+    src/gen/magus/status/v1alpha1/status_pb.ts: {code-comment-budget: 7, code-comment-sentence: 11, comment-caps: 14, comment-history: 2}
+    src/gen/magus/token/v1alpha1/token_pb.ts: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 5}
+    src/gen/magus/tool/v1alpha1/tool_pb.ts: {code-comment-budget: 9, code-comment-sentence: 10, comment-caps: 3, doc-path: 1}
+    src/gen/magus/viewer/v1alpha1/viewer_pb.ts: {code-comment-budget: 17, code-comment-sentence: 15, comment-caps: 8, comment-history: 1}
+    src/lib/appwindow.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    src/lib/detach.ts: {code-comment-budget: 7, code-comment-sentence: 7, comment-caps: 8, comment-history: 2}
+    src/lib/enums.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/lib/glossary.ts: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 4, comment-history: 1}
+    src/lib/install.test.ts: {code-comment-budget: 1}
+    src/lib/install.ts: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 7}
+    src/lib/notifications-dom.test.ts: {code-comment-sentence: 2}
+    src/lib/notifications.test.ts: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 2, comment-history: 1}
+    src/lib/notifications.ts: {banner: 1, code-comment-budget: 17, code-comment-sentence: 29, comment-caps: 46, comment-history: 2, provenance: 1}
+    src/lib/persist.test.ts: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    src/lib/persist.ts: {code-comment-budget: 4, code-comment-sentence: 10, comment-caps: 11}
+    src/lib/qr.ts: {banner: 4, code-comment-budget: 6, code-comment-sentence: 6, comment-caps: 1}
+    src/lib/refresh-toast.ts: {code-comment-budget: 4, code-comment-sentence: 10, comment-caps: 8}
+    src/lib/review-notice.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    src/lib/review-notice.ts: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 3}
+    src/lib/scope.test.ts: {code-comment-budget: 1, code-comment-sentence: 3}
+    src/lib/scope.ts: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 6}
+    src/lib/server.test.ts: {code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 2}
+    src/lib/server.ts: {banner: 10, code-comment-budget: 26, code-comment-sentence: 44, comment-caps: 51, comment-history: 2, provenance: 2}
+    src/lib/settings.ts: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 8}
+    src/lib/store.test.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    src/lib/store.ts: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 2}
+    src/lib/sw.test.ts: {comment-history: 1}
+    src/lib/sw.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 6, comment-caps: 2, comment-history: 2}
+    src/lib/toast-dom.test.ts: {code-comment-sentence: 1}
+    src/lib/toast.ts: {code-comment-budget: 1, code-comment-sentence: 4}
+    src/lib/token-exchange.test.ts: {code-comment-sentence: 1}
+    src/lib/token-exchange.ts: {code-comment-budget: 1}
+    src/lib/unreachable.test.ts: {code-comment-sentence: 1}
+    src/lib/unreachable.ts: {code-comment-sentence: 1, comment-history: 1}
+    src/lib/watch.ts: {code-comment-budget: 8, code-comment-sentence: 14, comment-caps: 7}
+    src/lib/workspace.ts: {code-comment-sentence: 1}
+    src/render/ansi.test.ts: {code-comment-sentence: 1, comment-history: 1}
+    src/render/ansi.ts: {banner: 1, code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 3, comment-first-person: 1}
+    src/render/clipboard.ts: {code-comment-sentence: 1}
+    src/render/filterField.ts: {code-comment-budget: 1, code-comment-sentence: 1, comment-history: 1}
+    src/render/model.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/render/render-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/render/sections.ts: {code-comment-budget: 4, code-comment-sentence: 8}
+    src/render/time.ts: {code-comment-sentence: 2, comment-history: 2}
+    src/render/treeKeys.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 2}
+    src/theme.ts: {code-comment-budget: 9, code-comment-sentence: 9, comment-caps: 6, provenance: 1}
+    src/ui/alert.ts: {code-comment-sentence: 1}
+    src/ui/app-menu-dom.test.ts: {code-comment-sentence: 1}
+    src/ui/app-menu.ts: {code-comment-budget: 2, code-comment-sentence: 1, comment-caps: 2}
+    src/ui/empty-state.ts: {code-comment-sentence: 1}
+    src/ui/expandable.ts: {code-comment-sentence: 1}
+    src/ui/glyph.ts: {code-comment-sentence: 1}
+    src/ui/help-popover-dom.test.ts: {code-comment-budget: 1, code-comment-sentence: 1}
+    src/ui/help-popover.ts: {code-comment-budget: 2, code-comment-sentence: 8, comment-caps: 1, comment-first-person: 2, comment-history: 1}
+    src/ui/menu-dom.test.ts: {code-comment-sentence: 1}
+    src/ui/menu-toggle-dom.test.ts: {code-comment-sentence: 1}
+    src/ui/menu-toggle.ts: {code-comment-sentence: 1}
+    src/ui/menu.ts: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    src/ui/ref-drawer.ts: {banner: 3, code-comment-budget: 18, code-comment-sentence: 21, comment-caps: 23, comment-first-person: 3, comment-history: 2}
+    src/ui/signin-dom.test.ts: {code-comment-budget: 8, code-comment-sentence: 8, comment-caps: 5}
+    src/ui/signin.ts: {banner: 2, code-comment-budget: 11, code-comment-sentence: 19, comment-caps: 23, comment-history: 1}
+    src/ui/status.ts: {code-comment-sentence: 1}
+    src/ui/table-dom.test.ts: {code-comment-sentence: 1}
+    src/ui/table.ts: {code-comment-budget: 6, code-comment-sentence: 5, comment-caps: 3}
+    src/ui/workspace-picker-dom.test.ts: {code-comment-budget: 4, code-comment-sentence: 11, comment-caps: 4, comment-history: 2}
+    src/ui/workspace-picker.ts: {code-comment-budget: 9, code-comment-sentence: 19, comment-caps: 14, comment-first-person: 1, comment-history: 4}

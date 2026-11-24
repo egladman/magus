@@ -58,9 +58,11 @@ proofread:
     kinds.go: {code-comment-sentence: 1}
     kinds_test.go: {doc-path: 1}
     list.go: {code-comment-budget: 3, code-comment-sentence: 7}
+    magusfile.buzz: {code-comment-budget: 2, comment-history: 1, doc-path: 3}
     metrics.go: {code-comment-budget: 2, code-comment-sentence: 4}
     prefilter.go: {code-comment-budget: 2, code-comment-sentence: 2}
     prefilter_test.go: {code-comment-sentence: 1}
+    proofread.buzz: {code-comment-sentence: 3, comment-caps: 1}
     proofread.go: {code-comment-budget: 4, code-comment-sentence: 24, comment-caps: 1, comment-first-person: 7, doc-path: 3}
     proofread_test.go: {code-comment-budget: 1, code-comment-sentence: 4}
     protect.go: {code-comment-sentence: 1}

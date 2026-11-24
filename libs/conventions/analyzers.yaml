@@ -1,0 +1,50 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    accessorclone/analyzer.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    accessorclone/analyzer_test.go: {code-comment-sentence: 1}
+    asciistrings/analyzer.go: {code-comment-sentence: 1}
+    asciistrings/analyzer_test.go: {comment-history: 1}
+    benchbeside/analyzer.go: {code-comment-sentence: 1}
+    clikitmain/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 5}
+    clikitmain/analyzer_test.go: {code-comment-sentence: 1}
+    closedswitch/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    diagmsg/analyzer.go: {code-comment-budget: 3, code-comment-sentence: 6}
+    diagmsg/analyzer_test.go: {code-comment-sentence: 1}
+    errmsg/analyzer.go: {code-comment-budget: 4, code-comment-sentence: 11, comment-first-person: 1}
+    errmsg/analyzer_test.go: {code-comment-sentence: 1}
+    fieldwise/analyzer.go: {code-comment-budget: 4, code-comment-sentence: 18}
+    fieldwise/analyzer_test.go: {code-comment-sentence: 2}
+    filenames/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    filenames/analyzer_test.go: {code-comment-sentence: 1}
+    globalrestore/analyzer.go: {code-comment-budget: 2, code-comment-sentence: 6}
+    globalrestore/analyzer_test.go: {code-comment-sentence: 2}
+    hostagnostic/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    hostagnostic/analyzer_test.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    hostvocab/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    internal/gitdiff/gitdiff.go: {code-comment-sentence: 1}
+    internal/source/source.go: {code-comment-sentence: 4}
+    internal/sourcetest/sourcetest.go: {code-comment-sentence: 1}
+    magusfile.buzz: {doc-path: 3}
+    nameoutput/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    nameoutput/analyzer_test.go: {comment-history: 1}
+    namewords/analyzer.go: {code-comment-sentence: 2}
+    namewords/analyzer_test.go: {code-comment-sentence: 1}
+    plugin/plugin.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    plugin/plugin_test.go: {code-comment-sentence: 1}
+    providerio/analyzer.go: {code-comment-budget: 3, code-comment-sentence: 5}
+    providerio/analyzer_test.go: {code-comment-sentence: 2, comment-history: 1}
+    ruletext/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    stderrprint/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 6}
+    stringjoin/analyzer.go: {code-comment-sentence: 2}
+    stutter/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    testisolation/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    testisolation/analyzer_test.go: {code-comment-sentence: 1}
+    testloops/analyzer.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    testloops/analyzer_test.go: {code-comment-sentence: 2, provenance: 1}

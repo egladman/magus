@@ -1,0 +1,12 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    diagnostics.go: {code-comment-budget: 5, code-comment-sentence: 15, comment-caps: 5}
+    diagnostics_test.go: {code-comment-sentence: 2, comment-caps: 2, restates: 1}
+    magusfile.buzz: {doc-path: 3}
