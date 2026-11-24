@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/sandbox/filesystem"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -72,10 +72,10 @@ func TestSplicePublicProtocolPlansAndApplies(t *testing.T) {
 	refused, err := handler(judged, callRequest(tool.Name(), map[string]any{"document": doc, "apply": true}))
 	require.NoError(t, err)
 	require.False(t, refused.IsError, refused.Content)
-	data, err := json.Marshal(refused.StructuredContent)
+	data, err := codec.Marshal(refused.StructuredContent)
 	require.NoError(t, err)
 	var response spliceResponse
-	require.NoError(t, json.Unmarshal(data, &response))
+	require.NoError(t, codec.Unmarshal(data, &response))
 	require.Len(t, response.Plan.Refused, 1)
 	assert.Contains(t, response.Plan.Refused[0].Reason, "caller refused file.txt")
 	assert.Equal(t, "before\n", readSpliceFile(t, path))
@@ -119,10 +119,10 @@ func testSpliceCallerPolicy(t *testing.T, mode string) {
 			reply, err := handler(ctx, callRequest(tool.Name(), map[string]any{"document": doc, "apply": apply}))
 			require.NoError(t, err)
 			require.False(t, reply.IsError, reply.Content)
-			data, err := json.Marshal(reply.StructuredContent)
+			data, err := codec.Marshal(reply.StructuredContent)
 			require.NoError(t, err)
 			var response spliceResponse
-			require.NoError(t, json.Unmarshal(data, &response))
+			require.NoError(t, codec.Unmarshal(data, &response))
 			require.NotEmpty(t, response.Plan.Refused)
 			access := "read"
 			if read {

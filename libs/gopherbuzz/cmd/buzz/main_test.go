@@ -36,40 +36,40 @@ func (s *ParseSuite) parse(argv ...string) (opts, error) {
 	return got, err
 }
 
-func (s *ParseSuite) requireOpts(want opts, argv ...string) {
+func (s *ParseSuite) requireOptions(want opts, argv ...string) {
 	got, err := s.parse(argv...)
 	s.Require().NoError(err)
 	s.Equal(want, got)
 }
 
-func (s *ParseSuite) TestBareFile() { s.requireOpts(opts{args: []string{"x.buzz"}}, "x.buzz") }
+func (s *ParseSuite) TestBareFile() { s.requireOptions(opts{args: []string{"x.buzz"}}, "x.buzz") }
 
 func (s *ParseSuite) TestFileThenScriptArgs() {
-	s.requireOpts(opts{args: []string{"x.buzz", "a", "b"}}, "x.buzz", "a", "b")
+	s.requireOptions(opts{args: []string{"x.buzz", "a", "b"}}, "x.buzz", "a", "b")
 }
 
 func (s *ParseSuite) TestCheckLong() {
-	s.requireOpts(opts{check: true, args: []string{"x.buzz"}}, "--check", "x.buzz")
+	s.requireOptions(opts{check: true, args: []string{"x.buzz"}}, "--check", "x.buzz")
 }
 
 func (s *ParseSuite) TestCheckShort() {
-	s.requireOpts(opts{check: true, args: []string{"x.buzz"}}, "-c", "x.buzz")
+	s.requireOptions(opts{check: true, args: []string{"x.buzz"}}, "-c", "x.buzz")
 }
 
 func (s *ParseSuite) TestTestShort() {
-	s.requireOpts(opts{test: true, args: []string{"x.buzz"}}, "-t", "x.buzz")
+	s.requireOptions(opts{test: true, args: []string{"x.buzz"}}, "-t", "x.buzz")
 }
 
 func (s *ParseSuite) TestTestLong() {
-	s.requireOpts(opts{test: true, args: []string{"x.buzz"}}, "--test", "x.buzz")
+	s.requireOptions(opts{test: true, args: []string{"x.buzz"}}, "--test", "x.buzz")
 }
 
-func (s *ParseSuite) TestEval() { s.requireOpts(opts{eval: "code"}, "-e", "code") }
+func (s *ParseSuite) TestEval() { s.requireOptions(opts{eval: "code"}, "-e", "code") }
 
-func (s *ParseSuite) TestEvalEquals() { s.requireOpts(opts{eval: "code"}, "--eval=code") }
+func (s *ParseSuite) TestEvalEquals() { s.requireOptions(opts{eval: "code"}, "--eval=code") }
 
 func (s *ParseSuite) TestAST() {
-	s.requireOpts(opts{dumpAST: true, args: []string{"x.buzz"}}, "--ast", "x.buzz")
+	s.requireOptions(opts{dumpAST: true, args: []string{"x.buzz"}}, "--ast", "x.buzz")
 }
 
 func (s *ParseSuite) TestVersionPrintsAndRunsNothing() {
@@ -87,17 +87,17 @@ func (s *ParseSuite) TestHelpPrintsAndRunsNothing() {
 }
 
 func (s *ParseSuite) TestRepeatableLibraryPath() {
-	s.requireOpts(opts{libDirs: []string{"a", "b"}, args: []string{"x.buzz"}}, "-L", "a", "--library-path", "b", "x.buzz")
+	s.requireOptions(opts{libDirs: []string{"a", "b"}, args: []string{"x.buzz"}}, "-L", "a", "--library-path", "b", "x.buzz")
 }
 
-func (s *ParseSuite) TestStdinDash() { s.requireOpts(opts{args: []string{"-"}}, "-") }
+func (s *ParseSuite) TestStdinDash() { s.requireOptions(opts{args: []string{"-"}}, "-") }
 
 func (s *ParseSuite) TestOptionsStopAtTheScript() {
-	s.requireOpts(opts{args: []string{"x.buzz", "-c"}}, "x.buzz", "-c")
+	s.requireOptions(opts{args: []string{"x.buzz", "-c"}}, "x.buzz", "-c")
 }
 
 func (s *ParseSuite) TestDoubleDashEndsOptions() {
-	s.requireOpts(opts{args: []string{"-c"}}, "--", "-c")
+	s.requireOptions(opts{args: []string{"-c"}}, "--", "-c")
 }
 
 func (s *ParseSuite) TestUnknownOption() {

@@ -25,7 +25,7 @@ func TestProjectLookup(t *testing.T) {
 	next := 4
 	want := lookupPage{
 		Matches: []lookupMatch{{ID: "method:magus.where", Signature: "where(path: str) -> str"}, {ID: "project:docs"}},
-		Total: 5, NextOffset: &next,
+		Total:   5, NextOffset: &next,
 	}
 	require.Equal(t, want, projectLookup(result))
 

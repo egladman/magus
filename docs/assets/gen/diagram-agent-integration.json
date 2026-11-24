@@ -7,7 +7,7 @@
   "diagram": "agent-integration",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:b63dedf17133a924b9db441f2e92f9dca128f2b1ad59befb2587a3c66a4cf2ae",
+  "stamp": "sha256:beae2e9fc6d03eed188a5a5f1a342ff2ee5ff3291a925e9be6ca899cd0d64018",
   "undrilled": [
     "MCP tools"
   ]

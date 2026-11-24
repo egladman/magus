@@ -93,16 +93,16 @@ This record's first draft added a finding record and a waiver record beside ones
 already has. The inventory, from `magus query "kind=symbol ..."` and `magus refs` on
 2026-10-24:
 
-| record                                        | fields                                                                                                        | who uses it                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `types.Finding` (`magus/lint` in Buzz)        | Path, Line, Col, Rule, Message, Fix, URL                                                                      | 38 Buzz files: every `hack/lint` rule, docs conventions                |
-| `spells.Diagnostic`                           | File, Line, Col, Severity, Code, Message                                                                      | nothing outside its tests; `ParseDiagnostics` has no production caller |
+| record                                            | fields                                                                                                        | who uses it                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `types.Finding` (`magus/lint` in Buzz)            | Path, Line, Col, Rule, Message, Fix, URL                                                                      | 38 Buzz files: every `hack/lint` rule, docs conventions                |
+| `spells.Diagnostic`                               | File, Line, Col, Severity, Code, Message                                                                      | nothing outside its tests; `ParseDiagnostics` has no production caller |
 | `Finding` in `magusfiles/quality/advisories.buzz` | id, installed, summary, fix, actionable, deferral                                                             | the two security gates                                                 |
-| `types.JobProblem`                            | Code, Field, Subject, Message, Fix, Edit                                                                      | job record validation                                                  |
-| `types.JobWaiver`                             | Code, Subject, Reason; `Waives` matches code and subject, a glob for two codes; `Waivable` limits which codes | job records (MGS3043, MGS3044, gate not run)                           |
-| proofread `Finding` and suppressions          | rule, span, reason required; unused is PRF1090                                                                | `libs/proofread`, a library that never imports magus                   |
-| target `advisory` and `advisory_reason`       | a whole target excused from a composite, with prose                                                           | magusfiles                                                             |
-| the conformance ceiling                       | each changed file's violation count at the base revision, measured on every run, never stored                 | `hack/lint/code-stays-within-the-conformance-ceiling.buzz`             |
+| `types.JobProblem`                                | Code, Field, Subject, Message, Fix, Edit                                                                      | job record validation                                                  |
+| `types.JobWaiver`                                 | Code, Subject, Reason; `Waives` matches code and subject, a glob for two codes; `Waivable` limits which codes | job records (MGS3043, MGS3044, gate not run)                           |
+| proofread `Finding` and suppressions              | rule, span, reason required; unused is PRF1090                                                                | `libs/proofread`, a library that never imports magus                   |
+| target `advisory` and `advisory_reason`           | a whole target excused from a composite, with prose                                                           | magusfiles                                                             |
+| the conformance ceiling                           | each changed file's violation count at the base revision, measured on every run, never stored                 | `hack/lint/code-stays-within-the-conformance-ceiling.buzz`             |
 
 The first four are one idea under four names: something a check says about a place, with
 a rule and a message. `types.JobWaiver` is the waiver this record needs, already with a

@@ -87,7 +87,7 @@ func checkHarnessExports(exported map[string]int) []string {
 // checkOp holds a provider op to op. It returns T, or result\Result::<T>
 // when it can fail. A raising op is refused (ADR 0054).
 func checkOp(fd *ast.FunDecl, op decode.ContractFunc) []string {
-	result := resultOf(op.Returns)
+	result := resultAnnotation(op.Returns)
 	var problems []string
 	if fd.ErrAnnot != "" {
 		problems = append(problems, fmt.Sprintf("line %d: %s declares !> %s; an op returns > %s and never raises",
@@ -99,8 +99,8 @@ func checkOp(fd *ast.FunDecl, op decode.ContractFunc) []string {
 	return append(problems, checkSignature(fd, op)...)
 }
 
-// resultOf is the Result annotation an op that can fail declares for returns.
-func resultOf(returns string) string { return `result\Result::<` + returns + ">" }
+// resultAnnotation is the Result annotation an op that can fail declares for returns.
+func resultAnnotation(returns string) string { return fmt.Sprintf(`result\Result::<%s>`, returns) }
 
 // checkSignature holds an export to fn's parameter types and return type. Parameter names
 // are the spell's own; a function whose Params is empty takes none.

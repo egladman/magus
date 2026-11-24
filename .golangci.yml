@@ -586,6 +586,7 @@ linters:
             - worktree  # git's own term
             - identity  # an English word; id.go and entity.go only make it look like id + entity
             - baseline  # one word, proofread's own; not base + line
+            - models    # an ordinary English word, not mode + ls
 
       nameoutput:
         type: module
@@ -606,7 +607,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           # A function is named for what it returns or does: graphOf builds a graph,
-          # so it is buildGraph, and loadCtx reads a context, so it is loadContext.
+          # so it is buildGraph, and parseSrc reads a source, so it is parseSource.
           # Exported and unexported names are both judged. An initialism Go spells in
           # caps stays (ID, URL, HTTP, JSON, API), as does a word the standard library
           # spells the same way (Dir, Env, Addr, Attr, Exec) and this tree's Ref.
@@ -621,7 +622,6 @@ linters:
               Idx,
               Tmp,
               Ptr,
-              Ctx,
               Req,
               Resp,
               Rsp,
@@ -630,12 +630,9 @@ linters:
               Opts,
               Str,
               Strs,
-              Err,
               Cmd,
               Cwd,
-              Prev,
               Impl,
-              Repo,
             ]
           # ADR 0030: row is a persistence word. The SDK and the domain types name
           # the thing a row stores.

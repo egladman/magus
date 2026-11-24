@@ -23,6 +23,9 @@ export fun gopherbuzzAround() > result\Result::<[magus\Dir]> {
             magus\graph().dir("libs/gopherbuzz/buzzgen"),
             magus\graph().dir("libs/gopherbuzz/cmd/buzz"),
             magus\graph().dir("libs/gopherbuzz/examples/ffi-c"),
+            magus\graph().dir("libs/gopherbuzz/internal/cmd/stdgen"),
+            magus\graph().dir("libs/gopherbuzz/internal/stdgen"),
+            magus\graph().dir("libs/gopherbuzz/std/internal/boxed"),
             magus\graph().dir("libs/gopherbuzz/wasm"),
         ]);
     } catch (err: any) {
@@ -30,4 +33,4 @@ export fun gopherbuzzAround() > result\Result::<[magus\Dir]> {
     }
 }
 
-export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, two benchmarks and an example: built on the pipeline, not a stage of it";
+export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, the stdlib generator and its boxed values, two benchmarks and an example: built on the pipeline, not a stage of it";

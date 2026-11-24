@@ -1004,7 +1004,7 @@ func (h *History) Load(ctx context.Context, path string) error {
 	}
 	log, err := historyLog(path)
 	if err != nil {
-		return fmt.Errorf("forecast: read history: %w", err)
+		return fmt.Errorf("read history: %w", err)
 	}
 	lines, err := log.Load()
 	if err != nil {
@@ -1097,7 +1097,7 @@ func (h *History) lines() []historyLine {
 func UpdateHistory(ctx context.Context, path string, fn func(*History) error) error {
 	log, err := historyLog(path)
 	if err != nil {
-		return fmt.Errorf("forecast: update history: %w", err)
+		return fmt.Errorf("update history: %w", err)
 	}
 	var failed error
 	err = log.Update(ctx, func(entries []historyLine) []historyLine {

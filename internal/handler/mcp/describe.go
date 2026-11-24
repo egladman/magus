@@ -7,9 +7,7 @@ func DescribeTools() types.MCPToolReport {
 	entries := make([]types.MCPTool, 0, len(Registry))
 	for _, d := range Registry {
 		params := make([]types.MCPToolParam, 0, len(d.Params))
-		for _, p := range d.Params {
-			params = append(params, types.MCPToolParam(p))
-		}
+		params = append(params, d.Params...)
 		entries = append(entries, types.MCPTool{
 			Name:        d.Name,
 			Description: d.Description,

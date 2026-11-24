@@ -32,7 +32,7 @@ var Registry = checkedRegistry([]ToolDescriptor{
 		},
 	},
 	{
-		Name: hint.ToolClient.String(),
+		Name:        hint.ToolClient.String(),
 		Description: `Query the workspace or run a target from a Buzz main(args: [str]). Import "magus" and call magus\describe.module("magus") for signatures. Return a value as json or print to stdout. Filter large results before returning.`,
 		Params: []ParamDescriptor{
 			{Name: "script", Type: schemaString, Description: "Inline Buzz source. Exactly one of script or path."},

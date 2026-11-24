@@ -88,10 +88,8 @@ func directionToProto(d types.EdgeDirection) graphv1.EdgeDirection {
 		return graphv1.EdgeDirection_EDGE_DIRECTION_OUT
 	case types.EdgeIn:
 		return graphv1.EdgeDirection_EDGE_DIRECTION_IN
-
 	}
 	return graphv1.EdgeDirection_EDGE_DIRECTION_UNSPECIFIED
-
 }
 
 func edgeRefsToProto(in []types.KnowledgeEdgeRef) []*graphv1.EdgeRef {

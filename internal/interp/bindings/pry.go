@@ -92,17 +92,11 @@ func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume inter
 			return
 		}
 		cur := depthNow()
-		switch mode {
-		case interp.ResumeStep: // step into: stop at the next line, any depth
-		case interp.ResumeNext: // step over: skip lines in deeper (called) frames
-			if cur > startDepth {
-				return
-			}
-		case interp.ResumeFinish: // run until the current frame returns
-			if cur >= startDepth {
-				return
-			}
-		case interp.ResumeContinue:
+		if mode == interp.ResumeNext && cur > startDepth {
+			return
+		}
+		if mode == interp.ResumeFinish && cur >= startDepth {
+			return
 		}
 		// Suspend stepping while the REPL is open so nested evals don't re-fire.
 		stepper.SetStepHook(0, nil)

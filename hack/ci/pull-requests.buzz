@@ -5,7 +5,7 @@
 //	magus buzz hack/ci/pull-requests.buzz -- status [--all | --author <login>] [--pr <n>]...
 //	    one JSON line per pull request: its state (running, green, red-inherited or red),
 //	    its stage, the action it needs and the model that does it (none when this script
-//	    or nobody acts), and for a green or red-inherited one the merge command a person
+//	    or nobody acts), and for a green one the merge command a person
 //	    runs
 //	magus buzz hack/ci/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
 //	    take the actions that change no code: queue a green stack by the label on its top,
@@ -1193,7 +1193,7 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
 final MERGE_READY_STAGES = ["behind", "queued", "needs-queue"];
 
 // classify decides one pull request: its state and stage, what to do and who does it, and
-// the merge command a person runs when its checks are green or fail only as main does.
+// the merge command a person runs when its checks are green.
 // Anything it cannot place goes to opus; model none is only for what this script or
 // nobody does.
 export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
@@ -1201,9 +1201,9 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
     final verdict = judge(p, facts: facts);
     final r = decideAction(p, open: open, facts: facts, stage: stage, verdict: verdict);
     var merge = "";
-    final mergeable = verdict.state == "green" or verdict.state == "red-inherited";
+    final mergeable = verdict.state == "green";
     if (mergeable and MERGE_READY_STAGES.indexOf(stage) != null and p.mergeable == "MERGEABLE") {
-        merge = "gh pr merge {p.number} --squash --admin";
+        merge = requeueCommand(p);
     }
     return Record{ pr = r.pr, head = r.head, base = r.base, state = verdict.state, stage = stage, reason = r.reason,
         action = r.action, model = r.model, evidence = r.evidence, verdict = verdict, merge = merge };
@@ -2448,7 +2448,7 @@ fun whyLine(x: Placed, b: Board) > str {
     }
     if (x.section == "manual") {
         return "- **#{p.number}** {kickReason(p)}<br>merge {mono(b.base)} in, run {mono("magus run generate:rw")}, push, "
-            + "then {mono(requeueCommand(p))}; or a person merges it past the queue: {mono("gh pr merge {p.number} --squash --admin")}";
+            + "then {mono(requeueCommand(p))}";
     }
     return "- **#{p.number}** approved, checks green: {mono(joinCommand(p, r: x.record))}";
 }
@@ -3463,12 +3463,12 @@ test "the checks on the head decide running, green, red-inherited and red" {
     _ = expect([failed("magus shard 0: .")], facts: Facts{}, want: "red");
 }
 
-test "only a green or red-inherited pull request on a merge-ready stage carries a merge command" {
+test "only a green pull request on a merge-ready stage carries a merge command" {
     final inheritedFacts = Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] };
     final expect = fun (p: Pull, facts: Facts, state: str, merge: bool) > Record {
         final r = classify(p, open: [p], facts: facts);
         assert\equal(r.state, want: state, message: "#{p.number} {r.reason}");
-        assert\equal(r.merge == "gh pr merge {p.number} --squash --admin", want: merge, message: "#{p.number} merge");
+        assert\equal(r.merge == requeueCommand(p), want: merge, message: "#{p.number} merge");
         if (!merge) {
             assert\equal(r.merge, want: "", message: "#{p.number} no command");
         }
@@ -3479,7 +3479,7 @@ test "only a green or red-inherited pull request on a merge-ready stage carries 
     _ = expect(Pull{ number = 2, checks = [green("t")], mergeState = "BEHIND" }, facts: Facts{}, state: "green", merge: true);
     _ = expect(Pull{ number = 3, checks = [green("t")], autoMerge = true }, facts: Facts{}, state: "green", merge: true);
 
-    final inherited = expect(Pull{ number = 4, checks = [failed("magus shard 0: .")] }, facts: inheritedFacts, state: "red-inherited", merge: true);
+    final inherited = expect(Pull{ number = 4, checks = [failed("magus shard 0: .")] }, facts: inheritedFacts, state: "red-inherited", merge: false);
     assert\equal([inherited.action, inherited.model], want: ["none", "none"], message: "nothing for an agent to fix");
     assert\equal(applyCommands(inherited, method: "squash").len(), want: 0, message: "apply neither queues nor reruns it");
 
@@ -3496,7 +3496,7 @@ test "a red-inherited line names both runs, a red one the failures main does not
     final inherited = classify(Pull{ number = 4, head = "h", checks = [failed("magus shard 0: .")] }, open: [<Pull>],
         facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] });
     final line = render(inherited);
-    foreach (want in [`"state":"red-inherited"`, `"merge":"gh pr merge 4 --squash --admin"`, `"main_run":"{MAIN.url}"`,
+    foreach (want in [`"state":"red-inherited"`, `"main_run":"{MAIN.url}"`,
         `"head_runs":["https://github.com/egladman/magus/actions/runs/11"]`, `"failing_tests":["TestAcquireDefersToAPredecessorThatHolds"]`]) {
         assert\equal(line.indexOf(want) != null, want: true, message: "{want} in {line}");
     }

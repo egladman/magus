@@ -216,25 +216,26 @@ func renameEntry(src string) string {
 	}
 	depth := 0
 	for i, tok := range toks {
-		switch {
-		case tok.Kind == token.LBrace:
+		if tok.Kind == token.LBrace {
 			depth++
-		case tok.Kind == token.RBrace:
-			depth--
-		case tok.Kind == token.Fun:
-			if depth != 0 || i+1 == len(toks) {
-				continue
-			}
-			name := toks[i+1]
-			if name.Kind != token.Ident || name.Val != "main" {
-				continue
-			}
-			off, ok := byteOffset(src, name.Line, name.Col)
-			if !ok || !strings.HasPrefix(src[off:], "main") {
-				return src
-			}
-			return fmt.Sprintf("%s%s%s\nfinal main = %s;\n", src[:off], entryName, src[off+len("main"):], entryName)
+			continue
 		}
+		if tok.Kind == token.RBrace {
+			depth--
+			continue
+		}
+		if tok.Kind != token.Fun || depth != 0 || i+1 == len(toks) {
+			continue
+		}
+		name := toks[i+1]
+		if name.Kind != token.Ident || name.Val != "main" {
+			continue
+		}
+		off, ok := byteOffset(src, name.Line, name.Col)
+		if !ok || !strings.HasPrefix(src[off:], "main") {
+			return src
+		}
+		return fmt.Sprintf("%s%s%s\nfinal main = %s;\n", src[:off], entryName, src[off+len("main"):], entryName)
 	}
 	return src
 }

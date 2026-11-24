@@ -135,7 +135,7 @@ func hostModuleBinds(modules ffi.Set) []buzz.Module {
 
 // pureStdlib names the Buzz stdlib modules both MCP Buzz tools provide: pure
 // compute, with no filesystem, process, reflection, FFI or test harness.
-var pureStdlib = []string{"std", "math", "crypto", "serialize", "buffer"}
+var pureStdlib = []string{"std", "math", "crypto", "serializecore", "serialize", "buffer"}
 
 // PureStdlib splits the Buzz stdlib for the MCP Buzz tools. provide is what both
 // install. withheld is every other stdlib module name, which each tool refuses
