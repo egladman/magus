@@ -398,6 +398,25 @@ that. `restates` judges a one-line comment against the header, and against the
 declarations of a block of four or fewer. The console's lint runs the judge over
 `console/src/**/*.css` and fails on any finding.
 
+## Code comments
+
+A comment is for a person reading the code, and explains only what the code cannot
+show. The `code-comment` rules hold that policy, ruled on 2026-11-24:
+
+- One budget everywhere: 12 words on 1 line after code, 30 on 3 inside a body, 40 on
+  4 on an unexported declaration, 60 on 8 on an exported one or a file header, 25 words a sentence. A
+  blank `//` line counts toward no budget, and there is no column limit. No path,
+  package or exported-API knob loosens it. A project that proves it needs more adds a
+  `zones:` entry, with the evidence, to its own `analyzers.yaml`.
+- A measurement may stay ("measured 1765 commits; 502 end in a trailer"). A date, a
+  bare pull request or issue number, a commit hash and the story of an incident are
+  refused (`provenance`).
+- The comment rules deny now as house rules, ahead of the labeled round that would
+  earn them a default. That round is still owed.
+- `testdata/code_comment/watchdog.go.txt` is the reference fixture: a real file whose
+  lines were 36% comment. A comment rule that does not flag it does not ship
+  (`TestCodeCommentJudgesTheWatchdogFixture`).
+
 ## Changing proofread
 
 This part covers adding a rule or a kind of text, and deciding what a rule ships as.
