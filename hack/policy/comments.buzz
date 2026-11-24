@@ -1,8 +1,7 @@
-// The code-comments rule. A write to Go, Buzz or TypeScript is graded on the
-// comment text it adds, against limits near the Go standard library's. A block
-// over a limit is denied. A stylesheet's comments are judged by proofread
-// (libs/proofread). The first write of a session that adds comments to other
-// code is advised once.
+// The code-comments rule. proofread (libs/proofread) judges the comments a
+// write adds: Go, Buzz or TypeScript by its code-comment kind, a stylesheet by
+// its stylesheet kind. A code finding on an added line is denied. The first
+// write of a session that adds comments to code is advised once.
 namespace agentpolicy\comments;
 
 import "std";
@@ -18,46 +17,27 @@ final commentAdvice = "This write adds code comments. Audit each one: keep only 
     + "what the code cannot, which is why it is written this way, a constraint or invariant it relies "
     + "on, a workaround and what it works around, or a public symbol's contract. Delete the ones that "
     + "narrate the code, restate a name or the next line, or record the change's history, which "
-    + "belongs in the commit message. Keep a sentence to 25 words and 3 commas, colons or semicolons "
-    + "(30 and 4 on an exported declaration), and a comment line to 80 columns. This is said once per session.";
+    + "belongs in the commit message. Keep a sentence to 25 words. This is said once per session.";
 
 // A line that opens a comment in the common languages. `#!` is a shebang, not a comment.
 final commentLine = $"(?m)^[ \t]*(#([^!]|$)|//|/\*|\* |<!--|-- |;;)";
 // A comment after code on the same line.
 final trailingComment = $"\S[ \t]+(//|#)[ \t]+\S";
+// A line inside a //, /* */ or JSDoc comment block.
+final blockLine = $"^[ \t]*(//|/\*|\*)";
 
 // The formats whose `#`, `--` or `//` lines are content rather than comments.
 final proseExtensions = [".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc", ".json", ".csv", ".tsv",
     ".log", ".lock", ".svg", ".diff", ".patch"];
 
-// Limit is what one comment block may add. clauses caps the commas, colons and
-// semicolons that end a word of one sentence; null sets no cap.
-object Limit {
-    sentence: int,
-    clauses: int?,
-    words: int,
-    lines: int,
-}
-
-// The limits sit near the Go standard library's 90th to 95th percentile, so
-// written code reads like it. Words carry the rule; lines are a backstop.
-final inlineLimit = Limit{ sentence = 25, clauses = 3, words = 30, lines = 3 };
-final unexportedLimit = Limit{ sentence = 25, clauses = 3, words = 40, lines = 4 };
-final exportedLimit = Limit{ sentence = 30, clauses = 4, words = 60, lines = 8 };
-final trailingLimit = Limit{ sentence = 12, clauses = null, words = 12, lines = 1 };
-final widthLimit = 80;
-// A tab counts as this many columns toward widthLimit.
-final tabWidth = 4;
-
-final houseStyle = "Comments here follow the repository owner's house style: a comment says only what the "
-    + "code cannot, in short sentences. Limits on the text a write adds: a sentence of at most "
-    + "{inlineLimit.sentence} words and {inlineLimit.clauses!} commas, colons or semicolons inside a body "
-    + "or on an unexported declaration, {exportedLimit.sentence} words and {exportedLimit.clauses!} on an "
-    + "exported declaration or a file header; a block adds at most {inlineLimit.words} words and "
-    + "{inlineLimit.lines} lines inside a body, {unexportedLimit.words} and {unexportedLimit.lines} on an "
-    + "unexported declaration, {exportedLimit.words} and {exportedLimit.lines} on an exported one; a "
-    + "trailing comment at most {trailingLimit.words} words; a comment line at most {widthLimit} columns, "
-    + "a tab counting {tabWidth}. An old sentence the write keeps costs nothing.";
+final houseStyle = "Comments here follow the repository owner's house style, which `proofread code-comment` "
+    + "judges: a comment says only what the code cannot, in short sentences. A trailing comment holds 12 "
+    + "words on 1 line, one inside a body 30 words on 3 lines, a doc on an unexported declaration 40 on 4, "
+    + "and an exported doc or a file header 60 on 8; blank comment lines, code, tables and URLs count for "
+    + "nothing. A sentence holds 25 words. A comment carries no date, pull request number, commit hash or "
+    + "incident, no path to docs/design, docs/decisions or a Markdown file, no word in capitals for emphasis, "
+    + "no I or we, no banner and no account of what changed. A TODO, FIXME, BUG, compat or Deprecated paragraph "
+    + "is never judged. A line the write keeps costs nothing.";
 
 final remedy = "Cut each to the why the code cannot show, in short sentences; a design record belongs in "
     + "the commit message or the docs.";
@@ -66,7 +46,7 @@ final preambleRule = "The owner's Go house style keeps nothing above the package
     + "tooling reads: //go:build, a //go: directive, a generated-code header. A package keeps no "
     + "package comment, in doc.go or anywhere else.";
 
-// houseRules is the house style's limits as a sentence for a verdict.
+// houseRules is the house style as a sentence for a verdict.
 export fun houseRules() > str {
     return houseStyle;
 }
@@ -81,7 +61,8 @@ fun fileExtension(path: str) > str {
     return "." + parts[parts.len() - 1].lower();
 }
 
-// language is the //-comment language path is written in, "" for any other.
+// language is proofread's --language for path, "" for a file it reads no
+// comments of.
 fun language(path: str) > str {
     final ext = fileExtension(path);
     if (ext == ".go") {
@@ -90,7 +71,7 @@ fun language(path: str) > str {
     if (ext == ".buzz") {
         return "buzz";
     }
-    if (ext == ".ts") {
+    if (ext == ".ts" or ext == ".tsx") {
         return "ts";
     }
     return "";
@@ -121,482 +102,166 @@ export fun hasComment(text: str) > bool {
     return commentLine.match(text) != null or trailingComment.match(text) != null;
 }
 
-// Comment is one comment block of a code file, its kind named as describe
-// words it. prose, fresh, rows and columns hold one entry per comment line.
-// They are its text, whether the write added it, its 1-based line and its
-// width.
-export object Comment {
-    kind: str,
+// Finding is one finding proofread reports over a write's text.
+export object Finding {
+    rule: str,
     line: int,
-    added: int,
-    prose: [str],
-    fresh: [bool],
-    rows: [int],
-    columns: [int],
+    message: str,
 }
 
-final goPackage = $"^package [A-Za-z_]";
-// The lines Go tooling reads, which no limit counts.
-final goDirective = $"^//(go:|line |export|extern |nolint)|^// \+build ";
-final tsDirective = $"^(///[ \t]*<|//[ \t]*(eslint-|@ts-|prettier-ignore|biome-ignore))";
-// The markers internal/agent reads off a hook template.
-final buzzDirective = $"^// magus-guard-(template|coverage): ";
-final generatedHeader = $"^// Code generated .* DO NOT EDIT\.$";
-// A Go Example's expected output: go test compares it, so it is not prose.
-final goExampleOutput = $"^// (Unordered output|Output):";
-final goLicense = $"(?i)copyright|spdx-license-identifier";
-final goDecl = $"^(func|type|var|const) ";
-final goMethod = $"^func \(([^)]*)\) ([A-Za-z_][A-Za-z0-9_]*)";
-final goNamed = $"^(func|type|var|const) ([A-Za-z_][A-Za-z0-9_]*)";
-final buzzDecl = $"^(export|namespace|fun|object|enum|final|var|protocol|test|extern) ";
-final tsDecl = $"^(export )?(default )?(declare )?(async )?(abstract )?(function|class|interface|type|const|let|var|enum|namespace)[ *]";
-final listNumber = $"^[0-9]+[.)] ";
+// JUDGE_FAILED is the rule of a finding that says proofread could not run.
+export final JUDGE_FAILED = "judge";
 
-fun isUpper(name: str) > bool {
-    final b = name.byte(0);
-    return b >= 65 and b <= 90;
-}
-
-// goExported reports whether the declaration line names an exported symbol. A grouped
-// `var (` or `type (` counts as exported, the larger budget.
-fun goExported(decl: str) > bool {
-    final method = goMethod.match(decl);
-    if (method != null) {
-        final recv = method![1].trim().split(" ");
-        var typeName = recv[recv.len() - 1].replace("*", with: "");
-        final bracket = typeName.indexOf("[");
-        if (bracket != null) {
-            typeName = typeName.sub(0, len: bracket!);
+// judgeRunner returns a judge that runs the built proofread over text on
+// stdin, under this repository's decisions table. A judge that is missing,
+// stale or did not run returns one JUDGE_FAILED finding naming why.
+export fun judgeRunner(workspace: str) > fun (args: [str], text: str) > [Finding] {
+    final dir = workspace + "/" + proofread\home;
+    return fun (args: [str], text: str) > [Finding] {
+        final stale = proofread\whyStale(dir);
+        if (stale != "") {
+            return [unrun("proofread cannot run: {stale}")];
         }
-        return typeName != "" and isUpper(typeName) and isUpper(method![2]);
-    }
-    final named = goNamed.match(decl);
-    if (named != null) {
-        return isUpper(named![2]);
-    }
-    return true;
+        final bin = "{dir}/{proofread\binary}";
+        final run = proc\exec(bin,
+            args: args + ["--stdin", "--decisions", workspace + "/" + decisions\DECISIONS_FILE],
+            opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
+        // Exit 1 is a deny finding, written to stdout like any other.
+        if (run == null) {
+            return [unrun("proofread did not run: {bin} did not start")];
+        }
+        if (run!.code != 0 and run!.code != 1) {
+            return [unrun("proofread did not run: {bin} exited {run!.code}: {run!.stderr.trim()}")];
+        }
+        return parseFindings(run!.stdout);
+    };
 }
 
-// declKind is "exported" or "unexported" for a top-level declaration line,
-// null for any other line.
-fun declKind(lang: str, decl: str) > str? {
-    if (lang == "go") {
-        if (goDecl.match(decl) == null) {
-            return null;
-        }
-        return if (goExported(decl)) "exported" else "unexported";
-    }
-    if (lang == "buzz") {
-        if (buzzDecl.match(decl) == null) {
-            return null;
-        }
-        return if (decl.startsWith("export ") or decl.startsWith("namespace ")) "exported" else "unexported";
-    }
-    if (tsDecl.match(decl) == null) {
-        return null;
-    }
-    return if (decl.startsWith("export ")) "exported" else "unexported";
+fun unrun(why: str) > Finding {
+    return Finding{ rule = JUDGE_FAILED, line = 0, message = "{why}; run `{proofread\build}`, then retry" };
 }
 
-fun directive(lang: str, ct: str) > bool {
-    if (lang == "go") {
-        return goDirective.match(ct) != null;
+// parseFindings reads proofread's findings, whose source is `<kind>:<line>`.
+export fun parseFindings(stdout: str) > [Finding] {
+    final rows: [any] = json\parse(stdout) catch [<any>];
+    final found = mut [<Finding>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        final colon = source.indexOf(":");
+        var line = 0;
+        if (colon != null) {
+            line = std\parseInt(source.sub(colon! + 1)) ?? 0;
+        }
+        found.append(Finding{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "" });
     }
-    if (lang == "ts") {
-        return tsDirective.match(ct) != null;
+    return found;
+}
+
+// judgeFailure is the message of the first JUDGE_FAILED finding, or "".
+fun judgeFailure(found: [Finding]) > str {
+    foreach (f in found) {
+        if (f.rule == JUDGE_FAILED) {
+            return f.message;
+        }
     }
-    if (lang == "buzz") {
-        return buzzDirective.match(ct) != null;
+    return "";
+}
+
+// touches reports whether a finding at line speaks of an added line. A
+// budget speaks of the block opening there; any other rule, of its line.
+fun touches(lines: [str], f: Finding, had: {str: bool}) > bool {
+    var i = f.line - 1;
+    while (i >= 0 and i < lines.len()) {
+        if (!(had[lines[i]] ?? false)) {
+            return true;
+        }
+        if (f.rule != "code-comment-budget") {
+            return false;
+        }
+        i = i + 1;
+        if (i >= lines.len() or blockLine.match(lines[i]) == null) {
+            return false;
+        }
     }
     return false;
 }
 
-// lineProse is a // line's text. The marker and one space go, so a code line
-// keeps its indent.
-fun lineProse(ct: str) > str {
-    var rest = ct.sub(2);
-    if (rest.startsWith("/")) {
-        rest = rest.sub(1);
+// preambleProblems names the comment lines a write adds above a Go file's
+// package clause.
+fun preambleProblems(path: str, before: str, after: str) > [str] {
+    if (language(path) != "go") {
+        return [<str>];
     }
-    if (rest.startsWith(" ")) {
-        rest = rest.sub(1);
-    }
-    return rest;
-}
-
-// blockProse is the text of one line of a /* */ or JSDoc comment.
-fun blockProse(ct: str) > str {
-    var rest = ct;
-    if (rest.startsWith("/**")) {
-        rest = rest.sub(3);
-    } else if (rest.startsWith("/*")) {
-        rest = rest.sub(2);
-    }
-    if (rest.endsWith("*/")) {
-        rest = rest.sub(0, len: rest.len() - 2);
-    }
-    if (rest.startsWith("*")) {
-        rest = rest.sub(1);
-    }
-    if (rest.startsWith(" ")) {
-        rest = rest.sub(1);
-    }
-    return rest;
-}
-
-fun columnsOf(raw: str) > int {
-    return raw.replace("\t", with: " ".repeat(tabWidth)).utf8Len();
-}
-
-// trailingAt is where the // opening a comment after code on line sits. It
-// skips string literals, and is null when line has no such comment.
-fun trailingAt(lang: str, line: str) > int? {
-    final t = line.trim();
-    if (t == "" or t.startsWith("//") or t.startsWith("/*") or t.startsWith("*")) {
-        return null;
-    }
-    final quotes = if (lang == "ts") "\"'`" else "\"`";
-    var quote = "";
-    var i = 0;
-    while (i < line.len() - 1) {
-        final c = line.sub(i, len: 1);
-        if (quote != "") {
-            if (c == "\\") {
-                i = i + 2;
-                continue;
-            }
-            if (c == quote) {
-                quote = "";
-            }
-        } else if (quotes.indexOf(c) != null) {
-            quote = c;
-        } else if (c == "/" and line.sub(i + 1, len: 1) == "/") {
-            if (i == 0) {
-                return null;
-            }
-            final prior = line.sub(i - 1, len: 1);
-            final next = if (i + 2 < line.len()) line.sub(i + 2, len: 1) else "";
-            if ((prior == " " or prior == "\t") and next == " ") {
-                return i;
-            }
-            return null;
-        }
-        i = i + 1;
-    }
-    return null;
-}
-
-// charged is the lines a write charges a block. A block whose first line is
-// new is all the write's; another pays for the lines it added.
-fun charged(fresh: [bool]) > int {
-    if (fresh[0]) {
-        return fresh.len();
-    }
-    var n = 0;
-    foreach (f in fresh) {
-        if (f) {
-            n = n + 1;
-        }
-    }
-    return n;
-}
-
-// Scan is the comment block that opens at a line, and the line after it. block
-// is null when every line is a directive or a license.
-object Scan {
-    next: int,
-    generated: bool,
-    block: Comment?,
-}
-
-// blockKind names a block by where it sits. after is the line below it, and
-// started says whether the file's code has begun.
-fun blockKind(lang: str, after: str, started: bool) > str {
-    if (lang == "go" and !started) {
-        return "preamble";
-    }
-    final decl = declKind(lang, decl: after);
-    if (decl != null) {
-        return decl!;
-    }
-    return if (started) "inline" else "header";
-}
-
-// scanBlock reads the comment block that opens at lines[at]. A generated-code
-// header above the code marks the whole file generated.
-fun scanBlock(lang: str, lines: [str], at: int, had: {str: bool}, started: bool) > Scan {
-    final t = lines[at].trim();
-    final opener = t.startsWith("/*");
-    if (lang == "go" and goExampleOutput.match(t) != null) {
-        var end = at + 1;
-        while (end < lines.len() and lines[end].trim().startsWith("//")) {
-            end = end + 1;
-        }
-        return Scan{ next = end, generated = false, block = null };
-    }
-    final license = !started and goLicense.match(t) != null;
-    final prose = mut [<str>];
-    final fresh = mut [<bool>];
-    final rows = mut [<int>];
-    final columns = mut [<int>];
-    var i = at;
-    while (i < lines.len()) {
-        final raw = lines[i];
-        final ct = raw.trim();
-        if (!opener and !ct.startsWith("//")) {
-            break;
-        }
-        i = i + 1;
-        if (!opener and (license or directive(lang, ct: ct))) {
-            continue;
-        }
-        if (!started and generatedHeader.match(ct) != null) {
-            return Scan{ next = i, generated = true, block = null };
-        }
-        prose.append(if (opener) blockProse(ct) else lineProse(ct));
-        fresh.append(!(had[ct] ?? false));
-        rows.append(i);
-        columns.append(columnsOf(raw));
-        if (opener and raw.indexOf("*/") != null) {
-            break;
-        }
-    }
-    if (prose.len() == 0) {
-        return Scan{ next = i, generated = false, block = null };
-    }
-    final kind = blockKind(lang, after: if (i < lines.len()) lines[i] else "", started: started);
-    return Scan{ next = i, generated = false, block = Comment{ kind = kind, line = at + 1, added = charged(fresh),
-        prose = prose, fresh = fresh, rows = rows, columns = columns } };
-}
-
-// trailing is the comment after code on line, the file's row'th, or null.
-fun trailing(lang: str, line: str, row: int, had: {str: bool}) > Comment? {
-    final at = trailingAt(lang, line: line);
-    if (at == null) {
-        return null;
-    }
-    final ct = line.sub(at!);
-    if (directive(lang, ct: ct)) {
-        return null;
-    }
-    final isNew = !(had[line.trim()] ?? false);
-    return Comment{ kind = "trailing", line = row, added = if (isNew) 1 else 0,
-        prose = [lineProse(ct)], fresh = [isNew], rows = [row], columns = [0] };
-}
-
-// codeComments is every comment block of a file's text in lang, in order, with
-// the lines before did not hold marked fresh. A generated file has none: nobody
-// wrote its comments.
-export fun codeComments(lang: str, text: str, before: str) > [Comment] {
     final had = mut {<str: bool>};
     foreach (line in before.split("\n")) {
-        had[line.trim()] = true;
+        had[line] = true;
     }
-    final lines = text.split("\n");
-    final blocks = mut [<Comment>];
-    // Go starts at its package clause, Buzz and TypeScript at any code.
-    var started = false;
-    var i = 0;
-    while (i < lines.len()) {
-        final t = lines[i].trim();
-        if (t.startsWith("//") or t.startsWith("/*")) {
-            final scan = scanBlock(lang, lines: lines, at: i, had: had, started: started);
-            if (scan.generated) {
-                return [<Comment>];
-            }
-            if (scan.block -> b) {
-                blocks.append(b);
-            }
-            i = scan.next;
-            continue;
+    var added = 0;
+    var first = 0;
+    foreach (i, line in after.split("\n")) {
+        final t = line.trim();
+        if (t.startsWith("package ")) {
+            break;
         }
-        if ((lang != "go" and t != "") or goPackage.match(lines[i]) != null) {
-            started = true;
-        }
-        if (trailing(lang, line: lines[i], row: i + 1, had: had) -> c) {
-            blocks.append(c);
-        }
-        i = i + 1;
-    }
-    return blocks;
-}
-
-
-// endsSentence reports whether word closes a sentence. A closing bracket or
-// quote after the stop still counts; "e.g." and "i.e." do not.
-fun endsSentence(word: str) > bool {
-    var w = word;
-    while (w != "" and ")\"'`".indexOf(w.sub(w.len() - 1)) != null) {
-        w = w.sub(0, len: w.len() - 1);
-    }
-    final bare = w.lower().replace("(", with: "");
-    if (w == "" or bare == "e.g." or bare == "i.e.") {
-        return false;
-    }
-    final last = w.sub(w.len() - 1);
-    return last == "." or last == "?" or last == "!";
-}
-
-// sentences splits a block's prose into sentences. A blank line, a list item or
-// a JSDoc tag starts a new one; an indented line is code and holds none.
-fun sentences(prose: [str]) > [str] {
-    final found = mut [<str>];
-    var current = "";
-    foreach (line in prose) {
-        var t = line.trim();
-        final item = t.startsWith("- ") or t.startsWith("* ") or listNumber.match(t) != null;
-        if ((t == "" or item or t.startsWith("@")) and current != "") {
-            found.append(current);
-            current = "";
-        }
-        if (t == "" or (!item and (line.startsWith("\t") or line.startsWith("  ")))) {
-            continue;
-        }
-        if (t.startsWith("- ") or t.startsWith("* ")) {
-            t = t.sub(2);
-        }
-        foreach (word in t.replace("\t", with: " ").split(" ")) {
-            if (word == "") {
-                continue;
-            }
-            current = if (current == "") word else current + " " + word;
-            if (endsSentence(word)) {
-                found.append(current);
-                current = "";
+        final tooling = t.startsWith("//go:") or t.startsWith("// +build") or t.startsWith("// Code generated ");
+        if (t.startsWith("//") and !tooling and !(had[line] ?? false)) {
+            added = added + 1;
+            if (first == 0) {
+                first = i + 1;
             }
         }
     }
-    if (current != "") {
-        found.append(current);
+    if (added == 0) {
+        return [<str>];
     }
-    return found;
+    return ["{path}:{first}: {added} comment lines above the package clause. " + preambleRule + " Delete them."];
 }
 
-fun wordCount(sentence: str) > int {
-    return sentence.split(" ").len();
-}
-
-// clauseBreaks counts the words of sentence that end in a comma, colon or
-// semicolon, outside backtick code spans.
-fun clauseBreaks(sentence: str) > int {
-    var n = 0;
-    foreach (k, part in sentence.split("`")) {
-        if (k % 2 == 1) {
-            continue;
-        }
-        foreach (word in part.split(" ")) {
-            if (word.endsWith(",") or word.endsWith(":") or word.endsWith(";")) {
-                n = n + 1;
-            }
-        }
-    }
-    return n;
-}
-
-fun limitOf(kind: str) > Limit {
-    if (kind == "exported" or kind == "header") {
-        return exportedLimit;
-    }
-    if (kind == "unexported") {
-        return unexportedLimit;
-    }
-    if (kind == "trailing") {
-        return trailingLimit;
-    }
-    return inlineLimit;
-}
-
-fun describe(kind: str) > str {
-    if (kind == "exported") {
-        return "doc comment on an exported declaration";
-    }
-    if (kind == "unexported") {
-        return "doc comment on an unexported declaration";
-    }
-    if (kind == "header") {
-        return "file header comment";
-    }
-    if (kind == "trailing") {
-        return "trailing comment";
-    }
-    return "comment inside a body";
-}
-
-// blockProblems is what block b adds past its limits. A sentence in old was
-// already in the file, so it costs nothing.
-fun blockProblems(path: str, b: Comment, old: {str: bool}) > [str] {
-    if (b.kind == "preamble") {
-        return ["{path}:{b.line}: {b.added} comment lines above the package clause. " + preambleRule + " Delete them."];
-    }
-    final found = mut [<str>];
-    final where = "{path}:{b.line}: {describe(b.kind)}";
-    final limit = limitOf(b.kind);
-    var words = 0;
-    foreach (s in sentences(b.prose)) {
-        if (old[s] ?? false) {
-            continue;
-        }
-        final n = wordCount(s);
-        words = words + n;
-        if (b.kind == "trailing") {
-            continue;
-        }
-        if (n > limit.sentence) {
-            found.append("{where}, a sentence of {n} words, over the limit of {limit.sentence}: \"{s}\"");
-            continue;
-        }
-        final breaks = clauseBreaks(s);
-        if (limit.clauses -> most) {
-            if (breaks > most) {
-                found.append("{where}, a sentence with {breaks} commas, colons or semicolons, over the limit of {most}: \"{s}\"");
-            }
-        }
-    }
-    if (words > limit.words) {
-        found.append("{where}, {words} new words, over the limit of {limit.words}.");
-    }
-    if (b.added > limit.lines) {
-        found.append("{where}, {b.added} lines, over the limit of {limit.lines}.");
-    }
-    foreach (j, wide in b.columns) {
-        if (b.fresh[j] and wide > widthLimit and b.prose[j].indexOf("://") == null) {
-            found.append("{path}:{b.rows[j]}: a comment line {wide} columns wide, over the limit of {widthLimit}.");
-        }
-    }
-    return found;
-}
-
-// commentProblems lists what the comments a write adds break, one line each,
-// path:line first. Only the sentences, words and lines the write adds are
-// graded, so an old block beside the edit costs nothing. A path in no
-// //-comment language has none.
-export fun commentProblems(path: str, before: str, after: str) > [str] {
+// judgeCode lists what the comments a write adds to code break, path:line
+// first. Only a finding on a comment the write adds counts. A judge that could
+// not run is one problem naming why.
+export fun judgeCode(path: str, before: str, after: str, judge: fun (args: [str], text: str) > [Finding]) > [str] {
     final lang = language(path);
     if (lang == "") {
         return [<str>];
     }
-    final old = mut {<str: bool>};
-    foreach (b in codeComments(lang, text: before, before: "")) {
-        foreach (s in sentences(b.prose)) {
-            old[s] = true;
-        }
+    final added = addedLines(before, after: after);
+    if (added == "" or !hasComment(added)) {
+        return [<str>];
     }
     final found = mut [<str>];
-    foreach (b in codeComments(lang, text: after, before: before)) {
-        if (b.added == 0) {
-            continue;
-        }
-        foreach (p in blockProblems(path, b: b, old: old)) {
-            found.append(p);
+    foreach (p in preambleProblems(path, before: before, after: after)) {
+        found.append(p);
+    }
+    final judged = judge(["code-comment", "--language", lang], after);
+    final failed = judgeFailure(judged);
+    if (failed != "") {
+        found.append("{path}: the comment judge could not run: {failed}");
+        return found;
+    }
+    final had = mut {<str: bool>};
+    foreach (line in before.split("\n")) {
+        had[line] = true;
+    }
+    final lines = after.split("\n");
+    foreach (f in judged) {
+        if (touches(lines, f: f, had: had)) {
+            found.append("{path}:{f.line}: {f.message} [{f.rule}]");
         }
     }
     return found;
 }
 
-// decideCode denies a write whose comments break a limit, naming every problem.
-// The house style paragraph goes with the first denial of a session only.
-export fun decideCode(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
-    final found = commentProblems(path, before: before, after: after);
+// commentProblems is judgeCode with this checkout's built proofread, for a
+// caller running at the workspace root.
+export fun commentProblems(path: str, before: str, after: str) > [str] {
+    return judgeCode(path, before: before, after: after, judge: judgeRunner("."));
+}
+
+// decideCode denies a write whose comments proofread refuses, naming each
+// problem. The house style goes with a session's first denial only.
+export fun decideCode(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (args: [str], text: str) > [Finding]) > GuardVerdict {
+    final found = judgeCode(path, before: before, after: after, judge: judge);
     if (found.len() == 0) {
         return magus\guard.defer();
     }
@@ -608,61 +273,8 @@ export fun decideCode(path: str, before: str, after: str, once: fun (key: str) >
 // A CSS comment over this many times its budget is refused.
 final denyFactor = 2;
 
-// CssFinding is one finding of proofread over a stylesheet.
-export object CssFinding {
-    rule: str,
-    line: int,
-    message: str,
-}
-
-// cssJudgeRunner returns a judge that runs the built libs/proofread/cmd/proofread as
-// `proofread stylesheet` over a stylesheet's text, under this repository's decisions table,
-// which turns the house comment rules on. A judge that is missing, stale or did not run
-// returns one "judge" finding naming why and the build, which decideCss denies on.
-export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding] {
-    final dir = workspace + "/" + proofread\home;
-    return fun (css: str) > [CssFinding] {
-        final stale = proofread\whyStale(dir);
-        if (stale != "") {
-            return [unrun("proofread cannot run: {stale}")];
-        }
-        final bin = "{dir}/{proofread\binary}";
-        final run = proc\exec(bin,
-            args: ["stylesheet", "--stdin", "--decisions", workspace + "/" + decisions\DECISIONS_FILE],
-            opts: proc\ExecOptions{stdin = css, quiet = true, allowFailure = true}) catch null;
-        // Exit 1 is a deny finding, written to stdout like any other.
-        if (run == null) {
-            return [unrun("proofread did not run: {bin} did not start")];
-        }
-        if (run!.code != 0 and run!.code != 1) {
-            return [unrun("proofread did not run: {bin} exited {run!.code}: {run!.stderr.trim()}")];
-        }
-        return parseCssFindings(run!.stdout);
-    };
-}
-
-fun unrun(why: str) > CssFinding {
-    return CssFinding{ rule = "judge", line = 0, message = "{why}; run `{proofread\build}`, then retry" };
-}
-
-// parseCssFindings reads proofread's findings, whose source is `stdin:<line>`.
-export fun parseCssFindings(stdout: str) > [CssFinding] {
-    final rows: [any] = json\parse(stdout) catch [<any>];
-    final found = mut [<CssFinding>];
-    foreach (r in rows) {
-        final source: str = r["source"] ?? "";
-        final colon = source.indexOf(":");
-        var line = 0;
-        if (colon != null) {
-            line = std\parseInt(source.sub(colon! + 1)) ?? 0;
-        }
-        found.append(CssFinding{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "" });
-    }
-    return found;
-}
-
-// The most lines a CSS comment may span before the write is refused: twice the budget of a
-// header, the largest a comment here earns.
+// The most lines a CSS comment may span before the write is refused: twice
+// the budget of a header, the largest a comment here earns.
 final cssFileBudget = 8;
 
 final cssStyle = "CSS comments meet the same prose rules as Go ones: a comment says only what the code "
@@ -671,8 +283,8 @@ final cssStyle = "CSS comments meet the same prose rules as Go ones: a comment s
     + "size earns. A comment is also refused for repeating the code beside it, narrating a change, a "
     + "banned word, or the writing rules of docs/conventions.md.";
 
-// longestAddedCssComment is the line count of the longest `/* */` comment of after whose
-// opening line before did not hold.
+// longestAddedCssComment is the line count of the longest `/* */` comment of
+// after whose opening line before did not hold.
 export fun longestAddedCssComment(before: str, after: str) > int {
     final had = mut {<str: bool>};
     foreach (line in before.split("\n")) {
@@ -706,11 +318,10 @@ export fun longestAddedCssComment(before: str, after: str) > int {
     return longest;
 }
 
-// decideCss judges a write to a stylesheet that adds a comment as a Go write is judged: a
-// comment over twice the largest budget is refused, and a comment proofread reports,
-// on a line the write added, is advised with what it says. A judge that could not run
-// denies, naming why; one that finds nothing leaves the once-per-session advice.
-export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]) > GuardVerdict {
+// decideCss judges a stylesheet write that adds a comment. One over twice
+// the largest budget is refused. A proofread finding on an added line is
+// advised; a judge that could not run denies.
+export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (args: [str], text: str) > [Finding]) > GuardVerdict {
     final added = addedLines(before, after: after);
     if (added == "" or !hasComment(added)) {
         return magus\guard.defer();
@@ -718,14 +329,13 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
     final longest = longestAddedCssComment(before, after: after);
     if (longest > denyFactor * cssFileBudget) {
         return magus\guard.deny("a CSS comment runs {longest} lines against a budget of at most {cssFileBudget}\n"
-            + "The write is to {path}. " + cssStyle + "\n\nCut it to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+            + "The write is to {path}. " + cssStyle + "\n\n" + remedy);
     }
-    final found = judge(after);
-    foreach (f in found) {
-        if (f.rule == "judge") {
-            return magus\guard.deny("the CSS comment judge could not run: {f.message}\n"
-                + "The write to {path} adds a comment, and no rule judged it.");
-        }
+    final found = judge(["stylesheet"], after);
+    final failed = judgeFailure(found);
+    if (failed != "") {
+        return magus\guard.deny("the CSS comment judge could not run: {failed}\n"
+            + "The write to {path} adds a comment, and no rule judged it.");
     }
     final had = mut {<str: bool>};
     foreach (line in before.split("\n")) {
@@ -743,7 +353,7 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
         reasons.append("{path}:{f.line}: {f.message} [{f.rule}]");
     }
     if (reasons.len() > 0) {
-        return magus\guard.advise(cssStyle + "\n\n" + reasons.join("\n") + "\n\nCut each to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+        return magus\guard.advise(cssStyle + "\n\n" + reasons.join("\n") + "\n\n" + remedy);
     }
     if (once("code-comments")) {
         return magus\guard.advise(commentAdvice);
@@ -751,21 +361,17 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
     return magus\guard.defer();
 }
 
-// decideWrite grades a write: a stylesheet by decideCss, any other file by decideComments.
-export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]) > GuardVerdict {
+// decideWrite grades a write: a stylesheet by decideCss, Go, Buzz and
+// TypeScript by decideCode. Any other code write adding comments is advised
+// once per session.
+export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (args: [str], text: str) > [Finding]) > GuardVerdict {
     if (fileExtension(path) == ".css") {
         return decideCss(path, before: before, after: after, once: once, judge: judge);
     }
-    return decideComments(path, before: before, after: after, once: once);
-}
-
-// decideComments grades a Go, Buzz or TypeScript write against the comment
-// limits. It then advises once per session when a code write adds comments.
-export fun decideComments(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
     if (proseExtensions.indexOf(fileExtension(path)) != null) {
         return magus\guard.defer();
     }
-    final graded = decideCode(path, before: before, after: after, once: once);
+    final graded = decideCode(path, before: before, after: after, once: once, judge: judge);
     if (graded.decision != magus\GuardDecision.defer) {
         return graded;
     }
@@ -785,358 +391,100 @@ fun spent() > fun (key: str) > bool {
     return once;
 }
 
-fun commentLines(n: int, indent: str) > str {
-    final lines = mut [<str>];
-    var i = 0;
-    while (i < n) {
-        i = i + 1;
-        lines.append(indent + "// Line {i} narrates.");
-    }
-    return lines.join("\n");
+fun noJudge() > fun (args: [str], text: str) > [Finding] {
+    return fun (args: [str], text: str) > [Finding] => [<Finding>];
 }
 
-// words is one sentence of n one-letter words.
-fun words(n: int) > str {
-    return "w ".repeat(n - 1) + "w.";
-}
-
-fun graded(path: str, after: str) > GuardVerdict {
-    return decideComments(path, before: "", after: after, once: spent());
-}
-
-fun inBody(comment: str) > str {
-    return "package p\n\nfunc f() \{\n" + comment + "\n\tx()\n}\n";
-}
-
-fun onExported(comment: str) > str {
-    return "package p\n\n" + comment + "\nfunc Exported() \{}\n";
-}
-
-fun onUnexported(comment: str) > str {
-    return "package p\n\n" + comment + "\nfunc helper() \{}\n";
-}
-
-fun kindsOf(lang: str, text: str) > str {
-    final kinds = mut [<str>];
-    foreach (b in codeComments(lang, text: text, before: "")) {
-        kinds.append("{b.kind}:{b.line}:{b.prose.len()}:{b.added}");
-    }
-    return kinds.join(" ");
+// judgeSays reports rule on line, and records the args it was run with.
+fun judgeSays(rule: str, line: int, ran: mut [str]) > fun (args: [str], text: str) > [Finding] {
+    return fun (args: [str], text: str) > [Finding] {
+        ran.append(args.join(" "));
+        return [Finding{ rule = rule, line = line, message = "said" }];
+    };
 }
 
 test "a write that adds a comment to code is advised once per session" {
     final once = helpers\counter();
-    final v = decideComments("/w/internal/cache/key.go", before: "", after: "package cache\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once);
+    final v = decideWrite("/w/internal/cache/key.go", before: "", after: "package cache\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}", once: once, judge: noJudge());
     std\assert(v.decision == magus\GuardDecision.advise, message: "the first");
     std\assert(v.reason.indexOf("keep only the comments that say what the code cannot") != null, message: "states the rule");
-    std\assert(v.reason.indexOf("Keep a sentence to 25 words") != null, message: "states the limits");
-    std\assert(v.reason.indexOf("Skill(") == null, message: "sends the reader to no skill");
-    std\assert(decideComments("/w/a.go", before: "", after: "package a\n// again", once: once).decision == magus\GuardDecision.defer, message: "only once");
+    std\assert(v.reason.indexOf("Keep a sentence to 25 words") != null, message: "states the limit");
+    std\assert(decideWrite("/w/a.go", before: "", after: "package a\n// again", once: once, judge: noJudge()).decision == magus\GuardDecision.defer, message: "only once");
 }
 
-test "every comment form counts" {
-    foreach (path, added in {
-        "a.go": "package a\n\t// a note",
-        "a.py": "# a note",
-        "a.sh": "#\necho",
-        "a.c": "/* a note */",
-        "b.c": " * a note",
-        "a.html": "<!-- a note -->",
-        "a.sql": "-- a note",
-        "a.el": ";; a note",
-        "b.go": "package b\nx := 1 // a note",
-        "b.py": "x = 1  # a note",
-    }) {
-        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.advise, message: path);
-    }
+test "a code finding on an added line is denied, with the language proofread reads" {
+    final ran = mut [<str>];
+    final after = "package p\n\n// f does it on 2026-09-04.\nfunc f() \{}\n";
+    final v = decideWrite("/w/p.go", before: "", after: after, once: spent(), judge: judgeSays("provenance", line: 3, ran: ran));
+    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}");
+    std\assert(v.reason.indexOf("/w/p.go:3: said [provenance]") != null, message: v.reason);
+    std\assert(ran.len() == 1 and ran[0] == "code-comment --language go", message: "{ran}");
 }
 
-test "prose, a shebang, code alone and an unchanged comment stay silent" {
-    foreach (path, added in {
-        "README.md": "# A heading\n// not code",
-        "notes.TXT": "# a line",
-        "data.json": "\{\"a\": \"// b\"}",
-        "run.sh": "#!/bin/sh\necho hi",
-        "a.go": "package a\nx := a/b",
-        "b.go": "",
-    }) {
-        std\assert(decideComments(path, before: "", after: added, once: helpers\counter()).decision == magus\GuardDecision.defer, message: path);
-    }
-    final before = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() \{}\n";
-    final after = "package a\n\n// keyOf hashes the inputs.\nfunc keyOf() int \{ return 1 }\n";
-    std\assert(decideComments("a.go", before: before, after: after, once: helpers\counter()).decision == magus\GuardDecision.defer, message: "the comment was already there");
+test "a finding on a comment the write keeps costs nothing" {
+    final ran = mut [<str>];
+    final before = "package p\n\n// f is old and long.\nfunc f() \{}\n";
+    final after = before + "\n// g is new.\nfunc g() \{}\n";
+    final v = decideWrite("/w/p.go", before: before, after: after, once: spent(), judge: judgeSays("code-comment-budget", line: 3, ran: ran));
+    std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision}: {v.reason}");
 }
 
-test "codeComments tells the Go kinds apart" {
-    final text = "//go:build linux\n\n// Package p does things.\npackage p\n\n// Exported is a contract.\n// It has two lines.\nfunc Exported(\n\ta int,\n) \{\n\tx := 1 // trailing\n\t// inline\n\t// block\n\treturn\n}\n\n// helper is one line.\nfunc (s *Server) helper() \{}\n\n// T is a type.\ntype T struct \{\n\t// a field's doc, inline\n\tA int\n}\n";
-    final kinds = kindsOf("go", text: text);
-    std\assert(kinds == "preamble:3:1:1 exported:6:2:2 trailing:11:1:1 inline:12:2:2 unexported:17:1:1 exported:20:1:1 inline:22:1:1", message: kinds);
-    std\assert(codeComments("go", text: "// Code generated by x. DO NOT EDIT.\n\npackage p\n\n" + commentLines(30, indent: ""), before: "").len() == 0, message: "generated");
+test "a block the write grows is judged at the line it opens on" {
+    final ran = mut [<str>];
+    final before = "package p\n\n// f is old.\nfunc f() \{}\n";
+    final after = "package p\n\n// f is old.\n// It grew a second line.\nfunc f() \{}\n";
+    final v = decideWrite("/w/p.go", before: before, after: after, once: spent(), judge: judgeSays("code-comment-budget", line: 3, ran: ran));
+    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}");
 }
 
-test "codeComments tells the Buzz kinds apart and skips a // inside a string" {
-    final text = "// The header.\nnamespace a;\n\nimport \"std\";\n\n// helper is private.\nfun helper() > void \{}\n\n// Exported is shared.\nexport fun Exported() > void \{\n    // inside\n    final x = \"a // not a comment\"; // a trailing note\n}\n";
-    final kinds = kindsOf("buzz", text: text);
-    std\assert(kinds == "exported:1:1:1 unexported:6:1:1 exported:9:1:1 inline:11:1:1 trailing:12:1:1", message: kinds);
-    std\assert(kindsOf("buzz", text: "// A header above the imports.\nimport \"std\";\n") == "header:1:1:1", message: "a header");
+test "a line finding speaks of its own line alone" {
+    final ran = mut [<str>];
+    final before = "package p\n\n// f is old.\nfunc f() \{}\n";
+    final after = "package p\n\n// f is old.\n// It grew a second line.\nfunc f() \{}\n";
+    final v = decideWrite("/w/p.go", before: before, after: after, once: spent(), judge: judgeSays("provenance", line: 3, ran: ran));
+    std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision}: {v.reason}");
 }
 
-test "codeComments reads JSDoc and skips a TypeScript directive" {
-    final text = "// Header line.\nimport x from \"y\";\n\n/**\n * Run runs.\n */\nexport function run() \{}\n\nconst s = 'a // b'; // why\n// eslint-disable-next-line no-console\nconsole.log(s);\n";
-    final kinds = kindsOf("ts", text: text);
-    std\assert(kinds == "header:1:1:1 exported:4:3:3 trailing:9:1:1", message: kinds);
+test "a Buzz or TypeScript write is judged in its own language" {
+    final ran = mut [<str>];
+    _ = decideWrite("/w/a.buzz", before: "", after: "// x.\nfun f() > void \{}\n", once: spent(), judge: judgeSays("banner", line: 9, ran: ran));
+    _ = decideWrite("/w/a.tsx", before: "", after: "// x.\nexport const a = 1;\n", once: spent(), judge: judgeSays("banner", line: 9, ran: ran));
+    std\assert(ran.len() == 2 and ran[0] == "code-comment --language buzz" and ran[1] == "code-comment --language ts", message: "{ran}");
 }
 
-test "a short why-comment passes" {
-    final v = graded("a.go", after: inBody("\t// keys are sorted; the bsearch below depends on it"));
-    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
+test "a judge that cannot run denies a code write that adds a comment" {
+    final failing = fun (args: [str], text: str) > [Finding] => [unrun("proofread cannot run: not built")];
+    final v = decideWrite("/w/p.go", before: "", after: "package p\n\n// f.\nfunc f() \{}\n", once: spent(), judge: failing);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}");
+    std\assert(v.reason.indexOf("could not run") != null, message: v.reason);
 }
 
-test "a body comment over 3 lines is refused at once, naming the count and the limit" {
-    std\assert(graded("a.go", after: inBody(commentLines(3, indent: "\t"))).decision == magus\GuardDecision.defer, message: "3 lines");
-    final v = graded("/w/internal/a.go", after: inBody(commentLines(4, indent: "\t")));
-    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
-    verdict\assertVerdict(v.reason, label: "a long body comment");
-    std\assert(v.reason.indexOf("/w/internal/a.go:4: comment inside a body, 4 lines, over the limit of 3.") != null, message: v.reason);
-    std\assert(v.reason.indexOf("repository owner's house style") != null, message: "names whose style");
-    std\assert(v.reason.indexOf("Cut each to the why") != null, message: "remedy");
+test "a comment above the package clause is denied, a directive is not" {
+    final v = decideWrite("/w/p.go", before: "", after: "// Package p does things.\npackage p\n", once: spent(), judge: noJudge());
+    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}");
+    std\assert(v.reason.indexOf("above the package clause") != null, message: v.reason);
+    std\assert(preambleProblems("/w/p.go", before: "", after: "//go:build linux\n\npackage p\n").len() == 0, message: "a build tag is tooling");
 }
 
-test "the house style paragraph goes with a session's first comment denial only" {
-    final once = spent();
-    final long = inBody(commentLines(4, indent: "\t"));
-    final first = decideComments("/w/a.go", before: "", after: long, once: once);
-    std\assert(first.reason.indexOf("repository owner's house style") != null, message: first.reason);
-    final again = decideComments("/w/b.go", before: "", after: long, once: once);
-    std\assert(again.decision == magus\GuardDecision.deny, message: again.decision);
-    std\assert(again.reason.indexOf("repository owner's house style") == null, message: again.reason);
-    std\assert(again.reason.indexOf("/w/b.go:4: comment inside a body") != null, message: again.reason);
+test "a prose file and a file with no added comment are never judged" {
+    final ran = mut [<str>];
+    final judge = judgeSays("banner", line: 1, ran: ran);
+    std\assert(decideWrite("/w/README.md", before: "", after: "// a\n", once: spent(), judge: judge).decision == magus\GuardDecision.defer, message: "prose");
+    std\assert(decideWrite("/w/p.go", before: "", after: "package p\n", once: spent(), judge: judge).decision == magus\GuardDecision.defer, message: "no comment");
+    std\assert(ran.len() == 0, message: "{ran}");
 }
 
-test "a Go Example's output block is no prose, however long" {
-    final output = "\t// Output:\n" + commentLines(6, indent: "\t") + "\t// " + words(40) + "\n";
-    final v = graded("a_test.go", after: inBody(output));
-    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
-    final unordered = graded("a_test.go", after: inBody("\t// Unordered output:\n" + commentLines(6, indent: "\t")));
-    std\assert(unordered.decision == magus\GuardDecision.defer, message: unordered.reason);
+test "a stylesheet finding on an added line is advised, a judge failure denied" {
+    final ran = mut [<str>];
+    final after = "/* One. */\n.a \{ color: red; }\n";
+    final v = decideWrite("/w/a.css", before: "", after: after, once: spent(), judge: judgeSays("restates", line: 1, ran: ran));
+    std\assert(v.decision == magus\GuardDecision.advise, message: "{v.decision}");
+    std\assert(ran.len() == 1 and ran[0] == "stylesheet", message: "{ran}");
+    final failing = fun (args: [str], text: str) > [Finding] => [unrun("not built")];
+    std\assert(decideWrite("/w/a.css", before: "", after: after, once: spent(), judge: failing).decision == magus\GuardDecision.deny, message: "a failed judge");
 }
 
-test "an exported doc earns 8 lines and an unexported one 4" {
-    std\assert(graded("a.go", after: onExported(commentLines(8, indent: ""))).decision == magus\GuardDecision.defer, message: "8 exported");
-    final exported = graded("a.go", after: onExported(commentLines(9, indent: "")));
-    std\assert(exported.reason.indexOf("a.go:3: doc comment on an exported declaration, 9 lines, over the limit of 8.") != null, message: exported.reason);
-    std\assert(graded("a.go", after: onUnexported(commentLines(4, indent: ""))).decision == magus\GuardDecision.defer, message: "4 unexported");
-    final unexported = graded("a.go", after: onUnexported(commentLines(5, indent: "")));
-    std\assert(unexported.reason.indexOf("unexported declaration, 5 lines, over the limit of 4.") != null, message: unexported.reason);
-}
-
-test "a sentence over 25 words inside a body is refused, quoted with its count" {
-    std\assert(graded("a.go", after: inBody("\t// " + words(25))).decision == magus\GuardDecision.defer, message: "25 words");
-    final v = graded("a.go", after: inBody("\t// " + words(26)));
-    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
-    std\assert(v.reason.indexOf("a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25: \"" + words(26) + "\"") != null, message: v.reason);
-}
-
-test "a sentence over 25 words on an unexported declaration is refused" {
-    std\assert(graded("a.go", after: onUnexported("// " + words(25))).decision == magus\GuardDecision.defer, message: "25 words");
-    final v = graded("a.go", after: onUnexported("// " + words(26)));
-    std\assert(v.reason.indexOf("a sentence of 26 words, over the limit of 25") != null, message: v.reason);
-}
-
-test "a sentence over 30 words on an exported declaration is refused" {
-    std\assert(graded("a.go", after: onExported("// " + words(30))).decision == magus\GuardDecision.defer, message: "30 words");
-    final v = graded("a.go", after: onExported("// " + words(31)));
-    std\assert(v.reason.indexOf("a sentence of 31 words, over the limit of 30") != null, message: v.reason);
-}
-
-test "a sentence with more than 3 commas, colons or semicolons is refused" {
-    std\assert(graded("a.go", after: inBody("\t// It reads a, b, c and d.")).decision == magus\GuardDecision.defer, message: "3 breaks");
-    final v = graded("a.go", after: inBody("\t// It reads: a; b, c and d."));
-    std\assert(v.decision == magus\GuardDecision.defer, message: "3 breaks of three kinds");
-    final over = graded("a.go", after: inBody("\t// It reads: a; b, c, d and e."));
-    std\assert(over.reason.indexOf("a sentence with 4 commas, colons or semicolons, over the limit of 3: \"It reads: a; b, c, d and e.\"") != null, message: over.reason);
-    std\assert(graded("a.go", after: onExported("// It reads: a; b, c, d and e.")).decision == magus\GuardDecision.defer, message: "an exported doc earns 4");
-    std\assert(graded("a.go", after: onExported("// It reads: a; b, c, d, e and f.")).decision == magus\GuardDecision.deny, message: "5 on an exported doc");
-}
-
-test "the commas of a code span are no clause breaks" {
-    final v = graded("a.go", after: inBody("\t// It calls `f(a, b, c, d, e)` once."));
-    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
-}
-
-test "a block over its word limit is refused" {
-    final eleven = "\t// " + words(11);
-    std\assert(graded("a.go", after: inBody(eleven + "\n" + eleven)).decision == magus\GuardDecision.defer, message: "22 words");
-    final v = graded("a.go", after: inBody(eleven + "\n" + eleven + "\n" + eleven));
-    std\assert(v.reason.indexOf("a.go:4: comment inside a body, 33 new words, over the limit of 30.") != null, message: v.reason);
-    final ten = "// " + words(10);
-    final unexported = graded("a.go", after: onUnexported([ten, ten, ten, ten, "// One more."].join("\n")));
-    std\assert(unexported.reason.indexOf("unexported declaration, 42 new words, over the limit of 40.") != null, message: unexported.reason);
-    final exported = graded("a.go", after: onExported([ten, ten, ten, ten, ten, ten, "// One more."].join("\n")));
-    std\assert(exported.reason.indexOf("exported declaration, 62 new words, over the limit of 60.") != null, message: exported.reason);
-}
-
-test "a trailing comment over 12 words is refused" {
-    std\assert(graded("a.go", after: inBody("\tx := 1 // " + words(12))).decision == magus\GuardDecision.defer, message: "12 words");
-    final v = graded("a.go", after: inBody("\tx := 1 // " + words(13)));
-    std\assert(v.reason.indexOf("a.go:4: trailing comment, 13 new words, over the limit of 12.") != null, message: v.reason);
-}
-
-test "a comment line over 80 columns is refused, a tab counting 4, and a URL line passes" {
-    std\assert(graded("a.go", after: inBody("\t// " + "x".repeat(72) + ".")).decision == magus\GuardDecision.defer, message: "80 columns");
-    final v = graded("a.go", after: inBody("\t// " + "x".repeat(73) + "."));
-    std\assert(v.reason.indexOf("a.go:4: a comment line 81 columns wide, over the limit of 80.") != null, message: v.reason);
-    final url = "\t// See https://example.com/" + "x".repeat(80) + ".";
-    std\assert(graded("a.go", after: inBody(url)).decision == magus\GuardDecision.defer, message: "a URL");
-}
-
-fun legacy() > str {
-    final wide = "x".repeat(90);
-    return "package p\n\nfunc f() \{\n\t// " + words(40) + "\n\t// " + wide + ".\n" + commentLines(6, indent: "\t") + "\n\tx()\n}\n";
-}
-
-test "an edit beside a long legacy block passes" {
-    final old = legacy();
-    final touched = old + "\nfunc g() \{\n\t// One why.\n\ty()\n}\n";
-    std\assert(decideComments("a.go", before: old, after: touched, once: spent()).decision == magus\GuardDecision.defer, message: "a new block beside it");
-    final edited = old.replace("\tx()\n", with: "\tx(1)\n");
-    std\assert(decideComments("a.go", before: old, after: edited, once: spent()).decision == magus\GuardDecision.defer, message: "the code under it");
-    final preamble = "// Package p is old.\n" + old;
-    std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == magus\GuardDecision.defer, message: "an old package comment");
-}
-
-test "growing a legacy block is graded on the sentences it adds" {
-    final old = legacy();
-    final grown = old.replace("\tx()\n", with: "\t// One more why.\n\tx()\n");
-    std\assert(decideComments("a.go", before: old, after: grown, once: spent()).decision == magus\GuardDecision.defer, message: "a short sentence");
-    final long = old.replace("\tx()\n", with: "\t// " + words(26) + "\n\tx()\n");
-    final v = decideComments("a.go", before: old, after: long, once: spent());
-    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
-    std\assert(v.reason.indexOf("a sentence of 26 words") != null and v.reason.indexOf("of 40 words") == null, message: v.reason);
-    std\assert(v.reason.indexOf("columns wide") == null, message: "the old wide line is not the write's");
-}
-
-test "a long Buzz doc comment is refused" {
-    final header = "// " + words(31) + "\nnamespace a;\n";
-    final v = graded("hack/a.buzz", after: header);
-    std\assert(v.reason.indexOf("hack/a.buzz:1: doc comment on an exported declaration, a sentence of 31 words") != null, message: v.reason);
-    final helper = "namespace a;\n\n// " + words(26) + "\nfun helper() > void \{}\n";
-    std\assert(graded("a.buzz", after: helper).reason.indexOf("unexported declaration, a sentence of 26 words") != null, message: "unexported");
-    final atop = "// " + words(31) + "\nimport \"std\";\n";
-    std\assert(graded("a.buzz", after: atop).reason.indexOf("file header comment, a sentence of 31 words") != null, message: "a header");
-    final quoted = "namespace a;\n\nfun f() > void \{\n    final s = \"a // \" + \"" + words(20) + "\";\n}\n";
-    std\assert(graded("a.buzz", after: quoted).decision == magus\GuardDecision.defer, message: "a // inside a string");
-}
-
-test "a Buzz guard template marker meets no limit, and other prose beside it does" {
-    final marker = "// magus-guard-coverage: api_version=magus.guard-coverage/v1alpha1 host=cursor input=path deny=model advise=model defer=none ask=model\nimport \"std\";\n";
-    std\assert(graded("a.buzz", after: marker).decision == magus\GuardDecision.defer, message: "a marker");
-    final wide = "// magus-guard-note: " + "x".repeat(70) + "\nimport \"std\";\n";
-    std\assert(graded("a.buzz", after: wide).reason.indexOf("columns wide") != null, message: "not a marker");
-}
-
-test "a long TypeScript JSDoc sentence is refused" {
-    final doc = "/**\n * " + words(31) + "\n */\nexport function run() \{}\n";
-    final v = graded("src/a.ts", after: doc);
-    std\assert(v.reason.indexOf("src/a.ts:1: doc comment on an exported declaration, a sentence of 31 words") != null, message: v.reason);
-    final directive = "// eslint-disable-next-line " + words(30) + "\nconsole.log(1);\n";
-    std\assert(graded("a.ts", after: directive).decision == magus\GuardDecision.defer, message: "a directive");
-}
-
-test "several blocks over their limits are all named" {
-    final mixed = "package p\n\n" + commentLines(9, indent: "") + "\nfunc Exported() \{}\n\nfunc f() \{\n" + commentLines(7, indent: "\t") + "\n}\n";
-    final both = graded("a.go", after: mixed);
-    std\assert(both.decision == magus\GuardDecision.deny, message: "one refusal");
-    verdict\assertVerdict(both.reason, label: "two blocks");
-    std\assert(both.reason.startsWith("a comment breaks the house style: a.go:3: doc comment on an exported declaration, 9 lines"), message: both.reason);
-    std\assert(both.reason.indexOf("a.go:15:") != null, message: both.reason);
-}
-
-test "a comment above the package clause is refused, the lines Go tooling reads pass" {
-    final v = graded("a.go", after: "// Package p does things.\npackage p\n");
-    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
-    verdict\assertVerdict(v.reason, label: "a preamble");
-    std\assert(v.reason.indexOf("a.go:1: 1 comment lines above the package clause.") != null, message: v.reason);
-    std\assert(v.reason.indexOf("keeps no package comment") != null, message: "says a package keeps none");
-    std\assert(graded("a.go", after: "// a note\n//go:build linux\n\npackage p\n").decision == magus\GuardDecision.deny, message: "prose beside a directive");
-    foreach (name, text in {
-        "build tag": "//go:build linux && !noffi\n\npackage p\n",
-        "old build tag": "// +build linux\n\npackage p\n",
-        "generated": "// Code generated by magus-utils. DO NOT EDIT.\n\npackage p\n\n" + commentLines(40, indent: ""),
-        "license": "// Copyright 2026 The Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage p\n",
-        "directive": "//go:generate go run gen.go\n\npackage p\n",
-    }) {
-        std\assert(graded("a.go", after: text).decision == magus\GuardDecision.defer, message: name);
-    }
-    std\assert(graded("p/doc.go", after: "// Package p is the thing.\npackage p\n").decision == magus\GuardDecision.deny, message: "doc.go is no exception");
-}
-
-fun noJudge() > fun (css: str) > [CssFinding] {
-    return fun (css: str) > [CssFinding] { return [<CssFinding>]; };
-}
-
-fun judgeSays(rule: str, line: int) > fun (css: str) > [CssFinding] {
-    return fun (css: str) > [CssFinding] {
-        return [CssFinding{ rule = rule, line = line, message = "Drop 'simply': state the fact." }];
-    };
-}
-
-fun cssComment(n: int) > str {
-    final lines = mut [<str>];
-    var i = 0;
-    while (i < n) {
-        i = i + 1;
-        lines.append("   line {i} of a comment");
-    }
-    return "/*" + lines.join("\n") + " */\n";
-}
-
-test "a stylesheet write is judged by proofread on the lines it adds" {
-    final after = ".a \{ color: red; }\n\n/* Simply put. */\n.b \{ color: blue; }\n";
-    final v = decideWrite("/w/console/src/a.css", before: "", after: after, once: spent(), judge: judgeSays("filler", line: 3));
-    std\assert(v.decision == magus\GuardDecision.advise, message: v.decision);
-    std\assert(v.reason.indexOf("/w/console/src/a.css:3: Drop 'simply': state the fact. [filler]") != null, message: v.reason);
-    std\assert(v.reason.indexOf("same prose rules as Go ones") != null, message: "states the rule");
-    final kept = decideWrite("a.css", before: after, after: after + ".c \{ color: pink; }\n", once: spent(), judge: judgeSays("filler", line: 3));
-    std\assert(kept.decision == magus\GuardDecision.defer, message: "a finding on a comment the write did not add");
-    final clean = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
-    std\assert(clean.decision == magus\GuardDecision.advise and clean.reason.indexOf("Skill(") == null and clean.reason.indexOf("keep only the comments") != null, message: "a judge that finds nothing leaves the generic advice once");
-}
-
-test "a stylesheet write the judge cannot run on is denied, naming why and the build" {
-    final stale = fun (css: str) > [CssFinding] => [unrun("proofread cannot run: it is older than its sources")];
-    final v = decideWrite("a.css", before: "", after: "/* Simply put. */\n.b \{ color: blue; }\n", once: helpers\counter(), judge: stale);
-    std\assert(v.decision == magus\GuardDecision.deny, message: "{v.decision}: {v.reason}");
-    std\assert(v.reason.indexOf("older than its sources") != null and v.reason.indexOf("run `{proofread\build}`") != null, message: v.reason);
-    std\assert(decideWrite("a.css", before: "", after: ".b \{ color: blue; }\n", once: helpers\counter(), judge: stale).decision == magus\GuardDecision.defer, message: "a write with no comment needs no judge");
-}
-
-test "a stylesheet comment over twice the largest budget is refused" {
-    final v = decideWrite("a.css", before: "", after: cssComment(17) + ".a \{ color: red; }\n", once: spent(), judge: noJudge());
-    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
-    verdict\assertVerdict(v.reason, label: "a CSS comment");
-    std\assert(v.reason.startsWith("a CSS comment runs 17 lines against a budget of at most "), message: v.reason);
-    std\assert(v.reason.indexOf("\nThe write is to a.css. ") != null, message: v.reason);
-    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.defer, message: "16 lines");
-    final old = cssComment(30) + ".a \{ color: red; }\n";
-    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == magus\GuardDecision.defer, message: "an old long comment is not the write's");
-}
-
-test "longestAddedCssComment counts the lines a new comment spans" {
-    std\assert(longestAddedCssComment("", after: "/* one */\n.a \{}\n") == 1, message: "one line");
-    std\assert(longestAddedCssComment("", after: "/* one\n   two\n   three */\n.a \{}\n/* four */\n") == 3, message: "the longest");
-    std\assert(longestAddedCssComment("", after: ".a \{ color: red; }\n") == 0, message: "none");
-    std\assert(longestAddedCssComment("/* one\n   two */\n", after: "/* one\n   two */\n") == 0, message: "kept");
-}
-
-test "judge findings parse from stdin lines" {
-    final rows = parseCssFindings("[\{\"node\":\"stdin\",\"source\":\"stdin:7\",\"rule\":\"history\",\"message\":\"m\",\"match\":\"x\"}]");
-    std\assert(rows.len() == 1 and rows[0].line == 7 and rows[0].rule == "history" and rows[0].message == "m", message: "{rows.len()}");
-    std\assert(parseCssFindings("not json").len() == 0, message: "unreadable");
-}
-
-test "a write to a file that is not a stylesheet meets the Go rules" {
-    final v = decideWrite("a.go", before: "", after: "package a\n// note\n", once: spent(), judge: judgeSays("filler", line: 2));
-    std\assert(v.decision == magus\GuardDecision.defer or v.decision == magus\GuardDecision.advise, message: v.decision);
-    std\assert(v.reason.indexOf("same prose rules") == null, message: "not the CSS rule");
+test "proofread's findings parse to their source line" {
+    final found = parseFindings(`[{"source":"code-comment:12","rule":"banner","message":"m"}]`);
+    std\assert(found.len() == 1 and found[0].line == 12 and found[0].rule == "banner", message: "{found.len()}");
 }

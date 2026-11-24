@@ -586,7 +586,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
         }
     }
     return comments\decideWrite(req.path, before: before, after: after, once: once,
-        judge: comments\cssJudgeRunner(req.workspace));
+        judge: comments\judgeRunner(req.workspace));
 }
 
 // decide is judge over plain records. The order is the verdict: push authority first, then
