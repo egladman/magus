@@ -2076,6 +2076,36 @@ proofread:
     knowledge_test.go: {code-comment-budget: 8, code-comment-sentence: 37, comment-caps: 8, comment-history: 5}
     lazy_workspace.go: {code-comment-budget: 4, code-comment-sentence: 8, comment-caps: 2, provenance: 1}
     lazy_workspace_test.go: {code-comment-sentence: 1}
+    libs/image/assemble.go: {code-comment-budget: 2, code-comment-sentence: 2, doc-path: 2}
+    libs/image/config.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 2, doc-path: 1}
+    libs/image/index.go: {code-comment-budget: 1}
+    libs/image/layer.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    libs/image/layout.go: {code-comment-budget: 3, code-comment-sentence: 3, doc-path: 1}
+    libs/image/layout_test.go: {code-comment-sentence: 1, comment-caps: 3, doc-path: 4}
+    libs/image/platform.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    libs/image/provenance.go: {comment-caps: 4}
+    libs/image/referrers.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
+    libs/image/registry.go: {code-comment-budget: 3, code-comment-sentence: 2}
+    libs/image/registry_test.go: {code-comment-sentence: 2, comment-caps: 5, doc-path: 4}
+    libs/image/sbom.go: {code-comment-sentence: 1, comment-caps: 2}
+    libs/image/spec.go: {code-comment-sentence: 2, comment-caps: 1, doc-path: 1}
+    libs/image/staging.go: {code-comment-budget: 2, code-comment-sentence: 1, comment-history: 1}
+    libs/oci/auth.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 1}
+    libs/oci/image.go: {code-comment-budget: 5, code-comment-sentence: 10, comment-caps: 1}
+    libs/oci/oci.go: {code-comment-budget: 7, code-comment-sentence: 15, comment-caps: 7}
+    libs/oci/oci_test.go: {code-comment-budget: 4, code-comment-sentence: 12, comment-caps: 4}
+    libs/oci/referrers_test.go: {code-comment-sentence: 1, comment-caps: 2}
+    libs/testkit/capture.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-history: 1}
+    libs/testkit/environ.go: {code-comment-budget: 6, code-comment-sentence: 12, comment-caps: 5}
+    libs/testkit/environ_test.go: {code-comment-sentence: 2, comment-caps: 1}
+    libs/testkit/git.go: {code-comment-budget: 2, code-comment-sentence: 6, comment-history: 1}
+    libs/testkit/register/register.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    libs/testkit/register/review.go: {code-comment-sentence: 1}
+    libs/testkit/script/script.go: {code-comment-budget: 3, code-comment-sentence: 6}
+    libs/testkit/script/script_test.go: {code-comment-sentence: 2}
+    libs/testkit/secrets.go: {code-comment-sentence: 2}
+    libs/testkit/testkit.go: {code-comment-budget: 2, code-comment-sentence: 11}
+    libs/testkit/testkit_test.go: {code-comment-sentence: 2, comment-caps: 1, comment-history: 1}
     lifecycle.go: {code-comment-budget: 1, code-comment-sentence: 1}
     limiter.go: {code-comment-budget: 8, code-comment-sentence: 10}
     limiter_test.go: {code-comment-sentence: 6}

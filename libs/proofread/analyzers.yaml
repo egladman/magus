@@ -47,7 +47,7 @@ proofread:
     guide.go: {code-comment-budget: 8, code-comment-sentence: 14, comment-first-person: 1}
     guide_test.go: {doc-path: 8}
     help_test.go: {code-comment-sentence: 1}
-    internal/calibrate/calibrate.go: {code-comment-budget: 3, code-comment-sentence: 12, comment-caps: 2, comment-history: 1}
+    internal/calibrate/calibrate.go: {code-comment-budget: 2, code-comment-sentence: 10, comment-history: 1}
     internal/calibrate/calibrate_test.go: {doc-path: 1}
     internal/calibrate/round.go: {code-comment-sentence: 1}
     internal/calibrate/round_test.go: {code-comment-sentence: 1, comment-caps: 1}
