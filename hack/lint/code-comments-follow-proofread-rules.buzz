@@ -37,8 +37,8 @@ export object Baseline {
 }
 
 export fun reads() > [str] {
-    return ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.buzz", POLICY,
-        "libs/proofread/**/*.go", "libs/proofread/" + POLICY, "libs/proofread/go.mod", "libs/proofread/go.sum",
+    return ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.buzz", POLICY, "**/" + POLICY,
+        "libs/proofread/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
         "libs/proofread/proofread.buzz", "libs/proofread/internal/calibrate/cases/*.txtar"];
 }
 
