@@ -647,7 +647,7 @@ behind `//go:build` constraints, so macOS and Linux read 67.6% and 66.9% for the
 commit. The published figure is therefore split in two.
 
 The **denominator** is static. Which statements exist does not depend on where you
-stand, so `hack/magusfile/coverage.buzz` enumerates every statement block of every Go
+stand, so `magusfiles/quality/coverage.buzz` enumerates every statement block of every Go
 file in every module by running `go tool cover -mode=set` over one file at a time. That instruments
 syntactically, resolving no import and consulting no build context, so a Windows-only
 file yields its block table on a Mac and lands in the denominator at zero. Verified
@@ -688,7 +688,7 @@ push reports all three:
 - A `feat`, `fix` or `perf` change to shipped code adds a changelog
   fragment, as does any title marked breaking with `!`. Every other type
   passes without one, and so do changes that touch only docs, tests, workflows,
-  repository tooling and plans; `hack/magusfile/changelog.buzz` lists what does not
+  repository tooling and plans; `magusfiles/release/changelog.buzz` lists what does not
   ship. A change no user can notice is not a `feat`, `fix` or `perf`, so
   retitle it rather than add an entry. Check a branch with
   `magus run pr-changelog . -- "<title>"`.
@@ -699,7 +699,7 @@ There is no changelog file to edit: concurrent pull requests add different files
 and never touch a shared one. The docs changelog page renders the fragments and
 the release manifests (`magus run changelog-page docs`), and cutting a release
 folds the fragments into its manifest. `changes/README.md` has the format, and
-`hack/magusfile/changelog.buzz` is its one parser; a malformed fragment or an unknown
+`magusfiles/release/changelog.buzz` is its one parser; a malformed fragment or an unknown
 group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase
