@@ -59,7 +59,7 @@ func TestRunRejectsFilesystemImport(t *testing.T) {
 	})
 	require.ErrorIs(t, err, types.MCPClientFailed)
 	assert.Equal(t, 1, strings.Count(err.Error(), "[MGS3034]"), "the diagnostic is reported once: %s", err)
-	assert.Contains(t, err.Error(), "outside this tool; it runs magus\\ and pure modules only (std, math, crypto, serialize, buffer,")
+	assert.Contains(t, err.Error(), "outside this tool; it runs magus\\ and pure modules only (std, math, crypto, serializecore, serialize, buffer,")
 }
 
 // A stdlib module the client does not provide is refused with the reason, not

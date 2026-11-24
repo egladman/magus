@@ -46,7 +46,7 @@ func TestRunDoesNotImportHostModulesOrFiles(t *testing.T) {
 	}{
 		{"magus", "magus", "use the client tool"},
 		{"prefixed magus", "buzz:magus", "use the client tool"},
-		{"filesystem module", "fs", "outside this tool; it provides only std, math, crypto, serialize, buffer"},
+		{"filesystem module", "fs", "outside this tool; it provides only std, math, crypto, serializecore, serialize, buffer"},
 		{"debug module", "debug", "outside this tool"},
 		{"file", "./helper.buzz", "file imports are unavailable"},
 	} {
