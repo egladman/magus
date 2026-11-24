@@ -124,7 +124,7 @@ export object Conformance {
 }
 
 export final POLICY = Conformance{
-    checks = ["file-lines", "func-lines", "clone-tokens", "export-scope", "imported-packages", "main-logic", "store-path-export", "file-split"],
+    checks = ["func-lines", "clone-tokens", "export-scope", "imported-packages", "main-logic", "store-path-export", "file-split"],
 };
 
 // Verdict is what a change crossed: the touched files whose count of violations rose, and the
@@ -307,6 +307,7 @@ fun splitHead(digests: [str]) > [magus\ConformanceDistribution] {
 test "a metric in checks is held and any other is advice" {
     assert\equal(POLICY.holds("func-lines"), want: true, message: "held");
     assert\equal(POLICY.holds("shared-reach"), want: false, message: "advice");
+    assert\equal(POLICY.holds("file-lines"), want: false, message: "a long file is advice");
 }
 
 test "a file whose count rose is a ceiling naming both counts" {
