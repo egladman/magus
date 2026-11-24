@@ -231,9 +231,9 @@ func (s *githubErrorSuite) TestRequiredChecksStatesEachCheckAtTheCommit() {
 	s.remote(
 		on("GET /repos/acme/widgets/rules/branches/main", 200, `[{"type": "required_status_checks", "ruleset_id": 9, "parameters": {"required_status_checks": [{"context": "ci gate"}, {"context": "lint"}]}}]`),
 		on("GET /repos/acme/widgets/branches/main", 200, `{"protection": {}}`),
-		on("GET /repos/acme/widgets/actions/runs?head_sha="+headA+"&per_page=100", 200, `{"workflow_runs": [{"id": 5, "workflow_id": 1}]}`),
+		on(fmt.Sprintf("GET /repos/acme/widgets/actions/runs?head_sha=%s&per_page=100", headA), 200, `{"workflow_runs": [{"id": 5, "workflow_id": 1}]}`),
 		on("GET /repos/acme/widgets/actions/runs/5/jobs?per_page=100", 200, `{"jobs": [{"name": "ci gate", "status": "completed", "conclusion": "success"}]}`),
-		on("GET /repos/acme/widgets/commits/"+headA+"/status?per_page=100", 200, `{"statuses": []}`),
+		on(fmt.Sprintf("GET /repos/acme/widgets/commits/%s/status?per_page=100", headA), 200, `{"statuses": []}`),
 	)
 	got, err := s.open().RequiredChecks(s.ctx, widgets, headA)
 	s.Require().NoError(err)
@@ -359,8 +359,8 @@ func (s *githubErrorSuite) TestListArtifactsRefusesARunOfAnotherRepository() {
 
 // resultMark is the echo script with mark answering body, a Result.
 func resultMark(body string) string {
-	op := "export fun mark(req: QueueMarkRequest) > result\\Result::<Ack> {\n    " + body + "\n}\nfun spare(req: QueueMarkRequest) > Ack {"
-	return "import \"result\";\n" + strings.Replace(script, "export fun mark(req: QueueMarkRequest) > Ack {", op, 1)
+	op := fmt.Sprintf("export fun mark(req: QueueMarkRequest) > result\\Result::<Ack> {\n    %s\n}\nfun spare(req: QueueMarkRequest) > Ack {", body)
+	return fmt.Sprintf("import \"result\";\n%s", strings.Replace(script, "export fun mark(req: QueueMarkRequest) > Ack {", op, 1))
 }
 
 func (s *githubErrorSuite) TestAnOpThatReturnsAFailedResultIsTheCallsError() {
