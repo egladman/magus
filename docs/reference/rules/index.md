@@ -101,7 +101,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-duplicate](spawn-duplicate.md)                     | a spawn for a job that already has a worker                                                         |
 | [spawn-nested-waiter](spawn-nested-waiter.md)             | a subagent spawning a helper whose title or brief opening speaks of waiting or watching             |
 | [spawn-plain-commands](spawn-plain-commands.md)           | a spawn prompt for an isolated worker that teaches a substitution, a loop or an exec                |
-| [spawn-unisolated-row](spawn-unisolated-row.md)           | an isolated spawn for a writing job bound to the spawner's own checkout                             |
+| [spawn-unisolated-row](spawn-unisolated-row.md)           | an isolated spawn for a writing job whose fork made its checkout                                    |
 | [spawn-unvalidated](spawn-unvalidated.md)                 | a spawn for a job whose record was never validated                                                  |
 | [spawn-waiter](spawn-waiter.md)                           | a spawn whose child exists to wait on, poll or watch other work                                     |
 | [spawn-warm-worker](spawn-warm-worker.md)                 | a fresh spawn for follow-up work while the worker that wrote the code is still warm                 |
