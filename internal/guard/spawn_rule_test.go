@@ -1809,15 +1809,25 @@ func (s *SpawnUnisolatedSuite) writer() jobtypes.Job {
 	return jobtypes.Job{ID: "guard-facts", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"a/**"}}}
 }
 
-func (s *SpawnUnisolatedSuite) TestIsolatedWritingRowWithNoCheckoutIsDenied() {
+// Host isolation is how a writer gets a checkout of its own: exec adopts it.
+func (s *SpawnUnisolatedSuite) TestIsolatedWritingRowWithNoCheckoutPasses() {
 	v := s.spawn(s.writer(), true, nil)
-	require.Equal(s.T(), verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnUnisolatedRow)}, judgedAs(v), v.Context)
-	assert.Contains(s.T(), v.Reason, "magus job fork guard-facts --checkout <dir>")
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule, v.Reason)
 }
 
-func (s *SpawnUnisolatedSuite) TestRowWhoseCheckoutIsTheSpawnersIsDenied() {
+// An adopted checkout nobody took moves to the host's, even the spawner's own.
+func (s *SpawnUnisolatedSuite) TestRowWhoseAdoptedCheckoutIsTheSpawnersPasses() {
 	v := s.spawn(s.writer(), true, func(root string) *jobtypes.Worktree { return &jobtypes.Worktree{Root: root} })
-	assert.Equal(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule, v.Reason)
+}
+
+func (s *SpawnUnisolatedSuite) TestRowWhoseForkMadeItsCheckoutIsDenied() {
+	v := s.spawn(s.writer(), true, func(root string) *jobtypes.Worktree { return &jobtypes.Worktree{Root: root + "-made", Made: true} })
+	require.Equal(s.T(), verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnUnisolatedRow)}, judgedAs(v), v.Context)
+	assert.Contains(s.T(), v.Reason, "-made, the checkout its fork made")
+
+	v = s.spawn(s.writer(), false, func(root string) *jobtypes.Worktree { return &jobtypes.Worktree{Root: root + "-made", Made: true} })
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule, "without isolation the worker can take it there")
 }
 
 func (s *SpawnUnisolatedSuite) TestReadOnlyRowPasses() {

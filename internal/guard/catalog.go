@@ -1071,10 +1071,10 @@ var ruleDocSpawnUnplaced = types.RuleDoc{
 
 var ruleDocSpawnUnisolatedRow = types.RuleDoc{
 	Name:    string(denyRuleSpawnUnisolatedRow),
-	Catches: "an isolated spawn for a writing job bound to the spawner's own checkout",
-	Why: "`magus job exec` binds a job to the checkout it runs in, and a job forked from the root's checkout without --checkout binds there. " +
-		"The host's worktree isolation cannot move that binding, so the worker edits the spawner's tree beside its other workers. " +
-		"Read-only jobs, jobs with a checkout of their own and spawns without isolation pass.",
+	Catches: "an isolated spawn for a writing job whose fork made its checkout",
+	Why: "`magus job exec` takes a job whose fork made a checkout there and nowhere else, so a worker the host isolates in a fresh checkout cannot take it, and the host refuses its edits in the made checkout. " +
+		"Host isolation is how a writing job gets a checkout of its own: a job with none, or with one its fork adopted, adopts the host's checkout at exec, so its spawn passes. " +
+		"Read-only jobs and spawns without isolation pass.",
 }
 
 var ruleDocSpawnUnvalidated = types.RuleDoc{
