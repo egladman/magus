@@ -45,6 +45,7 @@ import "hack/lint/diagram-imports-are-named" as diagramimports;
 import "hack/lint/file-name-words-tell-siblings-apart" as filesiblings;
 import "hack/lint/diagram-modules-type-check-strictly" as diagramcheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/generators-declare-what-they-read" as generatorsread;
 import "hack/lint/gate-pages-say-what-they-do-not-measure" as gatemeasures;
 import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
@@ -97,6 +98,7 @@ export fun rules() > [Rule] {
         Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },
         Rule{ name = "package-manifests-carry-no-scripts", reads = manifestscripts\reads(), check = manifestscripts\check },
         Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
+        Rule{ name = "generators-declare-what-they-read", reads = generatorsread\reads(), check = generatorsread\check },
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
         Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
         Rule{ name = "local-skills-reach-every-host", reads = localskills\reads(), check = localskills\check },

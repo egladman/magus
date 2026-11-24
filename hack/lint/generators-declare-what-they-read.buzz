@@ -1,0 +1,208 @@
+// generators-declare-what-they-read fails a target that runs Go code on a package
+// whose in-repo dependencies its readsFiles misses.
+//
+// A declared footprint replaces the project's, so types-generate declaring only
+// .buzzgen.yaml replayed stale output after an edit to libs/safetyscissors.
+namespace generatorsread;
+
+import "assert";
+import "fs";
+import "proc";
+import "result";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+export fun reads() > [str] {
+    return ["magusfile.buzz"];
+}
+
+// body is fn's text up to its closing brace at column 0.
+export fun body(src: str, fn: str) > str {
+    final start = src.indexOf("export fun " + fn + "(");
+    if (start == null) {
+        return "";
+    }
+    final rest = src.sub(start!, len: src.len() - start!);
+    final end = rest.indexOf("\n}\n");
+    if (end == null) {
+        return rest;
+    }
+    return rest.sub(0, len: end!);
+}
+
+fun packagesAfter(text: str, verb: str) > [str] {
+    final needle = "\"go\", [\"" + verb + "\", \"";
+    final found = mut [<str>];
+    var rest = text;
+    while (rest.len() > 0) {
+        final at = rest.indexOf(needle);
+        if (at == null) {
+            return found;
+        }
+        final tail = rest.sub(at! + needle.len(), len: rest.len() - at! - needle.len());
+        final close = tail.indexOf("\"");
+        if (close == null) {
+            return found;
+        }
+        found.append(tail.sub(0, len: close!));
+        rest = tail;
+    }
+    return found;
+}
+
+// goPackages are the packages a body hands to go run or go generate.
+export fun goPackages(text: str) > [str] {
+    final all = mut [<str>];
+    foreach (p in packagesAfter(text, verb: "run")) {
+        all.append(p);
+    }
+    foreach (p in packagesAfter(text, verb: "generate")) {
+        all.append(p);
+    }
+    return all;
+}
+
+// covers reports whether glob reaches the Go files directly inside dir; "." is the root.
+export fun covers(glob: str, dir: str) > bool {
+    if (!glob.endsWith(".go")) {
+        return false;
+    }
+    if (glob == "**/*.go") {
+        return true;
+    }
+    if (glob.endsWith("/**/*.go")) {
+        final prefix = glob.sub(0, len: glob.len() - 8);
+        return dir == prefix or dir.startsWith(prefix + "/");
+    }
+    if (glob.endsWith("/*.go")) {
+        return dir == glob.sub(0, len: glob.len() - 5);
+    }
+    return glob == "*.go" and dir == ".";
+}
+
+// gaps are the dirs no glob covers, in order.
+export fun gaps(globs: [str], dirs: [str]) > [str] {
+    final missed = mut [<str>];
+    foreach (dir in dirs) {
+        var hit = false;
+        foreach (g in globs) {
+            if (covers(g, dir: dir)) {
+                hit = true;
+            }
+        }
+        if (!hit) {
+            missed.append(dir);
+        }
+    }
+    return missed;
+}
+
+// deps lists the in-repo directories the packages import, relative to the root module.
+fun deps(packages: [str]) > result\Result::<[str]> {
+    var root = "";
+    try {
+        final env = proc\exec("go", args: ["env", "GOMOD"], opts: proc\ExecOptions{ quiet = true });
+        root = fs\dirname(env.stdout.trim());
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "find the module root");
+    }
+    final args = mut ["list", "-deps", "-f", "\{\{if not .Standard\}\}\{\{.Dir\}\}\{\{end\}\}"];
+    foreach (p in packages) {
+        args.append(p);
+    }
+    var run = proc\ExecResult{};
+    try {
+        run = proc\exec("go", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "list the dependencies of {packages.join(" ")}");
+    }
+    if (run.code != 0) {
+        return result\fail::<[str]>("go list exited {run.code}: " + run.stderr.trim());
+    }
+    final dirs = mut [<str>];
+    foreach (line in run.stdout.split("\n")) {
+        if (line == root) {
+            dirs.append(".");
+        } else if (line.startsWith(root + "/")) {
+            dirs.append(line.sub(root.len() + 1, len: line.len() - root.len() - 1));
+        }
+    }
+    return result\ok::<[str]>(dirs);
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final targetsResult = support\targets();
+    if (targetsResult.error != null) {
+        throw targetsResult.error!.message;
+    }
+    final magusfile = support\named(files, p: "magusfile.buzz");
+    if (magusfile == null) {
+        return [support\missing("magusfile.buzz")];
+    }
+    final readResult = support\read(magusfile!);
+    if (readResult.error != null) {
+        throw readResult.error!.message;
+    }
+    final found = mut [<Finding>];
+    foreach (p in targetsResult.value!.projects) {
+        if (p.path != ".") {
+            continue;
+        }
+        foreach (n in p.nodes) {
+            final globs = mut [<str>];
+            foreach (ref in n.readsFiles) {
+                globs.append(ref.glob);
+            }
+            // No footprint means the target inherits the project's.
+            if (globs.len() == 0) {
+                continue;
+            }
+            final fn = n.name.replace("-", with: "_");
+            final packages = goPackages(body(readResult.value!, fn: fn));
+            if (packages.len() == 0) {
+                continue;
+            }
+            final depsResult = deps(packages);
+            if (depsResult.error != null) {
+                throw "target \"{n.name}\": " + depsResult.error!.message;
+            }
+            final missed = gaps(globs, dirs: depsResult.value!);
+            if (missed.len() == 0) {
+                continue;
+            }
+            final shown = missed.sub(0, len: if (missed.len() > 4) 4 else missed.len());
+            final more = if (missed.len() > 4) " and {missed.len() - 4} more" else "";
+            found.append(Finding{ path = "magusfile.buzz",
+                line = support\findLine(readResult.value!, needle: "export fun " + fn + "("),
+                message = "target \"{n.name}\" runs {packages.join(" ")} but its ctx.readsFiles does not reach {shown.join(", ")}{more}",
+                hint = "An edit to a directory the program compiles is a cache hit, so the target replays stale output.\n"
+                    + "Declare what buzz-generate does: **/*.go, go.mod, go.sum, go.work, go.work.sum,\n"
+                    + "plus the target's own non-Go inputs." });
+        }
+    }
+    return found;
+}
+
+test "goPackages reads go run and go generate arguments" {
+    final text = "_ = proc\\exec(\"go\", [\"generate\", \"./cmd/a\"]);\n_ = proc\\exec(\"go\", [\"run\", \"./cmd/b\", \"-x\"]);";
+    assert\equal(goPackages(text), want: ["./cmd/b", "./cmd/a"], message: "both verbs");
+}
+
+test "a directory is covered by the globs that name it or its ancestors" {
+    assert\equal(covers("**/*.go", dir: "libs/x"), want: true, message: "whole tree");
+    assert\equal(covers("libs/x/**/*.go", dir: "libs/x/y"), want: true, message: "descendant");
+    assert\equal(covers("libs/x/*.go", dir: "libs/x/y"), want: false, message: "shallow glob");
+    assert\equal(covers("*.go", dir: "."), want: true, message: "root");
+    assert\equal(covers(".buzzgen.yaml", dir: "."), want: false, message: "not Go");
+}
+
+test "gaps lists the directories nothing reaches" {
+    assert\equal(gaps([".buzzgen.yaml", "types/**/*.go"], dirs: [".", "types", "libs/a"]), want: [".", "libs/a"], message: "gaps");
+    assert\equal(gaps(["**/*.go"], dirs: [".", "libs/a"]).len(), want: 0, message: "whole tree");
+}
+
+test "body stops at the closing brace" {
+    final src = "export fun a(x) \{\n    one;\n}\nexport fun b(x) \{\n    two;\n}\n";
+    assert\equal(body(src, fn: "a"), want: "export fun a(x) \{\n    one;", message: "a");
+    assert\equal(body(src, fn: "c"), want: "", message: "absent");
+}
