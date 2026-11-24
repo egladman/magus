@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	// RuleRestates reports a stylesheet comment that only names the rule or
-	// declaration it sits on.
+	// RuleRestates reports a one-line comment that only names the code it
+	// sits on: a CSS rule or declaration, or the statement under it.
 	RuleRestates Rule = "restates"
 	// RuleCommentBudget reports a stylesheet comment over the lines its place
 	// earns.
@@ -29,7 +29,7 @@ const (
 var blockBudgetCheck = check{rule: RuleBlockBudget, reads: []Format{FormatStylesheet}}
 
 var cssChecks = []check{
-	{rule: RuleRestates, reads: []Format{FormatStylesheet}, judge: restates},
+	{rule: RuleRestates, reads: []Format{FormatStylesheet, FormatCode}, judge: restates},
 	{rule: RuleCommentBudget, reads: []Format{FormatStylesheet}, judge: commentBudget},
 	blockBudgetCheck,
 	{rule: RuleBannedWord, reads: []Format{FormatStylesheet}, judge: bannedWord},
@@ -163,7 +163,12 @@ var cssStubWords = wordSet("reset", "remove", "clear", "apply", "applie", "use",
 
 // restates reports a one-line CSS comment that only names the rule or the
 // declaration it sits on. It is the doc stub rule with the code as the symbol.
+// A code comment is judged by [codeRestates].
 func restates(in input) []Finding {
+	if in.code != nil {
+		return codeRestates(in)
+	}
+
 	text, ok := stub(in.symbol, cssStubWords)
 	if !ok {
 		return nil
@@ -176,11 +181,11 @@ func restates(in input) []Finding {
 	}}
 }
 
-// cssHistoryPatterns add to historyPatterns for a stylesheet comment. A stylesheet's
-// comments narrate the change more than a doc does: what a rule replaced, what
-// it was before, which work item built it. Bare "now" and "instead of" stay out
-// for the reason historyPatterns leaves them out.
-var cssHistoryPatterns = []*regexp.Regexp{
+// commentHistoryPatterns add to historyPatterns for a stylesheet or code
+// comment. Such comments narrate the change more than a doc does: what the
+// code replaced, what it was before, which work item built it. Bare "now" and
+// "instead of" stay out for the reason historyPatterns leaves them out.
+var commentHistoryPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bno longer\b`),
 	regexp.MustCompile(`(?i)\bnow (?:uses|reads|is|are|has|have|lives|sits|carries|renders|owns|gets|keeps|` +
 		`takes|ships|handles|goes|comes|applies|wins)\b`),

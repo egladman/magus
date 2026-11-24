@@ -19,6 +19,7 @@ import (
 //
 // KindDocComment reads text as a doc comment, by the rules [Judge] applies to
 // one. KindStylesheet reads text as a stylesheet and judges its comments.
+// KindCodeComment reads source in the language [WithLanguage] names.
 // KindDiagnostic judges text as [JudgeMessage] does at its default cap.
 // KindChangeDescription, KindCommitMessage and KindIssue read the first line
 // as a title, a paragraph of its own. KindCommitMessage reads no headings.
@@ -52,6 +53,8 @@ func judgeSpec(text string, s *KindSpec, o options) []Finding {
 		return judgeSkillSource(strings.Join(raw, "\n"), s, o)
 	case FormatStylesheet:
 		return judgeStylesheet(strings.Join(raw, "\n"), s, o)
+	case FormatCode:
+		return judgeCode(strings.Join(raw, "\n"), s, o)
 	case FormatMessage:
 		return judgeMessage(text, 0, s, o)
 	case FormatPlain:

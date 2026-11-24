@@ -11,12 +11,13 @@ import (
 const scissors = "# ------------------------ >8 ------------------------"
 
 // fromFiles reports whether the text kind judges is read from the files in
-// args. A commit message is read from the message file a VCS hook names, or
-// from stdin under --stdin, and so is a stylesheet, which a guard hands over
-// on stdin as the text a write would leave. A declared kind reads either.
+// args. A commit message, a stylesheet and source code are read from files or
+// from stdin: a guard hands over the text a write would leave. A declared
+// kind reads either.
 func fromFiles(kind proofread.Kind, args []string) bool {
 	return readsFiles(kind) ||
-		((kind == proofread.KindCommitMessage || kind == proofread.KindStylesheet || declared(kind)) && len(args) > 0)
+		((kind == proofread.KindCommitMessage || kind == proofread.KindStylesheet || kind == proofread.KindCodeComment ||
+			declared(kind)) && len(args) > 0)
 }
 
 // stripCommitComments returns text as git records it: without the lines that
