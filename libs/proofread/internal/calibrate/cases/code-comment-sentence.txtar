@@ -1,0 +1,15 @@
+A code comment sentence over 25 words.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// The lookup falls back to the store when the cache misses, which happens whenever a worker restarts before the first write lands and the key has expired by then.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// The lookup falls back to the store on a miss. A restart empties the cache.
+	x()
+}

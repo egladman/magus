@@ -60,6 +60,8 @@ type labeledCase struct {
 	Event proofread.Event
 	// LocalBranches are the local-only branch names a case is judged with.
 	LocalBranches []string
+	// Language is the source language a code-comment case is judged as.
+	Language proofread.SourceLanguage
 	// Voice is what the case file's author sections measure, or nil when it
 	// has none.
 	Voice *proofread.Voice
@@ -96,31 +98,11 @@ const caseLead = "fix(cache): keep the key stable\n" +
 	"A cached replay missed whenever two workers raced on the key, so the cache key now " +
 	"sorts its inputs before hashing.\n\n"
 
-// LoadCases reads every .txtar file at the root of fsys. A file is named for
-// the rule its cases judge, <rule>.txtar, and its comment is free text. A
-// rule's cases under a voice go in <rule>.<set>.txtar beside it. Each
-// section header reads
-//
-//	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
-//	    [branches=A,B]
-//
-// where label is hit, pass, fp or fn and kind is one the rule judges. Each
-// non-blank line of a section is one case; whole makes the section one case,
-// for a text whose lines belong together. A one-line change-description case
-// is judged as a bullet under a fixed title and opening paragraph; a whole one
-// as written. name and owner describe a doc-comment case's symbol,
-// thread sets a review case's thread length, and event a review-summary case's
-// verdict: APPROVE, REQUEST_CHANGES or COMMENT. branches lists the
-// local-only branch names a case is judged with.
-//
-// A section labeled author holds no case. Its texts, one per non-blank line or
-// the whole section, are one author's own writing of its kind: every author
-// section of a file builds one [proofread.Voice] (see [proofread.BuildVoice]),
-// and every case in the file is judged with it. A file with no author section
-// judges with no voice.
-//
-// A file named for no rule, a header it cannot read, or a kind the rule does
-// not judge is an error naming the file and line.
+// LoadCases reads each <rule>.txtar in fsys; <rule>.<set>.txtar holds cases
+// judged under a voice. A section header is <label>/<kind> then attributes
+// (see parseHeader, which lists them); each non-blank line is a case unless
+// the header says whole. Author sections build the file's [proofread.Voice].
+// A bad file, header or kind is an error naming its line.
 func LoadCases(fsys fs.FS) ([]labeledCase, error) {
 	names, err := fs.Glob(fsys, "*.txtar")
 	if err != nil {
@@ -273,6 +255,13 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 			}
 		case "branches":
 			out.LocalBranches = strings.Split(value, ",")
+		case "lang":
+			lang, ok := proofread.ParseLanguage(value)
+			if !ok {
+				return labeledCase{}, false, fmt.Errorf("lang=%q is none of go, ts or buzz", value)
+			}
+
+			out.Language = lang
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
@@ -301,6 +290,10 @@ func (c labeledCase) Findings(extra ...proofread.Option) []proofread.Finding {
 	opts := []proofread.Option{
 		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
 		proofread.WithLocalBranches(c.LocalBranches...),
+	}
+
+	if c.Language != "" {
+		opts = append(opts, proofread.WithLanguage(c.Language))
 	}
 
 	if doc, ok := catalog()[c.Rule]; ok && doc.Decisions[c.Kind] == proofread.DecisionOff {

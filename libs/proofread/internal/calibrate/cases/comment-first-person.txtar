@@ -1,0 +1,22 @@
+I, me, my, we, us or our in a code comment.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// I think we should retry here.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Our cache is warm by now, so we skip the store.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// The cache is warm by now, so the store is skipped.
+	x()
+}

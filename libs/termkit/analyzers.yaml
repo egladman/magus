@@ -1,0 +1,38 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    ansi.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 8, comment-history: 3}
+    ansi_test.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 3}
+    clipboard.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 4, comment-first-person: 1}
+    clipboard_test.go: {code-comment-sentence: 1, comment-caps: 1}
+    inline.go: {code-comment-budget: 5, code-comment-sentence: 12, comment-caps: 8, comment-history: 2}
+    inline_test.go: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 1}
+    input.go: {code-comment-budget: 21, code-comment-sentence: 30, comment-caps: 27, comment-history: 4}
+    input_test.go: {code-comment-budget: 10, code-comment-sentence: 12, comment-caps: 5, comment-first-person: 1, comment-history: 3}
+    internal/cells/cells.go: {code-comment-sentence: 1}
+    magusfile.buzz: {doc-path: 3}
+    notify/notify.go: {code-comment-budget: 29, code-comment-sentence: 33, comment-caps: 22, comment-history: 5}
+    notify/notify_test.go: {code-comment-budget: 7, code-comment-sentence: 6, comment-caps: 7, comment-history: 3}
+    pick/pick.go: {code-comment-budget: 19, code-comment-sentence: 20, comment-caps: 9, comment-first-person: 1, comment-history: 5}
+    pick/pick_test.go: {code-comment-budget: 6, code-comment-sentence: 8, comment-caps: 4}
+    probe.go: {code-comment-budget: 8, code-comment-sentence: 14, comment-caps: 7, comment-history: 1}
+    probe_test.go: {code-comment-budget: 3, code-comment-sentence: 10, comment-caps: 5, comment-history: 1}
+    progress/spin.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    prose.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-history: 1}
+    raw.go: {code-comment-sentence: 1}
+    raw_test.go: {code-comment-sentence: 2}
+    region.go: {code-comment-budget: 15, code-comment-sentence: 29, comment-caps: 24, comment-history: 3}
+    region_test.go: {code-comment-budget: 7, code-comment-sentence: 17, comment-caps: 13, comment-history: 5}
+    screen/options.go: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 3}
+    screen/screen.go: {code-comment-budget: 6, code-comment-sentence: 8, comment-caps: 9}
+    screen/screen_test.go: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 4, comment-history: 1}
+    screen/svg.go: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 3}
+    screen/svg_test.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 3}
+    zone.go: {code-comment-budget: 15, code-comment-sentence: 23, comment-caps: 19, comment-history: 1}
+    zone_test.go: {code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 3}

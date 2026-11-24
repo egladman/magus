@@ -1,0 +1,30 @@
+A code comment block over the words or prose lines its place earns.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// We first look the key up in the cache.
+	// If it is missing we go to the store.
+	// Then we write the result back.
+	// Finally we return it to the caller.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	x() // this call may block until the worker pool has a free slot and then returns
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// A miss falls through to the store; the write-back is what keeps the next read cheap.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+// Pool runs jobs on a fixed set of workers. Submit blocks while every worker
+// is busy. Close waits for running jobs and is safe to call twice.
+type Pool struct{}

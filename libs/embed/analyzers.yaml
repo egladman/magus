@@ -1,0 +1,27 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    embed.go: {code-comment-budget: 2, code-comment-sentence: 1}
+    embed_test.go: {code-comment-sentence: 2}
+    index.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    rankeval/holdout.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    rankeval/judgment.go: {code-comment-budget: 3, code-comment-sentence: 4}
+    rankeval/metrics.go: {code-comment-sentence: 1}
+    rankeval/qrels.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    rankeval/replay.go: {code-comment-sentence: 1}
+    rankeval/report.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 1, comment-history: 2}
+    rankeval/report_test.go: {code-comment-sentence: 1}
+    rankeval/results.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 3}
+    rankeval/significance.go: {code-comment-budget: 10, code-comment-sentence: 13, comment-caps: 3}
+    rankeval/significance_test.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    search.go: {code-comment-budget: 3, code-comment-sentence: 3}
+    search_test.go: {code-comment-budget: 9, code-comment-sentence: 17, comment-caps: 8, doc-path: 1}
+    table.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 1}
+    table_test.go: {code-comment-sentence: 3}
+    tokens.go: {code-comment-sentence: 1}

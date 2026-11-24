@@ -14,7 +14,7 @@ const RuleSuppressionUnused Rule = "suppression-unused"
 // suppressUnusedCheck has no judge: [input.suppress] reports its findings
 // after every other rule has run, since only then is a suppression known to
 // have matched nothing.
-var suppressUnusedCheck = check{rule: RuleSuppressionUnused, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatTemplate, FormatMessage}}
+var suppressUnusedCheck = check{rule: RuleSuppressionUnused, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatCode, FormatTemplate, FormatMessage}}
 
 var (
 	suppressChecks = []check{suppressUnusedCheck}

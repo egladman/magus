@@ -136,6 +136,7 @@ var subcommands = []subcommand{
 	{"agent-reply", proofread.KindAgentReply, inputStdin, "--stdin", "judge what a coding agent writes back to its person, on stdin"},
 	{"tool-description", proofread.KindToolDescription, inputStdin, "--stdin", "judge a tool's or a skill's description, on stdin"},
 	{"stylesheet", proofread.KindStylesheet, inputStdin, "FILE...|--stdin", "judge the comments of stylesheets, or of one on stdin"},
+	{"code-comment", proofread.KindCodeComment, inputStdin, "FILE...|--stdin", "judge the comments of Go, TypeScript and Buzz files, or of one on stdin"},
 }
 
 // The process exit codes: 0 for a run with no deny finding, 1 for one with a
@@ -269,6 +270,8 @@ type kindOptions struct {
 	prune          bool
 	metrics        bool
 	set            bool
+	language       string
+	budgets        string
 }
 
 // kindOpts holds the flags of the one command a process runs, which every kind's command shares.
@@ -292,6 +295,8 @@ var kindFlags = []command.Flag{
 	{Name: "prune", Kind: command.Bool, Default: false, Doc: "with --baseline, rewrite the file to the counts this run found", Target: &kindOpts.prune},
 	{Name: "metrics", Kind: command.Bool, Default: false, Doc: "write each text's readability metrics instead of its findings", Target: &kindOpts.metrics},
 	{Name: "set", Kind: command.Bool, Default: false, Doc: "with --stdin, judge the NUL-separated texts as one set by the rules a short text is too small to show", Target: &kindOpts.set},
+	{Name: "language", Kind: command.String, Doc: "with code-comment --stdin, the `language` of the source: go, ts or buzz", Target: &kindOpts.language},
+	{Name: "budgets", Kind: command.String, Doc: "with code-comment, the comment budgets as a JSON `object`, each at most its strict default", Target: &kindOpts.budgets},
 }
 
 // judgeCommand declares the command that judges text of kind: name is its word,
@@ -554,6 +559,13 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {
 	cmd, _ := kindCommand(kind)
 
+	codeOpts, err := codeCommentOptions(kind, &kindOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	opts = append(slices.Clone(opts), codeOpts...)
+
 	switch {
 	case cmd.input == inputSymbols:
 		if len(paths) > 0 {
@@ -591,6 +603,16 @@ func judgeFiles(paths []string, kind proofread.Kind, t table, opts []proofread.O
 		}
 
 		fileOpts := append(slices.Clone(opts), proofread.WithDecisions(t.decisionsAt(p)))
+
+		if kind == proofread.KindCodeComment {
+			lang, ok := proofread.PathLanguage(p)
+			if !ok {
+				return nil, fmt.Errorf("%s is not Go, TypeScript or Buzz, the languages code-comment reads", p)
+			}
+
+			fileOpts = append(fileOpts, proofread.WithLanguage(lang))
+		}
+
 		out = append(out, fileFindings(p, string(text), kind, fileOpts)...)
 	}
 

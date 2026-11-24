@@ -1,0 +1,23 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    cmd/proofread-train/calibrate.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    cmd/proofread-train/main.go: {code-comment-sentence: 1}
+    cmd/proofread-train/round.go: {code-comment-sentence: 2}
+    cmd/proofread-train/round_freeze.go: {code-comment-sentence: 1, comment-history: 1}
+    cmd/proofread-train/round_locate.go: {code-comment-sentence: 3}
+    cmd/proofread-train/round_pool.go: {code-comment-sentence: 2}
+    cmd/proofread-train/round_redact.go: {code-comment-sentence: 1}
+    cmd/proofread-train/round_sample.go: {code-comment-sentence: 2, comment-caps: 1}
+    cmd/proofread-train/round_score.go: {comment-caps: 3}
+    cmd/proofread-train/round_test.go: {code-comment-budget: 1, comment-caps: 9}
+    wordclass/perceptron.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    wordclass/sentences.go: {code-comment-budget: 1, comment-caps: 1}
+    wordclass/train.go: {code-comment-sentence: 1, comment-caps: 2}
+    wordclass/train_test.go: {code-comment-sentence: 1}

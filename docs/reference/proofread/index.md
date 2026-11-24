@@ -97,32 +97,40 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## House style
 
-| Rule                            | Code    | Dimension   | Default     | Catches                                                                                                      |
-| ------------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
-| [terms](terms.md)               | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
-| [dash](dash.md)                 | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
-| [ascii](ascii.md)               | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
-| [tense](tense.md)               | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
-| [attribution](attribution.md)   | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
-| [banned-word](banned-word.md)   | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
-| [date-format](date-format.md)   | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
-| [local-path](local-path.md)     | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
-| [local-branch](local-branch.md) | PRF5009 | conventions | off (house) | a branch that exists only on the author's machine, from the names the caller passes                          |
-| [emphasis](emphasis.md)         | PRF5010 | conventions | off (house) | a bold or italic span in a pull request description or a review                                              |
-| [bare-symbol](bare-symbol.md)   | PRF5011 | conventions | off (house) | a code name outside backticks: a call, a dotted name, a lowerCamel or a snake_case word                      |
+| Rule                                            | Code    | Dimension   | Default     | Catches                                                                                                      |
+| ----------------------------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| [terms](terms.md)                               | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
+| [dash](dash.md)                                 | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
+| [ascii](ascii.md)                               | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
+| [tense](tense.md)                               | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
+| [attribution](attribution.md)                   | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
+| [banned-word](banned-word.md)                   | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
+| [date-format](date-format.md)                   | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
+| [local-path](local-path.md)                     | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
+| [local-branch](local-branch.md)                 | PRF5009 | conventions | off (house) | a branch that exists only on the author's machine, from the names the caller passes                          |
+| [emphasis](emphasis.md)                         | PRF5010 | conventions | off (house) | a bold or italic span in a pull request description or a review                                              |
+| [bare-symbol](bare-symbol.md)                   | PRF5011 | conventions | off (house) | a code name outside backticks: a call, a dotted name, a lowerCamel or a snake_case word                      |
+| [provenance](provenance.md)                     | PRF5012 | conventions | deny        | a date, a pull request or issue number, a commit hash or an incident in a code comment                       |
+| [doc-path](doc-path.md)                         | PRF5013 | conventions | deny        | a code comment citing docs/design, docs/decisions, an ADR number or a Markdown file                          |
+| [comment-caps](comment-caps.md)                 | PRF5014 | conventions | deny        | an ordinary word in capitals for emphasis in a code comment                                                  |
+| [comment-first-person](comment-first-person.md) | PRF5015 | stance      | deny        | I, me, my, we, us or our in a code comment                                                                   |
 
 ## Doc comments
 
-| Rule                                    | Code    | Dimension   | Default     | Catches                                                                          |
-| --------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------------- |
-| [comment-block](comment-block.md)       | PRF6001 | economy     | off (house) | a doc comment over 250 words                                                     |
-| [comment-sentence](comment-sentence.md) | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                             |
-| [aside](aside.md)                       | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                             |
-| [history](history.md)                   | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to")       |
-| [docstub](docstub.md)                   | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                       |
-| [restates](restates.md)                 | PRF6007 | economy     | off (house) | a one-line stylesheet comment that only names the rule or declaration it sits on |
-| [comment-budget](comment-budget.md)     | PRF6008 | economy     | off (house) | a stylesheet comment over the lines its place earns                              |
-| [block-budget](block-budget.md)         | PRF6009 | economy     | off (house) | a rule block whose comments, summed, outrun its size                             |
+| Rule                                              | Code    | Dimension   | Default     | Catches                                                                          |
+| ------------------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------------- |
+| [comment-block](comment-block.md)                 | PRF6001 | economy     | off (house) | a doc comment over 250 words                                                     |
+| [comment-sentence](comment-sentence.md)           | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                             |
+| [aside](aside.md)                                 | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                             |
+| [history](history.md)                             | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to")       |
+| [docstub](docstub.md)                             | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                       |
+| [restates](restates.md)                           | PRF6007 | economy     | off (house) | a one-line stylesheet comment that only names the rule or declaration it sits on |
+| [comment-budget](comment-budget.md)               | PRF6008 | economy     | off (house) | a stylesheet comment over the lines its place earns                              |
+| [block-budget](block-budget.md)                   | PRF6009 | economy     | off (house) | a rule block whose comments, summed, outrun its size                             |
+| [code-comment-budget](code-comment-budget.md)     | PRF6010 | economy     | deny        | a code comment block over the words or prose lines its place earns               |
+| [code-comment-sentence](code-comment-sentence.md) | PRF6011 | economy     | deny        | a code comment sentence over 25 words                                            |
+| [banner](banner.md)                               | PRF6012 | structure   | deny        | a banner line of dashes, equals signs or slashes in a code comment               |
+| [comment-history](comment-history.md)             | PRF6013 | economy     | deny        | a code comment that narrates a change rather than the code                       |
 
 ## Agent instructions
 

@@ -88,3 +88,145 @@ zones:
     # exclusion still hold this until a rule reads the zone.
     budgets:
       conformance: excluded
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    ast/ast.go: {banner: 2, code-comment-budget: 5, code-comment-sentence: 19, comment-caps: 11}
+    ast/walk.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    benchmarks/comparison/comparison.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 1}
+    benchmarks/comparison/comparison_test.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    benchmarks/comparison/engines_cgo.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    benchmarks/comparison/engines_pure.go: {code-comment-budget: 1}
+    benchmarks/comparison/luajit_cgo.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    benchmarks/comparison/umka_cgo.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 8, comment-first-person: 1}
+    benchmarks/upstream/programs/fiber.buzz: {code-comment-budget: 1, provenance: 1}
+    benchmarks/upstream/programs/mandelbrot.buzz: {code-comment-budget: 1, code-comment-sentence: 1}
+    benchmarks/upstream/programs/match.buzz: {code-comment-budget: 1, code-comment-sentence: 1}
+    benchmarks/upstream/upstream.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 3, doc-path: 1}
+    benchmarks/upstream/upstream_test.go: {code-comment-sentence: 1}
+    buzzgen/callback.go: {code-comment-sentence: 1}
+    buzzgen/callback_test.go: {code-comment-sentence: 1, comment-caps: 2}
+    buzzgen/config.go: {code-comment-sentence: 1}
+    buzzgen/mirror.go: {code-comment-budget: 10, code-comment-sentence: 16, comment-caps: 10, comment-history: 1}
+    buzzgen/mirror_test.go: {code-comment-sentence: 3, comment-caps: 1}
+    buzzgen/reach.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    bytecode_cache.go: {code-comment-budget: 6, code-comment-sentence: 6}
+    bytecode_cache_test.go: {code-comment-sentence: 1}
+    bytecode_test.go: {code-comment-budget: 39, code-comment-sentence: 48, comment-caps: 34, comment-history: 2}
+    checker.go: {banner: 2, code-comment-budget: 118, code-comment-sentence: 135, comment-caps: 95, comment-first-person: 2, comment-history: 1, provenance: 3}
+    checker_members.go: {code-comment-budget: 3, code-comment-sentence: 3}
+    checker_members_test.go: {code-comment-sentence: 1, provenance: 1}
+    checker_test.go: {banner: 5, code-comment-budget: 38, code-comment-sentence: 41, comment-caps: 16, comment-history: 6, provenance: 3}
+    checker_typenames.go: {code-comment-budget: 3, code-comment-sentence: 4}
+    cmd/buzz/main.go: {code-comment-budget: 5, code-comment-sentence: 3}
+    compiler.go: {code-comment-budget: 18, code-comment-sentence: 24, comment-caps: 7}
+    compiler_test.go: {code-comment-budget: 27, code-comment-sentence: 26, comment-caps: 11, comment-history: 1, provenance: 8}
+    conformance.go: {code-comment-sentence: 1}
+    conformance_test.go: {code-comment-budget: 11, code-comment-sentence: 16, comment-caps: 10, comment-first-person: 5, comment-history: 3, doc-path: 4}
+    coverage.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 4}
+    coverage_test.go: {code-comment-sentence: 1}
+    debug.go: {code-comment-budget: 1}
+    diagnostics.go: {code-comment-budget: 6, code-comment-sentence: 3, comment-caps: 9}
+    diagnostics_test.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 4, comment-history: 1}
+    ffi.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-history: 1}
+    ffi_test.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-first-person: 1}
+    fiber.go: {code-comment-budget: 5, code-comment-sentence: 4, comment-caps: 7}
+    fiber_test.go: {code-comment-budget: 5, code-comment-sentence: 6, comment-caps: 2}
+    jit_tagged.go: {code-comment-sentence: 1}
+    magusfile.buzz: {doc-path: 3}
+    module.go: {code-comment-budget: 1, code-comment-sentence: 5}
+    observer.go: {code-comment-budget: 3, code-comment-sentence: 3}
+    observer_test.go: {banner: 4, code-comment-sentence: 2, comment-first-person: 1}
+    parser.go: {code-comment-budget: 47, code-comment-sentence: 55, comment-caps: 17, comment-first-person: 1, comment-history: 4, provenance: 1}
+    parser_test.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 6, comment-history: 1}
+    pool.go: {banner: 1, code-comment-budget: 10, code-comment-sentence: 20, comment-caps: 11, comment-first-person: 1, comment-history: 1}
+    pool_test.go: {code-comment-budget: 9, code-comment-sentence: 14, comment-caps: 4}
+    profile.go: {code-comment-sentence: 1}
+    session.go: {code-comment-budget: 72, code-comment-sentence: 57, comment-caps: 13, comment-first-person: 1, comment-history: 1, provenance: 1}
+    session_test.go: {code-comment-budget: 64, code-comment-sentence: 60, comment-caps: 31, comment-history: 11}
+    std/buffer.go: {code-comment-budget: 14, code-comment-sentence: 15, comment-caps: 11}
+    std/buffer_test.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    std/core.go: {code-comment-budget: 4, code-comment-sentence: 2, comment-caps: 1}
+    std/crypto.buzz: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
+    std/crypto.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    std/cwd.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    std/cwd_test.go: {code-comment-sentence: 2}
+    std/ext_assert.buzz: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 2, comment-first-person: 1}
+    std/ext_assert.go: {code-comment-budget: 5, code-comment-sentence: 8, comment-caps: 2}
+    std/ext_assert_test.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1}
+    std/ext_suite.buzz: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
+    std/ffi.go: {code-comment-budget: 6, code-comment-sentence: 5, comment-caps: 3, comment-history: 1}
+    std/ffi_test.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    std/fs.go: {code-comment-budget: 2, code-comment-sentence: 1, comment-caps: 1, comment-history: 1}
+    std/gc.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
+    std/io.buzz: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 1}
+    std/io.go: {code-comment-budget: 3, code-comment-sentence: 1, comment-caps: 1}
+    std/math.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 3, comment-history: 2, provenance: 1}
+    std/os.buzz: {code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 6, comment-history: 1}
+    std/os.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    std/os_test.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    std/serialize.go: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 2, comment-first-person: 1}
+    std/serialize_test.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
+    std/std.go: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 3}
+    std/std_test.go: {code-comment-budget: 5, code-comment-sentence: 3, comment-caps: 4}
+    std/testing.buzz: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 5, comment-history: 2}
+    token/token.go: {code-comment-budget: 15, code-comment-sentence: 15, comment-caps: 9, comment-history: 1}
+    token/token_test.go: {code-comment-budget: 5, code-comment-sentence: 8, comment-caps: 8, comment-first-person: 1}
+    types/types.go: {code-comment-budget: 13, code-comment-sentence: 18, comment-caps: 10, comment-history: 1}
+    types/types_test.go: {code-comment-sentence: 1}
+    version.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 3}
+    vm/chunk.go: {code-comment-budget: 8, code-comment-sentence: 9, comment-history: 1}
+    vm/debug_types.go: {code-comment-budget: 1, comment-caps: 1}
+    vm/fault.go: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 3}
+    vm/fetch_nanbox.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/fetch_safe.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/fetch_unsafe.go: {code-comment-budget: 2, code-comment-sentence: 10, comment-caps: 1, comment-first-person: 1}
+    vm/ffi.go: {banner: 1, code-comment-budget: 14, code-comment-sentence: 16, comment-caps: 3, comment-first-person: 2}
+    vm/ffi_log.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 6}
+    vm/ffi_log_test.go: {code-comment-sentence: 2, comment-caps: 3, comment-history: 1}
+    vm/ffi_mem.go: {banner: 1, code-comment-budget: 10, code-comment-sentence: 15, comment-caps: 6, comment-first-person: 2, comment-history: 3}
+    vm/ffi_mem_test.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    vm/ffi_pin.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/ffi_pin_tinygo.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/ffi_purego.go: {banner: 1, code-comment-budget: 18, code-comment-sentence: 20, comment-caps: 5, comment-first-person: 4, comment-history: 1}
+    vm/ffi_zig.go: {code-comment-budget: 6, code-comment-sentence: 6, comment-caps: 1, comment-first-person: 1, comment-history: 1}
+    vm/fiber.go: {code-comment-budget: 4, code-comment-sentence: 8, comment-caps: 7, comment-history: 1}
+    vm/gc_collect.go: {code-comment-budget: 12, code-comment-sentence: 13, comment-caps: 4, comment-history: 2}
+    vm/gc_collect_test.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1, comment-history: 2}
+    vm/heap_stats.go: {code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 1}
+    vm/heap_stats_test.go: {code-comment-sentence: 4}
+    vm/heapattr.go: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 2}
+    vm/heapprofile.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
+    vm/heapstats_other.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/jit.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 4}
+    vm/jit_amd64.go: {code-comment-budget: 7, code-comment-sentence: 2, comment-caps: 4, comment-history: 1}
+    vm/jit_arm64.go: {code-comment-budget: 9, code-comment-sentence: 8, comment-caps: 14, comment-first-person: 1}
+    vm/jit_mem_other.go: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 1, comment-first-person: 2}
+    vm/jit_mem_windows.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 4, comment-first-person: 1}
+    vm/jit_shared.go: {code-comment-budget: 25, code-comment-sentence: 29, comment-caps: 20, comment-first-person: 3}
+    vm/jit_shared_test.go: {code-comment-budget: 14, code-comment-sentence: 25, comment-caps: 10, comment-history: 2}
+    vm/marshal.go: {banner: 2, code-comment-budget: 4, code-comment-sentence: 14, comment-caps: 4, comment-history: 2}
+    vm/marshal_test.go: {code-comment-budget: 7, code-comment-sentence: 8, comment-caps: 4}
+    vm/op_code.go: {code-comment-budget: 6, code-comment-sentence: 10, comment-caps: 3, comment-first-person: 1, comment-history: 1}
+    vm/operators.go: {code-comment-budget: 26, code-comment-sentence: 25, comment-caps: 19, comment-first-person: 1, comment-history: 2}
+    vm/operators_test.go: {code-comment-sentence: 2}
+    vm/owner.go: {code-comment-budget: 2, code-comment-sentence: 8}
+    vm/owner_race.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/pat.go: {code-comment-budget: 5, code-comment-sentence: 7, comment-caps: 4}
+    vm/pat_test.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/stdlib.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/stdlib_test.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1, comment-history: 2}
+    vm/typeval.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 8}
+    vm/value.go: {banner: 7, code-comment-budget: 28, code-comment-sentence: 36, comment-caps: 23, comment-history: 4}
+    vm/value_nanbox.go: {code-comment-budget: 7, code-comment-sentence: 8, comment-caps: 1, comment-first-person: 1}
+    vm/value_safe.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    vm/value_test.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
+    vm/value_unsafe.go: {code-comment-budget: 4, code-comment-sentence: 13, comment-caps: 1, comment-first-person: 3}
+    vm/vm.go: {banner: 2, code-comment-budget: 56, code-comment-sentence: 60, comment-caps: 19, comment-first-person: 3, comment-history: 6}
+    vm/vm_test.go: {code-comment-sentence: 1, comment-caps: 2}
+    wasm/main.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 2}
+    zdef_decl.go: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 1, comment-history: 1}
+    zdef_decl_test.go: {code-comment-budget: 1, code-comment-sentence: 2}

@@ -13,3 +13,67 @@ clikitmain:
     hint: "declare the command as a libs/clikit command.Command, each flag storing into its Target, and run it with command.Main"
   # file: count of hand-parsed reads (a flag defined or parsed through package flag, or os.Args)
   baseline: {}
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    cmd/train/main.go: {code-comment-budget: 1}
+    completion/fim/fim.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    completion/fim/spans.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    completion/serve/serve.go: {code-comment-sentence: 4}
+    dedup/lex.go: {code-comment-sentence: 1, comment-caps: 1}
+    dedup/minhash.go: {code-comment-sentence: 1, comment-history: 1}
+    dedup/pairs.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    embed/cmd/embed/bench.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    embed/cmd/embed/convert.go: {code-comment-budget: 2, code-comment-sentence: 1}
+    embed/cmd/embed/decontam.go: {code-comment-budget: 2, code-comment-sentence: 1, comment-caps: 1}
+    embed/cmd/embed/jsonl.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    embed/cmd/embed/main.go: {code-comment-budget: 5, code-comment-sentence: 8}
+    embed/cmd/embed/oov.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    embed/cmd/embed/teacher.go: {code-comment-sentence: 1, comment-caps: 2}
+    embed/cmd/embed/train.go: {code-comment-budget: 2, code-comment-sentence: 1}
+    embed/distill/contrastive.go: {code-comment-budget: 3, code-comment-sentence: 7, comment-caps: 1, comment-first-person: 1}
+    embed/distill/contrastive_test.go: {code-comment-sentence: 1}
+    embed/distill/pca.go: {comment-history: 1}
+    embed/distill/quantize.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    embed/distill/quantize_test.go: {code-comment-sentence: 1}
+    embed/distill/texts.go: {code-comment-sentence: 1}
+    embed/distill/texts_test.go: {provenance: 1}
+    embed/distill/train.go: {code-comment-budget: 3, code-comment-sentence: 7}
+    embed/distill/train_test.go: {code-comment-sentence: 6}
+    embed/distill/vocab.go: {code-comment-sentence: 2}
+    embed/distill/vocab_test.go: {code-comment-sentence: 2}
+    embed/holdout.buzz: {code-comment-budget: 1, code-comment-sentence: 3}
+    embed/pairs.buzz: {code-comment-sentence: 6}
+    embed/runlog.buzz: {code-comment-sentence: 1}
+    embed/sources.buzz: {code-comment-budget: 2, code-comment-sentence: 5}
+    embed/teacher/bpe.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1}
+    embed/teacher/bpe_test.go: {code-comment-sentence: 1, comment-caps: 1}
+    embed/teacher/nomicbert.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    embed/teacher/nomicbert_test.go: {code-comment-sentence: 1}
+    embed/teacher/shards.go: {code-comment-sentence: 1}
+    embed/teacher/word_piece.go: {code-comment-sentence: 2, comment-caps: 2}
+    embed/teacher/word_piece_test.go: {code-comment-sentence: 1, comment-caps: 1}
+    eval/check.go: {code-comment-sentence: 1}
+    eval/complete.go: {code-comment-sentence: 3}
+    eval/decontam.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    eval/latency.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    eval/passk.go: {code-comment-budget: 4, code-comment-sentence: 5}
+    eval/run.go: {code-comment-budget: 1, code-comment-sentence: 6, comment-history: 1}
+    eval/s3.go: {code-comment-sentence: 5, comment-caps: 2, comment-first-person: 1, comment-history: 1}
+    eval/score.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    eval/score_test.go: {code-comment-sentence: 1}
+    eval/scrub.go: {code-comment-sentence: 2}
+    eval/sets.go: {code-comment-sentence: 2}
+    eval/splice.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-caps: 1}
+    eval/split.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    eval/stats.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    magusfile.buzz: {code-comment-budget: 4, code-comment-sentence: 11, comment-caps: 8}
+    probe/bench.go: {comment-caps: 1}
+    probe/fertility.go: {code-comment-sentence: 1, comment-history: 1}
+    probe/latency.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    probe/pilot.go: {code-comment-sentence: 3, comment-history: 1}
+    probe/runs.go: {code-comment-sentence: 1}
+    split.buzz: {code-comment-budget: 3, code-comment-sentence: 4}

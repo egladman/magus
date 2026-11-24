@@ -3272,14 +3272,14 @@ fun commitWith(files: [Committed]) > GuardVerdict {
     return decideCommitComments(commit("trim the key"), read: committing(files));
 }
 
-test "a commit that adds a long comment is refused, quoting the sentence" {
+test "a commit that adds a long comment is refused, naming the sentence's length" {
     final long = "w ".repeat(25) + "w.";
     final after = "package p\n\nfunc f() \{\n\t// " + long + "\n\tx()\n}\n";
     final v = commitWith([Committed{ path = "internal/a.go", before = "", after = after }]);
     std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     verdict\assertVerdict(v.reason, label: "a long comment in a commit");
-    std\assert(v.reason.indexOf("internal/a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25: \"" + long + "\"") != null, message: v.reason);
-    std\assert(v.reason.indexOf("Limits on the text a write adds") != null, message: "states the limits");
+    std\assert(v.reason.indexOf("internal/a.go:4: Sentence runs 26 words against a budget of 25: split it. [code-comment-sentence]") != null, message: v.reason);
+    std\assert(v.reason.indexOf("A sentence holds 25 words.") != null, message: "states the limits");
 }
 
 test "a commit beside a long legacy comment passes" {
@@ -3291,9 +3291,9 @@ test "a commit beside a long legacy comment passes" {
 test "a commit of Buzz and TypeScript is graded, and another language is not" {
     final doc = "// " + "w ".repeat(30) + "w.\n";
     final buzz = commitWith([Committed{ path = "hack/a.buzz", before = "", after = doc + "export fun f() > void \{}\n" }]);
-    std\assert(buzz.reason.indexOf("hack/a.buzz:1: doc comment on an exported declaration") != null, message: buzz.reason);
+    std\assert(buzz.reason.indexOf("hack/a.buzz:1: Sentence runs 31 words against a budget of 25") != null, message: buzz.reason);
     final ts = commitWith([Committed{ path = "src/a.ts", before = "", after = doc + "export function f() \{}\n" }]);
-    std\assert(ts.reason.indexOf("src/a.ts:1: doc comment on an exported declaration") != null, message: ts.reason);
+    std\assert(ts.reason.indexOf("src/a.ts:1: Sentence runs 31 words against a budget of 25") != null, message: ts.reason);
     std\assert(commitWith([Committed{ path = "a.py", before = "", after = "# " + "w ".repeat(40) }]).decision == magus\GuardDecision.defer, message: "python");
 }
 

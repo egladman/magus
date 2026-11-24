@@ -259,6 +259,25 @@ func TestRunJudgesAStylesheetFromStdinWhenNoPathIsNamed(t *testing.T) {
 		".b { color: blue; }\n", rows(t, f))
 }
 
+func TestRunJudgesACodeCommentAtItsSourceLine(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "a.go", "package p\n\nfunc f() {\n\t// We retry here.\n\tx()\n}\n")
+
+	f := row(path, path+":4", "code-comment", proofread.RuleCommentFirstPerson, proofread.DecisionDeny,
+		"Drop \"We\": say what the code does and why, not who decided it.", "We")
+	f.Line = 4
+
+	assertArgs(t, []string{"code-comment", path}, "", rows(t, f))
+}
+
+func TestRunJudgesCodeFromStdinInTheNamedLanguage(t *testing.T) {
+	f := row("code-comment", "code-comment:3", "code-comment", proofread.RuleProvenance, proofread.DecisionDeny,
+		"Drop the date \"2026-09-04\": a comment states the code, and the log dates it.", "2026-09-04")
+	f.Line = 3
+
+	assertArgs(t, []string{"code-comment", "--stdin", "--language", "buzz"},
+		"namespace m;\n\n// Fixed on 2026-09-04.\nfun f() > void {}\n", rows(t, f))
+}
+
 func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
 	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleBuzzword, proofread.DecisionDeny,
 		"Replace 'delve' with what is actually so.", "delve").at(1, 8, 13))
@@ -507,6 +526,13 @@ func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 		{"a message with no file or --stdin", []string{"commit-message"},
 			"proofread: name a file, or pass --stdin to read the commit-message from stdin\n"},
 		{"--stdin beside a file", []string{"stylesheet", "--stdin", page}, "proofread: --stdin reads the stylesheet, so name no file\n"},
+		{"code on stdin with no language", []string{"code-comment", "--stdin"},
+			"proofread: code-comment --stdin needs --language go, ts or buzz\n"},
+		{"a loosened comment budget", []string{"code-comment", "--stdin", "--language", "go", "--budgets", `{"inline":{"words":31}}`},
+			"proofread: --budgets: comment budget inline.words is 31, over the strict 30: a project may only tighten it\n"},
+		{"a code file in no language", []string{"code-comment", page}, "proofread: " + page + " is not Go, TypeScript or Buzz, the languages code-comment reads\n"},
+		{"--language on another kind", []string{"reference", "-minimum", "0", "--language", "go", page},
+			"proofread: --language and --budgets judge code-comment, not reference\n"},
 		{"--stdin for a kind read from files", []string{"reference", "--stdin"}, "proofread: a reference is read from files, not stdin\n"},
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
 		{"explain with no rule", []string{"explain"}, "proofread: explain takes one rule name or code\n"},

@@ -1,0 +1,101 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    assets/mark.buzz: {code-comment-budget: 1, code-comment-sentence: 9}
+    budget/claim.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    budget/limiter.go: {code-comment-budget: 4, code-comment-sentence: 12, comment-caps: 1, comment-history: 2}
+    budget/limiter_test.go: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 2, comment-first-person: 4}
+    budget/machine.go: {code-comment-budget: 7, code-comment-sentence: 18, comment-caps: 7, comment-history: 2}
+    budget/machine_test.go: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 2}
+    budget/memory.go: {code-comment-budget: 1, code-comment-sentence: 4}
+    budget/seat.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1, comment-history: 1, provenance: 1}
+    budget/seat_test.go: {code-comment-sentence: 1, comment-caps: 1, comment-history: 1}
+    budget/watch.go: {code-comment-budget: 8, code-comment-sentence: 17, comment-caps: 5, comment-history: 2}
+    budget/watch_test.go: {code-comment-budget: 2, code-comment-sentence: 9, provenance: 1}
+    doc.go: {code-comment-budget: 1, code-comment-sentence: 4, doc-path: 2}
+    internal/apigroup/apigroup.go: {code-comment-budget: 1}
+    job/agent.go: {code-comment-sentence: 1}
+    job/attempt.go: {code-comment-budget: 1, code-comment-sentence: 1, doc-path: 1}
+    job/attest.go: {code-comment-budget: 1, code-comment-sentence: 4, provenance: 1}
+    job/authorize.go: {code-comment-budget: 10, code-comment-sentence: 22, comment-caps: 19, doc-path: 1}
+    job/authorize_test.go: {code-comment-sentence: 2}
+    job/basis.go: {code-comment-sentence: 2}
+    job/check.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    job/claim_grammar.go: {code-comment-budget: 2, code-comment-sentence: 10, comment-caps: 2}
+    job/config.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    job/declaration.go: {code-comment-budget: 2, code-comment-sentence: 10, comment-caps: 4}
+    job/digest_read.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    job/grade.go: {code-comment-budget: 1, code-comment-sentence: 8}
+    job/grant.go: {code-comment-sentence: 1}
+    job/job.go: {code-comment-budget: 11, code-comment-sentence: 42, comment-caps: 31, comment-history: 2, doc-path: 2}
+    job/job_test.go: {code-comment-budget: 2, code-comment-sentence: 12, comment-caps: 5}
+    job/lease_context.go: {code-comment-budget: 1, code-comment-sentence: 3}
+    job/lock.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    job/lock_test.go: {code-comment-sentence: 1}
+    job/mutate.go: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 1, comment-history: 3}
+    job/narrow.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 3}
+    job/origin.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    job/origin_test.go: {code-comment-sentence: 2}
+    job/overlap.go: {code-comment-budget: 9, code-comment-sentence: 24, comment-caps: 7}
+    job/postcondition.go: {code-comment-budget: 8, code-comment-sentence: 13, comment-caps: 9}
+    job/problem.go: {comment-caps: 1}
+    job/put.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    job/record.go: {code-comment-sentence: 2, doc-path: 2}
+    job/report.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    job/store.go: {code-comment-budget: 18, code-comment-sentence: 34, comment-caps: 22, comment-history: 3}
+    job/store_test.go: {code-comment-sentence: 2}
+    job/store_unix_test.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-caps: 4}
+    job/store_version.go: {code-comment-budget: 2, code-comment-sentence: 8}
+    job/store_version_test.go: {code-comment-sentence: 1}
+    job/witness.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    journal/call.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    journal/record.go: {code-comment-budget: 1}
+    journal/records.go: {code-comment-sentence: 1, comment-history: 1}
+    journal/stream/event.go: {code-comment-budget: 7, code-comment-sentence: 13, comment-caps: 7, doc-path: 2}
+    journal/stream/event_test.go: {code-comment-sentence: 1, comment-caps: 2}
+    journal/stream/follow.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 2}
+    journal/stream/follow_test.go: {code-comment-sentence: 1, comment-caps: 1}
+    journal/stream/writer.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    journal/stream/writer_test.go: {code-comment-sentence: 1}
+    magusfile.buzz: {doc-path: 4}
+    options.go: {code-comment-sentence: 1}
+    safety_scissors.go: {code-comment-budget: 3, code-comment-sentence: 5}
+    sandbox/errors.go: {code-comment-sentence: 1}
+    sandbox/filesystem/expand.go: {code-comment-budget: 1}
+    sandbox/filesystem/filesystem.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
+    sandbox/filesystem/filesystem_test.go: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 2}
+    sandbox/landlock_linux.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 5}
+    sandbox/landlock_linux_test.go: {code-comment-sentence: 3, comment-caps: 4}
+    sandbox/launch.go: {code-comment-budget: 2, code-comment-sentence: 5}
+    sandbox/launch_darwin.go: {code-comment-sentence: 1, comment-caps: 1}
+    sandbox/launch_linux.go: {code-comment-budget: 3, code-comment-sentence: 1}
+    sandbox/launch_linux_test.go: {code-comment-sentence: 3, comment-caps: 1}
+    sandbox/launch_other.go: {code-comment-sentence: 1}
+    sandbox/launch_windows.go: {code-comment-sentence: 1}
+    sandbox/lease.go: {code-comment-budget: 5, code-comment-sentence: 10, comment-caps: 3}
+    sandbox/lease_test.go: {code-comment-sentence: 1}
+    sandbox/policy.go: {code-comment-budget: 1, code-comment-sentence: 5}
+    sandbox/seatbelt.go: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 2}
+    sandbox/seatbelt_test.go: {code-comment-sentence: 1}
+    session/config.go: {comment-history: 2}
+    session/fold.go: {code-comment-budget: 3, code-comment-sentence: 9, comment-caps: 1}
+    session/fold_test.go: {code-comment-sentence: 4, comment-history: 1}
+    session/id.go: {code-comment-budget: 1}
+    session/lock.go: {code-comment-budget: 2, code-comment-sentence: 2}
+    session/rotate.go: {code-comment-budget: 10, code-comment-sentence: 20, comment-caps: 2, comment-history: 1}
+    session/rotate_test.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-caps: 2, comment-history: 2}
+    session/session.go: {code-comment-budget: 20, code-comment-sentence: 41, comment-caps: 23}
+    session/session_test.go: {code-comment-sentence: 6, comment-caps: 5}
+    step/step.go: {code-comment-budget: 1, code-comment-sentence: 1, doc-path: 1}
+    tier/assignment.go: {code-comment-sentence: 1}
+    tier/enums.go: {code-comment-sentence: 1}
+    tier/tier.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    verdict/judgment.go: {code-comment-sentence: 2}
+    verdict/judgment_test.go: {code-comment-sentence: 1}
+    verdict/verdict.go: {code-comment-budget: 2, code-comment-sentence: 2}

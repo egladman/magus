@@ -1,0 +1,286 @@
+// code-comments-follow-proofread-rules holds Go, TypeScript and Buzz comments
+// to `proofread code-comment`. A project's analyzers.yaml may tighten its
+// budgets under proofread.settings and counts what each file still holds
+// under proofread.baseline.
+//
+// Tier 2, measured shape: a count may only fall. A file over its count fails;
+// one under it fails until a person lowers it.
+namespace codecommentsfollowproofreadrules;
+
+import "assert";
+import "fs";
+import "path";
+import "proc";
+import "result";
+import "std";
+import "encoding/json";
+import "encoding/yaml";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/policy/proofread" as decisions;
+import "libs/proofread/proofread" as proofread;
+
+final POLICY = "analyzers.yaml";
+final SECTION = "proofread";
+final KIND = "code-comment";
+
+final COUNT_FIX = "Cut the comment to what the code cannot show; the proofread baseline in its "
+    + "project's analyzers.yaml may only fall.";
+
+// Baseline is one project's proofread key: settings as proofread's --budgets
+// JSON, "" for none, and each file's counts by rule, keyed by workspace path.
+export object Baseline {
+    budgets: str = "",
+    counts: {str: {str: int}},
+    file: str = POLICY,
+    text: str = "",
+}
+
+export fun reads() > [str] {
+    return ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.buzz", POLICY, "**/" + POLICY,
+        "libs/proofread/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
+        "libs/proofread/proofread.buzz", "libs/proofread/internal/calibrate/cases/*.txtar"];
+}
+
+// judged reports whether the comments of p are judged: hand-written source,
+// not a fixture under testdata/.
+export fun judged(p: str) > bool {
+    if (("/" + p).indexOf("/testdata/") != null) {
+        return false;
+    }
+    return p.endsWith(".go") or p.endsWith(".ts") or p.endsWith(".tsx") or p.endsWith(".buzz");
+}
+
+// owner is the project holding p: the deepest project root above it, or ".".
+export fun owner(p: str, projects: [str]) > str {
+    var best = ".";
+    foreach (pr in projects) {
+        if (pr != "." and p.startsWith(pr + "/") and (best == "." or pr.len() > best.len())) {
+            best = pr;
+        }
+    }
+    return best;
+}
+
+// policyFile is the analyzers.yaml at project's root.
+export fun policyFile(project: str) > str {
+    return if (project == ".") POLICY else project + "/" + POLICY;
+}
+
+// baseline reads the proofread key of project's analyzers.yaml, as yaml\parse
+// answers it from text. Its paths are relative to project.
+export fun baseline(section: {str: any}, text: str, project: str) > Baseline {
+    final prefix = if (project == ".") "" else project + "/";
+    final counts = mut {<str: {str: int}>};
+    final rows: {str: any} = section["baseline"] ?? {<str: any>};
+    foreach (file, byRule in rows) {
+        final row = mut {<str: int>};
+        final rules: {str: any} = byRule;
+        foreach (rule, n in rules) {
+            row[rule] = std\toInt(n);
+        }
+        counts[prefix + file] = row;
+    }
+    final settings: {str: any} = section["settings"] ?? {<str: any>};
+    final budgets = if (settings[KIND] != null) (json\stringify(settings[KIND]) catch "") else "";
+    return Baseline{ budgets = budgets, counts = counts, file = policyFile(project), text = text };
+}
+
+// Judged is one deny finding proofread reported, at its workspace path.
+export object Judged {
+    path: str,
+    rule: str,
+    line: int,
+    message: str,
+    url: str = "",
+}
+
+// compare holds the findings of each file to b's counts. A file past its
+// count fails on each finding past it; one under it fails at its row. A
+// narrow run judges some files, so a row for a file it left out is judged
+// only when exists says the file is gone.
+export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: fun (p: str) > bool) > [Finding] {
+    final seen = mut {<str: {str: int}>};
+    final acc = mut [<Finding>];
+    foreach (f in found) {
+        final row = seen[f.path] ?? mut {<str: int>};
+        final n = (row[f.rule] ?? 0) + 1;
+        final had = mut {<str: int>};
+        foreach (k, v in row) {
+            had[k] = v;
+        }
+        had[f.rule] = n;
+        seen[f.path] = had;
+        final allowed = (b.counts[f.path] ?? {<str: int>})[f.rule] ?? 0;
+        if (n > allowed) {
+            acc.append(Finding{ path = f.path, line = f.line, message = "{f.message} [{f.rule}]", url = f.url,
+                hint = COUNT_FIX });
+        }
+    }
+    foreach (file in support\sorted(b.counts.keys())) {
+        final rules = b.counts[file]!;
+        if (!(present[file] ?? false) and exists(file)) {
+            continue;
+        }
+        foreach (rule in support\sorted(rules.keys())) {
+            final want = rules[rule]!;
+            final got = (seen[file] ?? {<str: int>})[rule] ?? 0;
+            if (got >= want) {
+                continue;
+            }
+            final line = support\findLine(b.text, needle: relative(file, file: b.file) + ":");
+            final why = if (present[file] ?? false) "holds {got}" else "is gone";
+            acc.append(Finding{ path = b.file, line = line,
+                message = "the proofread baseline allows {want} {rule} findings in {file}, which {why}",
+                hint = "A person lowers the count to {got} in {b.file}; it never rises." });
+        }
+    }
+    return acc;
+}
+
+// relative is p relative to the directory holding the policy file.
+fun relative(p: str, file: str) > str {
+    final dir = if (file == POLICY) "" else file.sub(0, len: file.len() - POLICY.len());
+    return if (dir != "" and p.startsWith(dir)) p.sub(dir.len()) else p;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final listed = support\projects();
+    if (listed.error != null) {
+        throw listed.error!.message;
+    }
+    final projects = mut [<str>];
+    foreach (p in listed.value!.projects) {
+        projects.append(p.path);
+    }
+    final baselines = mut {<str: Baseline>};
+    final byProject = mut {<str: mut [str]>};
+    final present = mut {<str: bool>};
+    var base = ".";
+    foreach (f in files) {
+        if (f.base != "") {
+            base = f.base;
+        }
+        final project = owner(f.value, projects: projects);
+        if (f.value == policyFile(project)) {
+            final read = support\read(f);
+            if (read.error != null) {
+                throw read.error!.message;
+            }
+            final doc: {str: any} = yaml\parse(read.value!) ?? {<str: any>};
+            baselines[project] = baseline(doc[SECTION] ?? {<str: any>}, text: read.value!, project: project);
+        } else if (judged(f.value)) {
+            present[f.value] = true;
+            if (byProject[project] == null) {
+                byProject[project] = mut [<str>];
+            }
+            byProject[project]!.append(f.value);
+        }
+    }
+    final acc = mut [<Finding>];
+    final names = mut {<str: bool>};
+    foreach (project in byProject.keys() + baselines.keys()) {
+        names[project] = true;
+    }
+    foreach (project in support\sorted(names.keys())) {
+        final b = baselines[project] ?? Baseline{ counts = {<str: {str: int}>}, file = policyFile(project) };
+        final judgedRun = judge(byProject[project] ?? [<str>], base: base, budgets: b.budgets);
+        if (judgedRun.error != null) {
+            acc.append(Finding{ path = b.file, message = "proofread did not judge {project}: {judgedRun.error!.message}",
+                hint = "Run `{proofread\build}`, then retry." });
+            continue;
+        }
+        final onDisk = fun (p: str) > bool => fs\exists("{base}/{p}") catch false;
+        foreach (f in compare(judgedRun.value!, b: b, present: present, exists: onDisk)) {
+            acc.append(f);
+        }
+    }
+    return acc;
+}
+
+// judge runs proofread code-comment over files from base and returns its
+// deny findings.
+fun judge(files: [str], base: str, budgets: str) > result\Result::<[Judged]> {
+    if (files.len() == 0) {
+        return result\ok::<[Judged]>([<Judged>]);
+    }
+    try {
+        final stale = proofread\whyStale("{base}/{proofread\home}");
+        if (stale != "") {
+            return result\fail::<[Judged]>(stale);
+        }
+        final args = mut [KIND, "--decisions", decisions\DECISIONS_FILE];
+        if (budgets != "") {
+            args.append("--budgets");
+            args.append(budgets);
+        }
+        foreach (rel in support\sorted(files)) {
+            args.append(rel);
+        }
+        final bin = path\abs("{base}/{proofread\home}/{proofread\binary}");
+        final run = proc\exec(bin, args: args, dir: base, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (run.code != 0 and run.code != 1) {
+            return result\fail::<[Judged]>("exited {run.code}: " + run.stderr.trim());
+        }
+        final rows: [any] = json\parse(run.stdout);
+        final acc = mut [<Judged>];
+        foreach (r in rows) {
+            if ((r["decision"] ?? "") != "deny") {
+                continue;
+            }
+            final node: str = r["node"] ?? "";
+            final source: str = r["source"] ?? "";
+            final line = if (source.len() > node.len()) std\parseInt(source.sub(node.len() + 1)) ?? 0 else 0;
+            acc.append(Judged{ path = node, rule = r["rule"] ?? "", line = line, message = r["message"] ?? "",
+                url = r["url"] ?? "" });
+        }
+        return result\ok::<[Judged]>(acc);
+    } catch (err: any) {
+        return result\caught::<[Judged]>(err, doing: "run proofread code-comment");
+    }
+}
+
+fun said(path: str, rule: str, line: int) > Judged {
+    return Judged{ path = path, rule = rule, line = line, message = "m" };
+}
+
+test "a file within its counts passes, one past them fails on each finding past" {
+    final b = Baseline{ counts = {"a.go": {"banner": 1}} };
+    final found = [said("a.go", rule: "banner", line: 3), said("a.go", rule: "banner", line: 9), said("b.go", rule: "provenance", line: 2)];
+    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => true);
+    assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
+    assert\equal(got[0].line, want: 9, message: "the second banner is past the count");
+    assert\equal(got[1].path, want: "b.go", message: "a file with no row has a count of 0");
+}
+
+test "a count above what the file holds, or a gone file, fails at its row" {
+    final text = "proofread:\n  baseline:\n    a.go: \{banner: 2}\n    gone.go: \{banner: 1}\n";
+    final b = Baseline{ counts = {"a.go": {"banner": 2}, "gone.go": {"banner": 1}}, text = text };
+    final got = compare([said("a.go", rule: "banner", line: 3)], b: b, present: {"a.go": true}, exists: fun (p: str) > bool => p != "gone.go");
+    assert\equal(support\messages(got), want: [
+        "the proofread baseline allows 2 banner findings in a.go, which holds 1",
+        "the proofread baseline allows 1 banner findings in gone.go, which is gone",
+    ], message: "both rows");
+    assert\equal(got[0].line, want: 3, message: "the row's line");
+}
+
+test "a row for a file a narrow run left out is not judged" {
+    final b = Baseline{ counts = {"a.go": {"banner": 2}} };
+    final got = compare([<Judged>], b: b, present: {<str: bool>}, exists: fun (p: str) > bool => true);
+    assert\equal(got.len(), want: 0, message: "{support\messages(got)}");
+}
+
+test "a nested project's baseline reads its paths from its own root" {
+    final doc: {str: any} = yaml\parse("proofread:\n  settings:\n    code-comment: \{sentence: 20}\n  baseline:\n    x.go: \{banner: 1}\n");
+    final b = baseline(doc["proofread"], text: "", project: "libs/proofread");
+    assert\equal(b.counts["libs/proofread/x.go"]?["banner"] ?? 0, want: 1, message: "prefixed");
+    assert\equal(b.budgets, want: `{"sentence":20}`, message: "settings pass on as budgets");
+    assert\equal(b.file, want: "libs/proofread/analyzers.yaml", message: "its own file");
+}
+
+test "only hand-written source is judged" {
+    assert\equal(judged("internal/a.go"), want: true, message: "go");
+    assert\equal(judged("web/b.tsx"), want: true, message: "tsx");
+    assert\equal(judged("libs/x/testdata/c.go"), want: false, message: "a fixture");
+    assert\equal(judged("README.md"), want: false, message: "prose");
+}

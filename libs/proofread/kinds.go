@@ -24,6 +24,9 @@ const (
 	// FormatStylesheet reads a stylesheet and judges its comments beside the
 	// code each sits on.
 	FormatStylesheet Format = "stylesheet"
+	// FormatCode reads Go, TypeScript or Buzz source and judges each comment
+	// block by the place it sits.
+	FormatCode Format = "code"
 	// FormatTemplate renders a skill's text/template body into its short and
 	// full forms and judges both.
 	FormatTemplate Format = "template"
@@ -34,7 +37,7 @@ const (
 
 // formats is every format, in the order the docs list them.
 var formats = []Format{
-	FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatTemplate, FormatMessage,
+	FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatCode, FormatTemplate, FormatMessage,
 }
 
 // Reader is how a kind's text becomes the input its rules read. Every field
@@ -413,6 +416,15 @@ var builtinKinds = []KindSpec{
 			advise(RuleFiller, RuleReplyVoice, RuleHedge),
 			house(RuleCommentBlock, RuleCommentSentence, RuleTerms, RuleAside, RuleHistory, RuleTense, RuleAttribution,
 				RuleRestates, RuleCommentBudget, RuleBlockBudget, RuleBannedWord),
+		),
+	},
+	{
+		Name:   KindCodeComment,
+		Reader: Reader{Format: FormatCode},
+		Rules: rules(
+			deny(RuleSuppressionUnused, RuleCodeCommentBudget, RuleCodeCommentSentence, RuleBanner, RuleCommentHistory,
+				RuleProvenance, RuleDocPath, RuleCommentCaps, RuleCommentFirstPerson),
+			house(RuleRestates),
 		),
 	},
 }

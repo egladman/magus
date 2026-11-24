@@ -70,7 +70,7 @@ func readKind(text string, kind Kind) []paragraph {
 		_, prose := readLines(raw)
 
 		return paragraphs(prose, keep)
-	case FormatTemplate, FormatStylesheet:
+	case FormatTemplate, FormatStylesheet, FormatCode:
 		r = markdownPage
 	}
 

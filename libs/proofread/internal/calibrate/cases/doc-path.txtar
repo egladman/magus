@@ -1,0 +1,27 @@
+A code comment citing docs/design, docs/decisions, an ADR number or a Markdown file.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// See docs/design/principles/no-silent-defaults.md for why this fails loudly.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Per ADR 0055 the error is a value.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// An absent capability fails loudly: an empty answer would read as success.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+// Open returns the store; see [Store.Close] for cleanup.
+func Open() *Store { return nil }

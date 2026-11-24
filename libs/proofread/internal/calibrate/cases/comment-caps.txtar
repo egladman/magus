@@ -1,0 +1,22 @@
+An ordinary word in capitals for emphasis in a code comment.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// This must NEVER run before the lock is held.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Do NOT reorder these calls.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// The lock must be held first; JSON output reads $HOME and STDOUT.
+	x()
+}

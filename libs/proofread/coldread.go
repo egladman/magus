@@ -260,7 +260,7 @@ func history(in input) []Finding {
 
 	patterns := historyPatterns
 	if in.spec.Reader.Format == FormatStylesheet {
-		patterns = append(slices.Clone(patterns), cssHistoryPatterns...)
+		patterns = append(slices.Clone(patterns), commentHistoryPatterns...)
 	}
 
 	for _, ln := range in.prose {

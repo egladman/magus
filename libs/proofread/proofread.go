@@ -170,6 +170,9 @@ const (
 	// the doc comment rules and to some of the written ones, since a comment is
 	// both a doc on the code beside it and prose a maintainer reads cold.
 	KindStylesheet Kind = "stylesheet"
+	// KindCodeComment is Go, TypeScript or Buzz source whose comments are
+	// judged, each by the budget its place earns and by the wording rules.
+	KindCodeComment Kind = "code-comment"
 )
 
 // compat(until: no caller, decisions table, round record or case file names
@@ -304,7 +307,7 @@ func isHouse(r Rule) bool {
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
+var checks = slices.Concat(coreChecks, cssChecks, codeCommentChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, uniformChecks,
 	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks, nextChecks)
 
@@ -480,6 +483,10 @@ type options struct {
 	// kinds are the kinds [WithKinds] declared, which [JudgeText] resolves
 	// after the built-ins.
 	kinds []KindSpec
+	// language is the source language [KindCodeComment] reads, and budgets
+	// the budgets it holds comments to, nil for [StrictCommentBudgets].
+	language SourceLanguage
+	budgets  *CommentBudgets
 }
 
 // WithOnly judges by the named rules alone. A named rule that does not apply
@@ -544,6 +551,9 @@ type input struct {
 	// css is the comment [judgeStylesheet] is judging, set for
 	// [KindStylesheet] alone.
 	css *cssComment
+	// code is the comment [judgeCode] is judging, set for [KindCodeComment]
+	// alone.
+	code *codeComment
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty.

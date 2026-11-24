@@ -3123,6 +3123,13 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     // each project's own analyzers.yaml: a root glob stops at a nested project.
                     "console/analyzers.yaml", "libs/diagram/analyzers.yaml", "libs/gopherbuzz/analyzers.yaml",
                     "libs/proofread/analyzers.yaml", "libs/ssg/analyzers.yaml", "libs/train/analyzers.yaml",
+                     "docs/analyzers.yaml", "docs/guides/integrations/agents/analyzers.yaml", "proto/analyzers.yaml",
+                     "libs/apiversion/analyzers.yaml", "libs/clikit/analyzers.yaml", "libs/codec/analyzers.yaml",
+                     "libs/conventions/analyzers.yaml", "libs/diagnostics/analyzers.yaml", "libs/embed/analyzers.yaml",
+                     "libs/kustomize/analyzers.yaml", "libs/proofread/train/analyzers.yaml", "libs/safetyscissors/analyzers.yaml",
+                     "libs/scipbuzz/analyzers.yaml", "libs/secrets/analyzers.yaml", "libs/termkit/analyzers.yaml",
+                     "libs/testpairing/analyzers.yaml", "libs/text/analyzers.yaml", "libs/textsearch/analyzers.yaml",
+                     "libs/xdg/analyzers.yaml",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", ".gitignore",
                     "types/diagnostic.go",
