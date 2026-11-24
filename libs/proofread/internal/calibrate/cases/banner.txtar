@@ -1,0 +1,20 @@
+A banner line of dashes, equals signs or slashes in a code comment.
+-- hit/code-comment whole lang=go --
+package p
+
+// ---------- helpers ----------
+func f() {}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	//==========
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// Keys are sorted; the bsearch below depends on it.
+	x()
+}

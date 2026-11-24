@@ -1,0 +1,36 @@
+A date, a pull request or issue number, a commit hash or an incident in a code comment.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Added 2025-03-14 to stop the stall.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Works around the hang from PR #412.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// We hit an outage when the lock was dropped, hence the retry.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// The retry waits 250ms: a shorter wait measured as a busy loop.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// TODO: drop the retry once the store returns a typed error.
+	x()
+}

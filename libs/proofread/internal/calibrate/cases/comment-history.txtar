@@ -1,0 +1,22 @@
+A code comment that narrates a change rather than the code.
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Now uses a map instead of a slice.
+	x()
+}
+-- hit/code-comment whole lang=go --
+package p
+
+func f() {
+	// Previously this retried forever; it was changed to give up.
+	x()
+}
+-- pass/code-comment whole lang=go --
+package p
+
+func f() {
+	// A map keeps the lookup constant time; the slice scan dominated at 10k keys.
+	x()
+}
