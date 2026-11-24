@@ -1,7 +1,6 @@
 package job
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -60,14 +59,12 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 	// Read before the lock, since it runs the VCS. The row is read again there.
 	var row job.Job
-	var rows []job.Job
 	if f, err := s.Read(ctx); err == nil {
-		rows = f.Jobs
 		if i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			row = f.Jobs[i]
 		}
 	}
-	facts, err := s.readExecFacts(ctx, id, row, rows)
+	facts, err := s.readExecFacts(ctx, id, row)
 	if err != nil {
 		return job.Job{}, err
 	}
@@ -116,9 +113,8 @@ type execFacts struct {
 	full  map[string]string
 }
 
-// readExecFacts reads them for row among rows; row is zero when nothing
-// declared id.
-func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job, rows []job.Job) (execFacts, error) {
+// readExecFacts reads them for row, the zero row when nothing declared id.
+func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (execFacts, error) {
 	base, err := s.CheckoutToken(ctx)
 	if err != nil {
 		return execFacts{}, fmt.Errorf("the checkout at %s reports no revision, so there is no base to record for %s,"+
@@ -126,7 +122,7 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job, rows 
 	}
 	return execFacts{
 		base:  base,
-		moved: s.untakenElsewhere(ctx, row, rows),
+		moved: s.untakenElsewhere(ctx, row),
 		full:  s.fullRevisions(ctx, row.Checkpoint, base),
 	}, nil
 }
@@ -173,17 +169,17 @@ func execRefusal(row *job.Job, here string, facts execFacts) error {
 // The guard asks before it binds a caller, so it reads that checkout as
 // Exec does.
 func (s *Store) ExecRefusal(ctx context.Context, row job.Job, here string) error {
-	f, err := s.Read(ctx)
-	if err != nil {
-		return err
-	}
 	config := s.storeConfig
 	config.root = here
-	facts, err := (&Store{storeConfig: config}).open().readExecFacts(ctx, row.ID, row, f.Jobs)
+	facts, err := (&Store{storeConfig: config}).open().readExecFacts(ctx, row.ID, row)
 	if err != nil {
 		return err
 	}
 	if err := execRefusal(&row, here, facts); err != nil {
+		return err
+	}
+	f, err := s.Read(ctx)
+	if err != nil {
 		return err
 	}
 	return checkoutWriterConflict(row, here, f.Jobs)
@@ -214,7 +210,7 @@ func checkoutWriterConflict(row job.Job, here string, rows []job.Job) error {
 // untakenElsewhere is this checkout adopted for row, which nobody took: a
 // worker the host isolated here binds the job here. Row's fork adopted
 // another checkout, or row owns none (see [hostIsolated]).
-func (s *Store) untakenElsewhere(ctx context.Context, row job.Job, rows []job.Job) *job.Worktree {
+func (s *Store) untakenElsewhere(ctx context.Context, row job.Job) *job.Worktree {
 	if s.root == "" || row.CheckoutRoot != "" || row.Worktree.Standing() && row.Worktree.Made {
 		return nil
 	}
@@ -222,7 +218,7 @@ func (s *Store) untakenElsewhere(ctx context.Context, row job.Job, rows []job.Jo
 	if err != nil {
 		return nil
 	}
-	if row.Worktree.Standing() && samePath(here, row.Worktree.Root) || !row.Worktree.Standing() && !hostIsolated(row, here, rows) {
+	if row.Worktree.Standing() && samePath(here, row.Worktree.Root) || !row.Worktree.Standing() && !hostIsolated(row, here) {
 		return nil
 	}
 	wt, err := s.adoptCheckout(ctx, row.ID, here)
@@ -232,31 +228,11 @@ func (s *Store) untakenElsewhere(ctx context.Context, row job.Job, rows []job.Jo
 	return &wt
 }
 
-// hostIsolated reports whether writing row runs in a checkout of its own
-// at here: no live writer is bound here and one is bound elsewhere. A
-// checkout no writer holds yet may be the spawner's own, which no row adopts.
-func hostIsolated(row job.Job, here string, rows []job.Job) bool {
-	if len(row.Paths.Write) == 0 {
-		return false
-	}
-	elsewhere := false
-	for _, peer := range rows {
-		if peer.ID == row.ID || len(peer.Paths.Write) == 0 || !peer.State.Live() {
-			continue
-		}
-		bound := peer.CheckoutRoot
-		if peer.Worktree.Standing() {
-			bound = cmp.Or(bound, peer.Worktree.Root)
-		}
-		switch {
-		case bound == "":
-		case samePath(bound, here):
-			return false
-		default:
-			elsewhere = true
-		}
-	}
-	return elsewhere
+// hostIsolated reports whether writing row is taken at here, a checkout
+// other than the one its fork ran in. The forker's own checkout is never
+// adopted; a row whose fork recorded none adopts nothing.
+func hostIsolated(row job.Job, here string) bool {
+	return len(row.Paths.Write) > 0 && row.ForkedIn != "" && !samePath(row.ForkedIn, here)
 }
 
 // fullRevisions maps the revision half of each token to the full revision this checkout's

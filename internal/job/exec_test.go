@@ -94,17 +94,24 @@ func (s *ExecRefusalSuite) TestTwoWritersCannotOwnTheSameHead() {
 	s.NoError(took)
 }
 
+// writers are a writer running where the fork ran, in landing, and a writer
+// forked there that nobody took.
 func (s *ExecRefusalSuite) writers() (peer, row job.Job) {
-	peer = job.Job{ID: "compile", State: job.StateRunning, Checkpoint: s.checkpoint, CheckoutRoot: s.landing, Paths: job.Paths{Write: []string{"compiler.go"}}}
-	row = job.Job{ID: "w1", State: job.StateDeclared, Checkpoint: s.checkpoint, Paths: job.Paths{Write: []string{"bench.go"}}}
+	peer = job.Job{ID: "compile", State: job.StateRunning, Checkpoint: s.checkpoint, CheckoutRoot: s.landing, ForkedIn: s.landing, Paths: job.Paths{Write: []string{"compiler.go"}}}
+	row = job.Job{ID: "w1", State: job.StateDeclared, Checkpoint: s.checkpoint, ForkedIn: s.landing, Paths: job.Paths{Write: []string{"bench.go"}}}
 	return peer, row
 }
 
-func (s *ExecRefusalSuite) TestExecAdoptsAHostWorktree() {
-	peer, row := s.writers()
+func (s *ExecRefusalSuite) execIn(root, id string) (job.Job, error) {
+	return NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: root}).Exec(s.T().Context(), id)
+}
+
+// One writer is the common case: no other row is bound anywhere.
+func (s *ExecRefusalSuite) TestExecAdoptsAHostWorktreeForTheFirstWriter() {
+	_, row := s.writers()
 	host := s.linked("host", s.checkpoint)
-	plant(s.T(), s.store, peer, row)
-	took, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: host}).Exec(s.T().Context(), row.ID)
+	plant(s.T(), s.store, row)
+	took, err := s.execIn(host, row.ID)
 	s.Require().NoError(err)
 	s.Require().True(took.Worktree.Standing())
 	s.Equal(host, took.Worktree.Root)
@@ -135,15 +142,25 @@ func (s *ExecRefusalSuite) TestASecondWriterInAnAdoptedCheckoutPasses() {
 	s.ErrorIs(took, ErrHeldElsewhere)
 }
 
-func (s *ExecRefusalSuite) TestALinkedCheckoutNoOtherWriterHoldsIsNotAdopted() {
+func (s *ExecRefusalSuite) TestTheForkersOwnCheckoutIsNotAdopted() {
 	_, row := s.writers()
+	plant(s.T(), s.store, row)
+	took, err := s.execIn(s.landing, row.ID)
+	s.Require().NoError(err)
+	s.False(took.Worktree.Standing(), "a worker the host did not isolate works in the spawner's checkout")
+	s.Equal(s.landing, took.CheckoutRoot)
+	s.NotContains(TakeAdvice(s.T().Context(), took, types.VCSOptions{}), "adopted")
+}
+
+func (s *ExecRefusalSuite) TestARowWhoseForkRecordedNoCheckoutIsNotAdopted() {
+	_, row := s.writers()
+	row.ForkedIn = ""
 	host := s.linked("host", s.checkpoint)
 	plant(s.T(), s.store, row)
-	took, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: host}).Exec(s.T().Context(), row.ID)
+	took, err := s.execIn(host, row.ID)
 	s.Require().NoError(err)
-	s.False(took.Worktree.Standing(), "it may be the spawner's own checkout")
+	s.False(took.Worktree.Standing())
 	s.Equal(host, took.CheckoutRoot)
-	s.NotContains(TakeAdvice(s.T().Context(), took, types.VCSOptions{}), "adopted")
 }
 
 func (s *ExecRefusalSuite) TestACheckoutNotAtTheCheckpointIsRefusedByBoth() {
