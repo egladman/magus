@@ -1,0 +1,44 @@
+# This project's analyzer policy, typed by a person. An analyzer reads it for
+# this project's files only, and paths are relative to this directory; the
+# root analyzers.yaml describes the shape.
+
+proofread:
+  # file: {rule: count} of the code-comment deny findings a file still holds,
+  # which hack/lint/code-comments-follow-proofread-rules.buzz holds it to. A
+  # count may only fall.
+  baseline:
+    claude-code/mod/hooks/cost.ts: {code-comment-budget: 2, code-comment-sentence: 3}
+    claude-code/mod/hooks/json-view.tsx: {code-comment-sentence: 1}
+    claude-code/mod/hooks/json.ts: {code-comment-budget: 3, code-comment-sentence: 3}
+    claude-code/mod/hooks/jsonl-view.tsx: {code-comment-sentence: 1}
+    claude-code/mod/hooks/jsonl.ts: {code-comment-budget: 1}
+    claude-code/mod/hooks/register.tsx: {banner: 5, code-comment-budget: 4, code-comment-sentence: 2}
+    claude-code/mod/hooks/tree.ts: {code-comment-sentence: 1}
+    claude-code/mod/tests/models.ts: {provenance: 1}
+    claude-code/mod/types/gen/claude-code-testing.d.ts: {code-comment-budget: 28, code-comment-sentence: 26, comment-caps: 3}
+    claude-code/mod/types/gen/claude-code-tools.d.ts: {code-comment-budget: 101, code-comment-sentence: 79, comment-caps: 19, comment-history: 8, doc-path: 7, restates: 3}
+    claude-code/mod/types/gen/claude-code.d.ts: {banner: 1, code-comment-budget: 572, code-comment-sentence: 545, comment-caps: 38, comment-history: 6, doc-path: 7}
+    claude-code/mod/types/index.d.ts: {code-comment-sentence: 1}
+    cursor-hook.buzz: {code-comment-budget: 6, code-comment-sentence: 17, doc-path: 2}
+    cursor-schemas.ts: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 15, doc-path: 1}
+    lib/bindings.buzz: {doc-path: 2}
+    lib/embed.buzz: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 2, doc-path: 1}
+    lib/hook.buzz: {code-comment-budget: 8, code-comment-sentence: 14, comment-caps: 2, comment-history: 1, provenance: 2}
+    lib/session.buzz: {code-comment-sentence: 1}
+    magus-buzz-check.buzz: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 2}
+    magus-checkpoint.buzz: {code-comment-budget: 2, code-comment-sentence: 9, comment-caps: 5}
+    magus-command.buzz: {code-comment-budget: 18, code-comment-sentence: 34, comment-caps: 30}
+    magus-duration.buzz: {code-comment-budget: 1}
+    magus-observe.buzz: {code-comment-budget: 5, code-comment-sentence: 10, comment-caps: 7}
+    magus-path.buzz: {code-comment-budget: 3, code-comment-sentence: 9, comment-caps: 13}
+    magus-reclaim-disk.buzz: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 3}
+    magus-rehydrate.buzz: {code-comment-budget: 4, code-comment-sentence: 9, comment-caps: 6, doc-path: 1}
+    magus-session-load-claude-code.buzz: {code-comment-budget: 3, code-comment-sentence: 6, comment-caps: 6, comment-history: 1}
+    magus-session-load-codex.buzz: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 2}
+    magus-session-load-cursor.buzz: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 1, doc-path: 3}
+    magus-session-load-opencode.buzz: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 3}
+    magus-session.buzz: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 2}
+    magusfile.buzz: {doc-path: 3}
+    opencode-plugin.live.test.ts: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 6, comment-history: 1, doc-path: 1, provenance: 1}
+    opencode-plugin.test.ts: {code-comment-budget: 4, code-comment-sentence: 5, comment-caps: 4, comment-history: 3}
+    proofread-reply.buzz: {code-comment-budget: 1, code-comment-sentence: 7, comment-caps: 2}
