@@ -410,7 +410,7 @@ func (c Chain) Needs(refs ...string) Chain {
 		}
 		c = append(c, step)
 	}
-	return c
+	return slices.Clone(c)
 }
 
 // String renders the chain the way `magus describe target` prints it: each step's Ref,
