@@ -2444,13 +2444,12 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 		}
 		// Where the host never ran the plugin check skips, so CI passes.
 		// An unknown currency is advice: no command can make it known.
-		switch verification.Plugin.Status {
-		case agent.HarnessPluginUninstalled, agent.HarnessPluginDisabled, agent.HarnessPluginBehind:
-			problems = append(problems, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
-		case agent.HarnessInvalid, agent.HarnessSkillsOnly, agent.HarnessUncovered, agent.HarnessUnprobed, agent.HarnessVerified:
-			if verification.Plugin.Failing() {
-				advice = append(advice, fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason))
-			}
+		pluginLine := fmt.Sprintf("%s harness plugin is %s: %s", id, verification.Plugin.Status, verification.Plugin.Reason)
+		switch plugin := verification.Plugin; {
+		case plugin.Status == agent.HarnessPluginUninstalled, plugin.Status == agent.HarnessPluginDisabled, plugin.Status == agent.HarnessPluginBehind:
+			problems = append(problems, pluginLine)
+		case plugin.Failing():
+			advice = append(advice, pluginLine)
 		}
 		if verification.Tool.Failing() {
 			problems = append(problems, fmt.Sprintf("%s tool rows are %s: %s", id, verification.Tool.Status, verification.Tool.Reason))
