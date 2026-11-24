@@ -16,6 +16,7 @@ to see how a rule earns its default through calibration, read
 | `change-description` | a pull request: its title on the first line, its description after it                 |
 | `review-reply`       | a review comment, a review's body or a reply in a thread                              |
 | `stylesheet`         | the comments of a CSS file, each read with the rule or declaration it sits on         |
+| `code-comment`       | the comments of a Go, TypeScript or Buzz file, each held to the budget of its place   |
 
 The magus module never imports `libs/proofread`, which requires only
 `libs/diagnostics` and `golang.org/x/tools`. `cmd/proofread` runs it, and its first
@@ -25,7 +26,13 @@ argument names a kind: `proofread doc-comment --stdin` reads the symbols of
 declaration because an index records no position inside a doc. The page and
 agent-instruction kinds judge the files the arguments name;
 `change-description` and `review-reply` read the text on stdin under `--stdin`, and
-`stylesheet` judges the files it names or, under `--stdin`, one on stdin. A finding from
+`stylesheet` judges the files it names or, under `--stdin`, one on stdin. So does
+`code-comment`, which takes the language of stdin from `--language go|ts|buzz` and a
+file's from its extension. Its budgets by place (12 words on 1 line after code, 30 on
+3 inside a body, 40 on 4 on an unexported declaration, 60 on 8 on an exported one or a
+file header, 25 words a sentence) are its strict defaults; `--budgets` may only tighten
+them. A blank comment line, code, a table, a URL and a directive count for nothing, and
+a TODO, FIXME, BUG, compat or Deprecated paragraph is never judged. A finding from
 text names its file, or the kind it read from stdin, and its line. A Go symbol
 and a TypeScript one meet the same rules. For a `skill-template`,
 what the short form shows meets the agent-compact rules, and what only the
@@ -284,10 +291,18 @@ the words.
 | `aside`              | PRF6004 | doc comment, stylesheet, help    | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
 | `history`            | PRF6005 | doc comment, stylesheet          | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
 | `docstub`            | PRF6006 | doc comment                      | off (house)                          | a one-line doc that only repeats the symbol's name                               |
-| `restates`           | PRF6007 | stylesheet                       | off (house)                          | a one-line comment that only names the code it sits on                           |
+| `restates`           | PRF6007 | stylesheet, code comment         | off (house)                          | a one-line comment that only names the code it sits on                           |
 | `comment-budget`     | PRF6008 | stylesheet                       | off (house)                          | a comment over the lines its place earns                                         |
 | `block-budget`       | PRF6009 | stylesheet                       | off (house)                          | a rule block whose comments, summed, outrun its size                             |
 | `banned-word`        | PRF5006 | stylesheet                       | off (house)                          | a word this repository bans                                                      |
+| `code-comment-budget`   | PRF6010 | code comment                  | deny                                 | a comment block over the words or prose lines its place earns                    |
+| `code-comment-sentence` | PRF6011 | code comment                  | deny                                 | a comment sentence over 25 words                                                 |
+| `banner`             | PRF6012 | code comment                     | deny                                 | a banner line of dashes, equals signs or slashes                                 |
+| `comment-history`    | PRF6013 | code comment                     | deny                                 | a comment narrating a change, the history phrases and the stylesheet ones        |
+| `provenance`         | PRF5012 | code comment                     | deny                                 | a date, a pull request or issue number, a commit hash or a retold failure        |
+| `doc-path`           | PRF5013 | code comment                     | deny                                 | a citation of docs/design, docs/decisions, an ADR number or a Markdown file      |
+| `comment-caps`       | PRF5014 | code comment                     | deny                                 | an ordinary word in capitals for emphasis                                        |
+| `comment-first-person` | PRF5015 | code comment                   | deny                                 | I, me, my, we, us or our                                                         |
 | `lead-context`       | PRF1001 | change description               | deny; advise for a defect            | a lead that is not a paragraph stating what the change set out to do and why     |
 | `reply-voice`        | PRF1002 | pages, change description, reply | deny                                 | a reply opener, a conversation, a bold-label item, a stock label or heading      |
 | `tense`              | PRF5004 | pages, change description        | off (house)                          | the future tense, and the author as the actor of a change                        |
