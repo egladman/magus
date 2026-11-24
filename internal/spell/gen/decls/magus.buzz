@@ -803,6 +803,7 @@ export object Job {
     registered: int = 0,
     holderStopped: int = 0,
     checkoutRoot: str = "",
+    forkedIn: str = "",
     worktree: JobWorktree? = null,
     endReason: str = "",
     created: int = 0,
