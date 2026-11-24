@@ -22,7 +22,7 @@ A person is needed for the kicked-back rows.
 
 - **#8** approved, checks green: `gh pr merge 8 --auto --squash`
 - **#9** approved, checks green: `gh pr edit 9 --add-label "merge-queue: squash"`
-- **#7** `KICK_REGENERATION`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/7#issuecomment-1)<br>merge `main` in, run `magus run generate:rw`, push, then `gh pr merge 7 --auto --rebase`; or a person merges it past the queue: `gh pr merge 7 --squash --admin`
+- **#7** `KICK_REGENERATION`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/7#issuecomment-1)<br>merge `main` in, run `magus run generate:rw`, push, then `gh pr merge 7 --auto --rebase`
 - **#6** `KICK_RED`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/6#issuecomment-1)<br>by hand, once fixed: `gh pr merge 6 --auto --rebase`
 
 </details>

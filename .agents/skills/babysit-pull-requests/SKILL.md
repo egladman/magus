@@ -131,7 +131,7 @@ fix the pure function that produced it and its test, then run it again.
 6. Check again in about 20 minutes (the
    queue's validation time), or with its pull request monitor. Repeat from 1.
    - A record with `action: none` needs no agent. It is queued, waiting on the pull
-     request below it, `running`, or `red-inherited` with a `merge` for the person.
+     request below it, `running`, or `red-inherited` and waiting for main.
    - A `draft` or `closed` stage never merges on its own. Tell the person and drop
      it from the selection.
 
