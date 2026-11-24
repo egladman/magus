@@ -110,6 +110,7 @@ automates a decision and when it hands the decision to you.
 - [Manual on purpose](design/judgment/manual-on-purpose.md): Automate a repetition, never a rep; each act that forms judgment stays a person's keystroke.
 - [The loop keeps you able to notice](design/judgment/the-loop-keeps-you-able-to-notice.md): What reaches a person is the deviation, the batch and the absence, never a confirmation of a pattern they already trust.
 - [Corrective competence](design/judgment/corrective-competence.md): The skill this section protects is your ability to fix the thing yourself when the agent is wrong, or gone.
+- [Stale is never silent](design/judgment/stale-is-never-silent.md): A stale output, a replayed result or a fallback is reported as a coded diagnostic with a fix line, and each cause gets its own code.
 
 <!-- END DESIGN INDEX -->
 
