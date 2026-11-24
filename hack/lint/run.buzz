@@ -35,6 +35,7 @@ import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/buzz-sources-pass-the-static-check" as buzzcheck;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
+import "hack/lint/code-comments-follow-proofread-rules" as codecomments;
 import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/closed-switches-name-every-member" as closedswitches;
 import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
@@ -123,6 +124,7 @@ export fun rules() > [Rule] {
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
         Rule{ name = "code-stays-within-the-conformance-ceiling", reads = conformanceceiling\reads(), check = conformanceceiling\check },
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
+        Rule{ name = "code-comments-follow-proofread-rules", reads = codecomments\reads(), check = codecomments\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
         Rule{ name = "skill-renders-follow-markdown-and-description-budgets", reads = skillrenders\reads(), check = skillrenders\check },

@@ -39,8 +39,7 @@ export object Baseline {
 export fun reads() > [str] {
     return ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.buzz", POLICY,
         "libs/proofread/**/*.go", "libs/proofread/" + POLICY, "libs/proofread/go.mod", "libs/proofread/go.sum",
-        "libs/proofread/proofread.buzz", "libs/proofread/internal/wordclass/gen/*.gz",
-        "libs/proofread/internal/calibrate/cases/*.txtar"];
+        "libs/proofread/proofread.buzz", "libs/proofread/internal/calibrate/cases/*.txtar"];
 }
 
 // judged reports whether the comments of p are judged: hand-written source,
@@ -179,7 +178,11 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
     }
     final acc = mut [<Finding>];
-    foreach (project in support\sorted(byProject.keys() + baselines.keys())) {
+    final names = mut {<str: bool>};
+    foreach (project in byProject.keys() + baselines.keys()) {
+        names[project] = true;
+    }
+    foreach (project in support\sorted(names.keys())) {
         final b = baselines[project] ?? Baseline{ counts = {<str: {str: int}>}, file = policyFile(project) };
         final judgedRun = judge(byProject[project] ?? [<str>], base: base, budgets: b.budgets);
         if (judgedRun.error != null) {
