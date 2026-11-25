@@ -101,6 +101,7 @@ import "std";
 import "magus";
 import "fs";
 import "vcs";
+import "result";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/gh" as gh;
@@ -245,7 +246,7 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic,
             verified = fun () > GuardVerdict { return pushes\decidePush(req.push, read: pushes\readUnverified); } },
-        reads: host\readsFrom(req.workspace, dir: req.dir));
+        reads: host\readsFrom(req.workspace, dir: req.dir), workflow: pullRequests\ciWorkflowAt(req.workspace));
     return lastWord(req, programs: programs, decided: decided, forked: forked, once: once);
 }
 
@@ -598,7 +599,7 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // files it names, diff reads the branch's diff for a description's budget, judge runs
 // proofread over a pull request's text of a kind, and reads gives the host rule a task
 // capture's text and whether the workspace holds a ./magus.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads, workflow: fun () > result\Result::<str>) > GuardVerdict {
     final hostVerdict = host\decideHost(programs, reads: reads);
     if (hostVerdict.decision != magus\GuardDecision.defer) {
         return hostVerdict;
@@ -620,7 +621,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     if (names.decision == magus\GuardDecision.deny) {
         return names;
     }
-    final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
+    final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once, workflow: workflow);
     if (rest.decision != magus\GuardDecision.defer) {
         return withNote(withNote(rest, note: verified), note: cadenceVerdict);
     }
@@ -642,13 +643,13 @@ fun withNote(v: GuardVerdict, note: GuardVerdict) > GuardVerdict {
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
 // denials, the gh advisories, then the pull request text advisories.
-fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
+fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, workflow: fun () > result\Result::<str>) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once, line: line);
     if (github.decision == magus\GuardDecision.deny) {
         return github;
     }
     final commit = subjects\decideCommit(programs, baseBranch: baseBranch);
-    final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, judge: judge, once: once);
+    final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, judge: judge, once: once, workflow: workflow);
     if (commit.decision == magus\GuardDecision.deny and pull.decision == magus\GuardDecision.deny) {
         return magus\guard.deny(commit.reason + "\n\n" + pull.reason);
     }
@@ -684,7 +685,7 @@ test "a commit and a pull request text denied together open with one verdict" {
     final once = fun (key: str) > bool {
         return true;
     };
-    final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once);
+    final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once, workflow: pullRequests\ciWorkflowAt(""));
     std\assert(both.decision == magus\GuardDecision.deny, message: both.reason);
     verdict\assertVerdict(both.reason, label: "a commit and a pull request together");
     std\assert(both.reason.indexOf("this pull request text breaks") != null, message: "both rationales are kept: " + both.reason);
@@ -768,7 +769,7 @@ fun decidePushAs(role: magus\AgentRole, title: str, lease: str, verified: fun ()
     final reads = host\Reads{ text = fun (path: str) > str { return ""; }, binary = fun () > bool { return false; } };
     return decide(helpers\vcsRequest([["git", "push", "origin", "HEAD:x"]]), caller: cadence\Caller{ role = role, title = title }, checkout: null,
         baseBranch: "", line: "git push origin HEAD:x", files: {<str: str>}, diff: facts, judge: none,
-        once: fun (key: str) > bool { return false; }, publishing: publishing, reads: reads);
+        once: fun (key: str) > bool { return false; }, publishing: publishing, reads: reads, workflow: pullRequests\ciWorkflowAt(""));
 }
 
 test "a worker's push is refused by push-authority before push-unverified reads" {
