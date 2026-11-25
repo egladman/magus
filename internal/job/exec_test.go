@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -155,6 +156,66 @@ func (s *ExecRefusalSuite) TestExecAdoptsAHostWorktreeForTheFirstWriter() {
 	i := slices.IndexFunc(stored, func(r job.Job) bool { return r.ID == row.ID })
 	s.Require().GreaterOrEqual(i, 0)
 	s.Equal(host, stored[i].Worktree.Root)
+}
+
+// The host made the worktree behind the checkpoint and with no ./magus:
+// exec catches it up and pins the forking checkout's build of the checkpoint.
+func (s *ExecRefusalSuite) TestPlacingExecMovesAHostWorktreeToItsCheckpointAndPinsAMagusBuiltThere() {
+	_, row := s.writers()
+	host := s.linked("host", s.checkpoint+"~1")
+	forkers := filepath.Join(s.landing, "magus")
+	s.Require().NoError(os.WriteFile(forkers, []byte(versionScript("forker", types.MagusBuild{Version: "v0.5.0", Commit: s.checkpoint})), 0o755))
+	plant(s.T(), s.store, recent(row))
+
+	took, err := s.placingIn(host, row.ID)
+	s.Require().NoError(err)
+	s.Equal(s.checkpoint, CheckoutHead(s.T().Context(), host), "exec fast-forwarded the host worktree")
+	s.Equal(s.checkpoint, took.Worktree.Base)
+	s.Contains([]job.BaseVerdict{job.BaseMatch, job.BaseRevisionMatch}, took.BaseVerdict)
+	s.Equal(filepath.Join(host, "magus"), took.Worktree.Binary)
+	want, err := BinaryDigest(forkers)
+	s.Require().NoError(err)
+	s.Equal(want, took.Worktree.BinaryDigest, "the pin is the forker's exact build")
+}
+
+func (s *ExecRefusalSuite) TestPlacingExecRefusesAHostWorktreeHoldingWorkAndLeavesIt() {
+	_, row := s.writers()
+	host := s.linked("host", s.checkpoint+"~1")
+	head := CheckoutHead(s.T().Context(), host)
+	s.Require().NoError(os.WriteFile(filepath.Join(host, "a.txt"), []byte("edited\n"), 0o644))
+	plant(s.T(), s.store, recent(row))
+
+	_, err := s.placingIn(host, row.ID)
+	s.Require().ErrorContains(err, "uncommitted work (a.txt)")
+	s.Equal(head, CheckoutHead(s.T().Context(), host))
+	stored, err := s.store.List(s.T().Context())
+	s.Require().NoError(err)
+	i := slices.IndexFunc(stored, func(r job.Job) bool { return r.ID == row.ID })
+	s.Require().GreaterOrEqual(i, 0)
+	s.Equal(job.StateDeclared, stored[i].State, "nobody took it")
+}
+
+// With no magus built at the checkpoint to copy, exec says so and pins none.
+func (s *ExecRefusalSuite) TestPlacingExecPinsNothingWhenNoBuildAtTheCheckpointStands() {
+	_, row := s.writers()
+	host := s.linked("host", s.checkpoint)
+	plant(s.T(), s.store, recent(row))
+
+	took, err := s.placingIn(host, row.ID)
+	s.Require().NoError(err)
+	s.Empty(took.Worktree.BinaryDigest)
+	s.NoFileExists(filepath.Join(host, "magus"))
+}
+
+// recent is row touched now: placement lists the store, and that sweep ends
+// a row older than jobs.stale_after.
+func recent(row job.Job) job.Job {
+	row.Created, row.Updated = time.Now().Unix(), time.Now().Unix()
+	return row
+}
+
+func (s *ExecRefusalSuite) placingIn(root, id string) (job.Job, error) {
+	return NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: root}).Exec(s.T().Context(), id, Placing(Placement{}))
 }
 
 func (s *ExecRefusalSuite) TestASecondWriterInAnAdoptedCheckoutPasses() {

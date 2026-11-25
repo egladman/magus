@@ -281,10 +281,34 @@ func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {
 	assert.Equal(t, "none", InstallProjects(t.TempDir(), t.TempDir(), job.Job{ReadOnly: true}, projects))
 }
 
+// A ./magus already in the checkout may be its worker's own build, so it is
+// never what placement copies or vouches for.
+func TestPlaceBuiltBinarySkipsTheCheckoutsOwnMagus(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	dir := t.TempDir()
+	own := filepath.Join(dir, "magus")
+	require.NoError(t, os.WriteFile(own, []byte(versionScript("own", types.MagusBuild{Version: "v0.5.0", Commit: repo.Head()})), 0o755))
+	placed, err := s.PlaceBuiltBinary(t.Context(), repo.Head(), dir, own)
+	require.NoError(t, err)
+	assert.Empty(t, placed)
+}
+
+// Below a checkout whose ./magus a live row pins, a magus hands that binary
+// the call. Asking a candidate's version turns the hand-off off.
+func TestBuiltAtAsksTheBinaryItselfAndNotAWorkspaceMagus(t *testing.T) {
+	t.Parallel()
+	at := "0123456789abcdef0123456789abcdef01234567"
+	bin := filepath.Join(t.TempDir(), "magus")
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$MAGUS_NO_BOOTSTRAP_EXEC\" = 1 ]; then echo '{\"version\":\"v0.5.0\",\"commit\":%q}'; else echo '{\"version\":\"v0.5.0\",\"commit\":\"handed-off\"}'; fi\n", at)
+	require.NoError(t, os.WriteFile(bin, []byte(script), 0o755))
+	assert.True(t, builtAt(t.Context(), bin, at))
+}
+
 func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
-	placed, err := s.PlaceBuiltBinary(t.Context(), filepath.Join(t.TempDir(), "absent"), repo.Head(), t.TempDir())
+	placed, err := s.PlaceBuiltBinary(t.Context(), repo.Head(), t.TempDir(), filepath.Join(t.TempDir(), "absent"))
 	require.NoError(t, err)
 	assert.Empty(t, placed)
 }
@@ -637,11 +661,20 @@ func TestExecBindsAnUntakenAdoptedJobToAFreshCheckoutAtItsCheckpoint(t *testing.
 	assert.ErrorContains(t, err, "once this checkout is at its checkpoint "+checkpoint)
 
 	fresh := linked("fresh", checkpoint)
-	taken, err := at(fresh).Exec(ctx, "w1")
+	exe, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: checkpoint})
+	taken, err := at(fresh).Exec(ctx, "w1", Placing(Placement{Exe: exe}))
 	require.NoError(t, err)
 	assert.Equal(t, fresh, taken.CheckoutRoot)
-	assert.Equal(t, fresh, taken.Worktree.Root)
-	assert.False(t, taken.Worktree.Made, "the host made it, so magus never removes it")
+	digest, err := BinaryDigest(exe)
+	require.NoError(t, err)
+	source, err := filepath.EvalSymlinks(repo.Root())
+	require.NoError(t, err)
+	require.NotNil(t, taken.Worktree)
+	got := *taken.Worktree
+	got.Created = 0
+	// Made is false: the host made it, so magus never removes it. Binary and
+	// BinaryDigest are the magus built at the checkpoint, placed and pinned.
+	assert.Equal(t, job.Worktree{Root: fresh, Source: source, Base: checkpoint, Binary: filepath.Join(fresh, "magus"), BinaryDigest: digest}, got)
 
 	_, err = at(landing).Exec(ctx, "w2")
 	require.NoError(t, err)

@@ -95,11 +95,11 @@ func ForkCheckout(ctx context.Context, store *Store, root string, row job.Declar
 	return row, nil
 }
 
-// ProvisionCheckout readies a checkout the fork made or moved: it reuses a
-// ./magus built at the checkout's base, else the script builds one. It then
-// installs only the projects row touches. reused says no build ran.
-func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Disk, exe, forker string, row job.Declaration, wt job.Worktree) (reused bool, err error) {
-	placed, err := store.PlaceBuiltBinary(ctx, exe, wt.Base, wt.Root)
+// ProvisionCheckout readies a checkout a fork made or moved, or exec adopted.
+// It reuses a ./magus built at the checkout's base, else the script builds one.
+// It then installs only the projects row touches. reused says no build ran.
+func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Disk, exe, forker string, row job.Job, wt job.Worktree) (reused bool, err error) {
+	placed, err := store.PlaceBuiltBinary(ctx, wt.Base, wt.Root, exe, filepath.Join(forker, binaryName))
 	if err != nil {
 		return false, err
 	}
@@ -110,9 +110,7 @@ func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Dis
 		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
 		return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root)
 	}
-	var declared job.Job
-	row.Apply(&declared)
-	install := InstallProjects(forker, wt.Root, declared, ws.Projects)
+	install := InstallProjects(forker, wt.Root, row, ws.Projects)
 	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", install)
 }
 

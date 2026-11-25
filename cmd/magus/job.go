@@ -833,7 +833,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		// checkout already holds may be anyone's build.
 		placed := made && worktree.Binary != ""
 		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
-			reused, err := job.ProvisionCheckout(ctx, store, jobWS, diskProbe, mirrored, root, row, worktree)
+			reused, err := job.ProvisionCheckout(ctx, store, jobWS, diskProbe, mirrored, root, declaredJob(row), worktree)
 			if err != nil {
 				return job.FailedProvision(ctx, store, worktree, made, err)
 			}
@@ -1003,6 +1003,30 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 	return emitFormatted(opts, stored)
 }
 
+// declaredJob is the row a fork's declaration writes.
+func declaredJob(row jobtypes.Declaration) jobtypes.Job {
+	var j jobtypes.Job
+	row.Apply(&j)
+	return j
+}
+
+// execPlacement readies a checkout exec adopts as a fork readies one it moved.
+// The hook and workspace come from the forking checkout: the adopted one may
+// hold no ./magus to read them with.
+func execPlacement(store *job.Store) job.Placement {
+	exe, _ := os.Executable()
+	return job.Placement{
+		Exe: exe,
+		Provision: func(ctx context.Context, row jobtypes.Job, wt jobtypes.Worktree) (bool, error) {
+			forker := row.ForkedIn
+			if forker == "" {
+				forker = wt.Source
+			}
+			return job.ProvisionCheckout(ctx, store, jobWorkspace(ctx, forker), diskProbe, exe, forker, row, wt)
+		},
+	}
+}
+
 // jobExec takes a job in THIS checkout: it records the base this tree actually landed on
 // beside the checkpoint the job was handed, and the checkout it landed in.
 //
@@ -1088,7 +1112,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err := refusePaused(ctx, store, pos[0]); err != nil {
 		return err
 	}
-	stored, err := store.Exec(ctx, pos[0])
+	stored, err := store.Exec(ctx, pos[0], job.Placing(execPlacement(store)))
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
