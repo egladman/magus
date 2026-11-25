@@ -367,9 +367,6 @@ func shapedRun(shape forecast.Shape, peakMB int64) forecast.Outcome {
 	return forecast.Outcome{Result: forecast.OutcomePass, MaxRSSBytes: peakMB * mib, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
 }
 
-// readsNoCharm is a chain that no charm changes.
-func readsNoCharm(*types.Project, string, string) bool { return false }
-
 // Narrowed runs of any args pool to size a narrowed run, and only ever lower its claim:
 // the full runs' trusted peak caps it, and with too few full runs to trust, the
 // narrowed peak stands.
@@ -382,7 +379,7 @@ func TestNarrowedClaimIsCappedByTheFullRunPeak(t *testing.T) {
 	claim := func(runs ...forecast.Outcome) (int, budget.Sizing) {
 		h := forecast.History{Projects: map[string]map[string]forecast.Stats{".": {"go/test": {RecentOutcomes: runs}}}}
 		x := h.MeasuredRuns()
-		mb, sizing, _ := newClaimSizer(&x, narrowed("X"), readsNoCharm).memory(p, "test", 0)
+		mb, sizing, _ := newClaimSizer(&x, narrowed("X"), func(*types.Project, string, string) bool { return false }).memory(p, "test", 0)
 		return mb, sizing
 	}
 
@@ -413,7 +410,7 @@ func TestNarrowedRunsNeverSizeAFullRun(t *testing.T) {
 	}}}}}
 	x := h.MeasuredRuns()
 
-	mb, sizing, _ := newClaimSizer(&x, full, readsNoCharm).memory(p, "test", 10240)
+	mb, sizing, _ := newClaimSizer(&x, full, func(*types.Project, string, string) bool { return false }).memory(p, "test", 10240)
 	assert.Equal(t, 10240, mb, "two full runs are too few, and the narrowed runs do not make up the count")
 	assert.Equal(t, budget.Sizing{}, sizing)
 }

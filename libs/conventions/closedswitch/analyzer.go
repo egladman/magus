@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/libs/conventions/internal/deviation"
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
 )
@@ -172,19 +173,6 @@ func decode(path string) (Settings, error) {
 	return settings, err
 }
 
-// owner returns the directory a file's policy and paths are relative to: the
-// nearest directory at or above the file with a go.mod.
-func owner(file string) (string, bool) {
-	for d := filepath.Dir(file); ; d = filepath.Dir(d) {
-		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
-			return d, true
-		}
-		if filepath.Dir(d) == d {
-			return "", false
-		}
-	}
-}
-
 // place returns the policy and the slash path of f inside its project. An
 // empty Module has no tree to walk: the working directory owns every file and
 // the package import path names it.
@@ -197,7 +185,7 @@ func place(pass *analysis.Pass, opts Options, cache *policies, f *ast.File) (loa
 		return loaded{}, "", false
 	}
 	name := source.Name(pass, f)
-	dir, ok := owner(name)
+	dir, ok := deviation.Owner(name)
 	if !ok {
 		return loaded{}, "", false
 	}

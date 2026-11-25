@@ -67,7 +67,7 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 	helpTitles map[types.DiagnosticCode]string) check.Check {
 	const name = "diagnostic-docs"
 
-	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "docs", filepath.FromSlash(strings.Trim(codeDocsMarker, "/")))); err != nil {
 		return check.Check{
 			Name:     name,
 			Status:   check.OK,
@@ -196,12 +196,6 @@ func checkWorkspaceDiagnosticDocs(root string, d config.Diagnostics) check.Check
 	}
 	return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.OK,
 		Message: fmt.Sprintf("%d workspace code page(s) under %s carry a remediation section", len(pages), d.Docs)}
-}
-
-// codeDocsRoot is the directory every code page lives under, and the one whose absence
-// puts the check out of scope.
-func codeDocsRoot(root string) string {
-	return filepath.Join(root, "docs", filepath.FromSlash(strings.Trim(codeDocsMarker, "/")))
 }
 
 // codeDocPath maps a code's rendered docs URL back to its Markdown source under root,

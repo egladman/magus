@@ -78,7 +78,7 @@ func Write(path string, v any) error {
 	for _, k := range names {
 		b.WriteString(k)
 		b.WriteByte('\t')
-		b.WriteString(escape(fields[k]))
+		b.WriteString(escaper.Replace(fields[k]))
 		b.WriteByte('\n')
 	}
 
@@ -124,8 +124,6 @@ func Write(path string, v any) error {
 //	          the allocation is the whole claim.
 //	trade-off: none. strings.Replacer is documented safe for concurrent use.
 var escaper = strings.NewReplacer("\\", "\\\\", "\n", "\\n", "\t", "\\t")
-
-func escape(s string) string { return escaper.Replace(s) }
 
 func unescape(s string) string {
 	var b strings.Builder

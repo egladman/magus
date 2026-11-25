@@ -48,7 +48,8 @@ var testToolRows = []types.HarnessTool{
 func testTools(t testing.TB) agent.ToolRows {
 	t.Helper()
 	root := t.TempDir()
-	for _, f := range testToolFiles() {
+	for _, f := range append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Tools: testToolRows}, nil),
+		types.AgentFile{Path: testToolsDir + "/" + types.ToolHostFile, Content: testToolHost + "\n"}) {
 		path := filepath.Join(root, f.Path)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(f.Content), 0o644))
@@ -62,13 +63,6 @@ const (
 	testToolHost = "test"
 	testToolsDir = ".test/magus/tools"
 )
-
-// testToolFiles is testToolRows installed under testToolsDir with the host file that names
-// the directory, as the harness install writes them.
-func testToolFiles() []types.AgentFile {
-	return append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Tools: testToolRows}, nil),
-		types.AgentFile{Path: testToolsDir + "/" + types.ToolHostFile, Content: testToolHost + "\n"})
-}
 
 // decodeTestEnvelope is decodeHookEnvelope under testToolRows.
 func decodeTestEnvelope(t testing.TB, raw string) (hookRequest, bool) {

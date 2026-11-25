@@ -99,48 +99,6 @@ func fixtureUsage(spec armSpec, run fixtureRun, perInput int64) map[string]any {
 	return usage
 }
 
-func assistantTurn(spec armSpec, run fixtureRun, turn, perInput int64) map[string]any {
-	return map[string]any{
-		"type": "assistant",
-		"message": map[string]any{
-			"id":    fmt.Sprintf("msg_%s_%d", fixtureRunID(run.arm, run.task, run.rep), turn),
-			"role":  "assistant",
-			"model": run.model,
-			"usage": fixtureUsage(spec, run, perInput),
-			"content": []any{
-				map[string]any{"type": "text", "text": fmt.Sprintf("turn %d", turn)},
-				map[string]any{
-					"type": "tool_use", "id": fmt.Sprintf("tu_%d_a", turn), "name": "Bash",
-					"input": map[string]any{"command": "magus run test ."},
-				},
-				map[string]any{
-					"type": "tool_use", "id": fmt.Sprintf("tu_%d_b", turn), "name": "Read",
-					"input": map[string]any{"file_path": fmt.Sprintf("src/mod%d.ts", turn%spec.distinctReads)},
-				},
-			},
-		},
-	}
-}
-
-func toolResults(spec armSpec, turn int64) map[string]any {
-	return map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"role": "user",
-			"content": []any{
-				map[string]any{
-					"type": "tool_result", "tool_use_id": fmt.Sprintf("tu_%d_a", turn),
-					"content": strings.Repeat("o", int(spec.resultBytes)),
-				},
-				map[string]any{
-					"type": "tool_result", "tool_use_id": fmt.Sprintf("tu_%d_b", turn),
-					"content": []any{map[string]any{"type": "text", "text": strings.Repeat("r", int(spec.resultBytes))}},
-				},
-			},
-		},
-	}
-}
-
 // transcriptLines builds a stream-json transcript with per-turn usage, tool
 // calls and results.
 func transcriptLines(run fixtureRun) []any {
@@ -150,7 +108,41 @@ func transcriptLines(run fixtureRun) []any {
 		map[string]any{"type": "system", "subtype": "init", "session_id": fixtureRunID(run.arm, run.task, run.rep), "model": run.model},
 	}
 	for turn := int64(1); turn <= spec.turns; turn++ {
-		lines = append(lines, assistantTurn(spec, run, turn, perInput), toolResults(spec, turn))
+		lines = append(lines, map[string]any{
+			"type": "assistant",
+			"message": map[string]any{
+				"id":    fmt.Sprintf("msg_%s_%d", fixtureRunID(run.arm, run.task, run.rep), turn),
+				"role":  "assistant",
+				"model": run.model,
+				"usage": fixtureUsage(spec, run, perInput),
+				"content": []any{
+					map[string]any{"type": "text", "text": fmt.Sprintf("turn %d", turn)},
+					map[string]any{
+						"type": "tool_use", "id": fmt.Sprintf("tu_%d_a", turn), "name": "Bash",
+						"input": map[string]any{"command": "magus run test ."},
+					},
+					map[string]any{
+						"type": "tool_use", "id": fmt.Sprintf("tu_%d_b", turn), "name": "Read",
+						"input": map[string]any{"file_path": fmt.Sprintf("src/mod%d.ts", turn%spec.distinctReads)},
+					},
+				},
+			},
+		}, map[string]any{
+			"type": "user",
+			"message": map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{
+						"type": "tool_result", "tool_use_id": fmt.Sprintf("tu_%d_a", turn),
+						"content": strings.Repeat("o", int(spec.resultBytes)),
+					},
+					map[string]any{
+						"type": "tool_result", "tool_use_id": fmt.Sprintf("tu_%d_b", turn),
+						"content": []any{map[string]any{"type": "text", "text": strings.Repeat("r", int(spec.resultBytes))}},
+					},
+				},
+			},
+		})
 	}
 	// The host's own total, which extract prefers for output: a real record's
 	// per-turn output counts one streamed chunk each.

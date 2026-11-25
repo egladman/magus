@@ -540,17 +540,6 @@ func buzzCommentCitations(content string) []sourceCite {
 	return out
 }
 
-// findCommentSources returns every workspace source path whose comments this pass can
-// read, sorted, under findBuzzFiles's ignore rules.
-//
-// Go test files are excluded: a URL in a test cites the fixture's provenance, not the
-// shipped code's, and the walk is the cost this pass adds to every build. TypeScript is
-// excluded for a different reason. There is no TS lexer in this module, and a hand-rolled
-// one has to get template literals, regex literals and division apart to tell a comment
-// from a string; measured, console/src holds two comment URLs and both are loopback
-// placeholders this parser rejects anyway, so the unsafe parse would buy nothing.
-func findCommentSources(root string) []string { return WalkTree(root).commentSources() }
-
 func (w *TreeWalk) commentSources() []string {
 	return w.scan(walkBuzz, func(f treeFile) bool {
 		return strings.HasSuffix(f.rel, ".buzz") || (strings.HasSuffix(f.rel, ".go") && !strings.HasSuffix(f.rel, "_test.go"))

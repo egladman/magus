@@ -149,7 +149,3 @@ func platformFromOCI(p *ocispec.Platform) Platform {
 	}
 	return Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant, OSVersion: p.OSVersion, OSFeatures: p.OSFeatures}
 }
-
-func platformFromConfig(cfg ocispec.Image) Platform {
-	return platformFromOCI(&cfg.Platform)
-}

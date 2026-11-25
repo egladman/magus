@@ -777,7 +777,7 @@ func textOnly(pat string, sa searchArgs) []Suggestion {
 // answers something narrower. `-F` settles that in the caller's favor whatever the
 // pattern looks like, since it promised there is no regex in it.
 func textSuggestion(pat string, sa searchArgs) (Suggestion, bool) {
-	if pat == "" || (!sa.fixed && hasRegexMeta(pat)) {
+	if pat == "" || (!sa.fixed && strings.ContainsAny(pat, `.*+?[](){}|^$\`)) {
 		return Suggestion{}, false
 	}
 	run := "magus refs --text " + quoted(pat)
@@ -848,7 +848,7 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 			out = append(out, s)
 		}
 		return out
-	case hasRegexMeta(pat) && !sa.fixed:
+	case strings.ContainsAny(pat, `.*+?[](){}|^$\`) && !sa.fixed:
 		return []Suggestion{{
 			Run:        fmt.Sprintf("magus query %s%s", matcherArg("id=~"+pat), scope),
 			Why:        "the pattern is a regex, and id=~ runs it over node ids",
@@ -1142,10 +1142,6 @@ func anyMarkdown(paths []string) bool {
 	return false
 }
 
-func hasRegexMeta(pat string) bool {
-	return strings.ContainsAny(pat, `.*+?[](){}|^$\`)
-}
-
 func hedge(base string, sa searchArgs) string {
 	if sa.ignoreCase {
 		return base + hedgeCase
@@ -1153,25 +1149,12 @@ func hedge(base string, sa searchArgs) string {
 	return base
 }
 
-// Suggestions are paste-ready shell, and patterns reach the formatter with
-// quoting already resolved, so embedding is a safety property: a $( ), a
-// backtick, or a " re-embedded in double quotes would EXECUTE (or break) on
-// paste, a bare backslash is eaten, handing magus a different regex, and a !
-// still fires history expansion inside double quotes in the INTERACTIVE shell
-// a suggestion is pasted into ("event not found", or a silently substituted
-// command). Anything the shell still interprets inside double quotes is
-// emitted single-quoted instead, with an embedded single quote spliced through
-// the close-escape-reopen sequence singleQuoted writes.
-func shellUnsafeInDoubles(s string) bool {
-	return strings.ContainsAny(s, "$\\\"`!")
-}
-
 func singleQuoted(s string) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 func quoted(pat string) string {
-	if shellUnsafeInDoubles(pat) {
+	if strings.ContainsAny(pat, "$\\\"`!") {
 		return singleQuoted(pat)
 	}
 	return fmt.Sprintf("%c%s%c", '"', pat, '"')
@@ -1182,7 +1165,7 @@ func quoted(pat string) string {
 // wrapped.
 func matcherArg(m string) string {
 	switch {
-	case shellUnsafeInDoubles(m):
+	case strings.ContainsAny(m, "$\\\"`!"):
 		return singleQuoted(m)
 	case strings.ContainsAny(m, " |(){}[]<>&;!*?'"):
 		return fmt.Sprintf("%c%s%c", '"', m, '"')

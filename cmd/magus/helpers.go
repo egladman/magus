@@ -61,10 +61,6 @@ func magusFromContext(ctx context.Context) (*magus.Magus, bool) {
 // bootstrapLimiterKey carries a limiter shared between the proc server and workspace.
 type bootstrapLimiterKey struct{}
 
-func withBootstrapLimiter(ctx context.Context, lim *budget.Limiter) context.Context {
-	return context.WithValue(ctx, bootstrapLimiterKey{}, lim)
-}
-
 func bootstrapLimiterFromContext(ctx context.Context) *budget.Limiter {
 	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*budget.Limiter)
 	return lim

@@ -751,10 +751,6 @@ type RiskMeterSuite struct {
 
 func TestRiskMeterSuite(t *testing.T) { suite.Run(t, new(RiskMeterSuite)) }
 
-func riskSource() coverageSource {
-	return coverageSource{project: "lib", spell: "go", target: "test", coverage: riskCoverage()}
-}
-
 func (s *RiskMeterSuite) SetupTest() {
 	s.scorer.SetT(s.T())
 	s.scorer.SetupTest()
@@ -769,7 +765,9 @@ func (s *RiskMeterSuite) SetupTest() {
 	}
 	s.meter = riskMeter{
 		scorer: s.scorer.scorer(),
-		source: func(string) (coverageSource, string) { return riskSource(), "" },
+		source: func(string) (coverageSource, string) {
+			return coverageSource{project: "lib", spell: "go", target: "test", coverage: riskCoverage()}, ""
+		},
 		covers: func(string) bool { return true },
 		head:   s.side("head"),
 		atBase: s.side("base"),
@@ -913,7 +911,7 @@ func (s *RiskMeterSuite) TestAChangedFileWithNoSourceIsReported() {
 		if p == "lib/b.go" {
 			return coverageSource{}, "no target of lib declares its coverage profile .magus/coverage.out as an output"
 		}
-		return riskSource(), ""
+		return coverageSource{project: "lib", spell: "go", target: "test", coverage: riskCoverage()}, ""
 	}
 	s.meter.changed = []string{"lib/b.go"}
 	got := s.measure()

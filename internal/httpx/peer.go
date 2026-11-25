@@ -70,19 +70,15 @@ func PeerGuard(format rpcerr.Format, uid int, cred auth.Credential, next http.Ha
 		p, ok := r.Context().Value(peerKey{}).(peer)
 		switch {
 		case !ok || p.err != nil:
-			format.Write(w, r, peerRefused(fmt.Sprintf("this socket admits only processes running as uid %d, and the kernel did not report this connection's peer", uid)))
+			format.Write(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.SocketPeerNotOwner, Message: fmt.Sprintf("this socket admits only processes running as uid %d, and the kernel did not report this connection's peer", uid)})
 			return
 		case p.uid != uid:
-			format.Write(w, r, peerRefused(fmt.Sprintf("this socket admits only processes running as uid %d; this connection's peer runs as uid %d", uid, p.uid)))
+			format.Write(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.SocketPeerNotOwner, Message: fmt.Sprintf("this socket admits only processes running as uid %d; this connection's peer runs as uid %d", uid, p.uid)})
 			return
 		}
 		ctx := recorder.ContextWithEntryPoint(recorder.ContextWithCredential(r.Context(), cred), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func peerRefused(msg string) rpcerr.Error {
-	return rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.SocketPeerNotOwner, Message: msg}
 }
 
 // GrantGuard holds each request to the Need of its path against the credential already on its

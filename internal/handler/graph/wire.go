@@ -12,39 +12,17 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// graphToProto maps a domain KnowledgeGraphOutput onto the magus.graph.v1alpha1 wire message. The
-// node-link field names already match (id/kind/label; source/target/relation), so the
-// protojson of the result is byte-shape-compatible with the domain JSON the explorer used to
-// receive; the extra count/flag fields are additive and ignored by the client.
-func graphToProto(g types.KnowledgeGraphOutput) *graphv1.Graph {
-	return &graphv1.Graph{
-		Definition: g.Definition,
-		ApiVersion: string(g.APIVersion),
-		Directed:   g.Directed,
-		Multigraph: g.Multigraph,
-		NodeCount:  int32(g.NodeCount),
-		EdgeCount:  int32(g.EdgeCount),
-		SourceBase: g.SourceBaseURL,
-		Nodes:      nodesToProto(g.Nodes),
-		Links:      edgesToProto(g.Links),
-	}
-}
-
-func nodeToProto(n types.KnowledgeNode) *graphv1.Node {
-	return &graphv1.Node{
-		Id:     n.ID,
-		Kind:   n.Kind,
-		Label:  n.Label,
-		Doc:    n.Doc,
-		Source: n.Source,
-		Attrs:  n.Attrs,
-	}
-}
-
 func nodesToProto(in []types.KnowledgeNode) []*graphv1.Node {
 	out := make([]*graphv1.Node, 0, len(in))
 	for _, n := range in {
-		out = append(out, nodeToProto(n))
+		out = append(out, &graphv1.Node{
+			Id:     n.ID,
+			Kind:   n.Kind,
+			Label:  n.Label,
+			Doc:    n.Doc,
+			Source: n.Source,
+			Attrs:  n.Attrs,
+		})
 	}
 	return out
 }

@@ -146,9 +146,6 @@ func PostconditionCheck(g job.Postcondition) (types.LeaseCheck, error) {
 // leaseChecks is how magus's job store reads the checks it keeps: as [types.LeaseCheck].
 type leaseChecks struct{}
 
-// checkSpec is the store option that gives the job store [leaseChecks].
-func checkSpec() job.Option { return job.WithCheckSpec(leaseChecks{}) }
-
 func (leaseChecks) Validate(stored job.Check) (job.Check, error) {
 	c, err := types.DecodeLeaseCheck(stored)
 	if err != nil {

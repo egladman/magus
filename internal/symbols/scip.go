@@ -451,7 +451,7 @@ func platformTwins(sym types.KnowledgeSymbol, defs map[string]types.KnowledgeSym
 // the file rides on the package name, `gomod example.com/m@mem/total_linux.go <descriptors>`,
 // so the descriptors still parse and every lens measures the twin's body as its own.
 func twinKey(key, file string) string {
-	parts := keyParts(key)
+	parts := strings.SplitN(key, " ", 3)
 	parts[len(parts)-2] = fmt.Sprintf("%s@%s", parts[len(parts)-2], file)
 	return strings.Join(parts, " ")
 }
@@ -460,7 +460,7 @@ func twinKey(key, file string) string {
 // without its file, since the twins share their references, and key itself otherwise. A
 // package name never holds an @ past its first byte, which is what marks a twin.
 func TwinBase(key string) string {
-	parts := keyParts(key)
+	parts := strings.SplitN(key, " ", 3)
 	if len(parts) < 2 {
 		return key
 	}
@@ -471,12 +471,6 @@ func TwinBase(key string) string {
 	}
 	parts[len(parts)-2] = name[:i]
 	return strings.Join(parts, " ")
-}
-
-// keyParts splits a key into its manager, its package name when it has one, and its
-// descriptors, which may hold spaces of their own.
-func keyParts(key string) []string {
-	return strings.SplitN(key, " ", 3)
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining

@@ -214,7 +214,7 @@ func parseBaggage(v string) (lease, spawner string) {
 		case BaggageLease:
 			lease = validLease(strings.TrimSpace(decoded))
 		case BaggageSpawner:
-			spawner = clampSpawner(strings.TrimSpace(decoded))
+			spawner = clampRunes(strings.TrimSpace(decoded), MaxSpawnerLen)
 		}
 	}
 	return lease, spawner
@@ -236,7 +236,3 @@ func validLease(id string) string {
 	}
 	return id
 }
-
-// clampSpawner bounds a label. Not validated further: it is a claim meant for a person to
-// read, and rejecting it for its shape would drop attribution rather than improve it.
-func clampSpawner(s string) string { return clampRunes(s, MaxSpawnerLen) }

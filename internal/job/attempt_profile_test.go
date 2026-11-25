@@ -1,7 +1,6 @@
 package job
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -15,16 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withSecrets gives ctx the resolver the recorder requires before it writes anything: with
-// none it refuses rather than store text it could not redact.
-func withSecrets(ctx context.Context) context.Context {
-	return testkit.WithEnvResolver(ctx)
-}
-
 // call records one guard observation of lease's holder in the trail at base.
 func call(t *testing.T, base, lease, tool string, tokens int64, decision verdict.Decision) {
 	t.Helper()
-	recorder.AppendAgentCommand(withSecrets(t.Context()), base, recorder.AgentCommand{
+	recorder.AppendAgentCommand(testkit.WithEnvResolver(t.Context()), base, recorder.AgentCommand{
 		Host: "claude-code", Session: "s1", Lease: lease, Tool: tool, Path: "internal/job/x.go",
 		Decision: decision, AgentFacts: types.AgentFacts{ContextTokens: tokens},
 	})

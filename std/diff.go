@@ -114,16 +114,10 @@ func DiffUnified(_ context.Context, a, b, fromLabel, toLabel string, contextLine
 	return out, nil
 }
 
-// diffNormalize folds line endings and a single trailing newline, the two
-// differences that are not differences for a text file.
-func diffNormalize(s string) string {
-	return strings.TrimSuffix(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
-}
-
 // DiffEqual reports whether a and b match once line endings and a trailing
 // newline are normalized.
 func DiffEqual(_ context.Context, a, b string) (bool, error) {
-	return diffNormalize(a) == diffNormalize(b), nil
+	return strings.TrimSuffix(strings.ReplaceAll(a, "\r\n", "\n"), "\n") == strings.TrimSuffix(strings.ReplaceAll(b, "\r\n", "\n"), "\n"), nil
 }
 
 // DiffStat summarizes the change as added/removed line counts.

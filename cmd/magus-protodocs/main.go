@@ -206,7 +206,7 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 		if err != nil {
 			return api{}, fmt.Errorf("resolve file %s: %w", fp.GetName(), err)
 		}
-		pkgMeta[pkg] = pkgPage{Package: pkg, File: fd.Path(), Doc: fileDoc(fd)}
+		pkgMeta[pkg] = pkgPage{Package: pkg, File: fd.Path(), Doc: bodyComments(fd.SourceLocations().ByPath(protoreflect.SourcePath{2}))}
 
 		for i := 0; i < fd.Messages().Len(); i++ {
 			a.collectMessage(fd, fd.Messages().Get(i))
@@ -300,7 +300,7 @@ func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.Mes
 
 	for i := 0; i < md.Fields().Len(); i++ {
 		fdesc := md.Fields().Get(i)
-		fDoc := cellDoc(fd, fdesc)
+		fDoc := cleanComments(fd.SourceLocations().ByDescriptor(fdesc))
 		fl := field{
 			Name:        string(fdesc.Name()),
 			JSONName:    fdesc.JSONName(),
@@ -359,7 +359,7 @@ func (a *api) collectEnum(fd protoreflect.FileDescriptor, ed protoreflect.EnumDe
 	}
 	for i := 0; i < ed.Values().Len(); i++ {
 		vd := ed.Values().Get(i)
-		vDoc := cellDoc(fd, vd)
+		vDoc := cleanComments(fd.SourceLocations().ByDescriptor(vd))
 		et.Values = append(et.Values, enumValueDef{
 			Name: string(vd.Name()), Number: int32(vd.Number()), Doc: vDoc,
 			Deprecated: isDeprecated(vd.Options()),
@@ -630,13 +630,6 @@ func reservedNote(nums []string, names protoreflect.Names) string {
 	return fmt.Sprintf("Reserved: %s.", strings.Join(parts, "; "))
 }
 
-// fileDoc reads the package-level comment. There is no protoreflect.Descriptor for a
-// `package` declaration, so it is addressed by SourceCodeInfo path [2] (the `package` field
-// of FileDescriptorProto) directly, via ByPath rather than ByDescriptor.
-func fileDoc(fd protoreflect.FileDescriptor) string {
-	return bodyComments(fd.SourceLocations().ByPath(protoreflect.SourcePath{2}))
-}
-
 // bodyDoc reads a comment that renders as page PROSE: a service, method, message, or enum
 // doc. It keeps the blank-line paragraph breaks the author wrote, because those carry the
 // summary-then-detail split this schema writes in: Staleness opens with one line saying
@@ -648,13 +641,6 @@ func fileDoc(fd protoreflect.FileDescriptor) string {
 // choice.
 func bodyDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) string {
 	return bodyComments(fd.SourceLocations().ByDescriptor(desc))
-}
-
-// cellDoc reads a comment destined for a table cell (a field or an enum value) and
-// flattens it to the single line a cell can hold. No line number: a row carries no source
-// link of its own, only the message or enum heading above it does.
-func cellDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) string {
-	return cleanComments(fd.SourceLocations().ByDescriptor(desc))
 }
 
 // bodyComments is cleanComments with the author's paragraph breaks kept. Each paragraph
@@ -715,10 +701,10 @@ func escapeAndLinkify(s string) string {
 	for len(s) > 0 {
 		start := nextURLStart(s)
 		if start < 0 {
-			b.WriteString(escapeMD(s))
+			b.WriteString(strings.NewReplacer("|", `\|`, "_", `\_`).Replace(s))
 			break
 		}
-		b.WriteString(escapeMD(s[:start]))
+		b.WriteString(strings.NewReplacer("|", `\|`, "_", `\_`).Replace(s[:start]))
 		end := start
 		for end < len(s) && !isURLBoundary(s[end]) {
 			end++
@@ -741,10 +727,6 @@ func nextURLStart(s string) int {
 
 func isURLBoundary(b byte) bool {
 	return b == ' ' || b == '"' || b == ')' || b == ']' || b == '>' || b == '\n' || b == '\t'
-}
-
-func escapeMD(s string) string {
-	return strings.NewReplacer("|", `\|`, "_", `\_`).Replace(s)
 }
 
 // leafName is the last dot-separated segment of a qualified name: "Token" from

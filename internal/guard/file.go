@@ -99,16 +99,10 @@ func adviseNewFileName(root, path string) advice {
 		base = dir[i+1:]
 	}
 	name := filepath.Base(clean)
-	if derivedFromSibling(fileStem(name), base, siblings) {
+	if derivedFromSibling(strings.TrimSuffix(name, filepath.Ext(name)), base, siblings) {
 		return advice{}
 	}
 	return newFileNameAdvice(dir, name, siblings)
-}
-
-// fileStem drops the final extension, so a name compares the same across the languages
-// one directory may hold.
-func fileStem(name string) string {
-	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
 // derivedFromSibling reports whether stem extends a sibling's name, the shape of a twin
@@ -124,7 +118,7 @@ func derivedFromSibling(stem, base string, siblings []string) bool {
 		return false
 	}
 	for _, sibling := range siblings {
-		root := fileStem(sibling)
+		root := strings.TrimSuffix(sibling, filepath.Ext(sibling))
 		if root == "" || root == base || root == stem {
 			continue
 		}

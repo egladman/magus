@@ -67,7 +67,14 @@ func doctorCommand(ctx context.Context, root string, args []string) error {
 
 	// Query the server for the server-related checks. Non-fatal on failure.
 	dopts := []doctor.Option{
-		doctor.WithConfig(globalCfg), doctor.WithServerInfo(doctor.BuildServerInfo(ctx, serverSource())), doctor.WithSkillCatalog(agentSkills),
+		doctor.WithConfig(globalCfg), doctor.WithServerInfo(doctor.BuildServerInfo(ctx, doctor.ServerSource{
+			ClientVersion: version,
+			Addr:          resolveServerAddr(""),
+			MCPAddr:       mcpAddrString(),
+			BridgeEnabled: globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled,
+			MCPEnabled:    globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled,
+			ServerEnabled: globalCfg.Server.Enabled,
+		})), doctor.WithSkillCatalog(agentSkills),
 		doctor.WithGraphNodes(func(ctx context.Context) ([]types.KnowledgeNode, error) {
 			// Domain-only: the graph `graph export` renders into the docs site.
 			g, err := loadKnowledgeGraph(ctx, root, false, false, false)
@@ -130,19 +137,6 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	}
 	doctor.RenderReport(os.Stdout, out)
 	return nil
-}
-
-// serverSource gathers what the server checks need from this process: the version, the
-// resolved server and MCP addresses, and which services the config enables.
-func serverSource() doctor.ServerSource {
-	return doctor.ServerSource{
-		ClientVersion: version,
-		Addr:          resolveServerAddr(""),
-		MCPAddr:       mcpAddrString(),
-		BridgeEnabled: globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled,
-		MCPEnabled:    globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled,
-		ServerEnabled: globalCfg.Server.Enabled,
-	}
 }
 
 // doctorExplanations reads every declared notes store and reports which files it explains,

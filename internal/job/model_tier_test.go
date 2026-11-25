@@ -139,11 +139,6 @@ func TestNewModelTierRequestCountsFilesOnce(t *testing.T) {
 		"a glob is one, and two claims in one file are that file once")
 }
 
-// tierRequest is an agent section requesting a tier, resumed.
-func tierRequest(name string) *job.Agent {
-	return &job.Agent{Model: job.Model{Tier: name}, Worker: job.Worker{Type: job.WorkerTypeResumed}}
-}
-
 // modelRequest is an agent section requesting a host model id, resumed.
 func modelRequest(id string) *job.Agent {
 	return &job.Agent{Model: job.Model{ID: id}, Worker: job.Worker{Type: job.WorkerTypeResumed}}
@@ -211,7 +206,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 	}{
 		{
 			name:        "a row naming a tier wins and the matrix never runs",
-			row:         job.Job{ID: "a", Agent: tierRequest("design")},
+			row:         job.Job{ID: "a", Agent: &job.Agent{Model: job.Model{Tier: "design"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}},
 			matrix:      countingMatrix{answer: routineAnswer()},
 			want:        tier.Assignment{Name: "design", Rank: 2, Skills: tier.SkillVariantShort, Source: tier.SourceJob, Reason: "the job names the tier design"},
 			matrixCalls: 0,

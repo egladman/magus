@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -57,7 +58,7 @@ func assembleVCS(entries []types.KnowledgeVCS, couplings []types.KnowledgeCoChan
 	// One author node per contributor, with an `authored` edge to each file they touched
 	// (omitted entirely when authorship is off). Sorted author order keeps it deterministic.
 	for _, a := range slices.Sorted(maps.Keys(authorFiles)) {
-		aID := authorID(a)
+		aID := fmt.Sprintf("%s:%s", types.KindAuthor, a)
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: aID, Kind: types.KindAuthor, Label: sanitize(a, maxLabelLen)})
 		for _, f := range authorFiles[a] {
 			s.Edges = append(s.Edges, extractedEdge(aID, fileID(f), types.RelationAuthored, ""))

@@ -43,7 +43,10 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 		if _, err := store.Claim(ctx, me.ID, []jobtypes.ClaimRequest{d.Request}, facts, config.Jobs{}, false); err != nil {
 			return writeGrade{}, "the job store refused the claim: " + err.Error()
 		}
-		return claimedAdvice(me, d), ""
+		return writeGrade{Decision: verdict.Advise,
+			Context: fmt.Sprintf("magus workspace: claimed %s for lease %s by %s: %s.", d.Request.Path, me.ID, d.Request.Because, d.Proof),
+			Why: fmt.Sprintf("The claim is recorded on the job as `%s` records one, and `%s` lists the path among its write paths.",
+				hint.JobApply, hint.DescribeJob.With(me.ID))}, ""
 	case d.Appliable:
 		return withStop(gradeProvedClaim(ctx, deps, checkout, me, rows, rel), d.Stop), d.Stop
 	}
@@ -63,14 +66,6 @@ func integratedBranchChanging(ctx context.Context, checkout string, me jobtypes.
 		}
 	}
 	return ""
-}
-
-// claimedAdvice is the one line a write passes with once magus claimed its path for me.
-func claimedAdvice(me jobtypes.Job, d job.AutoClaim) writeGrade {
-	return writeGrade{Decision: verdict.Advise,
-		Context: fmt.Sprintf("magus workspace: claimed %s for lease %s by %s: %s.", d.Request.Path, me.ID, d.Request.Because, d.Proof),
-		Why: fmt.Sprintf("The claim is recorded on the job as `%s` records one, and `%s` lists the path among its write paths.",
-			hint.JobApply, hint.DescribeJob.With(me.ID))}
 }
 
 // withStop adds to a refusal's verdict line why magus did not claim the path itself.

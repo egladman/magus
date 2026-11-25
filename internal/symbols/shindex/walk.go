@@ -25,10 +25,6 @@ type walker struct {
 	infos   map[string]bool
 }
 
-func newWalker(s *script) *walker {
-	return &walker{s: s, closure: s.closure(), locals: map[*syntax.FuncDecl]map[string]string{}, infos: map[string]bool{}}
-}
-
 func (w *walker) document() symbols.Document {
 	w.doc = symbols.Document{Path: w.s.unit, Language: language}
 	syntax.Walk(w.s.file, w.visit)

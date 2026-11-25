@@ -385,7 +385,13 @@ func (ix *Indexer) indexBuild(ctx context.Context, want map[string]bool, overlay
 			if err := gctx.Err(); err != nil {
 				return err
 			}
-			shards[i] = newWalker(ix.Dir, p, mods).shard()
+			shards[i] = (&walker{
+				root: ix.Dir, pkg: p, mods: mods,
+				syms:    map[types.Object]string{},
+				owners:  map[*types.Var][]*scip.Descriptor{},
+				scanned: map[*types.Package]bool{},
+				qual:    packageNameQualifier(p.Types),
+			}).shard()
 			return nil
 		})
 	}
@@ -470,16 +476,6 @@ type walker struct {
 	owners  map[*types.Var][]*scip.Descriptor
 	scanned map[*types.Package]bool
 	qual    types.Qualifier
-}
-
-func newWalker(root string, p *packages.Package, mods *moduleTable) *walker {
-	return &walker{
-		root: root, pkg: p, mods: mods,
-		syms:    map[types.Object]string{},
-		owners:  map[*types.Var][]*scip.Descriptor{},
-		scanned: map[*types.Package]bool{},
-		qual:    packageNameQualifier(p.Types),
-	}
 }
 
 // packageNameQualifier spells another package's type by its package name, cache.Limiter

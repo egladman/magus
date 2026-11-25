@@ -179,11 +179,6 @@ func printStatusWithSilent(w io.Writer, snapshot daemon.Snapshot, silent []guard
 	return nil
 }
 
-// printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
-	return writeStatus(os.Stdout, r, opts, animFrame, compact)
-}
-
 // writeStatus renders one status frame to w, so the watch loop can redraw a buffer
 // in place rather than erase the whole screen.
 func writeStatus(w io.Writer, r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
@@ -208,20 +203,6 @@ func writeStatus(w io.Writer, r daemon.Snapshot, opts output.Options, animFrame 
 		})
 	}
 	return nil
-}
-
-// buildStatusBase constructs the static portions of a StatusSnapshot that depend
-// on the selfUpdateCompiled build-tag constant and the resolved config. Called at
-// MCP-server start to inject into dashboard.Options so the bridge can serve the full
-// daemon.Snapshot without importing cmd/magus.
-func buildStatusBase() daemon.Base {
-	return daemon.Base{
-		Telemetry: server.BuildTelemetryStatus(globalCfg.Telemetry),
-		Cache:     server.BuildCacheStatus(globalCfg.Cache),
-		Build: daemon.Build{
-			SelfUpdate: selfUpdateCompiled,
-		},
-	}
 }
 
 func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemon.Snapshot {
@@ -320,7 +301,7 @@ func queryWork(ctx context.Context) (broker.WorkReport, error) {
 // better than a corrupted screen.
 func paintStatusFrame(p *termkit.InlineView, inline bool, r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
 	if !inline {
-		return printStatus(r, opts, animFrame, compact)
+		return writeStatus(os.Stdout, r, opts, animFrame, compact)
 	}
 	var frame strings.Builder
 	if err := writeStatus(&frame, r, opts, animFrame, compact); err != nil {
@@ -333,5 +314,5 @@ func paintStatusFrame(p *termkit.InlineView, inline bool, r daemon.Snapshot, opt
 	if err := termkit.ClearScreen(os.Stdout); err != nil {
 		return err
 	}
-	return printStatus(r, opts, animFrame, compact)
+	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }

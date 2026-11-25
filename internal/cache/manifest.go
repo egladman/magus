@@ -71,7 +71,7 @@ type OutputRecord struct {
 }
 
 func (c *Cache) manifestPath(projectPath, hash string) string {
-	return manifestPathIn(c.store, projectPath, hash)
+	return filepath.Join(c.store, "manifests", flattenPath(projectPath), hash+".json")
 }
 
 func (c *Cache) blobPath(blob string) string { return blobPathIn(c.store, blob) }
@@ -98,11 +98,6 @@ func (c *Cache) publishLog(projectPath, hash string) error {
 		return err
 	}
 	return writeAtomic(c.entryLogPath(projectPath, hash), data)
-}
-
-// The store layout, relative to a cache root: the local store's or a staging one's.
-func manifestPathIn(root, projectPath, hash string) string {
-	return filepath.Join(root, "manifests", flattenPath(projectPath), hash+".json")
 }
 
 func blobPathIn(root, blob string) string {

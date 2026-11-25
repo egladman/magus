@@ -468,7 +468,7 @@ func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (types.JobL
 // MagusWorkspacePutJob answers Workspace.putJob.
 // It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (types.Job, error) {
-	put, err := decodeJobPut(opts)
+	put, err := job.DecodePut(opts)
 	if err != nil {
 		return types.Job{}, err
 	}
@@ -589,11 +589,6 @@ func MagusJobWait(ctx context.Context, j types.Job, result map[string]any) (jobt
 		return jobtypes.Status{}, err
 	}
 	return MagusWaitJob(ctx, j.ID, &decoded)
-}
-
-// decodeJobPut reads a putJob opts map through the store's own decoder.
-func decodeJobPut(opts map[string]any) (jobtypes.Put, error) {
-	return job.DecodePut(opts)
 }
 
 // decodeJobResult reads a result map through the strict, versioned decoder

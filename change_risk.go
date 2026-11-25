@@ -88,11 +88,17 @@ func (s riskScorer) score(out *types.ChangeRisk, fn touchedFunction) {
 func (s riskScorer) scoreOne(fn touchedFunction) (types.ChangeRiskFunction, types.FunctionGap, bool) {
 	c, reason := s.complexity(fn)
 	if reason != "" {
-		return types.ChangeRiskFunction{}, functionGap(fn, 0, reason), false
+		return types.ChangeRiskFunction{}, types.FunctionGap{
+			Symbol: fn.Symbol, Label: fn.Label, Path: fn.Path, Language: fn.Language,
+			Line: fn.Line, Complexity: 0, Reason: reason,
+		}, false
 	}
 	covered, coverable, reason := s.coverage(fn)
 	if reason != "" {
-		return types.ChangeRiskFunction{}, functionGap(fn, c, reason), false
+		return types.ChangeRiskFunction{}, types.FunctionGap{
+			Symbol: fn.Symbol, Label: fn.Label, Path: fn.Path, Language: fn.Language,
+			Line: fn.Line, Complexity: c, Reason: reason,
+		}, false
 	}
 	return riskFunction(fn, c, covered, coverable), types.FunctionGap{}, true
 }
@@ -180,13 +186,6 @@ func riskFunction(fn touchedFunction, complexity, covered, coverable int) types.
 	}
 	f.Score = types.ChangeRiskScore(complexity, f.Coverage())
 	return f
-}
-
-func functionGap(fn touchedFunction, complexity int, reason string) types.FunctionGap {
-	return types.FunctionGap{
-		Symbol: fn.Symbol, Label: fn.Label, Path: fn.Path, Language: fn.Language,
-		Line: fn.Line, Complexity: complexity, Reason: reason,
-	}
 }
 
 // ChangeRisk scores the functions touched since base: what HEAD added since

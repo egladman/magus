@@ -782,7 +782,7 @@ func TestBudgetPastEveryWindowReadsTheTableOnlyForAStatedFigure(t *testing.T) {
 	reads := 0
 	table := func() model.Table {
 		reads++
-		return fixtureModelTable()
+		return model.InEffect(fixtureModelRows, nil)
 	}
 	_, refused := budgetPastEveryWindow(builtin.Setting{Decision: builtin.Deny}, table)
 	assert.False(t, refused)
@@ -994,16 +994,11 @@ func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover && git push", s.root))
 }
 
-// tierlessFableRows lists claude-fable-5-1 with no tier.
-func tierlessFableRows() []model.Row {
-	return []model.Row{{ID: "claude-fable-5-1", Alias: "fable"}}
-}
-
 func TestARowNamingFableSpawnsOnFable(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	economy, ok := set.At(0)
 	require.True(t, ok)
-	f := forkedTier{job: "j", record: tier.Assignment{Name: "economy", Model: "claude-fable-5-1"}, tier: economy, set: set, rows: tierlessFableRows()}
+	f := forkedTier{job: "j", record: tier.Assignment{Name: "economy", Model: "claude-fable-5-1"}, tier: economy, set: set, rows: []model.Row{{ID: "claude-fable-5-1", Alias: "fable"}}}
 
 	assert.Empty(t, f.refusal("claude-code", "fable"), "the row names Fable by id, the spawn by alias")
 }
@@ -1012,7 +1007,7 @@ func TestATieredRowStillRefusesFable(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	economy, ok := set.At(0)
 	require.True(t, ok)
-	f := forkedTier{job: "j", record: tier.Assignment{Name: "economy"}, tier: economy, set: set, rows: tierlessFableRows()}
+	f := forkedTier{job: "j", record: tier.Assignment{Name: "economy"}, tier: economy, set: set, rows: []model.Row{{ID: "claude-fable-5-1", Alias: "fable"}}}
 
 	assert.Contains(t, f.refusal("claude-code", "claude-fable-5-1"), "maps to no model tier")
 }

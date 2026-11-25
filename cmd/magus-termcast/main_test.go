@@ -63,7 +63,7 @@ func TestCoreLoopUpToDate(t *testing.T) {
 // The recording is the first thing a reader sees, so a warning in it is a wrong
 // first impression no other gate would catch.
 func TestCaptureIsClean(t *testing.T) {
-	if err := checkClean(repositoryFile(t, capturePath)); err != nil {
+	if err := checkNoise(repositoryFile(t, capturePath), false); err != nil {
 		t.Error(err)
 	}
 }

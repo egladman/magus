@@ -114,7 +114,7 @@ func (r *RunRegistry) fold(rec journal.Record) {
 // targetLocked returns the mutable state for project/target, creating it (and
 // recording first-seen order) on first reference. Caller holds r.mu.
 func (r *RunRegistry) targetLocked(rs *runState, project, target string) *daemon.TargetRun {
-	key := targetKey(project, target)
+	key := fmt.Sprintf("%s\x00%s", project, target)
 	t := rs.targets[key]
 	if t == nil {
 		t = &daemon.TargetRun{Project: project, Target: target}
@@ -161,9 +161,6 @@ func (r *RunRegistry) pruneLocked(now time.Time) {
 		}
 	}
 }
-
-// targetKey joins a project and target into a map key that cannot collide across projects.
-func targetKey(project, target string) string { return fmt.Sprintf("%s\x00%s", project, target) }
 
 // resultState maps a journal result status onto a target run state. An unrecognized status
 // (e.g. a future journal status this build does not know) maps to the zero/unspecified state

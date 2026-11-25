@@ -329,16 +329,6 @@ func gitRoot(dir string) string {
 	}
 }
 
-// collectTargetNodes returns src's target graph nodes, read statically from the
-// magusfile source by describe.Extract, the sole graph source. Both the cache-footprint
-// path (applyTargetDepsAndFootprint) and the graph render (TargetGraph) read through
-// here so a target's reads/writes/modifications and cross-deps reach the cache key and affected-tracking,
-// not only MAGUS.md. The static read is deterministic and side-effect free (it never runs
-// a target body) and sees both arms of a runtime branch, which a trace could not.
-func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
-	return describe.Extract(concatSource(src))
-}
-
 // applyTargetDepsAndFootprint folds the two things magus recovers statically from a
 // target body into the workspace's projects: cross-project dependencies and the
 // per-target cache footprint (ctx.readsFiles / ctx.writesFiles).
@@ -865,7 +855,7 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 			entry.RelPath = types.ProjectDisplayName(entry.RelPath, p.Name, p.Dir)
 			entry.Name = entry.RelPath
 			if src.Engine == "buzz" {
-				nodes := collectTargetNodes(src)
+				nodes := describe.Extract(concatSource(src))
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)

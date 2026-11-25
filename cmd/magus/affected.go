@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"log/slog"
 	"maps"
 	"os"
@@ -296,7 +297,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
-	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
+	gate := internalci.PrepareGateRedundancy(ctx, m, internalci.GateEnv{DryRun: globalCfg.DryRun, Nested: spawn.CurrentLevel() > 0, Version: version, PoolProbe: gatePoolSaturated, Repairs: magus.UncommittedRepairs}, target, targets, charms, false)
 	gate.NoteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
 	if gateErr := gate.Evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
 		return gateErr
@@ -315,7 +316,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	reportUndeclaredSeeds(ctx, sink, undeclaredOnly)
 
 	var runOpts []magus.RunOption
-	if isGateInvocation(target, false) {
+	if internalci.IsGateInvocation(target, false, globalCfg.DryRun) {
 		runOpts = append(runOpts, magus.WithGate())
 	}
 	raceOpts, err := race.Resolve(af.Race)

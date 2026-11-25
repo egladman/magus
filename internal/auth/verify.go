@@ -95,7 +95,7 @@ func currentView() view {
 	v := view{state: state, sig: sig, loaded: time.Now()}
 	if tok, err := LoadOperator(); err == nil {
 		v.operatorSum = digest(tok.Reveal())
-		v.operator = operatorCredential(tok)
+		v.operator = Credential{Kind: KindOperator, ID: SecretID(tok), Grant: AccessOperator()}
 	}
 	if store, err := LoadStore(filepath.Join(state, "tokens.d")); err == nil {
 		st := store.state()

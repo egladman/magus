@@ -67,5 +67,5 @@ func bootstrapExecRefusal(target, self string) string {
 	if session == "" {
 		return ""
 	}
-	return unpinnedBinary(context.Background(), target, session)
+	return hookEnv().UnpinnedBinary(context.Background(), target, session)
 }

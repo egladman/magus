@@ -134,8 +134,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	sourceURL := h.sourceURL(r.Context())
-	desc, href := lens.describe(), anchorTemplate(sourceURL)
-	fig, err := h.cache.get(r.Context(), renderKey(g, desc, href), func(ctx context.Context) (Diagram, error) {
+	desc, href := lens.describe(), strings.TrimSuffix(sourceURL, "#L{line}")
+	fig, err := h.cache.get(r.Context(), fmt.Sprintf("%s\x00%s\x00%s", g.fingerprint(), desc, href), func(ctx context.Context) (Diagram, error) {
 		return h.compile(ctx, g, desc, href)
 	})
 	var findings *FindingsError
@@ -160,12 +160,6 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, id string) {
 		Nodes:     nodes,
 		SourceURL: sourceURL,
 	})
-}
-
-// anchorTemplate is the source URL template without its line fragment: a node anchors a
-// directory or a file, never a line, so the link lands on the path itself.
-func anchorTemplate(sourceURL string) string {
-	return strings.TrimSuffix(sourceURL, "#L{line}")
 }
 
 var errUnknownDiagram = errors.New("diagram: unknown diagram")

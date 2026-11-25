@@ -22,20 +22,14 @@ func (s *BypassClassSuite) linkedTree() []string {
 	return []string{"a/l", "a/r", "a/c"}
 }
 
-// linkSpellings are the ways to spell `<link>/../x.go`. They are
-// built by hand: filepath.Join would clean away the `..` under test.
-func linkSpellings(link string) []string {
-	return []string{
-		link + "/../x.go", fmt.Sprintf("./%s/../x.go", link), strings.Replace(link, "/", "/./", 1) + "/../x.go",
-		strings.Replace(link, "/", "//", 1) + "/../x.go", link + "/./../x.go", link + "/../../denied/x.go",
-	}
-}
-
 // TestPathJudgingMatchesTheKernel writes through every spelling and
 // requires the guard to name the file the kernel wrote.
 func (s *BypassClassSuite) TestPathJudgingMatchesTheKernel() {
 	for _, link := range s.linkedTree() {
-		for _, spelling := range linkSpellings(link) {
+		for _, spelling := range []string{
+			link + "/../x.go", fmt.Sprintf("./%s/../x.go", link), strings.Replace(link, "/", "/./", 1) + "/../x.go",
+			strings.Replace(link, "/", "//", 1) + "/../x.go", link + "/./../x.go", link + "/../../denied/x.go",
+		} {
 			abs := fmt.Sprintf("%s/%s", s.root, spelling)
 			for _, p := range []string{spelling, abs} {
 				s.Require().NoError(os.WriteFile(abs, []byte("x"), 0o644))

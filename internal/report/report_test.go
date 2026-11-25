@@ -27,12 +27,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// withSecrets gives a context the resolver main installs in production; a cache
-// run persists its output, which refuses without one.
-func withSecrets(ctx context.Context) context.Context {
-	return testkit.WithEnvResolver(ctx)
-}
-
 // openFileWriter opens path in append+create mode and wraps it in a Writer, the
 // file-backed construction OpenWriter used to expose. Kept local to the tests that
 // need a real file (append-mode reopening, on-disk fidelity) rather than restoring
@@ -339,7 +333,7 @@ func TestCacheRunOptions(t *testing.T) {
 
 	c, err := cache.Open(t.Context(), cdir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
-	ctx := withSecrets(t.Context())
+	ctx := testkit.WithEnvResolver(t.Context())
 	_, err = c.Run(ctx, spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("bin"), 0o755)
 	}, opts...)
@@ -400,7 +394,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	stateBase, err := xdg.StateDir()
 	require.NoError(t, err)
 	served := ServedIn(t.Context(), job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
-	ctx := withSecrets(t.Context())
+	ctx := testkit.WithEnvResolver(t.Context())
 	_, err = c.Run(ctx, spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
 	}, RunOptions(w, served, nil)...)

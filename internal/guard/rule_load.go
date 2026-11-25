@@ -14,10 +14,6 @@ type ruleLoad struct {
 	steps *steps.Group
 }
 
-func newRuleLoad() *ruleLoad {
-	return &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steps.Group{}}
-}
-
 // within is ctx with the load's registry and step group to register into.
 func (l *ruleLoad) within(ctx context.Context) context.Context {
 	return steps.WithGroup(workspace.ContextWithRegistry(ctx, l.WorkspaceRegistry), l.steps)

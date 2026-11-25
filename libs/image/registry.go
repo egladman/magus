@@ -114,7 +114,7 @@ func pullInto(ctx context.Context, st *staging, c *oci.Client, ref oci.Reference
 	if err := codec.Unmarshal(data, &cfg); err != nil {
 		return ocispec.Descriptor{}, fmt.Errorf("config %s: %w", man.Config.Digest, err)
 	}
-	got := platformFromConfig(cfg)
+	got := platformFromOCI(&cfg.Platform)
 	if !got.Matches(want) {
 		return ocispec.Descriptor{}, fmt.Errorf("%s: config says %s, not %s", ref, got, want)
 	}

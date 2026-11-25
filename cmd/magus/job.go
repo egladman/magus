@@ -462,7 +462,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	// A read: the symbol postconditions, their delta, the deletion candidates and the graph evidence
 	// take the graph as built, and none while a symbol index is stale (see evidence.Graph).
 	graph := newJobGraph(root, false)
-	facts := leaseBoundary(ctx, root, store, row, leases, graph)
+	facts := evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
 	waiting.Stop()
 	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, row.Paths.Write)
 	tries, err := store.Attempts(ctx)
@@ -1379,7 +1379,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 	// A row the result ended (a read-only one nothing else grades) gives its checkout back now.
 	if err == nil && stored.State.Terminal() {
-		err = endNamedWorktrees(ctx, out, store, stored.ID)
+		err = job.EndCheckouts(ctx, out, store, writtenInCheckout, globalCfg.DryRun, true, stored.ID)
 	}
 	return err
 }
@@ -1397,7 +1397,7 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 	for _, over := range already {
 		fmt.Println(over.Error())
 	}
-	removed := endNamedWorktrees(ctx, os.Stdout, store, endedIDs...)
+	removed := job.EndCheckouts(ctx, os.Stdout, store, writtenInCheckout, globalCfg.DryRun, true, endedIDs...)
 	if len(refused) > 0 {
 		reasons := make([]string, len(refused))
 		for i, err := range refused {
@@ -1598,7 +1598,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 		return exit.Usagef("magus job wait: %s owes %d regeneration(s) a merge left: %s; run `%s`, commit what it stages, then wait again",
 			checkout, len(owed), strings.Join(runs, ", "), hint.VCSResolve.With())
 	}
-	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, jobSymbolReader(root, true))
+	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout, evidence.JobSymbolReader(root, true, jobEvidenceEnv()))
 	if err != nil {
 		return exit.Usagef("magus job wait: %s", err)
 	}
@@ -2345,9 +2345,4 @@ func writtenInCheckout(ctx context.Context, checkout string, paths []string) ([]
 // endWorktrees is [job.EndCheckouts] for every ended job.
 func endWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
 	return job.EndCheckouts(ctx, out, store, writtenInCheckout, globalCfg.DryRun, false, ended...)
-}
-
-// endNamedWorktrees is [endWorktrees] for the jobs in ended alone, as `job exit` ends them.
-func endNamedWorktrees(ctx context.Context, out io.Writer, store *job.Store, ended ...string) error {
-	return job.EndCheckouts(ctx, out, store, writtenInCheckout, globalCfg.DryRun, true, ended...)
 }

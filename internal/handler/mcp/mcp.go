@@ -293,14 +293,6 @@ type taskRun struct {
 	cancelled bool
 }
 
-func newTaskRuns() *taskRuns {
-	return &taskRuns{
-		byRequest: map[context.Context]*taskRun{},
-		byParams:  map[*mcplib.TaskParams]*taskRun{},
-		byID:      map[string]*taskRun{},
-	}
-}
-
 // hook registers the joins on the server's hooks and task hooks.
 func (r *taskRuns) hook(hooks *server.Hooks, taskHooks *server.TaskHooks) {
 	hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcplib.CallToolRequest) {

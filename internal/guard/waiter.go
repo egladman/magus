@@ -752,19 +752,3 @@ func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, ti
 	}
 	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
-
-func denySpawnDuplicate(row jobtypes.Job) denial {
-	return denial{
-		Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
-		Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +
-			"A row stays running after its worker dies until something reaps it, so a stuck row is ended first, never worked around with a second worker.",
-	}
-}
-
-func adviseSpawnNestedWaiter() advice {
-	return advice{
-		Say: "magus workspace: a worker spawning a helper to wait or watch: return to your parent, which is told when each worker ends.",
-		Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a backgrounded run announces its own end. " +
-			"A helper spawned only to wait stacks a third context on the notice the first two already get.",
-	}
-}

@@ -141,9 +141,9 @@ func rowText(r Row, color bool) string {
 func lineText(r Row) string {
 	var base, emph termkit.SGR
 	switch {
-	case isAdd(r.Text):
+	case strings.HasPrefix(r.Text, "+"):
 		base, emph = sgrAdd, sgrAddEmph
-	case isDel(r.Text):
+	case strings.HasPrefix(r.Text, "-"):
 		base, emph = sgrDel, sgrDelEmph
 	default:
 		// Context, and the marker line saying a file has no trailing newline: nothing changed

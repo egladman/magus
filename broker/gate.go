@@ -84,7 +84,7 @@ func (s *server) enqueueLocked(p *parked) {
 	i := len(s.queue)
 	for i > 0 {
 		q := s.queue[i-1]
-		if q.gate || q.overtaken >= maxOvertakes || jobWeight(q.claim) >= jobWeight(p.claim) {
+		if q.gate || q.overtaken >= maxOvertakes || cmp.Or(q.claim.Weight, job.DefaultWeight) >= cmp.Or(p.claim.Weight, job.DefaultWeight) {
 			break
 		}
 		i--
@@ -93,10 +93,4 @@ func (s *server) enqueueLocked(p *parked) {
 		q.overtaken++
 	}
 	s.queue = slices.Insert(s.queue, i, p)
-}
-
-// jobWeight is what c weighs in the queue. A run bound to no job, and a job
-// that names no weight, carry zero and weigh the default.
-func jobWeight(c budget.Claim) float64 {
-	return cmp.Or(c.Weight, job.DefaultWeight)
 }

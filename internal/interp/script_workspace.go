@@ -63,10 +63,6 @@ var (
 	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 
-func newLazyWorkspaceContext(parent context.Context, root string, open ScriptOpener) *lazyWorkspaceContext {
-	return &lazyWorkspaceContext{Context: parent, root: root, open: open}
-}
-
 func (c *lazyWorkspaceContext) Value(key any) any {
 	switch key {
 	case workspaceContextKey:

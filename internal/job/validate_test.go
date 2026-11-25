@@ -430,14 +430,9 @@ func (s *ReforkGradeSuite) TestAReforkIsGradedWithNoCheckoutAttached() {
 	s.Require().NoError(err, "a refork is not graded in the checkout its last holder took")
 	s.Require().Len(s.graded, 2)
 	graded := s.graded[1]
-	s.Equal(job.Job{}, handout(graded), "the grade reads the row the refork writes")
-	s.Equal(job.Job{}, handout(again))
+	s.Equal(job.Job{}, job.Job{ReportedBase: graded.ReportedBase, BaseVerdict: graded.BaseVerdict, Registered: graded.Registered, CheckoutRoot: graded.CheckoutRoot}, "the grade reads the row the refork writes")
+	s.Equal(job.Job{}, job.Job{ReportedBase: again.ReportedBase, BaseVerdict: again.BaseVerdict, Registered: again.Registered, CheckoutRoot: again.CheckoutRoot})
 	s.Equal(job.StateDeclared, again.State)
-}
-
-// handout is what exec stamps on a row for the holder that took it.
-func handout(row job.Job) job.Job {
-	return job.Job{ReportedBase: row.ReportedBase, BaseVerdict: row.BaseVerdict, Registered: row.Registered, CheckoutRoot: row.CheckoutRoot}
 }
 
 func TestApplyCollectsEveryRecordsProblems(t *testing.T) {

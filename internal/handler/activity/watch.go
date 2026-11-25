@@ -216,23 +216,7 @@ func wireFeedEvent(e jobstore.FeedEvent) *activityv1.ActivityEvent {
 // once. The probe is a predicate input, never the event: nothing that leaves here says the
 // contested write belonged to the lease that matched it.
 func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
-	probe := fromWire(e)
-	if units := q.GetUnits(); len(units) > 0 && probe.Lease == "" {
-		for _, u := range units {
-			if slices.Contains(e.GetContested(), u) {
-				probe.Lease = u
-				break
-			}
-		}
-	}
-	return matchFilter(probe, q)
-}
-
-// fromWire is the narrow slice of a wire event matchFilter reads, so one filter serves both
-// the recorded events and the synthesized ones. Only the fields the filter looks at are
-// carried: this exists to answer a predicate, not to round-trip an event.
-func fromWire(e *activityv1.ActivityEvent) journal.Call {
-	return journal.Call{
+	probe := journal.Call{
 		Time: e.GetTime().AsTime(),
 		Origin: job.Origin{
 			User: e.GetUser(), EntryPoint: job.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
@@ -248,6 +232,15 @@ func fromWire(e *activityv1.ActivityEvent) journal.Call {
 		Lease: e.GetUnit(),
 		Kind:  decodeKind(e.GetKind()),
 	}
+	if units := q.GetUnits(); len(units) > 0 && probe.Lease == "" {
+		for _, u := range units {
+			if slices.Contains(e.GetContested(), u) {
+				probe.Lease = u
+				break
+			}
+		}
+	}
+	return matchFilter(probe, q)
 }
 
 // decodeKind maps back the two kinds this package synthesizes. The rest never round-trip:

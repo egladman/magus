@@ -362,7 +362,7 @@ func assembleDomain(in Inputs) []Shard {
 		if m := assembleMarkers(tree, in.Graph.Projects, docPages, newDocIndex(docNodes)); len(m.Nodes) > 0 || m.Err != nil {
 			shards = append(shards, m)
 		}
-		if pd := assemblePackageDirs(tree, in.Graph.Projects, in.Layers); len(pd.Nodes) > 0 {
+		if pd := packageDirs(tree.packageSources(), in.Graph.Projects, in.Layers); len(pd.Nodes) > 0 {
 			owned = append(owned, ownedDirs(pd.Nodes)...)
 			shards = append(shards, pd)
 		}
@@ -601,7 +601,7 @@ func assembleRegistry(in Inputs) Shard {
 			Attrs: nilIfEmpty(spellAttrs),
 		})
 		for _, op := range sp.Targets {
-			oID := opID(sp.Name, op)
+			oID := fmt.Sprintf("%s:%s:%s", types.KindOp, sp.Name, op)
 			// The base argv this op runs (empty charms), when statically knowable. A
 			// function-op contributes no entry, so it carries no argv and links to no
 			// tool, the "not statically knowable" boundary the command kind used to draw.
@@ -760,7 +760,7 @@ func assembleProject(p types.TargetGraphProject) Shard {
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: sID, Kind: types.KindSpell, Label: su.Spell})
 			s.Edges = append(s.Edges, extractedEdge(tID, sID, types.RelationUses, p.Path))
 			for _, op := range su.Ops {
-				oID := opID(su.Spell, op)
+				oID := fmt.Sprintf("%s:%s:%s", types.KindOp, su.Spell, op)
 				// Emit a minimal op node too, so a target using an op the registry
 				// shard did not declare (alias handle, workspace spell) never leaves
 				// a dangling edge; it dedups against the registry's richer node.

@@ -24,8 +24,8 @@ type snapshot struct {
 // newBuffer returns a buffer holding a copy of text, at version 0.
 func newBuffer(text []byte) *buffer {
 	return &buffer{
-		rope:    newRope(text),
-		anchors: [2]anchorTree{newAnchorTree(), newAnchorTree()},
+		rope:    rope{newTree[chunk, textSum](chunkify(nil, text))},
+		anchors: [2]anchorTree{anchorTree{t: newTree[anchorEntry, anchorSum](nil)}, anchorTree{t: newTree[anchorEntry, anchorSum](nil)}},
 	}
 }
 

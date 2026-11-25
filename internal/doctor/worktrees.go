@@ -97,15 +97,6 @@ func diskSamplesPath() (string, error) {
 	return filepath.Join(base, "magus", "disk", "space.jsonl"), nil
 }
 
-// retiredDiskSamples is the store from before the sample keys went snake_case. Nothing
-// reads or writes it; doctor names it so a person can delete it.
-//
-// compat(until: a release has shipped disk/space.jsonl): until then a machine that ran
-// an older magus holds one.
-func retiredDiskSamples(store string) string {
-	return filepath.Join(filepath.Dir(store), "samples.jsonl")
-}
-
 // readDiskSamples reads every line of the store; a line that does not decode is an error
 // naming its number rather than a gap in the trend.
 func readDiskSamples(path string) ([]types.DiskSample, error) {
@@ -190,7 +181,7 @@ func (r *runner) checkDiskTrend() check.Check {
 		return check.Check{Name: "disk-trend", Status: check.Advice, Message: fmt.Sprintf("cannot read the disk samples: %v", err)}
 	}
 	trend := diskTrend(samples, r.opts.cfg.Disk)
-	if retired := retiredDiskSamples(path); exists(retired) {
+	if retired := filepath.Join(filepath.Dir(path), "samples.jsonl"); exists(retired) {
 		trend.Details = append(trend.Details, fmt.Sprintf("%s is the disk samples store from before its keys went snake_case; nothing reads it, so it can be deleted", retired))
 	}
 	return trend

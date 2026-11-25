@@ -225,12 +225,6 @@ func shortHash(s string) string {
 	return hex.EncodeToString(sum[:4])
 }
 
-// recordBackground files a command the agent backgrounded, for a later watcher of its
-// process to be recognized as watching the agent's own work.
-func recordBackground(facts hint.Gate, agent, command string) {
-	writeAgentMarker(facts, hint.MarkerKind(fmt.Sprintf("%s%s-%s", backgroundMarkerPrefix, shortHash(agent), shortHash(command))), []byte(command))
-}
-
 func backgroundedCommands(facts hint.Gate, agent string) []string {
 	var out []string
 	for _, kind := range facts.Kinds(hint.MarkerKind(fmt.Sprintf("%s%s-", backgroundMarkerPrefix, shortHash(agent)))) {

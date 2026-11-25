@@ -503,7 +503,7 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	if err != nil || len(keep) == 0 {
 		return b.Commit, tamperedRefusal(err)
 	}
-	commit, err := commitRegenerated(ctx, v, b, keep)
+	commit, err := v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", b.date), Paths: keep})
 	return commit, tamperedRefusal(err)
 }
 
@@ -565,10 +565,6 @@ func regenerateWrites(ctx context.Context, v types.BuildVCS, s candidateSpec, b 
 		return nil, &types.RefusedError{Reason: "regeneration wrote files nothing declares it writes: " + strings.Join(stray, ", "), Paths: stray}
 	}
 	return keep, nil
-}
-
-func commitRegenerated(ctx context.Context, v types.BuildVCS, b built, keep []string) (string, error) {
-	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files", b.date), Paths: keep})
 }
 
 // unprovenWhy says why g does not prove a regeneration runs none of a change's code, and

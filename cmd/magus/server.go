@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"strings"
@@ -961,10 +962,18 @@ var serverHost *server.Host
 // startServer builds the server's host for `magus server` and starts it.
 func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	serverHost = server.NewHost(server.HostDeps{
-		Config:       cfg,
-		Version:      version,
-		Build:        selfBuild,
-		StatusBase:   buildStatusBase,
+		Config:  cfg,
+		Version: version,
+		Build:   selfBuild,
+		StatusBase: func() daemon.Base {
+			return daemon.Base{
+				Telemetry: server.BuildTelemetryStatus(globalCfg.Telemetry),
+				Cache:     server.BuildCacheStatus(globalCfg.Cache),
+				Build: daemon.Build{
+					SelfUpdate: selfUpdateCompiled,
+				},
+			}
+		},
 		Load:         loadMagus,
 		Place:        jobPlace,
 		BrokerClient: newBrokerClient,
@@ -1038,8 +1047,4 @@ func boundLease(root string) string {
 // leasedBrokerClient is a broker client of the daemon's own for one lease's runs.
 func leasedBrokerClient(lease string) *broker.Client {
 	return newBrokerClient(false, broker.WithLease(lease))
-}
-
-func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
-	return server.ResolveDeclaredWorkspaces(context.Background(), cfgList, envVal)
 }

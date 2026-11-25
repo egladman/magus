@@ -31,7 +31,7 @@ func TestNetFreePort(t *testing.T) {
 	assert.LessOrEqual(t, p, 65535)
 
 	// It is genuinely free: binding it right after must succeed.
-	l, err := net.Listen("tcp", net.JoinHostPort("localhost", itoa(p)))
+	l, err := net.Listen("tcp", net.JoinHostPort("localhost", strconv.Itoa(p)))
 	require.NoError(t, err, "free_port returned a port that was not bindable")
 	_ = l.Close()
 }
@@ -91,7 +91,7 @@ func TestNetWaitForPortBecomesReady(t *testing.T) {
 
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		l, err := net.Listen("tcp", net.JoinHostPort("localhost", itoa(port)))
+		l, err := net.Listen("tcp", net.JoinHostPort("localhost", strconv.Itoa(port)))
 		if err == nil {
 			t.Cleanup(func() { _ = l.Close() })
 		}
@@ -133,5 +133,3 @@ func TestNetRecordModeDoesNotTouchTheNetwork(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, p, 0)
 }
-
-func itoa(i int) string { return strconv.Itoa(i) }

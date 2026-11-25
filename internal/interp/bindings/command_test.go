@@ -56,15 +56,6 @@ func TestRedrawCollapserWritesAnUnterminatedLineAtTheEnd(t *testing.T) {
 	assert.Equal(t, "x\nz [2/2]", out.String())
 }
 
-func serviceOp() spells.Op {
-	// bin "true" exits 0, so the non-supervised fall-through fork is harmless.
-	return spells.Op{
-		Kind:    spells.OpKindService,
-		Command: spells.Command{Bin: "true"},
-		Service: &spells.Service{Command: spells.Command{Bin: "true"}},
-	}
-}
-
 // TestRunCommandResolvesCwdAgainstContext proves a command op with no explicit cwd
 // runs in the context working directory (the project dir the magusfile runner sets via
 // std.WithCurrentWorkingDirectory), not the process cwd. This is what lets a spell op invoked from a
@@ -126,7 +117,11 @@ func TestRunCommandSupervisesServiceDependency(t *testing.T) {
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
 	ctx := service.WithSupervision(service.WithSession(testContext(), sess))
 
-	_, err := runCommand(ctx, serviceOp(), commandOpts{})
+	_, err := runCommand(ctx, spells.Op{
+		Kind:    spells.OpKindService,
+		Command: spells.Command{Bin: "true"},
+		Service: &spells.Service{Command: spells.Command{Bin: "true"}},
+	}, commandOpts{})
 	require.NoError(t, err)
 }
 
@@ -140,7 +135,11 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 	// Session present but supervision NOT active: this is a directly-run service.
 	ctx := service.WithSession(testContext(), sess)
 
-	_, err := runCommand(ctx, serviceOp(), commandOpts{})
+	_, err := runCommand(ctx, spells.Op{
+		Kind:    spells.OpKindService,
+		Command: spells.Command{Bin: "true"},
+		Service: &spells.Service{Command: spells.Command{Bin: "true"}},
+	}, commandOpts{})
 	require.NoError(t, err) // `true` exits 0
 }
 

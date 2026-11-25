@@ -125,7 +125,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 	if globalBaseRef == "" {
 		globalBaseRef = os.Getenv("MAGUS_VCS_BASE_REF")
 	}
-	perVCSBaseRef := os.Getenv(perVCSEnv(name, "BASE_REF"))
+	perVCSBaseRef := os.Getenv(fmt.Sprintf("MAGUS_VCS_%s_%s", strings.ToUpper(name), "BASE_REF"))
 
 	base := chooseBase(runtimeBase, globalBaseRef, perVCSBaseRef, v.Base())
 
@@ -188,10 +188,6 @@ func chooseBase(runtime, global, perVCS, def string) string {
 		return def
 	}
 	return "origin/main"
-}
-
-func perVCSEnv(name, suffix string) string {
-	return fmt.Sprintf("MAGUS_VCS_%s_%s", strings.ToUpper(name), suffix)
 }
 
 // exitCode is err's exit status, or -1 when the command did not exit normally (it never

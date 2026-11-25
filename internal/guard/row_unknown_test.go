@@ -78,7 +78,20 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	require.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleLeaseRowUnknown)}, verdict.Judgment{Decision: write.Decision, Rule: write.Rule})
 	assert.Contains(t, write.Reason, "widens_paths")
 
-	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")
+	assert.Equal(t, denyRuleLeaseRowUnknown, []roleScopedRule{
+		{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
+		{denyRuleLeaseCheckout, denyLeaseCheckout},
+		{denyRuleLeasePaused, denyPausedLease},
+		{denyRuleLeaseGate, denyLeaseScopedGate},
+		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
+		{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
+		{denyRuleLeaseVCS, leaseVCSDenial},
+		{denyRuleLeaseRebind, denyLeaseScopedRebind},
+		{denyRuleLeaseHarness, denyLeaseScopedHarness},
+		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
+		{denyRuleEditUngraded, denyUngradedRewrite},
+		{denyRuleSleepPoll, denyRefusedRetry},
+	}[0].name, "judged before any rule that reads the row")
 }
 
 // Refusing these locked a worker out of its placement and its checkout hook.

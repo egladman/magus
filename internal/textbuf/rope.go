@@ -75,10 +75,6 @@ type rope struct {
 	t tree[chunk, textSum]
 }
 
-func newRope(text []byte) rope {
-	return rope{newTree[chunk, textSum](chunkify(nil, text))}
-}
-
 // chunkify appends text to dst as the fewest chunks of even size.
 func chunkify(dst []chunk, text []byte) []chunk {
 	if len(text) == 0 {

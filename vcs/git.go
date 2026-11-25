@@ -2536,7 +2536,7 @@ func (v gitVCS) StartMerge(ctx context.Context, root, ref string, as types.Perso
 	}
 	// An operation already underway would pass the check below with ITS MERGE_HEAD, and a
 	// failed merge would read as one that began.
-	if head, _ := gitMergeHead(ctx, root); head != "" {
+	if head, _ := gitOutput(ctx, root, gitOpts{}, "rev-parse", "-q", "--verify", "MERGE_HEAD"); head != "" {
 		return fmt.Errorf("git merge %s: a merge of %s is already in progress, conclude or abort it first", ref, head)
 	}
 	// The ref, not the id, so the message git prepares names the branch the user merged.
@@ -2548,17 +2548,10 @@ func (v gitVCS) StartMerge(ctx context.Context, root, ref string, as types.Perso
 	// the conflicts are the payload, reported by Conflicts. Only a merge that never began
 	// is an error, and git leaves MERGE_HEAD naming the merged commit exactly when one is
 	// underway.
-	if head, _ := gitMergeHead(ctx, root); head == commit {
+	if head, _ := gitOutput(ctx, root, gitOpts{}, "rev-parse", "-q", "--verify", "MERGE_HEAD"); head == commit {
 		return nil
 	}
 	return fmt.Errorf("git merge %s: %w", ref, err)
-}
-
-// gitMergeHead is the commit an in-progress merge is merging, "" when none is. Asking git
-// rather than reading .git/MERGE_HEAD finds it in a linked checkout too, where .git is a
-// file.
-func gitMergeHead(ctx context.Context, root string) (string, error) {
-	return gitOutput(ctx, root, gitOpts{}, "rev-parse", "-q", "--verify", "MERGE_HEAD")
 }
 
 // AbortMerge abandons the in-progress merge. See types.MergeStarter.

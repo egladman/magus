@@ -135,7 +135,7 @@ func (ix *Indexer) Index(ctx context.Context, units []symbols.Unit) ([]symbols.S
 		if s.err != nil {
 			shard.Gaps = []string{s.err.Error()}
 		} else {
-			shard.Documents = []symbols.Document{newWalker(s).document()}
+			shard.Documents = []symbols.Document{(&walker{s: s, closure: s.closure(), locals: map[*syntax.FuncDecl]map[string]string{}, infos: map[string]bool{}}).document()}
 		}
 		shards = append(shards, shard)
 	}

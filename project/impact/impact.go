@@ -79,24 +79,23 @@ func (s graphStore) HasSymbols() bool { return s.g.HasSymbols() }
 
 func (s graphStore) FileFacts(relPath string) FileFacts {
 	ff := s.g.FileFacts(relPath)
-	out := FileFacts{Coverage: fromGraphCoverage(ff.Coverage)}
+	out := FileFacts{}
+	if c := ff.Coverage; c != nil {
+		out.Coverage = &Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
+	}
 	for _, sym := range ff.Symbols {
-		out.Symbols = append(out.Symbols, SymbolFacts{
+		facts := SymbolFacts{
 			ID:        sym.ID,
 			Label:     sym.Label,
 			RefCount:  sym.RefCount,
 			FileCount: sym.FileCount,
-			Coverage:  fromGraphCoverage(sym.Coverage),
-		})
+		}
+		if c := sym.Coverage; c != nil {
+			facts.Coverage = &Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
+		}
+		out.Symbols = append(out.Symbols, facts)
 	}
 	return out
-}
-
-func fromGraphCoverage(c *knowledge.CoverageFacts) *Coverage {
-	if c == nil {
-		return nil
-	}
-	return &Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // Enrich folds the changed-symbol caller and coverage overlays onto res from the loaded
@@ -124,7 +123,7 @@ func Enrich(res *types.ImpactResult, store SymbolStore) {
 		if ff.Coverage != nil {
 			res.ChangedFileCoverage = append(res.ChangedFileCoverage, types.ImpactFileCoverage{
 				File:     f,
-				Coverage: toCoverage(ff.Coverage),
+				Coverage: impacttypes.Coverage{Ratio: ff.Coverage.Ratio, Covered: ff.Coverage.Covered, Total: ff.Coverage.Total},
 			})
 			coverageSeen = true
 		}
@@ -137,7 +136,7 @@ func Enrich(res *types.ImpactResult, store SymbolStore) {
 				FileCount: s.FileCount,
 			}
 			if s.Coverage != nil {
-				si.Coverage = toCoverage(s.Coverage)
+				si.Coverage = impacttypes.Coverage{Ratio: s.Coverage.Ratio, Covered: s.Coverage.Covered, Total: s.Coverage.Total}
 				coverageSeen = true
 			}
 			res.ChangedSymbols = append(res.ChangedSymbols, si)
@@ -337,12 +336,6 @@ func PublicThrough(g CallGraph, id string) []diff.PublicPath {
 		frontier = next
 	}
 	return out
-}
-
-// toCoverage narrows the knowledge-graph coverage facts to the report's own
-// type, so the impact JSON does not leak the internal graph type.
-func toCoverage(c *Coverage) impacttypes.Coverage {
-	return impacttypes.Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // Compute derives the impact report from a VCS diff against base (empty base uses

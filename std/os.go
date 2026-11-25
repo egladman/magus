@@ -487,7 +487,7 @@ func looksLikeShellCommand(cmd string) bool {
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 // A VCS binary is refused before anything starts; see procVCSRefusal.
 func ProcExec(ctx context.Context, cmd string, args []string, dir string, opts types.ExecOptions) (types.ExecResult, error) {
-	if err := procVCSRefusal(cmd, args, dir); err != nil {
+	if err := RefuseVCS(`proc\exec`, append([]string{cmd}, args...), dir); err != nil {
 		return types.ExecResult{}, err
 	}
 	wd := resolveDir(ctx, dir)

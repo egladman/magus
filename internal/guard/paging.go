@@ -18,17 +18,6 @@ const denyRuleReadPaging denyRuleName = "read-paging"
 // and a look around it; a third is a walk through the file.
 const readPagingRefused = 3
 
-// readPagingKind names the tally of one caller's windows of one file.
-func readPagingKind(agent, rel string) hint.MarkerKind {
-	return hint.MarkerKind(fmt.Sprintf("page-%s-%s", shortHash(agent), shortHash(rel)))
-}
-
-// readNavigationKind marks that one caller was refused a whole read of rel and served its
-// map, so the same caller asking for the same file again is let through.
-func readNavigationKind(agent, rel string) hint.MarkerKind {
-	return hint.MarkerKind(fmt.Sprintf("whole-read-%s-%s", shortHash(agent), shortHash(rel)))
-}
-
 // gradeReadPaging counts each new window the line reads of a mapped file, and refuses the
 // one that reaches readPagingRefused for its caller. A window inside one declaration or
 // heading is a targeted read and never counts, and neither is a repeat of a window already
@@ -56,7 +45,7 @@ func gradeReadPaging(deps Dependencies, facts hint.Gate, agent, dir, command str
 		if _, inside := m.coveringNear(first, last); inside {
 			continue
 		}
-		tally := readPagingKind(agent, rel)
+		tally := hint.MarkerKind(fmt.Sprintf("page-%s-%s", shortHash(agent), shortHash(rel)))
 		window := tally + hint.MarkerKind(fmt.Sprintf("-%s-%s", strconv.Itoa(first), strconv.Itoa(last)))
 		if facts.AlreadyFired(window) {
 			continue

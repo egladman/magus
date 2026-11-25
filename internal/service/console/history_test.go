@@ -28,18 +28,6 @@ func writeHistory(t *testing.T, h forecast.History) string {
 	return path
 }
 
-func volatilityConfigFixture(historyPath string) config.Config {
-	return config.Config{
-		HistoryPath: historyPath,
-		Volatility: config.Volatility{
-			Enabled:          true,
-			BootstrapSamples: 4,
-			MinSamples:       4,
-			Threshold:        0.01,
-		},
-	}
-}
-
 func TestServiceVolatility(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	outcomes := []forecast.Outcome{
@@ -56,7 +44,15 @@ func TestServiceVolatility(t *testing.T) {
 			"proj/a": {"test": st},
 		},
 	}
-	svc := NewService(nil, volatilityConfigFixture(writeHistory(t, hist)), daemon.Base{}, "1.0.0")
+	svc := NewService(nil, config.Config{
+		HistoryPath: writeHistory(t, hist),
+		Volatility: config.Volatility{
+			Enabled:          true,
+			BootstrapSamples: 4,
+			MinSamples:       4,
+			Threshold:        0.01,
+		},
+	}, daemon.Base{}, "1.0.0")
 
 	report, err := svc.volatility(context.Background())
 	require.NoError(t, err)

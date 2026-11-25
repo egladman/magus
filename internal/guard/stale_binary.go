@@ -59,17 +59,10 @@ func unloadCause(ctx context.Context, loadFailure error, at location, lease stri
 		return unloadNone
 	case errors.Is(loadFailure, errNotCheckoutBinary), !hasMagusBinary(root):
 		return unloadNoBinary
-	case contractDiffers(ctx, at, lease, root):
+	case differs(judgedContract(ctx, at, lease, root)):
 		return unloadStale
 	}
 	return unloadNone
-}
-
-// contractDiffers reports a checkout of magus at root whose contract, as
-// judgedContract reads it, differs from the judging binary's. One that
-// cannot be read differs.
-func contractDiffers(ctx context.Context, at location, lease, root string) bool {
-	return differs(judgedContract(ctx, at, lease, root))
 }
 
 func differs(skew contract.Skew, err error) bool {

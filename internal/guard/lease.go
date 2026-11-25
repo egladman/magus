@@ -75,7 +75,12 @@ func adviseRepeatVerify(runsDir string, now time.Time) (full advice, brief strin
 	if runs < verifyRepeatMinRuns || spent < verifyRepeatMinSpent {
 		return advice{}, ""
 	}
-	return verifyRepeatAdvice(runs, spent), verifyRepeatBrief(runs, spent)
+	return advice{
+			Say: fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock; %s first.",
+				types.TargetCI, runs, verifyRepeatWindow, spent.Round(time.Second), gateCadence),
+			Why: gateCadenceWhy,
+		}, fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock; %s.",
+			types.TargetCI, runs, spent.Round(time.Second), gateCadence)
 }
 
 // denyRepeatVerify refuses a gate over a tree unchanged since the newest
@@ -337,22 +342,6 @@ var gateCadence = fmt.Sprintf("`%s` sizes the risk", hint.Affected.With(string(t
 // gateCadenceWhy is the trade --plan informs, kept behind the advisory's ref.
 var gateCadenceWhy = "One project is usually answered by that project's own `" + string(types.TargetCI) +
 	"`, while the root or several projects is the gate earning it."
-
-func verifyRepeatAdvice(runs int, spent time.Duration) advice {
-	return advice{
-		Say: fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock; %s first.",
-			types.TargetCI, runs, verifyRepeatWindow, spent.Round(time.Second), gateCadence),
-		Why: gateCadenceWhy,
-	}
-}
-
-// verifyRepeatBrief is the repeat form, and it keeps the running cost rather
-// than going quiet. The count and the wall clock are the whole argument, and
-// they changed since the caller last read the full text.
-func verifyRepeatBrief(runs int, spent time.Duration) string {
-	return fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock; %s.",
-		types.TargetCI, runs, spent.Round(time.Second), gateCadence)
-}
 
 // denyLeaseScopedGate is what a bound lease's magus runs meet: the gate refusal first, then
 // worker-check-only for every other target. One entry because roleScopedCommandRules lists
@@ -2421,12 +2410,6 @@ func integrates(row jobtypes.Job, spawned, workspace string) bool {
 	return ok && titled.ID == row.ID
 }
 
-// integratesOwnCheckout is integrates for the checkout row was taken in.
-// A VCS call is placed by its own site, never by a magus call.
-func integratesOwnCheckout(deps Dependencies, row jobtypes.Job) bool {
-	return integrates(row, spawnedAs(deps.facts, deps.caller.Agent), row.CheckoutRoot)
-}
-
 // holdsCheckout reports whether row is a live row taken with `magus job fork --checkout` in
 // the checkout at workspace. Its holder gates there under any title. It is not integrates:
 // that role also lets the integrator build and bootstrap, which a holder of a change role
@@ -2660,7 +2643,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 	if role == "" {
 		return denial{}
 	}
-	integrator := integratesOwnCheckout(deps, me)
+	integrator := integrates(me, spawnedAs(deps.facts, deps.caller.Agent), me.CheckoutRoot)
 	lands := func(c hint.Invocation) bool { return workerLands(c) || integrator && integratorLands(c) }
 	placed := lands
 	if refMoveRoot(me) != "" {
@@ -2682,7 +2665,8 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 					if addsScratchCheckout(command, cwd) {
 						continue
 					}
-					return denial{Say: checkoutAddDenial(fmt.Sprintf("`%s`", command), me, role)}
+					return denial{Say: fmt.Sprintf("magus workspace: %s makes a checkout by hand, and lease %s is %s: `%s` makes a job's checkout, and removes it once the job ends",
+						fmt.Sprintf("`%s`", command), me.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))}
 				}
 				return workerVCSDecision(fmt.Sprintf("`%s`", command), vcsRefusal{op: op, kind: vcsOpOrchestrated}, me, role)
 			}

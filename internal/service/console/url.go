@@ -220,14 +220,10 @@ func encodeComponent(s string) string {
 // the target plan and the Jobs stage; a job is named by the latter.
 const JobApp = "plan"
 
-// jobFragment selects one job in the Jobs view. Shared by the two link forms so a path and
-// an absolute URL cannot disagree about which directive names a job.
-func jobFragment(id string) FragmentParam { return FragmentParam{Key: "job", Value: id} }
-
 // JobAppLink is one job's row in the console Jobs view, without an origin: the form a
 // handler hands back to the console, which is already served from the server it is asking.
 // See [AppLink].
-func JobAppLink(id string) string { return AppLink(JobApp, jobFragment(id)) }
+func JobAppLink(id string) string { return AppLink(JobApp, FragmentParam{Key: "job", Value: id}) }
 
 // JobLink is [JobAppLink] against the loopback origin of the server serving the
 // console: what a CLI hands a PERSON, who is not in the console already and for whom a
@@ -241,5 +237,5 @@ func JobLink(host, id string) string {
 	if host == "" || id == "" {
 		return ""
 	}
-	return Link(LinkOpts{Host: host, App: JobApp, Fragment: []FragmentParam{jobFragment(id)}})
+	return Link(LinkOpts{Host: host, App: JobApp, Fragment: []FragmentParam{FragmentParam{Key: "job", Value: id}}})
 }

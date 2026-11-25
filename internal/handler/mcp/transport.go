@@ -38,11 +38,6 @@ import (
 // the initialize hook can read it back and fold it into the session identity.
 type uaCtxKey struct{}
 
-// withUserAgent returns ctx carrying the client's raw HTTP User-Agent header.
-func withUserAgent(ctx context.Context, ua string) context.Context {
-	return context.WithValue(ctx, uaCtxKey{}, ua)
-}
-
 // userAgentFromContext returns the User-Agent stashed by withUserAgent, or ""
 // over stdio or before the context func has run.
 func userAgentFromContext(ctx context.Context) string {
@@ -149,7 +144,11 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 // and tool set live in one place. The caller supplies only the transport-specific
 // hooks (agent tracking) and the originFn used at tool-call time.
 func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Client) *mcpserver.MCPServer {
-	tasks := newTaskRuns()
+	tasks := &taskRuns{
+		byRequest: map[context.Context]*taskRun{},
+		byParams:  map[*mcp.TaskParams]*taskRun{},
+		byID:      map[string]*taskRun{},
+	}
 	taskHooks := &mcpserver.TaskHooks{}
 	tasks.hook(hooks, taskHooks)
 	srv := mcpserver.NewMCPServer(
@@ -279,7 +278,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		// context so the initialize hook can capture it. stdio has no equivalent
 		// (it carries no request headers), so this signal is HTTP-only by nature.
 		mcpserver.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-			return withCallerLease(withUserAgent(ctx, r.Header.Get("User-Agent")), recorder.LeaseFromBaggage(r.Header.Get(baggageHeader)))
+			return withCallerLease(context.WithValue(ctx, uaCtxKey{}, r.Header.Get("User-Agent")), recorder.LeaseFromBaggage(r.Header.Get(baggageHeader)))
 		}),
 	), nil
 }

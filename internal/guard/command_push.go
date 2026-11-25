@@ -251,7 +251,7 @@ func deletesOnly(c hint.Invocation) bool {
 	case "sl":
 		return slices.Contains(args, "--delete")
 	case "jj":
-		return slices.Contains(args, "--deleted") && len(jjSelectors(args)) == 0 &&
+		return slices.Contains(args, "--deleted") && len(slices.Concat(flagValues(args, "r", "revisions"), flagValues(args, "c", "change"), flagValues(args, "b", "bookmark"))) == 0 &&
 			!slices.ContainsFunc(args, func(a string) bool { return a == "--all" || a == "--tracked" })
 	}
 	return false
@@ -498,7 +498,7 @@ func jjSource(args []string) (source, unknown string) {
 			return "", fmt.Sprintf("`jj git push %s` publishes bookmarks magus does not read before the line runs", flag)
 		}
 	}
-	selectors := jjSelectors(args)
+	selectors := slices.Concat(flagValues(args, "r", "revisions"), flagValues(args, "c", "change"), flagValues(args, "b", "bookmark"))
 	switch len(selectors) {
 	case 0:
 		return "", "`jj git push` with no -r, -c or -b publishes bookmarks magus does not read before the line runs"
@@ -506,10 +506,6 @@ func jjSource(args []string) (source, unknown string) {
 		return oneCommit(selectors[0], "the selector")
 	}
 	return "", "`jj git push` names more than one of -r, -c and -b, so it publishes more than one revision"
-}
-
-func jjSelectors(args []string) []string {
-	return slices.Concat(flagValues(args, "r", "revisions"), flagValues(args, "c", "change"), flagValues(args, "b", "bookmark"))
 }
 
 // ghSource is gh pr create's --head, a branch of this repository.

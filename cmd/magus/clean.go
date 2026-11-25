@@ -8,6 +8,7 @@ import (
 	"os"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
@@ -55,7 +56,7 @@ func cleanCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	targets, _, err := resolveTargets(ctx, m, types.Target{Name: "clean"}, runSelection{projects: projectArgs, cwd: clientCurrentWorkingDirectory(ctx)})
+	targets, _, err := interactive.ResolveTargets(ctx, m, types.Target{Name: "clean"}, interactive.RunSelection{Projects: projectArgs, Cwd: clientCurrentWorkingDirectory(ctx)})
 	if err != nil {
 		return err
 	}

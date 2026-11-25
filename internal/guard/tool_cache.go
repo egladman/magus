@@ -10,7 +10,6 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
 )
 
 const lintCacheEnv = "GOLANGCI_LINT_CACHE"
@@ -113,14 +112,4 @@ func unscopedCache(scope workspaceScope, value string, set bool) string {
 		return fmt.Sprintf("%s=%s is outside the checkout %s", lintCacheEnv, value, scope.root)
 	}
 	return ""
-}
-
-// toolCacheDeny is the verdict for a direct lint run against a cache outside the checkout.
-func toolCacheDeny(scope workspaceScope, command string, inv hint.Invocation, why string) ShellVerdict {
-	return ShellVerdict{
-		Deny: explainDeny(command, inv, fmt.Sprintf("[%s] %s; run `magus run golangci-lint <project>`, which keeps the cache in %s",
-			types.ToolCacheUnscoped, why, filepath.Join(scope.root, ".magus", "golangci-lint"))),
-		Why:  "A cache shared with other checkouts answers from their results and hides findings this checkout would report: one shared lint cache held 10,202 paths from 5 other checkouts.",
-		Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(inv)},
-	}
 }

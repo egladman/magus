@@ -201,9 +201,6 @@ var osUname = map[string]string{
 	"freebsd": "FreeBSD", "netbsd": "NetBSD", "openbsd": "OpenBSD",
 }
 
-// normIdent lowercases and trims an identifier for alias lookup.
-func normIdent(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
-
 // renderPlatform returns canon in the requested style, or an error for an
 // unknown style. An empty style means the canonical (go) form.
 func renderPlatform(what, canon, style string, uname map[string]string) (string, error) {
@@ -223,7 +220,7 @@ func renderPlatform(what, canon, style string, uname map[string]string) (string,
 // PlatformArch normalizes an architecture identifier to canonical Go GOARCH and
 // renders it in the requested style. Returns "" for an unrecognized identifier.
 func PlatformArch(_ context.Context, name, style string) (string, error) {
-	canon, ok := archCanonical[normIdent(name)]
+	canon, ok := archCanonical[strings.ToLower(strings.TrimSpace(name))]
 	if !ok {
 		return "", nil
 	}
@@ -233,7 +230,7 @@ func PlatformArch(_ context.Context, name, style string) (string, error) {
 // PlatformOS normalizes an OS identifier to canonical Go GOOS and renders it in
 // the requested style. Returns "" for an unrecognized identifier.
 func PlatformOS(_ context.Context, name, style string) (string, error) {
-	canon, ok := osCanonical[normIdent(name)]
+	canon, ok := osCanonical[strings.ToLower(strings.TrimSpace(name))]
 	if !ok {
 		return "", nil
 	}

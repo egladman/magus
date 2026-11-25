@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"flag"
-	"io"
 	"os"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
@@ -35,7 +33,7 @@ func mcpCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return serveMCPStdio(ctx, m, os.Stdin, os.Stdout)
+	return server.ServeMCPStdio(ctx, m, os.Stdin, os.Stdout, server.StdioIdentity{Config: globalCfg, Version: version, Build: selfBuild})
 }
 
 // mcpUsage is `magus mcp --help`: the stdio registration a host needs, then the server's
@@ -43,8 +41,3 @@ func mcpCommand(ctx context.Context, root string, args []string) error {
 // client's config dialect belongs in docs/guides/integrations/mcp.md, where a change to one
 // is not a magus release.
 func mcpUsage() { server.WriteMCPUsage(os.Stderr, globalCfg.MCP) }
-
-// serveMCPStdio serves MCP for m as this process: its configuration and build.
-func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Writer) error {
-	return server.ServeMCPStdio(ctx, m, in, wire, server.StdioIdentity{Config: globalCfg, Version: version, Build: selfBuild})
-}

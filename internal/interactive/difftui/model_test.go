@@ -406,7 +406,7 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 	big.resize(9)
 	for range 2 {
 		assert.NotContains(t, Frame(big, false), "\x1b", "the plain frame carries no escape at all")
-		assert.Equal(t, Frame(big, false), stripSGR(Frame(big, true)))
+		assert.Equal(t, Frame(big, false), sgrPattern.ReplaceAllString(Frame(big, true), ""))
 		big.toggleOverview()
 	}
 }
@@ -502,8 +502,6 @@ func (termWriter) Fd() uintptr { return 1 }
 // sgrPattern matches the only escape this package emits. A hyperlink would need more, and the
 // fixtures here deliberately carry no Link for that reason.
 var sgrPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
-
-func stripSGR(s string) string { return sgrPattern.ReplaceAllString(s, "") }
 
 // emphasizedText is the text each hunk line's span selects, in line order, "" where there is none.
 // Compared as text rather than as offsets because text is what the renderer draws.

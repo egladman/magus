@@ -152,7 +152,7 @@ func TestFetchAndVerifyIndex_EmptyKeyring(t *testing.T) {
 // ed25519.Verify, which panics on any non-nil, non-32-byte key.
 func TestFetchAndVerifyIndex_WrongLengthKey(t *testing.T) {
 	t.Parallel()
-	opts := Options{Keys: badRing(16), DiscoveryURL: "http://127.0.0.1:0/index.json"}
+	opts := Options{Keys: Keyring{{ID: "malformed", State: KeyActive, Pub: make(ed25519.PublicKey, 16)}}, DiscoveryURL: "http://127.0.0.1:0/index.json"}
 	require.NotPanics(t, func() {
 		_, err := FetchAndVerifyIndex(context.Background(), opts)
 		require.Error(t, err)
@@ -690,7 +690,7 @@ func TestFetchAndVerifyManifestWrongLengthKey(t *testing.T) {
 	require.NotPanics(t, func() {
 		_, err := FetchAndVerifyManifest(
 			context.Background(), srv.URL+"/sums", srv.URL+"/sig",
-			Options{Keys: badRing(8)},
+			Options{Keys: Keyring{{ID: "malformed", State: KeyActive, Pub: make(ed25519.PublicKey, 8)}}},
 		)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "want 32")

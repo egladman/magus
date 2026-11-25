@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -347,16 +346,34 @@ func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 		CheckoutRoot:   row.CheckoutRoot,
 		Registered:     row.Registered,
 		RegisteredBy:   wireOrigin(row.RegisteredBy),
-		Attempt:        wireAttempt(row.Attempt),
 		Integration:    wireIntegration(row.Integration),
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
 		ApiVersion:     string(job.APIVersion),
 		Requires:       row.Requires,
-		ModelTier:      wireModelTier(row.ModelTier),
 		BriefFormat:    string(row.BriefFormat),
 		ReworkRounds:   int32(row.ReworkRounds),
 		Widenings:      int32(row.Widenings),
-		Agent:          wireAgent(row.Agent),
+	}
+	if a := row.Attempt; a != nil {
+		j.Attempt = &jobv1.JobAttempt{
+			Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
+			Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
+			AttemptId: a.AttemptID, DurationMs: a.DurationMs, Revision: a.Revision, Dirty: a.Dirty,
+			Lease: a.Lease, ExtraArgs: a.ExtraArgs,
+		}
+	}
+	if t := row.ModelTier; t != nil {
+		j.ModelTier = &jobv1.JobModelTier{
+			Name: t.Name, Rank: int32(t.Rank), Skills: string(t.Skills), Source: string(t.Source),
+			Reason: t.Reason, Site: t.Site, Model: t.Model,
+		}
+	}
+	if a := row.Agent; a != nil {
+		j.Agent = &jobv1.JobAgent{
+			Model:        &jobv1.JobAgentModel{Id: a.Model.ID, Tier: a.Model.Tier},
+			Instructions: a.Instructions,
+			Worker:       &jobv1.JobAgentWorker{Type: string(a.Worker.Type), Reason: a.Worker.Reason},
+		}
 	}
 	if row.ServerRun() {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -365,7 +382,12 @@ func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt, Revoked: r.Revoked})
 	}
 	for _, g := range row.PostconditionAttempts {
-		j.PostconditionAttempts = append(j.PostconditionAttempts, &jobv1.JobPostconditionAttempt{PostconditionId: g.PostconditionID, Attempt: wireAttempt(&g.Attempt)})
+		j.PostconditionAttempts = append(j.PostconditionAttempts, &jobv1.JobPostconditionAttempt{PostconditionId: g.PostconditionID, Attempt: &jobv1.JobAttempt{
+			Found: g.Attempt.Found, Ref: g.Attempt.Ref, TimestampMs: g.Attempt.TimestampMs,
+			Project: g.Attempt.Project, Target: g.Attempt.Target, Spell: g.Attempt.Spell, Failed: g.Attempt.Failed,
+			AttemptId: g.Attempt.AttemptID, DurationMs: g.Attempt.DurationMs, Revision: g.Attempt.Revision, Dirty: g.Attempt.Dirty,
+			Lease: g.Attempt.Lease, ExtraArgs: g.Attempt.ExtraArgs,
+		}})
 	}
 	for _, u := range row.Unattributed {
 		j.Unattributed = append(j.Unattributed, &jobv1.JobUnattributedWrite{Path: u.Path, Digest: u.Digest, At: u.At})
@@ -393,41 +415,6 @@ func wireOrigin(o job.Origin) *jobv1.JobOrigin {
 		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name}
 	}
 	return w
-}
-
-// wireModelTier maps the tier the store assigned, nil for a row written where the workspace
-// declared none.
-func wireModelTier(t *tier.Assignment) *jobv1.JobModelTier {
-	if t == nil {
-		return nil
-	}
-	return &jobv1.JobModelTier{
-		Name: t.Name, Rank: int32(t.Rank), Skills: string(t.Skills), Source: string(t.Source),
-		Reason: t.Reason, Site: t.Site, Model: t.Model,
-	}
-}
-
-func wireAgent(a *job.Agent) *jobv1.JobAgent {
-	if a == nil {
-		return nil
-	}
-	return &jobv1.JobAgent{
-		Model:        &jobv1.JobAgentModel{Id: a.Model.ID, Tier: a.Model.Tier},
-		Instructions: a.Instructions,
-		Worker:       &jobv1.JobAgentWorker{Type: string(a.Worker.Type), Reason: a.Worker.Reason},
-	}
-}
-
-func wireAttempt(a *job.CapturedRun) *jobv1.JobAttempt {
-	if a == nil {
-		return nil
-	}
-	return &jobv1.JobAttempt{
-		Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
-		Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
-		AttemptId: a.AttemptID, DurationMs: a.DurationMs, Revision: a.Revision, Dirty: a.Dirty,
-		Lease: a.Lease, ExtraArgs: a.ExtraArgs,
-	}
 }
 
 func wireIntegration(in *job.Integration) *jobv1.JobIntegration {

@@ -21,14 +21,6 @@ func goLike() Syntax {
 	}
 }
 
-func pythonLike() Syntax {
-	return Syntax{
-		Comments:  &CommentSyntax{LineComments: []string{"#"}, Quotes: []Quote{{Open: `"`, Close: `"`}}},
-		Stubs:     &StubSyntax{Kinds: []string{"Function"}, BodyStyle: StubBodyIndent, Body: "raise NotImplementedError"},
-		Decisions: &DecisionSyntax{Keywords: []string{"if", "and"}},
-	}
-}
-
 type lexSpansSuite struct{ suite.Suite }
 
 func TestLexSpans(t *testing.T) { suite.Run(t, new(lexSpansSuite)) }
@@ -112,7 +104,11 @@ func (s *complexitySuite) TestRefusesASyntaxWithNoComments() {
 }
 
 func (s *complexitySuite) TestCountsAnIndentLanguagesWordOperators() {
-	n, err := pythonLike().Complexity("def f(a, b):\n    if a and b:  # if\n        return 1\n")
+	n, err := Syntax{
+		Comments:  &CommentSyntax{LineComments: []string{"#"}, Quotes: []Quote{{Open: `"`, Close: `"`}}},
+		Stubs:     &StubSyntax{Kinds: []string{"Function"}, BodyStyle: StubBodyIndent, Body: "raise NotImplementedError"},
+		Decisions: &DecisionSyntax{Keywords: []string{"if", "and"}},
+	}.Complexity("def f(a, b):\n    if a and b:  # if\n        return 1\n")
 	s.Require().NoError(err)
 	s.Equal(3, n)
 }

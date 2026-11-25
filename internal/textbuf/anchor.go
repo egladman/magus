@@ -59,10 +59,6 @@ type anchorTree struct {
 	free []uint32
 }
 
-func newAnchorTree() anchorTree {
-	return anchorTree{t: newTree[anchorEntry, anchorSum](nil)}
-}
-
 // seek finds the first entry whose position passes at: greater than at, or, with
 // inclusive, equal to it as well. It returns the entry's index and the position and
 // maximum key before it; found is false when no entry passes at.

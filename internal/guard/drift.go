@@ -113,7 +113,13 @@ func driftVerdict(ws types.WorkspaceReader, writePath string, touched []string) 
 			return landed
 		}
 	}
-	landed.advice = scopeDriftAdvice(landed.project, from.Seeds)
+	landed.advice = advice{
+		Say: fmt.Sprintf("magus workspace: consider handing %s to its own session: nothing in the graph ties it to %s, and `%s` checks whether they connect.",
+			landed.project, strings.Join(from.Seeds, ", "), hint.Explain.With(landed.project, "--to", from.Seeds[0])),
+		Why: fmt.Sprintf("%s depends on none of the projects this session has written to (%s), and none of them depends on it, so no target run for one half of this diff validates the other. "+
+			"The magus-multi-agent skill partitions work by write set, and this write opens a second one. If the two connect, this is one unit after all.",
+			landed.project, strings.Join(from.Seeds, ", ")),
+	}
 	return landed
 }
 
@@ -133,20 +139,6 @@ func touchedPaths(ws types.WorkspaceReader, touched []string) []string {
 		out = append(out, p)
 	}
 	return out
-}
-
-// scopeDriftAdvice names magus-multi-agent rather than any skill a particular
-// harness installs. This ships in the binary and judges whatever workspace it is
-// pointed at, so the one skill it may route to is one magus itself installs, and
-// that skill's own opening line is to count write sets.
-func scopeDriftAdvice(proj string, touched []string) advice {
-	return advice{
-		Say: fmt.Sprintf("magus workspace: consider handing %s to its own session: nothing in the graph ties it to %s, and `%s` checks whether they connect.",
-			proj, strings.Join(touched, ", "), hint.Explain.With(proj, "--to", touched[0])),
-		Why: fmt.Sprintf("%s depends on none of the projects this session has written to (%s), and none of them depends on it, so no target run for one half of this diff validates the other. "+
-			"The magus-multi-agent skill partitions work by write set, and this write opens a second one. If the two connect, this is one unit after all.",
-			proj, strings.Join(touched, ", ")),
-	}
 }
 
 // record adds the write's project to the session's touched set.

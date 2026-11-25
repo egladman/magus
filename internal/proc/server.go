@@ -94,13 +94,6 @@ func SandboxFloorFromContext(ctx context.Context) types.SandboxMode {
 	return types.SandboxModeOff
 }
 
-// withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
-// The server's handler reads it via IsJob to route jobs through the full command set while a
-// plain adopted run stays limited to run/affected.
-func withJob(ctx context.Context) context.Context {
-	return context.WithValue(ctx, jobCtxKey, true)
-}
-
 // IsJob reports whether ctx belongs to a background job (submitted via SubmitJob) rather than
 // an adopted run. The server's dispatch handler branches on it.
 func IsJob(ctx context.Context) bool {
@@ -678,7 +671,7 @@ func (s *service) submitJob(reqCtx context.Context, req jobRequest, reply *jobRe
 		ctx = recorder.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = environ.With(ctx)
-		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
+		ctx = context.WithValue(ctx, jobCtxKey, true) // route through the full job command set, not the run/affected adoption allowlist
 		// A job descends from nobody. The request context carries whatever ancestry the SERVER's
 		// process environment had (which is a real value when the server was started from
 		// inside a magus target), and inheriting it would attribute this job's locks to a

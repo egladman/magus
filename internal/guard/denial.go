@@ -37,13 +37,6 @@ const ruleDocsBase = "https://eli.gladman.cc/magus/reference/rules/"
 // (a run's output) and mcp (an MCP payload).
 const verdictRefPrefix = "grd"
 
-// denyMarker keys a rule's first firing in the advisory gate. Prefixed so a deny can never
-// share a marker with an advisory kind of the same name. A workspace rule's colon becomes
-// a dash, since the kind is a filename component and Windows refuses a colon in one.
-func denyMarker(rule string) hint.MarkerKind {
-	return hint.MarkerKind("deny-" + strings.ReplaceAll(rule, ":", "-"))
-}
-
 // denial is a refusal in the two parts a rule words it in.
 type denial struct {
 	// Say is the verdict printed inline: one sentence naming the problem, carrying at
@@ -127,9 +120,9 @@ see: %s%s/`, ruleDocsBase, rule), doc.Catches
 	// Only the same verdict and remedy from the same binary, note aside, is a repeat: a
 	// rule refusing for a second reason would have its Catches line misname it, and after
 	// a role change or a rebuild the new remedy is what the reader needs to see.
-	marker := denyMarker(fmt.Sprintf("%s-%s", rule, reasonDigest(fmt.Sprintf(`%s
+	marker := hint.MarkerKind("deny-" + strings.ReplaceAll(fmt.Sprintf("%s-%s", rule, reasonDigest(fmt.Sprintf(`%s
 %s
-%s`, d.Say, command, binaryStamp()))))
+%s`, d.Say, command, binaryStamp()))), ":", "-"))
 	if preview {
 		return fmt.Sprintf("%s%s%s", d.Say, note, command), "", remedy
 	}

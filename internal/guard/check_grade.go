@@ -26,16 +26,12 @@ import (
 // fork` grades with a [ForkGrader] instead, which judges alike and keeps what it opened
 // for the rest of the fork.
 func NewCheckGrader(load RulesLoader) job.CheckGrader {
-	return newRulesByRoot(load, nil).grade
+	return (&rulesByRoot{load: load, loaded: map[string]gradingRules{}, opens: nil}).grade
 }
 
 // RulesLoader loads the guard's dependencies for the workspace at root, with the rules
 // they came from, nil when none loaded. The CLI holds the wiring that builds them.
 type RulesLoader func(ctx context.Context, root string) (Dependencies, *WorkspaceRules)
-
-func newRulesByRoot(load RulesLoader, opens *OpenedWorkspaces) *rulesByRoot {
-	return &rulesByRoot{load: load, loaded: map[string]gradingRules{}, opens: opens}
-}
 
 // rulesByRoot holds each workspace's rules while their files stay unchanged.
 type rulesByRoot struct {

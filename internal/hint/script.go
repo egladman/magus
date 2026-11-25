@@ -193,7 +193,7 @@ func parseScriptDeclaration(src []byte) (scriptDeclaration, bool, error) {
 	}
 	var errs []error
 	for _, q := range quotedRe.FindAll(serves[1], -1) {
-		entry, err := unquoteBuzz(q)
+		entry, err := strconv.Unquote(strings.ReplaceAll(string(q), `\{`, "{"))
 		if err != nil {
 			errs = append(errs, fmt.Errorf("SERVES entry %s: %w", q, err))
 			continue
@@ -216,14 +216,8 @@ func declaredString(re *regexp.Regexp, src []byte) (string, bool) {
 	if m == nil {
 		return "", false
 	}
-	s, err := unquoteBuzz(m[1])
+	s, err := strconv.Unquote(strings.ReplaceAll(string(m[1]), `\{`, "{"))
 	return s, err == nil
-}
-
-// unquoteBuzz reads a Buzz string literal as Go's strconv does, plus Buzz's \{ escape: a
-// placeholder like {checkout} is written \{checkout} so Buzz does not interpolate it.
-func unquoteBuzz(q []byte) (string, error) {
-	return strconv.Unquote(strings.ReplaceAll(string(q), `\{`, "{"))
 }
 
 func parseScriptSituation(entry string) (scriptSituation, error) {

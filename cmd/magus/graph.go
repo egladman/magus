@@ -16,7 +16,6 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
@@ -154,7 +153,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 
 	// Claimed only now: a step behind its own process's claim may never seat.
-	seated, err := admitGraphBuild(ctx, processBrokerClient(), root)
+	seated, err := admitUnderBrokerPolicy(ctx, processBrokerClient(), root, "graph-build", maintenance.GraphBuildMemoryMB)
 	if err != nil {
 		return err
 	}
@@ -232,12 +231,6 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 	return maintenance.AcquireGraphBuilds(ctx, wsRoot, dir, notices)
 }
 
-// admitGraphBuild claims the machine budget for assembling the graph, under
-// the workspace's broker policy.
-func admitGraphBuild(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
-	return admitUnderBrokerPolicy(ctx, admit, root, "graph-build", maintenance.GraphBuildMemoryMB)
-}
-
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a
 // helper takes a writer but is also handed stdout or a buffer, so the helper keeps its
 // signature. A prefix names the label to move out of the text.
@@ -264,7 +257,7 @@ func (w noticeLines) Write(p []byte) (int, error) {
 // project it left unindexed or behind, or a holder that died mid-build, returns false so
 // the caller builds.
 func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildHolder) (bool, error) {
-	left := staleIndexProjects(ctx, root)
+	left := types.StaleIndexProjects(staleIndexes(ctx, root))
 	var gaps []types.KnowledgeSymbolGap
 	probed := false
 	if ws, err := inspectWorkspace(ctx, root); err == nil {

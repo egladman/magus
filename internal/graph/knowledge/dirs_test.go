@@ -197,7 +197,7 @@ func TestFindPackageSourcesWalksIndexedLanguages(t *testing.T) {
 		ws.Write(rel, "")
 	}
 
-	assert.Equal(t, []string{"a.go", "crate/src/lib.rs", "gen/g.go", "lib/m.py", "src/app.tsx"}, findPackageSources(ws.Root()))
+	assert.Equal(t, []string{"a.go", "crate/src/lib.rs", "gen/g.go", "lib/m.py", "src/app.tsx"}, WalkTree(ws.Root()).packageSources())
 }
 
 func TestUnionLayersJoinsProjectsAndRefusesTwoNames(t *testing.T) {

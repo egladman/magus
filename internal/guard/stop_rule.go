@@ -63,7 +63,7 @@ func gradeWorkspaceStop(ctx context.Context, deps Dependencies, judged verdict.J
 	if judged.Decision == verdict.Deny {
 		judged = passWaitingStop(judged, req)
 	}
-	if note := stopFailureNote(asked); note != "" && judged.Decision != verdict.Deny {
+	if note := seamFailureNote(seamStop, "this stop stands on the built-in check alone", asked); note != "" && judged.Decision != verdict.Deny {
 		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
 		if judged.Decision == verdict.Defer {
 			judged.Decision = verdict.Advise
@@ -135,12 +135,6 @@ func stopRequest(ctx context.Context, deps Dependencies, env stopEnvelope, who h
 		req.Checkout = deps.CheckoutState(ctx, cmp.Or(at.dir, at.workspace))
 	}
 	return req
-}
-
-// stopFailureNote names each side of the stop rule that judged nothing, "" when every side
-// answered.
-func stopFailureNote(asked rulesAnswer) string {
-	return seamFailureNote(seamStop, "this stop stands on the built-in check alone", asked)
 }
 
 // seamFailureNote names each side of seam's rule that judged nothing and

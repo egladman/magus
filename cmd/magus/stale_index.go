@@ -18,21 +18,6 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// staleIndexProjects lists, workspace-relative and sorted, the projects whose built symbol
-// index would be rebuilt for the current sources.
-//
-// Silent on every uncertainty, which is the same contract every other advisory on this
-// command keeps. A project with NO index is deliberately not reported here: that is the
-// gap probe's answer, printVerdict already renders it as "outside coverage", and one fact
-// stated twice in two vocabularies teaches a reader to skip both.
-//
-// The verdict comes from the probe behind `magus server status`, so the
-// banner and the status table agree. It is checked at the read. Only the
-// concrete *magus.Magus exposes the cache.
-func staleIndexProjects(ctx context.Context, root string) []string {
-	return types.StaleIndexProjects(staleIndexes(ctx, root))
-}
-
 // staleIndexes is staleIndexProjects an index at a time: a project with a Go and a Buzz
 // index has an entry for each one that is stale.
 func staleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex {

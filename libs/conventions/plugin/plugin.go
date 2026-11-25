@@ -25,10 +25,12 @@ import (
 	"github.com/egladman/magus/libs/conventions/globalrestore"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
+	"github.com/egladman/magus/libs/conventions/inlineliteral"
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"github.com/egladman/magus/libs/conventions/jsonlstate"
 	"github.com/egladman/magus/libs/conventions/nameoutput"
 	"github.com/egladman/magus/libs/conventions/namewords"
+	"github.com/egladman/magus/libs/conventions/passthrough"
 	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
 	"github.com/egladman/magus/libs/conventions/secretfields"
@@ -55,9 +57,11 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("globalrestore", plugin("globalrestore", globalrestore.New))
 	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))
 	register.Plugin("hostvocab", plugin("hostvocab", hostvocab.New))
+	register.Plugin("inlineliteral", plugin("inlineliteral", inlineliteral.New))
 	register.Plugin("jsonlstate", plugin("jsonlstate", jsonlstate.New))
 	register.Plugin("nameoutput", plugin("nameoutput", nameoutput.New))
 	register.Plugin("namewords", plugin("namewords", namewords.New))
+	register.Plugin("passthrough", plugin("passthrough", passthrough.New))
 	register.Plugin("providerio", plugin("providerio", providerio.New))
 	register.Plugin("ruletext", plugin("ruletext", ruletext.New))
 	register.Plugin("secretfields", plugin("secretfields", secretfields.New))

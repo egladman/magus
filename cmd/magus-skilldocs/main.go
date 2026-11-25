@@ -267,7 +267,7 @@ func renderIndex(full, short []agent.AgentSkill) string {
 			"<span class=\"landing-card-title\">%s</span>"+
 			"<span class=\"landing-card-body\">%s</span>"+
 			"<span class=\"landing-card-body\"><small>%s short, %s full - %d%% shorter</small></span></a>\n",
-			f.Name, f.Name, escapeHTML(firstSentence(f.Description)),
+			f.Name, f.Name, strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(firstSentence(f.Description)),
 			kb(len(s.Body)), kb(len(f.Body)), percentSaved(len(f.Body), len(s.Body)))
 	}
 	b.WriteString("</div>\n\n")
@@ -290,12 +290,6 @@ func percentSaved(full, short int) int {
 // magnitude.
 func kb(n int) string {
 	return fmt.Sprintf("%.1f KB", float64(n)/1024)
-}
-
-// escapeHTML makes a description safe inside the card's span. Descriptions are prose
-// with backticks and quotes in them, and one `<` would silently eat the rest of a card.
-func escapeHTML(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
 // firstSentence trims a skill's description to its opening claim, for a table cell

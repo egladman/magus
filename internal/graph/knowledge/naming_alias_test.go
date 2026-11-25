@@ -11,11 +11,6 @@ import (
 	"github.com/egladman/magus/types/check"
 )
 
-// aliasUser is a function the change touches in an importer file of aliasFixture.
-func aliasUser(file string) types.KnowledgeSymbol {
-	return couplingFunction("/internal/use", "Use"+file[len("internal/use/"):len(file)-len(".go")], file, 5, 9, "func Use()", nil)
-}
-
 func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 	for _, tc := range []struct {
 		name, file, message string
@@ -38,7 +33,7 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			use := aliasUser(tc.file)
+			use := couplingFunction("/internal/use", "Use"+tc.file[len("internal/use/"):len(tc.file)-len(".go")], tc.file, 5, 9, "func Use()", nil)
 			g := aliasGraph(use)
 
 			got := g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(use)}, Conformance: aliasOptions()})

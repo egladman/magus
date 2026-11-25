@@ -170,7 +170,7 @@ func (o ConformanceOptions) Validate() error {
 	keys := slices.SortedFunc(maps.Keys(o.Limits), compareConformanceKeys)
 	for _, k := range keys {
 		l := o.Limits[k]
-		if err := checkConformanceKey(k); err != nil {
+		if err := errors.Join(checkConformanceMetric(k.Metric), checkConformancePopulation(k.Population)); err != nil {
 			fail("limit %s: %w", conformanceKeyName(k), err)
 			continue
 		}
@@ -192,10 +192,6 @@ func conformanceKeyChain(k ConformanceKey) []ConformanceKey {
 		return []ConformanceKey{k}
 	}
 	return []ConformanceKey{k, {Metric: k.Metric, Population: k.Population}}
-}
-
-func checkConformanceKey(k ConformanceKey) error {
-	return errors.Join(checkConformanceMetric(k.Metric), checkConformancePopulation(k.Population))
 }
 
 func checkConformanceMetric(m ConformanceMetric) error {

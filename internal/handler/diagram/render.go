@@ -220,10 +220,6 @@ func newRenderCache() *renderCache {
 	}
 }
 
-func renderKey(g graph, desc, anchorHref string) string {
-	return fmt.Sprintf("%s\x00%s\x00%s", g.fingerprint(), desc, anchorHref)
-}
-
 // get returns the diagram for key, calling compute at most once across concurrent callers of
 // the same key. A caller waiting on another's render returns when its own ctx ends. If the
 // computing caller's ctx ended, waiters compute for themselves rather than inherit its

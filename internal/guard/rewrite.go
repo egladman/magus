@@ -143,7 +143,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 			name := path.Base(c.Name)
 			if name == "magus" {
 				if script, ok := inlineBuzz(c.Args, heredocText(st)); ok {
-					hit = buzzRewrittenFile(scopeAt(location), script)
+					hit = existingWorkspaceFile(scopeAt(location), buzzWriteDestinations(script))
 				}
 				if hit != "" {
 					return false
@@ -167,7 +167,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 	if hit == "" || rewriteStaysOutside(scopeAt(location), command, d) {
 		return ""
 	}
-	return interpreterRewriteDenial(hit) + referenceScriptNote(location.workspace, denyRuleInterpreterRewrite)
+	return interpreterRewriteDenial(hit) + scriptLines(servedScripts(location.workspace, denyRuleInterpreterRewrite, nil))
 }
 
 // rewrittenWorkspaceFile names the first file already in the tree that the script would
@@ -201,13 +201,6 @@ func writeCandidates(name, script string, args []string) (candidates []string, u
 		candidates = append(candidates, args...)
 	}
 	return candidates, unknown
-}
-
-// buzzRewrittenFile names the first file already in the workspace that a Buzz program
-// replaces through fs at a literal destination, or "". A destination built at run time
-// from argv or a computed path is not read: this judges what the program text proves.
-func buzzRewrittenFile(scope workspaceScope, script string) string {
-	return existingWorkspaceFile(scope, buzzWriteDestinations(script))
 }
 
 // buzzWriteDestinations are the literals each fs write in a Buzz program is spelled from,

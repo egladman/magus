@@ -1219,12 +1219,8 @@ func leftoverReason(abs, rel string, readError error) string {
 // so reasons that are equally severe keep the order they were found in.
 func sortReasons(reasons []string) {
 	sort.SliceStable(reasons, func(i, j int) bool {
-		return isStampMismatch(reasons[i]) && !isStampMismatch(reasons[j])
+		return strings.Contains(reasons[i], "stale stamp (") && !strings.Contains(reasons[j], "stale stamp (")
 	})
-}
-
-func isStampMismatch(reason string) bool {
-	return strings.Contains(reason, "stale stamp (")
 }
 
 // installedSkillNames lists the magus skill directories under path, sorted. One
@@ -1456,7 +1452,7 @@ func (c *Catalog) offeredShipped(root string, locations []HarnessSkillLocation, 
 				Description: def.Description,
 				Source:      skillSourceShipped,
 				Form:        v.String(),
-				Body:        skillBody(c.installBytes(rendered)),
+				Body:        strings.TrimLeft(docs.StripFrontmatter(string(c.installBytes(rendered))), "\n"),
 				Current:     c.installedCurrent(root, installs, def.Name, v),
 			})
 		}
@@ -1528,18 +1524,12 @@ func (c *Catalog) offeredLocal(root string, locations []HarnessSkillLocation) ([
 				Description: fm.Description,
 				Source:      skillSourceLocal,
 				Form:        tier.SkillVariantFull.String(),
-				Body:        skillBody(raw),
+				Body:        strings.TrimLeft(docs.StripFrontmatter(string(raw)), "\n"),
 				Current:     true,
 			})
 		}
 	}
 	return out, nil
-}
-
-// skillBody is what a host loads from a SKILL.md: everything after the frontmatter,
-// less the blank line that separates the two.
-func skillBody(file []byte) string {
-	return strings.TrimLeft(docs.StripFrontmatter(string(file)), "\n")
 }
 
 func unknownSkillError(name string, offered []types.Skill) error {

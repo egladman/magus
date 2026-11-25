@@ -37,22 +37,12 @@ var buzzWriteSkill = agent.MustSkill("magus-buzz-lang")
 // the one thing they share is the suffix; keying on a directory would miss a workspace that
 // puts its spells somewhere else, which is exactly the shape magus-workspace-rules invites.
 func denyBuzzWriteWithoutSkill(markers hint.Gate, observesSkillLoads bool, workspace, writePath string) string {
-	if !isBuzzSource(writePath) {
+	if !strings.EqualFold(path.Ext(path.Base(writePath)), ".buzz") {
 		return ""
 	}
 	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, buzzWriteSkill,
 		"writing Buzz",
 		"No model has Buzz in its weights, so the shape it guesses from Go or TypeScript parses just often enough to ship a bug.")
-}
-
-// isBuzzSource reports whether a path is Buzz source.
-//
-// Case-folded because a host reports whatever the filesystem handed it, and a
-// case-insensitive volume will echo back the spelling the user typed rather than the one on
-// disk. The extension is checked on the base name so a directory called .buzz cannot make
-// every file under it read as source.
-func isBuzzSource(writePath string) bool {
-	return strings.EqualFold(path.Ext(path.Base(writePath)), ".buzz")
 }
 
 // buzzAuthoredBy names what a command line is about to author in Buzz, or "" when it
@@ -81,7 +71,7 @@ func buzzAuthoredBy(command string, d Dialect) string {
 		}
 	}
 	for _, target := range redirectTargets(command, 0, d) {
-		if isBuzzSource(target) {
+		if strings.EqualFold(path.Ext(path.Base(target)), ".buzz") {
 			return target
 		}
 	}

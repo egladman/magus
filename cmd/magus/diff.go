@@ -258,7 +258,8 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
-			warnUnreadUnknown(ctx, *rev.Unread, src.Label, verr)
+			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, src.Label),
+				attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(verr))
 		}
 	}
 	// The threads are named on the report so a person can find the id --thread takes. A patch
@@ -334,13 +335,6 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 			return u, console.AuthHint(u)
 		},
 	})
-}
-
-// warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
-// the record's error.
-func warnUnreadUnknown(ctx context.Context, u difftypes.Unread, source string, loadErr error) {
-	slog.WarnContext(ctx, review.UnreadLine(u, source),
-		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
 }
 
 // diffNames is what -o name prints; --impact leaves it alone.
@@ -629,7 +623,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content review.Content, req
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
-			warnUnreadUnknown(ctx, *rev.Unread, req.label, verr)
+			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, req.label),
+				attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(verr))
 			sync.Close()
 			return nil
 		}
@@ -841,7 +836,7 @@ func impactSources(m *magus.Magus, rootOverride string) reviewimpact.Sources {
 		OwnershipCommits: diffHistoryCommits,
 		HistoryPath:      globalCfg.HistoryPath,
 		Advisors: func(ctx context.Context, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error) {
-			return runLocalAdvisors(ctx, m, base, rev)
+			return review.LocalAdvice(types.WithWorkspace(ctx, viewInternals(m)), m.Root(), base, rev)
 		},
 		Anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
 			return impactAnchors(ctx, rootOverride, rev)
@@ -872,11 +867,4 @@ func impactAnchors(ctx context.Context, root string, rev difftypes.Diff) ([]revi
 	return review.ChangesetAnchors(ctx, root, dirs, func(ctx context.Context) (*knowledge.Graph, error) {
 		return loadKnowledgeGraph(ctx, root, false, false, true)
 	}, rev)
-}
-
-// runLocalAdvisors runs the read-only PR advisors against the local tree, with the workspace on
-// the context the way `magus buzz` has it. The workspace is attached, not loaded again:
-// loadMagus panics on a second root.
-func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error) {
-	return review.LocalAdvice(types.WithWorkspace(ctx, viewInternals(m)), m.Root(), base, rev)
 }

@@ -544,16 +544,12 @@ func (s *listJobsSuite) overlaps(oneCheckout bool, projects []*types.Project) []
 	return resp.Msg.Overlaps
 }
 
-func generatedProjects() []*types.Project {
-	return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}
-}
-
 func (s *listJobsSuite) TestDropsAGeneratedOutputHeldInAnotherCheckout() {
-	s.Empty(s.overlaps(false, generatedProjects()))
+	s.Empty(s.overlaps(false, []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}))
 }
 
 func (s *listJobsSuite) TestKeepsAGeneratedOutputHeldInOneCheckout() {
-	s.Len(s.overlaps(true, generatedProjects()), 1)
+	s.Len(s.overlaps(true, []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}), 1)
 }
 
 func (s *listJobsSuite) TestKeepsThePairWhenTheWorkspaceListsNoProjects() {

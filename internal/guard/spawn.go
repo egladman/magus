@@ -118,7 +118,7 @@ func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
 	if p := envelopeString(input, "prompt"); p != "" {
 		return p, true
 	}
-	if envelopeTarget(input) != "" {
+	if cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"), envelopeString(input, "threadId")) != "" {
 		return "", false
 	}
 	_, hasItems := input["items"].([]any)
@@ -335,14 +335,9 @@ func envelopeSchedules(input map[string]any) bool {
 	})
 }
 
-// envelopeTarget reads the addressee in each host's envelope.
-func envelopeTarget(input map[string]any) string {
-	return cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"), envelopeString(input, "threadId"))
-}
-
 // envelopeContinuation reads the addressee and text of a follow-up.
 func envelopeContinuation(input map[string]any) (target, message string, ok bool) {
-	target = envelopeTarget(input)
+	target = cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"), envelopeString(input, "threadId"))
 	if target == "" {
 		return "", "", false
 	}

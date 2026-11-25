@@ -80,19 +80,14 @@ func TestBuildIndexEmitsOnlyTheServedSchema(t *testing.T) {
 		`]}`, string(data))
 }
 
-// buildIndexForTest fills in the signer and lifetime a caller does not care about.
-func buildIndexForTest(manifests []ReleaseManifest) ReleaseIndex {
-	return buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil)
-}
-
 // TestBuildIndexParsesAsTheClientReadsIt runs the emitted bytes through the
 // reader in internal/selfupdate. The two schemas are declared in different
 // packages, so nothing but this stops them drifting apart.
 func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
-	data, err := codec.Marshal(buildIndexForTest([]ReleaseManifest{
+	data, err := codec.Marshal(buildIndex([]ReleaseManifest{
 		{Version: "v0.2.0", Artifacts: []ReleaseArtifact{{Name: "magus_v0.2.0_linux_amd64_static.tar.gz"}}},
 		{Version: "v0.3.0", Yanked: true},
-	}))
+	}, "testkeyid", "2099-01-01T00:00:00Z", nil))
 	require.NoError(t, err)
 
 	var idx selfupdate.ReleaseIndex
@@ -112,7 +107,7 @@ func TestBuildIndexKeepsPrereleasesOutOfReleases(t *testing.T) {
 		{Version: "v0.5.0-rc.1", Artifacts: []ReleaseArtifact{{Name: "rc.tar.gz"}}},
 		{Version: "v0.4.3+build-1", Artifacts: []ReleaseArtifact{{Name: "stable.tar.gz"}}},
 	}
-	idx := buildIndexForTest(manifests)
+	idx := buildIndex(manifests, "testkeyid", "2099-01-01T00:00:00Z", nil)
 	data, err := codec.Marshal(idx)
 	require.NoError(t, err)
 	require.Equal(t, `{"api_version":"magus.release-index/v1alpha1","schema_version":1,"key_id":"testkeyid","expires_at":"2099-01-01T00:00:00Z",`+

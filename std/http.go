@@ -694,7 +694,7 @@ func (o httpOpts) shouldRetry(r httpRetry, resp *http.Response, err error) bool 
 		switch {
 		case r.allErrs:
 			return true
-		case isConnRefused(err):
+		case errors.Is(err, syscall.ECONNREFUSED):
 			return r.connRefused
 		case isTimeout(err):
 			return true
@@ -724,9 +724,6 @@ func parseHTTPOptions(opts types.HTTPOptions) httpOpts {
 	}
 	return o
 }
-
-// isConnRefused reports whether err is (or wraps) a connection-refused error.
-func isConnRefused(err error) bool { return errors.Is(err, syscall.ECONNREFUSED) }
 
 // isTimeout reports whether err is (or wraps) a network timeout.
 func isTimeout(err error) bool {

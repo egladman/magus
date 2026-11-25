@@ -219,11 +219,6 @@ func ensureBroker(ctx context.Context) int {
 	return pid
 }
 
-func startedBrokerMessage(pid int) string {
-	return fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
-		pid, server.IdleText(broker.DefaultIdleExit), hint.BrokerStatus)
-}
-
 // noticeBroker tells the person that their run left a process behind, and that it listens
 // on nothing but its socket: a background process nobody mentions is the surprise this
 // removes. The pid, log and idle attributes ride along only under -o jsonl, since a pretty
@@ -239,7 +234,8 @@ func noticeBroker(ctx context.Context, pid int) {
 			slog.String("log", server.BrokerLogPath()),
 			slog.Int("idle_exit_s", int(broker.DefaultIdleExit/time.Second)))
 	}
-	slog.LogAttrs(ctx, slog.LevelInfo, startedBrokerMessage(pid), attrs...)
+	slog.LogAttrs(ctx, slog.LevelInfo, fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
+		pid, server.IdleText(broker.DefaultIdleExit), hint.BrokerStatus), attrs...)
 }
 
 var upstreamSourceSkill = agent.MustSkill("magus-upstream-source")

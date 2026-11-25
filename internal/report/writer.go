@@ -58,14 +58,6 @@ type writerCfg struct {
 	filter    *Filter
 }
 
-func defaultWriterConfig() writerCfg {
-	return writerCfg{
-		queueSize: 4096,
-		flushN:    64,
-		flushT:    100 * time.Millisecond,
-	}
-}
-
 // Option configures a [Writer].
 type Option func(*writerCfg)
 
@@ -82,7 +74,11 @@ func NewWriter(w io.Writer, opts ...Option) *Writer {
 }
 
 func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer {
-	cfg := defaultWriterConfig()
+	cfg := writerCfg{
+		queueSize: 4096,
+		flushN:    64,
+		flushT:    100 * time.Millisecond,
+	}
 	for _, o := range opts {
 		o(&cfg)
 	}

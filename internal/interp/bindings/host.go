@@ -8,15 +8,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/libs/secrets"
 )
-
-// emitMagusHint prints a script's msg through the shared hint channel. Advisory only,
-// never fatal.
-func emitMagusHint(ctx context.Context, msg string) {
-	interactive.Hint(ctx, msg)
-}
 
 // emitMagusLog writes msg at level, fields sorted by key. A target step
 // captures it at every level; the process logger shows it at its own. A

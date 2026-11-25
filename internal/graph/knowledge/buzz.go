@@ -105,7 +105,7 @@ func assembleBuzzIn(w *TreeWalk) Shard {
 				if target, ok := resolveBuzzImport(d.Path, scanned); ok {
 					s.Edges = append(s.Edges, extractedEdge(fID, fileID(target), types.RelationImports, rel))
 				} else {
-					iID := importID(d.Path)
+					iID := fmt.Sprintf("%s:%s", types.KindImport, d.Path)
 					n := types.KnowledgeNode{ID: iID, Kind: types.KindImport, Label: d.Path}
 					// A dangling workspace-relative import is an extraction ambiguity
 					// (MGS7001); a compiled-in module (magus/*, buzz stdlib) or a remote
@@ -146,7 +146,7 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 				continue
 			}
 			prov := fmt.Sprintf("%s:%s", rel, strconv.Itoa(tk.Line))
-			rID := fmt.Sprintf("%s:%s", rationaleID(rel, tk.Line), m[1])
+			rID := fmt.Sprintf("%s:%s", fmt.Sprintf("%s:%s:%s", types.KindRationale, rel, strconv.Itoa(tk.Line)), m[1])
 			if seen[rID] {
 				continue
 			}
@@ -247,12 +247,6 @@ func resolveBuzzImport(path string, scanned map[string]bool) (string, bool) {
 	}
 	return "", false
 }
-
-// findBuzzFiles returns every workspace .buzz source path (rel to root), sorted,
-// skipping ignore dirs (dot-dirs, vendor, ...), testdata fixtures (not source), and
-// whatever the VCS ignores. MAGUS.md ranks file and function nodes, so an ignored build
-// output such as dist/ would otherwise reach a committed file.
-func findBuzzFiles(root string) []string { return WalkTree(root).buzzFiles() }
 
 func (w *TreeWalk) buzzFiles() []string {
 	return w.scan(walkBuzz, func(f treeFile) bool { return strings.HasSuffix(f.rel, ".buzz") })

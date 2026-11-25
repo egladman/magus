@@ -61,15 +61,6 @@ type symbolIndex struct {
 	files    map[string]bool            // every base filename in the tree
 }
 
-func newSymbolIndex() symbolIndex {
-	return symbolIndex{
-		byPkg:    map[string]map[string]bool{},
-		exported: map[string]string{},
-		host:     map[string]bool{},
-		files:    map[string]bool{},
-	}
-}
-
 // resolves reports whether this module accounts for the reference at all.
 func (ix symbolIndex) resolves(pkg, sym string) bool {
 	if ix.host[fmt.Sprintf("%s.%s", pkg, sym)] || ix.files[fmt.Sprintf("%s.%s", pkg, sym)] {

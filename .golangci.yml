@@ -130,6 +130,8 @@ linters:
     - asciistrings
     - benchbeside
     - blankerror
+    - inlineliteral
+    - passthrough
     - jsonlstate
     - stutter
     - closedswitch
@@ -516,6 +518,29 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           base: origin/main
+
+      # The tree still holds thin helpers, so both report only one a change
+      # touches; the sweep is `magus run golangci-lint:rw` with base set to the
+      # root commit. An exit, with its reason, goes in the project's analyzers.yaml.
+      inlineliteral:
+        type: module
+        description: reports a private function a change touches that returns one literal value and has few use sites
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          base: origin/main
+          max-sites: 2
+          max-repeated-text: 40
+          hint: "`magus run golangci-lint:rw` applies the inline; only a person adds an exit, with its reason, in the project's analyzers.yaml"
+
+      passthrough:
+        type: module
+        description: reports a private function a change touches whose body is one call and that has few use sites
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          base: origin/main
+          max-sites: 2
+          max-repeated-text: 40
+          hint: "`magus run golangci-lint:rw` applies the inline; only a person adds an exit, with its reason, in the project's analyzers.yaml"
 
       jsonlstate:
         type: module

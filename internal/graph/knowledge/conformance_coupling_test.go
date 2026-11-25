@@ -60,21 +60,6 @@ func runField(name string, refs ...string) types.KnowledgeSymbol {
 	return s
 }
 
-// couplingPackages declares each caller package and run, with imports that put the callers
-// three hops apart once run is removed: termcast and std import a, a, queue and c import b.
-func couplingPackages() []types.KnowledgeSymbol {
-	return []types.KnowledgeSymbol{
-		conformancePkg(runPkg, []string{"internal/proc/run/exec.go"}, couplingFiles()...),
-		conformancePkg("/internal/a", []string{couplingFile("/internal/a")}, couplingFile("/cmd/termcast"), couplingFile("/std")),
-		conformancePkg("/internal/b", []string{couplingFile("/internal/b")},
-			couplingFile("/internal/a"), couplingFile("/internal/queue"), couplingFile("/internal/c")),
-		conformancePkg("/internal/c", []string{couplingFile("/internal/c")}),
-		conformancePkg("/internal/queue", []string{couplingFile("/internal/queue")}),
-		conformancePkg("/cmd/termcast", []string{couplingFile("/cmd/termcast")}),
-		conformancePkg("/std", []string{couplingFile("/std")}),
-	}
-}
-
 // execShape is run.Exec: 157 lines that six packages call through an Options struct whose
 // TTYCols and TTYRows only cmd/termcast sets and whose CancelGrace only internal/queue sets.
 func execShape() []types.KnowledgeSymbol {
@@ -93,7 +78,16 @@ func execShape() []types.KnowledgeSymbol {
 }
 
 func couplingGraph(syms ...types.KnowledgeSymbol) *Graph {
-	return mergeAll(assembleSymbolShards(map[string][]types.KnowledgeSymbol{".": append(couplingPackages(), syms...)}, nil))
+	return mergeAll(assembleSymbolShards(map[string][]types.KnowledgeSymbol{".": append([]types.KnowledgeSymbol{
+		conformancePkg(runPkg, []string{"internal/proc/run/exec.go"}, couplingFiles()...),
+		conformancePkg("/internal/a", []string{couplingFile("/internal/a")}, couplingFile("/cmd/termcast"), couplingFile("/std")),
+		conformancePkg("/internal/b", []string{couplingFile("/internal/b")},
+			couplingFile("/internal/a"), couplingFile("/internal/queue"), couplingFile("/internal/c")),
+		conformancePkg("/internal/c", []string{couplingFile("/internal/c")}),
+		conformancePkg("/internal/queue", []string{couplingFile("/internal/queue")}),
+		conformancePkg("/cmd/termcast", []string{couplingFile("/cmd/termcast")}),
+		conformancePkg("/std", []string{couplingFile("/std")}),
+	}, syms...)}, nil))
 }
 
 // couplingOptions are this tree's live relative values as anchors, so the run.Exec shape
@@ -173,7 +167,9 @@ func TestModeKnobs(t *testing.T) {
 				n.Attrs[attrBranchIdents] = tc.branches[0]
 			}
 			local := []descriptor{{Name: "F", Suffix: '('}}
-			assert.Equal(t, tc.want, modeKnobs(NewGraph(), n, symbolShape(n, local), callers))
+			assert.Equal(t, tc.want, modeKnobs(NewGraph(), n, pickShapeReader(n.Attrs[AttrLanguage]).read(symbolFacts{
+				Kind: n.Attrs[attrSymbolKind], Signature: n.Attrs[AttrSignature], Path: local, Neutral: neutralKind(local),
+			}), callers))
 		})
 	}
 }

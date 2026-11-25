@@ -637,13 +637,6 @@ func indexerUses(s *spells.Spell, target string) []string {
 	return s.SymbolIndexer().Uses
 }
 
-// indexerUseKey is how targetDrivenBins marks a tool s's indexer uses: apart from the
-// "spell:bin" a build op that runs the same binary is driven under, so keying a build
-// never probes the indexer's view of it.
-func indexerUseKey(s *spells.Spell, tool string) string {
-	return fmt.Sprintf("%s:%s@%s", s.Name(), tool, s.SymbolIndexOp())
-}
-
 // indexesDriven is, per project, the binaries the ops of idxs drive: the set
 // ComputeTargetKey hands probeObservations for the same ops. An observation outside it
 // never reaches a step's key, so probing it would fork for nothing (govulncheck's database

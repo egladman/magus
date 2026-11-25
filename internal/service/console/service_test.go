@@ -22,20 +22,16 @@ func minimalGraph() *knowledge.Graph {
 	return g
 }
 
-func minimalTargetGraph() types.TargetGraphOutput {
-	return types.TargetGraphOutput{
+// testService wires a Service with the graph/target seams so no real workspace is needed.
+func testService(opts ...Option) *Service {
+	g := minimalGraph()
+	tg := types.TargetGraphOutput{
 		Definition: "magusfile.buzz",
 		Projects: []types.TargetGraphProject{
 			{Path: "project/foo", DependsOn: []string{"project/bar"}},
 			{Path: "project/bar"},
 		},
 	}
-}
-
-// testService wires a Service with the graph/target seams so no real workspace is needed.
-func testService(opts ...Option) *Service {
-	g := minimalGraph()
-	tg := minimalTargetGraph()
 	base := append([]Option{
 		WithKnowledgeGraphFunction(func(context.Context, bool) (*knowledge.Graph, error) { return g, nil }),
 		WithDescribeGraphFunction(func() types.TargetGraphOutput { return tg }),

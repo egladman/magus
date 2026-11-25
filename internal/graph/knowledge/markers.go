@@ -298,7 +298,7 @@ func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages 
 			fID = notePath(fh.rel, fileID(fh.rel), types.KindFile)
 		}
 		for _, m := range foldMarkers(fh.hits) {
-			id := markerID(fh.rel, m.line)
+			id := fmt.Sprintf("%s:%s:%s", types.KindMarker, fh.rel, strconv.Itoa(m.line))
 			prov := fmt.Sprintf("%s:%s", fh.rel, strconv.Itoa(m.line))
 			positional, stamps := parseMarkerArgs(m.args)
 			attrs := stamps

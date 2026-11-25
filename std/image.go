@@ -291,7 +291,7 @@ func ImageWriteSBOM(ctx context.Context, layout, path string) (imagetypes.Docume
 	if err != nil {
 		return imagetypes.Document{}, err
 	}
-	return documentToTypes(doc), nil
+	return imagetypes.Document{Path: doc.Path, Descriptor: descriptorToTypes(doc.Descriptor)}, nil
 }
 
 // ImageWriteProvenance writes an in-toto statement for the layout's image to path.
@@ -315,7 +315,7 @@ func ImageWriteProvenance(ctx context.Context, layout string, p imagetypes.Prove
 	if err != nil {
 		return imagetypes.Document{}, err
 	}
-	return documentToTypes(doc), nil
+	return imagetypes.Document{Path: doc.Path, Descriptor: descriptorToTypes(doc.Descriptor)}, nil
 }
 
 // ImageAttachReferrers writes a new layout at dest with subject's image and documents.
@@ -544,15 +544,6 @@ func platformToTypes(p image.Platform) imagetypes.Platform {
 	}
 }
 
-// ociPlatformToTypes converts a descriptor's platform, which may name one magus does not
-// build for, so it does not pass through image.Platform's validation.
-func ociPlatformToTypes(p ocispec.Platform) imagetypes.Platform {
-	return imagetypes.Platform{
-		OS: imagetypes.OS(p.OS), Architecture: imagetypes.Architecture(p.Architecture), Variant: imagetypes.Variant(p.Variant),
-		OSVersion: p.OSVersion, OSFeatures: p.OSFeatures,
-	}
-}
-
 func digestToTypes(d digest.Digest) imagetypes.Digest {
 	if d == "" {
 		return imagetypes.Digest{}
@@ -573,7 +564,10 @@ func descriptorToTypes(d ocispec.Descriptor) imagetypes.Descriptor {
 		Annotations:  d.Annotations,
 	}
 	if d.Platform != nil {
-		p := ociPlatformToTypes(*d.Platform)
+		p := imagetypes.Platform{
+			OS: imagetypes.OS(d.Platform.OS), Architecture: imagetypes.Architecture(d.Platform.Architecture), Variant: imagetypes.Variant(d.Platform.Variant),
+			OSVersion: d.Platform.OSVersion, OSFeatures: d.Platform.OSFeatures,
+		}
 		out.Platform = &p
 	}
 	return out
@@ -646,8 +640,4 @@ func entriesToTypes(entries []image.Entry) []imagetypes.Entry {
 		}
 	}
 	return out
-}
-
-func documentToTypes(d image.Document) imagetypes.Document {
-	return imagetypes.Document{Path: d.Path, Descriptor: descriptorToTypes(d.Descriptor)}
 }

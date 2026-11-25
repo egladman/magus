@@ -158,7 +158,12 @@ func gitDeny(c hint.Invocation, s workspaceScope) (ShellVerdict, bool) {
 			return ShellVerdict{}, false
 		}
 		if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
-			return denySharedStash(rest[0]), true
+			return ShellVerdict{
+				Deny: fmt.Sprintf("bare `git stash %s` acts on stash@{0}, often another checkout's entry; name yours as stash@{N}.", rest[0]),
+				Why: fmt.Sprintf("The stash stack belongs to the REPOSITORY rather than your worktree, and %[1]s applies or destroys the top entry. "+
+					"`git stash list` names each entry's branch; then run `git stash %[1]s stash@{N}`.", rest[0]),
+				Rule: denyRule{Name: denyRuleSharedStash, Arg: rest[0]},
+			}, true
 		}
 		return denyWholeTree("git stash"), true
 	// `git worktree remove` is judged in internal/guard/worktree.go, which reads the
@@ -166,7 +171,7 @@ func gitDeny(c hint.Invocation, s workspaceScope) (ShellVerdict, bool) {
 	case "checkout":
 		// Whole-tree first: it is the broader reason, and one rule owning `-- .`
 		// keeps the message the same whichever revision precedes the pathspec.
-		if isWholeTreePathspec(rest, s) {
+		if coversRoot(pathOperands(rest), s) {
 			return denyWholeTree("git checkout ."), true
 		}
 		if side := mergeSideRef(rest); side != "" {
@@ -176,7 +181,7 @@ func gitDeny(c hint.Invocation, s workspaceScope) (ShellVerdict, bool) {
 			}, true
 		}
 	case "restore":
-		if isWholeTreePathspec(rest, s) {
+		if coversRoot(pathOperands(rest), s) {
 			return denyWholeTree("git restore ."), true
 		}
 		if side := mergeSideRef(rest); side != "" {
@@ -665,13 +670,6 @@ func denyMergeSideCheckout(ref string) string {
 		"conflicted one by regenerating. To take one side deliberately, say which - `git checkout "+
 		"--ours` or `--theirs` -- <path>`. To keep the merged result, it is already in the file; "+
 		"copy it aside before doing anything else.", ref, hint.VCSResolve.String())
-}
-
-// isWholeTreePathspec reports a checkout or restore with an operand
-// not proven narrower than the tree. Every non-flag word is read; a
-// revision reads as a plain name, so it never makes a line whole-tree.
-func isWholeTreePathspec(args []string, s workspaceScope) bool {
-	return coversRoot(pathOperands(args), s)
 }
 
 // namesNarrowerPaths reports a `--` and at least one path after it,

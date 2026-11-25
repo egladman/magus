@@ -465,7 +465,7 @@ func TestMCPAddress(t *testing.T) {
 func TestBuildMCPEndpointStatus(t *testing.T) {
 	ctx := context.Background()
 	t.Run("disabled", func(t *testing.T) {
-		got := BuildMCPEndpointStatus(ctx, mcpDisabled())
+		got := BuildMCPEndpointStatus(ctx, config.MCP{Enabled: new(false)})
 		require.NotNil(t, got)
 		assert.False(t, got.Enabled)
 		assert.Equal(t, "disabled", got.State)
@@ -667,11 +667,6 @@ func TestRenderProbeResults(t *testing.T) {
 // mcpUnreachable returns an enabled MCP config whose address nothing listens on.
 func mcpUnreachable() config.MCP {
 	return config.MCP{Address: "127.0.0.1:1", Enabled: new(true)}
-}
-
-// mcpDisabled returns an MCP config with the server turned off.
-func mcpDisabled() config.MCP {
-	return config.MCP{Enabled: new(false)}
 }
 
 // recordingStatus is a statusFunc that counts calls and returns a fixed snapshot/err, so

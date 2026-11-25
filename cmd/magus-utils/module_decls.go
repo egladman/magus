@@ -217,7 +217,7 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		return "", err
 	}
 	for _, e := range enums {
-		b.Write(renderBuzzEnumDecl(e))
+		b.Write(emit.BuzzEnum(e.Name, e.Closed, e.Cases))
 		b.WriteByte('\n')
 	}
 	for _, name := range mirrors {
@@ -790,13 +790,6 @@ func argumentEnum(m std.Method, i int) string {
 		}
 	}
 	return ""
-}
-
-// renderBuzzEnumDecl renders one enum as its Buzz declaration. It matches what the
-// types generator emits into an object mirror, so a reader sees one form wherever an
-// enum is declared.
-func renderBuzzEnumDecl(e boundaryEnum) []byte {
-	return emit.BuzzEnum(e.Name, e.Closed, e.Cases)
 }
 
 // buzzBuiltinTypes are the type names the Buzz type parser knows without a declaration.

@@ -305,7 +305,7 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 			return
 		}
 	}
-	err = harnessMissingError(id)
+	err = fmt.Errorf("no harness named %q (wire magus\\harness.provider(<spell>) in the root magusfile)", id)
 	return
 }
 
@@ -321,12 +321,6 @@ func HarnessModelRows(ctx context.Context, root string, wired []string) []model.
 		}
 	}
 	return rows
-}
-
-// harnessMissingError explains a miss: no spell is wired for id (or none is
-// registered at all). There is no compat JSON fallback left to check.
-func harnessMissingError(id string) error {
-	return fmt.Errorf("no harness named %q (wire magus\\harness.provider(<spell>) in the root magusfile)", id)
 }
 
 func validateHarnessDescriptor(d HarnessDescriptor) error {
@@ -645,11 +639,7 @@ func harnessMergeCommand(id string, files map[string]types.HarnessFile) string {
 	if len(files) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("magus describe harness %s -o json | magus buzz -e %s", id, posixQuote(harnessMergeScript))
-}
-
-func posixQuote(s string) string {
-	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
+	return fmt.Sprintf("magus describe harness %s -o json | magus buzz -e %s", id, fmt.Sprintf("'%s'", strings.ReplaceAll(harnessMergeScript, "'", `'\''`)))
 }
 
 // VerifyHarness validates both the descriptor and the concrete harness config.
@@ -680,7 +670,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 			return fmt.Sprintf("%s is missing or differs from what the spell renders%s", a.Path, merge)
 		})
 		result.Setting = verifyEach(root, d.Settings, planHarnessSetting, func(s types.Setting) string {
-			return fmt.Sprintf("missing %s%s", settingLocation(s), merge)
+			return fmt.Sprintf("missing %s%s", fmt.Sprintf("%s %s", s.Path, strings.Join(s.Key, ".")), merge)
 		})
 		result.Tool = verifyEach(root, d.toolFiles(), func(root string, f types.AgentFile) (types.HarnessFile, error) {
 			return planWholeFile(root, f.Path, f.Content)

@@ -83,7 +83,7 @@ DirectoryMode=0700
 
 [Install]
 WantedBy=sockets.target
-`, systemdEscape(f.Socket))
+`, strings.ReplaceAll(f.Socket, "%", "%%"))
 		svc := fmt.Sprintf(`[Unit]
 Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket
@@ -151,12 +151,9 @@ TimeoutStopSec=%s
 	}
 }
 
-// systemdEscape escapes the specifier character, which systemd expands in every value.
-func systemdEscape(s string) string { return strings.ReplaceAll(s, "%", "%%") }
-
 // systemdQuote makes s one word of an ExecStart line.
 func systemdQuote(s string) string {
-	s = systemdEscape(s)
+	s = strings.ReplaceAll(s, "%", "%%")
 	if !strings.ContainsAny(s, " \t\"'\\") {
 		return s
 	}

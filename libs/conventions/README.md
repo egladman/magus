@@ -26,6 +26,8 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag                                                                                      |
 | `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record                                                                                    |
 | `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see                                                                                        |
+| `inlineliteral` | a private function a change touches that returns one literal value (a builder, a literal, a getter) and has few use sites                                                                   |
+| `passthrough`   | a private function a change touches whose body is one call and that has few use sites                                                                                                       |
 
 `closedswitch` is declared by a person, not mined: the tree sits under the 0.8 adoption floor. The
 `exhaustive-switch` key of the `analyzers.yaml` at the root of the module that holds the file
@@ -141,6 +143,59 @@ to say what to name the thing instead. It judges each top-level name, struct
 field and interface method, exported or not, and no parameter or local. The root
 config bans `Row` and `Rows` in the root package and under `types/`: row names
 the persistence layer only (ADR 0030).
+
+## Thin helpers
+
+`inlineliteral` and `passthrough` judge a private package-level function whose
+body is one statement, with at most `max-sites` references in its package, tests
+included. A private name is visible only there, so the count is exact. A
+reference passing the function as a value counts as a site.
+
+- `inlineliteral` reads a body returning one composite literal or its address,
+  a basic literal or constant, or a name or field read. `v := E; return v` reads
+  as `return E`, and a nil check returning nil before a returned literal is
+  allowed, though the site must keep the check. A value use becomes a function
+  literal at the site.
+- `passthrough` reads a body that is one call, returned or made as a statement.
+  A function passed as a value is not reported, since a table or a callback needs
+  the name.
+
+A function with two sites or more whose body holds more than `max-repeated-text`
+runes of string literal is not judged either: inlining it writes the message at
+each site, and two copies of one message drift apart.
+
+Neither judges a method, an exported or generic function, `init` or `main`, a
+function with a `//go:` directive, one whose body holds a function literal, or one
+with a same-named declaration in a file the build excludes. Neither judges a body
+of two statements that do work, so an extraction holding a branch or a loop always
+passes.
+
+Each site carries a fix that inlines it when the edit keeps the program's
+meaning: every argument is a name, a literal or a field read, or one argument
+with effects is read once by a body that makes no other call. A parameter whose
+argument has another type, or a result the body computes at another type, is
+converted, so a site's `x := f()` keeps its type. golangci-lint applies a fix
+only within the file of its diagnostic, so a function is deleted by the next
+`--fix` run, once nothing references it.
+
+The tree still holds thin helpers, so both rules are scoped to a change like
+`blankerror`: a function is reported only when a changed line since the merge
+base with `base` meets its declaration. Pointing `base` at the root commit
+reports the whole tree, which is how a sweep finds the rest.
+
+Their only exits sit under the rule's key in the `analyzers.yaml` at the root of
+the module holding the file:
+
+```yaml
+inlineliteral:
+  exits: # a person keeps one; the reason is required
+    - {path: internal/x/z.go, symbol: defaults, reason: "..."}
+```
+
+`path` is the declaring file inside the module and `symbol` the function's name.
+An unknown field, an exit with no reason, or an exit naming a file that does not
+exist is a load error. An exit whose function no longer departs is a finding at
+its file's package clause, so a fixed helper takes its exit with it.
 
 ## Not here
 

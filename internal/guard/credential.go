@@ -267,7 +267,7 @@ func denyTokenStateCommand(location location, command string, d Dialect) string 
 			return true
 		}
 		if call, ok := n.(*syntax.CallExpr); ok && len(call.Args) > 1 &&
-			tokenStateListers[filepath.Base(literalWord(call.Args[0].Parts))] && !callWalks(call, d) && namesStayNames(stack, d) {
+			tokenStateListers[filepath.Base(literalWord(call.Args[0].Parts))] && !slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), walksDirectories) && namesStayNames(stack, d) {
 			for _, arg := range call.Args[1:] {
 				listed[arg] = true
 			}
@@ -281,7 +281,7 @@ func denyTokenStateCommand(location location, command string, d Dialect) string 
 				// The state dir holds more than the secrets: a command that opens one
 				// file in it or lists it reads none of them, and a loop or a redirect
 				// names it with no command to vouch for.
-				if call := enclosingCall(stack); call == nil || callWalks(call, d) {
+				if call := enclosingCall(stack); call == nil || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), walksDirectories) {
 					reason = tokenStateDenial(text)
 				}
 			}
@@ -303,11 +303,6 @@ func enclosingCall(stack []syntax.Node) *syntax.CallExpr {
 		}
 	}
 	return nil
-}
-
-// callWalks reports whether any command the call runs, wrappers peeled, walks directories.
-func callWalks(call *syntax.CallExpr, d Dialect) bool {
-	return slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), walksDirectories)
 }
 
 // tokenStateListers print a file's name and metadata and never its content.

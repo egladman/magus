@@ -417,13 +417,7 @@ func aboveParentNote(ctx context.Context, store *Store, row job.Job, plan []job.
 	return fmt.Sprintf("%s runs at model tier %s (rank %d), above its parent %s at %s (rank %d); %s."+
 		" `--model %s` keeps it at the parent's tier, and setting %s off in magus\\guard.builtins stops this advice",
 		row.ID, pair.child.Name(), pair.child.Rank(), row.Parent, pair.parent.Name(), pair.parent.Rank(),
-		ModelCost(models, tierModel(row), tierModel(pair.parentRow)), pair.parent.Name(), spawnAboveParentTier)
-}
-
-// tierModel names the model a row runs: its tier's alias, its requested
-// id, or the tier's name when neither is recorded.
-func tierModel(row job.Job) string {
-	return cmp.Or(row.ModelTier.Model, row.Agent.RequestedModel().ID, row.ModelTier.Name)
+		ModelCost(models, cmp.Or(row.ModelTier.Model, row.Agent.RequestedModel().ID, row.ModelTier.Name), cmp.Or(pair.parentRow.ModelTier.Model, pair.parentRow.Agent.RequestedModel().ID, pair.parentRow.ModelTier.Name)), pair.parent.Name(), spawnAboveParentTier)
 }
 
 // ModelCost says what model and parent each cost per million tokens, input

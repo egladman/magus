@@ -365,7 +365,7 @@ func (r stepSpec) spawnEnvelope(st step.Step, input map[string]any) (string, str
 		input["description"] = d
 	}
 	st.Name, st.Input = cmp.Or(st.Name, st.Kind), input
-	raw, err := codec.Marshal(stepEnvelope(st))
+	raw, err := codec.Marshal(hookEnvelope{ToolName: st.Name, ToolInput: st.Input, Cwd: st.Dir, SessionID: st.Session, AgentID: st.Agent})
 	if err != nil {
 		return "", fmt.Sprintf("does not encode as a spawn: %v", err)
 	}
@@ -535,12 +535,6 @@ func stepRecord(raw string) (step.Step, bool) {
 // hostToolStep reports a step that reads as a host's hook envelope.
 func hostToolStep(st step.Step) bool {
 	return st.APIVersion == step.APIVersion && st.Kind == hostToolKind && st.Name != ""
-}
-
-// stepEnvelope is the hook envelope a tool step stands for: the name is
-// the tool, and the input its tool_input.
-func stepEnvelope(st step.Step) hookEnvelope {
-	return hookEnvelope{ToolName: st.Name, ToolInput: st.Input, Cwd: st.Dir, SessionID: st.Session, AgentID: st.Agent}
 }
 
 // declaredStep is the Step record input holds when Judge hands it to

@@ -197,10 +197,6 @@ type scopedPolicies struct {
 	policies map[string]*Policy
 }
 
-func newScopedPolicies() *scopedPolicies {
-	return &scopedPolicies{policies: map[string]*Policy{}}
-}
-
 // stepScope is what runTarget records for the step it runs: the spells its project
 // binds and the target's own declaration.
 type stepScope struct {

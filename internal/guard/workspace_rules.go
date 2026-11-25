@@ -743,7 +743,7 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 	if !interp.Available() {
 		return nil, &types.EngineNotLinkedError{Op: "load the approved guard rules"}
 	}
-	reg := newRuleLoad()
+	reg := &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steps.Group{}}
 	resolver, err := recorder.NewSecretResolver()
 	if err != nil {
 		return nil, err
@@ -895,7 +895,7 @@ type WorkspaceRules struct {
 // is an error, which the caller must not read as "no rules", and so is a magusfile in a
 // program that links no Buzz engine: a *types.EngineNotLinkedError.
 func LoadWorkspaceRules(ctx context.Context, root string, opts types.VCSOptions) (*WorkspaceRules, error) {
-	load := newRuleLoad()
+	load := &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steps.Group{}}
 	rules := &WorkspaceRules{root: root, opts: opts, registry: load.WorkspaceRegistry, steps: load.steps}
 	srcs, err := interp.FindAll(root)
 	if errors.Is(err, interp.ErrNoMagusfile) {

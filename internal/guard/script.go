@@ -132,9 +132,9 @@ func judgeScript(ctx context.Context, deps Dependencies, lang scriptLang, body s
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
 		// in a Buzz script writes exactly what open(p, 'w') does in a python one.
-		if rel := buzzRewrittenFile(deps.scope, body); rel != "" {
+		if rel := existingWorkspaceFile(deps.scope, buzzWriteDestinations(body)); rel != "" {
 			return deps.grade(ShellVerdict{
-				Deny: interpreterRewriteDenial(rel) + referenceScriptNote(deps.scope.root, denyRuleInterpreterRewrite),
+				Deny: interpreterRewriteDenial(rel) + scriptLines(servedScripts(deps.scope.root, denyRuleInterpreterRewrite, nil)),
 				Rule: denyRule{Name: denyRuleInterpreterRewrite},
 			})
 		}

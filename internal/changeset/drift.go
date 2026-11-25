@@ -211,7 +211,7 @@ func (f driftFinding) empty() bool { return len(f.staleProjects) == 0 }
 func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string {
 	var b strings.Builder
 	if len(f.staleProjects) > 0 {
-		projects := joinProjects(f.staleProjects)
+		projects := strings.Join(f.staleProjects, " ")
 		fmt.Fprintf(&b, "[%s] commit %s left generated output stale (%s changed with no matching regeneration).\n",
 			types.StaleGeneratedOutput, hash, projects)
 		fmt.Fprintf(&b, "Regenerate: magus run generate:rw %s\n", projects)
@@ -226,10 +226,4 @@ func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string 
 		fmt.Fprintf(&b, "%s is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead.", hash)
 	}
 	return b.String()
-}
-
-// joinProjects renders the drifted project set for both the regenerate command's
-// argument list and the notice's prose, so the two can never name a different set.
-func joinProjects(projects []string) string {
-	return strings.Join(projects, " ")
 }

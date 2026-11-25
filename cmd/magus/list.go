@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
@@ -188,7 +189,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 		return err
 	}
 
-	selection, _, err := resolveTargets(ctx, ws, types.Target{Name: "ls"}, runSelection{projects: projectArgs, cwd: clientCurrentWorkingDirectory(ctx)})
+	selection, _, err := interactive.ResolveTargets(ctx, ws, types.Target{Name: "ls"}, interactive.RunSelection{Projects: projectArgs, Cwd: clientCurrentWorkingDirectory(ctx)})
 	if err != nil {
 		return err
 	}

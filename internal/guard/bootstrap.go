@@ -76,21 +76,13 @@ func (g goCall) buildRoot(cwd string) string {
 	return filepath.Join(cwd, g.chdir)
 }
 
-// bootstrapArgv is ward.BootstrapCommand as a shell line spells it, prefix first: what a
-// checkout of magus with no binary runs to get one, the real go-build target driven by a
-// magus compiled on the fly. The target's own key cannot express the embedded-spell
-// ordering, so its cache is bypassed; Go's content-addressed build cache stays on, and
-// -trimpath matches the target's build so packages compile once. The prefix is an
-// assignment, so the line runs through a shell, never through exec.
-func bootstrapArgv() []string { return strings.Fields(ward.BootstrapCommand) }
-
 // bootstrapParts splits bootstrapArgv into its one environment prefix and the go command
 // after it. The magus package refuses to compile without the experiment the prefix sets,
 // and a fresh checkout cannot count on mise to set it; the go-build target sets it for the
 // builds it runs. ok is false when ward.BootstrapCommand no longer has that shape, and
 // then no line is the bootstrap.
 func bootstrapParts() (env string, goArgv []string, ok bool) {
-	argv := bootstrapArgv()
+	argv := strings.Fields(ward.BootstrapCommand)
 	if len(argv) < 2 || !strings.Contains(argv[0], "=") || argv[1] != "go" {
 		return "", nil, false
 	}
@@ -365,7 +357,7 @@ func besideGoCall(command string, d Dialect) []string {
 // newOwnBuildOutcome builds the outcome rankOwnBuild layers onto the deny for denied.
 func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
-	argv := bootstrapArgv()
+	argv := strings.Fields(ward.BootstrapCommand)
 	if env, goArgv, ok := bootstrapParts(); ok {
 		argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
 	}

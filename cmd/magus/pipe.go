@@ -11,17 +11,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// proveStdio starts proving the magus stages on either side of this process in a shell
-// pipe. See pipe.ProveStdio.
-func proveStdio(ctx context.Context, args []string) context.Context {
-	return pipe.ProveStdio(ctx, args, pipe.Rules{
-		RecordStage:    pipeRecordStage,
-		ReadsRecords:   readsPipeRecords,
-		ProvesUpstream: provesUpstream,
-		TakesLocks:     takesProjectLocks,
-	})
-}
-
 // provesUpstream reports whether a magus invoked with argv (argv[0] first) proves the
 // magus stages upstream of it at start, as proveStdio does.
 func provesUpstream(argv []string) bool {

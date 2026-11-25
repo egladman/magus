@@ -631,7 +631,14 @@ func gradeAgainstOwnLease(me jobtypes.Job, owners []jobtypes.Job, rel string, en
 		return writeGrade{}
 	}
 	if me.State == jobtypes.StateExited {
-		return denyExitedWrite(me, rel)
+		return writeGrade{Decision: verdict.Deny, Reason: denial{
+			Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and job %s is exited; `%s` re-takes it, then "+
+				leaseActorClause(fmt.Sprintf("widen it with `%s`", hint.JobApply)),
+				rel, me.ID, nearestWritePaths(me, rel), me.ID, hint.JobExec.With(me.ID)),
+			Why: fmt.Sprintf("You stay bound to lease %s after `%s`: its write paths still grade your writes until a wait ends it. "+
+				"`%s` shows what the job holds.\n"+leaseActorWhy,
+				me.ID, hint.JobExit.With(me.ID), hint.DescribeJob.With(me.ID)),
+		}.full()}
 	}
 	g, stop := claim(rel)
 	if g.Decision != "" {
@@ -649,19 +656,6 @@ func gradeAgainstOwnLease(me jobtypes.Job, owners []jobtypes.Job, rel string, en
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
 			revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel),
-	}.full()}
-}
-
-// denyExitedWrite refuses a write outside an exited lease's paths. Its result
-// is filed, so magus claims nothing for it.
-func denyExitedWrite(me jobtypes.Job, rel string) writeGrade {
-	return writeGrade{Decision: verdict.Deny, Reason: denial{
-		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and job %s is exited; `%s` re-takes it, then "+
-			leaseActorClause(fmt.Sprintf("widen it with `%s`", hint.JobApply)),
-			rel, me.ID, nearestWritePaths(me, rel), me.ID, hint.JobExec.With(me.ID)),
-		Why: fmt.Sprintf("You stay bound to lease %s after `%s`: its write paths still grade your writes until a wait ends it. "+
-			"`%s` shows what the job holds.\n"+leaseActorWhy,
-			me.ID, hint.JobExit.With(me.ID), hint.DescribeJob.With(me.ID)),
 	}.full()}
 }
 
@@ -782,12 +776,7 @@ func quotedClaims(rel string, claims []string) string {
 // enterCall renders the job-store call that enters rel on lease id. The CLI has no
 // entry, so it is a client script.
 func enterCall(id, rel string) string {
-	return clientJobPut(id, "enter", strconv.Quote(rel))
-}
-
-// clientJobPut is a client tool script putting one key on row id.
-func clientJobPut(id, key, value string) string {
-	return fmt.Sprintf(`import "magus"; magus\workspace().putJob(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
+	return fmt.Sprintf(`import "magus"; magus\workspace().putJob(%s, opts: {%q: %s});`, strconv.Quote(id), "enter", strconv.Quote(rel))
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its

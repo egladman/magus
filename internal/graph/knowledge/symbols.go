@@ -35,10 +35,6 @@ func isSymbolsShard(name string) bool {
 	return strings.HasSuffix(name, symbolsShardSuffix) || strings.Contains(name, symbolsShardSuffix+":")
 }
 
-// symbolsShardKey is a symbol shard's name less the suffix: the project for its base
-// shard, "<project>:<dir>" for a directory shard.
-func symbolsShardKey(name string) string { return strings.Replace(name, symbolsShardSuffix, "", 1) }
-
 // symbolsShardProject is the project a symbol shard belongs to.
 func symbolsShardProject(name string) string {
 	project, _, _ := strings.Cut(name, symbolsShardSuffix)
@@ -210,7 +206,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 			s.Edges = append(s.Edges, e)
 		}
 		for _, c := range sym.Calls {
-			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, callProvenance(c)))
+			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, fmt.Sprintf("%scount=%s", refProvenancePrefix, strconv.Itoa(c.Count))))
 		}
 		for _, iface := range sym.Implements {
 			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(iface), types.RelationImplements, ""))
@@ -431,16 +427,6 @@ func refProvenance(ref types.KnowledgeSymbolRef) string {
 		}
 	}
 	return b.String()
-}
-
-// callProvenance encodes a call edge's attributed occurrence count in the same
-// "scip count=N" shape refProvenance uses, so parseRefProvenance decodes both and there
-// is one SCIP provenance format rather than two near-identical ones. It carries no lines:
-// the call sites are already on the caller file's `references` edge, and repeating them
-// per (caller, callee) pair would be pure shard weight. What distinguishes a call from a
-// reference is the RELATION and the endpoint kinds, never the provenance.
-func callProvenance(c types.KnowledgeSymbolCall) string {
-	return fmt.Sprintf("%scount=%s", refProvenancePrefix, strconv.Itoa(c.Count))
 }
 
 // parseRefProvenance decodes a refProvenance string back into its count and lines.

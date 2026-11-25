@@ -91,7 +91,7 @@ func XMLRender(_ context.Context, node any) (string, error) {
 func renderNode(b *strings.Builder, node any) error {
 	switch n := node.(type) {
 	case string:
-		b.WriteString(escapeText(n))
+		b.WriteString(strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(n))
 		return nil
 	case map[string]any:
 		tag, ok := n["tag"].(string)
@@ -207,10 +207,4 @@ func asString(v any) string {
 		return s
 	}
 	return fmt.Sprint(v)
-}
-
-// escapeText escapes character data (&, <, >) and leaves quotes alone,
-// unlike html.EscapeString.
-func escapeText(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }

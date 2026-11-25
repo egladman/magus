@@ -42,18 +42,15 @@ type CheckGrader func(ctx context.Context, root string, row job.Job) CheckVerdic
 // as [noGrader] does, so a missing grader is a problem the fork reports, never a pass.
 func (s *Store) checkGrader() CheckGrader {
 	if s.grader == nil {
-		return noGrader
+		return func(context.Context, string, job.Job) CheckVerdict {
+			return CheckVerdict{NotGraded: noGraderReason}
+		}
 	}
 	return s.grader
 }
 
 // noGraderReason is why a check graded with no grader reached no verdict.
 const noGraderReason = "the job store was opened with no check grader (Location.Grader), so nothing judges whether the holder may run it"
-
-// noGrader is the grade of a store with no grader: no verdict, said as NotGraded.
-func noGrader(context.Context, string, job.Job) CheckVerdict {
-	return CheckVerdict{NotGraded: noGraderReason}
-}
 
 // WithGrader returns a Store over s's file that grades a declared check with g in place of
 // s's own: a fork wraps the grader it validates with in kept verdicts

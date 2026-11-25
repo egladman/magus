@@ -49,37 +49,6 @@ func (f tableProver) Place(context.Context, string, []string) (Placement, error)
 	}, nil
 }
 
-// fixtureProject mirrors this repository's root: ci needs lint, build and test; lint and
-// build need format, which needs generate, which needs x-generate; test runs the go
-// spell's go-test op and needs format and two narrower suites.
-func fixtureProject() *types.Project {
-	return &types.Project{
-		Path: ".",
-		MagusfileTargets: []string{"ci", "lint", "build", "test", "format", "generate", "x-generate",
-			"buzz-test", "cgo-test", "release"},
-		TargetChains: map[string][]types.ChainStep{
-			"ci":       {{Target: "lint"}, {Target: "build"}, {Target: "test"}},
-			"lint":     {{Target: "format"}},
-			"build":    {{Target: "format"}},
-			"format":   {{Target: "generate"}},
-			"generate": {{Target: "x-generate"}},
-			"test":     {{Target: "format"}, {Target: "buzz-test"}, {Target: "cgo-test"}},
-		},
-		// cgo-test runs go-test too, over packages of its own choosing, so it runs as
-		// declared rather than being narrowed.
-		TargetSpellOps: map[string][]types.TargetSpellUse{
-			"test":     {{Spell: "go", Ops: []string{"go-test"}}},
-			"cgo-test": {{Spell: "go", Ops: []string{"go-test"}}},
-		},
-		TargetInputs: map[string][]types.InputRef{
-			"x-generate": {{Glob: "tools/gen.yaml"}, {Glob: "docs/**/*.md"}},
-			"buzz-test":  {{Glob: "**/*.buzz"}},
-			"cgo-test":   {{Glob: "a/*.go"}},
-			"release":    {{Glob: "notes/*.md"}},
-		},
-	}
-}
-
 // claims are the describe-file entries fixtureProject gives each fixture path.
 var claims = map[string][]types.FileClaim{
 	"e/zz_generated.go": {{Project: ".", Target: "x-generate", Role: "output", Glob: "e/zz_generated.go"}},
@@ -114,11 +83,35 @@ func fixtureInputs(provers map[string]Prover, delta ...Classified) Inputs {
 		Delta:    Delta{Paths: delta},
 		Claims:   entries(paths...),
 		Affected: []string{"."},
-		Projects: []*types.Project{fixtureProject()},
-		Target:   "ci",
-		Provers:  provers,
-		Root:     "/ws",
-		Base:     "base",
+		Projects: []*types.Project{&types.Project{
+			Path: ".",
+			MagusfileTargets: []string{"ci", "lint", "build", "test", "format", "generate", "x-generate",
+				"buzz-test", "cgo-test", "release"},
+			TargetChains: map[string][]types.ChainStep{
+				"ci":       {{Target: "lint"}, {Target: "build"}, {Target: "test"}},
+				"lint":     {{Target: "format"}},
+				"build":    {{Target: "format"}},
+				"format":   {{Target: "generate"}},
+				"generate": {{Target: "x-generate"}},
+				"test":     {{Target: "format"}, {Target: "buzz-test"}, {Target: "cgo-test"}},
+			},
+			// cgo-test runs go-test too, over packages of its own choosing, so it runs as
+			// declared rather than being narrowed.
+			TargetSpellOps: map[string][]types.TargetSpellUse{
+				"test":     {{Spell: "go", Ops: []string{"go-test"}}},
+				"cgo-test": {{Spell: "go", Ops: []string{"go-test"}}},
+			},
+			TargetInputs: map[string][]types.InputRef{
+				"x-generate": {{Glob: "tools/gen.yaml"}, {Glob: "docs/**/*.md"}},
+				"buzz-test":  {{Glob: "**/*.buzz"}},
+				"cgo-test":   {{Glob: "a/*.go"}},
+				"release":    {{Glob: "notes/*.md"}},
+			},
+		}},
+		Target:  "ci",
+		Provers: provers,
+		Root:    "/ws",
+		Base:    "base",
 		Read: func(context.Context, string) (string, string, error) {
 			return "old", "cur", nil
 		},

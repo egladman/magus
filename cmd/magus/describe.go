@@ -812,7 +812,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 // active workspace by default, or one entry per workspace the server is declared
 // to serve (server.workspaces / MAGUS_SERVER_WORKSPACES) when that list is set.
 func describeWorkspacesOutput(ctx context.Context, root string) ([]types.WorkspaceEntry, error) {
-	declared := resolveDeclaredWorkspaces(globalCfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
+	declared := server.ResolveDeclaredWorkspaces(context.Background(), globalCfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	if len(declared) == 0 {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {

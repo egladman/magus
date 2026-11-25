@@ -336,7 +336,11 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	if row, ok := spawnDuplicate(ctx, at, facts, hint.NewGate(at.cacheDir, who.callerKey()), env.Spawn.Description); ok {
-		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
+		return refused(denyRuleSpawnDuplicate, denial{
+			Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
+			Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +
+				"A row stays running after its worker dies until something reaps it, so a stuck row is ended first, never worked around with a second worker.",
+		}), ""
 	}
 	row, titled := spawnTitleJob(ctx, at, env.Spawn.Description)
 	if titled {
@@ -355,7 +359,11 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	}
 	// A subagent handing waiting to a helper of its own, said once a session.
 	if who.Agent != "" && spawnNestedWordRe.MatchString(fmt.Sprintf("%s\n%s", env.Spawn.Description, env.Value[:min(len(env.Value), spawnWaiterHead)])) {
-		note := adviseSpawnNestedWaiter()
+		note := advice{
+			Say: "magus workspace: a worker spawning a helper to wait or watch: return to your parent, which is told when each worker ends.",
+			Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a backgrounded run announces its own end. " +
+				"A helper spawned only to wait stacks a third context on the notice the first two already get.",
+		}
 		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
 			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: verdict.Advise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
@@ -379,7 +387,12 @@ const denyRuleSpawnUnisolatedRow denyRuleName = "spawn-unisolated-row"
 // denyTitledSpawn judges the row a spawn title names.
 func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hookRequest, row jobtypes.Job) (denyRuleName, denial, bool) {
 	if row.Validated == 0 {
-		return denyRuleSpawnUnvalidated, denySpawnUnvalidated(row), true
+		return denyRuleSpawnUnvalidated, denial{
+			Say: fmt.Sprintf("job %s carries no `validated` stamp, so nothing checked its record before a worker would take it: `%s` lists its problems, then `%s` validates it.",
+				row.ID, hint.JobFork.With(row.ID, "--dry-run"), hint.JobApply.With("-f", "<record>")),
+			Why: "A fork or an apply validates the whole record and stamps the row; a row without the stamp was written some other way, " +
+				"so its write paths, check and postconditions may hold a problem every worker would meet only after it started.",
+		}, true
 	}
 	if d, shared := denyUnisolatedRow(env.Spawn.Isolated, row); shared {
 		return denyRuleSpawnUnisolatedRow, d, true
@@ -496,19 +509,13 @@ func markAgentSeen(facts hint.Gate, env hookRequest) {
 	if env.IsContinue {
 		agentID := resolveAgentID(facts, env.Target)
 		facts.Touch(agentSeenKind(agentID))
-		facts.Touch(agentContinuedKind(agentID))
+		facts.Touch(agentMarkerKind("agent-continued-", agentID))
 	}
 }
 
 // stoppedAgentKind names the marker judgeStop touches when a subagent's stop stands.
 func stoppedAgentKind(agentID string) hint.MarkerKind {
 	return agentMarkerKind("agent-stopped-", agentID)
-}
-
-// agentContinuedKind names the marker a continue touches, which revives a stopped agent.
-// agentSeenKind cannot serve: a foreground spawn's call finishes after its child stopped.
-func agentContinuedKind(agentID string) hint.MarkerKind {
-	return agentMarkerKind("agent-continued-", agentID)
 }
 
 // stoppedAgent reports whether the host said agentID stopped, on stops, and nothing has
@@ -522,7 +529,7 @@ func stoppedAgent(facts, stops hint.Gate, agentID string) bool {
 	if !ok {
 		return false
 	}
-	continued, ok := facts.LastSeen(agentContinuedKind(agentID))
+	continued, ok := facts.LastSeen(agentMarkerKind("agent-continued-", agentID))
 	return !ok || stopped.After(continued)
 }
 

@@ -63,9 +63,5 @@ func writeDocument(path, mediaType string, v any) (Document, error) {
 	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
 		return Document{}, err
 	}
-	return Document{Path: path, Descriptor: blobDescriptor(mediaType, data)}, nil
-}
-
-func blobDescriptor(mediaType string, data []byte) ocispec.Descriptor {
-	return ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
+	return Document{Path: path, Descriptor: ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}}, nil
 }

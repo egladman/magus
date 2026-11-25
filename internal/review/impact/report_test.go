@@ -10,10 +10,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// fixture is a changeset every lens had something to say about: the populated case
-// each section's render is pinned against.
-func fixture() Report {
-	return Report{
+// TestImpactRendersEverySection pins the sections a disposer reads before landing.
+//
+// Asserted line by line rather than by substring: these sentences are the whole product of
+// this report, and a section that silently stopped rendering its list would still pass a
+// header-only check.
+func TestImpactRendersEverySection(t *testing.T) {
+	assert.Equal(t, []string{
+		"IMPACT - the blast radius of landing this",
+		"",
+		"REACH: 1 project edited, 2 projects rebuild",
+		"      root - edited, 3 files",
+		"      docs - rebuilds because it depends on one that was",
+		"",
+		"OWNERSHIP: who has been changing the projects in reach",
+		"      root mostly alice (72%), 4 authors",
+		"      docs mostly bob (100%), 1 author - BUS FACTOR 1",
+		"",
+		"COST: ~4m20s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
+		"      root ci ~3m20s (18 runs), 40% cache hits",
+		"      docs test ~1m0s (1 run)",
+		"",
+		"BASE: origin/main, tip 2 days old - a local run stays off the network, so anything merged since is outside what the advisors saw; `git fetch origin main` brings it forward",
+		"ADVISORS: 1 finding",
+		"      A public symbol changed",
+		"        diff.Diff is exported.",
+		"        Bump the minor.",
+		"      1 ran and found nothing: retracted",
+		"      could not run: doctor.buzz: main() returned 1",
+		"",
+		"ANCHORS: 2 notes anchored to what you changed",
+		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
+		"      note secret-value-type anchors symbol:m types/Secret# [drifted-anchor]",
+		"",
+		"LEFT BEHIND: 1 compat(until:) or Deprecated: marker added",
+		"      internal/cache/signing.go:32 compat(until: no store still serves ed25519 envelopes",
+		"      1 symbol lost the last use here and is still defined",
+		"        signEd25519 (internal/cache/signing.go:40)",
+		"",
+		"EVIDENCE: 2 questions the authors asked magus while writing this",
+		"      explain internal/cache (x2)",
+		"      refs m types/Secret#",
+		"",
+		"REVIEW: 1 file(s) changed after you read them",
+		"      internal/cache/cache.go",
+		"      2 file(s) you have not opened, widest blast radius first",
+		"        types/diff.go",
+		"        std/magus.go",
+		"      record what you read, wherever you read it: magus diff --ack <path>...",
+		"      or step through them here: magus diff",
+	}, Lines(Report{
 		Reach: &reachSummary{
 			Seeds:    1,
 			Rebuilds: 2,
@@ -69,59 +115,7 @@ func fixture() Report {
 			Stale:  []string{"internal/cache/cache.go"},
 			Unread: []string{"types/diff.go", "std/magus.go"},
 		},
-	}
-}
-
-// TestImpactRendersEverySection pins the sections a disposer reads before landing.
-//
-// Asserted line by line rather than by substring: these sentences are the whole product of
-// this report, and a section that silently stopped rendering its list would still pass a
-// header-only check.
-func TestImpactRendersEverySection(t *testing.T) {
-	assert.Equal(t, []string{
-		"IMPACT - the blast radius of landing this",
-		"",
-		"REACH: 1 project edited, 2 projects rebuild",
-		"      root - edited, 3 files",
-		"      docs - rebuilds because it depends on one that was",
-		"",
-		"OWNERSHIP: who has been changing the projects in reach",
-		"      root mostly alice (72%), 4 authors",
-		"      docs mostly bob (100%), 1 author - BUS FACTOR 1",
-		"",
-		"COST: ~4m20s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
-		"      root ci ~3m20s (18 runs), 40% cache hits",
-		"      docs test ~1m0s (1 run)",
-		"",
-		"BASE: origin/main, tip 2 days old - a local run stays off the network, so anything merged since is outside what the advisors saw; `git fetch origin main` brings it forward",
-		"ADVISORS: 1 finding",
-		"      A public symbol changed",
-		"        diff.Diff is exported.",
-		"        Bump the minor.",
-		"      1 ran and found nothing: retracted",
-		"      could not run: doctor.buzz: main() returned 1",
-		"",
-		"ANCHORS: 2 notes anchored to what you changed",
-		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
-		"      note secret-value-type anchors symbol:m types/Secret# [drifted-anchor]",
-		"",
-		"LEFT BEHIND: 1 compat(until:) or Deprecated: marker added",
-		"      internal/cache/signing.go:32 compat(until: no store still serves ed25519 envelopes",
-		"      1 symbol lost the last use here and is still defined",
-		"        signEd25519 (internal/cache/signing.go:40)",
-		"",
-		"EVIDENCE: 2 questions the authors asked magus while writing this",
-		"      explain internal/cache (x2)",
-		"      refs m types/Secret#",
-		"",
-		"REVIEW: 1 file(s) changed after you read them",
-		"      internal/cache/cache.go",
-		"      2 file(s) you have not opened, widest blast radius first",
-		"        types/diff.go",
-		"        std/magus.go",
-		"      record what you read, wherever you read it: magus diff --ack <path>...",
-		"      or step through them here: magus diff",
-	}, Lines(fixture()))
+	}))
 }
 
 // TestImpactEmptyFormsSayNobodyLooked is the half that matters.

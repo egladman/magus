@@ -108,12 +108,6 @@ type shippedSpells struct {
 	sourceOnly map[string]string // directory -> why it is not a built-in
 }
 
-// sourceOnlySpells is every top-level shipped spell that is not a built-in, by directory, with
-// the import that kept it out. A spell that drops out of the built-ins by importing a
-// host module lands here instead of vanishing, so an unknown-spell error and a test can
-// name it.
-func sourceOnlySpells() map[string]string { return maps.Clone(shipped().sourceOnly) }
-
 var shipped = sync.OnceValue(loadShipped)
 
 // loadShipped compiles every shipped spell that is a built-in and resolves its mgs_
@@ -140,7 +134,7 @@ func loadShipped() shippedSpells {
 	// telemetry provider, so the warm recording below is nil-gated to a no-op today;
 	// withBuiltinResolve keeps the resolve "builtin" attribute correct should a
 	// provider-carrying ctx ever drive this path.
-	ctx := withBuiltinResolve(context.Background())
+	ctx := context.WithValue(context.Background(), builtinCtxKey{}, true)
 	p := providerFromContext(ctx)
 	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}, sourceOnly: map[string]string{}}
 	for _, e := range entries {

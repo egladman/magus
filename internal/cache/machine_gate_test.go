@@ -1342,17 +1342,11 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	assert.Equal(t, "invrefused", sink.records[0].Invocation)
 	runs := sink.runs()
 	require.Len(t, runs, 1)
-	assert.Equal(t, refusalEvent(), normalizeRefusal(t, runs[0]),
-		"nothing ran, so nothing was captured and there is no ref")
-}
-
-// refusalEvent is the result a machine refusal of `.`'s test journals, with the
-// volatile fields normalizeRefusal clears.
-func refusalEvent() journal.Run {
-	return journal.Run{
+	assert.Equal(t, journal.Run{
 		Project: ".", Target: "test", Level: "error",
 		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
-	}
+	}, normalizeRefusal(t, runs[0]),
+		"nothing ran, so nothing was captured and there is no ref")
 }
 
 // normalizeRefusal clears a refusal's cause text, which names the holder's
@@ -1388,7 +1382,10 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	runs := sink.runs()
 	require.Len(t, runs, 1)
-	assert.Equal(t, refusalEvent(), normalizeRefusal(t, runs[0]))
+	assert.Equal(t, journal.Run{
+		Project: ".", Target: "test", Level: "error",
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	}, normalizeRefusal(t, runs[0]))
 
 	// A claim that ends because the run was cancelled is not a refusal to put on record.
 	cancelled, cancel := context.WithCancel(ctx)

@@ -189,7 +189,12 @@ func runCLI() int {
 	// env\set lands here rather than in the process environment. An adopted run gets its
 	// own from the proc server, so under `magus server` one run's PATH is not another's.
 	rootCtx = spawn.WithEnvOverlay(rootCtx)
-	rootCtx = proveStdio(rootCtx, args)
+	rootCtx = pipe.ProveStdio(rootCtx, args, pipe.Rules{
+		RecordStage:    pipeRecordStage,
+		ReadsRecords:   readsPipeRecords,
+		ProvesUpstream: provesUpstream,
+		TakesLocks:     takesProjectLocks,
+	})
 
 	dispatchCtx, res, exitCode := startup(rootCtx, args)
 
@@ -903,7 +908,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// parent is gone) hosts its own pool. loadMagus wires the limiter into the
 		// loaded workspace regardless, so a leaf still has its concurrency pool.
 		leaf := parentLive
-		if m, err := loadMagus(withBootstrapLimiter(rootCtx, lim), root); err == nil && !leaf {
+		if m, err := loadMagus(context.WithValue(rootCtx, bootstrapLimiterKey{}, lim), root); err == nil && !leaf {
 			srv, err := proc.New(rootCtx, proc.Options{
 				Handler: poolHandler(m.Root(), func(ctx context.Context, args []string) error {
 					return dispatchAdopted(ctx, root, rc, args)

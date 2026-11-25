@@ -104,12 +104,6 @@ func (o run) typed() bool { return !o.Background && !o.UnderAncestor }
 
 type typedRunKey struct{}
 
-// withTypedRun records on ctx whether the run that owns it is typed. Each run sets it
-// afresh, so index work nested in a typed run is still not typed.
-func withTypedRun(ctx context.Context, typed bool) context.Context {
-	return context.WithValue(ctx, typedRunKey{}, typed)
-}
-
 // inTypedRun reports whether ctx belongs to a run somebody typed.
 func inTypedRun(ctx context.Context) bool {
 	typed, _ := ctx.Value(typedRunKey{}).(bool)
@@ -2296,7 +2290,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 						continue
 					}
 					probe, fork = t.Probe, func() (string, error) { return s.ProbeVersion(ctx, tool, p.Dir) }
-					drivenAs = indexerUseKey(s, tool)
+					drivenAs = fmt.Sprintf("%s:%s@%s", s.Name(), tool, s.SymbolIndexOp())
 				}
 				// The spawn the doc above promises a target does not pay for unless it
 				// drives the binary. observationsForTarget already dropped an undriven
@@ -2358,7 +2352,7 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 			driven[fmt.Sprintf("%s:%s", s.Name(), op.Bin)] = true
 		}
 		for _, tool := range indexerUses(s, target) {
-			driven[indexerUseKey(s, tool)] = true
+			driven[fmt.Sprintf("%s:%s@%s", s.Name(), tool, s.SymbolIndexOp())] = true
 		}
 	}
 	return driven
@@ -2935,7 +2929,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = cache.WithTargetRuns(ctx, runs)
 	cross := interp.NewCrossDispatch(runs)
 	ctx = interp.WithCrossDispatch(ctx, cross)
-	ctx = withTypedRun(ctx, opts.typed())
+	ctx = context.WithValue(ctx, typedRunKey{}, opts.typed())
 	lim := m.limiter()
 	if opts.Step {
 		slog.With(attr.Component("magus")).InfoContext(ctx, "--step forces Concurrency=1")
@@ -3074,7 +3068,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
-	if s := statsSince(m.cache.Stats(), counted); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
+	now := m.cache.Stats()
+	s := cache.Stats{
+		Hit: now.Hit - counted.Hit, Miss: now.Miss - counted.Miss, Error: now.Error - counted.Error,
+		Permitted: now.Permitted - counted.Permitted, SavedMs: now.SavedMs - counted.SavedMs,
+		Files: now.Files - counted.Files, Slots: now.Slots - counted.Slots,
+	}
+	if s.Hit+s.Miss+s.Permitted+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
 			Hits: s.Hit, Misses: s.Miss, Permitted: s.Permitted, Errors: s.Error, Files: s.Files, Slots: s.Slots,
 			DurationMs: time.Since(start).Milliseconds(),
@@ -3088,16 +3088,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	return runErr
-}
-
-// statsSince is the work one run counted. The cache's counters are never
-// reset, and a ci run or the daemon makes several runs on one cache.
-func statsSince(now, base cache.Stats) cache.Stats {
-	return cache.Stats{
-		Hit: now.Hit - base.Hit, Miss: now.Miss - base.Miss, Error: now.Error - base.Error,
-		Permitted: now.Permitted - base.Permitted, SavedMs: now.SavedMs - base.SavedMs,
-		Files: now.Files - base.Files, Slots: now.Slots - base.Slots,
-	}
 }
 
 // withoutAdvisory leaves out each failure a composer carried on past: an

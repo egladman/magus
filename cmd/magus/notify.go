@@ -4,7 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -61,9 +65,10 @@ func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer
 	}
 	sessions.NormalizeEvent(&ev)
 
-	held, err := fileAttention(ctx, root, ev)
+	held, err := job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(ctx, jobtypes.EntryPointHook), version, jobPlace)
 	if err != nil {
-		noteAttentionOpenFailure(err)
+		slog.With(attr.Component("session notify")).Warn(fmt.Sprintf("the attention request was not recorded, so `%s` will not list it", hint.SessionAttention.String()),
+			attr.Error(err))
 	}
 
 	// A repeat of a block the queue already holds would ask for a yes on it twice.

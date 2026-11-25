@@ -27,19 +27,9 @@ func fHistDP(bounds []float64, counts []uint64, sum float64, attrs attribute.Set
 	return metricdata.HistogramDataPoint[float64]{Attributes: attrs, Count: total(counts), Bounds: bounds, BucketCounts: counts, Sum: sum}
 }
 
-// iHistDP builds one attributed int64 histogram data point.
-func iHistDP(bounds []float64, counts []uint64, sum int64, attrs attribute.Set) metricdata.HistogramDataPoint[int64] {
-	return metricdata.HistogramDataPoint[int64]{Attributes: attrs, Count: total(counts), Bounds: bounds, BucketCounts: counts, Sum: sum}
-}
-
 // fHistMetric wraps float64 histogram data points as a named metric.
 func fHistMetric(name string, dps ...metricdata.HistogramDataPoint[float64]) metricdata.Metrics {
 	return metricdata.Metrics{Name: name, Data: metricdata.Histogram[float64]{Temporality: metricdata.CumulativeTemporality, DataPoints: dps}}
-}
-
-// iHistMetric wraps int64 histogram data points as a named metric.
-func iHistMetric(name string, dps ...metricdata.HistogramDataPoint[int64]) metricdata.Metrics {
-	return metricdata.Metrics{Name: name, Data: metricdata.Histogram[int64]{Temporality: metricdata.CumulativeTemporality, DataPoints: dps}}
 }
 
 // sumMetric wraps attributed int64 sum data points as a named monotonic sum metric.
@@ -72,22 +62,6 @@ func floatHist(name string, bounds []float64, counts []uint64, sum float64) metr
 	}
 }
 
-// intHist builds an int64 histogram metric (e.g. the remote io.size byte histogram).
-func intHist(name string, bounds []float64, counts []uint64, sum int64) metricdata.Metrics {
-	return metricdata.Metrics{
-		Name: name,
-		Data: metricdata.Histogram[int64]{
-			Temporality: metricdata.CumulativeTemporality,
-			DataPoints: []metricdata.HistogramDataPoint[int64]{{
-				Count:        total(counts),
-				Bounds:       bounds,
-				BucketCounts: counts,
-				Sum:          sum,
-			}},
-		},
-	}
-}
-
 func total(counts []uint64) uint64 {
 	var n uint64
 	for _, c := range counts {
@@ -106,7 +80,18 @@ func TestAggregate(t *testing.T) {
 				floatHist(instTargetDuration, []float64{1, 2}, []uint64{0, 10, 0}, 15),
 				// bounds [0.1], counts [3,0]: 3 observations in (0,0.1]; sum 0.3.
 				floatHist(instRemoteDuration, []float64{0.1}, []uint64{3, 0}, 0.3),
-				intHist(instRemoteIOSize, []float64{1024}, []uint64{2, 0}, 4096),
+				{
+					Name: instRemoteIOSize,
+					Data: metricdata.Histogram[int64]{
+						Temporality: metricdata.CumulativeTemporality,
+						DataPoints: []metricdata.HistogramDataPoint[int64]{{
+							Count:        total([]uint64{2, 0}),
+							Bounds:       []float64{1024},
+							BucketCounts: []uint64{2, 0},
+							Sum:          4096,
+						}},
+					},
+				},
 				sumMetric(instRemoteOps,
 					idp(2, kvSet("method", "get", "outcome", "hit")),
 					idp(1, kvSet("method", "get", "outcome", "miss")),
@@ -185,8 +170,12 @@ func TestTargetStats(t *testing.T) {
 // and errors are the duration histogram's counts.
 func TestMCPToolStats(t *testing.T) {
 	rm := scope(
-		iHistMetric(instMCPInput, iHistDP([]float64{1000}, []uint64{4, 0}, 400, kvSet("tool", "graph"))),
-		iHistMetric(instMCPOutput, iHistDP([]float64{2000}, []uint64{4, 0}, 800, kvSet("tool", "graph"))),
+		metricdata.Metrics{Name: instMCPInput, Data: metricdata.Histogram[int64]{Temporality: metricdata.CumulativeTemporality, DataPoints: []metricdata.HistogramDataPoint[int64]{
+			{Attributes: kvSet("tool", "graph"), Count: total([]uint64{4, 0}), Bounds: []float64{1000}, BucketCounts: []uint64{4, 0}, Sum: 400},
+		}}},
+		metricdata.Metrics{Name: instMCPOutput, Data: metricdata.Histogram[int64]{Temporality: metricdata.CumulativeTemporality, DataPoints: []metricdata.HistogramDataPoint[int64]{
+			{Attributes: kvSet("tool", "graph"), Count: total([]uint64{4, 0}), Bounds: []float64{2000}, BucketCounts: []uint64{4, 0}, Sum: 800},
+		}}},
 		fHistMetric(instMCPDuration,
 			fHistDP([]float64{1}, []uint64{3, 0}, 0.3, kvSet("tool", "graph", "outcome", "ok")),
 			fHistDP([]float64{1}, []uint64{1, 0}, 0.1, kvSet("tool", "graph", "outcome", "error")),

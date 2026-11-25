@@ -19,10 +19,6 @@ func building() []RunningTarget {
 	return []RunningTarget{{Project: ".", Target: "go-build", Started: time.Now().Add(-4 * time.Minute)}}
 }
 
-// idle is a process with nothing executing: a read, a follow stream, or a run
-// between targets.
-func idle() []RunningTarget { return nil }
-
 // runConfirm drives confirmInterrupts on its own goroutine, with a target in
 // flight, and reports whether the context was cancelled within a short grace
 // period.
@@ -88,7 +84,7 @@ func TestSecondInterruptStopsTheRun(t *testing.T) {
 func TestInterruptWithNothingRunningStopsAtOnce(t *testing.T) {
 	t.Parallel()
 	for name, inFlight := range map[string]func() []RunningTarget{
-		"empty set": idle,
+		"empty set": func() []RunningTarget { return nil },
 		"no source": nil,
 	} {
 		t.Run(name, func(t *testing.T) {

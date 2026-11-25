@@ -58,7 +58,7 @@ func TestResultModuleHoldsTheRenderedMirrors(t *testing.T) {
 	for _, name := range []string{"Diagnostic", "Result"} {
 		entry, ok := boundaryTypeNamed(name)
 		require.True(t, ok, name)
-		want, err := renderBuzzMirrorDecl(name, entry.Type)
+		want, err := renderBuzzMirrorDeclIn("", name, entry.Type)
 		require.NoError(t, err)
 		assert.Contains(t, result.Source, string(want),
 			"libs/result/result.buzz has drifted from types.%s: replace its %s object with this text", name, name)

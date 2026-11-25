@@ -342,7 +342,7 @@ func NewRunCursor() *RunCursor { return &RunCursor{sent: map[string]bool{}} }
 func (c *RunCursor) Prime(rows []job.Job) {
 	for _, row := range rows {
 		for _, e := range RunEvents(row) {
-			c.sent[runKey(e)] = true
+			c.sent[fmt.Sprintf("%s\x00%s\x00%s", e.Job, e.Ref, e.Note)] = true
 		}
 	}
 }
@@ -352,7 +352,7 @@ func (c *RunCursor) Next(rows []job.Job) []FeedEvent {
 	var out []FeedEvent
 	for _, row := range rows {
 		for _, e := range RunEvents(row) {
-			key := runKey(e)
+			key := fmt.Sprintf("%s\x00%s\x00%s", e.Job, e.Ref, e.Note)
 			if c.sent[key] {
 				continue
 			}
@@ -362,5 +362,3 @@ func (c *RunCursor) Next(rows []job.Job) []FeedEvent {
 	}
 	return out
 }
-
-func runKey(e FeedEvent) string { return fmt.Sprintf("%s\x00%s\x00%s", e.Job, e.Ref, e.Note) }

@@ -65,10 +65,6 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// isJSONLLog reports a -o jsonl invocation, the one format config validation refuses
-// from magus.yaml and the CLI sets after it.
-func isJSONLLog(l config.Log) bool { return strings.EqualFold(l.Format, "jsonl") }
-
 // withRecordedOutput routes output written outside a target's capture, a magusfile's
 // print at load or a target body a dry run evaluates, to records when this is a -o
 // jsonl invocation. ctx already carrying writers is returned as is.
@@ -89,7 +85,7 @@ func (m *Magus) withRecordedOutput(ctx context.Context) context.Context {
 // withholds, whatever -s or -vv say: a raw line on either stream breaks the one contract
 // it has, and the stage observer this attaches is what emits run.step.
 func collapseOnSuccess(l config.Log) bool {
-	if isJSONLLog(l) {
+	if strings.EqualFold(l.Format, "jsonl") {
 		return true
 	}
 	switch strings.ToLower(l.Format) {
@@ -649,7 +645,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}
-	if isJSONLLog(cfg.Log) {
+	if strings.EqualFold(cfg.Log.Format, "jsonl") {
 		m.records = secrets.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
 	m.poolEvents = func(ev budget.PoolEvent) { m.recordPoolEvent(ctx, ev) }

@@ -86,6 +86,6 @@ func narrow(policy *Policy, b scissors.Boundary) *Policy {
 	narrowed.Lease, narrowed.LeaseFrom = b.Lease()
 	narrowed.lease = &b
 	// The unnarrowed policy's memo holds unnarrowed policies.
-	narrowed.scoped = newScopedPolicies()
+	narrowed.scoped = &scopedPolicies{policies: map[string]*Policy{}}
 	return narrowed.withConfinement()
 }

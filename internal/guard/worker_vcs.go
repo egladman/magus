@@ -456,13 +456,6 @@ func splitOptions(words, valued []string) (flags, positional []string) {
 	return flags, positional
 }
 
-// checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the
-// refused call as the reader typed it.
-func checkoutAddDenial(what string, row job.Job, role string) string {
-	return fmt.Sprintf("magus workspace: %s makes a checkout by hand, and lease %s is %s: `%s` makes a job's checkout, and removes it once the job ends",
-		what, row.ID, role, hint.JobFork.With("<job>", "--checkout", "<dir>"))
-}
-
 // workerGitVerbs read the repository, or touch only the worker's own index and branch. rm
 // and mv touch the tree too, and lease-write grades each path they name.
 var workerGitVerbs = []string{

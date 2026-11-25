@@ -1,7 +1,6 @@
 package maintenance
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,11 +15,6 @@ import (
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
-
-// Production installs a resolver in main; the journal refuses to write without one.
-func withSecrets(ctx context.Context) context.Context {
-	return testkit.WithEnvResolver(ctx)
-}
 
 func TestBuildSchedule_SkipsDisabledAndResolvesArgv(t *testing.T) {
 	m := config.Maintenance{
@@ -56,7 +50,7 @@ func TestIsDue(t *testing.T) {
 
 	// Ran 25h ago (start + duration = finish): interval elapsed, due.
 	old := now.Add(-25 * time.Hour)
-	ctx := withSecrets(t.Context())
+	ctx := testkit.WithEnvResolver(t.Context())
 	recorder.AppendCall(ctx, dir, journal.Call{Time: old.Add(-time.Second), Duration: time.Second, Kind: journal.CallKindJob, Name: "server rotate-activities", Outcome: journal.OutcomeOK})
 	require.True(t, due(j))
 

@@ -97,9 +97,6 @@ func AccessConsole() Access { return Access{Console: LevelWrite} }
 // token sees.
 func AccessViewer() Access { return Access{Console: LevelRead} }
 
-// accessSocketPeer is never minted: it is what a same-user peer on a magus unix socket holds.
-func accessSocketPeer() Access { return Access{MCP: LevelWrite, Console: LevelWrite} }
-
 // Level returns the grant's level on s, and LevelNone for a scope it does not know.
 func (g Access) Level(s Scope) Level {
 	switch s {
@@ -222,7 +219,7 @@ func CredentialStdio() Credential { return Credential{Kind: KindStdio, Grant: Ac
 // past the run, which is also why landlock keeps it from the operator file. It has no ID
 // because it has no secret.
 func CredentialSocketPeer() Credential {
-	return Credential{Kind: KindSocketPeer, Grant: accessSocketPeer()}
+	return Credential{Kind: KindSocketPeer, Grant: Access{MCP: LevelWrite, Console: LevelWrite}}
 }
 
 // Credential is what a request was admitted as, a bearer the server verified,

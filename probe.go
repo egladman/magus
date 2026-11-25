@@ -145,7 +145,7 @@ func probeCacheKey(ctx context.Context, probe spells.Command, dir string) (strin
 	if !binaryCacheable(target) {
 		return "", false
 	}
-	writeBinaryIdentity(&b, target)
+	writeFileIdentity(&b, target)
 	writeEnv(&b, spec)
 	names := spec.files
 	switch base := filepath.Base(target); {
@@ -274,12 +274,6 @@ func binaryCacheable(path string) bool {
 	_, err = io.ReadFull(f, head)
 	_ = f.Close()
 	return err == nil && !bytes.Equal(head, []byte("#!"))
-}
-
-// writeBinaryIdentity records the executable a probe runs. Call it only after
-// binaryCacheable confirms path is worth keying on.
-func writeBinaryIdentity(b *strings.Builder, path string) {
-	writeFileIdentity(b, path)
 }
 
 // writeFileIdentity records whether path exists and, when it does, what would change

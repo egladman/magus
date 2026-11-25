@@ -37,7 +37,9 @@ type gradeFunc func(types.LeaseCheck) CheckVerdict
 // does. A nil grader grades as [noGrader]: no verdict, never a pass.
 func gradeWith(grader CheckGrader, root string, row job.Job) gradeFunc {
 	if grader == nil {
-		grader = noGrader
+		grader = func(context.Context, string, job.Job) CheckVerdict {
+			return CheckVerdict{NotGraded: noGraderReason}
+		}
 	}
 	return func(c types.LeaseCheck) CheckVerdict {
 		raw, err := rawCheck(c)

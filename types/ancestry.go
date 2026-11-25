@@ -76,7 +76,7 @@ func AppendInvocationAncestor(ctx context.Context, pid int, id string) context.C
 	if id == "" {
 		return ctx
 	}
-	return WithInvocationAncestors(ctx, append(InvocationAncestorsFromContext(ctx), invocationRef(pid, id)))
+	return WithInvocationAncestors(ctx, append(InvocationAncestorsFromContext(ctx), fmt.Sprintf("%s:%s", strconv.Itoa(pid), id)))
 }
 
 // HasInvocationAncestor reports whether the invocation identified by pid and id is this
@@ -85,20 +85,5 @@ func HasInvocationAncestor(ctx context.Context, pid int, id string) bool {
 	if id == "" {
 		return false
 	}
-	return slices.Contains(InvocationAncestorsFromContext(ctx), invocationRef(pid, id))
-}
-
-// invocationRef is the identity two invocations are compared by: the pid that minted the
-// id, plus the id.
-//
-// The pid is not decoration. recorder.NewInvocationID is unique only
-// within a process: a millisecond stamp plus a per-process counter. Two
-// processes that mint in the same millisecond mint one string.
-// On the id alone, a CI
-// fan-out that starts several runs at once would have one refuse another as its own
-// ancestor. A pid is unique among live processes, so the pair is unique among live
-// invocations, which is all this comparison spans. Under the server the pid is shared by
-// holder and waiter and the ids differ, which is the case the ids alone handle.
-func invocationRef(pid int, id string) string {
-	return fmt.Sprintf("%s:%s", strconv.Itoa(pid), id)
+	return slices.Contains(InvocationAncestorsFromContext(ctx), fmt.Sprintf("%s:%s", strconv.Itoa(pid), id))
 }

@@ -29,11 +29,6 @@ func TestGateIdentitySuite(t *testing.T) {
 	suite.Run(t, new(gateIdentitySuite))
 }
 
-// vcsBuild is an unstamped build that fell back to Go's VCS stamp.
-func vcsBuild(commit string, modified bool) types.MagusBuild {
-	return types.MagusBuild{Version: devVersionSentinel, Commit: commit, Date: "unknown", Source: types.BuildSourceVCS, Dirty: modified}
-}
-
 func (s *gateIdentitySuite) TestTheEmptyVersionDisablesTheGateForAnyBuild() {
 	s.Empty(gateIdentity("", types.StampedBuild("v0.4.2-dirty", "6bfd32710", "")))
 	s.Empty(gateIdentity("", types.MagusBuild{}))
@@ -63,11 +58,11 @@ func (s *gateIdentitySuite) TestAStampedDirtyBuildIdentifiesAsItsFile() {
 }
 
 func (s *gateIdentitySuite) TestAnUnstampedCleanBuildFallsBackToItsVCSCommit() {
-	s.Equal("dev-abc123", gateIdentity(devVersionSentinel, vcsBuild("abc123", false)))
+	s.Equal("dev-abc123", gateIdentity(devVersionSentinel, types.MagusBuild{Version: devVersionSentinel, Commit: "abc123", Date: "unknown", Source: types.BuildSourceVCS, Dirty: false}))
 }
 
 func (s *gateIdentitySuite) TestAnUnstampedModifiedBuildIdentifiesAsItsFile() {
-	s.Equal(buildinfo.File(), gateIdentity(devVersionSentinel, vcsBuild("abc123", true)))
+	s.Equal(buildinfo.File(), gateIdentity(devVersionSentinel, types.MagusBuild{Version: devVersionSentinel, Commit: "abc123", Date: "unknown", Source: types.BuildSourceVCS, Dirty: true}))
 }
 
 func (s *gateIdentitySuite) TestABuildWithNoIdentityNeverAdopts() {
