@@ -27,7 +27,7 @@ Upstream Buzz has no such modules. A module there declares its natives in its ow
 source as non-exported `extern fun` declarations marked `/// @private`, and the
 runtime binds them for that module alone. gopherbuzz matches upstream's
 language-visible behavior and diverges only for a concrete reason
-([std README](../../libs/gopherbuzz/std/README.md)). A helper module is a divergence
+([std README](https://github.com/egladman/magus/blob/4639cf23c0f3b4aec0285379614fbcdd51f6e1fd/libs/gopherbuzz/std/README.md)). A helper module is a divergence
 with no such reason. Every ecosystem with real module privacy keeps a module's
 helpers inside its boundary.
 
