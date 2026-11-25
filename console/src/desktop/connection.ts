@@ -19,8 +19,6 @@ export function notConnectedHint(host: string): string {
     : "No server address configured. Click to set the server address.";
 }
 
-export const DEMO_CONNECTION_HINT = "Demo data is synthetic. Click to change the server address.";
-
 // connectionStatus is the shape a state wears. The colour tracks the same states, but the icon and the
 // word carry them too.
 export function connectionStatus(state: string | undefined, health: string | undefined): Status {
@@ -139,7 +137,7 @@ export function buildConnection(): HTMLElement {
   writeConnection(conn, {
     label: demoing ? "demo" : "not connected",
     state: demoing ? "demo" : "none",
-    hint: demoing ? DEMO_CONNECTION_HINT : notConnectedHint(getDefaultHost()),
+    ...(demoing ? {} : { hint: notConnectedHint(getDefaultHost()) }),
   });
   if (isReadOnly()) {
     const viewOnly = document.createElement("span");

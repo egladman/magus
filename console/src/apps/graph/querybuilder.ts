@@ -265,20 +265,6 @@ const VIEWS: ViewSpec[] = [
     picks: true,
   },
   {
-    id: "hubs",
-    label: "What does everything depend on?",
-    blurb: "The most depended-on nodes, ranked. Containment does not count toward the rank.",
-    cli: null,
-    picks: false,
-  },
-  {
-    id: "orphans",
-    label: "What is dead?",
-    blurb: "Nodes with no dependency either way, among the kinds that normally carry one.",
-    cli: null,
-    picks: false,
-  },
-  {
     id: "cycles",
     label: "Is anything circular?",
     blurb: "Targets caught in a dependency cycle, which magus cannot order.",
@@ -318,7 +304,7 @@ const VIEWS: ViewSpec[] = [
           ? "The workspace could not compute a diff: " + c.affectedFallback
           : c.live
             ? "Nothing to show: your working tree matches the base it is compared against."
-            : "Needs a live workspace. Open one with magus graph export --open --follow.",
+            : "Needs a live workspace, and none is connected. Run `magus affected ci --impact`, or open one with `magus graph export --open --follow`.",
   },
 ];
 
