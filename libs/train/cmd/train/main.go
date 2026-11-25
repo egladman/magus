@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/egladman/magus/libs/train/eval"
+	"github.com/egladman/magus/libs/train/loop"
 	"github.com/egladman/magus/libs/train/probe"
 	"github.com/egladman/magus/libs/xdg"
 )
@@ -43,7 +44,7 @@ func root() command.Command {
 			s1Command("eval-sets", "write the FIM dev and test sets and the Buzz pass@k tasks (stage S1)"),
 			s1Command("fim", "write the FIM training samples, decontaminated against the eval sets (stage S1)"),
 			s1Command("g1", "recount the G1 bullets from the datasets and write the report (stage S1)"),
-			evalCompleteCmd, passAtKCmd, latencyCmd,
+			evalCompleteCmd, passAtKCmd, latencyCmd, unrollCmd,
 		},
 	}
 }
@@ -590,4 +591,57 @@ var latencyCmd = command.Command{
 		}
 		return e.LatencyAll(ctx, systems, latencyOpts.set, latencyOpts.n, os.Stderr)
 	},
+}
+
+type unrollOptions struct {
+	src, dst           string
+	start, end, passes int
+}
+
+var unrollOpts unrollOptions
+
+var unrollCmd = command.Command{
+	Name:   "unroll",
+	Short:  "write a copy of a .gguf file or safetensors directory with layers start..end looped",
+	Effect: command.EffectLocalWrite,
+	Flags: []command.Flag{
+		{Name: "src", Kind: command.String, Doc: "the .gguf file, or the directory holding config.json and the safetensors", Target: &unrollOpts.src},
+		{Name: "dst", Kind: command.String, Doc: "the file or directory the copy is written to", Target: &unrollOpts.dst},
+		{Name: "start", Kind: command.Int, Doc: "the first layer of the loop", Target: &unrollOpts.start},
+		{Name: "end", Kind: command.Int, Doc: "the layer after the last one of the loop", Target: &unrollOpts.end},
+		{Name: "passes", Kind: command.Int, Default: 2, Doc: "how many times the layers start..end run", Target: &unrollOpts.passes},
+	},
+	Run: func(_ context.Context, _ command.Invocation) error { return runUnroll(&unrollOpts) },
+}
+
+func runUnroll(o *unrollOptions) error {
+	info, err := os.Stat(o.src)
+	if err != nil {
+		return err
+	}
+	var layers int
+	var write func(dst, src string, plan loop.Plan) error
+	switch {
+	case filepath.Ext(o.src) == ".gguf":
+		layers, err = loop.GGUFLayers(o.src)
+		write = loop.UnrollGGUF
+	case info.IsDir():
+		layers, err = loop.ConfigLayers(filepath.Join(o.src, "config.json"))
+		write = loop.UnrollCheckpoint
+	default:
+		return fmt.Errorf("--src %s is neither a .gguf file nor a directory", o.src)
+	}
+	if err != nil {
+		return err
+	}
+	plan, err := loop.NewPlan(layers, o.start, o.end, o.passes)
+	if err != nil {
+		return err
+	}
+	if err := write(o.dst, o.src, plan); err != nil {
+		return err
+	}
+	fmt.Printf("%s: %d layers, layers %d..%d run %d times, %d applications -> %s\n",
+		o.src, layers, o.start, o.end, o.passes, plan.Applications(), o.dst)
+	return nil
 }
