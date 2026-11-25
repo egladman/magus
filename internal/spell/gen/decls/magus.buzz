@@ -671,6 +671,7 @@ export object Postcondition {
     symbols: [str] = [],
     signature: str = "",
     accept: [Basis] = [],
+    derived: bool = false,
 }
 
 export object JobRelease {

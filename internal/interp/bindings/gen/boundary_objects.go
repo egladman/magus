@@ -680,6 +680,7 @@ func ObjectPostcondition(v types.Postcondition, enums ffi.EnumCases) vm.Value {
 		itemsAccept[indexAccept] = enums.Case("Basis", string(v.Postcondition.Accept[indexAccept]))
 	}
 	out.MapSet("accept", vm.ListValue(itemsAccept))
+	out.MapSet("derived", vm.BoolValue(v.Postcondition.Derived))
 	return out
 }
 
