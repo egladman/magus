@@ -641,6 +641,36 @@ func (s *unmergedSuite) TestAFiledCheckoutHoldingUncommittedChangesCounts() {
 	s.Contains(got.Jobs[0].Why, "1 uncommitted path(s), first w.txt")
 }
 
+func (s *unmergedSuite) TestACheckoutOutsideTheRepositoryIsNamedByItsJob() {
+	where := filepath.Join(s.T().TempDir(), "w")
+	s.repo.Git("worktree", "add", "-q", where, "-b", "w")
+	s.Require().NoError(os.WriteFile(filepath.Join(where, "w.txt"), []byte("dirty\n"), 0o644))
+	row := job.Job{ID: "w", State: job.StateExited, Paths: job.Paths{Write: []string{"w.txt"}}, CheckoutRoot: where}
+	s.filed("w", &job.Result{ChangedPaths: []string{"w.txt"}})
+
+	got := s.unmerged(row)
+
+	s.Require().Len(got.Jobs, 1)
+	s.Equal("w holds 1 uncommitted path(s), first w.txt", got.Jobs[0].Why)
+	s.Contains(got.Jobs[0].Remedy, "commit them in w,")
+	s.NotContains(got.Jobs[0].Remedy, where)
+}
+
+func (s *unmergedSuite) TestACheckoutInsideTheRepositoryIsNamedByItsRelativePath() {
+	where := filepath.Join(s.repo.Root(), "trees", "w")
+	s.repo.Git("worktree", "add", "-q", where, "-b", "w")
+	s.Require().NoError(os.WriteFile(filepath.Join(where, "w.txt"), []byte("dirty\n"), 0o644))
+	row := job.Job{ID: "w", State: job.StateExited, Paths: job.Paths{Write: []string{"w.txt"}}, CheckoutRoot: where}
+	s.filed("w", &job.Result{ChangedPaths: []string{"w.txt"}})
+
+	got := s.unmerged(row)
+
+	s.Require().Len(got.Jobs, 1)
+	s.Equal("trees/w holds 1 uncommitted path(s), first w.txt", got.Jobs[0].Why)
+	s.Contains(got.Jobs[0].Remedy, "commit them in trees/w,")
+	s.NotContains(got.Jobs[0].Remedy, s.repo.Root())
+}
+
 func (s *unmergedSuite) TestAFiledRowWithNoCheckoutOrBranchIsNeverReadAsMerged() {
 	s.filed("gone", &job.Result{ChangedPaths: []string{"a.go"}})
 	got := s.unmerged(job.Job{ID: "gone", State: job.StatePass})
@@ -670,7 +700,7 @@ func (s *unmergedSuite) TestADetachedCheckoutIsUnknownNeverMerged() {
 
 	got := s.unmerged(job.Job{ID: "w", State: job.StatePass})
 
-	s.Contains(got.Unknown, "no branch checked out")
+	s.Equal("the repository has no branch checked out, so nothing can be merged onto one", got.Unknown)
 	s.Empty(got.Jobs)
 }
 
