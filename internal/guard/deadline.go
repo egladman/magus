@@ -870,7 +870,6 @@ func (c timedCall) holdsMost() bool {
 	return c.name != "" && c.of > 0 && 2*c.took > c.of
 }
 
-
 // lapseWording is a phase as one sentence names it: subject did not verb within the budget.
 type lapseWording struct {
 	subject, verb string
