@@ -1016,3 +1016,18 @@ func TestATieredRowStillRefusesFable(t *testing.T) {
 
 	assert.Contains(t, f.refusal("claude-code", "claude-fable-5-1"), "maps to no model tier")
 }
+
+func TestGroundworkSaysJobExecRunsAlone(t *testing.T) {
+	t.Parallel()
+	deny := builtin.Setting{Decision: builtin.Deny}
+	call := func(line string) mainCall {
+		return mainCall{from: types.ThreadReported, orchestration: types.OrchestrationProven, work: types.DelegableSearch, line: line}
+	}
+	const sentence = "run `./magus job exec <row>` alone on its line, then the rest."
+	f, ok := groundworkFinding(deny, call("./magus job exec dx-a && rg foo"))
+	require.True(t, ok)
+	assert.Contains(t, f.say, sentence)
+	f, ok = groundworkFinding(deny, call("rg foo"))
+	require.True(t, ok)
+	assert.NotContains(t, f.say, sentence)
+}

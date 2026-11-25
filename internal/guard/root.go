@@ -204,6 +204,9 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	if c.spawnBroken != "" {
 		say = fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork, but spawning is broken: %s; take a row with `./magus job exec <row>` and do it as its holder.", work, c.spawnBroken)
 	}
+	if callsJobExec(c.line) {
+		say += " This line takes a row and uses it at once, and a line is judged before it runs: run `./magus job exec <row>` alone on its line, then the rest."
+	}
 	say = withPolicyNote(say+integrationScriptNote(c), c.policyNote)
 	return costFinding{
 		rule: denyRuleOrchestratorGroundwork,
@@ -211,6 +214,18 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 		key:  hint.MarkerKind(fmt.Sprintf("%s-%s", denyRuleOrchestratorGroundwork, c.work)),
 		say:  say,
 	}, true
+}
+
+// callsJobExec reports a line that runs `magus job exec` in any of its commands.
+func callsJobExec(line string) bool {
+	cmds, _ := ParseCommands(line)
+	return slices.ContainsFunc(cmds, func(inv hint.Invocation) bool {
+		if !isMagusInvocation(inv) {
+			return false
+		}
+		words := magusSubcommandWords(inv.Args)
+		return len(words) >= 2 && words[0] == "job" && words[1] == "exec"
+	})
 }
 
 // integrationScriptNote names the scripts the workspace declares replace the line's merge or
