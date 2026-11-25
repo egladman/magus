@@ -574,7 +574,7 @@ fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) >
         gitdir = dir.value!;
         final lock = readLock(gitdir);
         if (lock.error -> e) { return result\Result::<Observed>{ error = e }; }
-        locked = lock.value!;
+        locked = lock.value;
     }
     var touched = 0.0;
     if (st.dirty >= 0) {
@@ -1158,4 +1158,15 @@ test "the headline says what ran" {
     assert\equal(headline(items, applied: false, trimmed: ""), want: "dry run: nothing removed; --apply removes 2 worktrees (3 MiB) and 1 agent branch", message: "dry");
     assert\equal(headline(items, applied: true, trimmed: "trimmed 1 GiB"),
         want: "removed 1 of 2 removable worktrees (2 MiB) and deleted 1 of 1 agent branch; trimmed 1 GiB", message: "applied");
+}
+
+test "a worktree with no lock file reads as unlocked, and a lock reads as its reason" {
+    final dir = fs\tempDir("readlock");
+    final none = readLock(dir);
+    assert\isTrue(none.error == null, message: "no lock file is not an error");
+    assert\equal(none.value, want: null, message: "absent lock stays null for the caller to read, never force-unwrapped");
+    fs\writeFile(fs\join(dir, name: "locked"), content: "agent running\n");
+    assert\equal(readLock(dir).value, want: "agent running", message: "lock reason");
+    assert\equal(readLock("").value, want: null, message: "no gitdir, no lock");
+    fs\removeAll(dir);
 }
