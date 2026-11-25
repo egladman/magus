@@ -14,7 +14,7 @@ proofread is meant to be the writing tool for every kind of text its author writ
 pull request descriptions, READMEs, commit messages, code comments, design docs and
 messages to engineers and to people outside engineering. The goal is to write faster
 while the text keeps its author's voice and intent. This page is the design for
-getting there from [libs/proofread](../../../libs/proofread/README.md) as it stands.
+getting there from [libs/proofread](https://github.com/egladman/magus/blob/4639cf23c0f3b4aec0285379614fbcdd51f6e1fd/libs/proofread/README.md) as it stands.
 
 The verdict: no rewrite from nothing. The findings contract, the decisions table,
 kinds as values, the frozen labeling rounds and the voice statistics are sound and
