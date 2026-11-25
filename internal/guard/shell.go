@@ -2015,8 +2015,7 @@ var (
 // vars rather than consts: a Command renders through a method call.
 var (
 	vcsGuardContext    = fmt.Sprintf("magus workspace: classify the dirty tree first with `%s`, then stage the reviewed paths explicitly.", hint.DescribeFile.With("$(git diff --name-only)"))
-	vcsGuardContextWhy = "Stage them by name: `git add -- <paths>`. role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. " +
-		"Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
+	vcsGuardContextWhy = "Stage them by name: `git add -- <paths>`. role=output paths are generated: never hand-edit them, and commit them with the source change that moved them."
 	// The tail of runGuardContextFor, which supplies the replacements. This half
 	// carries only the WHY and the anti-retry line.
 	//
@@ -2032,7 +2031,7 @@ var (
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
 	revertGuardContext    = fmt.Sprintf("magus workspace: classify before reverting with `%s`, and do not revert a file just because you did not hand-edit it.", hint.DescribeFile.With("<paths>"))
-	revertGuardContextWhy = "A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
+	revertGuardContextWhy = "A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding."
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
 	// advisory sent them to refs owes them this sentence.
@@ -2062,7 +2061,7 @@ var (
 	// workspace vocabulary and routes through discovery.
 	pushGuardContext    = fmt.Sprintf("magus workspace: run `%s` before publishing if you have not since your last change.", hint.Affected.With("ci"))
 	pushGuardContextWhy = "The gate runs over every project the diff reaches, including ones you never edited.\n" +
-		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
+		"Already ran it, or pushing deliberate work-in-progress? Push."
 
 	denyAgentSignOff    = fmt.Sprintf("only a person may stamp a read receipt, dispose an attention request, or post or retract an advisory; report what is unread: `%s`.", hint.Diff.With("--impact"))
 	denyAgentSignOffWhy = fmt.Sprintf("A read receipt records that a PERSON read a change, disposing an attention request records that a PERSON answered it, and an advisory is shown to every session as a PERSON's own words, so every spelling of each is refused.\n"+
@@ -2509,7 +2508,7 @@ func denyWholeTree(op string) ShellVerdict {
 	return ShellVerdict{
 		Deny: fmt.Sprintf("whole-tree %s destroys uncommitted work, a concurrent agent's included; verify in place: `%s`.", op, hint.Run.With("<target>", "<project>")),
 		Why: fmt.Sprintf("No magus run needs a clean tree, and `%s` covers everything the diff reaches. "+
-			"If you truly need a pristine tree, use %s. See the magus-vcs-hygiene skill.", hint.Affected.With("ci"), scratchCheckout(op)),
+			"If you truly need a pristine tree, use %s.", hint.Affected.With("ci"), scratchCheckout(op)),
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
 	}
 }

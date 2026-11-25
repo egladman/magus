@@ -122,12 +122,7 @@ substitute-and-write.
   enumerate what still moved. Widening the pattern until the errors stop is the
   same mistake.{{else}}- Index knows which is which. Apply reported sites, then let compiler enumerate what still moved. Widening pattern until errors stop: same mistake.{{end}}
 
-{{if .Full}}**A not-indexed project is a stop, not an empty result.** `{{cmd "refs"}}` says
-`verdict: unknown, not absent` and names the projects it could not see. Run
-`{{cmd "graph build"}}` and ask again. Reading that verdict as "no matches" and falling
-back to text search misses every site in an unindexed project. A fresh worktree
-starts unindexed, so this is the normal state when you most want a rename.{{else}}Not-indexed project is stop, not empty result: `{{cmd "refs"}}` says `verdict: unknown, not absent`, names projects it could not see -> run `{{cmd "graph build"}}`, ask again.
-Fresh worktree starts unindexed: normal state when you most want rename.{{end}}
+A fresh worktree starts unindexed, so `{{cmd "refs"}}` often answers `unknown, not absent` first; `{{cmd "graph build"}}` and ask again.
 
 {{if .Full}}Three things decide whether the result is usable. Skipping any of them is how a bulk
 rewrite corrupts a file:
