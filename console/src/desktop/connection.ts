@@ -19,7 +19,7 @@ export function notConnectedHint(host: string): string {
     : "No server address configured. Click to set the server address.";
 }
 
-export const DEMO_CONNECTION_HINT = "Demo data is synthetic. Click to change the server address.";
+export const DEMO_CONNECTION_HINT = "Showing bundled demo data, not a server. Click to change the server address.";
 
 // connectionStatus is the shape a state wears. The colour tracks the same states, but the icon and the
 // word carry them too.

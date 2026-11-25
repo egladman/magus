@@ -104,14 +104,7 @@ import {
   recenterOn,
   usableCenter,
 } from "./viewport.js";
-import {
-  type DependencyDegree,
-  dependencyDegrees,
-  disconnected,
-  mostDependedOn,
-  opensProjected,
-  projectOwners as computeProjectOwners,
-} from "./views.js";
+import { opensProjected, projectOwners as computeProjectOwners } from "./views.js";
 import { detectFlavor, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import {
   installKeybindings,
@@ -257,7 +250,6 @@ interface Graph {
   adj?: Map<string, Set<string>>;
   semanticAdj?: Map<string, Set<string>>;
   projectOf?: Map<string, string>;
-  depDegrees?: Map<string, DependencyDegree>;
 }
 // graph is null until the first load, but every reader runs post-load (boot gates on it),
 // so it is typed non-null - `null as any` keeps the runtime null + the `if (!graph)` guards
@@ -347,9 +339,9 @@ let graphHasDurations = false;
 
 // ---- question-first views -----------------------------------------------------
 // Views answer developer questions with graph interactions. The active view is
-// one of: null (default projection), "blast", "trace", "critical", "hubs",
-// "orphans", "cycles". "affected" needs live mode and stays disabled without it.
-let activeView: string | null = null; // null | "blast" | "trace" | "hubs" | "orphans" | "critical" | "cycles" | "affected"
+// one of: null (default projection), "blast", "trace", "critical", "cycles". "affected" needs
+// live mode and stays disabled without it.
+let activeView: string | null = null; // null | "blast" | "trace" | "critical" | "cycles" | "affected"
 let viewNode: string | null = null; // primary node id for blast/trace
 let viewNodeTo: string | null = null; // secondary node id for trace
 // The default projection shows project-level nodes only on first load.
@@ -1289,7 +1281,7 @@ function startSimulation() {
     .on("tick", draw);
   // Every simulation gets its final framing armed HERE, on the object that will emit the "end" it
   // hangs on. Arming it at the call sites that start a layout instead loses it the moment two of
-  // them race: activate() runs twice on a `magus graph open` deep link - the standalone page boots
+  // them race: activate() runs twice on a `magus graph export --open` deep link - the standalone page boots
   // the app, then opening it from the rail activates it again - and the second pass builds a
   // NEW simulation while the settle fit sits on the discarded one. What that looks like is a graph
   // framed by one of the early beats, at the size it was a third of a second in, and never framed
@@ -2494,7 +2486,7 @@ function revealWholeGraph() {
   if (!graph?.nodes.length) return;
   // Only view/q/node name a SUBSET whose own framing must win. #data= and #src= say where the
   // graph came from, not what to look at, so treating them as directives left every
-  // `magus graph open` link - and the whole targets flavor, which arrives that way - opening on
+  // `magus graph export --open` link - and the whole targets flavor, which arrives that way - opening on
   // an unframed corner of its own layout.
   const p = hashParams();
   if (p.view || p.q || p.node) return;
@@ -3283,26 +3275,10 @@ function setListExpanded(v: boolean) {
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
 }
 
-// Cached per graph like adjacency(): the hubs ranking reads it once per node.
-function depDegrees() {
-  if (!graph.depDegrees) graph.depDegrees = dependencyDegrees(graph.nodes, graph.links);
-  return graph.depDegrees;
-}
-
 // rowMetric is the number the ACTIVE VIEW ranked by, when it ranked by one. A list that is
 // ordered but never says by what asks the reader to take the order on trust; worse, the fallback
-// order is raw degree, which is not what either of these views sorted on.
+// order is raw degree, which is not what the critical-path view sorted on.
 function rowMetric(): { sort: (n: GNode) => number; text: (n: GNode) => string } | null {
-  if (activeView === "hubs") {
-    const deg = depDegrees();
-    return {
-      sort: (n) => deg.get(n.id)?.dependents ?? 0,
-      text: (n) => {
-        const d = deg.get(n.id)?.dependents ?? 0;
-        return d + (d === 1 ? " dependent" : " dependents");
-      },
-    };
-  }
   if (activeView === "critical" && graphHasDurations) {
     return { sort: (n) => nodeDurationMs(n), text: (n) => formatDuration(nodeDurationMs(n)) };
   }
@@ -3732,7 +3708,7 @@ function applyDeepLinks() {
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
   // "affected" is absent on purpose: its set arrives after this runs, so activating it here would
   // hit activateView's "no diff" refusal. refreshAffectedFromServer re-reads the fragment instead.
-  const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
+  const validViews = ["blast", "trace", "critical", "cycles"];
   const view = params.view && validViews.includes(params.view) ? params.view : null;
   if (view) {
     projectionUnfolded = true; // views show the full graph
@@ -3848,7 +3824,6 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   if (!projectionUnfolded) updateProjectionStatus();
   renderLegend();
   renderList();
-  renderSuggestions();
   syncConditionalViews();
   // Default layout mode per flavor: targets -> layered, knowledge -> force.
   // Check if the URL fragment requests a specific mode (user override persists).
@@ -3904,6 +3879,9 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
 // the mode is set directly, and called from selectNode/applyQuery so
 // availability tracks state as it changes).
 function syncLayoutToggle() {
+  // Nothing to arrange or colour until a graph is loaded.
+  const modes = document.querySelector<HTMLElement>(".console-graph-sidebar__modes");
+  if (modes) modes.hidden = !graph?.nodes.length;
   document.querySelectorAll<HTMLButtonElement>("[data-layout]").forEach((btn) => {
     const mode = btn.dataset.layout;
     if (!mode || !isLayoutMode(mode)) return;
@@ -4283,15 +4261,11 @@ function criticalPath() {
   return path.length > 1 ? path : null;
 }
 
-// How many nodes the hubs view calls hubs. A cutoff has to be somewhere and the ranking is
-// long-tailed; a dozen fills the canvas without turning the answer back into the whole graph.
-const HUB_LIMIT = 12;
-
 // Apply a named view. Updates activeView, viewNode, viewNodeTo, matchSet,
 // and the CLI idiom display. Serializes into the fragment via updateHash().
 function activateView(name: string, nodeId?: string | null, nodeTo?: string | null) {
   // A view is a different question, so retire every in-flight refinement and the ranking the last
-  // one produced. Without the serverScores reset, renderList sorted a blast or orphans list by the
+  // one produced. Without the serverScores reset, renderList sorted a blast list by the
   // PREVIOUS query's relevance: almost every id misses the map, `?? 0` flattens the key, and the
   // degree fallback that is supposed to order these lists never runs.
   viewGeneration++;
@@ -4402,24 +4376,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           " total (longest duration-weighted chain).",
       );
     }
-  } else if (name === "hubs") {
-    matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
-    const n = matchSet.size;
-    setStatus(
-      n
-        ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
-        : "Nothing in this graph has a dependent.",
-    );
-  } else if (name === "orphans") {
-    matchSet = new Set(disconnected(graph.nodes, graph.links));
-    const n = matchSet.size;
-    setStatus(
-      "What's dead? " +
-        n +
-        " node" +
-        (n === 1 ? "" : "s") +
-        " of a kind that normally has dependencies, but with none either way.",
-    );
   } else if (name === "cycles") {
     const ids = new Set<string>();
     for (const e of graph.links) {
@@ -4511,9 +4467,6 @@ function preferredModeForView(view: string): LayoutMode | null {
   ) {
     return layoutMode === "force" ? "layered" : null;
   }
-  if (view === "hubs" || view === "orphans") {
-    return "force"; // connectivity/disconnection reads best as the physics web
-  }
   // Unknown view (not one of the question chips above): keep whatever mode is
   // already showing rather than guessing.
   return null;
@@ -4577,7 +4530,7 @@ function askQuestion(view: string) {
       setStatus(
         affectedFallback
           ? "affected view: the workspace could not compute a diff: " + affectedFallback
-          : "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
+          : "affected view needs a connected server, and none is. Run `magus affected ci --impact`, or open a live one with `magus graph export --open --follow`.",
         "warning",
       );
       return;
@@ -4732,105 +4685,6 @@ function updateSearchCopyBtn() {
   const cmd = buildQueryCmd(val);
   btn.title = "Copy: " + cmd;
   btn.dataset.cmd = cmd;
-}
-
-// ---- empty-state suggestions (chips) ----------------------------------------
-// After a graph loads, compute up to 3 quick facts and show clickable suggestion
-// chips. Targets graphs lead with the build-order suggestion, which only magus can draw; the rest
-// fill the remaining slots.
-function renderSuggestions() {
-  const wrap = el("suggestions");
-  if (!wrap || !graph) {
-    if (wrap) wrap.hidden = true;
-    return;
-  }
-  const chips: { text: string; action: () => void }[] = [];
-
-  // 0. Targets flavor: the build-order view is unique to magus - lead with it.
-  if (graphFlavor === "targets") {
-    chips.push({
-      text: "See the build order: what runs in parallel?",
-      action: () => {
-        layoutPickedByHand = true; // an explicit "show me this arrangement", same as the chip
-        switchLayout("waves");
-      },
-    });
-  }
-
-  // 1. The most depended-on node.
-  if (graph.nodes.length > 1 && chips.length < 3) {
-    const topId = mostDependedOn(graph.nodes, graph.links, 1)[0];
-    const top = topId ? graph.byId.get(topId) : null;
-    if (top) {
-      chips.push({
-        text: top.label + " is the biggest hub: what depends on it?",
-        action: () => {
-          applyPreferredMode("blast");
-          activateView("blast", top.id);
-        },
-      });
-    }
-  }
-
-  // 2. Cycle present?
-  const hasCycle = graph.links.some((e) => e.cycle);
-  if (hasCycle && chips.length < 3) {
-    // Find the first cycle edge source as the starting point for a trace.
-    const cycleEdge = graph.links.find((e) => e.cycle);
-    const src = cycleEdge ? endpointId(cycleEdge.source) : null;
-    chips.push({
-      text: "A dependency cycle was detected: trace its path?",
-      action: src
-        ? () => {
-            applyPreferredMode("trace");
-            activateView("trace", src);
-          }
-        : () => {
-            applyPreferredMode("hubs");
-            activateView("hubs");
-          },
-    });
-  }
-
-  // 3. Dead-node count.
-  const dead = disconnected(graph.nodes, graph.links);
-  if (dead.length > 0 && chips.length < 3) {
-    chips.push({
-      text:
-        dead.length + " node" + (dead.length === 1 ? "" : "s") + " depend on nothing: what's dead?",
-      action: () => {
-        applyPreferredMode("orphans");
-        activateView("orphans");
-      },
-    });
-  }
-
-  if (!chips.length) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  // The heading rides in the same innerHTML as the chips so it appears and disappears with them;
-  // without it these read as a third, unlabeled group of Ask chips rather than as facts already
-  // computed about the graph in front of you.
-  wrap.innerHTML =
-    '<p class="console-graph-sidebar__viewslabel">In this graph</p>' +
-    chips
-      .map(
-        (c, i) =>
-          '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
-          i +
-          '">' +
-          escapeHtml(c.text) +
-          "</button>",
-      )
-      .join("");
-  wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
-    b.addEventListener("click", () => {
-      chips[Number(b.dataset.i)]?.action();
-      wrap.hidden = true; // hide after first use
-    });
-  });
 }
 
 // ---- color preset lenses ----------------------------------------------------
@@ -5127,10 +4981,6 @@ function recomputeMatchSet() {
     } else if (activeView === "critical") {
       const path = criticalPath();
       matchSet = path ? new Set(path) : null;
-    } else if (activeView === "hubs") {
-      matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
-    } else if (activeView === "orphans") {
-      matchSet = new Set(disconnected(graph.nodes, graph.links));
     } else if (activeView === "cycles") {
       const ids = new Set<string>();
       for (const e of graph.links) {
@@ -5410,8 +5260,8 @@ function publishLiveStatus() {
 
 // updateSnapshotBadge shows "snapshot: <provenance>" for the private,
 // non-live sources (a #data= fragment or a --serve loopback fetch) - the
-// counterpart to the live badge for the common case of a one-shot `magus
-// graph open` without a running server. Hidden for "demo" and "remote", and
+// counterpart to the live badge for the common case of a one-shot `magus graph export --open`
+// without a running server. Hidden for "demo" and "remote", and
 // always hidden once live mode is active (bootLive never calls this).
 function updateSnapshotBadge(source: string | null) {
   const badge = el("snapshot-badge");
@@ -5542,8 +5392,6 @@ function finishInteractiveSetup() {
   // applyLayoutAndSimulation above; applyDeepLinks skips switching when the
   // mode already matches).
   applyDeepLinks();
-  // Emit empty-state suggestion chips.
-  renderSuggestions();
   // Fill the detail column. AFTER applyDeepLinks, so a #q=/#view= link is already reflected in
   // what the overview reports rather than being described a frame before it applies.
   syncOverview();
@@ -5806,7 +5654,6 @@ function bootWireEvents(lifecycleSignal: AbortSignal) {
   if (unfoldBtnWire) {
     unfoldBtnWire.addEventListener("click", () => {
       unfoldProjection();
-      renderSuggestions(); // re-render suggestions after full graph is visible
     });
   }
 
@@ -5850,14 +5697,6 @@ function bootWireEvents(lifecycleSignal: AbortSignal) {
 
   // No legend toggle. It existed to get the legend off the canvas on a narrow screen; the legend
   // is in the sidebar now, which scrolls, so there is nothing to collapse it away from.
-
-  // No separate lens wiring. The hubs/orphans buttons are ordinary view chips - they carry
-  // .console-graph-views__chip and data-view like every other question - so the chip handler
-  // above already dispatches them. A second [data-lens] listener ran on the SAME click and
-  // called activateView unconditionally, which undid the chip handler's clearView the instant
-  // it fired: clicking an active hubs/orphans chip cleared the view and re-applied it, so the
-  // toggle could never be turned off. The data-lens attribute is gone from the scaffold too;
-  // it was only ever a hook for the listener this comment replaces.
 
   // Color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
