@@ -560,12 +560,17 @@ func TestResolveMergeAddsALintPostconditionAndSaysSo(t *testing.T) {
 		return row, notes.String()
 	}
 
+	for _, f := range []string{"docs/notes.md", "cli/registry.go"} {
+		full := filepath.Join(s.root, filepath.FromSlash(f))
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+		require.NoError(t, os.WriteFile(full, nil, 0o644))
+	}
 	row, note := resolve(declare("docs/notes.md", "cli/registry.go"))
 	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
 	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
 		Args: []string{"cli/registry.go", "docs/notes.md"}}, checkIn(t, row.Postconditions[i].Check), "lint is scoped to the written files, sorted")
-	assert.Contains(t, note, `added the postcondition "lint" (2 files)`)
+	assert.Contains(t, note, `added the postcondition "lint": the lint target of . reads 2 written file(s) (cli/registry.go docs/notes.md) and no check or postcondition runs it`)
 
 	row, note = resolve(func(u *job.Job) {
 		declare("cli/registry.go")(u)
@@ -606,6 +611,73 @@ func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {
 	assert.Equal(t, files, filesIn(".", files), "the root lints every written file")
 	assert.Equal(t, []string{"b.go"}, filesIn("libs/x", files), "relative to the project, and never a sibling sharing its prefix")
 	assert.Empty(t, filesIn("libs/z", files))
+}
+
+// lintPostconditionArgsSuite pins the lint postcondition's args to the written files the tree
+// holds at fork, whatever language the project lints.
+type lintPostconditionArgsSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestLintPostconditionArgs(t *testing.T) { suite.Run(t, new(lintPostconditionArgsSuite)) }
+
+func (s *lintPostconditionArgsSuite) SetupTest() { s.root = s.T().TempDir() }
+
+func (s *lintPostconditionArgsSuite) write(files ...string) {
+	for _, f := range files {
+		full := filepath.Join(s.root, filepath.FromSlash(f))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(full), 0o755))
+		s.Require().NoError(os.WriteFile(full, nil, 0o644))
+	}
+}
+
+// args is the lint postcondition's args for project, whose lint reads sources, and the notes.
+func (s *lintPostconditionArgsSuite) args(project, sources string, write ...string) ([]string, []string) {
+	lintable := func(path string) *types.Project {
+		return &types.Project{
+			Path:             path,
+			Sources:          types.MustParseGlobs(sources),
+			MagusfileTargets: []string{"ci", "lint", "go-test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "lint"}}},
+		}
+	}
+	projects := []*types.Project{lintable("."), lintable("libs/kit")}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
+	got, notes := lintPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
+	for _, p := range got {
+		if p.Check.Project == project {
+			return p.Check.Args, notes
+		}
+	}
+	s.FailNow("no lint postcondition for " + project)
+	return nil, nil
+}
+
+func (s *lintPostconditionArgsSuite) TestAGoWritePathTheTreeDoesNotHoldIsLeftOut() {
+	s.write("libs/kit/job/digest.go")
+
+	got, notes := s.args("libs/kit", "**/*.go", "libs/kit/job/digest.go", "libs/kit/job/digest_open_unix.go")
+
+	s.Equal([]string{"job/digest.go"}, got, "the file the job may never create reaches no tool")
+	s.Contains(notes, "left 1 written file(s) the tree does not hold yet out of the lint postcondition for libs/kit:"+
+		" exit grades the run over every file the job changed, so name each one it creates")
+}
+
+func (s *lintPostconditionArgsSuite) TestAWritePathOfAnotherLanguageIsLeftOutTheSameWay() {
+	s.write("web/app.ts")
+
+	got, _ := s.args(".", "**/*.ts", "web/app.ts", "web/later.ts")
+
+	s.Equal([]string{"web/app.ts"}, got)
+}
+
+func (s *lintPostconditionArgsSuite) TestAProjectWithNoWrittenFilePresentKeepsThemAllAndSaysSo() {
+	got, notes := s.args(".", "**/*.go", "internal/job/new.go")
+
+	s.Equal([]string{"internal/job/new.go"}, got, "empty args would lint the whole project")
+	s.Contains(notes, "none of the 1 file(s) the lint postcondition for . reads exists yet, so it names every one:"+
+		" drop from the run any the job does not create")
 }
 
 func TestAmbiguousSymbolProblemsRefuseAnUnresolvedPostconditionOnAnExistingSymbol(t *testing.T) {
