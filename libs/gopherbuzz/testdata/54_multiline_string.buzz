@@ -1,0 +1,13 @@
+// @expect: true
+// A backtick multiline string keeps newlines and unescapes nothing but \{ and
+// \}, since it interpolates as upstream's multiline-strings test expects.
+final decl = `
+    fn add(a: c_int) c_int;
+    \{braces stay literal\}
+`;
+final n = 3;
+final interpolated = `sum={n + 12}`;
+final __r = decl.indexOf("fn add") != null
+    and decl.indexOf("\{braces stay literal\}") != null
+    and decl.indexOf("\n") != null
+    and interpolated == "sum=15";

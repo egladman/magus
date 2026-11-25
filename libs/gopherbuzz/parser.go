@@ -21,6 +21,8 @@ type parser struct {
 	// pendingExports holds names from standalone  statements, resolved
 	// against the file's declarations once parsing finishes. See applyPendingExports.
 	pendingExports []string
+	// scanner lexes interpolation holes the way the program itself was lexed.
+	scanner        *token.Scanner
 	tokens         []token.Token
 	pos            int
 	depth          int
@@ -54,8 +56,8 @@ type parser struct {
 	importUsage map[string]*importBinding
 }
 
-func newParser(tokens []token.Token) *parser {
-	return &parser{tokens: tokens}
+func newParser(sc *token.Scanner, tokens []token.Token) *parser {
+	return &parser{scanner: sc, tokens: tokens}
 }
 
 // importBinding is one top-level import's namespace-binding name, tracked for unused-
@@ -121,7 +123,7 @@ func (p *parser) markQualifiers(from int) {
 // labeled. This is the default because it matches upstream — leniency is the
 // deviation, not strictness, so it must be opted into explicitly (ParseEmbedded).
 func Parse(src string) (*ast.Program, error) {
-	return parseModed(nil, src, true)
+	return parseModed(nil, nil, src, true)
 }
 
 // ParseEmbedded relaxes the two script-conformance rules Parse enforces (top-level
@@ -129,7 +131,26 @@ func Parse(src string) (*ast.Program, error) {
 // eval, magusfile loading, and interactive snippets, where top-level statements
 // are the whole point. It is the named, deliberate deviation from upstream Buzz.
 func ParseEmbedded(src string) (*ast.Program, error) {
-	return parseModed(nil, src, false)
+	return parseModed(nil, nil, src, false)
+}
+
+// Parser parses with a host's Scanner and ParseCache. The zero value is Parse and
+// ParseEmbedded; a nil Cache caches nothing and a nil Scanner scans upstream Buzz.
+type Parser struct {
+	Scanner *token.Scanner
+	Cache   *ParseCache
+}
+
+// Parse is the package-level Parse, lexing with p.Scanner through p.Cache. Each
+// call returns a new Program the caller owns.
+func (p Parser) Parse(src string) (*ast.Program, error) {
+	return parseModed(p.Cache, p.Scanner, src, true)
+}
+
+// ParseEmbedded is the package-level ParseEmbedded, lexing with p.Scanner through
+// p.Cache. Each call returns a new Program the caller owns.
+func (p Parser) ParseEmbedded(src string) (*ast.Program, error) {
+	return parseModed(p.Cache, p.Scanner, src, false)
 }
 
 // ParseCache memoizes the lexing step of parsing by source text. A host that runs
@@ -148,27 +169,34 @@ type ParseCache struct {
 	maxBytes int
 
 	mu     sync.RWMutex
-	tokens map[string][]token.Token
+	tokens map[parseKey][]token.Token
 	bytes  int
+}
+
+// parseKey holds an entry per Scanner, so sessions that scan differently never
+// read each other's tokens.
+type parseKey struct {
+	scanner *token.Scanner
+	src     string
 }
 
 // NewParseCache returns an empty cache that retains about maxBytes at most, counting
 // each entry's source text and its tokens. A maxBytes of zero or less retains
 // nothing, the same as passing no cache.
 func NewParseCache(maxBytes int) *ParseCache {
-	return &ParseCache{maxBytes: maxBytes, tokens: map[string][]token.Token{}}
+	return &ParseCache{maxBytes: maxBytes, tokens: map[parseKey][]token.Token{}}
 }
 
 // Parse is the package-level Parse, lexing through c. Each call returns a new Program
 // the caller owns. A nil c caches nothing.
 func (c *ParseCache) Parse(src string) (*ast.Program, error) {
-	return parseModed(c, src, true)
+	return parseModed(c, nil, src, true)
 }
 
 // ParseEmbedded is the package-level ParseEmbedded, lexing through c. Each call
 // returns a new Program the caller owns. A nil c caches nothing.
 func (c *ParseCache) ParseEmbedded(src string) (*ast.Program, error) {
-	return parseModed(c, src, false)
+	return parseModed(c, nil, src, false)
 }
 
 // minCachedSource keeps interpolation fragments and one-line snippets, which are cheap
@@ -177,18 +205,19 @@ const minCachedSource = 256
 
 var tokenSize = int(reflect.TypeFor[token.Token]().Size())
 
-// tokenize is token.Tokenize through the cache; a nil c caches nothing.
-func (c *ParseCache) tokenize(src string) ([]token.Token, error) {
+// tokenize is sc.Tokenize through the cache; a nil c caches nothing.
+func (c *ParseCache) tokenize(sc *token.Scanner, src string) ([]token.Token, error) {
 	if c == nil || c.maxBytes <= 0 || len(src) < minCachedSource {
-		return token.Tokenize(src)
+		return sc.Tokenize(src)
 	}
+	key := parseKey{scanner: sc, src: src}
 	c.mu.RLock()
-	toks, ok := c.tokens[src]
+	toks, ok := c.tokens[key]
 	c.mu.RUnlock()
 	if ok {
 		return toks, nil
 	}
-	toks, err := token.Tokenize(src)
+	toks, err := sc.Tokenize(src)
 	if err != nil {
 		return nil, err
 	}
@@ -199,25 +228,26 @@ func (c *ParseCache) tokenize(src string) ([]token.Token, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if cached, ok := c.tokens[src]; ok {
+	if cached, ok := c.tokens[key]; ok {
 		return cached, nil
 	}
 	if c.bytes+size > c.maxBytes {
 		clear(c.tokens)
 		c.bytes = 0
 	}
-	c.tokens[src] = toks
+	c.tokens[key] = toks
 	c.bytes += size
 	return toks, nil
 }
 
-// parseModed parses src strict (Parse) or embedded (ParseEmbedded), lexing through c.
-func parseModed(c *ParseCache, src string, strict bool) (*ast.Program, error) {
-	toks, err := c.tokenize(src)
+// parseModed parses src strict (Parse) or embedded (ParseEmbedded), lexing with sc
+// through c.
+func parseModed(c *ParseCache, sc *token.Scanner, src string, strict bool) (*ast.Program, error) {
+	toks, err := c.tokenize(sc, src)
 	if err != nil {
 		return nil, err
 	}
-	p := newParser(toks)
+	p := newParser(sc, toks)
 	p.strict = strict
 	return p.parseProgram()
 }
@@ -238,12 +268,12 @@ type unusedImportDiag struct {
 // every caller outside this package. Used only by Session.checkShared, which already
 // treats parsing as the expensive, non-hot-path step (checkShared's own doc comment:
 // resolving imports executes code and reads files from disk).
-func parseModedTracked(c *ParseCache, src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
-	toks, err := c.tokenize(src)
+func parseModedTracked(c *ParseCache, sc *token.Scanner, src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
+	toks, err := c.tokenize(sc, src)
 	if err != nil {
 		return nil, nil, err
 	}
-	p := newParser(toks)
+	p := newParser(sc, toks)
 	p.strict = strict
 	prog, err := p.parseProgram()
 	if err != nil {
@@ -346,7 +376,7 @@ func (p *parser) eatBindingIdent() (token.Token, error) {
 	}
 	// A free identifier (@"...") carries its spelling in quotes precisely so a
 	// reserved word can be used as a name, so the rule does not apply to it.
-	if !t.Raw && reservedIdents[t.Val] {
+	if !t.At && reservedIdents[t.Val] {
 		return t, fmt.Errorf("buzz: line %d:%d: %q is a reserved word and cannot be used as a name", t.Line, t.Col, t.Val)
 	}
 	return t, nil
@@ -357,6 +387,21 @@ func (p *parser) optSemicolon() {
 	if p.check(token.Semicolon) {
 		p.advance()
 	}
+}
+
+// endStmt ends a statement whose `;` is optional here, but refuses a string
+// literal on the same line, as upstream's E74 does. Without that, `r"x"` reads
+// as two statements where a host scanner reads one string.
+func (p *parser) endStmt() error {
+	if p.check(token.Semicolon) {
+		p.advance()
+		return nil
+	}
+	t := p.peek()
+	if (t.Kind == token.String || t.Kind == token.InterpStr) && p.pos > 0 && p.tokens[p.pos-1].Line == t.Line {
+		return fmt.Errorf("buzz: line %d:%d: expected ';' after statement, got %s", t.Line, t.Col, t.Kind)
+	}
+	return nil
 }
 
 func (p *parser) parseProgram() (*ast.Program, error) {
@@ -472,7 +517,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 	// it, but reserving it here would break any embedding that already uses the word
 	// as a name. The statement-leading `protocol Name {` shape is unambiguous -- two
 	// juxtaposed identifiers followed by a brace is not otherwise valid Buzz.
-	if t.Kind == token.Ident && t.Val == "protocol" && !t.Raw &&
+	if t.Kind == token.Ident && t.Val == "protocol" && !t.At &&
 		p.peekAt(1).Kind == token.Ident && p.peekAt(2).Kind == token.LBrace {
 		return p.parseProtocolDecl()
 	}
@@ -480,7 +525,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 	// matches a type without binding it (anonymous-objects.buzz checks a structural
 	// `obj{ ... }` type this way). Parsing it as an ordinary declaration named `_` makes
 	// the checker perform exactly that compatibility check; nothing reads the binding.
-	if t.Kind == token.Ident && t.Val == "_" && !t.Raw && p.peekAt(1).Kind == token.Colon {
+	if t.Kind == token.Ident && t.Val == "_" && !t.At && p.peekAt(1).Kind == token.Colon {
 		p.advance() // `_`
 		p.advance() // ':'
 		annot, err := p.readType()
@@ -494,12 +539,14 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.optSemicolon()
+		if err := p.endStmt(); err != nil {
+			return nil, err
+		}
 		return &ast.DeclStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: "_", TypeAnnot: annot, Value: val}, nil
 	}
 	// A statement-position `match (`: the same node the expression form produces,
 	// wrapped so its value is discarded. Contextual for the same reason as above.
-	if t.Kind == token.Ident && t.Val == "match" && !t.Raw && p.peekAt(1).Kind == token.LParen {
+	if t.Kind == token.Ident && t.Val == "match" && !t.At && p.peekAt(1).Kind == token.LParen {
 		m, err := p.parseMatch()
 		if err != nil {
 			return nil, err
@@ -725,7 +772,9 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 	// A nullable declaration may omit its initializer: `final hello: int?;` binds
 	// null. Only nullable types get this; anything else still has to be assigned.
 	if strings.HasSuffix(typeAnnot, "?") && !p.check(token.Assign) {
-		p.optSemicolon()
+		if err := p.endStmt(); err != nil {
+			return nil, err
+		}
 		return &ast.DeclStmt{Pos: pos, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: &ast.NullLit{Pos: pos}}, nil
 	}
 	if _, err := p.eat(token.Assign); err != nil {
@@ -735,7 +784,9 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.optSemicolon()
+	if err := p.endStmt(); err != nil {
+		return nil, err
+	}
 	return &ast.DeclStmt{Pos: pos, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: val}, nil
 }
 
@@ -1124,7 +1175,9 @@ func (p *parser) parseReturn() (*ast.ReturnStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.optSemicolon()
+	if err := p.endStmt(); err != nil {
+		return nil, err
+	}
 	return &ast.ReturnStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Value: val}, nil
 }
 
@@ -1245,7 +1298,9 @@ func (p *parser) parseThrow() (*ast.ThrowStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.optSemicolon()
+	if err := p.endStmt(); err != nil {
+		return nil, err
+	}
 	return &ast.ThrowStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Value: val}, nil
 }
 
@@ -1998,7 +2053,9 @@ func (p *parser) parseExprOrAssign() (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.optSemicolon()
+	if err := p.endStmt(); err != nil {
+		return nil, err
+	}
 	return node, nil
 }
 
@@ -2301,12 +2358,12 @@ func (p *parser) parseUnary() (ast.Node, error) {
 	}
 	// An expression-position `match (...) { ... }`, which yields the selected
 	// branch's value.
-	if p.peek().Kind == token.Ident && p.peek().Val == "match" && !p.peek().Raw && p.peekAt(1).Kind == token.LParen {
+	if p.peek().Kind == token.Ident && p.peek().Val == "match" && !p.peek().At && p.peekAt(1).Kind == token.LParen {
 		return p.parseMatch()
 	}
 	// `typeof x`. A reserved word rather than a token kind, so match it the same
 	// contextual way `extern fun` is matched.
-	if p.peek().Kind == token.Ident && p.peek().Val == "typeof" && !p.peek().Raw {
+	if p.peek().Kind == token.Ident && p.peek().Val == "typeof" && !p.peek().At {
 		t := p.advance()
 		operand, err := p.parseUnary()
 		if err != nil {
@@ -2590,12 +2647,9 @@ func (p *parser) parseArgList(statementForm bool) ([]ast.Node, []string, error) 
 	var names []string
 	sawName := false
 	for !p.check(token.RParen) && !p.check(token.EOF) {
-		// A zdef declaration block is a backtick string full of braces (`extern struct {
-		// id: c_int }`), which the lexer necessarily splits as an interpolation. Upstream
-		// never interpolates one -- zdefStatement hands the raw token to its FFI parser --
-		// so take the verbatim text here instead of sub-parsing braces that were never
-		// expressions. Only reachable for a zdef callee, so an ordinary call's raw string
-		// still interpolates.
+		// A zdef block is a backtick string full of braces, which the scanner splits
+		// as an interpolation. Upstream hands the token to its FFI parser, so take the
+		// written text. Only a zdef callee reaches here.
 		if statementForm && p.check(token.InterpStr) && p.peek().Val != "" {
 			t := p.advance()
 			args = append(args, &ast.StringLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: t.Val})
@@ -2750,19 +2804,14 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 }
 
 // buildInterp parses each embedded expression source of an interpolation token.
-//
-// In a BACKTICK string, a brace run that does not parse as an expression is LITERAL
-// text rather than an error. That is what "raw" has to mean for brace-heavy content:
-// magus's own docs engine keeps Mustache templates ({{name}}) in backtick strings,
-// and a zdef declaration block is full of Zig braces. Upstream never interpolates
-// either (its zdefStatement reads the raw token), so the lenient reading keeps both
-// working while a genuine `{expr}` still evaluates. A double-quoted string keeps
-// reporting the error, since nothing there has a reason to hold unparsable braces.
+// In a backtick string, a brace run that does not parse stays literal text, so
+// Mustache templates and zdef blocks keep their braces. A double-quoted string
+// reports the error, since nothing there has a reason to hold unparsable braces.
 func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 	expr := &ast.InterpExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
-	// Only lexRawString sets Val on an interpolated token (to the verbatim source), so
-	// a non-empty Val is what identifies a backtick string here.
-	raw := t.Val != ""
+	// Only lexMultilineString sets Val on an interpolated token, so a non-empty Val
+	// identifies a backtick string.
+	multiline := t.Val != ""
 	// literal re-emits an interpolation as the source text it was written as.
 	literal := func(text string) { expr.Parts = append(expr.Parts, ast.InterpPart{Lit: fmt.Sprintf("{%s}", text)}) }
 	for _, part := range t.Parts {
@@ -2774,14 +2823,14 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		// parser so strictness is consistent across the program.
 		sub, used, err := p.parseInterpPart(part)
 		if err != nil {
-			if raw {
+			if multiline {
 				literal(part.Text)
 				continue
 			}
 			return nil, fmt.Errorf("buzz: line %d:%d: bad interpolation %q: %w", t.Line, t.Col, part.Text, err)
 		}
 		if len(sub.Stmts) != 1 {
-			if raw {
+			if multiline {
 				literal(part.Text)
 				continue
 			}
@@ -2789,7 +2838,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		}
 		es, ok := sub.Stmts[0].(*ast.ExprStmt)
 		if !ok {
-			if raw {
+			if multiline {
 				literal(part.Text)
 				continue
 			}
@@ -2807,12 +2856,12 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 // bindings it references. They are returned rather than marked so that a backtick brace
 // run that falls back to literal text marks nothing.
 func (p *parser) parseInterpPart(part token.StringPart) (*ast.Program, []string, error) {
-	toks, err := (*ParseCache)(nil).tokenize(part.Text + ";")
+	toks, err := (*ParseCache)(nil).tokenize(p.scanner, part.Text+";")
 	if err != nil {
 		return nil, nil, err
 	}
 	shiftTokens(toks, part.Line, part.Col)
-	sub := newParser(toks)
+	sub := newParser(p.scanner, toks)
 	sub.strict = p.strict
 	if len(p.importUsage) > 0 {
 		sub.importUsage = make(map[string]*importBinding, len(p.importUsage))

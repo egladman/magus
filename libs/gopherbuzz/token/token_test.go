@@ -250,7 +250,7 @@ func TestTokenize_Positions(t *testing.T) {
 			{Kind: EOF, Line: 1, Col: 4},
 		}},
 		{"free identifier keeps its spelling", `@"fun name"`, []Token{
-			{Kind: Ident, Val: "fun name", Raw: true, Line: 1, Col: 1},
+			{Kind: Ident, Val: "fun name", At: true, Line: 1, Col: 1},
 			{Kind: EOF, Line: 1, Col: 12},
 		}},
 		{"newline inside an interpolation starts its line at col 1", "\"{a\n}\" x", []Token{
@@ -516,9 +516,9 @@ func FuzzTokenize(f *testing.F) {
 	})
 }
 
-// TestTokenSize pins Kind packed beside Raw: every cached module holds one Token
+// TestTokenSize pins Kind packed beside At: every cached module holds one Token
 // per lexeme, so a field that adds padding costs the whole cache. The unpacked
-// layout, an int Kind first and Raw after Col, is one word larger on any target.
+// layout, an int Kind first and At after Col, is one word larger on any target.
 func TestTokenSize(t *testing.T) {
 	type unpacked struct {
 		Kind  int
@@ -526,10 +526,10 @@ func TestTokenSize(t *testing.T) {
 		Parts []StringPart
 		Line  int
 		Col   int
-		Raw   bool
+		At    bool
 		Doc   string
 	}
-	assert.Equal(t, unsafe.Sizeof(Kind(0)), unsafe.Offsetof(Token{}.Raw))
+	assert.Equal(t, unsafe.Sizeof(Kind(0)), unsafe.Offsetof(Token{}.At))
 	assert.Equal(t, unsafe.Sizeof(unpacked{})-unsafe.Sizeof(0), unsafe.Sizeof(Token{}))
 }
 
@@ -635,9 +635,9 @@ func TestTokenizeStringEscapes(t *testing.T) {
 		{"multiline", "\"a\nb\"", "a\nb"},
 		{"invalid utf-8 byte", "\"a\xffb\"", "a\uFFFDb"},
 		{"invalid utf-8 after escape", "\"\\t\xff\"", "\t\uFFFD"},
-		{"raw", "`a\\nb`", `a\nb`},
-		{"raw escaped brace", "`a\\{b\\}`", "a{b}"},
-		{"raw keeps invalid utf-8", "`a\xffb`", "a\xffb"},
+		{"multiline", "`a\\nb`", `a\nb`},
+		{"multiline escaped brace", "`a\\{b\\}`", "a{b}"},
+		{"multiline keeps invalid utf-8", "`a\xffb`", "a\xffb"},
 		{"escaped open brace", `"a\{b"`, "a{b"},
 		{"escaped close brace", `"a\}b"`, "a}b"},
 		{"decimal byte escape zero", `"\000"`, "\x00"},
@@ -650,12 +650,12 @@ func TestTokenizeStringEscapes(t *testing.T) {
 		{"newline after an escape", "\"\\t\nb\"", "\t\nb"},
 		{"CRLF", "\"a\r\nb\"", "a\r\nb"},
 		{"non-ASCII text", `"héllo 日本"`, "héllo 日本"},
-		{"raw multiline", "`a\nb`", "a\nb"},
-		{"raw CRLF", "`a\r\nb`", "a\r\nb"},
-		{"raw trailing backslash", "`a\\`", `a\`},
-		{"raw backslash before other text kept", "`a\\db`", `a\db`},
-		{"raw newline after an escaped brace", "`\\{\nz`", "{\nz"},
-		{"raw invalid utf-8 after an escaped brace", "`\\}\xff`", "}\xff"},
+		{"multiline multiline", "`a\nb`", "a\nb"},
+		{"multiline CRLF", "`a\r\nb`", "a\r\nb"},
+		{"multiline trailing backslash", "`a\\`", `a\`},
+		{"multiline backslash before other text kept", "`a\\db`", `a\db`},
+		{"multiline newline after an escaped brace", "`\\{\nz`", "{\nz"},
+		{"multiline invalid utf-8 after an escaped brace", "`\\}\xff`", "}\xff"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -682,21 +682,21 @@ func TestTokenizeInterpolationParts(t *testing.T) {
 		{"nested braces and string", `"{f({"k": "}"})} end"`, []StringPart{{IsExpr: true, Text: `f({"k": "}"})`}, {Text: " end"}}},
 		{"escaped quote in nested string", `"{g("a\"}")}"`, []StringPart{{IsExpr: true, Text: `g("a\"}")`}}},
 		{"invalid utf-8 in an expression", "\"{h(\"\xff\")}\"", []StringPart{{IsExpr: true, Text: "h(\"\uFFFD\")"}}},
-		{"raw", "`p {q} r`", []StringPart{{Text: "p "}, {IsExpr: true, Text: "q"}, {Text: " r"}}},
+		{"multiline", "`p {q} r`", []StringPart{{Text: "p "}, {IsExpr: true, Text: "q"}, {Text: " r"}}},
 		{"empty expression", `"{}"`, []StringPart{{IsExpr: true, Text: ""}}},
 		{"nested braces", `"{ {a} }"`, []StringPart{{IsExpr: true, Text: " {a} "}}},
 		{"nested interpolation stays in the expression", `"{"in {x}"} out"`, []StringPart{{IsExpr: true, Text: `"in {x}"`}, {Text: " out"}}},
-		{"raw string inside an expression", "\"{`}`}\"", []StringPart{{IsExpr: true, Text: "`}`"}}},
+		{"multiline string inside an expression", "\"{`}`}\"", []StringPart{{IsExpr: true, Text: "`}`"}}},
 		{"escaped backslash ends a nested string", `"{f("a\\")}"`, []StringPart{{IsExpr: true, Text: `f("a\\")`}}},
 		{"newline inside an expression", "\"{a +\nb}\"", []StringPart{{IsExpr: true, Text: "a +\nb"}}},
 		{"newline inside a nested string", "\"{f(\"a\nb\")}\"", []StringPart{{IsExpr: true, Text: "f(\"a\nb\")"}}},
 		{"run after an escape and an expression", `"\t{x}y"`, []StringPart{{Text: "\t"}, {IsExpr: true, Text: "x"}, {Text: "y"}}},
 		{"invalid utf-8 in a run", "\"\xff{x}\xfe\"", []StringPart{{Text: "�"}, {IsExpr: true, Text: "x"}, {Text: "�"}}},
 		{"non-ASCII runs", `"é{x}日"`, []StringPart{{Text: "é"}, {IsExpr: true, Text: "x"}, {Text: "日"}}},
-		{"raw keeps invalid utf-8 in a run", "`\xff{x}`", []StringPart{{Text: "\xff"}, {IsExpr: true, Text: "x"}}},
-		{"raw escaped brace then an expression", "`\\{a{x}b`", []StringPart{{Text: "{a"}, {IsExpr: true, Text: "x"}, {Text: "b"}}},
-		{"raw multiline run", "`a\n{x}`", []StringPart{{Text: "a\n"}, {IsExpr: true, Text: "x"}}},
-		{"raw leaves a brace in a nested string unmatched", "`{\"a {b\"}`", []StringPart{{IsExpr: true, Text: `"a {b"`}}},
+		{"multiline keeps invalid utf-8 in a run", "`\xff{x}`", []StringPart{{Text: "\xff"}, {IsExpr: true, Text: "x"}}},
+		{"multiline escaped brace then an expression", "`\\{a{x}b`", []StringPart{{Text: "{a"}, {IsExpr: true, Text: "x"}, {Text: "b"}}},
+		{"multiline multiline run", "`a\n{x}`", []StringPart{{Text: "a\n"}, {IsExpr: true, Text: "x"}}},
+		{"multiline leaves a brace in a nested string unmatched", "`{\"a {b\"}`", []StringPart{{IsExpr: true, Text: `"a {b"`}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -732,7 +732,7 @@ func TestTokenizeInterpolationPartPositions(t *testing.T) {
 		{"after an escape", `"\t{x}"`, []pos{{1, 4}}},
 		{"after a multi-byte run", `"é{x}"`, []pos{{1, 4}}},
 		{"indented", "    std\\print(\"{len(xs)}\")", []pos{{1, 16}}},
-		{"raw string on its second line", "`a\n  {x}`", []pos{{2, 3}}},
+		{"multiline string on its second line", "`a\n  {x}`", []pos{{2, 3}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -763,10 +763,10 @@ func TestTokenizeErrors(t *testing.T) {
 		{"lone dollar", `$x`},
 		{"dangling escape", `"a\`},
 		{"decimal byte escape past 255", `"\256"`},
-		{"unterminated raw string", "`abc"},
+		{"unterminated multiline string", "`abc"},
 		{"unterminated interpolation", `"a {b`},
 		{"unterminated string inside an interpolation", `"{"abc`},
-		{"unterminated raw interpolation", "`{b"},
+		{"unterminated multiline interpolation", "`{b"},
 		{"free identifier that interpolates", `@"{x}"`},
 		{"unterminated free identifier", `@"x`},
 		{"unexpected character", "#"},
@@ -779,10 +779,10 @@ func TestTokenizeErrors(t *testing.T) {
 	}
 }
 
-// TestTokenize_NestedRawStringBackslashEscapesBacktick pins upstream's rule inside
-// an interpolation: \` does not close a nested raw string, so the outer brace is
+// TestTokenize_NestedMultilineStringBackslashEscapesBacktick pins upstream's rule inside
+// an interpolation: \` does not close a nested multiline string, so the outer brace is
 // never reached. Upstream reports the same input as an unterminated string.
-func TestTokenize_NestedRawStringBackslashEscapesBacktick(t *testing.T) {
+func TestTokenize_NestedMultilineStringBackslashEscapesBacktick(t *testing.T) {
 	_, err := Tokenize("\"{`a\\`}\" x")
 	require.EqualError(t, err, "buzz: unterminated interpolation at line 1:1")
 }

@@ -204,7 +204,7 @@ Strings are indexed by BYTE: `s.sub(0, len: 8)` can cut a multi-byte character i
 half, and `s.len()` counts bytes. Integer division truncates (`7 / 2` is `3`), and
 `//` starts a comment, never an operator.{{end}}{{if .Full}}
 
-A raw string is backticks. Use it for JSON, regexes and Mustache templates, since
+A multiline string is backticks. Use it for JSON, regexes and Mustache templates, since
 its quotes need no escaping:{{end}}{{if .Full}}
 
 ```buzz

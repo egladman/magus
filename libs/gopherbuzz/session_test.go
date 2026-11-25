@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2695,25 +2696,25 @@ fun probe() > int {%s
 	}
 }
 
-func TestParity_RawStringRules(t *testing.T) {
+func TestParity_MultilineStringRules(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"interpolates an expression", "`sum={1 + 2}`", "sum=3"},
 		{"escaped brace stays literal", "`\\{literal\\}`", "{literal}"},
 		{"mustache survives as literal text", "`{{name}}`", "{{name}}"},
-		{"nested raw string inside an interpolation", "`outer {`inner`} end`", "outer inner end"},
+		{"nested multiline string inside an interpolation", "`outer {`inner`} end`", "outer inner end"},
 		{"newlines are literal", "`a\nb`", "a\nb"},
 		{"regex classes pass through", "`[0-9]+`", "[0-9]+"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			v := evalParity(t, fmt.Sprintf("fun probe() > str { return %s; }", tc.src))
-			assert.Equal(t, tc.want, v.AsString(), "a raw string interpolates but unescapes only \\{ and \\}")
+			assert.Equal(t, tc.want, v.AsString(), "a multiline string interpolates but unescapes only \\{ and \\}")
 		})
 	}
 }
 
 func TestParity_ZdefBlockIsNotInterpolated(t *testing.T) {
-	// A zdef declaration block is a raw string full of Zig braces. Upstream reads it
+	// A zdef declaration block is a multiline string full of Zig braces. Upstream reads it
 	// from the raw token and never interpolates it; the two positional arguments are
 	// also exempt from the strict argument-labeling rule.
 	s := NewSession(context.Background())
@@ -3691,4 +3692,58 @@ final cached = second\read();
 	for _, name := range []string{"initial", "cached"} {
 		require.Equal(t, "common", s.Globals()[name].String(), name)
 	}
+}
+
+type sessionScannerSuite struct {
+	suite.Suite
+	quote *token.Scanner
+}
+
+func TestSessionScannerSuite(t *testing.T) { suite.Run(t, new(sessionScannerSuite)) }
+
+func (s *sessionScannerSuite) SetupTest() { s.quote = quoteScanner(s.T()) }
+
+func (s *sessionScannerSuite) session(opts ...Option) *Session {
+	sess := NewSession(context.Background(), opts...)
+	s.T().Cleanup(func() { _ = sess.Close() })
+	return sess
+}
+
+func (s *sessionScannerSuite) TestSessionAndChildLexWithTheScanner() {
+	ctx := context.Background()
+	sess := s.session(WithEmbedded(), WithScanner(s.quote))
+	s.Require().NoError(sess.Exec(ctx, `var v = q"a\{b"q;`))
+	s.Equal(`a\{b`, sess.GetGlobal("v").AsString())
+
+	child := sess.NewChild()
+	s.Require().NoError(child.Exec(ctx, `var w = q"c"q;`))
+	s.Equal("c", child.GetGlobal("w").AsString())
+}
+
+func (s *sessionScannerSuite) TestImportLexesWithTheImportersScanner() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`export final answer = q"x}"q;`), 0o644))
+	sess := s.session(WithEmbedded(), WithScanner(s.quote), WithSearchPaths(filepath.Join(dir, "?.buzz")))
+	sess.SetIncludeDirs(nil)
+	s.Require().NoError(sess.Exec(context.Background(), "import \"lib\";\nvar v = answer;"))
+	s.Equal("x}", sess.GetGlobal("v").AsString())
+}
+
+func (s *sessionScannerSuite) TestSessionWithoutAScannerRefusesTheLiteral() {
+	err := s.session(WithEmbedded()).Exec(context.Background(), `var v = q"x"q;`)
+	s.ErrorContains(err, "expected ';' after statement, got string literal")
+}
+
+func (s *sessionScannerSuite) TestOneParseCacheServesEachScannerItsOwnTokens() {
+	ctx := context.Background()
+	c := NewParseCache(1 << 20)
+	src := padded(`var q = "plain"; var v = q"host"q;`)
+
+	host := s.session(WithEmbedded(), WithParseCache(c), WithScanner(s.quote))
+	s.Require().NoError(host.Exec(ctx, src))
+	s.Equal("host", host.GetGlobal("v").AsString())
+
+	plain := s.session(WithEmbedded(), WithParseCache(c))
+	s.Error(plain.Exec(ctx, src), "a plain session must not read the host's tokens")
+	s.Len(c.tokens, 2)
 }

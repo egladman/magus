@@ -49,7 +49,7 @@ own struct-passing rule) and, when its fields are exactly two or four `f64`,
 as a by-value return (the CGPoint/CGRect register paths). A Zig `extern
 struct`'s layout _is_ the C layout by definition, so the portable layout
 engine computes it without an embedded Zig compiler. Multiline declaration
-blocks read best as backtick raw strings, exactly like upstream:
+blocks read best as backtick multiline strings, exactly like upstream:
 
 ```buzz
 final lib = zdef("sqlite3", `
