@@ -7,7 +7,7 @@
   "diagram": "linters-boundary",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:afdc6d6c0dc360af6a6b60811f873a742f79ec2f04c8024e474cee52de152815",
+  "stamp": "sha256:e180b43e92dc0c029fa2959cfba323d6ec6fdc196a7ab4fed0fe106a1f5a762b",
   "undrilled": [
     "libs/conventions",
     "libs/testpairing"
