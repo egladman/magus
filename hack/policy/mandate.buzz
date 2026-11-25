@@ -756,9 +756,9 @@ fun statusText(jobs: [str], jobCount: int, tasks: [str], taskCount: int, other: 
     if (other.len() > 0) {
         counts.append("{other.len()} unknown");
     }
-    var heading = "Status: nothing open";
+    var heading = "status: nothing open";
     if (counts.len() > 0) {
-        heading = "Status: " + counts.join(", ");
+        heading = "status: " + counts.join(", ");
     }
     final lines = mut [heading];
     appendGroup(lines, name: "jobs", items: jobs);
@@ -1172,6 +1172,7 @@ test "a stopped holder's row refuses the root's stop once and never reads as a r
     std\assert(refused.reason.indexOf("go-indexer") != null, message: "names the row");
     std\assert(refused.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
     std\assert(refused.reason.indexOf("continue that worker") != null, message: "names the continuation and no tool");
+    _ = verdict\checked(refused, label: "stopped holder");
     std\assert(decideStop(again, q: alone, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "the second stop stands");
     std\assert(decideStop(again, q: alone, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.defer, message: "once under a mandate too");
 
@@ -1198,7 +1199,7 @@ test "a try started and not seen to end lets the root stop and says so, whatever
     final live = StopFacts{ role = "root", stopHookActive = false, running = [Try{ job = "naming-lint", n = 1, started = 1880000 }] };
     final stands = decideStop(live, q: spawned, m: issued, now: 2000000, count: none, file: skip);
     std\assert(stands.decision == magus\GuardDecision.advise, message: "spawned, not yet past job exec");
-    std\assert(stands.reason == "Status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: stands.reason);
+    std\assert(stands.reason == "status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: stands.reason);
     final waiting = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.running, holderStopped = 1500 }] };
     std\assert(decideStop(live, q: waiting, m: null, now: 2000000, count: none, file: skip).decision == magus\GuardDecision.advise, message: "waiting on its own background run");
     final ended = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: waiting, m: null, now: 2000, count: none, file: skip);
@@ -1261,7 +1262,7 @@ test "the line names the newest few, labels stale tries with their command and o
         Try{ job = "new-e", n = 1, started = now - 10800000 },
     ];
     final text = openStatus([], stopped: [], report: JobUnmergedReport{}, running: tries, now: now);
-    final want = "Status: 5 tasks running\n- background\n  - new-b: running 45s\n  - new-c: running 12m\n  - new-e: running 3h\n  - +2 older\nnext: clear stale tries with ./magus job prune --all";
+    final want = "status: 5 tasks running\n- background\n  - new-b: running 45s\n  - new-c: running 12m\n  - new-e: running 3h\n  - +2 older\nnext: clear stale tries with ./magus job prune --all";
     std\assert(text == want, message: text);
     final stale = runningItems([Try{ job = "old-a", n = 1, started = 1000, stale = true }], now: now);
     std\assert(stale.join(";") == "old-a: running 1d, stale", message: stale.join(";"));
@@ -1284,7 +1285,7 @@ test "a stop prints only when its set differs from the last stop's, so a set ret
     final again = decideStop(StopFacts{ role = "root", stopHookActive = false, running = one }, q: q, m: null, now: 2600000, count: counted, file: skip);
     std\assert(again.decision == magus\GuardDecision.defer, message: "the same set, ten minutes on, prints nothing");
     final grown = decideStop(StopFacts{ role = "root", stopHookActive = false, running = two }, q: q, m: null, now: 2600000, count: counted, file: skip);
-    std\assert(grown.decision == magus\GuardDecision.advise and grown.reason == "Status: 2 tasks running\n- background\n  - go-indexer: running 11m\n  - naming-lint: running 12m\nnext: wait for the running tasks", message: grown.reason);
+    std\assert(grown.decision == magus\GuardDecision.advise and grown.reason == "status: 2 tasks running\n- background\n  - go-indexer: running 11m\n  - naming-lint: running 12m\nnext: wait for the running tasks", message: grown.reason);
     final back = decideStop(StopFacts{ role = "root", stopHookActive = false, running = one }, q: q, m: null, now: 2600000, count: counted, file: skip);
     std\assert(back.decision == magus\GuardDecision.advise, message: "the first set again after another prints again");
 }
@@ -1295,7 +1296,7 @@ test "a held stop with a running try stays an advice and says no more than a fir
     final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }], unmerged = offBranch };
     final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
     final second = decideStop(StopFacts{ role = "root", stopHookActive = true, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
-    std\assert(second.decision == magus\GuardDecision.advise and second.reason == "Status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: "never a refusal, so the host has none to override");
+    std\assert(second.decision == magus\GuardDecision.advise and second.reason == "status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: "never a refusal, so the host has none to override");
 }
 
 test "work the host tracks and wakes the root for never refuses its stop" {
@@ -1305,7 +1306,7 @@ test "work the host tracks and wakes the root for never refuses its stop" {
     final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
     final v = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
     std\assert(v.decision == magus\GuardDecision.advise, message: "waiting rows and unmerged work do not turn the wait into a refusal");
-    std\assert(v.reason == "Status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: v.reason);
+    std\assert(v.reason == "status: 1 task running\n- background\n  - naming-lint: running 2m\nnext: wait for the running tasks", message: v.reason);
 }
 
 final offBranch = JobUnmergedReport{ branch = "feat/x", jobs = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
@@ -1348,13 +1349,13 @@ test "a row with only unresolved risks lets the root stop, with no mandate and u
 test "the status text is one counts line, a dash list by kind and one next line" {
     final report = JobUnmergedReport{ jobs = [JobUnmerged{ job = "push-checks", head = "abc123", why = "1 commit is not on main", remedy = "push push-checks" }] };
     final jobs = openStatus([], stopped: ["stop-text"], report: report, running: [], now: 0);
-    std\assert(jobs == "Status: 2 jobs open\n- jobs\n  - stop-text: stopped with no result\n  - push-checks at abc123: 1 commit is not on main. Remedy: push push-checks.\nnext: push push-checks", message: jobs);
+    std\assert(jobs == "status: 2 jobs open\n- jobs\n  - stop-text: stopped with no result\n  - push-checks at abc123: 1 commit is not on main. Remedy: push push-checks.\nnext: push push-checks", message: jobs);
     final mix = openStatus(["go-indexer"], stopped: [], report: JobUnmergedReport{}, running: [Try{ job = "go-test", n = 1, started = 880000 }], now: 1000000);
-    std\assert(mix.split("\n")[0] == "Status: 1 job open, 1 task running", message: mix);
+    std\assert(mix.split("\n")[0] == "status: 1 job open, 1 task running", message: mix);
     std\assert(mix.indexOf("\n- background\n  - go-test: running 2m\n") != null, message: mix);
     std\assert(mix.split("\n").len() == 6 and mix.split("\n")[5].startsWith("next: spawn a worker on go-indexer"), message: mix);
     final idle = openStatus([], stopped: [], report: JobUnmergedReport{}, running: [], now: 0);
-    std\assert(idle == "Status: nothing open\nnext: none", message: idle);
+    std\assert(idle == "status: nothing open\nnext: none", message: idle);
     std\assert(mix.indexOf("stop says") == null and mix.split("\n")[0].indexOf("`") == null, message: mix);
 }
 
@@ -1372,7 +1373,8 @@ test "an unmerged refusal carries the verdict shape" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
     final refused = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip);
-    std\assert(refused.reason.startsWith("Status: 1 job open\n"), message: refused.reason);
+    std\assert(refused.reason.startsWith("status: 1 job open\n"), message: refused.reason);
+    _ = verdict\checked(refused, label: "unmerged");
 }
 
 test "under a mandate unmerged work refuses until the loop limit, then files the rows" {
@@ -1390,12 +1392,15 @@ test "under a mandate unmerged work refuses until the loop limit, then files the
 }
 
 test "every denial carries the verdict shape" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
     _ = verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
     _ = verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "new scope");
     _ = verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "apply");
     _ = verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "rm");
     _ = verdict\checked(decideHold("late", m: issued, jobs: store, assess: fullTier), label: "held for review");
     _ = verdict\checked(decideWrite("/w/docs/design/x.md", workspace: "/w", m: issued, now: 2000), label: "write");
+    _ = verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = store }, m: null, now: 2000, count: none, file: skip), label: "stop");
 }
 
 test "the third refusal over the same rows lets the turn end and files them" {
