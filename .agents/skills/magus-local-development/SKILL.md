@@ -151,3 +151,20 @@ running and stays that way.
 - A guard lapse, a slow command or a client and server version mismatch is not a reason to start
   it. Report the lapse after its second retry and go on without the server.
 - A remedy that names the server is not a step to take here. Skip it and say that you skipped it.
+
+<!-- rule: do-not-strand-the-session; added: 2026-11-24; origin: person, Eli;
+     evidence: one session that killed its own hook binary, stranded itself on a removed row and lost three workers to deleted host worktrees, each needing the person to bail it out;
+     retire-when: magus installs its hook binary atomically, `job rm` refuses a row its caller holds, and a spawn replaces a worker whose worktree is gone -->
+## 12. Do not strand your own session
+
+Three moves lock a session out of every state-changing call. Each needs the person to undo it.
+
+- **Replacing the hook binary.** The hooks run `/Users/<you>/Repos/magus/magus`. Never `cp` a new
+  build over it: on macOS the kernel kills an executable rewritten in place (exit 137), and every
+  hook then refuses. Remove it first, then copy, or copy to a temporary name and `mv` it over.
+- **Removing a row you hold.** `job rm` on your own live row binds the session to an id the store
+  no longer has. `lease-undeclared` then refuses every write. Exit the row, have it waited on,
+  then remove it. Once stranded, the person forks a read-only row and you `job exec` it.
+- **Resuming a worker after its host worktree is gone.** The host deletes a worker's worktree when
+  the worker ends without changes, and a resumed worker cannot get it back. The spawn guard still
+  counts that worker as the job's holder, so fork the job again under a new id and spawn fresh.
