@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -975,6 +976,7 @@ func TestWorkerRawTool(t *testing.T) {
 		"a tool no spell covers": "jq . x.json",
 		"a magus run":            "./magus run go-test . -- -run TestLease",
 		"a help request":         "go help test",
+		"the bootstrap":          ward.BootstrapCommand,
 	} {
 		assert.Empty(t, denyWorkerRawTool(ctx, deps, row.ID, command), name)
 	}

@@ -918,8 +918,8 @@ export fun waitOnNoReturn() > void !> any {
 	require.ErrorContains(t, err, "has filed no result")
 }
 
-// session options and workspace.putJob take maps, decoded at the binding: an unknown key or a
-// value of the wrong type raises there, and a put's mistakes come back joined in one raise.
+// session options and workspace.putJob take maps decoded at the binding. A bad key or value
+// type raises there; a put's mistakes come back joined in one raise.
 func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
 	testkit.Isolate(t)
 	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}

@@ -389,11 +389,12 @@ fun ld_flags() > str {
 
 // Builds the OpenCode wasm runtime and its wasm_exec.js via go generate.
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["internal/interp/bindings/opencode/**/*.go", "internal/interp/bindings/opencode/plugin.buzz",
-        "libs/codec/**/*.go", "libs/codec/go.mod",
-        "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/std/*.buzz", "libs/gopherbuzz/std/gen/*.buzz",
-        "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
-        "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml"]);
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
+              config_generate, mocks_generate, buzz_generate);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml",
+        "internal/interp/bindings/opencode/plugin.buzz",
+        "libs/gopherbuzz/std/*.buzz", "libs/gopherbuzz/std/gen/*.buzz",
+        "libs/*/go.mod"]);
     ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
     _ = proc\exec("go", ["generate", "./internal/interp/bindings/opencode"]);
 }
@@ -861,8 +862,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // writing Go under internal/ or types/gen must finish first or MGS4008 refuses the run.
     ctx.needs(spells_generate, job_generate, buzz_generate, langservice_generate,
               config_generate, mocks_generate);
-    ctx.readsFiles(["cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
-        "libs/clikit/**/*.go",
+    ctx.readsFiles(["**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
@@ -879,8 +879,7 @@ export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     // every generator writing Go under internal/ or types/gen must finish first.
     ctx.needs(spells_generate, job_generate, buzz_generate, langservice_generate,
               config_generate, mocks_generate);
-    ctx.readsFiles(["cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "std/*.go", "libs/testkit/**/*.go", "libs/clikit/**/*.go",
-        "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/commands/testdata/api-go.lock"]);
@@ -1088,7 +1087,7 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
 // Console and docs generate their own TypeScript boundary mirrors.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(termkit_bindings_generate);
-    ctx.readsFiles([".buzzgen.yaml"]);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".buzzgen.yaml"]);
     ctx.writesFiles(["internal/interp/bindings/gen/boundary_list.go",
         "internal/interp/bindings/gen/boundary_objects.go",
         "internal/interp/bindings/gen/boundary_ops.go",
@@ -1105,8 +1104,7 @@ export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 export fun termkit_bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["std/termkit/gen/**/*.go"]);
-    ctx.readsFiles(["libs/termkit/**/*.go", "internal/generate/emit/*.go",
-        "cmd/magus-libmodules/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"]);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"]);
     _ = proc\exec("go", ["run", "./cmd/magus-libmodules", "-dir", "libs/termkit",
         "-outdir", "std/termkit/gen", "-import", "github.com/egladman/magus/std/termkit/gen"]);
 }
@@ -1495,7 +1493,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // Not named *_generate: generate would drift-gate bytes that differ every run.
 export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["tapes/core-loop.session.sh", "tapes/demo-init.sh",
-        "tapes/demo.txtar", "cmd/magus-termcast/*.go"]);
+        "tapes/demo.txtar", "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"]);
     // Not the glob: termcast_showcase owns the other capture (MGS1020).
     ctx.writesFiles(["tapes/core-loop.capture"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast", "-record"]);
@@ -1504,16 +1502,17 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
 // Re-records tapes/showcase.capture from a real interactive session.
 // Not named *_generate, for termcast_record's reason.
 export fun termcast_showcase(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["tapes/demo.txtar", "cmd/magus-termcast/*.go"]);
+    ctx.readsFiles(["tapes/demo.txtar", "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"]);
     ctx.writesFiles(["tapes/showcase.capture"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast", "-showcase"]);
 }
 
 // Renders tapes/core-loop.capture into the README's animated SVG.
 export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(job_generate);
-    ctx.readsFiles(["tapes/*.capture", "cmd/magus-termcast/*.go",
-        "internal/interactive/screen/*.go", "internal/job/gen/*.json"]);
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
+              config_generate, mocks_generate, buzz_generate);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "tapes/*.capture", "internal/job/gen/*.json"]);
     // Globbed so a hit restores both palettes, not only the dark half.
     ctx.writesFiles(["assets/gen/core-loop*.svg", "assets/gen/showcase*.svg"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast"]);
@@ -1522,9 +1521,10 @@ export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Renders the still SVGs of magus's interactive terminal screens for the docs.
 export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the real PrettyHandler's band.
-    ctx.needs(job_generate);
-    ctx.readsFiles(["cmd/magus-termcast/*.go", "internal/interactive/**/*.go",
-        "libs/termkit/**/*.go", "internal/cache/*.go", "internal/job/gen/*.json"]);
+    ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
+              config_generate, mocks_generate, buzz_generate);
+    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/job/gen/*.json"]);
     ctx.writesFiles(["assets/gen/terminal-*.svg"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }

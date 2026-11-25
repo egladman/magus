@@ -46,7 +46,7 @@ exec magus job exit upgrade/web --stdin
 cd ../shop
 exec magus job wait upgrade/api
 cp stdout $WORK/raw
-exec sh -c 'sed -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
+exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait-api.out
 exec magus job wait upgrade/web
 exec magus ls jobs --all
@@ -103,6 +103,7 @@ its holder reports it ran magus run test api
 postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
+checkout ~/src/ana: kept after job upgrade/api ended: the fork adopted it rather than making it, so magus never removes it
 -- ls-done.out --
 JOB          HOLDER  STATE  MODEL    PATHS  PROOF     CHECK
 upgrade/api  ana     pass   bounded  1      alone     magus run test api

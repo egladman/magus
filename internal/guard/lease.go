@@ -898,7 +898,7 @@ func uncheckedCause(err error) string {
 // a worker refused a target ran the same tool raw, outside the cache, the sandbox and this
 // rule, and the refusal taught the bypass. Silent where denyWorkerCheckOnly is.
 func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, command string) denial {
-	if actingLease == "" {
+	if actingLease == "" || bootstrapsOwnBinary(command) {
 		return denial{}
 	}
 	raw, ok := firstRawToolDenied(deps, command)
@@ -927,6 +927,17 @@ func denyWorkerRawTool(ctx context.Context, deps Dependencies, actingLease, comm
 			elideCommand(resolvedCommand(raw)), op, me.ID, checkCommand(checks[0])),
 		Why: why,
 	}
+}
+
+// bootstrapsOwnBinary reports the bootstrap line, which a worker in a fresh host worktree
+// needs before any target can run there.
+func bootstrapsOwnBinary(command string) bool {
+	cmds, ok := ParseCommandsDialect(command, DialectBash)
+	if !ok || len(cmds) != 1 {
+		return false
+	}
+	call, isGo := readGoCall(cmds[0])
+	return isGo && call.chdir == "" && call.bootstrapsMagus() && bootstrapLine(command, DialectBash)
 }
 
 // targetRun is one `magus run` or `magus affected` a command line makes, read far enough to

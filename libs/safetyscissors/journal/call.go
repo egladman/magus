@@ -354,7 +354,7 @@ func tailLines(ctx context.Context, dir string, limit int) ([]numbered, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("journal: read %s: %w", filepath.Join(dir, callsFile), err)
+			return nil, fmt.Errorf("read %s: %w", filepath.Join(dir, callsFile), err)
 		}
 	}
 	return append(buf[head:], buf[:head]...), nil
