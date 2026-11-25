@@ -127,6 +127,22 @@ func (s *RecordSuite) TestAPostconditionsBasesRoundTrip() {
 	s.Equal([]Basis{BasisWitnessed, BasisAttested}, got.Postconditions[0].Accept)
 }
 
+func (s *RecordSuite) TestAStoredDerivedPostconditionReadsBackDerived() {
+	row := Job{ID: "a", State: StateDeclared, Postconditions: []Postcondition{
+		{ID: "lint", Kind: PostconditionKindCheck, Check: checkJSON("lint", "."), Accept: []Basis{BasisWitnessed}, Derived: true},
+		{ID: "tests", Kind: PostconditionKindCheck, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}}}
+	out, err := MarshalRecord(row, nil)
+	s.Require().NoError(err)
+
+	got, ok, err := readRecord(out)
+
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Contains(string(out), `"derived":true`)
+	s.True(got.Postconditions[0].Derived)
+	s.False(got.Postconditions[1].Derived)
+}
+
 func (s *RecordSuite) TestAStoredBasisNoBuildSpellsIsRefused() {
 	r := recordJob(Job{ID: "a", State: StateDeclared, Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Check: checkJSON("test", ".")}}}, nil)
 	r.Spec.Postconditions[0].Accept = []string{"trusted"}

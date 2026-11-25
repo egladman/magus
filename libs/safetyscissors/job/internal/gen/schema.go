@@ -26,6 +26,7 @@ var postconditionRecord = codec.ObjectSchema{Name: "postconditionRecord", Closed
 	"symbols":     nil,
 	"signature":   nil,
 	"accept":      nil,
+	"derived":     nil,
 }}
 
 var jobSpec = codec.ObjectSchema{Name: "jobSpec", Closed: false, Fields: map[string]*codec.ObjectSchema{
