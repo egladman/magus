@@ -121,7 +121,7 @@ export fun read(dir: str) > [Fragment] !> str {
     final frags = mut [<Fragment>];
     final errs = mut [<str>];
     foreach (name in sort\strings(names)) {
-        final path = fs\join(dir, name);
+        final path = fs\join(dir, name: name);
         if (!name.endsWith(".md") or (fs\isDir(path) catch true)) {
             errs.append("{path}: not a fragment; {dir} holds only <name>.md files");
             continue;
@@ -147,7 +147,7 @@ export fun read(dir: str) > [Fragment] !> str {
 // version is not semver, or a dir with none, throws: the page would silently lose history.
 export fun releases(dir: str) > [Release] !> any {
     final byVersion = mut {<str: Release>};
-    foreach (p in fs\glob(fs\join(dir, "*.yaml"))) {
+    foreach (p in fs\glob(fs\join(dir, name: "*.yaml"))) {
         final doc = serialize\Boxed.init(yaml\parse(fs\readFile(p.value)));
         final version = doc.q("version").stringValue();
         if (!semver\isValid(version)) {
@@ -553,12 +553,12 @@ test "parse keeps the group and the entry as written" {
 
 test "lint names every malformed path and passes good ones" {
     final dir = fs\tempDir("fragments") catch "";
-    fs\writeFile(fs\join(dir, "ok.md"), content: "### Security\n\n- **Patched.**\n") catch void;
-    fs\writeFile(fs\join(dir, "bad.md"), content: "### Added\n\n- no headline\n") catch void;
-    std\assert(lint([fs\join(dir, "ok.md")]).len() == 0, message: "a good fragment");
-    final got = lint([fs\join(dir, "ok.md"), fs\join(dir, "bad.md"), fs\join(dir, "x.txt"), fs\join(dir, "gone.md")]);
+    fs\writeFile(fs\join(dir, name: "ok.md"), content: "### Security\n\n- **Patched.**\n") catch void;
+    fs\writeFile(fs\join(dir, name: "bad.md"), content: "### Added\n\n- no headline\n") catch void;
+    std\assert(lint([fs\join(dir, name: "ok.md")]).len() == 0, message: "a good fragment");
+    final got = lint([fs\join(dir, name: "ok.md"), fs\join(dir, name: "bad.md"), fs\join(dir, name: "x.txt"), fs\join(dir, name: "gone.md")]);
     std\assert(got.len() == 3, message: "{got}");
-    std\assert(got[0] == fs\join(dir, "bad.md") + ": line 3: an entry opens with a **bold headline**; line 3: an entry ends with a period",
+    std\assert(got[0] == fs\join(dir, name: "bad.md") + ": line 3: an entry opens with a **bold headline**; line 3: an entry ends with a period",
         message: got[0]);
     std\assert(got[1].endsWith("x.txt: not a fragment; fragments are <name>.md files"), message: got[1]);
     std\assert(got[2].endsWith("gone.md: cannot be read"), message: got[2]);
@@ -568,13 +568,13 @@ test "lint names every malformed path and passes good ones" {
 test "read skips dotfiles, reports every bad file, and orders by name" {
     std\assert((read("changes/testdata/absent") catch [<Fragment>]).len() == 0, message: "a missing dir holds none");
     final dir = fs\tempDir("fragments") catch "";
-    fs\writeFile(fs\join(dir, ".DS_Store"), content: "binary") catch void;
-    fs\writeFile(fs\join(dir, "b.md"), content: "### Added\n\n- **Second.**\n") catch void;
-    fs\writeFile(fs\join(dir, "a.md"), content: "### Added\n\n- **First.**\n") catch void;
+    fs\writeFile(fs\join(dir, name: ".DS_Store"), content: "binary") catch void;
+    fs\writeFile(fs\join(dir, name: "b.md"), content: "### Added\n\n- **Second.**\n") catch void;
+    fs\writeFile(fs\join(dir, name: "a.md"), content: "### Added\n\n- **First.**\n") catch void;
     final good = read(dir) catch [<Fragment>];
     std\assert(good.len() == 2 and good[0].entry == "- **First.**", message: "{good.len()}");
-    fs\writeFile(fs\join(dir, "bad.md"), content: "### Fix\n\n- **Typo.**\n") catch void;
-    fs\writeFile(fs\join(dir, "notes.txt"), content: "### Added\n\n- **Wrong extension.**\n") catch void;
+    fs\writeFile(fs\join(dir, name: "bad.md"), content: "### Fix\n\n- **Typo.**\n") catch void;
+    fs\writeFile(fs\join(dir, name: "notes.txt"), content: "### Added\n\n- **Wrong extension.**\n") catch void;
     var err = "";
     try {
         _ = read(dir);

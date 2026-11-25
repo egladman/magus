@@ -2815,7 +2815,7 @@ test "a change to a public API lock with no fragment is denied with the fix, and
     std\assert(plain.decision == magus\GuardDecision.defer, message: "a change off the public API needs none: " + plain.reason);
 
     final dir = fs\tempDir("fragment") catch "";
-    final fragment = fs\join(dir, "key.md");
+    final fragment = fs\join(dir, name: "key.md");
     fs\writeFile(fragment, content: "### Fixed\n\n- **The cache key hashes in sorted order.** Equal maps share one key.\n") catch void;
     final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(lockDiff([fragment])), judge: passing(), once: helpers\counter());
