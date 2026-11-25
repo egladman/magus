@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -205,6 +206,28 @@ func (s *ExecRefusalSuite) TestPlacingExecPinsNothingWhenNoBuildAtTheCheckpointS
 	s.Require().NoError(err)
 	s.Empty(took.Worktree.BinaryDigest)
 	s.NoFileExists(filepath.Join(host, "magus"))
+}
+
+// A checkout that builds its own ./magus is readied by its checkout.bootstrap
+// hook, the run that also builds proofread, and exec pins what it left.
+func (s *ExecRefusalSuite) TestPlacingExecProvisionsACheckoutThatBuildsItsOwn() {
+	builds := s.repo.Commit("builds its own", map[string]string{"magus.yaml": hookConfig, testHook: "namespace b;\n"})
+	_, row := s.writers()
+	row.Checkpoint = builds
+	host := s.linked("host", builds)
+	plant(s.T(), s.store, recent(row))
+	var provisioned []string
+	placement := Placement{Provision: func(_ context.Context, r job.Job, wt job.Worktree) (bool, error) {
+		provisioned = append(provisioned, fmt.Sprintf("%s %s", r.ID, wt.Root))
+		return false, os.WriteFile(filepath.Join(wt.Root, "magus"), []byte("built\n"), 0o755)
+	}}
+
+	took, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: host}).Exec(s.T().Context(), row.ID, Placing(placement))
+	s.Require().NoError(err)
+	s.Equal([]string{fmt.Sprintf("w1 %s", host)}, provisioned)
+	want, err := BinaryDigest(filepath.Join(host, "magus"))
+	s.Require().NoError(err)
+	s.Equal(want, took.Worktree.BinaryDigest)
 }
 
 // recent is row touched now: placement lists the store, and that sweep ends
