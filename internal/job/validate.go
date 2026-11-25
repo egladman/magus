@@ -733,9 +733,13 @@ func listNames(names []string) string {
 func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(outputs))
 	for _, o := range outputs {
+		verb := "regenerates " + o.Output
+		if o.InPlace {
+			verb = "rewrites " + o.Output + " in place"
+		}
 		ps = append(ps, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: o.Output,
-			Message: fmt.Sprintf("%s regenerates %s from %s, inside the write paths, and %s sits outside them", o.Target, o.Output, o.Source, o.Output),
+			Message: fmt.Sprintf("%s %s from %s, inside the write paths, and %s sits outside them", o.Target, verb, o.Source, o.Output),
 			Hint: fmt.Sprintf(`add %q to paths.write, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root regenerates it"}`,
 				o.Output, types.OutputOutsideWritePaths, o.Output),
 			Deviation: &job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: "the root regenerates it"},

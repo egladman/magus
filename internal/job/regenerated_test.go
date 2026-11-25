@@ -63,6 +63,35 @@ func regeneratedWorkspace(t *testing.T) (string, []*types.Project) {
 	return root, projects
 }
 
+func TestRegeneratedOutsideNamesInPlaceUpdates(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, rel := range []string{"design/a.md", "design/b.md", "design.md"} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(rel), 0o644))
+	}
+	projects := []*types.Project{{
+		Path:          "docs",
+		Sources:       types.MustParseGlobs("**/*.md"),
+		TargetInputs:  map[string][]types.InputRef{"index-generate": {{Glob: "design/**/*.md"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"index-generate": {{Glob: "design.md"}}},
+	}}
+	row := job.Job{Paths: job.Paths{Write: []string{"docs/design/a.md"}}}
+
+	got := RegeneratedOutside(root, row, projects, nil)
+	assert.Equal(t, []RegeneratedOutput{{Output: "docs/design.md", Target: "docs:index-generate", Source: "docs/design/**/*.md", InPlace: true}}, got)
+	assert.Equal(t, []string{
+		"docs/design.md (docs:index-generate, rewrites in place)",
+		"never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes",
+	}, regeneratedLines(got))
+	assert.Contains(t, regeneratedProblems(got)[0].Message, "rewrites docs/design.md in place")
+
+	row.Paths.Write = append(row.Paths.Write, "docs/design.md")
+	assert.Empty(t, RegeneratedOutside(root, row, projects, nil), "a write path covering the file settles it")
+}
+
 func ignoresCoverage(paths []string) ([]string, error) {
 	var out []string
 	for _, p := range paths {
