@@ -524,6 +524,6 @@ func TestLintPostconditionLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
 
 	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
-	assert.Equal(t, []string{"./cli"}, checkIn(t, row.Postconditions[i].Check).Args, "lint reads a soft path once the row changes it")
+	assert.Equal(t, []string{"cli/registry.go"}, checkIn(t, row.Postconditions[i].Check).Args, "lint reads a soft path once the row changes it")
 	assert.Contains(t, row.Paths.Write, "cli/registry_test.go", "the worker may still write it")
 }

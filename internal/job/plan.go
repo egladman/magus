@@ -577,7 +577,8 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 				fmt.Fprintf(out, "job: %s: %s\n", id, n)
 			}
 			for _, g := range added {
-				fmt.Fprintf(out, "job: %s: added the postcondition %q (%d files): the write paths include Go source and no check or postcondition runs lint\n", id, g.ID, len(g.Check.Args))
+				fmt.Fprintf(out, "job: %s: added the postcondition %q: the %s target of %s reads %d written file(s) (%s) and no check or postcondition runs it\n",
+					id, g.ID, g.Check.Target, g.Check.Project, len(g.Check.Args), strings.Join(g.Check.Args, " "))
 			}
 		}
 	}

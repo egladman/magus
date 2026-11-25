@@ -98,11 +98,9 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	if !opts.hasArgs && len(tgt.PathScope) > 0 && len(opts.args) > 0 {
-		scoped, dropped := scopeForwardedPaths(tgt.Command, dir, opts.args)
-		if len(dropped) > 0 {
-			_, stderr := spawn.OutputWriters(ctx)
-			_, _ = fmt.Fprintf(stderr, "%s: takes no operand for the forwarded file(s) %s, so it leaves them out\n",
-				opName(opts.op, tgt.Bin), strings.Join(dropped, " ")) // best effort: a lost notice changes no result
+		scoped, err := scopeForwardedPaths(ctx, tgt.Command, opName(opts.op, tgt.Bin), dir, opts.args)
+		if err != nil {
+			return spawn.ExecResult{}, err
 		}
 		// Each forwarded arg named a file the tool takes no operand for.
 		// A bare run would widen the call to the whole project.
@@ -679,15 +677,25 @@ func sourceBatches(files []string, each bool) [][]string {
 // side that is empty rather than leaving a stray blank line.
 var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
 
-// scopeForwardedPaths maps each of args naming an existing file under dir
-// through c's PathScope, each operand once, in first-seen order. Any other
-// arg, a flag or a package, passes unchanged. dropped are the files
-// PathScopeFiles leaves out.
-func scopeForwardedPaths(c spells.Command, dir string, args []string) (scoped, dropped []string) {
+// scopeForwardedPaths maps each existing file of args through c's PathScope,
+// each operand once. A flag or package passes unchanged. PathScopeFiles
+// drops a file with a notice, and a path it takes that names nothing errors:
+// the tool would misread it.
+func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, args []string) ([]string, error) {
+	var scoped, dropped, missing []string
 	seen := map[string]bool{}
 	for _, a := range args {
 		rel, ok := forwardedFile(dir, a)
 		if !ok {
+			p := a
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			_, err := os.Stat(p)
+			if _, takes := c.ScopePath(filepath.ToSlash(filepath.Clean(a))); takes && !strings.HasPrefix(a, "-") && errors.Is(err, os.ErrNotExist) {
+				missing = append(missing, a)
+				continue
+			}
 			scoped = append(scoped, a)
 			continue
 		}
@@ -703,7 +711,16 @@ func scopeForwardedPaths(c spells.Command, dir string, args []string) (scoped, d
 			}
 		}
 	}
-	return scoped, dropped
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("%s: the forwarded path(s) %s name no file under %s: create each one, or drop it from the args",
+			op, strings.Join(missing, " "), dir)
+	}
+	if len(dropped) > 0 {
+		_, stderr := spawn.OutputWriters(ctx)
+		_, _ = fmt.Fprintf(stderr, "%s: takes no operand for the forwarded file(s) %s, so it leaves them out\n",
+			op, strings.Join(dropped, " ")) // best effort: a lost notice changes no result
+	}
+	return scoped, nil
 }
 
 // forwardedFile is arg as a slash-separated path relative to dir when it names

@@ -221,14 +221,9 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintPostconditions is a lint postcondition per project whose lint reads a file the row writes
-// and nothing runs. It only reports, and over the written files alone: a
-// finding elsewhere is not the worker's. See [ranOver] for a soft path.
-//
-// A file the VCS ignores is left out: a write glob also matches installed files nobody
-// wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
-// worker will create is untracked then. The notes say how many files were left out, or that
-// the VCS could not be asked and every file was kept.
+// lintPostconditions lints each unlinted project over the written files present at fork: a
+// path never created would fail the tool. Exit grades the changed files ([ranOver]), so
+// created files still count. A project with none present keeps all.
 func lintPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (postconditions []types.Postcondition, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
@@ -249,10 +244,25 @@ func lintPostconditions(ctx context.Context, root string, row job.Job, ws Worksp
 	if note != "" {
 		notes = append(notes, note)
 	}
+	absent := map[string]bool{}
+	for _, f := range written {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(f))); err != nil || !info.Mode().IsRegular() {
+			absent[f] = true
+		}
+	}
 	for _, g := range lint {
+		in := filesIn(g.Project, written)
+		present := slices.DeleteFunc(slices.Clone(in), func(f string) bool { return absent[path.Join(g.Project, f)] })
+		switch left := len(in) - len(present); {
+		case left > 0 && len(present) == 0:
+			notes = append(notes, fmt.Sprintf("none of the %d file(s) the lint postcondition for %s reads exists yet, so it names every one: drop from the run any the job does not create", len(in), g.Project))
+			present = in
+		case left > 0:
+			notes = append(notes, fmt.Sprintf("left %d written file(s) the tree does not hold yet out of the lint postcondition for %s: exit grades the run over every file the job changed, so name each one it creates", left, g.Project))
+		}
 		postcondition := g.Postcondition
 		postcondition.Check.NoDefaultCharms = true
-		postcondition.Check.Args = goPackageArgs(filesIn(g.Project, written))
+		postcondition.Check.Args = present
 		postconditions = append(postconditions, postcondition)
 	}
 	return postconditions, notes
@@ -293,24 +303,6 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint postcondition", left)
 	}
 	return kept, ""
-}
-
-// goPackageArgs swaps each Go file for its ./dir package, once and in order. A file the
-// worker has not created yet would reach go vet as a bogus package path.
-func goPackageArgs(files []string) []string {
-	var out []string
-	for _, f := range files {
-		if strings.HasSuffix(f, ".go") {
-			f = "./" + path.Dir(f)
-			if f == "./." {
-				f = "."
-			}
-		}
-		if !slices.Contains(out, f) {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // filesIn is the files under project, relative to it. The root project holds every file.

@@ -457,25 +457,34 @@ func (s *runCommandPathScopeSuite) SetupTest() {
 // run runs the op with opts and returns the argv it ran with, or nil when it
 // did not run.
 func (s *runCommandPathScopeSuite) run(opts commandOpts) []string {
+	argv, err := s.runScoped([]string{"./{dir}"}, []string{"**/*.go", "!**/testdata/**"}, opts)
+	s.Require().NoError(err)
+	return argv
+}
+
+// runScoped is run for an op mapping the files pathScopeFiles takes through
+// pathScope, returning its error.
+func (s *runCommandPathScopeSuite) runScoped(pathScope, pathScopeFiles []string, opts commandOpts) ([]string, error) {
 	op := spells.Op{Command: spells.Command{
 		Bin:            "sh",
 		Args:           []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "vet"},
 		TrailingArgs:   []string{"./..."},
-		PathScope:      []string{"./{dir}"},
-		PathScopeFiles: []string{"**/*.go", "!**/testdata/**"},
+		PathScope:      pathScope,
+		PathScopeFiles: pathScopeFiles,
 	}}
 	opts.op = "go-vet"
 	opts.env = map[string]string{"LOGFILE": s.logFile}
 	ctx := std.WithCurrentWorkingDirectory(testContext(), s.dir)
 	ctx = spawn.WithOutputWriters(ctx, io.Discard, &s.stderr)
-	_, err := runCommand(ctx, op, opts)
-	s.Require().NoError(err)
+	if _, err := runCommand(ctx, op, opts); err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(s.logFile); os.IsNotExist(err) {
-		return nil
+		return nil, nil
 	}
 	lines := logLines(s.T(), s.logFile)
 	s.Require().Len(lines, 1)
-	return strings.Fields(lines[0])
+	return strings.Fields(lines[0]), nil
 }
 
 func (s *runCommandPathScopeSuite) TestForwardedFilesBecomeTheirPackagesOnce() {
@@ -496,8 +505,25 @@ func (s *runCommandPathScopeSuite) TestAForwardedPackageAndFlagPassUnchanged() {
 	s.Equal([]string{"vet", "-v", "./pkg"}, s.run(commandOpts{args: []string{"-v", "./pkg"}}))
 }
 
-func (s *runCommandPathScopeSuite) TestAForwardedPathNamingNoFilePassesUnchanged() {
-	s.Equal([]string{"vet", "missing.go"}, s.run(commandOpts{args: []string{"missing.go"}}))
+func (s *runCommandPathScopeSuite) TestAForwardedPathNamingNoFileFailsBeforeTheToolRuns() {
+	_, err := s.runScoped([]string{"./{dir}"}, []string{"**/*.go"}, commandOpts{args: []string{"pkg/a.go", "pkg/digest_open_unix.go"}})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "go-vet: the forwarded path(s) pkg/digest_open_unix.go name no file")
+	s.Contains(err.Error(), "create each one, or drop it from the args")
+	s.NoFileExists(s.logFile, "the tool never sees the path")
+}
+
+func (s *runCommandPathScopeSuite) TestAMissingPathInAnotherLanguageFailsTheSameWay() {
+	_, err := s.runScoped([]string{"{file}"}, []string{"**/*.ts"}, commandOpts{args: []string{"web/app.ts"}})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "web/app.ts name no file")
+	s.NoFileExists(s.logFile)
+}
+
+func (s *runCommandPathScopeSuite) TestAMissingPathTheOpTakesNoOperandForPassesUnchanged() {
+	s.Equal([]string{"vet", "./internal/..."}, s.run(commandOpts{args: []string{"./internal/..."}}), "a package pattern names no file")
 }
 
 func (s *runCommandPathScopeSuite) TestExplicitArgsAreNotScoped() {
