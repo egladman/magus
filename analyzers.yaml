@@ -483,7 +483,7 @@ proofread:
     hack/policy/model-tiers.buzz: {code-comment-budget: 1, code-comment-sentence: 1}
     hack/policy/pr_workflow.buzz: {code-comment-sentence: 1}
     hack/policy/proofread.buzz: {code-comment-budget: 10, code-comment-sentence: 16, comment-caps: 1, doc-path: 8, provenance: 6}
-    hack/policy/pull_requests.buzz: {code-comment-budget: 20, code-comment-sentence: 45, comment-caps: 1, doc-path: 1, provenance: 2}
+    hack/policy/pull_requests.buzz: {code-comment-budget: 19, code-comment-sentence: 37, comment-caps: 1, doc-path: 1, provenance: 2}
     hack/policy/push.buzz: {code-comment-budget: 3, code-comment-sentence: 6}
     hack/policy/repeated_calls.buzz: {comment-caps: 3, doc-path: 1, provenance: 1}
     hack/policy/sealed.buzz: {code-comment-budget: 1, code-comment-sentence: 3}
@@ -2124,7 +2124,7 @@ proofread:
     magusfiles/quality/drift.buzz: {code-comment-budget: 3, code-comment-sentence: 10, comment-caps: 4, comment-history: 2}
     magusfiles/quality/ruledocs.buzz: {code-comment-budget: 2, code-comment-sentence: 9, doc-path: 2}
     magusfiles/quality/run-golangci.buzz: {code-comment-sentence: 1, comment-first-person: 1}
-    magusfiles/release/changelog.buzz: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 2, doc-path: 1}
+    magusfiles/release/changelog.buzz: {code-comment-sentence: 3, comment-caps: 1, doc-path: 1}
     magusfiles/release/commits.buzz: {code-comment-budget: 1, code-comment-sentence: 4}
     magusfiles/release/releases.buzz: {code-comment-budget: 18, code-comment-sentence: 32, comment-caps: 20, doc-path: 1}
     magusfiles/release/toolchain-policy.buzz: {code-comment-budget: 1, code-comment-sentence: 4, comment-caps: 2}
