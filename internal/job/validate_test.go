@@ -1041,3 +1041,54 @@ func (s *acceptValidationSuite) TestAForkResolvesAnUnnamedAcceptToWitnessed() {
 	_, unresolved := s.at(plan.Validation.Problems, "postconditions[0].accept")
 	s.False(unresolved)
 }
+
+type derivedLintSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestDerivedLint(t *testing.T) { suite.Run(t, new(derivedLintSuite)) }
+
+func (s *derivedLintSuite) SetupTest() {
+	s.store, _ = validateWorkspace(s.T())
+	s.store.notices = &bytes.Buffer{}
+	for _, f := range []string{"a.go", "b.go"} {
+		s.Require().NoError(os.WriteFile(filepath.Join(s.store.root, f), nil, 0o644))
+	}
+}
+
+func (s *derivedLintSuite) apply(prev job.Job, merge func(*job.Job)) job.Job {
+	resolved, err := resolveMerge(s.T().Context(), s.store, []job.Job{prev}, prev.ID, merge, nil)
+	s.Require().NoError(err)
+	next := prev.Clone()
+	resolved(&next)
+	return next
+}
+
+func (s *derivedLintSuite) lintArgs(row job.Job) []string {
+	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
+	s.Require().GreaterOrEqual(i, 0, "postconditions: %v", row.Postconditions)
+	s.True(row.Postconditions[i].Derived)
+	return checkIn(s.T(), row.Postconditions[i].Check).Args
+}
+
+func (s *derivedLintSuite) TestWidenedAndReleasedRowsKeepTheLintOnTheirWritePaths() {
+	handWritten := job.Postcondition{ID: "lint-x", Check: fixtureCheck(types.LeaseCheck{Target: "format", Project: "."})}.Resolve()
+	row := s.apply(job.Job{ID: "w"}, func(u *job.Job) {
+		u.Paths.Write, u.Check, u.Postconditions = []string{"a.go"}, forkCheck(), []job.Postcondition{handWritten}
+	})
+	s.Equal([]string{"a.go"}, s.lintArgs(row))
+
+	row = s.apply(row, func(u *job.Job) { u.Paths.Write = []string{"a.go", "b.go"} })
+	s.Equal([]string{"a.go", "b.go"}, s.lintArgs(row), "a widened row lints what it now writes")
+
+	row = s.apply(row, func(u *job.Job) { u.Paths.Write = []string{"b.go"} })
+	s.Equal([]string{"b.go"}, s.lintArgs(row), "a released path leaves the lint")
+
+	ids := make([]string, len(row.Postconditions))
+	for i, g := range row.Postconditions {
+		ids[i] = g.ID
+	}
+	s.Contains(ids, "lint-x", "a hand-written postcondition is never touched")
+	s.Len(row.Postconditions, 2)
+}

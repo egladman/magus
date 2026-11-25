@@ -113,40 +113,50 @@ func unrunGates(root string, row job.Job, projects []*types.Project, regenerated
 	}
 
 	run := runTargets(row, lookup)
+	written := writtenFiles(root, row)
 	var (
-		written   []string
-		walked    bool
 		found     []unrunFound
 		undecided []string
 	)
 	listed := map[string]bool{}
-	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
-		if v.Depth == 0 {
+	for _, start := range requiredCheckStarts(top, projects, written) {
+		_ = types.WalkChain(start, ciTarget, lookup, func(v types.ChainVisit) error {
+			if v.Depth == 0 {
+				return nil
+			}
+			for _, note := range undecidedOwners(projects, v, written) {
+				undecided = appendUnique(undecided, note)
+			}
+			for _, owned := range byOwningProject(projects, v, written) {
+				key := owned.visit.Key()
+				label := fmt.Sprintf("%s:%s", owned.visit.Project.Path, v.Target)
+				if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
+					continue
+				}
+				gate, ok := foundGate(owned, v.Target)
+				if !ok {
+					continue
+				}
+				listed[key] = true
+				found = append(found, gate)
+			}
 			return nil
-		}
-		if !walked {
-			written, walked = writtenFiles(root, row), true
-		}
-		for _, note := range undecidedOwners(projects, v, written) {
-			undecided = appendUnique(undecided, note)
-		}
-		for _, owned := range byOwningProject(projects, v, written) {
-			key := owned.visit.Key()
-			label := fmt.Sprintf("%s:%s", owned.visit.Project.Path, v.Target)
-			if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
-				continue
-			}
-			gate, ok := foundGate(owned, v.Target)
-			if !ok {
-				continue
-			}
-			listed[key] = true
-			found = append(found, gate)
-		}
-		return nil
-	})
+		})
+	}
 
 	return offeredGates(found, row, lookup, grade), undecided
+}
+
+// requiredCheckStarts is the root project, then each other project owning a written
+// file, once each. CI runs the ci chain of every affected project, not the root's alone.
+func requiredCheckStarts(top *types.Project, projects []*types.Project, written []string) []*types.Project {
+	starts := []*types.Project{top}
+	for _, file := range written {
+		if owner := owningProject(projects, file); owner != nil && !slices.Contains(starts, owner) {
+			starts = append(starts, owner)
+		}
+	}
+	return starts
 }
 
 // foundGate is the gate owned comes to when target reads one of its files.

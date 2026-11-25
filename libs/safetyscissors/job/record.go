@@ -511,13 +511,14 @@ type postconditionRecord struct {
 	Signature   string   `json:"signature,omitempty"`
 	// Accept is written by every build since [AcceptWitnessedMigration], which wrote it
 	// onto each check postcondition stored before it, so a reader never defaults it.
-	Accept []string `json:"accept,omitempty"`
+	Accept  []string `json:"accept,omitempty"`
+	Derived bool     `json:"derived,omitzero"`
 }
 
 func recordPostcondition(g Postcondition) postconditionRecord {
 	r := postconditionRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
 		Kind: string(g.Kind), Expect: string(g.Expect), Check: g.Check,
-		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
+		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature, Derived: g.Derived}
 	for _, b := range g.Accept {
 		r.Accept = append(r.Accept, string(b))
 	}
@@ -527,7 +528,7 @@ func recordPostcondition(g Postcondition) postconditionRecord {
 func (r postconditionRecord) postcondition(bad *wireReads) Postcondition {
 	g := Postcondition{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
 		Kind: wirePostconditionKind().read(r.Kind, bad), Expect: wirePostconditionExpect().read(r.Expect, bad), Check: r.Check,
-		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
+		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature, Derived: r.Derived}
 	bases := wireBasis()
 	for _, w := range r.Accept {
 		g.Accept = append(g.Accept, bases.read(w, bad))

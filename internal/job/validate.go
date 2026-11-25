@@ -261,6 +261,7 @@ func lintPostconditions(ctx context.Context, root string, row job.Job, ws Worksp
 			notes = append(notes, fmt.Sprintf("left %d written file(s) the tree does not hold yet out of the lint postcondition for %s: exit grades the run over every file the job changed, so name each one it creates", left, g.Project))
 		}
 		postcondition := g.Postcondition
+		postcondition.Derived = true
 		postcondition.Check.NoDefaultCharms = true
 		postcondition.Check.Args = present
 		postconditions = append(postconditions, postcondition)

@@ -4970,6 +4970,12 @@ func decodePostcondition(v vm.Value, path string) (types.Postcondition, error) {
 				}
 				out.Postcondition.Accept = itemsAccept
 			}
+		case "derived":
+			bDerived, err := decodeBool(item, path+".derived")
+			if err != nil {
+				return out, err
+			}
+			out.Postcondition.Derived = bDerived
 		default:
 			return out, unknownMember(path, "Postcondition", key)
 		}

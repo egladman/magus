@@ -353,3 +353,44 @@ func TestRenderUnrunGatesCapsTheListAndPrintsThePostconditions(t *testing.T) {
 	renderUnrunGates(&buf, nil)
 	assert.Empty(t, buf.String(), "nothing to say prints no heading")
 }
+
+type ownerChainSuite struct {
+	suite.Suite
+}
+
+func TestOwnerChainSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(ownerChainSuite))
+}
+
+// ownerChainWorkspace is a root whose ci chain never composes console's own lint.
+func ownerChainWorkspace() []*types.Project {
+	return []*types.Project{
+		{
+			Path:         ".",
+			Sources:      types.MustParseGlobs("**/*.go"),
+			TargetChains: map[string][]types.ChainStep{"ci": {{Target: "lint"}}},
+		},
+		{
+			Path:         "console",
+			Sources:      types.MustParseGlobs("**/*.css"),
+			TargetChains: map[string][]types.ChainStep{"ci": {{Target: "lint"}}},
+		},
+	}
+}
+
+func (s *ownerChainSuite) TestOwnerCiChainListsItsLint() {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"console/src/app.css"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
+
+	got := UnrunGates(s.T().TempDir(), row, ownerChainWorkspace(), nil, nil)
+
+	s.Equal([]string{"console:lint"}, gateTargets(got))
+}
+
+func (s *ownerChainSuite) TestRootAndOwnerChainsListEachRequiredCheckOnce() {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"console/src/app.css", "internal/job/gates.go"}}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
+
+	got := UnrunGates(s.T().TempDir(), row, ownerChainWorkspace(), nil, nil)
+
+	s.Equal([]string{".:lint", "console:lint"}, gateTargets(got))
+}

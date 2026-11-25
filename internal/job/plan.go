@@ -546,6 +546,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 		probe = prev.Clone()
 	}
 	merge(&probe)
+	probe.Postconditions = slices.DeleteFunc(slices.Clone(probe.Postconditions), func(g job.Postcondition) bool { return g.Derived })
 	keepFrozenSignatures(&probe, prev)
 	resolved, derived, err := ResolveSymbolPostconditions(ctx, probe, read)
 	if err != nil {

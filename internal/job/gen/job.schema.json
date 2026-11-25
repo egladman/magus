@@ -351,6 +351,9 @@
               "enum": ["witnessed", "attested", "reported"]
             },
             "description": "Accept are the bases a run of a PostconditionKindCheck postcondition's check may rest on (see [Store.Grade]). A check postcondition names at least one: [Postcondition.Resolve] fills none in, so one accepting nothing is a fault, never a postcondition that takes the strongest or the weakest. Zero on every other kind."
+          },
+          "derived": {
+            "type": "boolean"
           }
         }
       },

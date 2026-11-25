@@ -46,7 +46,8 @@ type Postcondition struct {
 	// [Store.Grade]). A check postcondition names at least one: [Postcondition.Resolve] fills none in, so
 	// one accepting nothing is a fault, never a postcondition that takes the strongest or the
 	// weakest. Zero on every other kind.
-	Accept []Basis `json:"accept,omitempty" yaml:"accept,omitempty"`
+	Accept  []Basis `json:"accept,omitempty" yaml:"accept,omitempty"`
+	Derived bool    `json:"derived,omitzero" yaml:"derived,omitempty"`
 }
 
 // Resolve fills a postcondition's kind and expectation from what it declared, so every stored postcondition
