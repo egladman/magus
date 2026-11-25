@@ -17,6 +17,7 @@ import "assert";
 import "result";
 import "path";
 import "encoding/json";
+import "encoding/yaml";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/commits" as subjects;
@@ -1751,8 +1752,124 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
     return decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
 }
 
+final ciWorkflowPath = ".github/workflows/ci.yaml";
+
+// readCiWorkflow reads ci.yaml from the guard's working directory.
+fun readCiWorkflow() > result\Result::<str> {
+    try {
+        return result\ok::<str>(fs\readFile(ciWorkflowPath));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "read {ciWorkflowPath}");
+    }
+}
+
+// ciBranches are the patterns ci.yaml limits pull requests to: none when it limits none.
+fun ciBranches(text: str) > result\Result::<[str]> {
+    try {
+        final doc: {str: any} = yaml\parse(text);
+        final triggers: {str: any} = doc["on"];
+        if (!triggers.hasKey("pull_request")) {
+            return result\fail::<[str]>("it has no pull_request trigger");
+        }
+        final trigger: {str: any} = triggers["pull_request"] ?? {<str: any>};
+        final patterns = mut [<str>];
+        final listed = trigger["branches"];
+        if (listed == null) {
+            return result\ok::<[str]>(patterns);
+        }
+        final names: [any] = if (listed is str) [listed] else listed;
+        foreach (name in names) {
+            patterns.append("{name}");
+        }
+        return result\ok::<[str]>(patterns);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "read on.pull_request of {ciWorkflowPath}");
+    }
+}
+
+// globAt matches s from si against glob from pi: `*` stops at a slash, `**` does not.
+fun globAt(glob: str, pi: int, s: str, si: int) > bool {
+    if (pi == glob.len()) {
+        return si == s.len();
+    }
+    final c = glob.sub(pi, len: 1);
+    if (c == "*") {
+        final deep = pi + 1 < glob.len() and glob.sub(pi + 1, len: 1) == "*";
+        final next = if (deep) pi + 2 else pi + 1;
+        var k = si;
+        while (true) {
+            if (globAt(glob, pi: next, s: s, si: k)) {
+                return true;
+            }
+            if (k == s.len() or (!deep and s.sub(k, len: 1) == "/")) {
+                return false;
+            }
+            k += 1;
+        }
+    }
+    if (si == s.len()) {
+        return false;
+    }
+    final at = s.sub(si, len: 1);
+    if (c == "?") {
+        return at != "/" and globAt(glob, pi: pi + 1, s: s, si: si + 1);
+    }
+    return c == at and globAt(glob, pi: pi + 1, s: s, si: si + 1);
+}
+
+// branchRuns is whether patterns, a `!` pattern removing what an earlier one added, admit base.
+fun branchRuns(patterns: [str], base: str) > bool {
+    var runs = false;
+    foreach (pattern in patterns) {
+        if (pattern.startsWith("!")) {
+            if (globAt(pattern.sub(1), pi: 0, s: base, si: 0)) {
+                runs = false;
+            }
+        } else if (globAt(pattern, pi: 0, s: base, si: 0)) {
+            runs = true;
+        }
+    }
+    return runs;
+}
+
+// decideBase denies a `gh pr create` or `gh pr edit` whose base ci.yaml never runs on, since
+// GitHub shows no pending check there. A draft passes; so does a workflow with no branches
+// filter. A workflow that cannot be read fails closed.
+export fun decideBase(programs: [helpers\Program], workflow: fun () > result\Result::<str>) > GuardVerdict {
+    foreach (p in programs) {
+        final c = matchCommand(p);
+        if (c == null or p.name != "gh" or c!.command[0] != "pr" or c!.base.len() == 0
+            or (c!.command[1] != "create" and c!.command[1] != "edit")) {
+            continue;
+        }
+        final base = last(flagValues(p.args, flags: c!.base)) ?? "";
+        if (base == "" or helpers\hasFlag(p.args, long: "--draft") or p.args.indexOf("-d") != null) {
+            continue;
+        }
+        final read = workflow();
+        final patterns = if (read.error == null) ciBranches(read.value!) else read;
+        if (patterns.error != null) {
+            return magus\guard.deny("{ciWorkflowPath} could not be read, so base {base} is unchecked\n"
+                + "{patterns.error!.message}\n"
+                + "Fix the file, or open the pull request as a draft: `gh pr create --draft --base {base}`.",
+                opts: {"rule": "pr-base-has-no-ci"});
+        }
+        if (patterns.value!.len() > 0 and !branchRuns(patterns.value!, base: base)) {
+            return magus\guard.deny("pull request base {base} gets no CI: {ciWorkflowPath} runs on pull requests into {patterns.value!.join(", ")} only.\n"
+                + "Open it against main once the base merges, or add the branch to on.pull_request.branches. "
+                + "To open it anyway as a draft: `gh pr create --draft --base {base}`",
+                opts: {"rule": "pr-base-has-no-ci"});
+        }
+    }
+    return magus\guard.defer();
+}
+
 // decideCiting is decidePullRequest with the check on cited output refs chosen by the caller.
-fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
+fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation, workflow: fun () > result\Result::<str> = readCiWorkflow) > GuardVerdict {
+    final noCi = decideBase(programs, workflow: workflow);
+    if (noCi.decision == magus\GuardDecision.deny) {
+        return noCi;
+    }
     final problems = mut [<str>];
     final advice = mut [<str>];
     final denied = mut [<str>];
@@ -1901,7 +2018,52 @@ fun decided(programs: [helpers\Program], line: str, files: {str: str}, diff: fun
 // decidedCiting is decideCiting with every denial held to the verdict shape.
 fun decidedCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
     final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
-    return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited), label: label);
+    return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited,
+        workflow: noFilter), label: label);
+}
+
+fun noFilter() > result\Result::<str> {
+    return result\ok::<str>("on:\n  pull_request:\n");
+}
+
+fun mainOnly() > result\Result::<str> {
+    return result\ok::<str>("on:\n  pull_request:\n    branches: [main, 'release/**']\n");
+}
+
+fun asked(argv: [str], workflow: fun () > result\Result::<str>) > GuardVerdict {
+    return verdict\checked(decideBase(helpers\request([argv]), workflow: workflow), label: argv.join(" "));
+}
+
+test "a base the workflow's branches do not match is denied, naming the workflow" {
+    final v = asked(["gh", "pr", "create", "--base", "topic", "--title", "t"], workflow: mainOnly);
+    std\assert(v.decision == magus\GuardDecision.deny and v.rule == "pr-base-has-no-ci", message: v.reason);
+    std\assert(v.reason.indexOf(ciWorkflowPath) != null, message: v.reason);
+    final edit = asked(["gh", "pr", "edit", "3", "-B", "topic"], workflow: mainOnly);
+    std\assert(edit.decision == magus\GuardDecision.deny, message: "edit");
+}
+
+test "a matching base, a draft, or a workflow with no filter passes" {
+    foreach (argv in [
+        ["gh", "pr", "create", "--base", "main"],
+        ["gh", "pr", "create", "--base", "release/1.2"],
+        ["gh", "pr", "create", "--draft", "--base", "topic"],
+        ["gh", "pr", "create", "--base", "topic", "-d"],
+        ["gh", "pr", "create", "--title", "t"],
+    ]) {
+        std\assert(asked(argv, workflow: mainOnly).decision == magus\GuardDecision.defer, message: argv.join(" "));
+    }
+    std\assert(asked(["gh", "pr", "create", "--base", "topic"], workflow: noFilter).decision == magus\GuardDecision.defer,
+        message: "no filter");
+}
+
+test "a workflow that cannot be read fails closed" {
+    final gone = fun () > result\Result::<str> { return result\fail::<str>("no such file"); };
+    final broken = fun () > result\Result::<str> { return result\ok::<str>("on: [\n"); };
+    foreach (reader in [gone, broken]) {
+        final v = asked(["gh", "pr", "create", "--base", "main"], workflow: reader);
+        std\assert(v.decision == magus\GuardDecision.deny and v.rule == "pr-base-has-no-ci", message: v.reason);
+        std\assert(v.reason.indexOf("could not be read") != null, message: v.reason);
+    }
 }
 
 final goodTitle = "fix(guard): keep the key stable";
@@ -2029,7 +2191,7 @@ fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) 
 
 fun citing(body: str, cited: fun (ref: str) > Citation) > GuardVerdict {
     return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(readable()),
-        judge: passing(), once: helpers\counter(), cited: cited);
+        judge: passing(), once: helpers\counter(), cited: cited, workflow: noFilter);
 }
 
 test "a cited ref this checkout does not hold is denied" {
@@ -2092,7 +2254,7 @@ test "a review reply is not held to the runs it cites" {
     final asked = mut [<str>];
     final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: passing(), once: helpers\counter(),
-        cited: holding({<str: magus\OutputRecord>}, asked: asked));
+        cited: holding({<str: magus\OutputRecord>}, asked: asked), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.defer and asked.len() == 0, message: "{v.reason} {asked}");
 }
 

@@ -640,6 +640,43 @@ test "pagesIn keeps every page with no files and only the named ones with some" 
     assert\equal(pagesIn(["a.md", "b.md"], files: ["b.md", "c.go"]).join(","), "b.md", "a named file that is no page is skipped");
 }
 
+// unmatchedFiles names each of files that is no page, since a run that judged nothing
+// would pass. A workspace-relative name is shown project-relative, the form the run takes.
+fun unmatchedFiles(pages: [str], files: [str], root: str, docs: str) > [str] {
+    final found = mut [<str>];
+    foreach (f in files) {
+        if (pages.indexOf(f) != null) {
+            continue;
+        }
+        final prefix = docs + "/";
+        if (f.startsWith(prefix) and (fs\exists(root + "/" + f) catch false)) {
+            final cut = f.sub(prefix.len());
+            found.append("conventions: {cut} names no page under {docs}, so nothing was checked.\n"
+                + "Paths are relative to the project: `magus run lint {docs} -- {cut}`");
+        } else if (fs\exists(root + "/" + docs + "/" + f) catch false) {
+            found.append("conventions: {f} is no page the check reads under {docs}, so nothing was checked.");
+        } else {
+            found.append("conventions: {f} names no file under {docs}, so nothing was checked.");
+        }
+    }
+    return found;
+}
+
+test "a named file that matched no page fails, shown project-relative" {
+    final repo = fs\tempDir("magus-conventions-");
+    fs\mkdirAll(repo + "/docs/guides");
+    fs\writeFile(repo + "/docs/guides/a.md", "Plain.\n");
+    final workspaceForm = unmatchedFiles(["guides/a.md"], files: ["docs/guides/a.md"], root: repo, docs: "docs");
+    final missing = unmatchedFiles(["guides/a.md"], files: ["guides/zz.md"], root: repo, docs: "docs");
+    final matched = unmatchedFiles(["guides/a.md"], files: ["guides/a.md"], root: repo, docs: "docs");
+    fs\removeAll(repo);
+    assert\equal(workspaceForm.len(), 1, "one finding");
+    assert\equal(workspaceForm[0].indexOf("guides/a.md names no page") != null, true, workspaceForm[0]);
+    assert\equal(workspaceForm[0].indexOf("docs/guides/a.md names") == null, true, "the prefix is cut");
+    assert\equal(missing[0].indexOf("names no file") != null, true, missing[0]);
+    assert\equal(matched.len(), 0, "a page matches");
+}
+
 // pathExists is the one filesystem question the conventions lint asks.
 fun pathExists(p: str) > result\Result::<bool> {
     try {
@@ -671,6 +708,10 @@ export fun conventionsCheck(root: str, docs: str, files: [str]) > result\Result:
     try {
         final r4 = conventionPages(root + "/" + docs);
         if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final unmatched = unmatchedFiles(r4.value!, files: files, root: root, docs: docs);
+        if (unmatched.len() > 0) {
+            return result\fail::<bool>(unmatched.join("\n"));
+        }
         final sorted = pagesIn(r4.value!, files: files).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
         final violations: mut [str] = mut [<str>];
