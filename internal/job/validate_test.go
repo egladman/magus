@@ -569,7 +569,7 @@ func TestResolveMergeAddsALintPostconditionAndSaysSo(t *testing.T) {
 	i := slices.IndexFunc(row.Postconditions, func(g job.Postcondition) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "postconditions: %v", row.Postconditions)
 	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
-		Args: []string{"cli/registry.go", "docs/notes.md"}}, checkIn(t, row.Postconditions[i].Check), "lint is scoped to the written files, sorted")
+		Args: []string{"./cli", "docs/notes.md"}}, checkIn(t, row.Postconditions[i].Check), "lint is scoped to the written files, Go sources as their package, sorted")
 	assert.Contains(t, note, `added the postcondition "lint" (2 files)`)
 
 	row, note = resolve(func(u *job.Job) {

@@ -252,7 +252,7 @@ func lintPostconditions(ctx context.Context, root string, row job.Job, ws Worksp
 	for _, g := range lint {
 		postcondition := g.Postcondition
 		postcondition.Check.NoDefaultCharms = true
-		postcondition.Check.Args = filesIn(g.Project, written)
+		postcondition.Check.Args = goPackageArgs(filesIn(g.Project, written))
 		postconditions = append(postconditions, postcondition)
 	}
 	return postconditions, notes
@@ -293,6 +293,24 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint postcondition", left)
 	}
 	return kept, ""
+}
+
+// goPackageArgs swaps each Go file for its ./dir package, once and in order. A file the
+// worker has not created yet would reach go vet as a bogus package path.
+func goPackageArgs(files []string) []string {
+	var out []string
+	for _, f := range files {
+		if strings.HasSuffix(f, ".go") {
+			f = "./" + path.Dir(f)
+			if f == "./." {
+				f = "."
+			}
+		}
+		if !slices.Contains(out, f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // filesIn is the files under project, relative to it. The root project holds every file.

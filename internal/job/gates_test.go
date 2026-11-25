@@ -353,3 +353,44 @@ func TestRenderUnrunGatesCapsTheListAndPrintsThePostconditions(t *testing.T) {
 	renderUnrunGates(&buf, nil)
 	assert.Empty(t, buf.String(), "nothing to say prints no heading")
 }
+
+type lintPostconditionArgsSuite struct {
+	suite.Suite
+}
+
+func TestLintPostconditionArgs(t *testing.T) { suite.Run(t, new(lintPostconditionArgsSuite)) }
+
+func (s *lintPostconditionArgsSuite) args(project string, write ...string) []string {
+	lintable := func(path string) *types.Project {
+		return &types.Project{
+			Path:             path,
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"ci", "lint", "go-test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "lint"}}},
+		}
+	}
+	projects := []*types.Project{lintable("."), lintable("libs/safetyscissors")}
+	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
+	got, _ := lintPostconditions(s.T().Context(), s.T().TempDir(), row, Workspace{Projects: projects}, nil)
+	for _, p := range got {
+		if p.Check.Project == project {
+			return p.Check.Args
+		}
+	}
+	s.FailNow("no lint postcondition for " + project)
+	return nil
+}
+
+func (s *lintPostconditionArgsSuite) TestAWritePathAbsentFromTheTreeForwardsItsPackageDir() {
+	s.Equal([]string{"./job"}, s.args("libs/safetyscissors", "libs/safetyscissors/job/digest_open_unix.go"))
+}
+
+func (s *lintPostconditionArgsSuite) TestFilesOfOnePackageForwardItOnce() {
+	got := s.args("libs/safetyscissors", "libs/safetyscissors/job/b.go", "libs/safetyscissors/job/a.go", "libs/safetyscissors/store/c.go")
+
+	s.Equal([]string{"./job", "./store"}, got)
+}
+
+func (s *lintPostconditionArgsSuite) TestARootFileForwardsItsPackageDir() {
+	s.Equal([]string{"./internal/job"}, s.args(".", "internal/job/a.go"))
+}
