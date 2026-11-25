@@ -1016,14 +1016,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	current := g.Output()
-	// @vcs enrichment (opt-in) stamps commit-varying attrs on file nodes. They are not
-	// domain shape, and the base side never has them (a --rev export tree has no history,
-	// and an exported baseline predates the current commit), so keeping them would report
-	// nearly every file node as changed. Strip them from both sides for a structural diff.
-	knowledge.StripVCSAttrs(&baseline)
-	knowledge.StripVCSAttrs(&current)
-	diff := knowledge.DiffGraphs(baseLabel, baseline, current)
+	diff := knowledge.DiffGraphs(baseLabel, baseline, g.Output())
 
 	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
