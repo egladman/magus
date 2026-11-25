@@ -145,7 +145,11 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
         if (p.name == "gh") {
             final head = prHead(p.args, current: current);
             if (head != null) {
-                pushes.append(Push{ tool = "gh", remote = "origin", name = head! });
+                var source = "";
+                if (helpers\flagValue(p.args, long: "--head", short: "-H") != null) {
+                    source = "origin/" + head!;
+                }
+                pushes.append(Push{ tool = "gh", remote = "origin", name = head!, source = source });
             }
             continue;
         }
@@ -823,6 +827,9 @@ fun rename(p: Push, name: str, current: str) > str {
     final pushed = shellWord(p.name);
     final remote = shellWord(p.remote);
     var local = "";
+    if (p.tool == "gh" and p.source != "") {
+        return "  git branch -m {pushed} {served}\n  git push -u {remote} {served}\n  then open the pull request with --head {served}";
+    }
     if (p.tool == "git" or p.tool == "gh") {
         // First: `gh pr create --head` reads the local branch of that name.
         if (current != "" and current != name) {
@@ -878,7 +885,10 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
             continue;
         }
-        final read = topic(p.source);
+        var read = topic(p.source);
+        if (!read.known and p.tool == "gh" and p.source != "") {
+            read = topic(p.name);
+        }
         var verdict = judgeName(p.name, topic: read);
         if (p.generated) {
             verdict = Verdict{
@@ -1115,10 +1125,53 @@ test "the served name's pull request opens from a local branch renamed first" {
     final pr = helpers\request([["gh", "pr", "create", "--head", "feat/practical-gates-e9x4tl", "--fill"]]);
     final v = decideNames(pr, current: "feat/practical-gates-e9x4tl", remote: remote([<str>]), topic: practical, once: helpers\counter());
     final renamed = v.reason.indexOf("git branch -m feat/practical-gates-e9x4tl comparison-practical-gates");
-    final pushed = v.reason.indexOf("git push -u origin HEAD:comparison-practical-gates");
+    final pushed = v.reason.indexOf("git push -u origin comparison-practical-gates");
     final opened = v.reason.indexOf("--head comparison-practical-gates");
     std\assert(renamed != null and pushed != null and opened != null, message: "names all three: {v.reason}");
     std\assert(renamed! < pushed! and pushed! < opened!, message: "gh reads the local branch --head names: {v.reason}");
+}
+
+test "gh pr create --head or -H judges that branch, not the checkout's" {
+    foreach (flag in ["--head", "-H"]) {
+        final asked = mut [<str>];
+        final topic = fun (source: str) > Topic {
+            asked.append(source);
+            return readTopic(practicalPaths);
+        };
+        final pr = helpers\request([["gh", "pr", "create", "--base", "main", flag, "feat/practical-gates-e9x4tl", "--fill"]]);
+        final v = decideNames(pr, current: "diagnostics-from-footguns", remote: remote([<str>]), topic: topic, once: helpers\counter());
+        std\assert(asked.join(",") == "origin/feat/practical-gates-e9x4tl", message: "{flag} reads the remote-tracking head: {asked}");
+        std\assert(v.reason.indexOf("git branch -m feat/practical-gates-e9x4tl comparison-practical-gates") != null, message: "{flag} renames the head: {v.reason}");
+        std\assert(v.reason.indexOf("diagnostics-from-footguns") == null, message: "{flag} never names the checkout's branch: {v.reason}");
+        std\assert(v.reason.indexOf("git push -u origin comparison-practical-gates") != null, message: "{flag} pushes the renamed head: {v.reason}");
+    }
+}
+
+test "gh pr create --head falls back to the local branch when origin lacks it" {
+    final asked = mut [<str>];
+    final topic = fun (source: str) > Topic {
+        asked.append(source);
+        if (source.startsWith("origin/")) {
+            return unknownTopic();
+        }
+        return readTopic(practicalPaths);
+    };
+    final pr = helpers\request([["gh", "pr", "create", "--head", "owner:feat/practical-gates-e9x4tl", "--fill"]]);
+    final v = decideNames(pr, current: "x", remote: remote([<str>]), topic: topic, once: helpers\counter());
+    std\assert(asked.join(",") == "origin/feat/practical-gates-e9x4tl,feat/practical-gates-e9x4tl", message: "{asked}");
+    std\assert(v.reason.indexOf("comparison-practical-gates") != null, message: v.reason);
+}
+
+test "gh pr create with no head judges the checkout's branch" {
+    final asked = mut [<str>];
+    final topic = fun (source: str) > Topic {
+        asked.append(source);
+        return readTopic(practicalPaths);
+    };
+    final pr = helpers\request([["gh", "pr", "create", "--fill"]]);
+    final v = decideNames(pr, current: "feat/practical-gates-e9x4tl", remote: remote([<str>]), topic: topic, once: helpers\counter());
+    std\assert(asked.join(",") == "", message: "the checkout's own diff is read: {asked}");
+    std\assert(v.reason.indexOf("git branch -m feat/practical-gates-e9x4tl comparison-practical-gates") != null, message: v.reason);
 }
 
 test "a good name, the base branch and a version pass" {

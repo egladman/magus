@@ -437,10 +437,16 @@ export object Facts {
     changed: [str] = [<str>],
     added: [str] = [<str>],
     texts: {str: str} = {<str: str>},
+    why: str = "",
 }
 
 export fun unknownFacts() > Facts {
     return Facts{ known = false, fragments = 0, shipped = 0, lines = 0 };
+}
+
+// unreadableFacts is unknownFacts that says why, and what to run.
+export fun unreadableFacts(why: str) > Facts {
+    return Facts{ known = false, fragments = 0, shipped = 0, lines = 0, why = why };
 }
 
 // generated reports a path a generator writes, which proves nothing about what changed:
@@ -723,14 +729,14 @@ export object PullRef {
 // counts the lines head carries past ref (head "" is the checkout's own branch). A base the
 // command names wins over the pull request's. A read that fails or finds nothing is
 // unknown, which textProblems denies.
-export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?, fragmentText: fun (head: str, path: str) > str?) > fun (head: str, base: str, number: str) > Facts {
+export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?, explain: fun (head: str, ref: str) > str, fragmentText: fun (head: str, path: str) > str?) > fun (head: str, base: str, number: str) > Facts {
     return fun (head: str, base: str, number: str) > Facts {
         var rev = head;
         var name = base;
         if (number != "") {
             final pull = view(number);
             if (pull == null) {
-                return unknownFacts();
+                return unreadableFacts("`gh pr view {number}` could not read that pull request: check the number and `gh auth status`, then retry");
             }
             rev = pull!.head;
             if (name == "") {
@@ -746,9 +752,16 @@ export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: 
         }
         final stats = stat(rev, ref);
         if (stats == null) {
-            return unknownFacts();
+            return unreadableFacts(explain(rev, ref));
         }
         final facts = statFacts(stats!);
+        if (!facts.known) {
+            var whose = "the checkout's branch";
+            if (rev != "") {
+                whose = "`{rev}`";
+            }
+            return unreadableFacts("{whose} carries no changes past `{ref}`: commit them first, and push the head if it is not the checkout's branch");
+        }
         final texts = mut {<str: str>};
         foreach (added in facts.added) {
             final text = fragmentText(rev, path: added);
@@ -784,24 +797,119 @@ export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: 
         if (head == "") {
             return vcs\diffStat(ref, dir: workspace) catch null;
         }
-        final run = vcs\cmd(["diff", "--numstat", "--no-renames", "{ref}...{head}"],
-            opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
-        if (run == null or run!.code != 0) {
+        final tip = headRev(workspace, head: head);
+        final base = baseRev(workspace, ref: ref);
+        if (tip == null or base == null) {
             return null;
         }
-        return parseNumstat(run!.stdout);
+        final fork = gitText(workspace, args: ["merge-base", base!, tip!]);
+        if (fork == null) {
+            return null;
+        }
+        final counted = gitText(workspace, args: ["diff", "--numstat", "--no-renames", "--no-textconv", fork!, tip!, "--"]);
+        if (counted == null) {
+            return null;
+        }
+        return parseNumstat(counted!);
     };
     final fragmentText = fun (head: str, path: str) > str? {
         if (head == "") {
             return fs\readFile("{workspace}/{path}") catch null;
         }
-        final run = vcs\cmd(["show", "{head}:{path}"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+        final tip = headRev(workspace, head: head);
+        if (tip == null) {
+            return null;
+        }
+        final run = vcs\cmd(["show", "{tip!}:{path}"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
         if (run == null or run!.code != 0) {
             return null;
         }
         return run!.stdout;
     };
-    return diffReader(workspace, view: view, stat: stat, fragmentText: fragmentText);
+    final explain = fun (head: str, ref: str) > str {
+        return explainUnreadable(workspace, head: head, ref: ref);
+    };
+    return diffReader(workspace, view: view, stat: stat, explain: explain, fragmentText: fragmentText);
+}
+
+final hexRev = $"^[0-9a-f]{7,40}$";
+
+fun gitText(workspace: str, args: [str]) > str? {
+    final run = vcs\cmd(args, opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+    if (run == null or run!.code != 0) {
+        return null;
+    }
+    return run!.stdout.trim();
+}
+
+fun revOf(workspace: str, names: [str]) > str? {
+    foreach (name in names) {
+        final found = gitText(workspace, args: ["rev-parse", "--verify", "--quiet", name]);
+        if (found != null and found! != "") {
+            return found!;
+        }
+    }
+    return null;
+}
+
+fun headName(head: str) > str {
+    final parts = head.split(":");
+    return parts[parts.len() - 1];
+}
+
+// headRev is the commit a pull request's head names: `origin/<head>`, then the local
+// branch, then a bare sha. An `owner:` prefix is dropped. The checkout's HEAD is never a
+// candidate.
+export fun headRev(workspace: str, head: str) > str? {
+    final name = headName(head);
+    final names = mut ["refs/remotes/origin/" + name, "refs/heads/" + name];
+    if (hexRev.match(head) != null) {
+        names.append(head);
+    }
+    return revOf(workspace, names: names);
+}
+
+fun baseRev(workspace: str, ref: str) > str? {
+    final names = mut ["refs/remotes/" + ref];
+    if (ref.startsWith("origin/")) {
+        names.append("refs/heads/" + ref.sub(7));
+    }
+    names.append(ref);
+    return revOf(workspace, names: names);
+}
+
+// explainUnreadable names the read of a head's diff that failed, and the command to run.
+// It is "" for the checkout's own branch.
+fun explainUnreadable(workspace: str, head: str, ref: str) > str {
+    if (head == "") {
+        return "";
+    }
+    final name = headName(head);
+    final tip = headRev(workspace, head: head);
+    if (tip == null) {
+        return "the head `{name}` is neither `origin/{name}` nor a local branch in this checkout: run "
+            + "`git fetch origin {name}`, or `git push -u origin {name}` if it was never pushed, then retry";
+    }
+    final base = baseRev(workspace, ref: ref);
+    if (base == null) {
+        var bare = ref;
+        if (ref.startsWith("origin/")) {
+            bare = ref.sub(7);
+        }
+        return "the base `{ref}` is not in this checkout: run `git fetch origin {bare}`, then retry";
+    }
+    if (gitText(workspace, args: ["merge-base", base!, tip!]) == null) {
+        if (gitText(workspace, args: ["rev-parse", "--is-shallow-repository"]) == "true") {
+            return "this clone is shallow, so `{ref}` and `{name}` share no history it holds: run `git fetch --unshallow origin`, then retry";
+        }
+        return "`{ref}` and `{name}` share no history: open the pull request from a branch cut from `{ref}`";
+    }
+    final run = vcs\cmd(["diff", "--numstat", base!, tip!, "--"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+    var detail = "git could not run";
+    if (run != null) {
+        detail = run!.stderr.trim();
+    }
+    return "git could not count the lines of `{name}` against `{ref}` ({detail}): run `git diff --stat {ref}...{name}` to see the error";
 }
 
 // parseNumstat reads `git diff --numstat` rows: added, deleted and path, where a binary
@@ -1550,7 +1658,11 @@ fun editedPull(p: helpers\Program, c: TextCommand) > str {
 
 // unreadableDiff is the denial for a description whose diff cannot be read, naming the
 // fetch that brings the base in.
-fun unreadableDiff(base: str) > str {
+fun unreadableDiff(base: str, why: str) > str {
+    if (why != "") {
+        return "the diff of this pull request cannot be read, so its changelog, word budget and areas cannot be "
+            + "checked: {why}";
+    }
     var name = base;
     if (name == "") {
         name = "main";
@@ -1623,7 +1735,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         final base = last(flagValues(p.args, flags: c.base)) ?? "";
         read = diff(last(flagValues(p.args, flags: c.head)) ?? "", base: base, number: editedPull(p, c: c));
         if (!read.known) {
-            return Findings{ denies = [unreadableDiff(base)], advice = [<str>] };
+            return Findings{ denies = [unreadableDiff(base, why: read.why)], advice = [<str>] };
         }
         changelog = changelogProblems(title!, facts: read);
     }
@@ -2657,6 +2769,10 @@ test "the diff is read once per description, for the head and base the call name
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
     _ = decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[1] == "other||", message: "another branch is read by name: {reads}");
+    final short = helpers\request([["gh", "pr", "create", "-H", "other", "--title", goodTitle, "--body", sized(100)]]);
+    _ = decided(short, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    std\assert(reads[2] == "other||", message: "-H names the head too: {reads}");
+    reads.remove(2);
     final edit = helpers\request([["gh", "pr", "edit", "412", "--title", goodTitle, "--body", "Pins the key."]]);
     _ = decided(edit, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[2] == "||412", message: "an edit names its pull request: {reads}");
@@ -2664,7 +2780,11 @@ test "the diff is read once per description, for the head and base the call name
     std\assert(reads.len() == 3, message: "a reply reads no diff");
 }
 
-final featTitle = "feat(cache): hash the key in sorted order";
+fun noReason(head: str, ref: str) > str {
+    return "";
+}
+
+final featTitle ="feat(cache): hash the key in sorted order";
 
 // shippedDiff is the diff of a feature that changes one shipped path, with the fragments'
 // paths gained lines.
@@ -2728,23 +2848,23 @@ test "gh pr edit <n> reads its head and base from gh and counts the lines betwee
         asked.append("{head}:{path}");
         return "### Fixed\n\n- **Key order.** Hashes the key in sorted order.\n";
     };
-    final read = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "", number: "12");
+    final read = diffReader(".", view: view, stat: stat, explain: noReason, fragmentText:text)("", base: "", number: "12");
     std\assert(asked.join(",") == "12,0123abc...origin/release,0123abc:changes/unreleased/key.md", message: "asked {asked}");
     std\assert(read.texts.size() == 1 and (read.texts["changes/unreleased/key.md"] ?? "").startsWith("### Fixed"), message: "the added fragment is read at the pull request's head: {read.texts}");
     std\assert(read.known and read.shipped == 1 and read.fragments == 1 and read.lines == 16, message: "counts {read}");
     std\assert(read.paths.join(",") == "internal/cache/key.go,changes/unreleased/key.md", message: "paths {read.paths}");
     std\assert(read.changed.len() == 3 and read.added.join(",") == "changes/unreleased/key.md", message: "changed {read.changed}, added {read.added}");
 
-    _ = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "main", number: "12");
+    _ = diffReader(".", view: view, stat: stat, explain: noReason, fragmentText:text)("", base: "main", number: "12");
     std\assert(asked[asked.len() - 2] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
     final unseen = fun (number: str) > PullRef? {
         return null;
     };
-    std\assert(!diffReader(".", view: unseen, stat: stat, fragmentText: text)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
+    std\assert(!diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:text)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
     final unstat = fun (head: str, ref: str) > [FileStat]? {
         return null;
     };
-    std\assert(!diffReader(".", view: view, stat: unstat, fragmentText: text)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
+    std\assert(!diffReader(".", view: view, stat: unstat, explain: noReason, fragmentText:text)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
 }
 
 test "a fragment added on a head is linted from that head, not from the session's checkout" {
@@ -2760,15 +2880,15 @@ test "a fragment added on a head is linted from that head, not from the session'
         }
         return null;
     };
-    final read = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("topic", base: "main", number: "");
+    final read = diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:onHead)("topic", base: "main", number: "");
     std\assert(changelogProblems(featTitle, facts: read).len() == 0, message: "a well-formed fragment on the head passes though this checkout lacks it");
-    final missing = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("gone", base: "main", number: "");
+    final missing = diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:onHead)("gone", base: "main", number: "");
     final got = changelogProblems(featTitle, facts: missing);
     std\assert(got.len() == 1 and got[0].indexOf("changes/unreleased/elsewhere-only.md: cannot be read at the head") != null, message: got.join(","));
     final bad = fun (head: str, path: str) > str? {
         return "not a fragment\n";
     };
-    final malformed = changelogProblems(featTitle, facts: diffReader(".", view: unseen, stat: stat, fragmentText: bad)("topic", base: "main", number: ""));
+    final malformed = changelogProblems(featTitle, facts: diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:bad)("topic", base: "main", number: ""));
     std\assert(malformed.len() == 1 and malformed[0].indexOf("malformed changelog fragment(s)") != null, message: malformed.join(","));
 }
 
@@ -3675,4 +3795,75 @@ test "a session holding no job, a forge without a verb, and other commands pass"
     final none = fun (argv: [str]) > {str: str}? => null;
     std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.defer, message: "no verb");
     std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.defer, message: "an edit opens none");
+}
+
+fun mustGit(dir: str, args: [str]) > void {
+    final step = seedGit(dir, args: args);
+    std\assert(step.error == null, message: step.error?.message ?? "");
+}
+
+fun deletionRepo() > str {
+    final ws = fs\tempDir("head-diff") catch "";
+    std\assert(ws != "", message: "a temp dir");
+    mustGit(ws, args: ["init", "-q"]);
+    mustGit(ws, args: ["symbolic-ref", "HEAD", "refs/heads/main"]);
+    fs\mkdirAll("{ws}/internal/old") catch void;
+    foreach (i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) {
+        fs\writeFile("{ws}/internal/old/f{i}.go", content: "package old\n\nvar F{i} = {i}\n") catch void;
+    }
+    mustGit(ws, args: ["add", "."]);
+    mustGit(ws, args: ["commit", "-q", "-m", "seed"]);
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    mustGit(ws, args: ["checkout", "-q", "-b", "topic"]);
+    mustGit(ws, args: ["rm", "-q", "-r", "internal/old"]);
+    fs\mkdirAll("{ws}/changes/unreleased") catch void;
+    fs\writeFile("{ws}/changes/unreleased/gone.md", content: "### Removed\n\n- **Old.** Drops it.\n") catch void;
+    mustGit(ws, args: ["add", "."]);
+    mustGit(ws, args: ["commit", "-q", "-m", "drop old"]);
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/topic", "HEAD"]);
+    mustGit(ws, args: ["checkout", "-q", "-b", "elsewhere", "main"]);
+    return ws;
+}
+
+test "a head whose diff is mostly deletions is read from another checkout's HEAD, by --head or -H" {
+    final ws = deletionRepo();
+    final read = pullRequestDiff(ws);
+    foreach (head in ["topic", "owner:topic"]) {
+        final facts = read(head, base: "main", number: "");
+        std\assert(facts.known, message: "{head}: {facts.why}");
+        std\assert(facts.changed.len() == 21 and facts.added.join(",") == "changes/unreleased/gone.md", message: "{head}: {facts.changed.len()} paths, added {facts.added}");
+        std\assert(facts.texts.size() == 1, message: "{head}: the fragment is read at the head");
+    }
+    fs\removeAll(ws) catch void;
+}
+
+test "a head only a local branch holds is read, and origin wins when both exist" {
+    final ws = deletionRepo();
+    mustGit(ws, args: ["update-ref", "-d", "refs/remotes/origin/topic"]);
+    std\assert(pullRequestDiff(ws)("topic", base: "main", number: "").known, message: "the local branch stands in");
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/topic", "main"]);
+    std\assert(!pullRequestDiff(ws)("topic", base: "main", number: "").known, message: "origin/topic is the head, and it carries nothing past main");
+    fs\removeAll(ws) catch void;
+}
+
+test "no head reads the checkout's own branch" {
+    final ws = deletionRepo();
+    mustGit(ws, args: ["checkout", "-q", "topic"]);
+    final facts = pullRequestDiff(ws)("", base: "main", number: "");
+    std\assert(facts.known and facts.changed.len() == 21, message: "{facts.why}");
+    fs\removeAll(ws) catch void;
+}
+
+test "a diff that cannot be read says why and the command that fixes it" {
+    final ws = deletionRepo();
+    final missing = pullRequestDiff(ws)("nope", base: "main", number: "");
+    std\assert(!missing.known and missing.why.indexOf("`git fetch origin nope`") != null, message: missing.why);
+    mustGit(ws, args: ["update-ref", "-d", "refs/remotes/origin/main"]);
+    mustGit(ws, args: ["branch", "-D", "main"]);
+    final nobase = pullRequestDiff(ws)("topic", base: "main", number: "");
+    std\assert(!nobase.known and nobase.why.indexOf("`git fetch origin main`") != null, message: nobase.why);
+    final line = helpers\request([["gh", "pr", "create", "--head", "nope", "--base", "main", "--title", goodTitle, "--body", sized(100)]]);
+    final unreadable = decided(line, line: "", files: {<str: str>}, diff: pullRequestDiff(ws), judge: passing(), once: helpers\counter());
+    std\assert(unreadable.decision == magus\GuardDecision.deny and unreadable.reason.indexOf("`git fetch origin nope`") != null, message: unreadable.reason);
+    fs\removeAll(ws) catch void;
 }
