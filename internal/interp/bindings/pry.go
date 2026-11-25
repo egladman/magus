@@ -31,7 +31,7 @@ func buildBuzzPry(sess *buzz.Session, parseMode bool) vm.Callable {
 
 		resume, err := interp.Pry(ctx, esess, buzzPryContext(esess), opts)
 		if err != nil {
-			warnPry(ctx, err)
+			slog.WarnContext(ctx, "", attr.Notice("magus.pry"), attr.Error(err))
 			return vm.Null, nil
 		}
 		if resume == interp.ResumeContinue {
@@ -40,11 +40,6 @@ func buildBuzzPry(sess *buzz.Session, parseMode bool) vm.Callable {
 		buzzInstallStepHook(ctx, esess, resume, opts)
 		return vm.Null, nil
 	}
-}
-
-// warnPry reports a REPL that failed to open or run; the script carries on without it.
-func warnPry(ctx context.Context, err error) {
-	slog.WarnContext(ctx, "", attr.Notice("magus.pry"), attr.Error(err))
 }
 
 // buzzPryContext builds the REPL's PryContext from the session's current call
@@ -102,7 +97,7 @@ func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume inter
 		stepper.SetStepHook(0, nil)
 		next, err := interp.Pry(ctx, esess, buzzPryContext(esess), opts)
 		if err != nil {
-			warnPry(ctx, err)
+			slog.WarnContext(ctx, "", attr.Notice("magus.pry"), attr.Error(err))
 			return
 		}
 		if next == interp.ResumeContinue {

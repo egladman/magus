@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/internal/recorder"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,7 +198,7 @@ func TestCLIMintsAreAudited(t *testing.T) {
 		assert.Equal(t, journal.CallKindTokenLifecycle, e.Kind)
 		assert.Contains(t, e.Preview, minted.ID)
 		assert.Contains(t, e.Preview, minted.Grant.String())
-		blob, err := loggedPayload(base, e.Request.Ref)
+		blob, err := recorder.ReadCallPayload(base, journal.Payload{Ref: e.Request.Ref})
 		require.NoError(t, err)
 		for _, s := range []string{secret, code} {
 			assert.NotContains(t, string(blob), s)

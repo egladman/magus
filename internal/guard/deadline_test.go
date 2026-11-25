@@ -774,7 +774,8 @@ func BenchmarkInertCallLoadsNoRules(b *testing.B) {
 	testkit.Isolate(b)
 	repo := testkit.NewRepository(b, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": inertBenchRules})
 	root := repo.Root()
-	for _, f := range testToolFiles() {
+	for _, f := range append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Tools: testToolRows}, nil),
+		types.AgentFile{Path: testToolsDir + "/" + types.ToolHostFile, Content: testToolHost + "\n"}) {
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
 			b.Fatal(err)
 		}

@@ -1025,13 +1025,6 @@ func forkLimitProblems(rows []job.Job, id, parent string, limits config.Jobs) ty
 	return ps
 }
 
-// namesExistingSymbol reports whether a symbol postcondition of expect grades a symbol that exists
-// when the job is declared: one a job is to create (present) is the exception, and a name
-// that resolves to nothing under any other expectation is a typo that grades vacuously.
-func namesExistingSymbol(expect job.PostconditionExpect) bool {
-	return slices.Contains([]job.PostconditionExpect{job.ExpectChanged, job.ExpectAbsent, job.ExpectUnreferenced}, expect)
-}
-
 // ambiguousSymbolProblems finds each symbol a postcondition names whose bare name resolves to more
 // than one definition, or a `<package>.<Name>` that resolves to none when the postcondition grades an
 // existing symbol, as JobPostconditionInvalid, naming each. A name the reader cannot answer for is no
@@ -1050,7 +1043,7 @@ func ambiguousSymbolProblems(ctx context.Context, postconditions []job.Postcondi
 				continue
 			}
 			fact, ok := read(ctx, name, "")
-			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && namesExistingSymbol(postcondition.Resolve().Expect) {
+			if _, _, qualified := packageQualified(name); qualified && ok && len(fact.DefinedIn) == 0 && slices.Contains([]job.PostconditionExpect{job.ExpectChanged, job.ExpectAbsent, job.ExpectUnreferenced}, postcondition.Resolve().Expect) {
 				ps = append(ps, types.JobProblem{
 					Code: types.JobPostconditionInvalid, Field: fmt.Sprintf("postconditions[%d].symbols[%d]", i, j),
 					Message: fmt.Sprintf("postcondition %q expects %q to be %s, and the graph resolves it to no definition, so it would grade a name nothing defines",

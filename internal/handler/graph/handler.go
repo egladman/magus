@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"log/slog"
 	"net/http"
 
@@ -130,5 +131,15 @@ func (h *GraphHandler) body(ctx context.Context, flavor, level, sel string) ([]b
 	if err != nil {
 		return nil, err
 	}
-	return snakeJSON.Marshal(graphToProto(g))
+	return snakeJSON.Marshal(&graphv1.Graph{
+		Definition: g.Definition,
+		ApiVersion: string(g.APIVersion),
+		Directed:   g.Directed,
+		Multigraph: g.Multigraph,
+		NodeCount:  int32(g.NodeCount),
+		EdgeCount:  int32(g.EdgeCount),
+		SourceBase: g.SourceBaseURL,
+		Nodes:      nodesToProto(g.Nodes),
+		Links:      edgesToProto(g.Links),
+	})
 }

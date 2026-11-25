@@ -64,11 +64,6 @@ func forkOverrun(ctx context.Context, root string, row jobtypes.Job) (*job.Foreg
 	return job.CheckOverrun(ctx, m.Root(), row, hostForegroundMax(ctx, m)), nil
 }
 
-// collectNotes is row's notes over the already loaded workspace m.
-func collectNotes(ctx context.Context, m *magus.Magus, row jobtypes.Job) job.RowNotes {
-	return job.RowNotesWith(ctx, m.Root(), m.All(), row, hostForegroundMax(ctx, m), m.CheckGrader())
-}
-
 // hostForegroundMax is the shortest foreground maximum among the harnesses m wires. The
 // harness spells load on the first call and are kept for the rest, so a check with no
 // recorded run costs none of it.

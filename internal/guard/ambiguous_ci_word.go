@@ -179,8 +179,3 @@ func hostCIPath(p string) bool {
 		strings.Contains(slash, ".circleci/") ||
 		strings.Contains(slash, "azure-pipelines")
 }
-
-// writeAssumesCIWord reports a write path that picks the host's CI/CD.
-func writeAssumesCIWord(path string) bool {
-	return hostCIPath(path)
-}

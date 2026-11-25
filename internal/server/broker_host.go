@@ -159,7 +159,7 @@ func ServeBroker(ctx context.Context, o BrokerRun) error {
 		broker.WithLogger(slog.Default()),
 		broker.WithVersion(o.Version),
 		broker.WithDrain(drain, o.Config.ShutdownGrace),
-		broker.WithCrashDir(crashReportDir()),
+		broker.WithCrashDir(StateLogPath("crashes")),
 		broker.WithAdmissionLog(file.Log[budget.Admission]{Path: AdmissionLogPath(), Keep: admissionsKeep}),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
@@ -287,9 +287,6 @@ const admissionsKeep = 5000
 
 // LogPath is BrokerLogPath's counterpart for a server `server start` detached.
 func LogPath() string { return StateLogPath("server.log") }
-
-// crashReportDir is where the broker saves the crash report of a process it watched.
-func crashReportDir() string { return StateLogPath("crashes") }
 
 func StateLogPath(name string) string {
 	dir, err := xdg.StateDir()

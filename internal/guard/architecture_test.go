@@ -274,7 +274,8 @@ func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
 	report := filepath.Join(t.TempDir(), "scratchpad", "report.md")
-	assert.Equal(t, []string{string(verdict.Defer), ""}, decisionAndRule(s.write("", report)), "a scratchpad report is outside the workspace")
+	scratchpad := s.write("", report)
+	assert.Equal(t, []string{string(verdict.Defer), ""}, []string{string(scratchpad.Decision), scratchpad.Rule}, "a scratchpad report is outside the workspace")
 	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write inside the workspace still waits on the load")
 
 	scout := func(path string) verdict.Judgment {
@@ -294,10 +295,6 @@ func TestDeletingDeclarationsIsNotArchitecture(t *testing.T) {
 	assert.False(t, removesOnly(writeFields{Edits: []textEdit{{OldText: "var a = 1\n"}, {OldText: "x", NewText: "y"}}}), "one edit adds text")
 	assert.False(t, removesOnly(writeFields{Content: "package x\n"}), "a whole-file write adds content")
 	assert.False(t, removesOnly(writeFields{}), "an empty write removes nothing")
-}
-
-func decisionAndRule(v verdict.Judgment) []string {
-	return []string{string(v.Decision), v.Rule}
 }
 
 func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {

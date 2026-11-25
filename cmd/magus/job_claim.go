@@ -18,20 +18,15 @@ func jobClaimEnv() job.ClaimEnv {
 		Config:    globalCfg,
 		Workspace: jobWorkspace,
 		Callers: func(ctx context.Context, root, name string) ([]jobtypes.ClaimRequest, error) {
-			return evidence.ExpandCallers(ctx, root, name, jobCallersEnv())
+			return evidence.ExpandCallers(ctx, root, name, evidence.CallersEnv{
+				Config:           globalCfg,
+				OpenWorkspace:    openWorkspaceForRead,
+				RefsGraph:        loadRefsGraph,
+				PickSymbol:       knowledge.PickSymbol,
+				RenameBlindSpots: edit.RenameBlindSpots,
+				SymbolCoverage:   symbolCoverage,
+			})
 		},
-	}
-}
-
-// jobCallersEnv is what expanding a callers claim asks of the command line.
-func jobCallersEnv() evidence.CallersEnv {
-	return evidence.CallersEnv{
-		Config:           globalCfg,
-		OpenWorkspace:    openWorkspaceForRead,
-		RefsGraph:        loadRefsGraph,
-		PickSymbol:       knowledge.PickSymbol,
-		RenameBlindSpots: edit.RenameBlindSpots,
-		SymbolCoverage:   symbolCoverage,
 	}
 }
 

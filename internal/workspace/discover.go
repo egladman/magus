@@ -199,7 +199,7 @@ func collectFile(abs, rel string, globs []string) (spells.DiscoveryFile, bool, e
 		}
 		if matchFromAnyDir(g, rel) {
 			matched = true
-			marker = marker || !hasGlobMeta(path.Base(g))
+			marker = marker || !strings.ContainsAny(path.Base(g), `*?[{\`)
 		}
 	}
 	for _, g := range globs {
@@ -234,8 +234,6 @@ func matchFromAnyDir(glob, rel string) bool {
 		suffix = rest
 	}
 }
-
-func hasGlobMeta(s string) bool { return strings.ContainsAny(s, `*?[{\`) }
 
 // mergeDiscovery validates each answer against its spell, merges the claims per
 // directory, and renders each project's magusfile. magusfileDirs are the directories

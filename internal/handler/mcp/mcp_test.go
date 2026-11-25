@@ -243,7 +243,11 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	failure := errors.New("[MGS3016] workspace /repo failed to load")
 	opts := Options{Unavailable: func() error { return failure }}
 	require.NoError(t, opts.validate(), "Unavailable stands in for Magus")
-	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Client { return origin.Client{} }, "", newTaskRuns())
+	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Client { return origin.Client{} }, "", &taskRuns{
+		byRequest: map[context.Context]*taskRun{},
+		byParams:  map[*mcplib.TaskParams]*taskRun{},
+		byID:      map[string]*taskRun{},
+	})
 
 	tools := srv.ListTools()
 	require.Len(t, tools, len(Registry))

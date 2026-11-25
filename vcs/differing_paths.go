@@ -36,7 +36,7 @@ func DifferingPaths(ctx context.Context, r contentReader, dir, a, b string, path
 	readEach := err != nil
 	var out []string
 	for _, changed := range paths {
-		p := cleanPath(changed)
+		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
 		if !readEach {
 			if slices.Contains(differ, p) {
 				out = append(out, p)
@@ -123,13 +123,9 @@ func pathsAmong(changed, paths []string) []string {
 	}
 	var out []string
 	for _, p := range paths {
-		if p = cleanPath(p); differ[p] {
+		if p = path.Clean(filepath.ToSlash(strings.TrimSpace(p))); differ[p] {
 			out = append(out, p)
 		}
 	}
 	return out
-}
-
-func cleanPath(p string) string {
-	return path.Clean(filepath.ToSlash(strings.TrimSpace(p)))
 }

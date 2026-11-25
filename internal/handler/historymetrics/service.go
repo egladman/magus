@@ -38,40 +38,54 @@ func (s *service) GetHistoryMetrics(ctx context.Context, _ *connect.Request[hmv1
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(boardToProto(board)), nil
-}
-
-func boardToProto(b console.Board) *hmv1.GetHistoryMetricsResponse {
-	return &hmv1.GetHistoryMetricsResponse{
+	return connect.NewResponse(&hmv1.GetHistoryMetricsResponse{
 		Hotspots: &hmv1.Hotspots{
-			Definition: b.Hotspots.Definition,
-			Commits:    int32(b.Hotspots.Commits),
-			Since:      b.Hotspots.Since,
-			Nodes:      mapSlice(b.Hotspots.Nodes, nodeToProto),
-			Files:      mapSlice(b.Hotspots.Files, fileHotspotToProto),
+			Definition: board.Hotspots.Definition,
+			Commits:    int32(board.Hotspots.Commits),
+			Since:      board.Hotspots.Since,
+			Nodes:      mapSlice(board.Hotspots.Nodes, nodeToProto),
+			Files: mapSlice(board.Hotspots.Files, func(f types.FileHotspot) *hmv1.FileHotspot {
+				return &hmv1.FileHotspot{
+					Path: f.Path, Commits: int32(f.Commits), Complexity: int32(f.Complexity),
+					Score: int32(f.Score), Authors: int32(f.Authors),
+					LastCommitTime: tsFromTime(f.LastCommit), Moves: int32(f.Moves),
+				}
+			}),
 		},
 		Affinity: &hmv1.Affinity{
-			Definition: b.Affinity.Definition,
-			Commits:    int32(b.Affinity.Commits),
-			Since:      b.Affinity.Since,
-			Pairs:      mapSlice(b.Affinity.Pairs, coChangeToProto),
+			Definition: board.Affinity.Definition,
+			Commits:    int32(board.Affinity.Commits),
+			Since:      board.Affinity.Since,
+			Pairs: mapSlice(board.Affinity.Pairs, func(c types.CoChange) *hmv1.CoChange {
+				return &hmv1.CoChange{A: c.A, AName: c.AName, B: c.B, BName: c.BName, Count: int32(c.Count), Hidden: c.Hidden}
+			}),
 		},
 		Ownership: &hmv1.Ownership{
-			Definition: b.Ownership.Definition,
-			Commits:    int32(b.Ownership.Commits),
-			Since:      b.Ownership.Since,
-			Projects:   mapSlice(b.Ownership.Projects, ownershipToProto),
+			Definition: board.Ownership.Definition,
+			Commits:    int32(board.Ownership.Commits),
+			Since:      board.Ownership.Since,
+			Projects: mapSlice(board.Ownership.Projects, func(o types.OwnershipEntry) *hmv1.OwnershipEntry {
+				return &hmv1.OwnershipEntry{
+					Path: o.Path, Name: o.Name, Commits: int32(o.Commits), Authors: int32(o.Authors),
+					Primary: o.Primary, PrimaryShare: int32(o.PrimaryShare), BusFactor_1: o.BusFactor1,
+					Stale: o.Stale, LastCommitTime: tsFromTime(o.LastCommit),
+				}
+			}),
 		},
 		Trend: &hmv1.Trend{
-			Definition: b.Trend.Definition,
-			Commits:    int32(b.Trend.Commits),
-			Since:      b.Trend.Since,
-			Projects:   mapSlice(b.Trend.Projects, trendToProto),
+			Definition: board.Trend.Definition,
+			Commits:    int32(board.Trend.Commits),
+			Since:      board.Trend.Since,
+			Projects: mapSlice(board.Trend.Projects, func(t types.TrendEntry) *hmv1.TrendEntry {
+				return &hmv1.TrendEntry{
+					Path: t.Path, Name: t.Name, Recent: int32(t.Recent), Earlier: int32(t.Earlier), Delta: int32(t.Delta),
+				}
+			}),
 		},
-		Volatility:  volatilityToProto(b.Volatility),
-		ModelTiers:  modelTiersToProto(b.ModelTiers),
-		Conformance: conformanceToProto(b.Conformance),
-	}
+		Volatility:  volatilityToProto(board.Volatility),
+		ModelTiers:  modelTiersToProto(board.ModelTiers),
+		Conformance: conformanceToProto(board.Conformance),
+	}), nil
 }
 
 func conformanceToProto(o *types.Conformance) *hmv1.Conformance {
@@ -87,24 +101,22 @@ func conformanceToProto(o *types.Conformance) *hmv1.Conformance {
 					Population: string(r.Key.Population),
 					Scope:      r.Key.Scope,
 				},
-				N:          int32(r.N),
-				P50:        int32(r.P50),
-				P90:        int32(r.P90),
-				P95:        int32(r.P95),
-				P99:        int32(r.P99),
-				Live:       int32(r.Live),
-				Value:      int32(r.Value),
-				Propose:    int32(r.Propose),
-				Violations: mapSlice(r.Violations, conformanceItemToProto),
+				N:       int32(r.N),
+				P50:     int32(r.P50),
+				P90:     int32(r.P90),
+				P95:     int32(r.P95),
+				P99:     int32(r.P99),
+				Live:    int32(r.Live),
+				Value:   int32(r.Value),
+				Propose: int32(r.Propose),
+				Violations: mapSlice(r.Violations, func(i types.ConformanceItem) *hmv1.ConformanceItem {
+					return &hmv1.ConformanceItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
+				}),
 			}
 		}),
 		Excluded: int32(o.Excluded),
 		Answer:   answerToProto(o.Answer),
 	}
-}
-
-func conformanceItemToProto(i types.ConformanceItem) *hmv1.ConformanceItem {
-	return &hmv1.ConformanceItem{Id: i.ID, Source: i.Source, Measure: int32(i.Measure)}
 }
 
 func answerToProto(a types.KnowledgeAnswer) *graphv1.Answer {
@@ -163,32 +175,6 @@ func nodeToProto(n types.Node) *hmv1.ProjectNode {
 		p.LastCommitTime = tsFromTime(*n.LastCommit)
 	}
 	return p
-}
-
-func fileHotspotToProto(f types.FileHotspot) *hmv1.FileHotspot {
-	return &hmv1.FileHotspot{
-		Path: f.Path, Commits: int32(f.Commits), Complexity: int32(f.Complexity),
-		Score: int32(f.Score), Authors: int32(f.Authors),
-		LastCommitTime: tsFromTime(f.LastCommit), Moves: int32(f.Moves),
-	}
-}
-
-func coChangeToProto(c types.CoChange) *hmv1.CoChange {
-	return &hmv1.CoChange{A: c.A, AName: c.AName, B: c.B, BName: c.BName, Count: int32(c.Count), Hidden: c.Hidden}
-}
-
-func ownershipToProto(o types.OwnershipEntry) *hmv1.OwnershipEntry {
-	return &hmv1.OwnershipEntry{
-		Path: o.Path, Name: o.Name, Commits: int32(o.Commits), Authors: int32(o.Authors),
-		Primary: o.Primary, PrimaryShare: int32(o.PrimaryShare), BusFactor_1: o.BusFactor1,
-		Stale: o.Stale, LastCommitTime: tsFromTime(o.LastCommit),
-	}
-}
-
-func trendToProto(t types.TrendEntry) *hmv1.TrendEntry {
-	return &hmv1.TrendEntry{
-		Path: t.Path, Name: t.Name, Recent: int32(t.Recent), Earlier: int32(t.Earlier), Delta: int32(t.Delta),
-	}
 }
 
 func volatilityToProto(r *types.Volatility) *hmv1.Volatility {

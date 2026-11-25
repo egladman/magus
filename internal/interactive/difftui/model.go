@@ -819,10 +819,6 @@ func commentRows(t diff.ReviewComment, file, hunk int, lead string, head bool) [
 	return out
 }
 
-func isDel(line string) bool { return strings.HasPrefix(line, "-") }
-
-func isAdd(line string) bool { return strings.HasPrefix(line, "+") }
-
 func (m *Model) fileLine(i int) string {
 	f := &m.files[i]
 	n := len(f.Hunks)

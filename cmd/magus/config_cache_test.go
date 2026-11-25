@@ -68,7 +68,11 @@ func (s *ConfigCacheImportRecordSuite) TestAMissRestoresNothing() {
 }
 
 func (s *ConfigCacheImportRecordSuite) TestAnInactiveBackendRestoresNothing() {
-	row := newSpellCacheRow(magus.SpellCache{Spell: "go", Inactive: true})
+	sc := magus.SpellCache{Spell: "go", Inactive: true}
+	row := cache.SpellRow{
+		Spell: sc.Spell, Outcome: cache.RestoreOutcome(sc.Inactive, sc.Key), Key: sc.Key, Exact: sc.Exact, Files: sc.Files, Bytes: sc.Bytes,
+		Transferred: sc.Transferred, Skipped: sc.Skipped, Refused: sc.Refused, Dirs: sc.Dirs,
+	}
 	s.Equal(cache.SpellOutcome("inactive"), row.Outcome)
 }
 

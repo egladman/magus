@@ -4,11 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
-	"github.com/egladman/magus/types"
 )
 
 // parseMergeable reports false for a value outside the provider contract,
@@ -43,10 +41,6 @@ func parseReview(s string) (pullsv1.Review, bool) {
 	}
 }
 
-func failedJob(c types.ForgeCheck) *pullsv1.FailedJob {
-	return &pullsv1.FailedJob{Name: c.Name, Url: c.URL, Lines: c.Lines, OutputRef: c.OutputRef}
-}
-
 // parseTime returns the zero time for an instant the forge did not send.
 func parseTime(s string) time.Time {
 	t, err := time.Parse(time.RFC3339, s)
@@ -62,8 +56,6 @@ func toTimestamp(t time.Time) *timestamppb.Timestamp {
 	}
 	return timestamppb.New(t)
 }
-
-func toDuration(d time.Duration) *durationpb.Duration { return durationpb.New(d) }
 
 // formatDuration drops the zero units: 1m, not 1m0s.
 func formatDuration(d time.Duration) string {

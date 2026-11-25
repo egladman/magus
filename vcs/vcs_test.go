@@ -138,7 +138,7 @@ func TestResolveBuiltinBaseRefs(t *testing.T) {
 		t.Setenv("MAGUS_VCS_ENABLED", "")
 		t.Setenv("MAGUS_VCS_BASE_REF", "")
 		t.Setenv("MAGUS_VCS_NAME", name)
-		t.Setenv(perVCSEnv(name, "BASE_REF"), "")
+		t.Setenv(fmt.Sprintf("MAGUS_VCS_%s_%s", strings.ToUpper(name), "BASE_REF"), "")
 		res, err := Resolve(context.Background(), t.TempDir(), "", types.VCSOptions{})
 		require.NoError(t, err)
 		assert.Equal(t, want, res.Base)
@@ -759,7 +759,7 @@ func parityBackends() []parityBackend {
 		{"git", "git", gitVCS{}, gitInitRepository, gitReadback, gitListPreserved, true, true},
 		{"hg", "hg", hgVCS{}, hgInitRepository, hgReadback, hgListPreserved, true, true},
 		{"sl", "sl", saplingVCS{}, slInitRepository, slReadback, slListPreserved, true, false},
-		{"jj", "jj", jjVCS{}, jjInitRepository, jjReadback, mintsNothing, false, false},
+		{"jj", "jj", jjVCS{}, jjInitRepository, jjReadback, func(*testing.T, string) []string { return nil }, false, false},
 	}
 }
 
@@ -1793,11 +1793,6 @@ func slListPreserved(t *testing.T, dir string) []string {
 	}
 	return nodes
 }
-
-// mintsNothing is jj's store of magus-minted state, empty by construction: jj has already
-// snapshotted the working copy, so its Preserve reads a commit id and writes nothing. Named
-// rather than inlined so the claim is legible beside the three backends that do mint.
-func mintsNothing(*testing.T, string) []string { return nil }
 
 // The other half of Preserve's contract: a handle has a LIFETIME, and what ends it is magus
 // deleting its own object and nothing else.

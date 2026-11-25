@@ -12,8 +12,6 @@ import (
 
 func run(r journal.Run) journal.Record { return journal.NewRecord(time.Now(), "inv1", r) }
 
-func output(o journal.Output) journal.Record { return journal.NewRecord(time.Now(), "inv1", o) }
-
 func TestResultRefsLine(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -38,7 +36,7 @@ func TestResultRefsLine(t *testing.T) {
 		{
 			"events that are not results or carry no ref are skipped",
 			[]journal.Record{
-				output(journal.Output{Text: "out333333333333"}),
+				journal.NewRecord(time.Now(), "inv1", journal.Output{Text: "out333333333333"}),
 				run(journal.Run{}),
 			},
 			"",
@@ -88,7 +86,7 @@ func (s *ResultStatusesSuite) TestLeavesOutADependencysResult() {
 }
 
 func (s *ResultStatusesSuite) TestSkipsEventsThatAreNotResults() {
-	statuses := s.record("ci", output(journal.Output{Project: "proto", Target: "ci"}))
+	statuses := s.record("ci", journal.NewRecord(time.Now(), "inv1", journal.Output{Project: "proto", Target: "ci"}))
 	s.Empty(statuses.Of("proto"))
 }
 

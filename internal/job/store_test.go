@@ -40,14 +40,8 @@ import (
 // fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tempLocation(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: allowEveryCheck, Skew: sameContract}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}, Grader: func(context.Context, string, job.Job) CheckVerdict { return CheckVerdict{} }, Skew: func(string) error { return nil }}
 }
-
-// sameContract is a Location.Skew that judges every binary built from root's contract.
-func sameContract(string) error { return nil }
-
-// allowEveryCheck is a grader whose guard lets every check run.
-func allowEveryCheck(context.Context, string, job.Job) CheckVerdict { return CheckVerdict{} }
 
 // boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
 func boundStore(loc Location, id string) *Store {
@@ -1303,7 +1297,7 @@ func TestStoreFoldsTheDenialsFromTheHoldersCheckout(t *testing.T) {
 
 	holder, holderTrail := t.TempDir(), t.TempDir()
 	deny := func(base, rule string) {
-		recorder.AppendAgentCommand(withSecrets(t.Context()), base, recorder.AgentCommand{
+		recorder.AppendAgentCommand(testkit.WithEnvResolver(t.Context()), base, recorder.AgentCommand{
 			Host: "claude-code", Session: "s1", Tool: "file.write", Path: "docs/x.md",
 			Decision: "deny", Reason: "docs/x.md is no lease's", Rule: rule, Lease: "a",
 		})

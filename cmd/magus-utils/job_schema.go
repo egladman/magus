@@ -465,25 +465,18 @@ func namedType(pkg, name string, omitempty bool, marker string, d *goDecls, vers
 		if len(required) > 0 {
 			shape = append(shape, member{"required", required})
 		}
-		return append(shape, member{"properties", props}, member{"oneOf", leaseCheckChoice()}), nil
+		return append(shape, member{"properties", props}, member{"oneOf", []node{
+			{{"required", []string{"target"}}, {"properties", node{
+				{"target", node{{"minLength", 1}}},
+				{"script", node{{"maxLength", 0}}},
+			}}},
+			{{"required", []string{"script"}}, {"properties", node{
+				{"script", node{{"minLength", 1}}},
+				{"target", node{{"maxLength", 0}}},
+			}}},
+		}}), nil
 	}
 	return append(shape, member{"required", required}, member{"properties", props}), nil
-}
-
-// leaseCheckChoice is the either-or Declaration.Problems enforces on a check: a target
-// and no script, or a script and no target. "No" is absent or empty, because a Go-encoded
-// script check carries an empty target.
-func leaseCheckChoice() []node {
-	return []node{
-		{{"required", []string{"target"}}, {"properties", node{
-			{"target", node{{"minLength", 1}}},
-			{"script", node{{"maxLength", 0}}},
-		}}},
-		{{"required", []string{"script"}}, {"properties", node{
-			{"script", node{{"minLength", 1}}},
-			{"target", node{{"maxLength", 0}}},
-		}}},
-	}
 }
 
 // goDecls is what the sources declare: every struct, keyed by package name and struct name, the first paragraph of every type

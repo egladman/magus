@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/termkit"
 	"io"
 	"os"
 	"path/filepath"
@@ -754,7 +755,7 @@ func TestShortenPathKeepsTheIdentifyingTail(t *testing.T) {
 // call site.
 func TestReplFooterIsInertOffATTY(t *testing.T) {
 	var buf bytes.Buffer // a plain buffer has no Fd, so Region reports disabled
-	f := newReplFooter(&buf)
+	f := &replFooter{lease: termkit.ResolveZone(&buf).Acquire(stickyFooterRows)}
 	f.paint(replState("buzz", "/w", 1, true))
 	f.release()
 	assert.Empty(t, buf.String(), "a non-TTY REPL emits nothing extra")

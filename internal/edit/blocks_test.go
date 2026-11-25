@@ -17,10 +17,8 @@ func TestEditBlocks(t *testing.T) {
 	suite.Run(t, new(BlocksSuite))
 }
 
-func doc(lines ...string) []byte { return []byte(strings.Join(lines, "\n") + "\n") }
-
 func (s *BlocksSuite) parse(lines ...string) types.EditDocument {
-	return ParseBlocks("edits.md", doc(lines...))
+	return ParseBlocks("edits.md", []byte(strings.Join(lines, "\n")+"\n"))
 }
 
 func (s *BlocksSuite) refusal(line int, reason string) types.EditDocument {
@@ -206,13 +204,13 @@ func (s *BlocksSuite) TestARefusalVoidsEveryChange() {
 
 func (s *BlocksSuite) TestADocumentPlansAndApplies() {
 	root := writeFiles(s.T(), map[string]string{"a.go": "package a\n\nfunc f() { g(); g() }\n"})
-	parsed := ParseBlocks("edits.md", doc(
+	parsed := ParseBlocks("edits.md", []byte(strings.Join([]string{
 		"## a.go",
 		"```old all", "g()", "```",
 		"```new", "h()", "```",
 		"## b/b.go",
 		"```create", "package b", "```",
-	))
+	}, "\n")+"\n"))
 	s.Require().Empty(parsed.Refused)
 
 	x := Expand(s.T().Context(), root, parsed.Changes, nil)

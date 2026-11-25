@@ -35,7 +35,7 @@ func NewForkGrader(held types.WorkspaceRepository, load RulesLoader) *ForkGrader
 		opens.Keep(held.Root(), held)
 	}
 	return &ForkGrader{
-		rules:    newRulesByRoot(load, opens),
+		rules:    &rulesByRoot{load: load, loaded: map[string]gradingRules{}, opens: opens},
 		verdicts: job.NewKeptVerdicts(),
 	}
 }

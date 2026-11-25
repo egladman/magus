@@ -222,7 +222,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 				detail, _ := o.renderCommand(nil)
 				trace = append(trace, Op{Target: o.name, Kind: o.kind, Name: o.name, Detail: detail})
 				for _, w := range o.wards {
-					trace = append(trace, Op{Target: o.name, Kind: "ward", Name: string(w.Code), Detail: wardDetail(w)})
+					trace = append(trace, Op{Target: o.name, Kind: "ward", Name: string(w.Code), Detail: fmt.Sprintf("[%s] %s", string(w.Code), w.Msg)})
 				}
 			}
 		} else {

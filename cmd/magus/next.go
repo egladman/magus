@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/termkit"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive"
@@ -43,7 +46,8 @@ func emitConcurrencyNudge(ctx context.Context, sink *magus.Sink, m *magus.Magus,
 	if line == "" {
 		return
 	}
-	if msg, ok := job.ConcurrencyNudge(line, m.CacheDir(), terminalWindow(), args); ok {
+	if msg, ok := job.ConcurrencyNudge(line, m.CacheDir(), hint.WindowFromTerminal(os.Getenv, os.Getppid(),
+		termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe)), args); ok {
 		sink.EmitNotice(ctx, slog.LevelInfo, "", msg)
 	}
 }

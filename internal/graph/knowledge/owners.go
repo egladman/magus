@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -76,7 +77,7 @@ func assembleOwners(root string, nodes []ownedNode) Shard {
 		}
 		prov := "CODEOWNERS:" + strconv.Itoa(rule.line)
 		for _, owner := range rule.owners {
-			oID := ownerID(owner)
+			oID := fmt.Sprintf("%s:%s", types.KindOwner, owner)
 			if !seenOwner[owner] {
 				seenOwner[owner] = true
 				s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: oID, Kind: types.KindOwner, Label: owner})

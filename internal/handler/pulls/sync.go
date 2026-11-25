@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"log/slog"
 	"sync"
 	"time"
@@ -172,7 +173,7 @@ func (p *Poller) scheduleNext(now time.Time) {
 	if p.opts.BaseNote != "" {
 		c.reason += "; " + p.opts.BaseNote
 	}
-	p.state.Interval = toDuration(c.interval)
+	p.state.Interval = durationpb.New(c.interval)
 	p.state.CadenceReason = c.reason
 	p.state.NextSyncAt = toTimestamp(now.Add(c.interval))
 }

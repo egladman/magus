@@ -171,15 +171,10 @@ func validateHarnessSetting(s types.Setting) error {
 	return nil
 }
 
-// settingLocation renders a setting for a message: the file, and the key inside it.
-func settingLocation(s types.Setting) string {
-	return fmt.Sprintf("%s %s", s.Path, strings.Join(s.Key, "."))
-}
-
 // planHarnessSetting reports what s's file needs, with no Changes when it is in place.
 func planHarnessSetting(root string, s types.Setting) (types.HarnessFile, error) {
 	return planJSONKey(root, s.Path, s.Key, s.Value, func(got any) error {
 		return fmt.Errorf("%s holds %v, not %v, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
-			settingLocation(s), got, s.Value)
+			fmt.Sprintf("%s %s", s.Path, strings.Join(s.Key, ".")), got, s.Value)
 	})
 }

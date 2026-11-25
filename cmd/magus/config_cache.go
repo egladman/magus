@@ -151,13 +151,6 @@ type configCachePruneOutput struct {
 	FreedBytes int64 `json:"freed_bytes"`
 }
 
-func newSpellCacheRow(s magus.SpellCache) cache.SpellRow {
-	return cache.SpellRow{
-		Spell: s.Spell, Outcome: cache.RestoreOutcome(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
-		Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
-	}
-}
-
 func configCacheExport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache export", flag.ContinueOnError)
 	bindDisplayFlags(fs)
@@ -287,7 +280,10 @@ func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Op
 		rec := cache.SpellImportRecord{Remote: true, Spells: []cache.SpellRow{}}
 		names := make([]string, 0, len(restored))
 		for _, s := range restored {
-			rec.Add(newSpellCacheRow(s))
+			rec.Add(cache.SpellRow{
+				Spell: s.Spell, Outcome: cache.RestoreOutcome(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
+				Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
+			})
 			names = append(names, s.Spell)
 		}
 		if emitErr := emitRecord(opts, rec, names); emitErr != nil {

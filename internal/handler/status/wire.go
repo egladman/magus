@@ -56,14 +56,32 @@ func statusSnapshotToProto(r daemon.Snapshot, build daemon.BuildInfo) (*statusv1
 	if r.Broker != nil {
 		s.Broker = brokerToProto(r.Broker)
 		for _, svc := range r.Broker.Services {
-			s.Services = append(s.Services, serviceToProto(svc))
+			s.Services = append(s.Services, &statusv1.Service{
+				Id:         svc.ID,
+				Label:      svc.Label,
+				Command:    svc.Command,
+				Ports:      svc.Ports,
+				State:      string(svc.State),
+				Dependents: int32(svc.Dependents),
+				StartTime:  tsFromTime(svc.StartedAt),
+			})
 		}
 	}
 	if r.Server != nil {
 		s.Server = serverToProto(r.Server)
 	}
 	for _, l := range r.Locks {
-		s.Locks = append(s.Locks, lockToProto(l))
+		s.Locks = append(s.Locks, &statusv1.Lock{
+			Project: l.Project,
+			Pid:     int32(l.PID),
+			Command: l.Command,
+			Dir:     l.Dir,
+			// The pair is what a renderer needs: the age alone says nothing without the
+			// threshold the server judges it by. Dropping the threshold left every console
+			// row comparing against zero, so no held lock ever read as possibly abandoned.
+			AcquireTime:       tsFromTime(l.AcquireTime),
+			StaleAfterSeconds: int32(l.StaleAfterSeconds),
+		})
 	}
 	return s, dropped
 }
@@ -116,36 +134,6 @@ func serverToProto(s *daemon.Server) *statusv1.Server {
 		out.Listeners = append(out.Listeners, &statusv1.Listener{Kind: string(l.Kind), Address: l.Address})
 	}
 	return out
-}
-
-// lockToProto maps one held workspace lock onto the wire message. It deliberately
-// does not influence deriveHealth above: a held lock is what a working run looks
-// like, and reporting it as unhealthy would make a busy peer look like an outage.
-func lockToProto(l daemon.Lock) *statusv1.Lock {
-	return &statusv1.Lock{
-		Project: l.Project,
-		Pid:     int32(l.PID),
-		Command: l.Command,
-		Dir:     l.Dir,
-		// The pair is what a renderer needs: the age alone says nothing without the
-		// threshold the server judges it by. Dropping the threshold left every console
-		// row comparing against zero, so no held lock ever read as possibly abandoned.
-		AcquireTime:       tsFromTime(l.AcquireTime),
-		StaleAfterSeconds: int32(l.StaleAfterSeconds),
-	}
-}
-
-// serviceToProto maps one hosted shared service onto the wire message.
-func serviceToProto(s daemon.Service) *statusv1.Service {
-	return &statusv1.Service{
-		Id:         s.ID,
-		Label:      s.Label,
-		Command:    s.Command,
-		Ports:      s.Ports,
-		State:      string(s.State),
-		Dependents: int32(s.Dependents),
-		StartTime:  tsFromTime(s.StartedAt),
-	}
 }
 
 // runToProto maps one live run and its per-target execution state onto the wire message.

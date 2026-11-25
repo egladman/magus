@@ -64,9 +64,6 @@ func feed(events ...termkit.Event) func() (termkit.Event, error) {
 }
 
 func key(k termkit.Key) termkit.Event { return termkit.Event{Kind: termkit.EventKey, Key: k} }
-func char(r rune) termkit.Event {
-	return termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: r}
-}
 func click(row, clicks int) termkit.Event {
 	return termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: row, Press: true, Clicks: clicks}
 }
@@ -83,7 +80,7 @@ func TestFailurePromptEscapesEveryWayAUserMightTry(t *testing.T) {
 		"escape": key(termkit.KeyEscape),
 		"ctrl-c": key(termkit.KeyCtrlC),
 		"ctrl-d": key(termkit.KeyCtrlD),
-		"q":      char('q'),
+		"q":      termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: 'q'},
 	} {
 		t.Run(name, func(t *testing.T) {
 			b := newRecordingBand()
@@ -112,7 +109,7 @@ func TestFailurePromptSelectsAndActs(t *testing.T) {
 	assert.Equal(t, 1, b.selected, "the band shows which row is selected")
 
 	b, sel = newRecordingBand(), 0
-	action, item = dispatchFailureKeys(feed(char('o')), b, nil, &sel)
+	action, item = dispatchFailureKeys(feed(termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: 'o'}), b, nil, &sel)
 	assert.Equal(t, actionOutput, action)
 	assert.Equal(t, "out-build", item.OutputRef)
 }

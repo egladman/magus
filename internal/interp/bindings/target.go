@@ -803,7 +803,7 @@ func awaitBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, n
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
 			key := src.Dir + "\x00buzz"
 			p := reg.Get(key, interp.NewBuzzWorkerFunc(src))
-			return buzzDispatchViaPool(callCtx, p, names)
+			return p.Dispatch(callCtx, names, buzz.AncestorsFromContext(callCtx))
 		}
 	}
 	for _, name := range names {
@@ -819,17 +819,6 @@ func awaitBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, n
 		}
 	}
 	return nil
-}
-
-// buzzDispatchViaPool fans names out via the Buzz pool, which yields the caller's
-// limiter slot (if held) for the duration so pool workers can acquire it.
-//
-// The slot is handed back and the isolation lease deliberately is not: the children
-// run inside the caller's region and take no lease of their own, so there is nothing
-// for the dispatcher to release and nothing to re-acquire behind a queued peer (see
-// cache.runIsolation).
-func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) error {
-	return p.Dispatch(ctx, names, buzz.AncestorsFromContext(ctx))
 }
 
 // matchBuzzTargets matches registered Buzz target names against ctx.glob's patterns

@@ -301,10 +301,12 @@ func TestPruneUnregisteredReportsAnUnreadableDirectory(t *testing.T) {
 	assert.Error(t, pruneUnregistered(filepath.Join(t.TempDir(), "absent"), nil))
 }
 
-// landing builds a stand-in for docs/spells.md: hand-written prose either side
-// of the generated region.
-func landing(begin, end string) string {
-	return fmt.Sprintf(`# Spells
+// TestInjectSpellListRewritesOnlyTheMarkedRegion: the at-a-glance list lives on
+// the hand-written concept page so /spells/ both explains what a spell is and
+// lists every one, which only works if regenerating leaves the prose alone.
+func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spells.md")
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`# Spells
 
 A spell is a plugin.
 
@@ -313,15 +315,7 @@ stale table
 %s
 
 More prose.
-`, begin, end)
-}
-
-// TestInjectSpellListRewritesOnlyTheMarkedRegion: the at-a-glance list lives on
-// the hand-written concept page so /spells/ both explains what a spell is and
-// lists every one, which only works if regenerating leaves the prose alone.
-func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "spells.md")
-	require.NoError(t, os.WriteFile(path, []byte(landing(spellListBegin+" -->", spellListEnd)), 0o644))
+`, spellListBegin+" -->", spellListEnd)), 0o644))
 
 	builtins := spell.Builtins()
 	names := slices.Sorted(maps.Keys(builtins))

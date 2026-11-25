@@ -35,21 +35,6 @@ const (
 	attrPackageReplaced = "replaced"
 )
 
-// packageID keys a package node by MANAGER and name, never name alone: the npm package
-// `foo` and the Go module `foo` are different things that would otherwise share a node.
-// internal/symbols/scip.go's parseMoniker folds the manager into its key for the same
-// reason, so the two agree on what counts as one dependency.
-//
-// The VERSION is deliberately excluded, which is the same call parseMoniker makes. A
-// node is the dependency, not one release of it, so a bump edits an attr instead of
-// renaming the node and orphaning everything pointing at it. It also means two projects
-// pinned to DIFFERENT versions of one package share a node whose version attr can only
-// report one of them; see assemblePackages, which keeps the lowest and flags the split
-// rather than letting the last writer win silently.
-func packageID(manager, name string) string {
-	return fmt.Sprintf("%s:%s %s", types.KindPackage, manager, name)
-}
-
 // attrPackageVersionConflict marks a package two projects in one workspace pin to
 // different versions. The value is the full sorted set, comma-separated, because the
 // interesting thing about a conflict is every version involved; the version attr can
@@ -95,7 +80,7 @@ func assemblePackages(packages map[string][]types.KnowledgePackage) Shard {
 			if pkg.Manager == "" || pkg.Name == "" {
 				continue
 			}
-			id := packageID(pkg.Manager, pkg.Name)
+			id := fmt.Sprintf("%s:%s %s", types.KindPackage, pkg.Manager, pkg.Name)
 			n, ok := seen[id]
 			if !ok {
 				s.Nodes = append(s.Nodes, types.KnowledgeNode{

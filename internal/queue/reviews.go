@@ -96,7 +96,7 @@ func Reviews(ctx context.Context, v types.ReadVCS, f types.BuildFacts, cl Clone,
 			continue
 		}
 		r := types.Review{ID: rv.ReviewID, Reviewer: rv.Reviewer, Commit: rv.Commit}
-		if err := rd.DismissReview(ctx, c, r, dismissMessage(rv)); err != nil {
+		if err := rd.DismissReview(ctx, c, r, claim(fmt.Sprintf("magus queue: %s. Review the head again.", rv.Reason))); err != nil {
 			return report, fmt.Errorf("dismiss @%s's review of %s: %w", rv.Reviewer, c.Label(), err)
 		}
 		report.Reviews[i].Dismissed = true
@@ -272,11 +272,6 @@ func WriteReviewLines(w io.Writer, r types.ReviewReport) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
-}
-
-// dismissMessage is what the reviewer reads on the dismissal.
-func dismissMessage(rv types.ReviewVerdict) string {
-	return claim(fmt.Sprintf("magus queue: %s. Review the head again.", rv.Reason))
 }
 
 // orEmpty keeps a report's changed list a list, never null, for a reader iterating it.

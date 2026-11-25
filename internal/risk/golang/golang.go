@@ -559,20 +559,16 @@ func goGenerateRuns(file string) []string {
 // and the rest the go spell declares) change what compiles, so they compare as code. A
 // source that does not parse is never equivalent.
 func goEquivalent(old, cur string, directives []string) bool {
-	fo, err := parseGo(old)
+	fo, err := parser.ParseFile(token.NewFileSet(), "", old, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return false
 	}
-	fc, err := parseGo(cur)
+	fc, err := parser.ParseFile(token.NewFileSet(), "", cur, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return false
 	}
 	return slices.Equal(goDirectives(fo, directives), goDirectives(fc, directives)) &&
 		astEqual(reflect.ValueOf(fo), reflect.ValueOf(fc))
-}
-
-func parseGo(src string) (*ast.File, error) {
-	return parser.ParseFile(token.NewFileSet(), "", src, parser.ParseComments|parser.SkipObjectResolution)
 }
 
 func goDirectives(f *ast.File, directives []string) []string {

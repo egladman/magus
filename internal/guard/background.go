@@ -148,7 +148,7 @@ func adviseCheckTimeout(ctx context.Context, at location, run workerRun, call sh
 			"the advised timeout leaves half again as much for a cold cache or a loaded machine. "+
 			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through.", pricedBy(sameArgs))
 		key := checkTimeoutKey(r)
-		if run.refusals.MarkFired(denyMarker(string(key))) {
+		if run.refusals.MarkFired(hint.MarkerKind("deny-" + strings.ReplaceAll(string(key), ":", "-"))) {
 			continue
 		}
 		timeout := min(bound, call.foregroundMax)

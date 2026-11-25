@@ -618,11 +618,6 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 	return decls, true
 }
 
-// namedDeclarations are the entries of all that claim names. PlaceDerivedClaims (plan.go) reads it too.
-func namedDeclarations(claim string, all []string) []string {
-	return job.NamedDeclarations(claim, all)
-}
-
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
 // the guard and `job wait` would hold every one of them, not the one its author meant.
 func ambiguousClaim(file, claim string, matched, all []string) string {

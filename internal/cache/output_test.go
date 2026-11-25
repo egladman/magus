@@ -887,14 +887,10 @@ func benchRaw(n int) []byte {
 
 const benchLines = 200
 
-func benchMeta() OutputDescriptor {
-	return OutputDescriptor{Project: "cmd/magus", Target: "build", DurationMs: 1234}
-}
-
 // BenchmarkOutputStorePersist measures the write path run for every cached target execution.
 func BenchmarkOutputStorePersist(b *testing.B) {
 	raw := benchRaw(benchLines)
-	meta := benchMeta()
+	meta := OutputDescriptor{Project: "cmd/magus", Target: "build", DurationMs: 1234}
 	s := NewOutputStore(b.TempDir())
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -910,7 +906,7 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 	raw := benchRaw(benchLines)
 	dir := b.TempDir()
 	s := NewOutputStore(dir)
-	stored, err := s.Persist(withResolver(context.Background()), "deadbeefcafef00d", raw, benchMeta())
+	stored, err := s.Persist(withResolver(context.Background()), "deadbeefcafef00d", raw, OutputDescriptor{Project: "cmd/magus", Target: "build", DurationMs: 1234})
 	if err != nil {
 		b.Fatal(err)
 	}

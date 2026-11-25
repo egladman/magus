@@ -150,17 +150,10 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		Operands: fset.Args(),
 		Argv:     os.Args[1:],
 		Quiet:    global.quiet || global.silent,
-		Window:   terminalWindow(),
+		Window: hint.WindowFromTerminal(os.Getenv, os.Getppid(),
+			termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe)),
 	}
 	return hookEnv().RunHook(ctx, call, in, out, errOut)
-}
-
-// terminalWindow names the terminal window this process writes to, or "" when stdout is
-// not a terminal. It keys fire-once notices for a caller no host gave a session, and is
-// never recorded as one.
-func terminalWindow() string {
-	return hint.WindowFromTerminal(os.Getenv, os.Getppid(),
-		termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe))
 }
 
 // guardCacheDir resolves a workspace's cache directory for the guard: root's own, read from
@@ -247,11 +240,6 @@ func loadGuardRules(ctx context.Context, rootOverride string) (*guard.WorkspaceR
 // loadWorkspaceShellRules loads the shell rules of the workspace found from rootOverride.
 func loadWorkspaceShellRules(ctx context.Context, rootOverride string) ([]guard.WorkspaceShellRule, guard.Dialect) {
 	return hookEnv().LoadWorkspaceShellRules(ctx, rootOverride)
-}
-
-// unpinnedBinary says why the session's job store does not pin own.
-func unpinnedBinary(ctx context.Context, own, session string) string {
-	return hookEnv().UnpinnedBinary(ctx, own, session)
 }
 
 // hookEmit renders a verdict in opts' structured format, or its decision under -o name.

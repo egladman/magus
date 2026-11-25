@@ -58,16 +58,16 @@ func missingCommits(ctx context.Context, r workReader, dir, branch, head string)
 	}
 	copies := make(map[string][]types.Commit, len(onBranch))
 	for _, c := range onBranch {
-		id := replayIdentity(c)
+		id := fmt.Sprintf("%s\x00%s", c.Author.Email, strings.TrimPrefix(c.Subject, "fixup! "))
 		copies[id] = append(copies[id], c)
 	}
-	lines := newCommitLines(r, dir)
+	lines := &commitLines{r: r, dir: dir, read: map[string]map[string]bool{}}
 	missing := 0
 	for _, c := range commits {
 		if len(c.Parents) > 1 {
 			continue
 		}
-		held, err := heldByCopy(ctx, lines, c, copies[replayIdentity(c)])
+		held, err := heldByCopy(ctx, lines, c, copies[fmt.Sprintf("%s\x00%s", c.Author.Email, strings.TrimPrefix(c.Subject, "fixup! "))])
 		if err != nil {
 			return 0, err
 		}
@@ -155,10 +155,6 @@ type commitLines struct {
 	read map[string]map[string]bool
 }
 
-func newCommitLines(r workReader, dir string) *commitLines {
-	return &commitLines{r: r, dir: dir, read: map[string]map[string]bool{}}
-}
-
 func (l *commitLines) of(ctx context.Context, c types.Commit) (map[string]bool, error) {
 	if lines, ok := l.read[c.ID]; ok {
 		return lines, nil
@@ -224,9 +220,4 @@ func contentOnBranch(ctx context.Context, r workReader, dir, branch, head string
 	}
 	differ, err := DifferingPaths(ctx, r, dir, branch, head, paths)
 	return err == nil && len(differ) == 0
-}
-
-// replayIdentity reads a fixup as the commit it folds into.
-func replayIdentity(c types.Commit) string {
-	return fmt.Sprintf("%s\x00%s", c.Author.Email, strings.TrimPrefix(c.Subject, "fixup! "))
 }

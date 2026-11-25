@@ -1239,7 +1239,7 @@ func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, tim
 	keepHours := int(keepWithin / time.Hour)
 	byHour := map[int]int64{}
 	err := walkFiles(ctx, dir, func(_ string, info fs.FileInfo) error {
-		byHour[ageInHours(now, info.ModTime())] += info.Size()
+		byHour[max(0, int(now.Sub(info.ModTime())/time.Hour))] += info.Size()
 		report.BeforeBytes += info.Size()
 		return nil
 	})
@@ -1257,7 +1257,7 @@ func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, tim
 	}
 	report.CutoffMs = float64(now.Add(-time.Duration(cutoff) * time.Hour).UnixMilli())
 	err = walkFiles(ctx, dir, func(path string, info fs.FileInfo) error {
-		if ageInHours(now, info.ModTime()) < cutoff {
+		if max(0, int(now.Sub(info.ModTime())/time.Hour)) < cutoff {
 			return nil
 		}
 		if err := os.Remove(path); errors.Is(err, fs.ErrNotExist) {
@@ -1307,10 +1307,6 @@ func trimCutoff(byHour map[int]int64, keepHours int, maxBytes int64) (cutoff int
 		kept += byHour[hour]
 	}
 	return keepHours, fenced
-}
-
-func ageInHours(now, modified time.Time) int {
-	return max(0, int(now.Sub(modified)/time.Hour))
 }
 
 // trimStopped turns a walk's end into the report's Stopped line: the timeout is a reason

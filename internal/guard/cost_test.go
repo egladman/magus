@@ -269,8 +269,6 @@ var fixtureModelRows = []model.Row{
 	{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5}},
 }
 
-func fixtureModelTable() model.Table { return model.InEffect(fixtureModelRows, nil) }
-
 func fixtureModelSource() []model.Row { return fixtureModelRows }
 
 // The harness rows cost a workspace load, so billing leaves them unread; agents.models
@@ -316,7 +314,7 @@ func TestModelTableReadsEachRequestsOwnRows(t *testing.T) {
 // id, so the cost rules know nothing about it rather than a guess.
 func TestModelRowsResolveByExactID(t *testing.T) {
 	t.Parallel()
-	table := fixtureModelTable()
+	table := model.InEffect(fixtureModelRows, nil)
 	row, ok := table.Lookup("claude-opus-5-5")
 	require.True(t, ok)
 	assert.Equal(t, "claude-opus-5-5", row.ID)

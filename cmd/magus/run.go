@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"log/slog"
 	"os"
 	"slices"
@@ -373,7 +374,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// inputs refuses under load (MGS3010, exit 75) and advises when the machine
 	// is idle. Inert off the ci target and when nothing is on record.
 	partial := rf.Shard != "" || rf.NShards > 0
-	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
+	gate := internalci.PrepareGateRedundancy(ctx, m, internalci.GateEnv{DryRun: globalCfg.DryRun, Nested: spawn.CurrentLevel() > 0, Version: version, PoolProbe: gatePoolSaturated, Repairs: magus.UncommittedRepairs}, targetName, targets, charms, partial)
 	if gateErr := gate.Evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
@@ -382,7 +383,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if globalCfg.DryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
-	if isGateInvocation(targetName, partial) {
+	if internalci.IsGateInvocation(targetName, partial, globalCfg.DryRun) {
 		runOpts = append(runOpts, magus.WithGate())
 	}
 	if len(carried) > 0 {
@@ -487,18 +488,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	case outputJSONL, outputText:
 	}
 	return nil
-}
-
-// runSelection is interactive.RunSelection under the lowercase field names clean and list
-// still spell.
-type runSelection struct {
-	projects []string
-	skips    []string
-	cwd      string
-}
-
-func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, sel runSelection) ([]types.Target, string, error) {
-	return interactive.ResolveTargets(ctx, ws, t, interactive.RunSelection{Projects: sel.projects, Skips: sel.skips, Cwd: sel.cwd})
 }
 
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per

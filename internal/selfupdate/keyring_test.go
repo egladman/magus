@@ -150,9 +150,3 @@ func mustKey(t *testing.T) ed25519.PublicKey {
 func activeRing(pub ed25519.PublicKey) Keyring {
 	return Keyring{{ID: KeyID(pub), State: KeyActive, Pub: pub}}
 }
-
-// badRing is a ring holding one key of the wrong length. ed25519.Verify panics on
-// those, so every entry point has to reject them before it verifies anything.
-func badRing(n int) Keyring {
-	return Keyring{{ID: "malformed", State: KeyActive, Pub: make(ed25519.PublicKey, n)}}
-}

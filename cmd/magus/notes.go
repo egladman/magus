@@ -523,7 +523,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if gap {
-		return captureEnv(root).Gap(ctx, store.Gap{Title: title, Anchors: anchors, Refs: pos, Tags: tags}, name, *shared, *private)
+		return review.CaptureEnv{Root: root, Dirs: noteDirs(), Load: notesResolver}.Gap(ctx, store.Gap{Title: title, Anchors: anchors, Refs: pos, Tags: tags}, name, *shared, *private)
 	}
 	if len(anchors) > 0 {
 		return exit.Usagef("magus notes capture: --anchor needs --gap, a review thread is anchored by the files it discussed")
@@ -550,7 +550,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
 
-	target, err := captureEnv(root).Store(*shared, *private)
+	target, err := review.CaptureEnv{Root: root, Dirs: noteDirs(), Load: notesResolver}.Store(*shared, *private)
 	if err != nil {
 		return err
 	}
@@ -637,10 +637,6 @@ func (t *tagList) Set(v string) error {
 func noteDirs() review.NoteDirs {
 	declared := globalCfg.Knowledge.Notes
 	return review.NoteDirs{Shared: declared.Shared, Private: declared.Private}
-}
-
-func captureEnv(root string) review.CaptureEnv {
-	return review.CaptureEnv{Root: root, Dirs: noteDirs(), Load: notesResolver}
 }
 
 // reviewServerGet reads path from the running server with a short-lived token, which it

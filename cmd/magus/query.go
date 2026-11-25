@@ -296,7 +296,13 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	if err := knowledge.CheckSourcePage("explain", xf.MaxLines, xf.SkipLines); err != nil {
 		return err
 	}
-	source := explainSourceWindow(xf, flags, pos[0])
+	source := sourceWindow{
+		SourceWindow: knowledge.SourceWindow{
+			Show:     xf.Source || flagGiven(flags, flaggen.FlagExplainMaxLines) || flagGiven(flags, flaggen.FlagExplainSkipLines),
+			MaxLines: xf.MaxLines, SkipLines: xf.SkipLines,
+		},
+		again: commandAgain(hint.Explain.With, flags, pos[0], flaggen.FlagExplainMaxLines, flaggen.FlagExplainSkipLines),
+	}
 	if xf.To != "" {
 		if source.Show {
 			slog.ErrorContext(ctx, "--to prints a chain of edges, which has no source lines; drop --source, --max-lines and --skip-lines", attr.Notice("magus explain"))
@@ -398,16 +404,6 @@ type sourceWindow struct {
 
 func (w sourceWindow) refs() knowledge.RefsWindow {
 	return knowledge.RefsWindow{SourceWindow: w.SourceWindow, Again: w.again}
-}
-
-func explainSourceWindow(xf *flaggen.ExplainFlags, flags *flag.FlagSet, subject string) sourceWindow {
-	return sourceWindow{
-		SourceWindow: knowledge.SourceWindow{
-			Show:     xf.Source || flagGiven(flags, flaggen.FlagExplainMaxLines) || flagGiven(flags, flaggen.FlagExplainSkipLines),
-			MaxLines: xf.MaxLines, SkipLines: xf.SkipLines,
-		},
-		again: commandAgain(hint.Explain.With, flags, subject, flaggen.FlagExplainMaxLines, flaggen.FlagExplainSkipLines),
-	}
 }
 
 func readExplainResult(ctx context.Context, root string, xf *flaggen.ExplainFlags, read knowledge.GraphRead) (knowledge.ExplainResult, error) {
@@ -626,11 +622,6 @@ func searchStoredIfStale(ctx context.Context, ws workspacegraph.ReadWorkspace, c
 // detachedRefreshEnv marks the process startRefresh detached.
 const detachedRefreshEnv = "MAGUS_DETACHED_REFRESH"
 
-// refreshNotices carries a refresh's lock progress to the notice channel under verb.
-func refreshNotices(ctx context.Context, verb string) io.Writer {
-	return noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}
-}
-
 // refreshIndexesNow is `--refresh`: it waits for a refresh already running,
 // brings the stale indexes up to the tree, and says on stderr what that cost.
 // What stays behind it names at error level, and the read still answers.
@@ -655,7 +646,7 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 		return failed(err)
 	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot, Store: storeDir}
-	machine, err := maintenance.TakeRefreshLock(ctx, maintenance.MachineRefreshLock(), me, verb, detached, refreshNotices(ctx, verb), maintenance.GraphBuildPoll)
+	machine, err := maintenance.TakeRefreshLock(ctx, maintenance.MachineRefreshLock(), me, verb, detached, noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}, maintenance.GraphBuildPoll)
 	if err != nil {
 		return failed(err)
 	}
@@ -663,7 +654,7 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 		return true
 	}
 	defer func() { _ = machine.Release() }()
-	store, err := maintenance.TakeRefreshLock(ctx, maintenance.StoreRefreshLock(storeDir), me, verb, detached, refreshNotices(ctx, verb), maintenance.GraphBuildPoll)
+	store, err := maintenance.TakeRefreshLock(ctx, maintenance.StoreRefreshLock(storeDir), me, verb, detached, noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}, maintenance.GraphBuildPoll)
 	if err != nil {
 		return failed(err)
 	}

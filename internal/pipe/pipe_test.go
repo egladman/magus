@@ -162,8 +162,6 @@ func startUpstream(t *testing.T, cmd *exec.Cmd, w *os.File) {
 	_ = w.Close()
 }
 
-func readyFile(t *testing.T) string { return filepath.Join(t.TempDir(), "ready") }
-
 func waitForFile(t *testing.T, path string, within time.Duration) {
 	t.Helper()
 	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
@@ -360,7 +358,7 @@ func TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes(t *testing.T) {
 func TestPipeForkPendingExecIsNoStage(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
-	ready, forkRelease := readyFile(t), filepath.Join(t.TempDir(), "fork-release")
+	ready, forkRelease := filepath.Join(t.TempDir(), "ready"), filepath.Join(t.TempDir(), "fork-release")
 	// Registered first, so it runs after the stage is killed, if the test stops early.
 	t.Cleanup(func() { _ = os.WriteFile(forkRelease, nil, 0o644) })
 	up := pipeStage(t, cacheDir, map[string]string{"FORK_UNTIL": forkRelease, "READY": ready, "EXIT": "0"})

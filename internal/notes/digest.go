@@ -39,7 +39,7 @@ const digestLen = 16
 func Digest(lines []string) string {
 	var b strings.Builder
 	for _, line := range lines {
-		norm := normalizeLine(line)
+		norm := strings.Join(strings.Fields(line), " ")
 		if norm == "" {
 			continue
 		}
@@ -52,9 +52,4 @@ func Digest(lines []string) string {
 	// opinion, and the single most destructive edit is the one drift can never see.
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])[:digestLen]
-}
-
-// normalizeLine trims the ends and collapses every internal whitespace run to one space.
-func normalizeLine(s string) string {
-	return strings.Join(strings.Fields(s), " ")
 }

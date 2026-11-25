@@ -46,7 +46,7 @@ func jobEvidenceEnv() evidence.Env {
 			return graphReads.LoadGraph(ctx, m, globalCfg, false, false, false)
 		},
 		Notes: func(ctx context.Context, m *magus.Magus, row jobtypes.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
-			notes := collectNotes(ctx, m, row)
+			notes := job.RowNotesWith(ctx, m.Root(), m.All(), row, hostForegroundMax(ctx, m), m.CheckGrader())
 			return notes.RegeneratedOutside, notes.UnrunGates
 		},
 		HolderCell:         job.HolderCell,
@@ -60,14 +60,6 @@ func newJobGraph(root string, rebuild bool) *evidence.Graph {
 
 func jobRefusesTheGate(ctx context.Context, root string, row jobtypes.Job) error {
 	return evidence.RefusesTheGate(ctx, root, row, jobEvidenceEnv())
-}
-
-func leaseBoundary(ctx context.Context, root string, store *job.Store, row jobtypes.Job, leases []jobtypes.Job, graph *evidence.Graph) job.TermsFacts {
-	return evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
-}
-
-func jobSymbolReader(root string, rebuild bool) job.SymbolReader {
-	return evidence.JobSymbolReader(root, rebuild, jobEvidenceEnv())
 }
 
 func graphsByTree(root string, rootGraph *evidence.Graph, rebuild bool) func(tree string) *evidence.Graph {

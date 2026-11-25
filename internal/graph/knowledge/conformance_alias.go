@@ -76,7 +76,7 @@ func importAliases(g *Graph, skip func(file string) bool) []*aliasPackage {
 			p.name = n.Attrs[attrPackageName]
 		case n.Attrs[AttrLanguage] == "go":
 			p.dir = importPath(id)
-			p.name = externalPackageName(p.dir)
+			p.name = path.Base(majorVersion.ReplaceAllString(p.dir, ""))
 		}
 		if p.name == "" {
 			continue
@@ -158,12 +158,6 @@ func importPath(ns string) string {
 // majorVersion is the /vN element a module path ends in when its major version is 2 or
 // more; the package's name is the element before it.
 var majorVersion = regexp.MustCompile(`/v[2-9][0-9]*$`)
-
-// externalPackageName is the name a package outside the workspace is imported under by
-// default: the last element of its path, a major version suffix dropped.
-func externalPackageName(pkgPath string) string {
-	return path.Base(majorVersion.ReplaceAllString(pkgPath, ""))
-}
 
 // aliasSamples measures each judged package: one not generated and not excluded by o, with
 // at least the key's MinSubject importers (1 when 0). alias-share samples every judged

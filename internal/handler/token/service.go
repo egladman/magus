@@ -80,7 +80,13 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 	}
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok {
-			out = append(out, shareInfo(info))
+			out = append(out, &tokenv1.TokenInfo{
+				Name:       shareTokenLabel,
+				Id:         info.ID,
+				Class:      tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE,
+				Grant:      wireGrant(auth.AccessViewer()),
+				ExpireTime: timestamppb.New(info.Expires),
+			})
 		}
 	}
 	return connect.NewResponse(&tokenv1.ListTokensResponse{Tokens: out}), nil
@@ -128,7 +134,13 @@ func (s *Service) RevokeToken(ctx context.Context, req *connect.Request[tokenv1.
 				return nil, connectError(types.WrapDiagnostic(types.GrantInsufficient, auth.ErrExceedsGrant, "token: revoking the share link needs %s", auth.AccessViewer()))
 			}
 			if s.share.CloseIf(info.ID) {
-				return connect.NewResponse(shareInfo(info)), nil
+				return connect.NewResponse(&tokenv1.TokenInfo{
+					Name:       shareTokenLabel,
+					Id:         info.ID,
+					Class:      tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE,
+					Grant:      wireGrant(auth.AccessViewer()),
+					ExpireTime: timestamppb.New(info.Expires),
+				}), nil
 			}
 			return nil, connectError(types.WrapDiagnostic(types.TokenNotFound, auth.ErrTokenNotFound, "token: no token has the name or id %q", id))
 		}
@@ -174,16 +186,6 @@ func storedInfo(t auth.Token) *tokenv1.TokenInfo {
 		Class:      wireKind(t.Kind),
 		Grant:      wireGrant(t.Grant),
 		ExpireTime: timestamppb.New(t.Expires),
-	}
-}
-
-func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
-	return &tokenv1.TokenInfo{
-		Name:       shareTokenLabel,
-		Id:         i.ID,
-		Class:      tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE,
-		Grant:      wireGrant(auth.AccessViewer()),
-		ExpireTime: timestamppb.New(i.Expires),
 	}
 }
 

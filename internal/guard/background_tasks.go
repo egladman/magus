@@ -140,7 +140,13 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	}
 	resumes, why := hostResumes(resumesFrom, read.hostVersion)
 	if subagent && resumes && len(read.tasks) > 0 {
-		return adviseResumedStop(read.tasks, why, now), true, true
+		return verdict.Judgment{
+			APIVersion: agent.GuardAPIVersion,
+			Decision:   verdict.Advise,
+			Rule:       string(denyRuleBackgroundLeft),
+			Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
+				why, plural.Word(len(read.tasks), "A shell command", "Shell commands"), plural.Word(len(read.tasks), "is", "are"), stoppableTasks(read.tasks, now)),
+		}, true, true
 	}
 	tasks := slices.DeleteFunc(slices.Clone(read.tasks), func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
 	if subagent && len(tasks) == 0 && len(read.tasks) > 0 {
@@ -160,7 +166,13 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	// A second stop passes with the refusal as advice, as a workspace stop rule's does: the
 	// host overrides a stop refused too often, and the refusal would hold it open for that.
 	if subagent && setting.Decision == builtin.Deny {
-		refused := refuseLeftStop(tasks, why, now)
+		refused := verdict.Judgment{
+			APIVersion: agent.GuardAPIVersion,
+			Decision:   verdict.Deny,
+			Rule:       string(denyRuleBackgroundLeft),
+			Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+				stoppableTasks(tasks, now), why),
+		}
 		if env.StopHookActive != nil && *env.StopHookActive {
 			return passStop(refused, heldStop, string(denyRuleBackgroundLeft)), true, false
 		}
@@ -173,31 +185,6 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}, true, false
-}
-
-// refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
-// call that stops it and the one wait a subagent has for its own run. The first line is
-// the one a host shows the person.
-func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
-	return verdict.Judgment{
-		APIVersion: agent.GuardAPIVersion,
-		Decision:   verdict.Deny,
-		Rule:       string(denyRuleBackgroundLeft),
-		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
-			stoppableTasks(tasks, now), why),
-	}
-}
-
-// adviseResumedStop lets a subagent's stop stand while tasks run, since why says its host
-// resumes it when they complete.
-func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
-	return verdict.Judgment{
-		APIVersion: agent.GuardAPIVersion,
-		Decision:   verdict.Advise,
-		Rule:       string(denyRuleBackgroundLeft),
-		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
-			why, plural.Word(len(tasks), "A shell command", "Shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
-	}
 }
 
 // hostResumes reports whether a host at version resumes a stopped subagent when a background
@@ -294,7 +281,7 @@ func endsOnItsOwn(command string) bool {
 			name := path.Base(words[0])
 			c := hint.Invocation{Name: name, Args: words[1:]}
 			switch sub, _ := vcsSubcommand(c); {
-			case name == "magus" && boundedByJobExec(c.Args), (name == "git" || vcsGlobals[name] != nil) && committing(sub):
+			case name == "magus" && boundedByJobExec(c.Args), (name == "git" || vcsGlobals[name] != nil) && slices.Contains([]string{"commit", "ci", "merge", "cherry-pick", "revert"}, sub):
 				work = true
 			case !instantBuiltins[name]:
 				ends = false
@@ -307,12 +294,6 @@ func endsOnItsOwn(command string) bool {
 		return ends
 	})
 	return ends && work
-}
-
-// committing reports a version-control verb that records a commit through the
-// repository's hooks.
-func committing(sub string) bool {
-	return slices.Contains([]string{"commit", "ci", "merge", "cherry-pick", "revert"}, sub)
 }
 
 // sessionEnded reports whether raw is a SessionEnd. A subagent's stop
@@ -614,7 +595,7 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 	}
 	defer f.Close()
 	storePath := taskCheckpointPath(cacheDir, transcript)
-	store := checkpointLog(storePath)
+	store := file.Log[taskCheckpoint]{Path: storePath, Perm: 0o644, Keep: 1, SkipSync: true}
 	r, start, saved := resumeTaskReader(store, transcript, f)
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return transcriptTasks{}, err
@@ -766,12 +747,6 @@ func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints
 type savedCheckpoints struct {
 	entries []taskCheckpoint
 	loadErr error
-}
-
-// checkpointLog keeps the newest checkpoint. Its appends skip the sync, since
-// one write per hook call would cost more than a checkpoint saves.
-func checkpointLog(path string) file.Log[taskCheckpoint] {
-	return file.Log[taskCheckpoint]{Path: path, Perm: 0o644, Keep: 1, SkipSync: true}
 }
 
 // checkpointRetention is how long a session's checkpoint store outlives its last write,

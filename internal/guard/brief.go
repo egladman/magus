@@ -292,14 +292,10 @@ func briefUngraded(why string, runs []briefRun) ShellVerdict {
 	var notes []string
 	for _, r := range runs {
 		if !r.negated {
-			notes = append(notes, fmt.Sprintf("%s is not graded: no row was held to a check; %s", briefRunLabel(r), why))
+			notes = append(notes, fmt.Sprintf("%s is not graded: no row was held to a check; %s", strconv.Quote(elideCommand(strings.TrimSpace(r.line))), why))
 		}
 	}
 	return briefPassVerdict(notes)
-}
-
-func briefRunLabel(r briefRun) string {
-	return strconv.Quote(elideCommand(strings.TrimSpace(r.line)))
 }
 
 // briefPassNotes explains each of a brief's runs that row's grader passed for a reason a reader
@@ -309,7 +305,7 @@ func briefRunLabel(r briefRun) string {
 func briefPassNotes(runs []briefRun, judge rowJudge) []string {
 	var notes []string
 	for _, r := range runs {
-		line := briefRunLabel(r)
+		line := strconv.Quote(elideCommand(strings.TrimSpace(r.line)))
 		if r.negated {
 			notes = append(notes, line+" is not graded: the line forbids the run")
 			continue

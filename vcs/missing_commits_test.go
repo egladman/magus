@@ -287,7 +287,7 @@ func (s *missingCommitsSuite) TestABinaryWithNoBlobIDsMatchesNoOtherCommit() {
 	ours := types.Commit{ID: "ours", Parents: []string{"p"}}
 	theirs := types.Commit{ID: "theirs", Parents: []string{"p"}}
 
-	held, err := heldByCopy(s.T().Context(), newCommitLines(idlessBinaries{}, s.repo.Root()), ours, []types.Commit{theirs})
+	held, err := heldByCopy(s.T().Context(), &commitLines{r: idlessBinaries{}, dir: s.repo.Root(), read: map[string]map[string]bool{}}, ours, []types.Commit{theirs})
 
 	s.Require().NoError(err)
 	s.False(held)

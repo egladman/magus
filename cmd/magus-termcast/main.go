@@ -244,20 +244,11 @@ func recordSession() error {
 	if res.Code != 0 {
 		return fmt.Errorf("record %s: exit status %d", sessionPath, res.Code)
 	}
-	if err := checkClean(res.Stdout); err != nil {
+	if err := checkNoise(res.Stdout, false); err != nil {
 		return err
 	}
 	return os.WriteFile(capturePath, []byte(res.Stdout), 0o644)
 }
-
-// checkClean refuses a capture that shows magus complaining.
-//
-// The recording is the first thing a reader sees, and a warning in it reads as
-// the tool being broken rather than the recording machine being underprovisioned
-// - which is what it has always meant so far. Failing here costs a re-record;
-// not failing costs a wrong first impression that nothing else in the pipeline
-// would catch, because a warning renders exactly as cleanly as a pass.
-func checkClean(capture string) error { return checkNoise(capture, false) }
 
 // checkNoise refuses a capture that shows magus complaining.
 //

@@ -293,7 +293,7 @@ func (l Layout) manifest(ctx context.Context, desc ocispec.Descriptor) (Manifest
 	}
 	out := Manifest{
 		Layout:   Layout{Path: l.Path, Descriptor: desc},
-		Platform: platformFromConfig(cfg),
+		Platform: platformFromOCI(&cfg.Platform),
 		Config:   man.Config,
 		Layers:   man.Layers,
 	}

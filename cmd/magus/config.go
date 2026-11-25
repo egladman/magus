@@ -269,9 +269,9 @@ func configMCPConnector(args []string) error {
 	case "create":
 		return configMCPConnectorCreate(subArgs)
 	case "ls":
-		return configMCPConnectorList(subArgs)
+		return tokenList("config mcp connector ls", subArgs)
 	case "revoke":
-		return configMCPConnectorRevoke(subArgs)
+		return tokenRevoke("config mcp connector revoke", subArgs)
 	case "-h", "--help", "help":
 		fs.Usage()
 		return nil
@@ -316,14 +316,6 @@ func configMCPConnectorCreate(args []string) error {
 	// the reader to an endpoint that will reject the token they just minted.
 	slog.Info(fmt.Sprintf("This token reaches /mcp only. It is REJECTED by the console; mint a console\ncredential with `%s`.", hint.ConfigConsoleTokenCreate.String()), attr.Notice(""))
 	return nil
-}
-
-func configMCPConnectorList(args []string) error {
-	return tokenList("config mcp connector ls", args)
-}
-
-func configMCPConnectorRevoke(args []string) error {
-	return tokenRevoke("config mcp connector revoke", args)
 }
 
 // tokenList prints every stored token, whatever its grant: the console and connector commands
@@ -1017,9 +1009,9 @@ func configConsoleToken(args []string) error {
 	case "create":
 		return configConsoleTokenCreate(subArgs)
 	case "ls":
-		return configConsoleTokenList(subArgs)
+		return tokenList("config console token ls", subArgs)
 	case "revoke":
-		return configConsoleTokenRevoke(subArgs)
+		return tokenRevoke("config console token revoke", subArgs)
 	case "-h", "--help", "help":
 		fs.Usage()
 		return nil
@@ -1071,12 +1063,4 @@ func configConsoleTokenCreate(args []string) error {
 		slog.Info("Grant console=write: it reaches every console app and is refused at /mcp.", attr.Notice(""))
 	}
 	return nil
-}
-
-func configConsoleTokenList(args []string) error {
-	return tokenList("config console token ls", args)
-}
-
-func configConsoleTokenRevoke(args []string) error {
-	return tokenRevoke("config console token revoke", args)
 }

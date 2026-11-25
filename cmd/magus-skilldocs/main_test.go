@@ -19,11 +19,6 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// skillCatalog is the same embedded catalog the generator renders from, so a test asserting what
-// pages exist is asserting against the bodies a build actually ships. It replaced a relative path
-// into another command's directory, which only worked because the assets were not importable.
-func skillCatalog() *agent.Catalog { return agent.Default("") }
-
 // generate renders the whole reference into a fresh directory. It drives the real
 // embedded bodies rather than a fixture on purpose: the pages exist so a skill
 // edit cannot leave the documentation describing a version nobody installs, and a
@@ -73,7 +68,7 @@ func TestRunWritesOnePagePerShippedSkill(t *testing.T) {
 		got = append(got, e.Name())
 	}
 
-	defs, err := skillCatalog().EmbeddedSkills()
+	defs, err := agent.Default("").EmbeddedSkills()
 	require.NoError(t, err)
 	want := []string{"index.md"}
 	for _, d := range defs {
@@ -159,7 +154,7 @@ func TestIndexCardsEverySkill(t *testing.T) {
 	out := generate(t)
 	index := page(t, out, "index.md")
 
-	defs, err := skillCatalog().EmbeddedSkills()
+	defs, err := agent.Default("").EmbeddedSkills()
 	require.NoError(t, err)
 	for _, d := range defs {
 		assert.Contains(t, index, fmt.Sprintf("<a class=\"landing-card\" href=\"%s/\">", d.Name), "no index card for %s", d.Name)

@@ -89,7 +89,9 @@ func (g *Graph) sharedUses(o types.ConformanceOptions, only map[string]bool) []s
 		}
 		if len(callers) >= 2 {
 			u.Spread = callerSpread(ig, definer, u.Callers)
-			u.Knobs = modeKnobs(g, n, symbolShape(n, local), callers)
+			u.Knobs = modeKnobs(g, n, pickShapeReader(n.Attrs[AttrLanguage]).read(symbolFacts{
+				Kind: n.Attrs[attrSymbolKind], Signature: n.Attrs[AttrSignature], Path: local, Neutral: neutralKind(local),
+			}), callers)
 		}
 		out = append(out, u)
 	}
@@ -110,13 +112,6 @@ func (x *conformanceIndex) callerFiles(id string) []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-// symbolShape is the declaration shape the symbol's language reader reports.
-func symbolShape(n types.KnowledgeNode, local []descriptor) declShape {
-	return pickShapeReader(n.Attrs[AttrLanguage]).read(symbolFacts{
-		Kind: n.Attrs[attrSymbolKind], Signature: n.Attrs[AttrSignature], Path: local, Neutral: neutralKind(local),
-	})
 }
 
 // callerSpread is the most import hops between two of callers over ig, read in either

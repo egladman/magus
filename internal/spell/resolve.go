@@ -19,11 +19,6 @@ import (
 // resolve from a workspace-local one.
 type builtinCtxKey struct{}
 
-// withBuiltinResolve marks ctx as resolving a built-in spell.
-func withBuiltinResolve(ctx context.Context) context.Context {
-	return context.WithValue(ctx, builtinCtxKey{}, true)
-}
-
 // isBuiltinResolve reports whether ctx was marked by withBuiltinResolve.
 func isBuiltinResolve(ctx context.Context) bool {
 	v, _ := ctx.Value(builtinCtxKey{}).(bool)

@@ -32,7 +32,10 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // callers that belonged in an existing one, with the skill installed and never read.
 func adviseNewSourceDir(root, path string) advice {
 	if dir := newSourceDir(root, path); dir != "" {
-		return newSourceDirAdvice(dir)
+		return advice{
+			Say: fmt.Sprintf("magus workspace: this write creates a NEW DIRECTORY, `%s`; load the magus-architecture-review skill to check that it has to exist.", dir),
+			Why: fmt.Sprintf("`%s` holds nothing yet, so this write creates whatever your language calls an importable unit (package, module, crate).\nIs there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\nThe skill answers this from the workspace's own dependency and churn data rather than from taste.", dir),
+		}
 	}
 	return advice{}
 }
@@ -82,11 +85,4 @@ func workspaceRelativeDir(root, path string) (string, bool) {
 		clean = filepath.Join(root, clean)
 	}
 	return workspaceRelativeFile(root, filepath.Dir(clean))
-}
-
-func newSourceDirAdvice(dir string) advice {
-	return advice{
-		Say: fmt.Sprintf("magus workspace: this write creates a NEW DIRECTORY, `%s`; load the magus-architecture-review skill to check that it has to exist.", dir),
-		Why: fmt.Sprintf("`%s` holds nothing yet, so this write creates whatever your language calls an importable unit (package, module, crate).\nIs there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\nThe skill answers this from the workspace's own dependency and churn data rather than from taste.", dir),
-	}
 }

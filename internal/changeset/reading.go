@@ -73,13 +73,6 @@ func (s *Store) readingLog() (file.JSONL[ReadingMark], error) {
 		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active})
 }
 
-// errorNoReadingDir is [ErrNoStateDir] with the consequence spelled out. Every other persisted mark
-// is best-effort, but a person who pressed "I am reading this now" and was not recorded would be
-// told nothing by the missing report later, so this one says so.
-func errorNoReadingDir() error {
-	return fmt.Errorf("record that a review is being read: %w", ErrNoStateDir)
-}
-
 // SetReading records that the reader is reading at, as of now, and returns the mark.
 //
 // Marking a review that is already marked keeps the original start: pressing the key twice, or a
@@ -89,7 +82,7 @@ func errorNoReadingDir() error {
 func (s *Store) SetReading(ctx context.Context, at diff.ReviewTarget, now time.Time) (ReadingMark, error) {
 	path := s.readingPath()
 	if path == "" {
-		return ReadingMark{}, errorNoReadingDir()
+		return ReadingMark{}, fmt.Errorf("record that a review is being read: %w", ErrNoStateDir)
 	}
 	rl, err := s.readingLog()
 	if err != nil {
@@ -125,7 +118,7 @@ func (s *Store) ClearReadingIf(ctx context.Context, mark ReadingMark) (bool, err
 func (s *Store) clearReading(ctx context.Context, want func(ReadingMark) bool) (bool, error) {
 	path := s.readingPath()
 	if path == "" {
-		return false, errorNoReadingDir()
+		return false, fmt.Errorf("record that a review is being read: %w", ErrNoStateDir)
 	}
 	rl, err := s.readingLog()
 	if err != nil {

@@ -240,7 +240,14 @@ func (s *Service) ExplainNode(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("graph: no node matches %s, try `magus query %s` for a wider search", name, name))
 	}
 	resp := &graphv1.NodeContext{
-		Node:        nodeToProto(out.Node),
+		Node: &graphv1.Node{
+			Id:     out.Node.ID,
+			Kind:   out.Node.Kind,
+			Label:  out.Node.Label,
+			Doc:    out.Node.Doc,
+			Source: out.Node.Source,
+			Attrs:  out.Node.Attrs,
+		},
 		BlastRadius: int32(out.BlastRadius),
 		Out:         edgeRefsToProto(out.Out),
 		In:          edgeRefsToProto(out.In),

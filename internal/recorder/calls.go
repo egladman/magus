@@ -181,16 +181,13 @@ func DecodeRequestBlob(base, ref string, raw []byte, req *AgentCommandRequest) e
 	return &blobUndecodableError{Store: callsDir(base), Ref: ref, Err: err}
 }
 
-// retiredDecisions are the decision names no build after the defer rename writes.
-func retiredDecisions() []string { return []string{"pass", "allow"} }
-
 // DecodeAgentBlob decodes the agent-command blob ref, read from the activity
 // log under base, into v. A retired decision is a [*RetiredDecisionError];
 // any other failure is returned as is.
 func DecodeAgentBlob(base, ref string, raw []byte, v any) error {
 	err := codec.Unmarshal(raw, v)
 	var unknown *verdict.UnknownDecisionError
-	if errors.As(err, &unknown) && slices.Contains(retiredDecisions(), unknown.Decision) {
+	if errors.As(err, &unknown) && slices.Contains([]string{"pass", "allow"}, unknown.Decision) {
 		return &RetiredDecisionError{Store: callsDir(base), Ref: ref, Decision: unknown.Decision}
 	}
 	return err

@@ -361,12 +361,6 @@ func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
 	return found
 }
 
-// removedAPIError reports a magusfile still calling an API magus no longer binds.
-func removedAPIError(call, replacement string) error {
-	return types.DiagnosticErrorf(types.MagusfileAPIRemoved,
-		"%s was removed: %s instead", call, replacement)
-}
-
 // WithSource stores src in ctx so that bindings (e.g. ctx.needs) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
@@ -551,13 +545,6 @@ func workingCopyBytecodeStore(projectDir string) (buzz.BytecodeStore, error) { /
 	return sealedBytecodeStoreUnder("buzz-bytecode", projectDir)
 }
 
-// approvedBytecodeStore is workingCopyBytecodeStore for approved sources. Keys
-// and imports are digests of what the approved reader returns. Working-copy
-// loads never write here, and the seal covers the directory.
-func approvedBytecodeStore(projectDir string) (buzz.BytecodeStore, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
-	return sealedBytecodeStoreUnder("buzz-bytecode-approved", projectDir)
-}
-
 // sealedBytecodeStoreUnder is the sealed store for projectDir under the user
 // cache's magus/<name>/<compiler stamp>/<dir hash>. The error says why there
 // is none.
@@ -646,7 +633,7 @@ func magusfileBytecodeStore(ctx context.Context, dir string) (buzz.BytecodeStore
 	case sourceReaderFromContext(ctx) == nil:
 		return workingCopyBytecodeStore(dir)
 	case approvedSources(ctx):
-		return approvedBytecodeStore(dir)
+		return sealedBytecodeStoreUnder("buzz-bytecode-approved", dir)
 	}
 	return nil, errForeignSourceReader
 }
@@ -1308,13 +1295,6 @@ func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 	return f
 }
 
-// importTargetCollisionError reports a target whose name shadows a same-named import,
-// which makes the module read null on member access.
-func importTargetCollisionError(name, importPath string) error {
-	return fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
-		"reads null, rename the target or alias the import", name, importPath, name)
-}
-
 // runBuzz executes src on a fresh Buzz session and invokes target.
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) (any, error) {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
@@ -1421,24 +1401,6 @@ func parseBuzz(ctx context.Context, src *Source) (Parsed, error) {
 		out[i] = Target{Key: name, Name: name}
 	}
 	return Parsed{Targets: out, Choices: load.Choices}, nil
-}
-
-// targetCollisionError reports two source target names that normalize to the same
-// canonical key. Used by the Buzz registration path so the message
-// stays identical across engines.
-func targetCollisionError(prev, cur, key string) error {
-	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q, "+
-		"target names are matched case- and delimiter-insensitively, so rename one", prev, cur, key)
-}
-
-// ctxlessTargetError reports an exported magusfile function missing the magus.Context
-// first parameter every target must declare. The signature is the contract magus reads
-// statically to build the graph, so the ctx-less form is rejected at load.
-func ctxlessTargetError(name string) error {
-	return types.DiagnosticErrorf(types.TargetMissingContext,
-		"target %q must receive a %s as its first parameter: "+
-			"change its signature to export fun %s(ctx: %s, args: [str])",
-		name, types.ContextParamAnnotation, name, types.ContextParamAnnotation)
 }
 
 // execBuzzSource creates a Buzz Session, registers bindings, and executes source files.
@@ -1573,7 +1535,8 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// complaint about the callback's parameter).
 		if facts.RemovedCall != "" {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIError(facts.RemovedCall, facts.Replacement))
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, types.DiagnosticErrorf(types.MagusfileAPIRemoved,
+				"%s was removed: %s instead", facts.RemovedCall, facts.Replacement))
 		}
 		execErr := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) })
 		if salted != nil {
@@ -1615,19 +1578,24 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// A target that shadows a same-named import makes the module read null; fail at load.
 		if importPath, clash := importNames[name]; clash {
 			_ = buzzSess.Close()
-			return nil, importTargetCollisionError(name, importPath)
+			return nil, fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
+				"reads null, rename the target or alias the import", name, importPath, name)
 		}
 		key := types.Normalize(name)
 		if prev, dup := seen[key]; dup {
 			_ = buzzSess.Close()
-			return nil, targetCollisionError(prev, name, key)
+			return nil, fmt.Errorf("magusfile: targets %q and %q both normalize to %q, "+
+				"target names are matched case- and delimiter-insensitively, so rename one", prev, name, key)
 		}
 		// Every target must receive a magus.Context as its first parameter: the
 		// signature IS the contract magus reads statically to build the graph. Reject the
 		// old ctx-less form at load rather than dispatching it with the wrong arguments.
 		if !ctxForm[key] {
 			_ = buzzSess.Close()
-			return nil, ctxlessTargetError(name)
+			return nil, types.DiagnosticErrorf(types.TargetMissingContext,
+				"target %q must receive a %s as its first parameter: "+
+					"change its signature to export fun %s(ctx: %s, args: [str])",
+				name, types.ContextParamAnnotation, name, types.ContextParamAnnotation)
 		}
 		seen[key] = name
 		captured := val

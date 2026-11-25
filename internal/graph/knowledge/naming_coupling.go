@@ -58,7 +58,8 @@ func (couplingCheck) run(x *namingIndex) []finding {
 			if x.change.Introduced[s.id] {
 				score = overSharedIntroducedScore
 			}
-			out = append(out, finding{subject: s.id, score: score, message: overSharedMessage(s.label, u), details: couplingDetails(o, u)})
+			out = append(out, finding{subject: s.id, score: score, message: fmt.Sprintf("`%s` (%d lines) is shared by %d packages %s (%s), and %s. Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; otherwise give each caller its own copy with one line saying why",
+				s.label, u.Body, len(u.Callers), hopsApart(u.Spread), listed(u.Callers), phraseKnobs(u.Knobs, "`%s` is set only by %s", "it branches on `%s`", ", ")), details: couplingDetails(o, u)})
 			continue
 		}
 		if x.change.Introduced[s.id] || x.change.Renamed[s.id] != "" {
@@ -79,15 +80,10 @@ func (couplingCheck) run(x *namingIndex) []finding {
 			subject: s.id,
 			score:   bentScore,
 			message: fmt.Sprintf("`%s` now %s, and %d files call it (%s): a branch only one caller takes is a second function under one name. Keep the shared part small and give the branch its own function, unless every caller needs the fix it carries",
-				s.label, bentPhrase(knobs), len(files), listed(files)),
+				s.label, phraseKnobs(knobs, "offers `%s`, which only %s uses", "branches on `%s`", " and "), len(files), listed(files)),
 		})
 	}
 	return out
-}
-
-func overSharedMessage(label string, u sharedUse) string {
-	return fmt.Sprintf("`%s` (%d lines) is shared by %d packages %s (%s), and %s. Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; otherwise give each caller its own copy with one line saying why",
-		label, u.Body, len(u.Callers), hopsApart(u.Spread), listed(u.Callers), knobPhrase(u.Knobs))
 }
 
 // couplingDetails names every caller, then each configured anchor the rule read.
@@ -119,14 +115,6 @@ func listed(xs []string) string {
 		s += ", ..."
 	}
 	return s
-}
-
-func knobPhrase(knobs []modeKnob) string {
-	return phraseKnobs(knobs, "`%s` is set only by %s", "it branches on `%s`", ", ")
-}
-
-func bentPhrase(knobs []modeKnob) string {
-	return phraseKnobs(knobs, "offers `%s`, which only %s uses", "branches on `%s`", " and ")
 }
 
 // phraseKnobs words each knob with set, given its name and setter, or with branch, given

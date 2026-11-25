@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/egladman/magus/internal/edit"
+	"github.com/egladman/magus/internal/job/evidence"
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -18,7 +20,14 @@ func TestJobClaimEnvPicksEverySymbolAnAmbiguousNameNames(t *testing.T) {
 	g := knowledge.NewGraph()
 	g.Merge([]types.KnowledgeNode{{ID: a, Kind: types.KindSymbol, Label: "Parse"}, {ID: b, Kind: types.KindSymbol, Label: "Parse"}},
 		[]types.KnowledgeEdge{defines("a/a.go", a), defines("b/b.go", b)})
-	pick := jobCallersEnv().PickSymbol
+	pick := evidence.CallersEnv{
+		Config:           globalCfg,
+		OpenWorkspace:    openWorkspaceForRead,
+		RefsGraph:        loadRefsGraph,
+		PickSymbol:       knowledge.PickSymbol,
+		RenameBlindSpots: edit.RenameBlindSpots,
+		SymbolCoverage:   symbolCoverage,
+	}.PickSymbol
 
 	id, ambiguous := pick(g, "Parse")
 	assert.Empty(t, id)

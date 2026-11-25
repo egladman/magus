@@ -239,15 +239,13 @@ func workingTreeHolds(root string, f changeset.File) bool {
 				lines, read = strings.Split(string(b), "\n"), true
 			}
 			at := *r.NewLine - 1
-			if at < 0 || at >= len(lines) || trimLine(lines[at]) != trimLine(r.Text) {
+			if at < 0 || at >= len(lines) || strings.TrimRight(lines[at], " \t\r") != strings.TrimRight(r.Text, " \t\r") {
 				return false
 			}
 		}
 	}
 	return true
 }
-
-func trimLine(s string) string { return strings.TrimRight(s, " \t\r") }
 
 // changedDefinitions are the IDs of the symbols some hunk holds, ascending.
 func changedDefinitions(files []diff.File) []string {

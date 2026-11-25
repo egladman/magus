@@ -94,16 +94,8 @@ func packageLanguage(p string) string {
 	return packageLanguages[strings.ToLower(path.Ext(p))]
 }
 
-// findPackageSources skips what findBuzzFiles skips except gen: a generated package is
-// still one the hand-written ones import.
-func findPackageSources(root string) []string { return WalkTree(root).packageSources() }
-
 func (w *TreeWalk) packageSources() []string {
 	return w.scan(walkPackages, func(f treeFile) bool { return packageLanguage(path.Base(f.rel)) != "" })
-}
-
-func assemblePackageDirs(w *TreeWalk, projects []types.TargetGraphProject, layers map[string]string) Shard {
-	return packageDirs(w.packageSources(), projects, layers)
 }
 
 // packageDirs mints a dir node for every directory holding a source file and every

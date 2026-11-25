@@ -86,8 +86,6 @@ func heavyFigures(level types.GuardProfile) int {
 	return 8
 }
 
-func repeatFigures(types.GuardProfile) int { return 2 }
-
 func resultFigures(level types.GuardProfile) int {
 	switch level {
 	case types.GuardProfileLight:
@@ -157,7 +155,7 @@ func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall
 				say: fmt.Sprintf("magus workspace: %d searches, reads, diffs or runs in a row after the last spawn: a subagent does this work from a small context and returns only what matters.", n)})
 		}
 		s = setting(string(denyRuleRootRepeat))
-		if at, n := settingFigure(s, s.Calls, repeatFigures), st.Repeats[lineDigest(c.line)]+1; at > 0 && n >= at {
+		if at, n := settingFigure(s, s.Calls, func(types.GuardProfile) int { return 2 }), st.Repeats[lineDigest(c.line)]+1; at > 0 && n >= at {
 			out = append(out, costFinding{rule: denyRuleRootRepeat, key: hint.MarkerKind(denyRuleRootRepeat),
 				say: "magus workspace: this session ran this exact command before with no write since, and its output is still in the context."})
 		}

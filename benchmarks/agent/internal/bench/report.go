@@ -39,12 +39,6 @@ func pValue(value *float64) string {
 	return formatP(*value)
 }
 
-// passAt1 is a cell's pass rate beside its counts. A run with no check is not
-// graded, so the denominator is N less the unknown outcomes.
-func passAt1(cell CellStats) string {
-	return fmt.Sprintf("%s (%d of %d)", pct(cell.PassAt1), cell.Successes, cell.N-cell.UnknownOutcomes)
-}
-
 func interval(bounds [2]*float64, digits int) string {
 	if bounds[0] == nil || bounds[1] == nil {
 		return "n/a"
@@ -144,7 +138,7 @@ func paretoSection(a *Analysis) []string {
 			arm,
 			task,
 			strconv.FormatInt(cell.N, 10),
-			passAt1(cell),
+			fmt.Sprintf("%s (%d of %d)", pct(cell.PassAt1), cell.Successes, cell.N-cell.UnknownOutcomes),
 			num(cell.Metrics["total_billed_tokens"].Median, 0),
 			num(cell.MetricsSuccessOnly["total_billed_tokens"].Median, 0),
 			usd(cell.Metrics["dollars"].Median),
@@ -186,7 +180,7 @@ func comparisonsSection(a *Analysis) []string {
 	if a.Refusal != "" {
 		return append(lines, fmt.Sprintf("No comparison: %s.", a.Refusal), "")
 	}
-	compared := comparedMetrics()
+	compared := append([]metric{passAt1Row}, metrics...)
 	for _, m := range compared {
 		if c, ok := a.Comparisons[m.name]; ok && c.Family {
 			lines = append(lines, "- "+verdictLine(m, c))
@@ -227,7 +221,7 @@ func passRatesSection(a *Analysis) []string {
 	for _, key := range slices.Sorted(maps.Keys(a.Cells)) {
 		arm, task, _ := strings.Cut(key, "/")
 		cell := a.Cells[key]
-		rows = append(rows, row{arm, task, passAt1(cell), interval(cell.PassAt1CI, 3), byK(cell.PassAtK), byK(cell.PassPowK)})
+		rows = append(rows, row{arm, task, fmt.Sprintf("%s (%d of %d)", pct(cell.PassAt1), cell.Successes, cell.N-cell.UnknownOutcomes), interval(cell.PassAt1CI, 3), byK(cell.PassAtK), byK(cell.PassPowK)})
 	}
 	return section(
 		"pass@k and pass^k",

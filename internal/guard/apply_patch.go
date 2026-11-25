@@ -59,17 +59,11 @@ func envelopePatch(input map[string]any, writer bool) (files []patchFile, ok boo
 		if key == "command" && !writer {
 			continue
 		}
-		if text := envelopeString(input, key); isPatchText(text) {
+		if text := envelopeString(input, key); strings.HasPrefix(strings.TrimSpace(text), patchBegin) {
 			return parsePatch(text), true
 		}
 	}
 	return nil, false
-}
-
-// isPatchText reports whether text is an apply_patch body, which a shell rule must not
-// read: the added lines are file content, and a denied command quoted in one is not run.
-func isPatchText(text string) bool {
-	return strings.HasPrefix(strings.TrimSpace(text), patchBegin)
 }
 
 // parsePatch lists the file sections of a patch in order, each path once. A path the

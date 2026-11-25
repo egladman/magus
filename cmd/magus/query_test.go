@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -453,10 +454,18 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	tb.Setenv(proc.SocketEnv, "")
 	tb.Setenv(proc.TokenEnv, "")
 	host := server.NewHost(server.HostDeps{
-		Config:       cfg,
-		Version:      version,
-		Build:        selfBuild,
-		StatusBase:   buildStatusBase,
+		Config:  cfg,
+		Version: version,
+		Build:   selfBuild,
+		StatusBase: func() daemon.Base {
+			return daemon.Base{
+				Telemetry: server.BuildTelemetryStatus(globalCfg.Telemetry),
+				Cache:     server.BuildCacheStatus(globalCfg.Cache),
+				Build: daemon.Build{
+					SelfUpdate: selfUpdateCompiled,
+				},
+			}
+		},
 		Load:         loadMagus,
 		Place:        jobPlace,
 		BrokerClient: newBrokerClient,

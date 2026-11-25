@@ -91,9 +91,6 @@ var metrics = []metric{
 // passAt1Row is pass@1's place among the comparisons: first, and in the family.
 var passAt1Row = metric{name: passAt1Metric, label: "pass@1", digits: 3, headline: true, family: true}
 
-// comparedMetrics is every comparison in report order.
-func comparedMetrics() []metric { return append([]metric{passAt1Row}, metrics...) }
-
 // wilsonInterval is the cell's Wilson score interval; both bounds are nil when
 // nothing was graded.
 func wilsonInterval(successes, graded int) [2]*float64 {
@@ -583,7 +580,7 @@ func comparisons(c cellRuns, tasks []string, seed uint64) map[string]Comparison 
 	out := map[string]Comparison{}
 	var family []string
 	var ps []float64
-	for _, m := range comparedMetrics() {
+	for _, m := range append([]metric{passAt1Row}, metrics...) {
 		row := compare(c, tasks, m, seed)
 		out[m.name] = row
 		if m.family && row.P != nil {

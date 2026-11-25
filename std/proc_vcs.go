@@ -18,15 +18,6 @@ import (
 // vcsBinaries are the backends vcs\cmd drives.
 var vcsBinaries = []string{"git", "hg", "sl", "jj"}
 
-func isVCSBinary(name string) bool {
-	return slices.Contains(vcsBinaries, strings.TrimSuffix(filepath.Base(name), ".exe"))
-}
-
-// procVCSRefusal is RefuseVCS for proc\exec starting cmd with args in dir.
-func procVCSRefusal(cmd string, args []string, dir string) error {
-	return RefuseVCS(`proc\exec`, append([]string{cmd}, args...), dir)
-}
-
 // RefuseVCS is why the Buzz member named label (`proc\exec`, `os.execute`) may not
 // start argv in dir, nil when it may. Version control runs through vcs\cmd alone,
 // because that is where the lease-vcs gate grades it; a VCS binary started any other
@@ -38,7 +29,7 @@ func RefuseVCS(label string, argv []string, dir string) error {
 		return nil
 	}
 	for _, c := range argvCommands(argv) {
-		if isVCSBinary(c.Name) {
+		if slices.Contains(vcsBinaries, strings.TrimSuffix(filepath.Base(c.Name), ".exe")) {
 			return fmt.Errorf(`%s %s: %s runs only through vcs\cmd, which holds it to the lease rules: call %s instead`,
 				label, argv[0], c.Name, vcsCommandCall(c.Args, dir))
 		}

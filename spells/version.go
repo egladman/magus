@@ -319,22 +319,14 @@ func normalizeBound(v string) (string, bool) {
 // the result, and Check turns it into VerdictUnknown where the reader can see it.
 func (b VersionBounds) Intersect(other VersionBounds) VersionBounds {
 	out := b
-	if higher(other.Min, b.Min) {
+	if tighter(other.Min, b.Min, 1) {
 		out.Min = other.Min
 	}
-	if lower(other.Below, b.Below) {
+	if tighter(other.Below, b.Below, -1) {
 		out.Below = other.Below
 	}
 	return out
 }
-
-// higher reports whether candidate is a tighter floor than current. An empty candidate
-// never wins; an empty current always loses to a real one. An unparsable candidate
-// loses, which leaves the existing bound in place for Check to report as unknown.
-func higher(candidate, current string) bool { return tighter(candidate, current, 1) }
-
-// lower reports whether candidate is a tighter ceiling than current.
-func lower(candidate, current string) bool { return tighter(candidate, current, -1) }
 
 // tighter is higher and lower with the comparison sign as the only difference between
 // them. want is the semver.Compare result that means candidate narrows the window.

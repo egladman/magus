@@ -561,15 +561,11 @@ func Build(ctx context.Context, dir string, tracked types.TrackedFileReporter, p
 	if err != nil {
 		return oci.Artifact{}, err
 	}
-	return artifact(layer, prov), nil
-}
-
-func artifact(layer []byte, prov Provenance) oci.Artifact {
 	return oci.Artifact{
 		ArtifactType: artifactType,
 		Annotations:  prov.Annotations(),
 		Blobs:        []oci.Blob{{Title: layerTitle, MediaType: layerMediaType, Data: layer}},
-	}
+	}, nil
 }
 
 // ShippedRepository is where a release publishes each spell magus ships, one
@@ -616,7 +612,11 @@ func Shipped(name, dir string) (oci.Reference, oci.Artifact, error) {
 		if err != nil {
 			return shippedArtifact{}, err
 		}
-		content := artifact(layer, ShippedProvenance(dir))
+		content := oci.Artifact{
+			ArtifactType: artifactType,
+			Annotations:  ShippedProvenance(dir).Annotations(),
+			Blobs:        []oci.Blob{{Title: layerTitle, MediaType: layerMediaType, Data: layer}},
+		}
 		m, err := content.Manifest()
 		return shippedArtifact{content: content, manifest: m.Digest}, err
 	}))

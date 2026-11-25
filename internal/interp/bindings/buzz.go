@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive"
 	"log/slog"
 	"slices"
 
@@ -229,7 +230,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// nested object is drawn on.
 	logLevels.MapSet("hint", directVal(obs, "magus.log.hint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsString() {
-			emitMagusHint(ctx, args[0].AsString())
+			interactive.Hint(ctx, args[0].AsString())
 		}
 		return vm.Null, nil
 	}))

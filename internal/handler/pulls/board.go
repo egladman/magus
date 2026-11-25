@@ -3,6 +3,7 @@ package pulls
 import (
 	"cmp"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"slices"
 	"strings"
 	"time"
@@ -153,7 +154,8 @@ func mainState(b types.BaseBranch, now time.Time) *pullsv1.BranchState {
 		Pending: int32(r.pending),
 	}
 	if len(r.failures) > 0 {
-		s.FirstFailure = failedJob(r.failures[0])
+		c := r.failures[0]
+		s.FirstFailure = &pullsv1.FailedJob{Name: c.Name, Url: c.URL, Lines: c.Lines, OutputRef: c.OutputRef}
 	}
 	return s
 }
@@ -181,10 +183,10 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 		Draft:     p.Draft,
 	}
 	if r.hasQueued {
-		row.QueuedFor = toDuration(r.queuedFor)
+		row.QueuedFor = durationpb.New(r.queuedFor)
 	}
 	for _, c := range r.failures {
-		row.FailedJobs = append(row.FailedJobs, failedJob(c))
+		row.FailedJobs = append(row.FailedJobs, &pullsv1.FailedJob{Name: c.Name, Url: c.URL, Lines: c.Lines, OutputRef: c.OutputRef})
 	}
 	if len(row.FailedJobs) > 0 {
 		row.FirstFailure = row.FailedJobs[0]

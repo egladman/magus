@@ -106,11 +106,11 @@ func write(outDir string, log io.Writer) error {
 	}
 	modules := loadModules()
 	for _, m := range modules {
-		if err := writeModule(outDir, m); err != nil {
+		if err := os.WriteFile(filepath.Join(outDir, m.Name+".md"), []byte(renderModule(m)), 0o644); err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
 	}
-	if err := writeIndex(outDir, modules); err != nil {
+	if err := os.WriteFile(filepath.Join(outDir, "index.md"), []byte(renderIndex(modules)), 0o644); err != nil {
 		return fmt.Errorf("index: %w", err)
 	}
 	if err := prune(outDir, modules); err != nil {
@@ -159,13 +159,6 @@ func modulePageGenerated(source string) bool {
 	return source == "reference/buzz/" || source == "std/**/*.go, internal/hostmodules/**/*.go"
 }
 
-// typeMarkdown renders a type for a table cell: a backticked code span, linked to
-// its source definition when it is a host-defined type. Primitive types (string,
-// int, []string, ...) stay unlinked, the way godoc only links named types.
-func typeMarkdown(t std.TypeTag) string {
-	return fmt.Sprintf("`%s`", t.GoType())
-}
-
 // argTypeMarkdown renders argument i of meth. A callback has no tag, so it
 // renders as its Go func type.
 func argTypeMarkdown(meth std.Method, i int) string {
@@ -176,7 +169,7 @@ func argTypeMarkdown(meth std.Method, i int) string {
 	if a.Type == std.TypeInvalid && a.Object != "" {
 		return fmt.Sprintf("`%s`", a.Object)
 	}
-	return typeMarkdown(a.Type)
+	return fmt.Sprintf("`%s`", a.Type.GoType())
 }
 
 // retTypeText renders a return type. A Buzz-source method has no tag, only
@@ -199,10 +192,6 @@ func methodSourceLink(meth std.Method) string {
 		return ""
 	}
 	return fmt.Sprintf(" - [source](%s)", docs.SourceURL(src))
-}
-
-func writeModule(dir string, m std.Module) error {
-	return os.WriteFile(filepath.Join(dir, m.Name+".md"), []byte(renderModule(m)), 0o644)
 }
 
 // readExample reads a per-method example from std/examples/<module>/<method>.buzz
@@ -307,7 +296,7 @@ func renderModule(m std.Module) string {
 		fmt.Fprintf(&b, "## Fields\n\n")
 		fields := make([][]string, 0, len(m.Fields))
 		for _, f := range m.Fields {
-			fields = append(fields, []string{md.Code(f.Name), typeMarkdown(f.Type), f.Doc})
+			fields = append(fields, []string{md.Code(f.Name), fmt.Sprintf("`%s`", f.Type.GoType()), f.Doc})
 		}
 		b.WriteString(md.Table([]string{"Field", "Type", "Description"}, nil, fields))
 	}
@@ -341,7 +330,7 @@ func renderModule(m std.Module) string {
 			if equiv, dup := std.BuzzStdlibEquiv(m.Name, meth.Name); dup {
 				label := fmt.Sprintf("buzz-stdlib-%s-%s", m.Name, meth.Name)
 				sig += fmt.Sprintf("[^%s]", label)
-				notes = append(notes, stdlibNote{label, buzzMethodName(m, meth), equiv})
+				notes = append(notes, stdlibNote{label, fmt.Sprintf("%s\\%s", m.Name, std.BuzzMethodName(meth)), equiv})
 			}
 			sig += methodSourceLink(meth)
 			fmt.Fprintf(&b, "%s\n\n", sig)
@@ -406,16 +395,6 @@ func renderModule(m std.Module) string {
 	}
 
 	return b.String()
-}
-
-// buzzMethodName renders the module-qualified camelCase call (e.g. "fs.delete")
-// for a footnote, matching the form used in signatures.
-func buzzMethodName(m std.Module, meth std.Method) string {
-	return fmt.Sprintf("%s\\%s", m.Name, std.BuzzMethodName(meth))
-}
-
-func writeIndex(dir string, modules []std.Module) error {
-	return os.WriteFile(filepath.Join(dir, "index.md"), []byte(renderIndex(modules)), 0o644)
 }
 
 func renderIndex(modules []std.Module) string {

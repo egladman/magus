@@ -237,8 +237,8 @@ func (s *Store) open() *Store {
 		job.WithDeclarationDigest(s.declarationDigest),
 		job.WithHead(s.committedRevision),
 		job.WithMigrations(migrate.Store{Migrations: s.migrations}.Version(), s.migrate),
-		job.WithCredentialKinds(credentialKinds()...),
-		checkSpec(),
+		job.WithCredentialKinds([]job.CredentialKind{auth.KindOperator, auth.KindStored, auth.KindShare, auth.KindExchange, auth.KindStdio, auth.KindSocketPeer}...),
+		job.WithCheckSpec(leaseChecks{}),
 		job.WithErrorWrap(diagnose),
 		job.WithTree(s.CheckoutToken),
 		job.WithCheckCommand(s.checkCommand),
@@ -311,11 +311,6 @@ func jobsPath(loc Location) (string, error) {
 		return "", fmt.Errorf("job: %w", err)
 	}
 	return filepath.Join(dir, jobsFileName), nil
-}
-
-// credentialKinds are the kinds of credential an origin magus records may carry.
-func credentialKinds() []job.CredentialKind {
-	return []job.CredentialKind{auth.KindOperator, auth.KindStored, auth.KindShare, auth.KindExchange, auth.KindStdio, auth.KindSocketPeer}
 }
 
 // jobsFileName and attemptsFileName are the module store's files, named here for the

@@ -64,7 +64,11 @@ func eventToProto(r journal.Record) *viewerv1.Event {
 		Text:     f.text,
 	}
 	if started, ok := r.Started(); ok {
-		out.Command = commandToProto(started.Command)
+		out.Command = &viewerv1.Command{
+			Arguments: started.Command.Arguments,
+			Cwd:       started.Command.Cwd,
+			Trigger:   triggerToProto(started.Command.Trigger),
+		}
 		out.MagusVersion = started.Version
 	}
 	if scope, ok := r.Scope(); ok {
@@ -90,8 +94,12 @@ func unixMilli(t time.Time) int64 {
 // the wire message.
 func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 	return &viewerv1.Invocation{
-		Id:      inv.ID,
-		Command: commandToProto(inv.Command),
+		Id: inv.ID,
+		Command: &viewerv1.Command{
+			Arguments: inv.Command.Arguments,
+			Cwd:       inv.Command.Cwd,
+			Trigger:   triggerToProto(inv.Command.Trigger),
+		},
 		// Status was omitted here while ListInvocations set it from the same field, so GetInvocation
 		// and the shared Journal envelope reported every run as STATUS_UNSPECIFIED: a reader could
 		// not tell a passing run from one whose outcome was never recorded.
@@ -99,14 +107,6 @@ func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 		StartTime:    tsFromMs(unixMilli(inv.Started)),
 		EndTime:      tsFromMs(unixMilli(inv.Finished)),
 		MagusVersion: inv.Version,
-	}
-}
-
-func commandToProto(c journal.Command) *viewerv1.Command {
-	return &viewerv1.Command{
-		Arguments: c.Arguments,
-		Cwd:       c.Cwd,
-		Trigger:   triggerToProto(c.Trigger),
 	}
 }
 

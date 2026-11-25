@@ -18,12 +18,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// claudeCodeBash is a Claude Code PreToolUse event for a Bash call, in the shape the
-// host documents: https://code.claude.com/docs/en/hooks
-func claudeCodeBash(session, command string) string {
-	return fmt.Sprintf("{\"session_id\":\"%s\",\"prompt_id\":\"550e8400-e29b-41d4-a716-446655440000\",\"transcript_path\":\"/Users/dev/.claude/projects/-Users-dev-repo/%s.jsonl\",\"cwd\":\"/Users/dev/repo\",\"permission_mode\":\"default\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"%s\",\"description\":\"Stash local changes\",\"timeout\":120000,\"run_in_background\":false},\"tool_use_id\":\"toolu_01ABC123\"}", session, session, command)
-}
-
 // TestRepeatedDenyIsKeptPerCaller pins who a deny's full text is spent on: the installed
 // hook that called, named by host and transport, inside one session. The session id alone
 // shortened a rule for a second hook form that had never been told it, and let two hosts
@@ -40,7 +34,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	}
 	short := func(reason string) bool { return strings.HasPrefix(reason, "denied again [whole-tree]: ") }
 
-	event := claudeCodeBash(session, "git stash")
+	event := fmt.Sprintf("{\"session_id\":\"%s\",\"prompt_id\":\"550e8400-e29b-41d4-a716-446655440000\",\"transcript_path\":\"/Users/dev/.claude/projects/-Users-dev-repo/%s.jsonl\",\"cwd\":\"/Users/dev/repo\",\"permission_mode\":\"default\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"%s\",\"description\":\"Stash local changes\",\"timeout\":120000,\"run_in_background\":false},\"tool_use_id\":\"toolu_01ABC123\"}", session, session, "git stash")
 	assert.False(t, short(judge("claude-code", "sh", event)), "the first firing is in full")
 	assert.True(t, short(judge("claude-code", "sh", event)), "the same caller gets the short repeat")
 	assert.False(t, short(judge("claude-code", "buzz", event)),

@@ -239,8 +239,6 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 //	Dropbox        Note (conflicted copy 2026-08-13).md
 var syncConflictRE = regexp.MustCompile(`(?i)\.sync-conflict-|\(conflicted copy [^)]*\)|\(.*'s conflicted copy .*\)`)
 
-func isSyncConflict(name string) bool { return syncConflictRE.MatchString(name) }
-
 // obsidianTemplateDir returns the vault's configured template folder, or "" when the store
 // is not a vault or configures none. Reading .obsidian/templates.json is what makes this
 // exact: a hardcoded folder name would skip a directory someone uses for real notes, and
@@ -530,7 +528,7 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 		// would otherwise load as a second note competing with the original, and if the
 		// original declares an id, as a duplicate of that id. Obsidian Sync, Syncthing and
 		// Dropbox each spell it differently; all three are recognizable.
-		if isSyncConflict(d.Name()) {
+		if syncConflictRE.MatchString(d.Name()) {
 			return nil
 		}
 		if scanned >= MaxNotes {

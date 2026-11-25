@@ -464,10 +464,6 @@ type replFooter struct {
 	lease *termkit.Lease
 }
 
-func newReplFooter(out io.Writer) *replFooter {
-	return &replFooter{lease: termkit.ResolveZone(out).Acquire(stickyFooterRows)}
-}
-
 // paint redraws the footer. It needs no cursor bookkeeping: Region painting is
 // cursor-transparent, so the prompt printed next (and the characters the terminal
 // echoes as the user types) land wherever the transcript had reached.
@@ -601,7 +597,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	marks := osc133{w: stdout, on: opts.ShellIntegration}
 	running := false // C sent for the pending entry, D not yet
 
-	footer := newReplFooter(opts.Stdout)
+	footer := &replFooter{lease: termkit.ResolveZone(opts.Stdout).Acquire(stickyFooterRows)}
 	// Released on every exit path, including the ctx-cancelled one below: leaving
 	// the scroll margins set would hand the shell back a terminal that only
 	// scrolls its top rows, and the user has no obvious way to undo that.

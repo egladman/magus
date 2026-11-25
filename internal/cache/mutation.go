@@ -68,21 +68,6 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []typ
 	return out
 }
 
-// movedInputs names every hashed input that changed while the step ran, whoever changed it,
-// declared updates included.
-//
-// It must NOT share the exemptions of [mutatedSources], which answers "did this target
-// misbehave" and so ignores every declared update and output. This answers "does the key
-// still describe the tree it was computed from", where a peer rewriting a generated file
-// mid-hash is the whole danger. A declared update counts too: updates are never snapshotted
-// or replayed, so an entry filed under the pre-run bytes would, once the file returned to
-// them, hit and leave it as the run would not. Only a fixed point records, so a formatter
-// caches from its first run that changes nothing and an updater that rewrites its file on
-// every run never caches.
-func movedInputs(before, after sourceFingerprint) []string {
-	return mutatedSources(before, after, nil, nil)
-}
-
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
 // without declaring them via ctx.writesFiles with editsExistingSource. Callers invoke it only after
 // fn succeeded, so it never stacks on top of a target's own failure.
@@ -255,10 +240,6 @@ type writeWindow struct {
 
 type writeWindowKey struct{}
 
-func withWriteWindow(ctx context.Context, win *writeWindow) context.Context {
-	return context.WithValue(ctx, writeWindowKey{}, win)
-}
-
 func enclosingWriteWindow(ctx context.Context) *writeWindow {
 	win, _ := ctx.Value(writeWindowKey{}).(*writeWindow)
 	return win
@@ -430,7 +411,7 @@ func (c *Cache) checkUndeclaredWrites(ctx context.Context, s *Step, win *writeWi
 //
 // Neither side may be nil: runMiss makes the entry unstorable instead.
 func keyStillDescribesInputs(before, after sourceFingerprint) ([]string, bool) {
-	moved := movedInputs(before, after)
+	moved := mutatedSources(before, after, nil, nil)
 	return moved, len(moved) == 0
 }
 

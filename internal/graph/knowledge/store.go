@@ -304,7 +304,10 @@ func mergeShards(shards []Shard) *Graph {
 		nodes += len(sh.Nodes)
 		edges += len(sh.Edges)
 	}
-	g := newGraphSized(nodes, edges)
+	g := &Graph{
+		nodes: make(map[string]types.KnowledgeNode, nodes),
+		edges: make(map[edgeKey]types.KnowledgeEdge, edges),
+	}
 	for _, sh := range picked {
 		g.Merge(sh.Nodes, sh.Edges)
 	}
@@ -859,7 +862,7 @@ func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 		if meta.Fingerprint == "" {
 			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint, rebuild with `magus graph build`", name)
 		}
-		fps[symbolsShardKey(name)] = meta.Fingerprint
+		fps[strings.Replace(name, symbolsShardSuffix, "", 1)] = meta.Fingerprint
 		if p := symbolsShardProject(name); !slices.Contains(out.Projects, p) {
 			out.Projects = append(out.Projects, p)
 		}

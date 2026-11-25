@@ -316,12 +316,7 @@ func (m fileMap) read(e mapEntry) string {
 	if m.indexed && e.symbol != "" {
 		return hint.Refs.With(e.symbol, "--source")
 	}
-	return sedRangeCommand(m.rel, e.first, e.last)
-}
-
-// sedRangeCommand prints lines first..last of rel, the one read every file kind has.
-func sedRangeCommand(rel string, first, last int) string {
-	return fmt.Sprintf("sed -n %d,%dp %s", first, last, shellWord(rel))
+	return fmt.Sprintf("sed -n %d,%dp %s", e.first, e.last, shellWord(m.rel))
 }
 
 // shellWord quotes s for a shell only when it needs it, so a plain path reads as typed.
@@ -617,7 +612,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			}
 			// This caller was refused this file once and served its map, so asking again is
 			// a whole read it chose with the map in hand. Judge marks the refusal.
-			if deps.facts.AlreadyFired(readNavigationKind(deps.caller.Agent, rel)) {
+			if deps.facts.AlreadyFired(hint.MarkerKind(fmt.Sprintf("whole-read-%s-%s", shortHash(deps.caller.Agent), shortHash(rel)))) {
 				continue
 			}
 			d := denyReadNavigation(m)
@@ -631,7 +626,11 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 		}
 		first, last := rc.span(m.lines)
 		if e, ok := m.covering(first, last); ok && e.symbol != "" {
-			a := adviseReadSymbol(m, e, first, last)
+			a := advice{
+				Say: fmt.Sprintf("magus workspace: lines %d-%d of %s sit inside `%s` (%d-%d); `%s` prints that body.",
+					first, last, m.rel, e.name, e.first, e.last, m.read(e)),
+				Why: "It prints the body with its line numbers, checked against the index, and finds it again after the file moves.",
+			}
 			if v := (ShellVerdict{Context: a.Say, Why: a.Why, Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}); walk.settles(deps, v) {
 				return v, true
 			}
@@ -677,12 +676,4 @@ func denyReadNavigation(m fileMap) denial {
 		fmt.Fprintf(&b, "\n  %d-%d: %s", e.first, e.last, e.name)
 	}
 	return denial{Say: say, Why: b.String()}
-}
-
-func adviseReadSymbol(m fileMap, e mapEntry, first, last int) advice {
-	return advice{
-		Say: fmt.Sprintf("magus workspace: lines %d-%d of %s sit inside `%s` (%d-%d); `%s` prints that body.",
-			first, last, m.rel, e.name, e.first, e.last, m.read(e)),
-		Why: "It prints the body with its line numbers, checked against the index, and finds it again after the file moves.",
-	}
 }

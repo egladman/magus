@@ -131,7 +131,11 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		return v, true
 	}
 	if noGraph != "" {
-		return noGraphVerdict(noGraph), true
+		return ShellVerdict{
+			Context: fmt.Sprintf(precedentSearchAdvice, noGraph, noGraph),
+			Why:     precedentSearchAdviceWhy,
+			Kind:    advisoryPrecedent,
+		}, true
 	}
 	return ShellVerdict{}, false
 }
@@ -554,7 +558,7 @@ func liveDeclarations(deps Dependencies, root, dir string, c hint.Invocation, id
 		}
 		for _, e := range entries {
 			if e.name[strings.LastIndexByte(e.name, '.')+1:] == ident {
-				routes = append(routes, searchRoute{name: ident, run: sedRangeCommand(rel, e.first, e.last), indexed: fromIndex[rel]})
+				routes = append(routes, searchRoute{name: ident, run: fmt.Sprintf("sed -n %d,%dp %s", e.first, e.last, shellWord(rel)), indexed: fromIndex[rel]})
 			}
 		}
 	}
@@ -632,7 +636,10 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
 	routes := js.routes
 	textNote, textNext := textRemedy(c, js)
-	d := denySymbolSearch(routes, js)
+	d := denial{
+		Say: fmt.Sprintf("%s; %s it exactly. %s", denySymbolSearchLead, routeClause(routes), fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))),
+		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
+	}
 	behind := ""
 	if js.stale {
 		behind = fmt.Sprintf(" The symbol index %s; refs refreshes it as it answers.", symbolIndexCause(moved))
@@ -651,7 +658,7 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 	if len(next) > 0 {
 		next = append(next, textNext...)
 	}
-	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly.%s %s%s", denySymbolSearchLead, behind, classifiedLine(js), textNote), next...)
+	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly.%s %s%s", denySymbolSearchLead, behind, fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; ")), textNote), next...)
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
@@ -666,10 +673,6 @@ func routeNexts(routes []searchRoute) []types.NextStep {
 			"the index holds every definition and use, generated and cross-language ones included."))
 	}
 	return next
-}
-
-func isDiagnosticRoute(r searchRoute) bool {
-	return strings.HasPrefix(r.name, types.KindDiagnostic+":")
 }
 
 // treeSymbolAnswer is the sites the index holds for every name searched, under the paths
@@ -694,7 +697,7 @@ func treeSymbolAnswer(deps Dependencies, dir string, c hint.Invocation, routes [
 	}
 	var sites []site
 	for _, r := range routes {
-		if isDiagnosticRoute(r) {
+		if strings.HasPrefix(r.name, types.KindDiagnostic+":") {
 			return nil, false
 		}
 		found, definitive := deps.symbolSites(r.name)
@@ -974,11 +977,6 @@ func symbolIndexCause(moved staleGraph) string {
 	return "is older than the sources it covers"
 }
 
-// classifiedLine is the deny's account of each alternative.
-func classifiedLine(js searchJudgment) string {
-	return fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))
-}
-
 // textRemedy serves each text alternative as the literal search magus runs, when it is a
 // literal; a regular expression is named, not translated.
 func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep) {
@@ -1005,18 +1003,6 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep)
 		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "a literal search over the same paths, for the text the graph does not hold."))
 	}
 	return fmt.Sprintf("\nThe text alternatives (%s) are not symbols: search them on their own.", strings.Join(names, ", ")), next
-}
-
-// noGraphVerdict advises a search for a name in a workspace with no symbol index to route
-// it to: the one case the rule fails open, since a deny there would route nowhere. It
-// carries no brief: a repeat saying the index is still missing changes nothing for a
-// reader already told how to build one.
-func noGraphVerdict(ident string) ShellVerdict {
-	return ShellVerdict{
-		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
-		Why:     precedentSearchAdviceWhy,
-		Kind:    advisoryPrecedent,
-	}
 }
 
 // definitionLookupRe matches `func X`, `func (r *T) X` and `type X`, receiver escaped or
@@ -1094,14 +1080,6 @@ func routeClause(routes []searchRoute) string {
 // denySymbolSearchLead names what the search is for; the classification after it is what
 // makes a false positive disputable.
 const denySymbolSearchLead = "this text search is for an indexed name"
-
-// denySymbolSearch names the commands, one per name, since that is the whole correction.
-func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
-	return denial{
-		Say: fmt.Sprintf("%s; %s it exactly. %s", denySymbolSearchLead, routeClause(routes), classifiedLine(js)),
-		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
-	}
-}
 
 // classifyAlternative reads one alternative as a declaration lookup, a diagnostic code, a
 // name, or text, and says which syntax decided it.

@@ -76,7 +76,7 @@ func TestVerifyRoutesByKind(t *testing.T) {
 
 	opCred, ok := Verify(op.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, operatorCredential(op), opCred)
+	assert.Equal(t, Credential{Kind: KindOperator, ID: SecretID(op), Grant: AccessOperator()}, opCred)
 	assert.Equal(t, AccessOperator(), opCred.Grant)
 
 	// A record carrying the operator secret's hash, as a viewer.

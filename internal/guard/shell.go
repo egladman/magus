@@ -2491,17 +2491,6 @@ var (
 	timedMagusAdviceWhy = "Each target prints a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
 )
 
-// denySharedStash refuses an unqualified stash restore. The verb it names in the
-// reason is also the rule's Arg, so the two cannot describe different commands.
-func denySharedStash(verb string) ShellVerdict {
-	return ShellVerdict{
-		Deny: fmt.Sprintf("bare `git stash %s` acts on stash@{0}, often another checkout's entry; name yours as stash@{N}.", verb),
-		Why: fmt.Sprintf("The stash stack belongs to the REPOSITORY rather than your worktree, and %[1]s applies or destroys the top entry. "+
-			"`git stash list` names each entry's branch; then run `git stash %[1]s stash@{N}`.", verb),
-		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
-	}
-}
-
 // denyWholeTree refuses an operation that discards the whole tree, op naming which
 // one: in the reason and, for the same reason as above, in the rule.
 func denyWholeTree(op string) ShellVerdict {
@@ -2657,12 +2646,6 @@ func Evaluate(ctx context.Context, deps Dependencies, command string) ShellVerdi
 		v.Deny += servedScriptsNote(deps.scope.root, v.Rule.Name, command, d) + nothingRanNote(command, d)
 	}
 	return v
-}
-
-// referenceScriptNote names, one per line, the scripts the workspace at root declares
-// serve rule, "" when none does.
-func referenceScriptNote(root string, rule denyRuleName) string {
-	return scriptLines(servedScripts(root, rule, nil))
 }
 
 // servedScriptsNote is referenceScriptNote with the scripts declaring they replace a
@@ -2924,7 +2907,13 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 	}
 	if rawToolDeny {
 		match, _ := rawToolMatch(deps, rawToolCmd)
-		d := runGuardAdvice(match)
+		d := denial{
+			Say: fmt.Sprintf("run it through magus: `%s`.", hint.Run.With(fmt.Sprintf("<target>%s", charmSuffix(match)), "<project>")),
+			Why: fmt.Sprintf("`%s` lists this workspace's targets. Tool flags go after `--`: `%s`.\n%s",
+				hint.DescribeTargets.With("-o", "name"),
+				hint.Run.With(fmt.Sprintf("%s::%s", match.spell, match.operation), "[<project>]", "--", "<tool-args>"),
+				runGuardContext),
+		}
 		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
 		// Routing into magus without naming the charm that makes the write legal sends
 		// the reader to a target that would refuse to do it.
@@ -2954,7 +2943,12 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 		}
 	}
 	if inv, why, ok := toolCacheUnscoped(deps.scope, command, d); ok {
-		if v, ok := held.ends(deps, toolCacheDeny(deps.scope, command, inv, why)); ok {
+		if v, ok := held.ends(deps, ShellVerdict{
+			Deny: explainDeny(command, inv, fmt.Sprintf("[%s] %s; run `magus run golangci-lint <project>`, which keeps the cache in %s",
+				types.ToolCacheUnscoped, why, filepath.Join(deps.scope.root, ".magus", "golangci-lint"))),
+			Why:  "A cache shared with other checkouts answers from their results and hides findings this checkout would report: one shared lint cache held 10,202 paths from 5 other checkouts.",
+			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(inv)},
+		}); ok {
 			return v
 		}
 	}
@@ -3053,23 +3047,6 @@ func evaluateLine(ctx context.Context, deps Dependencies, held *heldAdvice, comm
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory
-}
-
-// runGuardContextFor leads with the TOP-LEVEL TARGET, and names the spell op
-// only as the arg-passthrough escape hatch.
-//
-// The target is not named, because it cannot be: the guard ships in a binary and
-// a workspace calls its targets whatever it likes, so a literal `magus run test`
-// would be this repository's vocabulary asserted over someone else's. The op IS
-// named, since it resolved from the spell catalog rather than from a convention.
-func runGuardAdvice(match toolMatch) denial {
-	return denial{
-		Say: fmt.Sprintf("run it through magus: `%s`.", hint.Run.With(fmt.Sprintf("<target>%s", charmSuffix(match)), "<project>")),
-		Why: fmt.Sprintf("`%s` lists this workspace's targets. Tool flags go after `--`: `%s`.\n%s",
-			hint.DescribeTargets.With("-o", "name"),
-			hint.Run.With(fmt.Sprintf("%s::%s", match.spell, match.operation), "[<project>]", "--", "<tool-args>"),
-			runGuardContext),
-	}
 }
 
 // charmSuffix spells the rewrite charm into the suggested target, because the same target

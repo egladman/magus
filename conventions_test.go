@@ -681,7 +681,12 @@ var symbolIndexSkipDirs = skipDirs("worktrees", "gen", "vendor", "testdata", "di
 // miss than accuse.
 func buildSymbolIndex(t *testing.T) (symbolIndex, []string) {
 	t.Helper()
-	ix := newSymbolIndex()
+	ix := symbolIndex{
+		byPkg:    map[string]map[string]bool{},
+		exported: map[string]string{},
+		host:     map[string]bool{},
+		files:    map[string]bool{},
+	}
 	var files []string
 
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {

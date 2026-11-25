@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	"github.com/egladman/magus/types"
 )
 
 // The attention queue: blocks waiting on a person (what agents raised, and the one
@@ -205,20 +204,4 @@ func resolveRootOrEmpty(root string) string {
 		return ""
 	}
 	return resolved
-}
-
-// noteAttentionOpenFailure reports a queue write that did not happen, without failing
-// the notification. notify is invoked from agent hooks, where a non-zero exit
-// interrupts the very session the notification exists to help, but a request that
-// silently never reached the queue is a block nobody will ever be shown, so it says
-// so rather than swallowing it.
-func noteAttentionOpenFailure(err error) {
-	slog.With(attr.Component("session notify")).Warn(fmt.Sprintf("the attention request was not recorded, so `%s` will not list it", hint.SessionAttention.String()),
-		attr.Error(err))
-}
-
-// fileAttention files an event as an attention request of the repository at root; see
-// [job.FileAttention] for which events open one.
-func fileAttention(ctx context.Context, root string, ev types.Event) (held bool, err error) {
-	return job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(ctx, jobtypes.EntryPointHook), version, jobPlace)
 }

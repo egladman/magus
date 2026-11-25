@@ -424,7 +424,11 @@ func (g *machineGate) atBound(ctx context.Context, c budget.Claim, w *budgetWait
 	if w.blind {
 		// A nested magus that cannot name its ancestors cannot be excused
 		// from its parent's claim, so the refusal names the fix.
-		return machineSeat{}, machineBlindError(c, v)
+		return machineSeat{}, types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+			"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
+				" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
+			displayProject(c.Project), c.Target, spawn.AncestorsEnvVar,
+			describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 	}
 	return machineSeat{}, machineBusyError(c, v, time.Now(), claimLease(ctx), w.waited(), w.bound)
 }
@@ -1052,17 +1056,6 @@ func describeMachineOversize(c budget.Claim, v budget.Verdict) string {
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))
-}
-
-// machineBlindError is the refusal for a nested magus that cannot name its ancestors.
-// It says what to fix, because the cause is a magusfile clearing the environment rather
-// than anything about the machine.
-func machineBlindError(c budget.Claim, v budget.Verdict) error {
-	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
-			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
-		displayProject(c.Project), c.Target, spawn.AncestorsEnvVar,
-		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
 
 // describeMachineDeclaration says where the memory and slots came from. A composed

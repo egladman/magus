@@ -622,7 +622,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 			refused = append(refused, fmt.Sprintf("%q: the declarations of %s could not be placed", claim, file))
 			continue
 		}
-		switch matched := namedDeclarations(word, all); len(matched) {
+		switch matched := job.NamedDeclarations(word, all); len(matched) {
 		case 1:
 			kept = append(kept, claim)
 		case 0:

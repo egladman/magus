@@ -70,7 +70,10 @@ func denySiblingCheckout(callDir, command string, d Dialect, owned func(root str
 		if !ok || common != hereCommon || root == hereRoot || (owned != nil && owned(root)) {
 			continue
 		}
-		return siblingCheckoutDenial(hereRoot, root)
+		return fmt.Sprintf("magus guard denied a magus command relocated into %s, another checkout of this repository; run that checkout's own magus rooted there: `%s --root %s <args>`.\n\n"+
+			"That is a different checkout of THIS repository, not a different workspace. A binary carries the guard rules and spell bytecode of the tree it was built from, so only that checkout's own binary judges it, and a gate that passes there says nothing about %s.\n\n"+
+			"A run of a target here names the project instead. Taking a job in that checkout is `job exec` the same way, which binds this session to it. Work that belongs to the other checkout belongs to a session rooted there.",
+			root, filepath.Join(root, "magus"), root, hereRoot)
 	}
 	return ""
 }
@@ -191,14 +194,4 @@ func gitFileCommonDir(gitFile string) (string, bool) {
 		p = real
 	}
 	return filepath.Clean(p), true
-}
-
-// siblingCheckoutDenial names both trees, because the mistake is invisible when only
-// one of them is on screen: the command looks correct, and what is wrong with it
-// is where it points.
-func siblingCheckoutDenial(here, there string) string {
-	return fmt.Sprintf("magus guard denied a magus command relocated into %s, another checkout of this repository; run that checkout's own magus rooted there: `%s --root %s <args>`.\n\n"+
-		"That is a different checkout of THIS repository, not a different workspace. A binary carries the guard rules and spell bytecode of the tree it was built from, so only that checkout's own binary judges it, and a gate that passes there says nothing about %s.\n\n"+
-		"A run of a target here names the project instead. Taking a job in that checkout is `job exec` the same way, which binds this session to it. Work that belongs to the other checkout belongs to a session rooted there.",
-		there, filepath.Join(there, "magus"), there, here)
 }

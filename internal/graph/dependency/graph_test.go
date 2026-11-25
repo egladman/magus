@@ -309,9 +309,9 @@ func TestNearCyclesCancellable(t *testing.T) {
 	// Build a chain large enough that the loop has work to do.
 	entries := make([][]string, 200)
 	for i := range entries {
-		entries[i] = []string{"n" + iota3(i)}
+		entries[i] = []string{"n" + fmt.Sprintf("%s%s%s", string(rune('a'+i/100)), string(rune('a'+(i/10)%10)), string(rune('a'+i%10)))}
 		if i > 0 {
-			entries[i] = append(entries[i], "n"+iota3(i-1))
+			entries[i] = append(entries[i], "n"+fmt.Sprintf("%s%s%s", string(rune('a'+(i-1)/100)), string(rune('a'+((i-1)/10)%10)), string(rune('a'+(i-1)%10))))
 		}
 	}
 	g := build(t, entries)
@@ -321,11 +321,6 @@ func TestNearCyclesCancellable(t *testing.T) {
 	// Should short-circuit immediately on cancellation; no panic, returns
 	// whatever it's seen so far (possibly empty).
 	assert.NotPanics(t, func() { _ = g.NearCycles(ctx, 5) })
-}
-
-func iota3(i int) string {
-	// trivial 3-digit string
-	return fmt.Sprintf("%s%s%s", string(rune('a'+i/100)), string(rune('a'+(i/10)%10)), string(rune('a'+i%10)))
 }
 
 // linear builds a chain: 0→1→2→…→n-1 where each node depends on the next.

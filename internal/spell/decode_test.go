@@ -623,17 +623,13 @@ func TestDescriptor_ToolObserve(t *testing.T) {
 	assert.False(t, feed.HasProbe(), "an observation is not a version")
 }
 
-func stubSpell(stubs spells.StubSyntax) Contract {
-	return Contract{Name: "lang", Language: &spells.Language{
-		Name:       "lang",
-		Extensions: []string{".l"},
-		Syntax:     &spells.Syntax{Stubs: &stubs},
-	}}
-}
-
 func TestDescriptor_Stubs(t *testing.T) {
 	want := spells.StubSyntax{Kinds: []string{"Function", "Method"}, BodyStyle: "brace", Body: "{ panic() }"}
-	m, err := describe(stubSpell(want))
+	m, err := describe(Contract{Name: "lang", Language: &spells.Language{
+		Name:       "lang",
+		Extensions: []string{".l"},
+		Syntax:     &spells.Syntax{Stubs: &want},
+	}})
 	require.NoError(t, err)
 	require.NotNil(t, m.Syntax)
 	assert.Equal(t, &want, m.Syntax.Stubs)
@@ -664,7 +660,11 @@ func TestDescriptor_StubsRefused(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stubs := valid()
 			tt.mutate(&stubs)
-			_, err := describe(stubSpell(stubs))
+			_, err := describe(Contract{Name: "lang", Language: &spells.Language{
+				Name:       "lang",
+				Extensions: []string{".l"},
+				Syntax:     &spells.Syntax{Stubs: &stubs},
+			}})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), `spell "lang"`, "the error names the spell")
 			assert.Contains(t, err.Error(), tt.want)

@@ -303,10 +303,6 @@ type workspaceOpens struct {
 	shared *OpenedWorkspaces
 }
 
-func newWorkspaceOpens(shared *OpenedWorkspaces) *workspaceOpens {
-	return &workspaceOpens{byRoot: map[string]workspaceOpen{}, shared: shared}
-}
-
 func (o *workspaceOpens) kept(root string) (workspaceOpen, bool) {
 	if o == nil {
 		return workspaceOpen{}, false
@@ -785,7 +781,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &checkoutRevisions{current: map[string]string{}}
-	deps.opens = newWorkspaceOpens(deps.Opens)
+	deps.opens = &workspaceOpens{byRoot: map[string]workspaceOpen{}, shared: deps.Opens}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
@@ -1183,7 +1179,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 			}
 		}
 		if judgment.Decision != verdict.Deny {
-			if reason := denyAmbiguousCIWord(facts, writeAssumesCIWord(input)); reason != "" {
+			if reason := denyAmbiguousCIWord(facts, hostCIPath(input)); reason != "" {
 				refuse(denyRuleAmbiguousCIWord, reason)
 			}
 		}
@@ -1320,7 +1316,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		now := time.Now()
 		// readVerdictAt lets this caller's next whole read of the file through.
 		if v.Deny != "" && v.Rule.Name == denyRuleReadNavigation {
-			facts.MarkFired(readNavigationKind(who.Agent, v.Rule.Arg))
+			facts.MarkFired(hint.MarkerKind(fmt.Sprintf("whole-read-%s-%s", shortHash(who.Agent), shortHash(v.Rule.Arg))))
 		}
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(gradeReadPaging(deps, facts, who.Agent, callDir, input, shellD)))
@@ -1397,7 +1393,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range roleScopedCommandRules() {
+		for _, rule := range []roleScopedRule{
+			{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
+			{denyRuleLeaseCheckout, denyLeaseCheckout},
+			{denyRuleLeasePaused, denyPausedLease},
+			{denyRuleLeaseGate, denyLeaseScopedGate},
+			{denyRuleWorkerCheckOnly, denyWorkerRawTool},
+			{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
+			{denyRuleLeaseVCS, leaseVCSDenial},
+			{denyRuleLeaseRebind, denyLeaseScopedRebind},
+			{denyRuleLeaseHarness, denyLeaseScopedHarness},
+			{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
+			{denyRuleEditUngraded, denyUngradedRewrite},
+			{denyRuleSleepPoll, denyRefusedRetry},
+		} {
 			if judgment.Decision == verdict.Deny || preauth != "" {
 				break
 			}
@@ -1607,7 +1616,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.
 				recordWatch(facts, who.Agent, waiter.watchCall, now)
 			}
 			if req.CallBackground && !env.IsWatch {
-				recordBackground(facts, who.Agent, input)
+				writeAgentMarker(facts, hint.MarkerKind(fmt.Sprintf("%s%s-%s", backgroundMarkerPrefix, shortHash(who.Agent), shortHash(input))), []byte(input))
 			}
 		}
 	}
@@ -1748,7 +1757,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
 	v = deps.rankGraded(v, denyRuleSiblingCheckout, denySiblingCheckout(callDir, line, d, lineOwns(ctx, deps, at, line, d)), rankSiblingCheckout)
-	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
+	v = stronger(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
 	v = deps.rankGraded(v, denyRuleConflictCommit, denyConflictCommit(ctx, at, line, d), rankConflictCommit)
@@ -1820,27 +1829,6 @@ func denyHookWiringCommand(at location, callDir, actingLease string, agentAttrib
 type roleScopedRule struct {
 	name  denyRuleName
 	judge func(context.Context, Dependencies, string, string) denial
-}
-
-// roleScopedCommandRules are the command rules a served next stands down, so each is
-// asked of a remedy before it is served. verify-repeat reads the run log rather
-// than a row,
-// and is here because a gate magus itself served is not a repeat the caller chose.
-func roleScopedCommandRules() []roleScopedRule {
-	return []roleScopedRule{
-		{denyRuleLeaseRowUnknown, denyUnknownRowMembers},
-		{denyRuleLeaseCheckout, denyLeaseCheckout},
-		{denyRuleLeasePaused, denyPausedLease},
-		{denyRuleLeaseGate, denyLeaseScopedGate},
-		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
-		{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
-		{denyRuleLeaseVCS, leaseVCSDenial},
-		{denyRuleLeaseRebind, denyLeaseScopedRebind},
-		{denyRuleLeaseHarness, denyLeaseScopedHarness},
-		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
-		{denyRuleEditUngraded, denyUngradedRewrite},
-		{denyRuleSleepPoll, denyRefusedRetry},
-	}
 }
 
 // oneString adapts a rule that words its refusal as one string, verdict on the first
@@ -2053,7 +2041,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		if !hostToolStep(step) {
 			return hookRequest{}, false
 		}
-		env = stepEnvelope(step)
+		env = hookEnvelope{ToolName: step.Name, ToolInput: step.Input, Cwd: step.Dir, SessionID: step.Session, AgentID: step.Agent}
 	} else if err := codec.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}

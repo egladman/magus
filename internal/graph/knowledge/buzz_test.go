@@ -116,8 +116,8 @@ func TestSourceWalksSkipVCSIgnored(t *testing.T) {
 	r.Write("dist/built.buzz", "fun built() > void {}\n")
 	r.Write("dist/built.go", "package built\n")
 
-	assert.Equal(t, []string{"kept.buzz"}, findBuzzFiles(root))
-	assert.Equal(t, []string{"kept.buzz", "kept.go"}, findCommentSources(root))
+	assert.Equal(t, []string{"kept.buzz"}, WalkTree(root).buzzFiles())
+	assert.Equal(t, []string{"kept.buzz", "kept.go"}, WalkTree(root).commentSources())
 }
 
 // writeBenchTree materializes a synthetic workspace of nBuzz .buzz files (each a

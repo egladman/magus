@@ -21,10 +21,10 @@ import (
 func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	t.Parallel()
 
-	parent := leaseRow("plan", "")
+	parent := job.Job{ID: "plan", Parent: "", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	parent.Paths.Write = []string{"internal/ledger"}
 	parent.Validation = "magus run test internal/ledger"
-	child := leaseRow("plan/cli", "plan")
+	child := job.Job{ID: "plan/cli", Parent: "plan", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	child.Paths.Write = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
@@ -503,8 +503,4 @@ func TestWithoutEndedDropsEveryRowThatEndedAndItsReadOnlyShadows(t *testing.T) {
 	assert.Equal(t, 2, ended)
 	require.Len(t, live.ReadOnly, 1)
 	assert.Equal(t, "fleet", live.ReadOnly[0].Job)
-}
-
-func leaseRow(id, parent string) job.Job {
-	return job.Job{ID: id, Parent: parent, State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 }

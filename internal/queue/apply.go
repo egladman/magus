@@ -723,19 +723,13 @@ func (r *applyRun) requiredChecks(ctx context.Context, c types.Change, tip strin
 			return nil, false, err
 		}
 		if carried {
-			return nil, true, r.kick(ctx, c, types.Kick{Code: types.CodeKickRed, Report: redChecksReport(r.plan.Base, c.Head, tip, failing)})
+			return nil, true, r.kick(ctx, c, types.Kick{Code: types.CodeKickRed, Report: fmt.Sprintf("The merge queue cannot merge this change at `%s`: its required checks %s failed there, and it already carries `%s` at `%s`, so they failed on what it would merge onto.\n\nFix them and push.\n", short(c.Head), joinPaths(failing), r.plan.Base, short(tip))})
 		}
 		return failing, false, nil
 	case len(running) > 0:
 		return nil, true, r.wait(ctx, c, c.Head, types.CodeWaitChecks, fmt.Sprintf("its required checks %s are running", joinPaths(running)))
 	}
 	return nil, false, nil
-}
-
-// redChecksReport says which required checks failed on a head that carries the base's
-// tip, so the failure is the change's own.
-func redChecksReport(base, head, tip string, failing []string) string {
-	return fmt.Sprintf("The merge queue cannot merge this change at `%s`: its required checks %s failed there, and it already carries `%s` at `%s`, so they failed on what it would merge onto.\n\nFix them and push.\n", short(head), joinPaths(failing), base, short(tip))
 }
 
 // rebuild builds v's candidate again onto onto and returns it once it is the commit

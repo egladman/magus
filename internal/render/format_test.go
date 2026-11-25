@@ -82,21 +82,9 @@ func gluePath(t testing.TB, rel ...string) string {
 	return filepath.Join(append([]string{root}, rel...)...)
 }
 
-// glueHostSchemaDir holds the host schemas the glue's replies are graded against;
-// testdata/hosts/SOURCES.md says which a host published and which magus wrote.
-func glueHostSchemaDir(t testing.TB) string {
-	return gluePath(t, "internal", "render", "testdata", "hosts")
-}
-
 // glueTemplateDir is the shipped glue.
 func glueTemplateDir(t testing.TB) string {
 	return gluePath(t, "docs", "guides", "integrations", "agents")
-}
-
-// withSecrets gives a context the resolver main installs in production; a glue
-// that execs a command has its output captured, which refuses without one.
-func withSecrets(ctx context.Context) context.Context {
-	return testkit.WithEnvResolver(ctx)
 }
 
 // glueRunner runs a glue file the way `magus buzz -s` does outside a workspace: the host
@@ -219,7 +207,7 @@ const glueVerdictEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --r
 
 func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir(t), rel))
+	raw, err := os.ReadFile(filepath.Join(gluePath(t, "internal", "render", "testdata", "hosts"), rel))
 	require.NoError(t, err, "read the vendored schema %s", rel)
 	var schema jsonschema.Schema
 	require.NoError(t, codec.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
@@ -272,7 +260,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 	var reply string
 	withStdin(t, a.event, func() {
 		reply = testkit.CaptureStdout(t, func() {
-			runErr = glueRunner().Run(withSecrets(t.Context()), dir, interp.ScriptOptions{}, "", []string{script}, []string{"--agent-name", a.host}, true)
+			runErr = glueRunner().Run(testkit.WithEnvResolver(t.Context()), dir, interp.ScriptOptions{}, "", []string{script}, []string{"--agent-name", a.host}, true)
 		})
 	})
 	require.NoError(t, runErr, "%s (%s) must never fail: its host reads a non-zero exit as an error", name, a.label)
@@ -459,7 +447,7 @@ var glueCursorEvents = map[string]struct {
 // introspects.
 func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir(t), rel))
+	raw, err := os.ReadFile(filepath.Join(gluePath(t, "internal", "render", "testdata", "hosts"), rel))
 	require.NoError(t, err, "read the vendored schema %s", rel)
 	var schema struct {
 		Properties map[string]any `json:"properties"`

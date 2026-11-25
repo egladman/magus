@@ -31,12 +31,6 @@ import (
 // refused as unjudged.
 var worktreeRemoveRe = regexp.MustCompile(`\b` + gitOpts + `worktree\s+(?:remove|unlock)\b`)
 
-// rankWorktreeRemove fills a silence and outranks an advisory, but never replaces a deny
-// the line earned on its own. A demoted removal outranks only an advisory.
-func rankWorktreeRemove(v, removal ShellVerdict) ShellVerdict {
-	return stronger(v, removal)
-}
-
 // isWorktreeRemove reports a `git worktree remove`, whatever global options precede it, or
 // a `git worktree unlock`, which leaves a removal nothing that would stop it.
 func isWorktreeRemove(c hint.Invocation) bool {

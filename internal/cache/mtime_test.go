@@ -16,10 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// shardFileName mirrors mtimeStore.writeShardFile's on-disk naming so tests can
-// place raw junk files under keys that never collide with a computed shard key.
-func shardFileName(key byte) string { return fmt.Sprintf("%02x.json.gz", key) }
-
 // TestMtimeStoreRoundTrip exercises set -> flush -> load across two store
 // instances sharing one shard directory: the second store must see exactly
 // the entry the first wrote. This covers the happy-path shard write and the
@@ -191,14 +187,14 @@ func TestMtimeStoreLoadSkipsJunkFiles(t *testing.T) {
 	// Junk 4: valid hex name but not gzip -> gzip.NewReader fails. Derive the
 	// key from validKey so it can never collide with the valid shard's name.
 	badGzKey := validKey ^ 0x11
-	require.NoError(t, os.WriteFile(filepath.Join(shardDir, shardFileName(badGzKey)), []byte("not gzip"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(shardDir, fmt.Sprintf("%02x.json.gz", badGzKey)), []byte("not gzip"), 0o644))
 	// Junk 5: valid gzip but non-decodable JSON -> shard wiped, no crash.
 	badJSONKey := validKey ^ 0x22
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	_, _ = gz.Write([]byte("not json"))
 	require.NoError(t, gz.Close())
-	require.NoError(t, os.WriteFile(filepath.Join(shardDir, shardFileName(badJSONKey)), buf.Bytes(), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(shardDir, fmt.Sprintf("%02x.json.gz", badJSONKey)), buf.Bytes(), 0o644))
 
 	// Write the real shard last so it wins if any derived junk key still lands
 	// on the same name (impossible given the XOR masks, but explicit is safe).

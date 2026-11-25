@@ -169,22 +169,15 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// bundled per module, and a cross-file reference would need an import the bundle
 	// has no way to supply.
 	for _, e := range enumsUsedBy(rt) {
-		b.Write(renderBuzzEnumDecl(e))
+		b.Write(emit.BuzzEnum(e.Name, e.Closed, e.Cases))
 		fmt.Fprintln(&b)
 	}
-	body, err := renderBuzzMirrorDecl(name, rt)
+	body, err := renderBuzzMirrorDeclIn("", name, rt)
 	if err != nil {
 		return nil, err
 	}
 	b.Write(body)
 	return b.Bytes(), nil
-}
-
-// renderBuzzMirrorDecl renders just the `export object <name> { … }` declaration. Split
-// from the header so a module bundle (moduledecls) can carry many mirrors under one
-// header instead of repeating the banner per type.
-func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
-	return renderBuzzMirrorDeclIn("", name, rt)
 }
 
 // renderBuzzMirrorDeclIn is renderBuzzMirrorDecl for a declaration in the

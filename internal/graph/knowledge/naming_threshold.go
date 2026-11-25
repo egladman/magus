@@ -61,14 +61,14 @@ func (thresholdCheck) run(x *namingIndex) []finding {
 				subject: p.subject.id,
 				score:   thresholdGrewScore,
 				message: fmt.Sprintf("`%s` measures %d for %s, up from %d at the base, past the configured anchor of %d",
-					p.subject.label, p.measure, thresholdName(p.key), was, p.value),
+					p.subject.label, p.measure, fmt.Sprintf("%s %s", string(p.key.Metric), string(p.key.Population)), was, p.value),
 			})
 		default:
 			out = append(out, finding{
 				subject: p.subject.id,
 				score:   thresholdPastScore,
 				message: fmt.Sprintf("`%s` measures %d for %s, past the configured anchor of %d",
-					p.subject.label, p.measure, thresholdName(p.key), p.value),
+					p.subject.label, p.measure, fmt.Sprintf("%s %s", string(p.key.Metric), string(p.key.Population)), p.value),
 			})
 		}
 	}
@@ -154,8 +154,4 @@ func thresholdItemID(d *namingDecl) (string, bool) {
 		return "", false
 	}
 	return symbolItemID(d.file(), local), true
-}
-
-func thresholdName(k types.ConformanceKey) string {
-	return fmt.Sprintf("%s %s", string(k.Metric), string(k.Population))
 }

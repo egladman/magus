@@ -986,7 +986,7 @@ func (w *sweeper) reason(x rowIndex, rows []job.Job, row job.Job) (string, error
 		return fmt.Sprintf("taken in %s, which no longer exists", row.CheckoutRoot), nil
 	}
 	if Editing(row) && row.Registered != 0 && row.Overdue(w.now) {
-		return overdueReason(row, w.now), nil
+		return fmt.Sprintf("%s%s ago", overdueReasonPrefix, time.Duration(w.now-row.Deadline)*time.Second), nil
 	}
 	// Only a registration says a holder took it; a checkout_root without one names no holder.
 	if row.Registered != 0 || row.State != job.StateDeclared {
@@ -1284,7 +1284,7 @@ func (w *sweeper) pruneReason(row job.Job, flagged job.List, window time.Duratio
 	case row.State == job.StateExited:
 		return fmt.Sprintf("exited %s ago and nobody collected its result with `magus job wait`", idle)
 	case slices.Contains(flagged.Overdue, row.ID):
-		return overdueReason(row, w.now)
+		return fmt.Sprintf("%s%s ago", overdueReasonPrefix, time.Duration(w.now-row.Deadline)*time.Second)
 	case !slices.Contains(flagged.Stale, row.ID):
 		return ""
 	case row.Registered == 0:
@@ -1297,10 +1297,6 @@ func (w *sweeper) pruneReason(row job.Job, flagged job.List, window time.Duratio
 
 // overdueReasonPrefix opens the end_reason of a row ended for passing its deadline.
 const overdueReasonPrefix = "overdue: its deadline passed "
-
-func overdueReason(row job.Job, now int64) string {
-	return fmt.Sprintf("%s%s ago", overdueReasonPrefix, time.Duration(now-row.Deadline)*time.Second)
-}
 
 // resolveStaleAfter is jobs.stale_after from the workspace's own magus.yaml. Workspace
 // only, like every rule that acts rather than reports: a value in one person's global

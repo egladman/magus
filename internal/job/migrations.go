@@ -3,6 +3,7 @@ package job
 import (
 	"bytes"
 	"fmt"
+	"github.com/egladman/magus/internal/auth"
 	"reflect"
 	"slices"
 	"strings"
@@ -127,13 +128,6 @@ func regroup(e migrate.Entry) (migrate.Entry, error) {
 // [job.AcceptWitnessed].
 func acceptWitnessed(e migrate.Entry) (migrate.Entry, error) { return job.AcceptWitnessed(e) }
 
-// specPathsMoved pairs each flat spec member with its name under spec.paths.
-func specPathsMoved() []struct{ flat, nested string } {
-	return []struct{ flat, nested string }{
-		{"writePaths", "write"}, {"readPaths", "read"}, {"denyPaths", "deny"}, {"softPaths", "soft"},
-	}
-}
-
 // pathsNested moves a row's flat spec path members under spec.paths.
 func pathsNested(e migrate.Entry) (migrate.Entry, error) {
 	raw, ok := e["spec"]
@@ -145,7 +139,9 @@ func pathsNested(e migrate.Entry) (migrate.Entry, error) {
 		return nil, fmt.Errorf("reading spec: %w", err)
 	}
 	paths := map[string]codec.RawMessage{}
-	for _, m := range specPathsMoved() {
+	for _, m := range []struct{ flat, nested string }{
+		{"writePaths", "write"}, {"readPaths", "read"}, {"denyPaths", "deny"}, {"softPaths", "soft"},
+	} {
 		if v, ok := spec[m.flat]; ok {
 			paths[m.nested] = v
 			delete(spec, m.flat)
@@ -450,39 +446,6 @@ func staleStoreFix(path string) string {
 // [Store.snakeAttempts].
 const keysSnaked = "records and attempts spell their keys and enum values in snake_case"
 
-// snakeKeys pairs each camelCase key a job store record spelled before [keysSnaked] with
-// its snake_case spelling. An explicit table rather than a case conversion, because a
-// conversion would respell every camelCase key, those of a member this build keeps without
-// declaring among them; the table names only keys a record declared. goals and
-// gateAttempts take the names the postcondition rename gave them.
-func snakeKeys() map[string]string {
-	return map[string]string{
-		"apiVersion": "api_version", "attemptId": "attempt_id", "baseVerdict": "base_verdict",
-		"binaryDigest": "binary_digest", "briefFormat": "brief_format", "bytesReclaimed": "bytes_reclaimed",
-		"changedPaths": "changed_paths", "checkoutRoot": "checkout_root", "deadBecause": "dead_because",
-		"denialsKnown": "denials_known", "dependsOn": "depends_on", "durationMs": "duration_ms",
-		"endReason": "end_reason", "entryPoint": "entry_point", "extraArgs": "extra_args",
-		"failingRefs": "failing_refs", "followUps": "follow_ups", "gateAttempts": "postcondition_attempts",
-		"gateId": "gate_id", "goals": "postconditions", "holderStopped": "holder_stopped", "itemsRemoved": "items_removed",
-		"jobState": "job_state", "lastRun": "last_run", "lastTransitionTime": "last_transition_time",
-		"leftUnmerged": "left_unmerged", "maxAttempts": "max_attempts", "maxClaims": "max_claims",
-		"modelTier": "model_tier", "observedGeneration": "observed_generation", "outputRef": "output_ref",
-		"parentHead": "parent_head", "pauseReason": "pause_reason", "pausedBy": "paused_by",
-		"pausedUntil": "paused_until", "readOnly": "read_only", "registeredBy": "registered_by",
-		"releaseRequests": "release_requests", "releasedAt": "released_at", "reportedBase": "reported_base",
-		"reworkRounds": "rework_rounds", "takenBy": "taken_by", "timestampMs": "timestamp_ms",
-		"unresolvedRisks": "unresolved_risks", "verdictRef": "verdict_ref",
-		"verificationEvidence": "verification_evidence", "waiterEvidence": "waiter_evidence",
-		"writeProof": "write_proof",
-	}
-}
-
-// opaqueMembers are the members whose values [snakeRecord] never respells: maps a caller
-// keys, and a check, whose one renamed member it respells itself.
-func opaqueMembers() map[string]bool {
-	return map[string]bool{"annotations": true, "labels": true, "check": true}
-}
-
 // snakeKeyCollisionError is a stored object carrying a member under its camelCase key and
 // its snake_case key both, so neither can be told for the one the record means.
 type snakeKeyCollisionError struct {
@@ -509,7 +472,25 @@ func (e *unplacedEnumError) Error() string {
 // inside each check. A line already respelled comes back unchanged, so the rewrite is the
 // same applied twice.
 func snakeRecord(e migrate.Entry) (migrate.Entry, error) {
-	keys, opaque := snakeKeys(), opaqueMembers()
+	keys, opaque := map[string]string{
+		"apiVersion": "api_version", "attemptId": "attempt_id", "baseVerdict": "base_verdict",
+		"binaryDigest": "binary_digest", "briefFormat": "brief_format", "bytesReclaimed": "bytes_reclaimed",
+		"changedPaths": "changed_paths", "checkoutRoot": "checkout_root", "deadBecause": "dead_because",
+		"denialsKnown": "denials_known", "dependsOn": "depends_on", "durationMs": "duration_ms",
+		"endReason": "end_reason", "entryPoint": "entry_point", "extraArgs": "extra_args",
+		"failingRefs": "failing_refs", "followUps": "follow_ups", "gateAttempts": "postcondition_attempts",
+		"gateId": "gate_id", "goals": "postconditions", "holderStopped": "holder_stopped", "itemsRemoved": "items_removed",
+		"jobState": "job_state", "lastRun": "last_run", "lastTransitionTime": "last_transition_time",
+		"leftUnmerged": "left_unmerged", "maxAttempts": "max_attempts", "maxClaims": "max_claims",
+		"modelTier": "model_tier", "observedGeneration": "observed_generation", "outputRef": "output_ref",
+		"parentHead": "parent_head", "pauseReason": "pause_reason", "pausedBy": "paused_by",
+		"pausedUntil": "paused_until", "readOnly": "read_only", "registeredBy": "registered_by",
+		"releaseRequests": "release_requests", "releasedAt": "released_at", "reportedBase": "reported_base",
+		"reworkRounds": "rework_rounds", "takenBy": "taken_by", "timestampMs": "timestamp_ms",
+		"unresolvedRisks": "unresolved_risks", "verdictRef": "verdict_ref",
+		"verificationEvidence": "verification_evidence", "waiterEvidence": "waiter_evidence",
+		"writeProof": "write_proof",
+	}, map[string]bool{"annotations": true, "labels": true, "check": true}
 	out := make(migrate.Entry, len(e))
 	for k, v := range e {
 		name := snakeKey(keys, k)
@@ -637,7 +618,7 @@ type enumMember struct {
 // recordEnums are the enum members of a job row and an attempt.
 func recordEnums() []enumMember {
 	entry := newStoredEnum(job.EntryPointCLI, job.EntryPointHook, job.EntryPointMCP, job.EntryPointRPC, job.EntryPointServer)
-	creds := newStoredEnum(credentialKinds()...)
+	creds := newStoredEnum([]job.CredentialKind{auth.KindOperator, auth.KindStored, auth.KindShare, auth.KindExchange, auth.KindStdio, auth.KindSocketPeer}...)
 	fixed := []enumMember{
 		{"Job", []string{"spec", "brief_format"}, newStoredEnum(job.BriefFormatMarkdown, job.BriefFormatBuzz)},
 		{"Job", []string{"spec", "agent", "worker", "type"}, newStoredEnum(job.WorkerTypeResumed, job.WorkerTypeNew)},
@@ -868,12 +849,6 @@ func attemptPostconditionIDs(e migrate.Entry) error {
 // featuresRespelled names the migration that respells the signature-goals feature.
 const featuresRespelled = "the signature-goals feature becomes signature-postconditions"
 
-// renamedFeatures pairs each feature a requires annotation named before
-// [featuresRespelled] with its name after it.
-func renamedFeatures() map[string]string {
-	return map[string]string{"signature-goals": "signature-postconditions"}
-}
-
 // respellFeatures renames, in every requires annotation of a row or the header, each
 // feature [renamedFeatures] lists. A line naming none comes back unchanged.
 func respellFeatures(e migrate.Entry) (migrate.Entry, error) {
@@ -893,7 +868,7 @@ func respellFeatures(e migrate.Entry) (migrate.Entry, error) {
 	if err := codec.Unmarshal(annotationsRaw, &annotations); err != nil {
 		return nil, fmt.Errorf("reading metadata.annotations: %w", err)
 	}
-	renamed, changed := renamedFeatures(), false
+	renamed, changed := map[string]string{"signature-goals": "signature-postconditions"}, false
 	for key, value := range annotations {
 		if !strings.HasSuffix(key, "/requires") {
 			continue

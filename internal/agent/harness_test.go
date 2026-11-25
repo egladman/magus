@@ -245,7 +245,7 @@ func TestPlanHarnessForAMissingFileCreatesIt(t *testing.T) {
 	require.Contains(t, plan.Files, "test-host/hooks.json")
 	assert.False(t, plan.Files["test-host/hooks.json"].Exists)
 	assert.Equal(t,
-		"magus describe harness test-host -o json | magus buzz -e "+posixQuote(harnessMergeScript),
+		"magus describe harness test-host -o json | magus buzz -e "+fmt.Sprintf("'%s'", strings.ReplaceAll(harnessMergeScript, "'", `'\''`)),
 		plan.Merge)
 }
 

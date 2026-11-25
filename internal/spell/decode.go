@@ -51,7 +51,7 @@ func checkSandbox(m *spells.Descriptor) error {
 	if m.Sandbox == nil {
 		return nil
 	}
-	if err := validateSandbox(*m.Sandbox); err != nil {
+	if err := sandbox.CheckDeclaration(*m.Sandbox); err != nil {
 		return types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", m.Name, err)
 	}
 	return nil
@@ -714,13 +714,6 @@ func validateSymbolIndexer(spellName string, si *spells.SymbolIndexer) error {
 		}
 	}
 	return nil
-}
-
-// validateSandbox refuses what sandbox.CheckDeclaration refuses: a grant that cannot be
-// honored would quietly grant nothing, and the tool would fail with a permission error
-// naming a path, not the spell.
-func validateSandbox(sb spells.Sandbox) error {
-	return sandbox.CheckDeclaration(sb)
 }
 
 // ValidateDiscovered checks a decoded discover_projects answer; one bad claim fails it

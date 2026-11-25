@@ -36,7 +36,8 @@ func FileAttention(ctx context.Context, root string, ev types.Event, origin job.
 		// none would collapse onto ONE request, and a single dispose would close blocks
 		// nobody had read. No id, no durable request: the same graceful path as no
 		// repository, because the notification itself still fires.
-		noteMissingAttentionSource(ctx)
+		slog.With(attr.Component("session notify")).WarnContext(ctx, "the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
+			attr.Why("have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 		return false, nil
 	}
 	if root == "" {
@@ -75,13 +76,4 @@ func FileAttention(ctx context.Context, root string, ev types.Event, origin job.
 		return false, err
 	}
 	return !opened, nil
-}
-
-// noteMissingAttentionSource reports the one event shape that cannot become a durable
-// request. It leaves the notification itself alone (the desktop alert still fires) and
-// says what the producer has to change, because an agent whose blocks never reach the
-// queue has no other symptom.
-func noteMissingAttentionSource(ctx context.Context) {
-	slog.With(attr.Component("session notify")).WarnContext(ctx, "the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
-		attr.Why("have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }

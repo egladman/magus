@@ -247,9 +247,9 @@ func TestTreeWalkScansShareOneWalkAndOneIgnoreQuery(t *testing.T) {
 	assert.Len(t, w.ignored, asked, "no later scan asked again")
 
 	assert.Equal(t, findDocFiles(root, ""), docs, "the shared walk answers as the standalone scan does")
-	assert.Equal(t, findBuzzFiles(root), w.buzzFiles())
-	assert.Equal(t, findCommentSources(root), w.commentSources())
-	assert.Equal(t, findPackageSources(root), w.packageSources())
+	assert.Equal(t, WalkTree(root).buzzFiles(), w.buzzFiles())
+	assert.Equal(t, WalkTree(root).commentSources(), w.commentSources())
+	assert.Equal(t, WalkTree(root).packageSources(), w.packageSources())
 }
 
 func TestInputHashPathSeesAbsenceAndChange(t *testing.T) {

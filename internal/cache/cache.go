@@ -757,7 +757,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// Named, so a wait here says which step holds the key and so the slot watch can see
 	// that this step's seat is parked rather than working: this lock is one of the two
 	// ways a step blocks while holding its slots.
-	unlock, err := hashLocks.acquireNamed(ctx, hash, stepLabel(s), func(holder string) func() {
+	unlock, err := hashLocks.acquireNamed(ctx, hash, fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target), func(holder string) func() {
 		return budget.MarkWaiting(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
 	})
 	if err != nil {
@@ -957,7 +957,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	ctx = recorder.WithPermits(types.WithExecCost(ctx))
 	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
-	rawOutput, logged, runErr := c.captureRun(withWriteWindow(NewContext(ctx, c), win), lp, s.ProjectPath, reproTarget(s), fn)
+	rawOutput, logged, runErr := c.captureRun(context.WithValue(NewContext(ctx, c), writeWindowKey{}, win), lp, s.ProjectPath, reproTarget(s), fn)
 	c.writers.finish(win)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
 	result.Permitted = recorder.Permits(ctx)
@@ -1407,7 +1407,7 @@ func withWhy(err error, attrs ...slog.Attr) []any {
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
 func (c *Cache) admit(ctx context.Context, s Step, lim *budget.Limiter) (context.Context, int, func(), error) {
 	slots := grantedSlots(ctx, s, stepSlots(s, lim))
-	ctx, releaseSeat, err := lim.Seat(ctx, slots, stepLabel(s))
+	ctx, releaseSeat, err := lim.Seat(ctx, slots, fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target))
 	if err != nil {
 		return ctx, 0, nil, err
 	}
@@ -1429,10 +1429,6 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *budget.Limiter) (context
 		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
 	}, nil
 }
-
-// stepLabel names a step for a human reading a wait. It is the project as
-// `magus server status` spells it, then the target.
-func stepLabel(s Step) string { return fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target) }
 
 type sharedStepBaseKey struct{}
 

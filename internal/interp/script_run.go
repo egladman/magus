@@ -432,7 +432,7 @@ func (r *ScriptRunner) Context(ctx context.Context, root string) (context.Contex
 		ctx = std.WithCurrentWorkingDirectory(ctx, abs)
 	}
 	if !r.Adopted(ctx) && !r.Sandbox {
-		return newLazyWorkspaceContext(ctx, root, r.Open), nil
+		return &lazyWorkspaceContext{Context: ctx, root: root, open: r.Open}, nil
 	}
 	ws, lerr := r.Open(ctx, root)
 	if lerr != nil {

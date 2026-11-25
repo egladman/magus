@@ -399,7 +399,7 @@ func (affixCheck) run(x *namingIndex) []finding {
 				subject: subj.id,
 				score:   dominance * affinity(mine, want, a.trailing),
 				message: fmt.Sprintf("`%s`: %d of %d %s shaped `%s` that say %s are named `%s`",
-					subj.label, len(carriers), cohort, plural(subj.shape.Kind), shapeOrKind(subj),
+					subj.label, len(carriers), cohort, plural(subj.shape.Kind), cmp.Or(subj.shape.Key, subj.shape.Kind),
 					strings.Join(said, " or "), pattern),
 				details: details,
 			})
@@ -407,8 +407,6 @@ func (affixCheck) run(x *namingIndex) []finding {
 	}
 	return out
 }
-
-func shapeOrKind(d *namingDecl) string { return cmp.Or(d.shape.Key, d.shape.Kind) }
 
 // affinity is how close a name comes to an affix: the share of the affix's words it holds, plus
 // a quarter when its edge is a truncation of the affix (From of FromContext, or Context of it).

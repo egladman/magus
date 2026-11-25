@@ -50,10 +50,10 @@ func hardResetAsSwitch(ctx context.Context, deps Dependencies, at location, call
 			return true
 		}
 		g := parseGit(words[1:])
-		call.Args[1+g.at] = litWord("switch")
+		call.Args[1+g.at] = &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "switch"}}}
 		for i := 2 + g.at; i < len(words); i++ {
 			if words[i] == "--hard" {
-				call.Args[i] = litWord("--detach")
+				call.Args[i] = &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "--detach"}}}
 			}
 		}
 		rewritten++
@@ -97,8 +97,4 @@ func cleanUnboundCheckout(ctx context.Context, deps Dependencies, rows []job.Job
 	}
 	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
 	return err == nil && len(dirty) == 0
-}
-
-func litWord(s string) *syntax.Word {
-	return &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: s}}}
 }

@@ -151,7 +151,7 @@ func OrderHunks(in OrderInput) diff.Order {
 				Text:     "generated output; its source carries the review",
 			}))
 		case f.Moved:
-			unranked = append(unranked, fixedOrderPlacement(id, unrankedOrderWhy("the working tree no longer matches the range head for this file")))
+			unranked = append(unranked, fixedOrderPlacement(id, diff.Why{Relation: diff.WhyUnranked, Text: "the working tree no longer matches the range head for this file"}))
 		default:
 			eligible = append(eligible, id)
 		}
@@ -177,7 +177,7 @@ func OrderHunks(in OrderInput) diff.Order {
 			ranked = append(ranked, id)
 			continue
 		}
-		unranked = append(unranked, fixedOrderPlacement(id, unrankedOrderWhy(b.unlinkedReason(id))))
+		unranked = append(unranked, fixedOrderPlacement(id, diff.Why{Relation: diff.WhyUnranked, Text: b.unlinkedReason(id)}))
 	}
 
 	b.condense(ranked)
@@ -747,8 +747,4 @@ func qualifySymbolID(id string) string {
 
 func fixedOrderPlacement(id int, why diff.Why) orderPlacement {
 	return orderPlacement{nodes: []int{id}, fixed: &why}
-}
-
-func unrankedOrderWhy(reason string) diff.Why {
-	return diff.Why{Relation: diff.WhyUnranked, Text: reason}
 }

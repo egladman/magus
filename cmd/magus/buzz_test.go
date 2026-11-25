@@ -149,11 +149,6 @@ func loggedCalls(ctx context.Context, cacheDir string, limit int) ([]journal.Cal
 	return out, nil
 }
 
-// loggedPayload is the payload ref names in the log under cacheDir.
-func loggedPayload(cacheDir, ref string) ([]byte, error) {
-	return recorder.ReadCallPayload(cacheDir, journal.Payload{Ref: ref})
-}
-
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.

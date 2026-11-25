@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"io"
 	"os"
 	"path/filepath"
@@ -151,7 +152,14 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
 	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
-	worker := narrowLease()
+	worker := jobtypes.Job{
+		ID:         "harness/lease-scoped-deny",
+		Agent:      jobtypes.Instructed("lease-scoped denies in the guard"),
+		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/**"}},
+		Validation: "magus run go::go-test . -- ./internal/ledger/",
+		State:      jobtypes.StateRunning,
+		Registered: 1,
+	}
 	worker.Parent = "harness"
 	_, err = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
 		Update(t.Context(), worker.ID, func(cur *jobtypes.Job) { *cur = worker })
@@ -471,7 +479,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	primaryCache, err := magus.ResolveCacheDir(primary)
 	require.NoError(t, err)
-	_, err = loggedPayload(primaryCache, ref)
+	_, err = recorder.ReadCallPayload(primaryCache, journal.Payload{Ref: ref})
 	assert.NoError(t, err, "the primary checkout holds a copy, which every checkout's query output searches")
 }
 
@@ -642,20 +650,6 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
 	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
-}
-
-// narrowLease is a delegated worker assigned one package's tests: the shape the
-// multi-agent skill hands out, and the shape the gate deny is scoped to. Mirrors
-// internal/guard's own narrowLease, unexported there.
-func narrowLease() jobtypes.Job {
-	return jobtypes.Job{
-		ID:         "harness/lease-scoped-deny",
-		Agent:      jobtypes.Instructed("lease-scoped denies in the guard"),
-		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/**"}},
-		Validation: "magus run go::go-test . -- ./internal/ledger/",
-		State:      jobtypes.StateRunning,
-		Registered: 1,
-	}
 }
 
 // touchedProjects reads the marker recording which projects this session has written

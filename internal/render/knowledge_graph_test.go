@@ -9,8 +9,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func knowledgeSubgraph() types.KnowledgeGraphOutput {
-	return types.KnowledgeGraphOutput{
+func TestWriteKnowledgeDOT(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteKnowledgeDOT(&buf, types.KnowledgeGraphOutput{
 		APIVersion: types.KnowledgeAPIVersion,
 		Directed:   true,
 		NodeCount:  3,
@@ -26,12 +27,7 @@ func knowledgeSubgraph() types.KnowledgeGraphOutput {
 			// An edge to a node outside the subgraph is dropped by both formats.
 			{Source: "target:pkg/a:build", Target: "spell:missing", Relation: "uses", Confidence: "extracted", Score: 1},
 		},
-	}
-}
-
-func TestWriteKnowledgeDOT(t *testing.T) {
-	var buf bytes.Buffer
-	if err := WriteKnowledgeDOT(&buf, knowledgeSubgraph()); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	got := buf.String()

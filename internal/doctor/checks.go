@@ -2564,7 +2564,7 @@ func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 			if fix == nil && !st.OnlyLeftovers {
 				// One check carries one remedy, so two stale locations need the
 				// remedy twice; the message lists them all.
-				fix = skillInstallFix(st)
+				fix = agent.ReinstallCommand(st.ID)
 			}
 		}
 		msg := "installed skills are behind this binary: " + strings.Join(stale, ", ")
@@ -2592,16 +2592,6 @@ func (r *runner) checkAgentSkills(ctx context.Context) check.Check {
 		Message: fmt.Sprintf("%d install location(s) current with this binary", len(statuses)),
 		Details: details,
 	}
-}
-
-// skillInstallFix is doctor's half of the ONE remedy for a stale skill install:
-// every location checkAgentSkills grades comes from a harness descriptor (see
-// agent.HarnessSkillLocations), whose ID is validated non-empty at load, so
-// st.ID is always in hand here. It defers to agent.ReinstallCommand so this
-// structured Fix and the free-text Detail strings for the same condition
-// read as one command, not two that can drift apart.
-func skillInstallFix(st agent.Status) []string {
-	return agent.ReinstallCommand(st.ID)
 }
 
 // selfStalingScanLimits bound what checkSelfStalingOutputs is willing to read. A workspace

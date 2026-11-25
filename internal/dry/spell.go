@@ -144,12 +144,6 @@ func sortSpellOps(ops []spellOp) {
 	slices.SortFunc(ops, func(a, b spellOp) int { return strings.Compare(a.name, b.name) })
 }
 
-// wardDetail renders a diagnostic as the single-line Detail an Op of Kind "ward"
-// carries, leading with the MGSxxxx code so the console shows the code and message.
-func wardDetail(d *types.DiagnosticError) string {
-	return fmt.Sprintf("[%s] %s", string(d.Code), d.Msg)
-}
-
 // dryRunSpell builds the dry-run plan for one spell op: the op line (Kind
 // "service" or "command", Detail = bin + the charm-applied argv) followed by one
 // "ward" op per kind-coherence diagnostic raised for it (e.g. MGS5002 for a detached
@@ -186,7 +180,7 @@ func dryRunSpell(ops []spellOp, opName, output string, charms []string) dryResul
 	}
 	trace := []Op{{Target: op.name, Kind: op.kind, Name: op.name, Detail: detail}}
 	for _, w := range op.wards {
-		trace = append(trace, Op{Target: op.name, Kind: "ward", Name: string(w.Code), Detail: wardDetail(w)})
+		trace = append(trace, Op{Target: op.name, Kind: "ward", Name: string(w.Code), Detail: fmt.Sprintf("[%s] %s", string(w.Code), w.Msg)})
 	}
 	return dryResult{OK: true, Order: []string{op.name}, Trace: trace, Output: output}
 }

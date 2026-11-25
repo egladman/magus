@@ -127,10 +127,6 @@ func RevokeOperator() error {
 	return nil
 }
 
-func operatorCredential(token secrets.Secret) Credential {
-	return Credential{Kind: KindOperator, ID: SecretID(token), Grant: AccessOperator()}
-}
-
 // SecretID is [TokenID] of a token magus holds, so a caller can name it without revealing it.
 func SecretID(token secrets.Secret) string { return TokenID(token.Reveal()) }
 

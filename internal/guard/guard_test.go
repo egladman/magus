@@ -2203,7 +2203,7 @@ func (s *OpenedWorkspacesSuite) judgment(opened *OpenedWorkspaces) Dependencies 
 		}
 		return stubWorkspace{}, nil
 	}}
-	deps.opens = newWorkspaceOpens(deps.Opens)
+	deps.opens = &workspaceOpens{byRoot: map[string]workspaceOpen{}, shared: deps.Opens}
 	return deps
 }
 

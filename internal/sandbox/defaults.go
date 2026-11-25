@@ -167,7 +167,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		GitDirs:    slices.Compact(gitDirs),
 		writtenAt:  writtenAt,
 		opts:       &o,
-		scoped:     newScopedPolicies(),
+		scoped:     &scopedPolicies{policies: map[string]*Policy{}},
 	}
 	return p.withConfinement()
 }

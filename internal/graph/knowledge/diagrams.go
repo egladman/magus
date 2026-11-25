@@ -25,8 +25,6 @@ const (
 	attrDuplicate = "duplicate"
 )
 
-func diagramID(id string) string { return fmt.Sprintf("%s:%s", types.KindDiagram, id) }
-
 // diagramExtractor reads diagram\of calls across the Buzz files of one shard, so a diagram id
 // built twice is reported on the first node instead of merged away.
 type diagramExtractor struct {
@@ -231,9 +229,9 @@ func diagramNode(rel, fn string, ce *ast.CallExpr, consts map[string]string, dir
 		unresolved = append(unresolved, "dir")
 	}
 
-	nodeID := diagramID(id)
+	nodeID := fmt.Sprintf("%s:%s", types.KindDiagram, id)
 	if id == "" {
-		nodeID = diagramID(fmt.Sprintf("%s:%s", rel, fn))
+		nodeID = fmt.Sprintf("%s:%s", types.KindDiagram, fmt.Sprintf("%s:%s", rel, fn))
 	}
 	if eyebrow != "" {
 		attrs[attrEyebrow] = eyebrow

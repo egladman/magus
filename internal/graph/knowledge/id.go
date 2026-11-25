@@ -24,8 +24,6 @@ func targetID(projectPath, name string) string {
 
 func spellID(name string) string { return fmt.Sprintf("%s:%s", types.KindSpell, name) }
 
-func opID(spell, op string) string { return fmt.Sprintf("%s:%s:%s", types.KindOp, spell, op) }
-
 // toolID keys the workspace-scoped node for a tool, the program an op runs (argv[0]
 // basename), shared by every op and spell that runs it, so `explain tool:go` lists
 // every op that runs go. A tool is an ENTITY (the program), distinct from an op (the
@@ -57,21 +55,6 @@ func dirID(relPath string) string { return fmt.Sprintf("%s:%s", types.KindDir, r
 func functionID(relPath, name string) string {
 	return fmt.Sprintf("%s:%s:%s", types.KindFunction, relPath, name)
 }
-
-func importID(literal string) string { return fmt.Sprintf("%s:%s", types.KindImport, literal) }
-
-func rationaleID(relPath string, line int) string {
-	return fmt.Sprintf("%s:%s:%s", types.KindRationale, relPath, strconv.Itoa(line))
-}
-
-// markerID keys a folded begin/end block by its begin line.
-func markerID(relPath string, line int) string {
-	return fmt.Sprintf("%s:%s:%s", types.KindMarker, relPath, strconv.Itoa(line))
-}
-
-func ownerID(name string) string { return fmt.Sprintf("%s:%s", types.KindOwner, name) }
-
-func authorID(name string) string { return fmt.Sprintf("%s:%s", types.KindAuthor, name) }
 
 func symbolID(key string) string { return fmt.Sprintf("%s:%s", types.KindSymbol, key) }
 

@@ -72,17 +72,6 @@ func NewGraph() *Graph {
 	}
 }
 
-// newGraphSized is NewGraph with the node and edge maps sized for the counts a caller
-// already knows (mergeShards sums them from the shards), so the merge does not regrow
-// them. The counts are an upper bound on the merged graph, since nodes and edges that
-// two shards share dedup; an over-estimate costs only buckets.
-func newGraphSized(nodes, edges int) *Graph {
-	return &Graph{
-		nodes: make(map[string]types.KnowledgeNode, nodes),
-		edges: make(map[edgeKey]types.KnowledgeEdge, edges),
-	}
-}
-
 // SetRoot records the workspace root the graph's node IDs are relative to. Every
 // resolution path normalizes a pasted path against it (see normalizePaths), so a graph
 // without one answers absolute and backslash spellings as if they were literal text.

@@ -69,19 +69,16 @@ func (s *SpawnAboveParentTierSuite) denied() verdict.Judgment {
 	return verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRuleSpawnAboveParentTier)}
 }
 
-// pricedRows price sonnet and opus by alias at the tiers the declaration maps.
-func pricedRows() []model.Row {
-	return []model.Row{
-		{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Price: budget.Price{Input: 3, Output: 15}},
-		{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Price: budget.Price{Input: 5, Output: 25}},
-	}
-}
-
 // The way up is allowed. The advice names both tiers, each model's cost, the
 // alias at the parent's tier and the setting that stops it.
 func (s *SpawnAboveParentTierSuite) TestAProvenHigherTierIsAdvisedWithItsCost() {
 	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
-	deps.ModelRows = pricedRows
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{
+			{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Price: budget.Price{Input: 3, Output: 15}},
+			{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Price: budget.Price{Input: 5, Output: 25}},
+		}
+	}
 
 	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
 
@@ -252,19 +249,16 @@ func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 	s.Contains(v.Context, "add a row for claude-sonnet-5-5-20261001")
 }
 
-// aliasedRows carry aliases no declaration maps; fable's names no tier.
-func aliasedRows() []model.Row {
-	return []model.Row{
-		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
-		{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
-		{ID: "claude-fable-5-1", Alias: "fable"},
-	}
-}
-
 // judgeAliased spawns spawn from a session on claude-sonnet-5-5.
 func (s *SpawnAboveParentTierSuite) judgeAliased(spawn string) verdict.Judgment {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
-	deps.ModelRows = aliasedRows
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{
+			{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
+			{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
+			{ID: "claude-fable-5-1", Alias: "fable"},
+		}
+	}
 	return judgeSpawnBy(ctx, s.T(), deps, "", spawn)
 }
 

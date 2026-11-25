@@ -37,11 +37,7 @@ func covImplementationVariadic(_ context.Context, _ ...string) (string, error) {
 
 func covImplementationNoContext(_ string) (string, error) { return "", nil }
 
-func covImplementationNoArgs() error { return nil }
-
 func covImplementationNoReturn(_ context.Context) {}
-
-func covImplementationNoError(_ context.Context) string { return "" }
 
 func covImplementationTwoStrings(_ context.Context) (string, string) { return "", "" }
 
@@ -127,7 +123,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		},
 		{
 			name: "Impl takes no arguments at all",
-			mod:  method(Method{Name: "f", Impl: covImplementationNoArgs}),
+			mod:  method(Method{Name: "f", Impl: func() error { return nil }}),
 			want: "method Impl must take context.Context as first arg",
 		},
 		{
@@ -157,7 +153,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		},
 		{
 			name: "last return is not an error",
-			mod:  method(Method{Name: "f", Impl: covImplementationNoError}),
+			mod:  method(Method{Name: "f", Impl: func(_ context.Context) string { return "" }}),
 			want: "method Impl last return must be error, got string",
 		},
 		{
@@ -206,7 +202,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		},
 		{
 			name: "field resolver returns one value",
-			mod:  field(Field{Name: "v", Resolver: covImplementationNoError}),
+			mod:  field(Field{Name: "v", Resolver: func(_ context.Context) string { return "" }}),
 			want: "field Resolver must return (T, error), got 1 returns",
 		},
 		{

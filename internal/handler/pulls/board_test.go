@@ -43,10 +43,6 @@ func running(name string) types.ForgeCheck {
 	return types.ForgeCheck{Name: name, Kind: "check", State: "running"}
 }
 
-func mergeQueue(state, description string) types.ForgeCheck {
-	return types.ForgeCheck{Name: queue.DefaultStatusContext, Kind: "status", State: state, Description: description}
-}
-
 func newPull(n int, author string, checks ...types.ForgeCheck) types.ForgePull {
 	return types.ForgePull{
 		Number:    n,
@@ -74,7 +70,7 @@ type BoardSuite struct{ suite.Suite }
 func TestBoardSuite(t *testing.T) { suite.Run(t, new(BoardSuite)) }
 
 func (s *BoardSuite) TestCIIgnoresMergeQueue() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("build"), mergeQueue("failure", "behind two pulls"))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("build"), types.ForgeCheck{Name: queue.DefaultStatusContext, Kind: "status", State: "failure", Description: "behind two pulls"})))
 
 	s.Equal(pullsv1.CiState_CI_STATE_GREEN, row.Ci)
 	s.EqualValues(1, row.Passed)
@@ -122,7 +118,7 @@ func (s *BoardSuite) TestCINoneWithoutChecks() {
 }
 
 func (s *BoardSuite) TestCINoneWhenOnlyTheQueueReports() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", mergeQueue("pending", "waiting"))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", types.ForgeCheck{Name: queue.DefaultStatusContext, Kind: "status", State: "pending", Description: "waiting"})))
 
 	s.Equal(pullsv1.CiState_CI_STATE_NONE, row.Ci)
 	s.Equal("pending", row.Queue.State)
