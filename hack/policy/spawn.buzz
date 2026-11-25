@@ -651,8 +651,10 @@ fun describeTest(counts: ForkCounts) > str {
 }
 
 // decideForkLine judges each `magus job fork` on a line. facts runs only for a
-// fork that could be refused, since it reads the version control per row.
+// fork that could be refused, since it reads the version control per row. It
+// runs at most once: every fork on the line reads the same base.
 export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (path: str) > str, facts: fun () > ForkCounts, limit: int) > GuardVerdict {
+    var counted: ForkCounts? = null;
     foreach (index, p in programs) {
         final ops = helpers\magusOperands(p.args);
         if (p.name != "magus" or ops.len() < 2 or ops[0] != "job" or ops[1] != "fork") {
@@ -662,12 +664,15 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
-        var counts = withoutPublished(facts(), published: remotePublished());
-        // Each landed check merges trees, so only a count at the limit pays.
-        if (counts.finishedBranches.len() >= limit) {
-            counts = withoutLanded(counts, landed: landedReader());
+        if (counted == null) {
+            var counts = withoutPublished(facts(), published: remotePublished());
+            // Each landed check merges trees, so only a count at the limit pays.
+            if (counts.finishedBranches.len() >= limit) {
+                counts = withoutLanded(counts, landed: landedReader());
+            }
+            counted = counts;
         }
-        final judged = decideFork(fork, counts: counts, limit: limit);
+        final judged = decideFork(fork, counts: counted!, limit: limit);
         if (judged.decision != magus\GuardDecision.defer) {
             return judged;
         }
@@ -858,4 +863,17 @@ test "a named fork is judged, a child reads no facts, and another command passes
     };
     std\assert(decideForkLine([forkProgram(["kid", "--parent", "next"])], line: "./magus job fork kid --parent next", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.defer, message: "a child");
     std\assert(decideForkLine([helpers\Program{ name = "magus", args = ["ls", "jobs"], repeats = false }], line: "./magus ls jobs", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.defer, message: "another verb");
+}
+
+test "a line of five forks reads the facts once" {
+    final calls = mut [<int>];
+    final few = fun () > ForkCounts {
+        calls.append(1);
+        return waiting(3);
+    };
+    final fork = forkProgram(["next", "--read-only"]);
+    final line = "for n in 0 1 2 3 4; do ./magus job fork next --read-only; done";
+    final v = decideForkLine([fork, fork, fork, fork, fork], line: line, read: noFile, facts: few, limit: 10);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
+    std\assert(calls.len() == 1, message: "facts ran {calls.len()} times");
 }
