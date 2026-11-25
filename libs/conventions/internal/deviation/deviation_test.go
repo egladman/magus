@@ -24,12 +24,12 @@ noThrow:
 // policy writes body as analyzers.yaml in a fresh working directory.
 func (s *LedgerSuite) policy(body string) {
 	s.T().Chdir(s.T().TempDir())
-	s.Require().NoError(os.WriteFile(File, []byte(body), 0o600))
+	s.Require().NoError(os.WriteFile(analyzersFile, []byte(body), 0o600))
 }
 
 func (s *LedgerSuite) TestReadsOneAnalyzersKey() {
 	s.policy(file)
-	l, err := Load("inlineliteral", ".", false)
+	l, err := load("inlineliteral", ".", false)
 	s.Require().NoError(err)
 	s.True(l.Accepts("a/b.go", "defaults"))
 	s.False(l.Accepts("a/c.go", "defaults"))
@@ -41,38 +41,38 @@ func (s *LedgerSuite) TestReadsOneAnalyzersKey() {
 
 func (s *LedgerSuite) TestAnExitWithoutAReasonIsRefused() {
 	s.policy("inlineliteral:\n  exits:\n    - {path: a.go, symbol: f}\n")
-	_, err := Load("inlineliteral", ".", false)
+	_, err := load("inlineliteral", ".", false)
 	s.ErrorContains(err, "the exit for f in a.go gives no reason")
 }
 
 func (s *LedgerSuite) TestAnUnknownFieldIsRefused() {
 	s.policy("inlineliteral:\n  exits:\n    - {path: a.go, symbol: f, resaon: x}\n")
-	_, err := Load("inlineliteral", ".", false)
+	_, err := load("inlineliteral", ".", false)
 	s.ErrorContains(err, "field resaon not found")
 }
 
 func (s *LedgerSuite) TestABaselineIsRefused() {
 	s.policy("inlineliteral:\n  baseline:\n    - {path: a.go, symbol: f}\n")
-	_, err := Load("inlineliteral", ".", false)
+	_, err := load("inlineliteral", ".", false)
 	s.ErrorContains(err, "field baseline not found")
 }
 
 func (s *LedgerSuite) TestNoFileHoldsNoExits() {
 	s.T().Chdir(s.T().TempDir())
-	l, err := Load("inlineliteral", ".", false)
+	l, err := load("inlineliteral", ".", false)
 	s.Require().NoError(err)
 	s.Empty(l.In("a/b.go"))
 }
 
 func (s *LedgerSuite) TestNoKeyHoldsNoExits() {
 	s.policy("passthrough: {}\n")
-	l, err := Load("inlineliteral", ".", false)
+	l, err := load("inlineliteral", ".", false)
 	s.Require().NoError(err)
 	s.Empty(l.In("a/b.go"))
 }
 
 func (s *LedgerSuite) TestAnExitNamingAMissingFileIsALoadError() {
 	s.policy(file)
-	_, err := Load("inlineliteral", ".", true)
+	_, err := load("inlineliteral", ".", true)
 	s.ErrorContains(err, "the exit for defaults names a/b.go, which is not a file under .")
 }

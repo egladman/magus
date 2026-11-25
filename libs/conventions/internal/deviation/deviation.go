@@ -13,9 +13,9 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// File is the analyzers file's name at the root of each module: YAML a person
+// analyzersFile is the analyzers file at the root of each module: YAML a person
 // edits, one top-level key per analyzer.
-const File = "analyzers.yaml"
+const analyzersFile = "analyzers.yaml"
 
 // Exit is one departure a person keeps. A rule reading exits takes no
 // //nolint, so they are its only way out.
@@ -36,11 +36,11 @@ type Ledger struct {
 	exits map[string]Exit
 }
 
-// Load reads rule's key from the analyzers file in dir. No file, or no key,
-// holds no exits. An unknown field, a reasonless exit or a duplicate is an
-// error. With check, so is an exit naming a file not under dir.
-func Load(rule, dir string, check bool) (*Ledger, error) {
-	path := filepath.Join(dir, File)
+// load reads rule's key from dir's analyzers file; none holds no exits. An
+// unknown field, reasonless exit or duplicate is an error, and with check so is
+// an exit naming a file not under dir.
+func load(rule, dir string, check bool) (*Ledger, error) {
+	path := filepath.Join(dir, analyzersFile)
 	display := path
 	if wd, err := os.Getwd(); err == nil {
 		if rel, err := filepath.Rel(wd, path); err == nil {
@@ -126,7 +126,7 @@ func (ls *Ledgers) Place(pass *analysis.Pass, f *ast.File) (*Ledger, string, boo
 		return nil, "", false, nil
 	}
 	name := source.Name(pass, f)
-	dir, ok := owner(name)
+	dir, ok := Owner(name)
 	if !ok {
 		return nil, "", false, nil
 	}
@@ -144,14 +144,14 @@ func (ls *Ledgers) at(dir string) (*Ledger, error) {
 	if l, ok := ls.byDir[dir]; ok {
 		return l.ledger, l.err
 	}
-	ledger, err := Load(ls.rule, dir, ls.module != "")
+	ledger, err := load(ls.rule, dir, ls.module != "")
 	ls.byDir[dir] = loaded{ledger: ledger, err: err}
 	return ledger, err
 }
 
-// owner copies closedswitch's: that package reads its own key and type, and
-// neither imports the other.
-func owner(file string) (string, bool) {
+// Owner returns the directory at or above file that holds a go.mod: the root
+// that policy paths are relative to.
+func Owner(file string) (string, bool) {
 	for d := filepath.Dir(file); ; d = filepath.Dir(d) {
 		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
 			return d, true

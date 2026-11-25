@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/conventions/internal/deviation"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -78,10 +79,10 @@ func (s *AnalyzerSuite) TestAFileAnswersToTheNearestModule() {
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "go.mod"), []byte("module outer\n"), 0o600))
 	s.Require().NoError(os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module outer/libs/inner\n"), 0o600))
 
-	dir, ok := owner(filepath.Join(nested, "x.go"))
+	dir, ok := deviation.Owner(filepath.Join(nested, "x.go"))
 	s.True(ok)
 	s.Equal(nested, dir)
-	dir, ok = owner(filepath.Join(root, "cmd", "y.go"))
+	dir, ok = deviation.Owner(filepath.Join(root, "cmd", "y.go"))
 	s.True(ok)
 	s.Equal(root, dir)
 }
