@@ -116,7 +116,7 @@ func uncommitted(ctx context.Context, root string, row job.Job) ([]string, strin
 	}
 	dirty, err := drv.DirtyFiles(ctx, root, nil)
 	if err != nil {
-		return nil, fmt.Sprintf("the status of %s cannot be read: %s", root, err.Error())
+		return nil, fmt.Sprintf("the status of its checkout cannot be read: %s", err.Error())
 	}
 	return slices.DeleteFunc(dirty, func(p string) bool {
 		return !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return job.Covers(w, p) })

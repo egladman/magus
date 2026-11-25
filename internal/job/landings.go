@@ -668,7 +668,7 @@ func (r *unmergedRead) facts(rows []job.Job, row job.Job) []job.Unmerged {
 	label := r.label(row, rr.where)
 	switch {
 	case rr.unread != "":
-		out = append(out, fact(short, strings.ReplaceAll(rr.unread, rr.where, label), fmt.Sprintf("commit what %s holds", label)))
+		out = append(out, fact(short, rr.unread, fmt.Sprintf("commit what %s holds", label)))
 	case rr.where != "" && len(f.Dirty) > 0:
 		out = append(out, fact(short, fmt.Sprintf("%s holds %d uncommitted path(s), first %s", label, len(f.Dirty), f.Dirty[0]), "commit them in "+label))
 	}

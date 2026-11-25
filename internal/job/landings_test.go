@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -654,6 +655,31 @@ func (s *unmergedSuite) TestACheckoutOutsideTheRepositoryIsNamedByItsJob() {
 	s.Equal("w holds 1 uncommitted path(s), first w.txt", got.Jobs[0].Why)
 	s.Contains(got.Jobs[0].Remedy, "commit them in w,")
 	s.NotContains(got.Jobs[0].Remedy, where)
+}
+
+func (s *unmergedSuite) TestAnUnreadableStatusNamesNoPath() {
+	where := filepath.Join(s.T().TempDir(), "w")
+	s.repo.Git("worktree", "add", "-q", where, "-b", "w")
+	gitDir := strings.TrimSpace(s.repo.Git("-C", where, "rev-parse", "--absolute-git-dir"))
+	s.Require().NoError(os.WriteFile(filepath.Join(gitDir, "index"), []byte("not an index"), 0o644))
+	row := job.Job{ID: "w", State: job.StateExited, Paths: job.Paths{Write: []string{"w.txt"}}, CheckoutRoot: where}
+	s.filed("w", &job.Result{ChangedPaths: []string{"w.txt"}})
+
+	got := s.unmerged(row)
+
+	s.Require().Len(got.Jobs, 1)
+	s.True(strings.HasPrefix(got.Jobs[0].Why, "the status of its checkout cannot be read: "), got.Jobs[0].Why)
+	s.Equal("commit what w holds, or state why it stays off", got.Jobs[0].Remedy[:strings.Index(got.Jobs[0].Remedy, ": `")])
+}
+
+func (s *unmergedSuite) TestARepositoryWithNoCommitIsUnknownByName() {
+	bare := s.T().TempDir()
+	s.Require().NoError(exec.CommandContext(s.T().Context(), "git", "-C", bare, "init", "-q").Run())
+
+	got := Unmerged(s.T().Context(), bare, []job.Job{{ID: "w", State: job.StatePass}}, job.Attempts{"w": {filedTry("w", &job.Result{ChangedPaths: []string{"w.txt"}})}})
+
+	s.Equal("the branch of the repository: ", got.Unknown[:len("the branch of the repository: ")])
+	s.NotContains(got.Unknown, bare)
 }
 
 func (s *unmergedSuite) TestACheckoutInsideTheRepositoryIsNamedByItsRelativePath() {
