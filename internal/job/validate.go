@@ -735,7 +735,7 @@ func regeneratedProblems(outputs []RegeneratedOutput) types.JobProblems {
 	for _, o := range outputs {
 		verb := "regenerates " + o.Output
 		if o.InPlace {
-			verb = "rewrites " + o.Output + " in place"
+			verb = fmt.Sprintf("rewrites %s in place", o.Output)
 		}
 		ps = append(ps, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: o.Output,

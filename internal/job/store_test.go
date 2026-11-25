@@ -1084,7 +1084,7 @@ func TestStoreKeepsALineWithFieldsThisBuildLacks(t *testing.T) {
 	path, err := s.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	line := headerLine("") + "\n" + recordLine("a", "Running", "Running", `"postconditions":[{"newer_field":1}]`, "") + "\n"
+	line := fmt.Sprintf("%s\n%s\n", headerLine(""), recordLine("a", "Running", "Running", `"postconditions":[{"newer_field":1}]`, ""))
 	require.NoError(t, os.WriteFile(path, []byte(line), 0o644))
 
 	_, err = s.Update(t.Context(), "a", func(j *job.Job) { j.Parent = "root" })

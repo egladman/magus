@@ -40,7 +40,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/store/migrate"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -382,9 +381,13 @@ func refuseUnknownFields(err error, unknown *job.UnknownMemberError) error {
 	}
 	reader, _ := os.Executable()
 	return types.WrapDiagnostic(types.StoreRecordsNewer, err,
-		"%s holds fields this magus does not know (%s), so a build with another job schema wrote it. Read by %s (%s). The line is kept. Relink from the tree that wrote it: `%s`",
-		where, strings.Join(unknown.Paths, ", "), cmp.Or(reader, "an unknown binary"), cmp.Or(buildinfo.Version(), buildinfo.UnknownVersion), ward.RelinkAt(""))
+		"%s holds fields this magus does not know (%s), so a build with another job schema wrote it. Read by %s (%s). The line is kept. Relink from its tree: `%s`",
+		where, strings.Join(unknown.Paths, ", "), cmp.Or(reader, "an unknown binary"), cmp.Or(buildinfo.Version(), buildinfo.UnknownVersion), relink)
 }
+
+// relink is a copy of ward.RelinkAt(""): importing internal/ward would take this package
+// past its import ceiling.
+const relink = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"
 
 // refuseRecordVersion refuses a stored line at version got, which this magus does not read:
 // a newer version of its own group waits for an update, and any other is foreign.
