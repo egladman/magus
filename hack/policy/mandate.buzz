@@ -625,9 +625,6 @@ export object StopFacts {
     // running are the tries the guard saw start whose end nobody has
     // observed, read under each job's deadline.
     running: [Try] = [],
-    // background are the jobs, sorted, whose running try the stopping agent spawned in the
-    // host's background mode, which the host wakes it for when each ends.
-    background: [str] = [],
 }
 
 // Try is one try of a job: started at a unix millisecond, end unobserved. started is 0 when
@@ -636,53 +633,106 @@ export object Try {
     job: str,
     n: int,
     started: int,
+    // stale is jobs.stale_after's verdict on the row, as the store reports it.
+    stale: bool = false,
+    // orphaned is a try still open on a row that already ended; no command closes it.
+    orphaned: bool = false,
 }
 
-// runningTries are the tries in attempts the guard saw start and
-// nobody saw end. The store records a start in unix seconds and now() reads milliseconds, so
-// a Try carries milliseconds.
-export fun runningTries(attempts: [magus\Attempt]) > [Try] {
+// runningTries are the tries in list the guard saw start and nobody saw end. The store
+// records a start in unix seconds and now() reads milliseconds, so a Try carries
+// milliseconds.
+export fun runningTries(list: JobList) > [Try] {
+    final ended = mut [<str>];
+    final known = mut [<str>];
+    foreach (j in list.jobs) {
+        known.append(j.id);
+        if (j.state == magus\JobState.pass or j.state == magus\JobState.fail or j.state == magus\JobState.noReturn or j.state == magus\JobState.exited) {
+            ended.append(j.id);
+        }
+    }
     final found = mut [<Try>];
-    foreach (a in attempts) {
+    foreach (a in list.attempts) {
         if (a.status.started != 0 and a.status.ended == 0) {
-            found.append(Try{ job = a.job, n = a.n, started = a.status.started * 1000 });
+            found.append(Try{ job = a.job, n = a.n, started = a.status.started * 1000,
+                stale = list.stale.indexOf(a.job) != null,
+                orphaned = ended.indexOf(a.job) != null or known.indexOf(a.job) == null });
         }
     }
     return found;
 }
 
-// runningLine names each try still counted as running. The host wakes the root when a try in
-// background, one it spawned in the host's background mode, ends; for any other try nothing
-// says so. active is the host's word that a stop rule already held this stop, so it passes
-// with the note.
-fun runningLine(running: [Try], now: int, active: bool, background: [str] = []) > str {
-    final named = mut [<str>];
-    final untracked = mut [<str>];
+final shownNewest = 3;
+
+// ageText reads a span in the unit its size calls for: 45s, 12m, 3h, 7d.
+export fun ageText(millis: int) > str {
+    final seconds = millis / 1000;
+    if (seconds < 60) {
+        return "{seconds}s";
+    }
+    if (seconds < 3600) {
+        return "{seconds / 60}m";
+    }
+    if (seconds < 86400) {
+        return "{seconds / 3600}h";
+    }
+    return "{seconds / 86400}d";
+}
+
+// runningKey leaves ages and labels out, so an unchanged set keys the same at every stop.
+fun runningKey(running: [Try]) > str {
+    final ids = mut [<str>];
     foreach (t in running) {
-        if (background.indexOf(t.job) == null) {
-            untracked.append(t.job);
-        }
-        if (t.started == 0) {
-            named.append("{t.job} attempt {t.n}, no start recorded, end unobserved");
-        } else {
-            var age = now - t.started;
-            if (age < 0) {
-                age = 0;
-            }
-            named.append("{t.job} attempt {t.n}, started {age / 60000}m ago, end unobserved");
+        ids.append("{t.job}:{t.n}");
+    }
+    _ = ids.sort(fun (left: str, right: str) > bool => left < right);
+    return ids.join(",");
+}
+
+// runningLine is the one line the person reads when the set changed.
+fun runningLine(running: [Try], now: int) > str {
+    final newest = running.cloneMutable();
+    _ = newest.sort(fun (left: Try, right: Try) > bool => left.started > right.started);
+    var stale = 0;
+    var orphaned = 0;
+    foreach (t in running) {
+        if (t.orphaned) {
+            orphaned = orphaned + 1;
+        } else if (t.stale) {
+            stale = stale + 1;
         }
     }
-    var wakes = "The host wakes this session when each background spawn it tracks ends. ";
-    if (untracked.len() > 0) {
-        wakes = "The host spawned no background subagent it tracks for {untracked.join(", ")}, so nothing says it wakes this session when that ends. ";
+    final named = mut [<str>];
+    foreach (t in newest) {
+        if (named.len() >= shownNewest) {
+            break;
+        }
+        var label = "{t.job} no start";
+        if (t.started != 0) {
+            label = "{t.job} {ageText(max0(now - t.started))}";
+        }
+        if (t.orphaned) {
+            label = label + " open on an ended row";
+        } else if (t.stale) {
+            label = label + " stale";
+        }
+        named.append(label);
     }
-    var line = "this stop stands: {named.join("; ")}. "
-        + wakes
-        + "A handback, `magus job exit` or the job's deadline ends each.";
-    if (active) {
-        line = line + " The host marks this as a second stop, so it passes with this note.";
+    var line = "{running.len()} running: {named.join(", ")}";
+    if (running.len() > named.len()) {
+        line = line + ", +{running.len() - named.len()} older";
+    }
+    if (stale > 0) {
+        line = line + "; clear stale with ./magus job prune --all";
     }
     return line;
+}
+
+fun max0(n: int) > int {
+    if (n < 0) {
+        return 0;
+    }
+    return n;
 }
 
 // Queue is the job store as the Stop rule reads it.
@@ -804,8 +854,16 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
     if (facts.role != "root") {
         return magus\guard.defer();
     }
+    // count only grows. Each stop marks its set under its number, and a mark bumped to 2
+    // says the stop before held the same set.
+    final stop = count("idle-stop-stops");
     if (facts.running.len() > 0) {
-        return magus\guard.advise(runningLine(facts.running, now: now, active: facts.stopHookActive, background: facts.background), opts: {"rule": "idle-stop"});
+        final set = runningKey(facts.running);
+        _ = count("idle-stop-running:{set}@{stop}");
+        if (stop > 1 and count("idle-stop-running:{set}@{stop - 1}") > 1) {
+            return magus\guard.defer();
+        }
+        return magus\guard.advise(runningLine(facts.running, now: now), opts: {"rule": "idle-stop"});
     }
     final stopped = mut [<str>];
     foreach (r in q.jobs) {
@@ -1062,7 +1120,7 @@ test "a try started and not seen to end lets the root stop and says so, whatever
     final live = StopFacts{ role = "root", stopHookActive = false, running = [Try{ job = "naming-lint", n = 1, started = 1880000 }] };
     final stands = decideStop(live, q: spawned, m: issued, now: 2000000, count: none, file: skip);
     std\assert(stands.decision == magus\GuardDecision.advise, message: "spawned, not yet past job exec");
-    std\assert(stands.reason.indexOf("naming-lint attempt 1, started 2m ago, end unobserved") != null, message: stands.reason);
+    std\assert(stands.reason == "1 running: naming-lint 2m", message: stands.reason);
     final waiting = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.running, holderStopped = 1500 }] };
     std\assert(decideStop(live, q: waiting, m: null, now: 2000000, count: none, file: skip).decision == magus\GuardDecision.advise, message: "waiting on its own background run");
     final ended = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: waiting, m: null, now: 2000, count: none, file: skip);
@@ -1070,52 +1128,95 @@ test "a try started and not seen to end lets the root stop and says so, whatever
 }
 
 test "a try runs from its start until an end is observed" {
-    final tries = [
-        Attempt{ job = "a", n = 1, status = AttemptStatus{ started = 10 } },
-        Attempt{ job = "b", n = 2, status = AttemptStatus{ started = 10, ended = 20, end = magus\AttemptEnd.handback } },
-        Attempt{ job = "c", n = 1 },
-    ];
-    final running = runningTries(tries);
+    final list = JobList{
+        jobs = [Job{ id = "a", state = magus\JobState.running }],
+        attempts = [
+            Attempt{ job = "a", n = 1, status = AttemptStatus{ started = 10 } },
+            Attempt{ job = "b", n = 2, status = AttemptStatus{ started = 10, ended = 20, end = magus\AttemptEnd.handback } },
+            Attempt{ job = "c", n = 1 },
+        ],
+    };
+    final running = runningTries(list);
     std\assert(running.len() == 1 and running[0].job == "a" and running[0].n == 1, message: "only the started try with no end");
     std\assert(running[0].started == 10000, message: "the store's seconds read as milliseconds, as now() does");
 }
 
-test "a running try's age is read against its recorded start, and a missing start says so" {
-    final none = fun (key: str) > int => 1;
-    final skip = fun (rows: [str]) > void {};
-    final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
-    final now = 1790000000000;
-    final aged = decideStop(StopFacts{ role = "root", stopHookActive = false, running = runningTries([Attempt{ job = "naming-lint", n = 1, status = AttemptStatus{ started = 1789999880 } }]) },
-        q: q, m: null, now: now, count: none, file: skip);
-    std\assert(aged.reason.indexOf("started 2m ago, end unobserved") != null, message: aged.reason);
-    final unstarted = decideStop(StopFacts{ role = "root", stopHookActive = false, running = [Try{ job = "naming-lint", n = 1, started = 0 }] }, q: q, m: null, now: now, count: none, file: skip);
-    std\assert(unstarted.decision == magus\GuardDecision.advise, message: "the stop stands");
-    std\assert(unstarted.reason.indexOf("naming-lint attempt 1, no start recorded, end unobserved") != null, message: unstarted.reason);
-    std\assert(unstarted.reason.indexOf("m ago") == null, message: "no age is computed");
+test "a try is stale when the store says so and orphaned when its row ended or is gone" {
+    final list = JobList{
+        jobs = [
+            Job{ id = "live", state = magus\JobState.running },
+            Job{ id = "old", state = magus\JobState.running },
+            Job{ id = "done", state = magus\JobState.pass },
+        ],
+        stale = ["old"],
+        attempts = [
+            Attempt{ job = "live", n = 1, status = AttemptStatus{ started = 10 } },
+            Attempt{ job = "old", n = 1, status = AttemptStatus{ started = 10 } },
+            Attempt{ job = "done", n = 1, status = AttemptStatus{ started = 10 } },
+            Attempt{ job = "gone", n = 1, status = AttemptStatus{ started = 10 } },
+        ],
+    };
+    final running = runningTries(list);
+    std\assert(!running[0].stale and !running[0].orphaned, message: "a live row's try is neither");
+    std\assert(running[1].stale and !running[1].orphaned, message: "the store's stale list marks the try");
+    std\assert(running[2].orphaned and running[3].orphaned, message: "an ended or missing row leaves its try open");
 }
 
-test "a running try the host tracks in the background is told from one it does not" {
-    final none = fun (key: str) > int => 1;
-    final skip = fun (rows: [str]) > void {};
-    final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
-    final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
-    final tracked = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries, background = ["naming-lint"] }, q: q, m: null, now: 2000000, count: none, file: skip);
-    std\assert(tracked.decision == magus\GuardDecision.advise, message: "the stop stands");
-    std\assert(tracked.reason.indexOf("wakes this session when each background spawn it tracks ends") != null, message: tracked.reason);
-    final untracked = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: null, now: 2000000, count: none, file: skip);
-    std\assert(untracked.reason.indexOf("spawned no background subagent it tracks for naming-lint") != null, message: untracked.reason);
+test "a try's age reads in the unit its size calls for, and a missing start has none" {
+    std\assert(ageText(45000) == "45s", message: ageText(45000));
+    std\assert(ageText(720000) == "12m", message: ageText(720000));
+    std\assert(ageText(3 * 3600000) == "3h", message: ageText(3 * 3600000));
+    std\assert(ageText(7 * 86400000) == "7d", message: ageText(7 * 86400000));
+    final started = [Try{ job = "naming-lint", n = 1, started = 1789999880000 }];
+    std\assert(runningLine(started, now: 1790000000000) == "1 running: naming-lint 2m", message: runningLine(started, now: 1790000000000));
+    final unstarted = [Try{ job = "naming-lint", n = 1, started = 0 }];
+    std\assert(runningLine(unstarted, now: 1790000000000) == "1 running: naming-lint no start", message: runningLine(unstarted, now: 1790000000000));
 }
 
-test "a stop the host marks as held already passes over a running try with the note kept as advice" {
+test "the line names the newest few, labels stale tries with their command and open ones with none" {
+    final now = 100000000;
+    final tries = [
+        Try{ job = "old-a", n = 1, started = 1000, stale = true },
+        Try{ job = "new-b", n = 1, started = now - 45000 },
+        Try{ job = "new-c", n = 2, started = now - 720000 },
+        Try{ job = "old-d", n = 1, started = 2000, orphaned = true },
+        Try{ job = "new-e", n = 1, started = now - 10800000 },
+    ];
+    final line = runningLine(tries, now: now);
+    std\assert(line == "5 running: new-b 45s, new-c 12m, new-e 3h, +2 older; clear stale with ./magus job prune --all", message: line);
+    final stale = runningLine([Try{ job = "old-a", n = 1, started = 1000, stale = true }], now: now);
+    std\assert(stale == "1 running: old-a 1d stale; clear stale with ./magus job prune --all", message: stale);
+    final open = runningLine([Try{ job = "dx-guard", n = 1, started = now - 3600000, orphaned = true }], now: now);
+    std\assert(open == "1 running: dx-guard 1h open on an ended row", message: open);
+}
+
+test "a stop prints only when its set differs from the last stop's, so a set returning prints again" {
+    final seen = mut {"": 0};
+    final counted = fun (key: str) > int {
+        seen[key] = (seen[key] ?? 0) + 1;
+        return seen[key] ?? 0;
+    };
+    final skip = fun (rows: [str]) > void {};
+    final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
+    final one = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
+    final two = [Try{ job = "naming-lint", n = 1, started = 1880000 }, Try{ job = "go-indexer", n = 1, started = 1900000 }];
+    final first = decideStop(StopFacts{ role = "root", stopHookActive = false, running = one }, q: q, m: null, now: 2000000, count: counted, file: skip);
+    std\assert(first.decision == magus\GuardDecision.advise, message: "the first stop prints");
+    final again = decideStop(StopFacts{ role = "root", stopHookActive = false, running = one }, q: q, m: null, now: 2600000, count: counted, file: skip);
+    std\assert(again.decision == magus\GuardDecision.defer, message: "the same set, ten minutes on, prints nothing");
+    final grown = decideStop(StopFacts{ role = "root", stopHookActive = false, running = two }, q: q, m: null, now: 2600000, count: counted, file: skip);
+    std\assert(grown.decision == magus\GuardDecision.advise and grown.reason == "2 running: go-indexer 11m, naming-lint 12m", message: grown.reason);
+    final back = decideStop(StopFacts{ role = "root", stopHookActive = false, running = one }, q: q, m: null, now: 2600000, count: counted, file: skip);
+    std\assert(back.decision == magus\GuardDecision.advise, message: "the first set again after another prints again");
+}
+
+test "a held stop with a running try stays an advice and says no more than a first one" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
     final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }], unmerged = offBranch };
     final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
-    final first = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
     final second = decideStop(StopFacts{ role = "root", stopHookActive = true, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
-    std\assert(first.decision == magus\GuardDecision.advise and second.decision == magus\GuardDecision.advise, message: "never a refusal, so the host has none to override");
-    std\assert(first.reason.indexOf("second stop") == null, message: "the first stop is not called a second");
-    std\assert(second.reason.indexOf("naming-lint attempt 1, started 2m ago") != null and second.reason.indexOf("second stop, so it passes") != null, message: second.reason);
+    std\assert(second.decision == magus\GuardDecision.advise and second.reason == "1 running: naming-lint 2m", message: "never a refusal, so the host has none to override");
 }
 
 test "work the host tracks and wakes the root for never refuses its stop" {
@@ -1123,9 +1224,9 @@ test "work the host tracks and wakes the root for never refuses its stop" {
     final skip = fun (rows: [str]) > void {};
     final q = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.running }, JobFacts{ id = "go-indexer", state = magus\JobState.declared }], unmerged = offBranch };
     final tries = [Try{ job = "naming-lint", n = 1, started = 1880000 }];
-    final v = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries, background = ["naming-lint"] }, q: q, m: issued, now: 2000000, count: none, file: skip);
+    final v = decideStop(StopFacts{ role = "root", stopHookActive = false, running = tries }, q: q, m: issued, now: 2000000, count: none, file: skip);
     std\assert(v.decision == magus\GuardDecision.advise, message: "waiting rows and unmerged work do not turn the wait into a refusal");
-    std\assert(v.reason.indexOf("The host wakes this session when each background spawn it tracks ends") != null, message: v.reason);
+    std\assert(v.reason == "1 running: naming-lint 2m", message: v.reason);
 }
 
 final offBranch = JobUnmergedReport{ branch = "feat/x", jobs = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
