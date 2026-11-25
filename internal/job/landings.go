@@ -348,16 +348,16 @@ func Unmerged(ctx context.Context, root string, rows []job.Job, tries job.Attemp
 	}
 	branch, err := driver.Ref(ctx, root)
 	if err != nil {
-		report.Unknown = fmt.Sprintf("the branch of %s: %s", root, err)
+		report.Unknown = fmt.Sprintf("the branch of the repository: %s", err)
 		return report
 	}
 	if branch == "" {
-		report.Unknown = root + " has no branch checked out, so nothing can be merged onto one"
+		report.Unknown = "the repository has no branch checked out, so nothing can be merged onto one"
 		return report
 	}
 	meta, err := driver.Metadata(ctx, root)
 	if err != nil {
-		report.Unknown = fmt.Sprintf("the revision of %s: %s", root, err)
+		report.Unknown = fmt.Sprintf("the revision of the repository: %s", err)
 		return report
 	}
 	report.Branch = branch
@@ -665,11 +665,12 @@ func (r *unmergedRead) facts(rows []job.Job, row job.Job) []job.Unmerged {
 	var out []job.Unmerged
 	f := rr.fact
 	short := shortRevision(types.Commit{ID: f.Head, Short: f.Short})
+	label := r.label(row, rr.where)
 	switch {
 	case rr.unread != "":
-		out = append(out, fact(short, rr.unread, fmt.Sprintf("commit what %s holds", rr.where)))
+		out = append(out, fact(short, rr.unread, fmt.Sprintf("commit what %s holds", label)))
 	case rr.where != "" && len(f.Dirty) > 0:
-		out = append(out, fact(short, fmt.Sprintf("%s holds %d uncommitted path(s), first %s", rr.where, len(f.Dirty), f.Dirty[0]), "commit them in "+rr.where))
+		out = append(out, fact(short, fmt.Sprintf("%s holds %d uncommitted path(s), first %s", label, len(f.Dirty), f.Dirty[0]), "commit them in "+label))
 	}
 	merge := fmt.Sprintf("merge %s into %s", short, r.branch)
 	switch {
@@ -679,6 +680,25 @@ func (r *unmergedRead) facts(rows []job.Job, row job.Job) []job.Unmerged {
 		out = append(out, fact(short, fmt.Sprintf("%d commit(s) at %s are not on %s", f.Commits, short, r.branch), merge))
 	}
 	return out
+}
+
+// label names the checkout at where for text a person reads. Inside the
+// repository it is the path from the repository root. Outside, it is the job's
+// id. No absolute path reaches the text.
+func (r *unmergedRead) label(row job.Job, where string) string {
+	for _, base := range []string{r.root, resolved(r.root)} {
+		for _, at := range []string{where, resolved(where)} {
+			rel, err := filepath.Rel(base, at)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+				continue
+			}
+			if rel == "." {
+				return "the repository"
+			}
+			return filepath.ToSlash(rel)
+		}
+	}
+	return row.ID
 }
 
 // unknown says what this read left unanswered, "" when it answered everything.
