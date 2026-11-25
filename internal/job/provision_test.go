@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -121,4 +123,102 @@ func (s *FailedProvisionSuite) TestACheckoutThisForkMadeIsRemovedAndTheErrorSays
 	s.Require().ErrorContains(err, NoCheckoutHook)
 	s.ErrorContains(err, fmt.Sprintf("this fork made %s, so it removed it", wt.Root))
 	s.NoDirExists(wt.Root)
+}
+
+// ReadyCheckoutSuite pins how a checkout's own checkout.ready steps run.
+type ReadyCheckoutSuite struct {
+	suite.Suite
+	said     bytes.Buffer
+	previous *slog.Logger
+}
+
+func TestReadyCheckoutSuite(t *testing.T) { suite.Run(t, new(ReadyCheckoutSuite)) }
+
+func (s *ReadyCheckoutSuite) SetupTest() {
+	s.previous = slog.Default()
+	s.said.Reset()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, nil)))
+}
+
+func (s *ReadyCheckoutSuite) TearDownTest() { slog.SetDefault(s.previous) }
+
+const twoReadySteps = "checkout:\n  ready:\n    - target: build\n      project: libs/a\n    - target: graph\n      project: .\n"
+
+// checkout is a repository holding yaml as its magus.yaml. Its ./magus logs each call
+// to calls and prints a target result. It fails the target named failing.
+func (s *ReadyCheckoutSuite) checkout(yaml, failing string) (root, calls string) {
+	root = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": yaml}).Root()
+	calls = filepath.Join(s.T().TempDir(), "calls")
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$PWD $*" >> %q
+if [ "$2" = %q ]; then
+  echo '{"type":"run.target.result","target":"dep","status":"failed","ref":"ref-dep"}'
+  echo '{"type":"run.target.result","target":"'"$2"'","status":"failed","ref":"ref-'"$2"'"}'
+  exit 1
+fi
+echo 'not json'
+echo '{"type":"run.target.result","target":"'"$2"'","status":"ok","ref":"ref-'"$2"'"}'
+`, calls, failing)
+	s.Require().NoError(os.WriteFile(filepath.Join(root, binaryName), []byte(script), 0o755))
+	return root, calls
+}
+
+func (s *ReadyCheckoutSuite) calls(path string) string {
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return ""
+	}
+	s.Require().NoError(err)
+	return string(body)
+}
+
+func (s *ReadyCheckoutSuite) TestEachStepRunsInOrderInTheCheckoutAndKeepsItsRef() {
+	root, calls := s.checkout(twoReadySteps, "")
+
+	ran, err := runReadySteps(s.T().Context(), root)
+
+	s.Require().NoError(err)
+	s.Equal([]readyRun{
+		{Step: config.ReadyStep{Target: "build", Project: "libs/a"}, Ref: "ref-build"},
+		{Step: config.ReadyStep{Target: "graph", Project: "."}, Ref: "ref-graph"},
+	}, ran)
+	real, err := filepath.EvalSymlinks(root)
+	s.Require().NoError(err)
+	s.Equal(fmt.Sprintf("%[1]s run build libs/a -o jsonl\n%[1]s run graph . -o jsonl\n", real), s.calls(calls))
+}
+
+func (s *ReadyCheckoutSuite) TestAFailingStepStopsTheRestAndNamesItsRefAndRerun() {
+	root, calls := s.checkout(twoReadySteps, "build")
+
+	ran, err := runReadySteps(s.T().Context(), root)
+
+	var failed *readyStepError
+	s.Require().ErrorAs(err, &failed)
+	s.Equal(readyStepError{Root: root, Step: config.ReadyStep{Target: "build", Project: "libs/a"}, Ref: "ref-dep", Err: failed.Err}, *failed)
+	s.ErrorContains(err, "`./magus query output ref-dep`")
+	s.ErrorContains(err, "`./magus run build libs/a` reruns it there")
+	s.ErrorContains(err, "no later step ran")
+	s.Empty(ran)
+	s.NotContains(s.calls(calls), "graph")
+}
+
+func (s *ReadyCheckoutSuite) TestNoDeclarationIsSaidOnceAndRunsNothing() {
+	root, calls := s.checkout("", "")
+
+	ran, err := runReadySteps(s.T().Context(), root)
+
+	s.Require().NoError(err)
+	s.Empty(ran)
+	s.Empty(s.calls(calls))
+	s.Equal(1, strings.Count(s.said.String(), "declares no checkout.ready"))
+}
+
+func (s *ReadyCheckoutSuite) TestACheckoutWithNoMagusIsRefused() {
+	root, _ := s.checkout(twoReadySteps, "")
+	s.Require().NoError(os.Remove(filepath.Join(root, binaryName)))
+
+	ran, err := runReadySteps(s.T().Context(), root)
+
+	s.Require().ErrorContains(err, "declares 2 checkout.ready step(s) and holds no ./magus to run them, so none ran")
+	s.Empty(ran)
 }

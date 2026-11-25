@@ -244,6 +244,16 @@ type Disk struct {
 type Checkout struct {
 	// Bootstrap is read from the workspace's magus.yaml alone.
 	Bootstrap string `json:"bootstrap" yaml:"bootstrap" cli:"-"`
+	// Ready lists the targets a checkout a job's fork makes or exec adopts runs, in
+	// order, once its ./magus stands. It is read from that checkout's own magus.yaml.
+	// A failing step stops the rest. Empty declares none.
+	Ready []ReadyStep `json:"ready" yaml:"ready" cli:"-" validate:"dive"`
+}
+
+// ReadyStep is one checkout.ready entry, run as `magus run <target> <project>`.
+type ReadyStep struct {
+	Target  string `json:"target" yaml:"target" validate:"required"`
+	Project string `json:"project" yaml:"project" validate:"required"`
 }
 
 // Queue configures the merge queue, `magus queue`.

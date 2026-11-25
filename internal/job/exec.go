@@ -192,10 +192,9 @@ func wouldAdopt(row job.Job, here string, facts execFacts) bool {
 	return execRefusal(&row, here, facts) == nil && row.Worktree == facts.moved
 }
 
-// readyCheckout moves wt to row's checkpoint and pins a ./magus built
-// there, saying what it did. The pin is magus placing an exact build, so
-// it is written with the row and never through [Store.PinBinary], which
-// refuses a bound worker.
+// readyCheckout moves wt to row's checkpoint, pins a ./magus built there and
+// runs its checkout.ready steps, saying what it did. The pin is written with
+// the row, never through [Store.PinBinary], which refuses a bound worker.
 func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree, p Placement) (job.Worktree, error) {
 	followed, err := s.followCheckpoint(ctx, row.ID, wt, row.Checkpoint, true)
 	if err != nil {
@@ -204,8 +203,19 @@ func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree,
 	if followed.Base != wt.Base {
 		execNote(ctx, fmt.Sprintf("moved %s from %.12s to %.12s, the checkpoint of %s", followed.Root, wt.Base, followed.Base, row.ID))
 	}
+	provisioned := BuildsItsOwnMagus(followed.Root) && p.Provision != nil
+	// Provision runs the steps itself, after the build it may need first.
+	readied := func(placed job.Worktree) (job.Worktree, error) {
+		if provisioned {
+			return placed, nil
+		}
+		if _, err := runReadySteps(ctx, placed.Root); err != nil {
+			return wt, fmt.Errorf("readying %s for %s: %w", placed.Root, row.ID, err)
+		}
+		return placed, nil
+	}
 	switch {
-	case BuildsItsOwnMagus(followed.Root) && p.Provision != nil:
+	case provisioned:
 		reused, err := p.Provision(ctx, row, followed)
 		if err != nil {
 			return wt, err
@@ -224,7 +234,7 @@ func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree,
 		}
 		if placed == "" {
 			execNote(ctx, fmt.Sprintf("placed no ./magus in %s: no magus built at %.12s stands to copy, so %s pins none", followed.Root, followed.Base, row.ID))
-			return followed, nil
+			return readied(followed)
 		}
 		execNote(ctx, fmt.Sprintf("placed ./magus in %s from %s, built at %.12s", followed.Root, placed, followed.Base))
 	}
@@ -233,13 +243,13 @@ func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree,
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		execNote(ctx, fmt.Sprintf("%s holds no ./magus after its bootstrap, so %s pins none", followed.Root, row.ID))
-		return followed, nil
+		return readied(followed)
 	case err != nil:
 		return wt, fmt.Errorf("pinning %s for %s: %w", bin, row.ID, err)
 	}
 	followed.Binary, followed.BinaryDigest = bin, digest
 	execNote(ctx, fmt.Sprintf("pinned %s for %s: %s", bin, row.ID, digest))
-	return followed, nil
+	return readied(followed)
 }
 
 // execNote is one line of what exec did, on stderr: stdout is its record.

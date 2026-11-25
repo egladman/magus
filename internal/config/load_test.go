@@ -210,6 +210,25 @@ func (s *configSuite) TestLoadWorkspaceOnlyRefusesSources() {
 	s.Contains(err.Error(), "sets sources")
 }
 
+func (s *configSuite) TestLoadWorkspaceOnlyReadsCheckoutReadyInOrder() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, Filename),
+		[]byte("checkout:\n  ready:\n    - target: build\n      project: libs/a\n    - target: graph\n      project: .\n"), 0o644))
+	cfg, err := LoadWorkspaceOnly(root)
+	s.Require().NoError(err)
+	s.Equal([]ReadyStep{{Target: "build", Project: "libs/a"}, {Target: "graph", Project: "."}}, cfg.Checkout.Ready)
+}
+
+func (s *configSuite) TestValidateRefusesAReadyStepNamingNoProject() {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs, Console: Defaults().Console}
+	s.Require().NoError(Validate(cfg))
+	cfg.Checkout.Ready = []ReadyStep{{Target: "build"}}
+	var ve *ValidationError
+	s.Require().ErrorAs(Validate(cfg), &ve)
+	s.Equal([]FieldFailure{{Field: "checkout.ready[0].project", Tag: "required"}}, ve.Failures)
+}
+
 func (s *configSuite) TestLoadAcceptsSourcesWhenTheWorkingDirIsTheUserConfigDir() {
 	home := s.T().TempDir()
 	s.T().Setenv("XDG_CONFIG_HOME", home)
