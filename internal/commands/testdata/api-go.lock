@@ -3421,7 +3421,6 @@ github.com/egladman/magus/types.OwnershipEntry.Path field string "json:\"path\" 
 github.com/egladman/magus/types.OwnershipEntry.Primary field string "json:\"primary\"                yaml:\"primary\""
 github.com/egladman/magus/types.OwnershipEntry.PrimaryShare field int "json:\"primary_share\"          yaml:\"primary_share\""
 github.com/egladman/magus/types.OwnershipEntry.Stale field bool "json:\"stale,omitempty\"        yaml:\"stale,omitempty\""
-github.com/egladman/magus/types.ParseAPIVersion func(s string) (APIVersion, error)
 github.com/egladman/magus/types.ParseCheckpointToken func(token string) (revision string, digest string)
 github.com/egladman/magus/types.ParseGlobs func(declared []string) ([]Glob, error)
 github.com/egladman/magus/types.ParseJobTimeout func(s string) (time.Duration, error)
