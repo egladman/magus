@@ -1,0 +1,8 @@
+package builders
+
+import "strings"
+
+func elsewhere() {
+	b := strings.Builder{} // want `builder returns one composite literal and has one use site: inline it`
+	_ = b
+}

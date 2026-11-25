@@ -1,0 +1,35 @@
+package calls
+
+import (
+	"fmt"
+	"strings"
+)
+
+func upper(s string) string { return strings.ToUpper(s) }
+
+func shout(s string) string { return strings.ToUpper(s) + "!" }
+
+func twice(a, b string) string { return strings.Repeat(a, len(b)) }
+
+func say(s string) { fmt.Println(s) }
+
+func later(s string) { fmt.Println(s) }
+
+func table(s string) string { return strings.TrimSpace(s) }
+
+func read() string { return "x" }
+
+func warn(s string) string { return fmt.Sprintf("a message long enough to name once: %s", s) }
+
+func apply(f func(string) string, s string) string { return f(s) }
+
+func use(name string) {
+	_ = strings.ToUpper(name)          // want `upper returns one call and has 2 use sites: inline it`
+	_ = strings.ToUpper(read())        // want `upper returns one call and has 2 use sites: inline it`
+	_ = twice(read(), read()) // want `twice returns one call and has one use site: inline it`
+	fmt.Println(name)                // want `say makes one call and has one use site: inline it`
+	go later(name)           // want `later makes one call and has one use site: inline it`
+	_ = table(name) // want `apply returns one call and has one use site: inline it`
+	_ = shout(name)
+	_, _ = warn(name), warn(name)
+}
