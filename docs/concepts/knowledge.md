@@ -953,6 +953,12 @@ if the baseline was global). Edge diffs are structural:
 an edge is identified by (source, target, relation), so a re-scored or re-provenanced
 edge that keeps those three is not reported as a change.
 
+What git history derives moves with every commit, so it is reported apart under
+`history` and kept out of the structural totals: author nodes, `authored` and
+`co_changes` edges, and churn and staleness attrs. A `--rev` base has no history, so
+there `history` is a note with counts rather than a list. Text output lists edges; it
+counts nodes that only moved line and edges of removed nodes, which `-o json` lists.
+
 ## Global graph (across workspaces)
 
 `--global` unions the knowledge graphs of the workspaces `knowledge.workspaces` lists in
