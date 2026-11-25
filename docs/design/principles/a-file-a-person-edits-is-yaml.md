@@ -36,9 +36,10 @@ One file for every project would hide which rules apply where.
 - One top-level `zones` list: a path whose complexity a measurement licenses,
   with its `reason` (`spec`, `performance` or `security`), its `evidence` and
   its `budgets`.
-- A stale baseline entry fails, so the baseline shrinks as code is fixed. An
-  agent's job never lists the file in its write paths, so the guard denies an
-  agent's edit to it and only a person grows it.
+- A stale baseline entry fails, so the baseline shrinks as code is fixed. A
+  machine may lower a count to what its file holds, through
+  `hack/dev/prune-comment-baseline.buzz`, and never raises one; only a person
+  raises a count.
 
 **Debt.** Person-edited JSON Lines found on 2026-11-18, owed a move to YAML:
 

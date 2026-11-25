@@ -4,7 +4,8 @@
 // under proofread.baseline.
 //
 // Tier 2, measured shape: a count may only fall. A file over its count fails;
-// one under it fails until a person lowers it.
+// one under it fails until hack/dev/prune-comment-baseline.buzz lowers its
+// row. Only a person raises a count.
 namespace codecommentsfollowproofreadrules;
 
 import "assert";
@@ -25,7 +26,8 @@ final SECTION = "proofread";
 final KIND = "code-comment";
 
 final COUNT_FIX = "Cut the comment to what the code cannot show; the proofread baseline in its "
-    + "project's analyzers.yaml may only fall.";
+    + "project's analyzers.yaml is lowered by script and raised only by a person.";
+final PRUNE_SCRIPT = "hack/dev/prune-comment-baseline.buzz";
 
 // Baseline is one project's proofread key: settings as proofread's --budgets
 // JSON, "" for none, and each file's counts by rule, keyed by workspace path.
@@ -95,11 +97,25 @@ export object Judged {
     url: str = "",
 }
 
+// Fall is a row count above what its file holds now, 0 for a gone file.
+export object Fall {
+    file: str,
+    rule: str,
+    want: int,
+    got: int,
+}
+
+// Verdict is the findings that fail a run and the row counts that could fall.
+export object Verdict {
+    findings: [Finding],
+    falls: [Fall],
+}
+
 // compare holds each file's findings to b's counts. A file past its count
-// fails on each finding past it; one under it fails at its row. A narrow run
-// judges a row for a file it left out only when exists says the file is gone.
-// A gone row one rowless file now holds is a move, reported once.
-export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: fun (p: str) > bool) > [Finding] {
+// fails on each finding past it; one under it fails at its row and falls. A
+// narrow run judges a row for a file it left out only when exists says the
+// file is gone. A gone row one rowless file holds is a move.
+export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: fun (p: str) > bool) > Verdict {
     final seen = mut {<str: {str: int}>};
     final acc = mut [<Finding>];
     foreach (f in found) {
@@ -118,6 +134,7 @@ export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: f
         }
     }
     final moved = mut {<str: bool>};
+    final falls = mut [<Fall>];
     foreach (file in support\sorted(b.counts.keys())) {
         final rules = b.counts[file]!;
         if (!(present[file] ?? false) and exists(file)) {
@@ -144,7 +161,8 @@ export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: f
             final why = if (present[file] ?? false) "holds {got}" else "is gone";
             acc.append(Finding{ path = b.file, line = line,
                 message = "the proofread baseline allows {want} {rule} findings in {file}, which {why}",
-                hint = "A person lowers the count to {got} in {b.file}; it never rises." });
+                hint = "Run `magus buzz {PRUNE_SCRIPT} -- --apply` to lower it to {got}." });
+            falls.append(Fall{ file = file, rule = rule, want = want, got = got });
         }
     }
     final kept = mut [<Finding>];
@@ -153,7 +171,7 @@ export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: f
             kept.append(f);
         }
     }
-    return kept;
+    return Verdict{ findings = kept, falls = falls };
 }
 
 // movedTo is the one file with no row in rows whose findings equal rules, or
@@ -233,7 +251,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             continue;
         }
         final onDisk = fun (p: str) > bool => fs\exists("{base}/{p}") catch false;
-        foreach (f in compare(judgedRun.value!, b: b, present: present, exists: onDisk)) {
+        foreach (f in compare(judgedRun.value!, b: b, present: present, exists: onDisk).findings) {
             acc.append(f);
         }
     }
@@ -242,7 +260,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 
 // judge runs proofread code-comment over files from base and returns its
 // deny findings.
-fun judge(files: [str], base: str, budgets: str) > result\Result::<[Judged]> {
+export fun judge(files: [str], base: str, budgets: str) > result\Result::<[Judged]> {
     if (files.len() == 0) {
         return result\ok::<[Judged]>([<Judged>]);
     }
@@ -289,42 +307,57 @@ fun said(path: str, rule: str, line: int) > Judged {
 test "a file within its counts passes, one past them fails on each finding past" {
     final b = Baseline{ counts = {"a.go": {"banner": 1}} };
     final found = [said("a.go", rule: "banner", line: 3), said("a.go", rule: "banner", line: 9), said("b.go", rule: "provenance", line: 2)];
-    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => true);
+    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => true).findings;
     assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
     assert\equal(got[0].line, want: 9, message: "the second banner is past the count");
     assert\equal(got[1].path, want: "b.go", message: "a file with no row has a count of 0");
 }
 
-test "a count above what the file holds, or a gone file, fails at its row" {
+test "a count above what the file holds, or a gone file, fails at its row and names the script" {
     final text = "proofread:\n  baseline:\n    a.go: \{banner: 2}\n    gone.go: \{banner: 1}\n";
     final b = Baseline{ counts = {"a.go": {"banner": 2}, "gone.go": {"banner": 1}}, text = text };
-    final got = compare([said("a.go", rule: "banner", line: 3)], b: b, present: {"a.go": true}, exists: fun (p: str) > bool => p != "gone.go");
+    final v = compare([said("a.go", rule: "banner", line: 3)], b: b, present: {"a.go": true}, exists: fun (p: str) > bool => p != "gone.go");
+    final got = v.findings;
     assert\equal(support\messages(got), want: [
         "the proofread baseline allows 2 banner findings in a.go, which holds 1",
         "the proofread baseline allows 1 banner findings in gone.go, which is gone",
     ], message: "both rows");
     assert\equal(got[0].line, want: 3, message: "the row's line");
+    assert\equal(got[0].hint, want: "Run `magus buzz hack/dev/prune-comment-baseline.buzz -- --apply` to lower it to 1.", message: "the script lowers it");
+    assert\equal(v.falls.len(), want: 2, message: "both rows could fall");
+    assert\equal(v.falls[1].got, want: 0, message: "a gone file holds none");
+}
+
+test "a file past its row fails on the finding and is no fall" {
+    final b = Baseline{ counts = {"a.go": {"banner": 1}} };
+    final found = [said("a.go", rule: "banner", line: 1), said("a.go", rule: "banner", line: 2)];
+    final v = compare(found, b: b, present: {"a.go": true}, exists: fun (p: str) > bool => true);
+    assert\equal(v.findings.len(), want: 1, message: "{support\messages(v.findings)}");
+    assert\equal(v.findings[0].hint, want: COUNT_FIX, message: "a rise stays the person's");
+    assert\equal(v.falls.len(), want: 0, message: "nothing to lower");
 }
 
 test "a gone row whose counts one rowless file holds is one move" {
     final text = "proofread:\n  baseline:\n    old.go: \{banner: 2}\n";
     final b = Baseline{ counts = {"old.go": {"banner": 2}}, text = text };
     final found = [said("new.go", rule: "banner", line: 4), said("new.go", rule: "banner", line: 8)];
-    final got = compare(found, b: b, present: {"new.go": true}, exists: fun (p: str) > bool => p != "old.go");
+    final v = compare(found, b: b, present: {"new.go": true}, exists: fun (p: str) > bool => p != "old.go");
+    final got = v.findings;
     assert\equal(support\messages(got), want: ["the proofread baseline row old.go names a file that moved to new.go"], message: "one finding");
     assert\equal(got[0].line, want: 3, message: "at the row");
+    assert\equal(v.falls.len(), want: 0, message: "a person renames a moved row");
 }
 
 test "a gone row stays gone when two rowless files hold its counts" {
     final b = Baseline{ counts = {"old.go": {"banner": 1}} };
     final found = [said("a.go", rule: "banner", line: 1), said("b.go", rule: "banner", line: 1)];
-    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => p != "old.go");
+    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => p != "old.go").findings;
     assert\equal(got.len(), want: 3, message: "{support\messages(got)}");
 }
 
 test "a row for a file a narrow run left out is not judged" {
     final b = Baseline{ counts = {"a.go": {"banner": 2}} };
-    final got = compare([<Judged>], b: b, present: {<str: bool>}, exists: fun (p: str) > bool => true);
+    final got = compare([<Judged>], b: b, present: {<str: bool>}, exists: fun (p: str) > bool => true).findings;
     assert\equal(got.len(), want: 0, message: "{support\messages(got)}");
 }
 

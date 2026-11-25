@@ -1,0 +1,183 @@
+// Cost: one proofread run per project with a baseline.
+//
+// Lowers each proofread baseline row in a project's analyzers.yaml to what its
+// file holds now, and never raises one: only a person raises a count. A rule at
+// zero goes, and so does a row whose rules all reach zero. It writes only with
+// --apply.
+//
+//	magus buzz hack/dev/prune-comment-baseline.buzz -- [--apply]
+namespace prunecommentbaseline;
+
+import "assert";
+import "flags";
+import "fs";
+import "std";
+import "vcs";
+import "encoding/yaml";
+import "hack/lint/code-comments-follow-proofread-rules" as rule;
+import "hack/lint/support" as support;
+
+final USAGE = "usage: magus buzz hack/dev/prune-comment-baseline.buzz -- [--apply]";
+final HELP = "cost: one proofread run per project with a baseline\n{USAGE}";
+
+// lowerText rewrites the proofread baseline rows of an analyzers.yaml as text,
+// so its comments and flow style stay. now maps a workspace path to the count
+// each rule of its row holds; prefix is the project's path and a slash, or "".
+// A row line reads `    file: {rule: n, rule: n}`.
+export fun lowerText(text: str, now: {str: {str: int}}, prefix: str) > str {
+    final lines = mut [<str>];
+    var inProofread = false;
+    var inBaseline = false;
+    foreach (line in text.split("\n")) {
+        if (!line.startsWith(" ") and line != "") {
+            inProofread = line == "proofread:";
+            inBaseline = false;
+        } else if (inProofread and line.startsWith("  ") and !line.startsWith("   ")) {
+            inBaseline = line.trim() == "baseline:";
+        }
+        final cut = line.indexOf(": \{");
+        if (!inBaseline or !line.startsWith("    ") or cut == null or !line.endsWith("}")) {
+            lines.append(line);
+            continue;
+        }
+        final key = line.sub(4, len: cut! - 4);
+        final held = now[prefix + key];
+        if (held == null) {
+            lines.append(line);
+            continue;
+        }
+        final kept = mut [<str>];
+        foreach (pair in line.sub(cut! + 3, len: line.len() - cut! - 4).split(", ")) {
+            final colon = pair.indexOf(": ");
+            if (colon == null) {
+                kept.append(pair);
+                continue;
+            }
+            final name = pair.sub(0, len: colon!);
+            final old = std\parseInt(pair.sub(colon! + 2)) ?? 0;
+            final got = held![name] ?? old;
+            final count = if (got < old) got else old;
+            if (count > 0) {
+                kept.append("{name}: {count}");
+            }
+        }
+        if (kept.len() > 0) {
+            lines.append("    {key}: \{" + kept.join(", ") + "}");
+        }
+    }
+    return lines.join("\n");
+}
+
+// held is each falling row's counts after the fall, keyed by workspace path;
+// a rule that did not fall keeps its count from b.
+export fun held(falls: [rule\Fall], b: rule\Baseline) > {str: {str: int}} {
+    final acc = mut {<str: mut {str: int}>};
+    foreach (f in falls) {
+        if (f.got >= f.want) {
+            continue;
+        }
+        if (acc[f.file] == null) {
+            acc[f.file] = (b.counts[f.file] ?? {<str: int>}).cloneMutable();
+        }
+        acc[f.file]![f.rule] = f.got;
+    }
+    return acc;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "prune-comment-baseline: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final dry = parsed.values["--apply"] == null;
+    std\print(if (dry) "read-only" else "writes analyzers.yaml baseline rows");
+    final listed = support\projects();
+    if (listed.error != null) {
+        throw listed.error!.message;
+    }
+    final projects = mut [<str>];
+    foreach (p in listed.value!.projects) {
+        projects.append(p.path);
+    }
+    final byProject = mut {<str: mut [str]>};
+    final present = mut {<str: bool>};
+    foreach (path in vcs\cmd(["ls-files"], opts: vcs\CommandOptions{ quiet = true }).stdout.split("\n")) {
+        if (!rule\judged(path)) {
+            continue;
+        }
+        final project = rule\owner(path, projects: projects);
+        if (byProject[project] == null) {
+            byProject[project] = mut [<str>];
+        }
+        byProject[project]!.append(path);
+        present[path] = true;
+    }
+    var total = 0;
+    foreach (project in support\sorted(projects)) {
+        final file = rule\policyFile(project);
+        if (!fs\exists(file)) {
+            continue;
+        }
+        final text = fs\readFile(file);
+        final doc: {str: any} = yaml\parse(text) ?? {<str: any>};
+        final b = rule\baseline(doc["proofread"] ?? {<str: any>}, text: text, project: project);
+        if (b.counts.len() == 0) {
+            continue;
+        }
+        final run = rule\judge(byProject[project] ?? [<str>], base: ".", budgets: b.budgets);
+        if (run.error != null) {
+            throw "prune-comment-baseline: proofread did not judge {project}: {run.error!.message}";
+        }
+        final onDisk = fun (p: str) > bool => fs\exists(p) catch false;
+        final falls = rule\compare(run.value!, b: b, present: present, exists: onDisk).falls;
+        if (falls.len() == 0) {
+            continue;
+        }
+        total += falls.len();
+        foreach (f in falls) {
+            std\print("{file}: {f.file} {f.rule} {f.want} -> {f.got}");
+        }
+        final prefix = if (project == ".") "" else project + "/";
+        final next = lowerText(text, now: held(falls, b: b), prefix: prefix);
+        if (!dry and next != text) {
+            fs\writeFile(file, content: next);
+        }
+    }
+    std\print("{total} proofread baseline counts " + (if (dry) "could fall" else "lowered"));
+}
+
+test "a row falls to what its file holds and a rule at zero goes" {
+    final text = "proofread:\n  baseline:\n    a.go: \{banner: 3, provenance: 2}\n    b.go: \{banner: 1}\n";
+    final got = lowerText(text, now: {"a.go": {"banner": 1, "provenance": 0}}, prefix: "");
+    assert\equal(got, want: "proofread:\n  baseline:\n    a.go: \{banner: 1}\n    b.go: \{banner: 1}\n", message: "a.go lowered, b.go untouched");
+}
+
+test "a row with every rule at zero goes, comments stay and a count never rises" {
+    final text = "# note\nproofread:\n  # rows\n  baseline:\n    a.go: \{banner: 1}\n    b.go: \{banner: 2}\n";
+    final got = lowerText(text, now: {"a.go": {"banner": 0}, "b.go": {"banner": 5}}, prefix: "");
+    assert\equal(got, want: "# note\nproofread:\n  # rows\n  baseline:\n    b.go: \{banner: 2}\n", message: "a.go gone, b.go keeps 2");
+}
+
+test "a nested project's rows match by their prefixed path and other keys stay" {
+    final text = "other:\n  baseline:\n    x.go: \{banner: 4}\nproofread:\n  baseline:\n    x.go: \{banner: 4}\n";
+    final got = lowerText(text, now: {"libs/p/x.go": {"banner": 2}}, prefix: "libs/p/");
+    assert\equal(got, want: "other:\n  baseline:\n    x.go: \{banner: 4}\nproofread:\n  baseline:\n    x.go: \{banner: 2}\n", message: "only proofread rows");
+}
+
+test "held lowers a falling rule and keeps the row's others" {
+    final b = rule\Baseline{ counts = {"a.go": {"banner": 3, "provenance": 1}, "b.go": {"banner": 1}} };
+    final got = held([rule\Fall{ file = "a.go", rule = "banner", want = 3, got = 1 }], b: b);
+    assert\equal(got["a.go"]?["banner"] ?? -1, want: 1, message: "lowered");
+    assert\equal(got["a.go"]?["provenance"] ?? -1, want: 1, message: "the other rule keeps its count");
+    assert\equal(got["b.go"] == null, want: true, message: "a row with no fall is left alone");
+}
+
+test "held never raises a count" {
+    final b = rule\Baseline{ counts = {"a.go": {"banner": 1}} };
+    final got = held([rule\Fall{ file = "a.go", rule = "banner", want = 1, got = 4 }], b: b);
+    assert\equal(got.len(), want: 0, message: "a rise is no fall");
+}

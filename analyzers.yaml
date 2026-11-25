@@ -303,7 +303,7 @@ proofread:
     cmd/magus/failures.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 1}
     cmd/magus/globals.go: {banner: 1, code-comment-budget: 4, code-comment-sentence: 4, comment-caps: 1}
     cmd/magus/globals_test.go: {banner: 1, code-comment-budget: 7, code-comment-sentence: 13, comment-caps: 6}
-    cmd/magus/graph.go: {banner: 2, code-comment-budget: 33, code-comment-sentence: 36, comment-caps: 15, comment-first-person: 1, comment-history: 3}
+    cmd/magus/graph.go: {banner: 2, code-comment-budget: 32, code-comment-sentence: 35, comment-caps: 15, comment-first-person: 1, comment-history: 3}
     cmd/magus/graph_test.go: {code-comment-budget: 3, code-comment-sentence: 6, comment-history: 1, doc-path: 2}
     cmd/magus/helpers.go: {code-comment-budget: 5, code-comment-sentence: 9, comment-history: 1}
     cmd/magus/hook_glue.go: {code-comment-budget: 1, code-comment-sentence: 1}
@@ -479,7 +479,7 @@ proofread:
     hack/policy/guard.buzz: {code-comment-budget: 4, code-comment-sentence: 10, doc-path: 2}
     hack/policy/helpers.buzz: {code-comment-sentence: 2}
     hack/policy/host.buzz: {code-comment-budget: 1, code-comment-sentence: 3}
-    hack/policy/mandate.buzz: {code-comment-budget: 3, code-comment-sentence: 11, comment-history: 1, doc-path: 1}
+    hack/policy/mandate.buzz: {code-comment-budget: 2, code-comment-sentence: 9, comment-history: 1, doc-path: 1}
     hack/policy/model-tiers.buzz: {code-comment-budget: 1, code-comment-sentence: 1}
     hack/policy/pr_workflow.buzz: {code-comment-sentence: 1}
     hack/policy/proofread.buzz: {code-comment-budget: 10, code-comment-sentence: 16, comment-caps: 1, doc-path: 8, provenance: 6}
@@ -875,8 +875,8 @@ proofread:
     internal/graph/knowledge/coverage.go: {code-comment-budget: 4, code-comment-sentence: 9, comment-caps: 1}
     internal/graph/knowledge/diagrams.go: {code-comment-budget: 1, code-comment-sentence: 5}
     internal/graph/knowledge/diagrams_test.go: {code-comment-sentence: 1}
-    internal/graph/knowledge/diff.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
-    internal/graph/knowledge/diff_test.go: {code-comment-sentence: 5, comment-caps: 2}
+    internal/graph/knowledge/diff.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
+    internal/graph/knowledge/diff_test.go: {code-comment-sentence: 3, comment-caps: 1}
     internal/graph/knowledge/dirs.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 3}
     internal/graph/knowledge/dirs_test.go: {code-comment-sentence: 4, comment-caps: 3}
     internal/graph/knowledge/docs.go: {code-comment-budget: 20, code-comment-sentence: 24, comment-caps: 18, comment-history: 1, doc-path: 10}
