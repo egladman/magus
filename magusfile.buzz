@@ -996,8 +996,8 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-description: the title and description pass the proofread rules");
 }
 
-// Fails a feat, fix, perf or breaking pull request that ships code without a changelog
-// fragment under changes/unreleased/, and any malformed fragment.
+// Fails a breaking pull request, or one that changes a public-surface lock or page, without a
+// changelog fragment under changes/unreleased/, and any malformed fragment.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     final titled = pull_request_title(ctx, args: args, target: "pr-changelog");
     if (titled.error != null) { throw titled.error!.message; }
@@ -1023,7 +1023,7 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("pr-changelog: \"{title}\" owes no entry against {base}");
         return;
     }
-    magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
+    magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} public-surface path(s)");
 }
 
 // Fails a pull request any of whose commits carries an attribution.
