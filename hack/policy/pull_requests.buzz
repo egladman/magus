@@ -1754,12 +1754,17 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
 
 final ciWorkflowPath = ".github/workflows/ci.yaml";
 
-// readCiWorkflow reads ci.yaml from the guard's working directory.
+// readCiWorkflow reads ci.yaml at the root of the checkout holding the hook's working
+// directory, since a host may run its hooks from a subdirectory.
 fun readCiWorkflow() > result\Result::<str> {
+    final root = vcs\root() catch "";
+    if (root == "") {
+        return result\fail::<str>("the hook runs outside any checkout, so {ciWorkflowPath} has no root to resolve against");
+    }
     try {
-        return result\ok::<str>(fs\readFile(ciWorkflowPath));
+        return result\ok::<str>(fs\readFile("{root}/{ciWorkflowPath}"));
     } catch (err: any) {
-        return result\caught::<str>(err, doing: "read {ciWorkflowPath}");
+        return result\caught::<str>(err, doing: "read {root}/{ciWorkflowPath}");
     }
 }
 
