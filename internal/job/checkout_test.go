@@ -831,3 +831,58 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"})
 	assert.NotEmpty(t, gone.TestUnknown, "a revision the history lost is unknown, not zero")
 }
+
+// countedMissing counts the range reads MissingCommits runs.
+type countedMissing struct {
+	types.VCSDriver
+	reads *int
+}
+
+func (c countedMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	*c.reads++
+	return c.VCSDriver.MissingCommits(ctx, dir, branch, head)
+}
+
+func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
+	t.Parallel()
+	_, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	for _, name := range []string{"pending", "squashed", "landed"} {
+		repo.Git("switch", "-q", "-c", name, main)
+		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
+		repo.Git("switch", "-q", main)
+	}
+	repo.Git("merge", "-q", "--ff-only", "landed")
+	repo.Commit("squash squashed", map[string]string{"squashed.txt": "squashed\n"})
+	finished := []job.Job{
+		{ID: "pending", State: job.StateExited}, {ID: "squashed", State: job.StateExited},
+		{ID: "landed", State: job.StatePass}, {ID: "gone", State: job.StateExited},
+	}
+	driver, why := resolveDriver(t.Context(), repo.Root())
+	require.NotNil(t, driver, why)
+	reads := 0
+	counted := countedMissing{VCSDriver: driver, reads: &reads}
+
+	first, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	require.NoError(t, err)
+	second, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	require.NoError(t, err)
+
+	want := []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}
+	assert.Equal(t, []any{want, want}, []any{first, second})
+	assert.Equal(t, 2, reads, "the first read asks pending and squashed; a merged or gone branch and every second answer cost none")
+}
+
+func TestForkFactsTimesItselfOnTheCallClock(t *testing.T) {
+	t.Parallel()
+	_, _, repo := worktreeStore(t)
+	var timed []string
+	ctx := WithCallClock(t.Context(), func(name string) func() {
+		timed = append(timed, name)
+		return func() {}
+	})
+
+	ForkFacts(ctx, repo.Root(), nil, FullTest{})
+
+	assert.Equal(t, []string{forkFactsCall}, timed)
+}

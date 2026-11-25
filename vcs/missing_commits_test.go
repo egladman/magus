@@ -320,3 +320,20 @@ func (s *missingCommitsSuite) TestCommitsSharingASubjectDiffEachCommitOnce() {
 	s.Equal(2, missing)
 	s.Equal(6, counted.diffs, "five commits once each, then the net patch")
 }
+
+func (s *missingCommitsSuite) TestMergedBranchesListsOnlyWhatTheRevisionReaches() {
+	s.repo.Git("branch", "-q", "behind", s.main)
+
+	merged, err := MergedBranches(s.T().Context(), gitVCS{}, s.repo.Root(), "HEAD")
+
+	s.Require().NoError(err)
+	s.Equal(map[string]bool{s.main: true, "behind": true}, merged, "side holds a commit HEAD lacks")
+}
+
+func (s *missingCommitsSuite) TestMergedBranchesDeclinesOnAnotherBackend() {
+	_, err := MergedBranches(s.T().Context(), hgVCS{}, s.repo.Root(), "HEAD")
+
+	var unsupported *types.VCSUnsupportedError
+	s.Require().ErrorAs(err, &unsupported)
+	s.Equal("hg", unsupported.VCS)
+}

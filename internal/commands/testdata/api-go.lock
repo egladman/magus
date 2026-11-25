@@ -3006,6 +3006,7 @@ github.com/egladman/magus/types.LeaseCheck.Project field string "json:\"project,
 github.com/egladman/magus/types.LeaseCheck.Script field string "json:\"script,omitempty\"   yaml:\"script,omitempty\""
 github.com/egladman/magus/types.LeaseCheck.Target field string "json:\"target\"             yaml:\"target\" schema:\"target\""
 github.com/egladman/magus/types.LeaseCheck.Test field bool "json:\"test,omitzero\" yaml:\"test,omitempty\""
+github.com/egladman/magus/types.LeaseHolderQuiet const DiagnosticCode = "MGS3059"
 github.com/egladman/magus/types.LegacySpellings type struct
 github.com/egladman/magus/types.LegacySpellings.DenyPaths field []string "json:\"forbidden_paths,omitempty\""
 github.com/egladman/magus/types.LegacySpellings.ReadPaths field []string "json:\"focus,omitempty\""

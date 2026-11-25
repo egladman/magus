@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -56,7 +59,11 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 // and advances one with the same call, which is right for an orchestrator writing its own
 // plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
 // invented for it would bury that under a plausible-looking ledger entry.
-func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
+func (s *Store) Exec(ctx context.Context, id string, opts ...ExecOption) (job.Job, error) {
+	var o execOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	// Read before the lock, since it runs the VCS. The row is read again there.
 	var row job.Job
 	if f, err := s.Read(ctx); err == nil {
@@ -68,19 +75,24 @@ func (s *Store) Exec(ctx context.Context, id string) (job.Job, error) {
 	if err != nil {
 		return job.Job{}, err
 	}
+	// Relative would be resolved against whichever process sweeps the row later.
+	here := ""
+	if s.root != "" {
+		if abs, err := filepath.Abs(s.root); err == nil {
+			here = abs
+		}
+	}
+	if o.placement != nil {
+		if facts, err = s.readyAdoption(ctx, row, here, facts, *o.placement); err != nil {
+			return job.Job{}, err
+		}
+	}
 	base, full := facts.base, facts.full
 	return s.MutateSeeing(ctx, id, job.AsExec, func(cur *job.Job, exists bool, now int64, rows []job.Job) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
 				" check the declared ids with `%s` and exec under the id the"+
 				" orchestrator handed you", job.ErrUnknownJob, id, hint.LsJobs)
-		}
-		// Relative would be resolved against whichever process sweeps the row later.
-		here := ""
-		if s.root != "" {
-			if abs, err := filepath.Abs(s.root); err == nil {
-				here = abs
-			}
 		}
 		if err := execRefusal(cur, here, facts); err != nil {
 			return err
@@ -125,6 +137,114 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (exec
 		moved: s.untakenElsewhere(ctx, row),
 		full:  s.fullRevisions(ctx, row.Checkpoint, base),
 	}, nil
+}
+
+// Placement readies a checkout [Store.Exec] adopts for a job nobody took.
+// Exe, or the ./magus where the job was forked, is copied in when built at
+// the checkpoint. Provision readies a checkout that builds its own, as
+// [ProvisionCheckout] does, and says whether it reused one. A nil Provision
+// leaves such a checkout without one.
+type Placement struct {
+	Exe       string
+	Provision func(ctx context.Context, row job.Job, wt job.Worktree) (reused bool, err error)
+}
+
+// ExecOption is an option to [Store.Exec].
+type ExecOption func(*execOptions)
+
+type execOptions struct {
+	placement *Placement
+}
+
+// Placing makes Exec ready the checkout it adopts before it takes the job.
+// It moves it to the job's checkpoint, refusing uncommitted work. It places
+// a ./magus built there and pins it on the row. Without it Exec adopts the
+// checkout as it stands, which is what the guard asks about.
+func Placing(p Placement) ExecOption {
+	return func(o *execOptions) { o.placement = &p }
+}
+
+// readyAdoption readies facts.moved when Exec would move row there, and
+// reads the base again from the moved checkout. Any other row's facts come
+// back as they were.
+func (s *Store) readyAdoption(ctx context.Context, row job.Job, here string, facts execFacts, p Placement) (execFacts, error) {
+	if !wouldAdopt(row, here, facts) {
+		return facts, nil
+	}
+	ready, err := s.readyCheckout(ctx, row, *facts.moved, p)
+	if err != nil {
+		return facts, err
+	}
+	base, err := s.CheckoutToken(ctx)
+	if err != nil {
+		return facts, fmt.Errorf("the checkout at %s reports no revision after moving to %s's checkpoint: %w", here, row.ID, err)
+	}
+	facts.moved, facts.base, facts.full = &ready, base, s.fullRevisions(ctx, row.Checkpoint, base)
+	return facts, nil
+}
+
+// wouldAdopt reports whether Exec would move row to facts.moved. A refusal
+// moves nothing, and the locked write refuses it again.
+func wouldAdopt(row job.Job, here string, facts execFacts) bool {
+	if facts.moved == nil {
+		return false
+	}
+	return execRefusal(&row, here, facts) == nil && row.Worktree == facts.moved
+}
+
+// readyCheckout moves wt to row's checkpoint and pins a ./magus built
+// there, saying what it did. The pin is magus placing an exact build, so
+// it is written with the row and never through [Store.PinBinary], which
+// refuses a bound worker.
+func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree, p Placement) (job.Worktree, error) {
+	followed, err := s.followCheckpoint(ctx, row.ID, wt, row.Checkpoint, true)
+	if err != nil {
+		return wt, fmt.Errorf("adopting %s for %s at its checkpoint: %w", wt.Root, row.ID, err)
+	}
+	if followed.Base != wt.Base {
+		execNote(ctx, fmt.Sprintf("moved %s from %.12s to %.12s, the checkpoint of %s", followed.Root, wt.Base, followed.Base, row.ID))
+	}
+	switch {
+	case BuildsItsOwnMagus(followed.Root) && p.Provision != nil:
+		reused, err := p.Provision(ctx, row, followed)
+		if err != nil {
+			return wt, err
+		}
+		if !reused {
+			execNote(ctx, fmt.Sprintf("built ./magus in %s at %.12s: no magus built there stood to reuse", followed.Root, followed.Base))
+		}
+	default:
+		exes := []string{p.Exe}
+		if row.ForkedIn != "" {
+			exes = append(exes, filepath.Join(row.ForkedIn, binaryName))
+		}
+		placed, err := s.PlaceBuiltBinary(ctx, followed.Base, followed.Root, exes...)
+		if err != nil {
+			return wt, err
+		}
+		if placed == "" {
+			execNote(ctx, fmt.Sprintf("placed no ./magus in %s: no magus built at %.12s stands to copy, so %s pins none", followed.Root, followed.Base, row.ID))
+			return followed, nil
+		}
+		execNote(ctx, fmt.Sprintf("placed ./magus in %s from %s, built at %.12s", followed.Root, placed, followed.Base))
+	}
+	bin := filepath.Join(followed.Root, binaryName)
+	digest, err := BinaryDigest(bin)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		execNote(ctx, fmt.Sprintf("%s holds no ./magus after its bootstrap, so %s pins none", followed.Root, row.ID))
+		return followed, nil
+	case err != nil:
+		return wt, fmt.Errorf("pinning %s for %s: %w", bin, row.ID, err)
+	}
+	followed.Binary, followed.BinaryDigest = bin, digest
+	execNote(ctx, fmt.Sprintf("pinned %s for %s: %s", bin, row.ID, digest))
+	return followed, nil
+}
+
+// execNote is one line of what exec did, on stderr: stdout is its record.
+func execNote(ctx context.Context, msg string) {
+	slog.InfoContext(ctx, msg, attr.Notice("note"))
 }
 
 // execRefusal is why Exec refuses row in the checkout here, nil for none.

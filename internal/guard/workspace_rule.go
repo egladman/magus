@@ -295,6 +295,9 @@ func denyLapse(asked *rulesAnswer, call judgedCall) bool {
 	if asked.lapse == nil || !call.changes || asked.answer.Decision == verdict.Deny {
 		return false
 	}
+	if asked.log != nil {
+		asked.lapse.slowest = asked.log.slowestCall(time.Since(asked.log.start))
+	}
 	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
 	asked.by = asked.lapse.side
 	asked.log.markLapseDenied()

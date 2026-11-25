@@ -415,7 +415,8 @@ export fun binaryAtHead(h: Host, dir: str) > result\Result::<bool> {
 }
 
 // placeBinary builds ./magus in dir at its HEAD unless one stands there, seeds
-// its index, installs dependencies, and returns a line per thing it did. The
+// its index, installs dependencies and builds proofread. It returns a line per
+// thing it did. Without proofread the comment judge refuses every edit. The
 // daemon stops before a build. With restart it starts on the new binary, which
 // must then name HEAD. install "" installs every project's.
 export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = "") > [str] !> any {
@@ -463,6 +464,13 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
             return installed.value!;
         }));
     }
+    did.append(timing\timed(h.say, clock: h.clock, start: "building the proofread binary", step: timing\PROOFREAD, run: fun () > str !> any {
+        final built = buildProofread(h, dir: dir);
+        if (built.error -> err) {
+            throw err.message;
+        }
+        return built.value!;
+    }));
     if (restart) {
         final started = startDaemon(h, dir: dir);
         if (started.error -> err) {
@@ -486,6 +494,16 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
         }
     }
     return did;
+}
+
+// buildProofread builds the proofread binary the comment judge and commit guard
+// run. A target run, so a build of the same inputs any checkout cached replays.
+fun buildProofread(h: Host, dir: str) > result\Result::<str> {
+    final proofread = must(magusRan(h, dir: dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+    if (proofread.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>("built the proofread binary");
 }
 
 // verifyReady makes the checkout at dir ready to verify, and returns a line per
@@ -584,11 +602,11 @@ export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any 
         return "generated the symbol digest";
     }));
     did.append(timing\timed(h.say, clock: h.clock, start: "building the proofread binary", step: timing\PROOFREAD, run: fun () > str !> any {
-        final proofread = must(magusRan(h, dir: dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
-        if (proofread.error -> err) {
+        final built = buildProofread(h, dir: dir);
+        if (built.error -> err) {
             throw err.message;
         }
-        return "built the proofread binary";
+        return built.value!;
     }));
     if (restart) {
         final started = startDaemon(h, dir: dir);
@@ -1244,7 +1262,7 @@ test "verify-ready stops the daemon, rebuilds a skewed binary, removes only untr
     assert\equal(calls[calls.len() - 1], want: "magus run proofread-build libs/proofread", message: "proofread binary last");
 }
 
-test "the build path places the binary and harnesses before indexing and dependencies" {
+test "the build path places the binary and harnesses before indexing and dependencies, then builds proofread" {
     final calls = mut [<str>];
     final h = stubHost({}, stamps: {}, calls: calls);
     assert\equal(placeBinary(h, dir: "/c", restart: false), want: [
@@ -1253,8 +1271,31 @@ test "the build path places the binary and harnesses before indexing and depende
         "installed every declared harness",
         "seeded /c",
         "installed every project's dependencies",
+        "built the proofread binary",
     ], message: "did");
-    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus buzz hack/dev/bootstrap-harnesses.buzz", "magus ls jobs -o name", "seed /c", "magus run install --all"], message: "order");
+    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "magus buzz hack/dev/bootstrap-harnesses.buzz", "magus ls jobs -o name", "seed /c", "magus run install --all", "magus run proofread-build libs/proofread"], message: "order");
+}
+
+test "a checkout a fork readies with a kept binary still builds proofread" {
+    final calls = mut [<str>];
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
+    }, stamps: {}, calls: calls);
+    final did = placeBinary(h, dir: "/c", restart: false, install: "none");
+    assert\equal(did[did.len() - 1], want: "built the proofread binary", message: "last");
+    assert\equal(calls.indexOf("magus run proofread-build libs/proofread") != null, want: true, message: "ran");
+}
+
+test "a failed proofread build stops the build path, naming the command" {
+    final h = stubHost({"magus run proofread-build libs/proofread": Ran{ code = 1, stderr = "no compiler" }}, stamps: {}, calls: mut [<str>]);
+    var why = "";
+    try {
+        _ = placeBinary(h, dir: "/c", restart: false);
+    } catch (e: str) {
+        why = e;
+    }
+    assert\equal(why, want: "verify-ready: magus run proofread-build libs/proofread: exit 1: no compiler", message: why);
 }
 
 test "a job store the placed binary will not open stops the build path before any step writes it" {
@@ -1280,6 +1321,8 @@ test "each slow step says what it does before it runs, and its result with the t
         "seeded /c (0ms)",
         "installing the dependencies of docs with /c/magus",
         "installed the dependencies of docs (0ms)",
+        "building the proofread binary",
+        "built the proofread binary (0ms)",
     ], message: "said");
 }
 

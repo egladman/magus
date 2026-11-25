@@ -95,6 +95,22 @@ func TestAmbiguousCIWordDeniesAssumingCall(t *testing.T) {
 	assert.NotEqual(t, verdict.Deny, s.bash("", "./magus affected ci").Decision, "a clarifying message clears the gate")
 }
 
+func TestGitHubCIClearsTheWord(t *testing.T) {
+	t.Parallel()
+	assert.False(t, asksAmbiguousCIWord("check GitHub CI"))
+	assert.True(t, asksAmbiguousCIWord("check ci"))
+}
+
+func TestAmbiguousCIWordDenialNamesClearingPhrases(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("get ci passing")
+	v := s.bash("", "./magus affected ci")
+	require.Equal(t, verdict.Deny, v.Decision)
+	assert.Contains(t, v.Reason, "`magus ci`")
+	assert.Contains(t, v.Reason, "`GitHub Actions`")
+	assert.Contains(t, v.Reason, "question dialog")
+}
+
 func TestAmbiguousCIWordStaysClearWhenMessageClarifies(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 

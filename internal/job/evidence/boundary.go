@@ -4,16 +4,20 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -81,7 +85,11 @@ func LeaseBoundary(ctx context.Context, root string, store *job.Store, row jobty
 	}
 	derived := generatedBoundary(m, affected.Affected, row.Paths.Write)
 	here := job.WorkingCheckout(cmp.Or(row.CheckoutRoot, m.Root()), row)
-	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" })...)
+	quiet := quietWindow{now: time.Now().Unix()}
+	if quiet.after, err = store.StaleAfter(); err != nil {
+		slog.WarnContext(ctx, "no lease holder was checked for quiet (MGS3059)", attr.Error(err), attr.Notice("warn"))
+	}
+	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" }, quiet)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	regenerated, unrun := env.Notes(ctx, m, row)
 	facts := job.TermsFacts{
@@ -149,7 +157,7 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 //
 // Nor does a lease in another checkout claim a generated output ([job.HeldApart]): row's
 // holder, working in here, regenerates its own copy.
-func leasedBoundary(row jobtypes.Job, leases []jobtypes.Job, here string, projects job.Projects) []job.TermsBoundary {
+func leasedBoundary(row jobtypes.Job, leases []jobtypes.Job, here string, projects job.Projects, quiet quietWindow) []job.TermsBoundary {
 	ancestors := jobtypes.Ancestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
@@ -161,13 +169,41 @@ func leasedBoundary(row jobtypes.Job, leases []jobtypes.Job, here string, projec
 			if apart, _ := job.HeldApart(here, other, projects, p); apart {
 				continue
 			}
-			out = append(out, job.TermsBoundary{
-				Path:   p,
-				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),
-			})
+			out = append(out, job.TermsBoundary{Path: p, Reason: quiet.reason(leases, other, p)})
 		}
 	}
 	return out
+}
+
+// quietWindow is jobs.stale_after as of now, in unix seconds. A holder quiet past it keeps
+// its paths, since quiet is not proof it left; its reason becomes MGS3059. A zero after
+// flags no holder.
+type quietWindow struct {
+	now   int64
+	after time.Duration
+}
+
+func (q quietWindow) reason(leases []jobtypes.Job, other jobtypes.Job, path string) string {
+	if !jobtypes.StaleAt(leases, other, q.now, q.after) {
+		return fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID)
+	}
+	since, _ := jobtypes.IdleSince(leases, other)
+	idle := time.Duration(q.now-since) * time.Second
+	return types.FormatDiagnostic(types.LeaseHolderQuiet, fmt.Sprintf(
+		"%s is held by job %s, untouched for %s (jobs.stale_after is %s); the root or a person checks it: `%s job prune --dry-run --all %s`",
+		path, other.ID, minutes(idle), minutes(q.after), hint.BinaryName(), other.ID))
+}
+
+// minutes renders d to the minute without its zero units: 5h12m, 1h, 45m.
+func minutes(d time.Duration) string {
+	if d < time.Minute {
+		return d.Round(time.Second).String()
+	}
+	s := strings.TrimSuffix(d.Round(time.Minute).String(), "0s")
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }
 
 // rootTags is every tag of m's root, none when its VCS will not list them, which leaves

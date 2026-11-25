@@ -1502,7 +1502,7 @@ proofread:
     internal/job/problems.go: {code-comment-sentence: 2}
     internal/job/problems_test.go: {code-comment-sentence: 1, comment-history: 1}
     internal/job/provision.go: {code-comment-budget: 2, code-comment-sentence: 4}
-    internal/job/regenerated.go: {code-comment-budget: 5, code-comment-sentence: 10}
+    internal/job/regenerated.go: {code-comment-budget: 4, code-comment-sentence: 7}
     internal/job/regenerated_test.go: {code-comment-budget: 1, code-comment-sentence: 2}
     internal/job/render.go: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 1}
     internal/job/render_test.go: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 2}

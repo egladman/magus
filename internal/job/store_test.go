@@ -1077,6 +1077,32 @@ func TestStoreReportsAnUnreadableFile(t *testing.T) {
 	assert.ErrorIs(t, err, types.StoreLineUndecodable)
 }
 
+func TestStoreKeepsALineWithFieldsThisBuildLacks(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	line := fmt.Sprintf("%s\n%s\n", headerLine(""), recordLine("a", "Running", "Running", `"postconditions":[{"newer_field":1}]`, ""))
+	require.NoError(t, os.WriteFile(path, []byte(line), 0o644))
+
+	_, err = s.Update(t.Context(), "a", func(j *job.Job) { j.Parent = "root" })
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.StoreRecordsNewer)
+	assert.NotErrorIs(t, err, types.StoreLineUndecodable)
+	assert.ErrorContains(t, err, "spec.postconditions[0].newer_field")
+	assert.ErrorContains(t, err, path+":2")
+	assert.ErrorContains(t, err, "The line is kept")
+	assert.ErrorContains(t, err, "go build -trimpath -o magus ./cmd/magus")
+	self, execErr := os.Executable()
+	require.NoError(t, execErr)
+	assert.ErrorContains(t, err, self)
+	kept, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, line, string(kept))
+}
+
 func TestRecordUnattributedWrite(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n"), 0o644))

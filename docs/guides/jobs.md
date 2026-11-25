@@ -534,6 +534,23 @@ because every path the new entry names is one the glob matches. Going the other 
 from `internal/job/breadth.go` to `internal/job/*.go`, widens the claim: the fork checks
 it as a new claim, with the breadth and overlap checks that a new claim gets.
 
+### Two jobs in one checkout
+
+Jobs do not need a worktree each. Two jobs whose write paths are disjoint may both be
+taken in one checkout and edited at the same time, and a declaration claim counts:
+`run.go#A` and `run.go#B` are disjoint, so the two jobs share one file. The fork
+records what it proved in the PROOF column, and `job exec` refuses a second job in a
+checkout only when its write paths overlap those of a live job there, because both
+would be graded against one HEAD. `TestDisjointWritersCoWriteOneCheckout` and
+`TestDeclarationsOfOneFileCoWriteButOneDeclarationDoesNot` in
+`internal/job/exec_test.go` pin both halves. Each holder stages and commits only its
+own paths.
+
+A workspace file is the exception: a magusfile, `magus.yaml` or a spell source in the
+write paths is refused with [MGS3046](../reference/codes/sandbox/MGS3046.md) while
+another live job works in the checkout, since it changes the plan every job there is
+running.
+
 ### What a lint postcondition grades
 
 A fork that writes Go source adds a `lint` postcondition over the files it writes. Test files the

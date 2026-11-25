@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // LeaseMarkerName is the file that binds a lease to a checkout for a caller its host names
@@ -887,24 +888,79 @@ func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]U
 	if driver == nil {
 		return nil, errors.New(why)
 	}
+	return unintegratedWith(ctx, driver, root, finished, integrating)
+}
+
+// unintegratedWith counts each finished row's missing commits. Two listings
+// answer most rows: the branch heads and the merged branches. missingCommitsFile
+// answers a tip already read at this revision. Only a moved tip costs a range read.
+func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job, integrating map[string]bool) ([]Unintegrated, error) {
 	meta, err := driver.Metadata(ctx, root)
 	if err != nil {
 		return nil, fmt.Errorf("the checkout's revision: %w", err)
 	}
+	tips, err := driver.BranchHeads(ctx, root)
+	if err != nil {
+		return nil, fmt.Errorf("the branch heads: %w", err)
+	}
+	merged, err := vcs.MergedBranches(ctx, driver, root, meta.ID)
+	if err != nil {
+		slog.DebugContext(ctx, "each finished branch is read for merged on its own", attr.Error(err))
+	}
+	answers := readMissingCache(root)
 	var out []Unintegrated
 	for _, row := range finished {
 		branch := jobBranch(ctx, driver, row)
-		if integrating[branch] {
+		tip, standing := tips[branch]
+		// A branch that does not stand holds no work this checkout can name.
+		if integrating[branch] || !standing || merged[branch] {
 			continue
 		}
-		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		missing, err := driver.MissingCommits(ctx, root, meta.ID, branch)
-		if err != nil || missing == 0 {
-			continue
+		missing, known := answers.get(meta.ID, tip)
+		if !known {
+			missing, err = driver.MissingCommits(ctx, root, meta.ID, tip)
+			if err != nil {
+				continue
+			}
+			answers.put(meta.ID, tip, missing)
 		}
-		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
+		if missing > 0 {
+			out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
+		}
+	}
+	if err := answers.write(meta.ID); err != nil {
+		slog.WarnContext(ctx, "missing-commit answers not stored", attr.Component("magus"), attr.Error(err))
+	}
+	// Rows skipped because the deadline passed would read as integrated.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("the finished branches: %w", err)
 	}
 	return out, nil
+}
+
+// forkFactsCall is what [ForkFacts] times itself as: the host call
+// magus\workspace().forkFacts() as std names it.
+const forkFactsCall = "job.forkFacts"
+
+// CallClock starts timing one named call and returns its end. A reader such
+// as the guard puts one on ctx to learn which call spent a judgment's time.
+type CallClock func(name string) (end func())
+
+type callClockKey struct{}
+
+// WithCallClock returns ctx carrying clock for [timeCall].
+func WithCallClock(ctx context.Context, clock CallClock) context.Context {
+	return context.WithValue(ctx, callClockKey{}, clock)
+}
+
+// timeCall starts name on ctx's clock and returns its end, which the caller
+// must run. With no clock on ctx it times nothing.
+func timeCall(ctx context.Context, name string) (end func()) {
+	clock, ok := ctx.Value(callClockKey{}).(CallClock)
+	if !ok || clock == nil {
+		return func() {}
+	}
+	return clock(name)
 }
 
 // FullTest is the run [ForkFacts] counts commits from. An empty Ref means the
@@ -916,7 +972,9 @@ type FullTest struct {
 
 // ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
 // nothing, and a side it cannot read says why rather than reading as zero.
+// It times itself on ctx's [CallClock] as "job.forkFacts".
 func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) job.ForkFacts {
+	defer timeCall(ctx, forkFactsCall)()
 	facts := job.ForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
 	waiting, err := unintegratedBranches(ctx, root, rows)
 	if err != nil {
@@ -953,9 +1011,17 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 	if err != nil {
 		return 0, fmt.Sprintf("the checkout's revision: %s", err)
 	}
-	commits, err := driver.MissingCommits(ctx, root, last.Revision, meta.ID)
-	if err != nil {
-		return 0, fmt.Sprintf("the commits since %s: %s", last.Revision, err)
+	answers := readMissingCache(root)
+	commits, known := answers.get(last.Revision, meta.ID)
+	if !known {
+		commits, err = driver.MissingCommits(ctx, root, last.Revision, meta.ID)
+		if err != nil {
+			return 0, fmt.Sprintf("the commits since %s: %s", last.Revision, err)
+		}
+		answers.put(last.Revision, meta.ID, commits)
+		if err := answers.write(meta.ID); err != nil {
+			slog.WarnContext(ctx, "missing-commit answers not stored", attr.Component("magus"), attr.Error(err))
+		}
 	}
 	return commits, ""
 }

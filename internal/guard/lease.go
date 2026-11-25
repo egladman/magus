@@ -1263,7 +1263,7 @@ func (r targetRun) ownOutputs(regenerated []job.RegeneratedOutput) []job.Regener
 	name := targetName(r.target)
 	return slices.DeleteFunc(regenerated, func(o job.RegeneratedOutput) bool {
 		_, target, _ := strings.Cut(o.Target, ":")
-		return targetName(target) != name
+		return o.InPlace || targetName(target) != name
 	})
 }
 

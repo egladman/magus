@@ -133,6 +133,8 @@ saying it, delete it here.
   `id=~decisions/`, and read [docs/design/refusals.md](docs/design/refusals.md). Each page names its
   enforcement and a good and a bad example. Reopen a decision only with new
   evidence, and change the page in the same commit.
+- A ruling that must persist goes in the repo: a design page, an ADR under `docs/decisions/`,
+  or this file. Agent memory is a working note, never the record.
 - Merge duplicates only when they share semantics, knobs and bugs; otherwise keep
   the copy with one line saying why
   ([design](docs/design/principles/a-copy-can-be-the-right-answer.md)).

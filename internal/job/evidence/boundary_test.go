@@ -1,7 +1,9 @@
 package evidence
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,6 +12,8 @@ import (
 	"context"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
+	terms "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -52,10 +56,31 @@ func (s *LeasedBoundarySuite) owners(row job.Job, rows []job.Job) []string {
 		return []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}}}, ""
 	}
 	var out []string
-	for _, b := range leasedBoundary(row, rows, "/repos/landing", projects) {
+	for _, b := range leasedBoundary(row, rows, "/repos/landing", projects, quietWindow{}) {
 		out = append(out, b.Path)
 	}
 	return out
+}
+
+// A holder quiet past jobs.stale_after keeps its path, and its reason names the prune line.
+func (s *LeasedBoundarySuite) TestNamesAQuietHolder() {
+	const now = int64(100_000)
+	window := time.Hour
+	me := job.Job{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/hint"}}}
+	busy := job.Job{ID: "busy", State: job.StateRunning, Updated: now, Paths: job.Paths{Write: []string{"run.go"}}}
+	quiet := job.Job{ID: "quiet", State: job.StateRunning, Updated: now - int64(2*window/time.Second) - 720,
+		Paths: job.Paths{Write: []string{"run.go"}}}
+	projects := func() ([]*types.Project, string) { return nil, "" }
+
+	got := leasedBoundary(me, []job.Job{me, busy, quiet}, "/repos/landing", projects, quietWindow{now: now, after: window})
+
+	want := []terms.TermsBoundary{
+		{Path: "run.go", Reason: "owned by live lease busy: coordinate, never work around"},
+		{Path: "run.go", Reason: types.FormatDiagnostic(types.LeaseHolderQuiet, fmt.Sprintf(
+			"run.go is held by job quiet, untouched for 2h12m (jobs.stale_after is 1h); "+
+				"the root or a person checks it: `%s job prune --dry-run --all quiet`", hint.BinaryName()))},
+	}
+	s.Equal(want, got, "a quiet holder still holds its path")
 }
 
 func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {

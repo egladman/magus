@@ -17,6 +17,7 @@ import "assert";
 import "result";
 import "path";
 import "encoding/json";
+import "encoding/yaml";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/commits" as subjects;
@@ -436,10 +437,16 @@ export object Facts {
     changed: [str] = [<str>],
     added: [str] = [<str>],
     texts: {str: str} = {<str: str>},
+    why: str = "",
 }
 
 export fun unknownFacts() > Facts {
     return Facts{ known = false, fragments = 0, shipped = 0, lines = 0 };
+}
+
+// unreadableFacts is unknownFacts that says why, and what to run.
+export fun unreadableFacts(why: str) > Facts {
+    return Facts{ known = false, fragments = 0, shipped = 0, lines = 0, why = why };
 }
 
 // generated reports a path a generator writes, which proves nothing about what changed:
@@ -722,14 +729,14 @@ export object PullRef {
 // counts the lines head carries past ref (head "" is the checkout's own branch). A base the
 // command names wins over the pull request's. A read that fails or finds nothing is
 // unknown, which textProblems denies.
-export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?, fragmentText: fun (head: str, path: str) > str?) > fun (head: str, base: str, number: str) > Facts {
+export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: fun (head: str, ref: str) > [FileStat]?, explain: fun (head: str, ref: str) > str, fragmentText: fun (head: str, path: str) > str?) > fun (head: str, base: str, number: str) > Facts {
     return fun (head: str, base: str, number: str) > Facts {
         var rev = head;
         var name = base;
         if (number != "") {
             final pull = view(number);
             if (pull == null) {
-                return unknownFacts();
+                return unreadableFacts("`gh pr view {number}` could not read that pull request: check the number and `gh auth status`, then retry");
             }
             rev = pull!.head;
             if (name == "") {
@@ -745,9 +752,16 @@ export fun diffReader(workspace: str, view: fun (number: str) > PullRef?, stat: 
         }
         final stats = stat(rev, ref);
         if (stats == null) {
-            return unknownFacts();
+            return unreadableFacts(explain(rev, ref));
         }
         final facts = statFacts(stats!);
+        if (!facts.known) {
+            var whose = "the checkout's branch";
+            if (rev != "") {
+                whose = "`{rev}`";
+            }
+            return unreadableFacts("{whose} carries no changes past `{ref}`: commit them first, and push the head if it is not the checkout's branch");
+        }
         final texts = mut {<str: str>};
         foreach (added in facts.added) {
             final text = fragmentText(rev, path: added);
@@ -783,24 +797,119 @@ export fun pullRequestDiff(workspace: str) > fun (head: str, base: str, number: 
         if (head == "") {
             return vcs\diffStat(ref, dir: workspace) catch null;
         }
-        final run = vcs\cmd(["diff", "--numstat", "--no-renames", "{ref}...{head}"],
-            opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
-        if (run == null or run!.code != 0) {
+        final tip = headRev(workspace, head: head);
+        final base = baseRev(workspace, ref: ref);
+        if (tip == null or base == null) {
             return null;
         }
-        return parseNumstat(run!.stdout);
+        final fork = gitText(workspace, args: ["merge-base", base!, tip!]);
+        if (fork == null) {
+            return null;
+        }
+        final counted = gitText(workspace, args: ["diff", "--numstat", "--no-renames", "--no-textconv", fork!, tip!, "--"]);
+        if (counted == null) {
+            return null;
+        }
+        return parseNumstat(counted!);
     };
     final fragmentText = fun (head: str, path: str) > str? {
         if (head == "") {
             return fs\readFile("{workspace}/{path}") catch null;
         }
-        final run = vcs\cmd(["show", "{head}:{path}"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+        final tip = headRev(workspace, head: head);
+        if (tip == null) {
+            return null;
+        }
+        final run = vcs\cmd(["show", "{tip!}:{path}"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
         if (run == null or run!.code != 0) {
             return null;
         }
         return run!.stdout;
     };
-    return diffReader(workspace, view: view, stat: stat, fragmentText: fragmentText);
+    final explain = fun (head: str, ref: str) > str {
+        return explainUnreadable(workspace, head: head, ref: ref);
+    };
+    return diffReader(workspace, view: view, stat: stat, explain: explain, fragmentText: fragmentText);
+}
+
+final hexRev = $"^[0-9a-f]{7,40}$";
+
+fun gitText(workspace: str, args: [str]) > str? {
+    final run = vcs\cmd(args, opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+    if (run == null or run!.code != 0) {
+        return null;
+    }
+    return run!.stdout.trim();
+}
+
+fun revOf(workspace: str, names: [str]) > str? {
+    foreach (name in names) {
+        final found = gitText(workspace, args: ["rev-parse", "--verify", "--quiet", name]);
+        if (found != null and found! != "") {
+            return found!;
+        }
+    }
+    return null;
+}
+
+fun headName(head: str) > str {
+    final parts = head.split(":");
+    return parts[parts.len() - 1];
+}
+
+// headRev is the commit a pull request's head names: `origin/<head>`, then the local
+// branch, then a bare sha. An `owner:` prefix is dropped. The checkout's HEAD is never a
+// candidate.
+export fun headRev(workspace: str, head: str) > str? {
+    final name = headName(head);
+    final names = mut ["refs/remotes/origin/" + name, "refs/heads/" + name];
+    if (hexRev.match(head) != null) {
+        names.append(head);
+    }
+    return revOf(workspace, names: names);
+}
+
+fun baseRev(workspace: str, ref: str) > str? {
+    final names = mut ["refs/remotes/" + ref];
+    if (ref.startsWith("origin/")) {
+        names.append("refs/heads/" + ref.sub(7));
+    }
+    names.append(ref);
+    return revOf(workspace, names: names);
+}
+
+// explainUnreadable names the read of a head's diff that failed, and the command to run.
+// It is "" for the checkout's own branch.
+fun explainUnreadable(workspace: str, head: str, ref: str) > str {
+    if (head == "") {
+        return "";
+    }
+    final name = headName(head);
+    final tip = headRev(workspace, head: head);
+    if (tip == null) {
+        return "the head `{name}` is neither `origin/{name}` nor a local branch in this checkout: run "
+            + "`git fetch origin {name}`, or `git push -u origin {name}` if it was never pushed, then retry";
+    }
+    final base = baseRev(workspace, ref: ref);
+    if (base == null) {
+        var bare = ref;
+        if (ref.startsWith("origin/")) {
+            bare = ref.sub(7);
+        }
+        return "the base `{ref}` is not in this checkout: run `git fetch origin {bare}`, then retry";
+    }
+    if (gitText(workspace, args: ["merge-base", base!, tip!]) == null) {
+        if (gitText(workspace, args: ["rev-parse", "--is-shallow-repository"]) == "true") {
+            return "this clone is shallow, so `{ref}` and `{name}` share no history it holds: run `git fetch --unshallow origin`, then retry";
+        }
+        return "`{ref}` and `{name}` share no history: open the pull request from a branch cut from `{ref}`";
+    }
+    final run = vcs\cmd(["diff", "--numstat", base!, tip!, "--"], opts: vcs\CommandOptions{quiet = true, allowFailure = true, dir = workspace}) catch null;
+    var detail = "git could not run";
+    if (run != null) {
+        detail = run!.stderr.trim();
+    }
+    return "git could not count the lines of `{name}` against `{ref}` ({detail}): run `git diff --stat {ref}...{name}` to see the error";
 }
 
 // parseNumstat reads `git diff --numstat` rows: added, deleted and path, where a binary
@@ -1549,7 +1658,11 @@ fun editedPull(p: helpers\Program, c: TextCommand) > str {
 
 // unreadableDiff is the denial for a description whose diff cannot be read, naming the
 // fetch that brings the base in.
-fun unreadableDiff(base: str) > str {
+fun unreadableDiff(base: str, why: str) > str {
+    if (why != "") {
+        return "the diff of this pull request cannot be read, so its changelog, word budget and areas cannot be "
+            + "checked: {why}";
+    }
     var name = base;
     if (name == "") {
         name = "main";
@@ -1622,7 +1735,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         final base = last(flagValues(p.args, flags: c.base)) ?? "";
         read = diff(last(flagValues(p.args, flags: c.head)) ?? "", base: base, number: editedPull(p, c: c));
         if (!read.known) {
-            return Findings{ denies = [unreadableDiff(base)], advice = [<str>] };
+            return Findings{ denies = [unreadableDiff(base, why: read.why)], advice = [<str>] };
         }
         changelog = changelogProblems(title!, facts: read);
     }
@@ -1747,12 +1860,134 @@ fun adviceKey(p: helpers\Program, c: TextCommand) > str {
 // a description that departs from the shape or leaves a touched area unnamed. The verdict
 // names the rule, so the trail and a repeated denial tell it apart. The guard holds the
 // author's runs, so it holds the output refs a description cites to them.
-export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
-    return decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
+export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, workflow: fun () > result\Result::<str>) > GuardVerdict {
+    return decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun, workflow: workflow);
+}
+
+final ciWorkflowPath = ".github/workflows/ci.yaml";
+
+// ciWorkflowAt reads ci.yaml under workspace, the root the hook was started for. The hook's
+// working directory may sit in a nested checkout whose ci.yaml is another repository's.
+export fun ciWorkflowAt(workspace: str) > fun () > result\Result::<str> {
+    return fun () > result\Result::<str> {
+        if (workspace == "") {
+            return result\fail::<str>("the hook names no workspace, so {ciWorkflowPath} has no root to resolve against");
+        }
+        try {
+            return result\ok::<str>(fs\readFile("{workspace}/{ciWorkflowPath}"));
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "read {workspace}/{ciWorkflowPath}");
+        }
+    };
+}
+
+// ciBranches are the patterns ci.yaml limits pull requests to: none when it limits none.
+fun ciBranches(text: str) > result\Result::<[str]> {
+    try {
+        final doc: {str: any} = yaml\parse(text);
+        final triggers: {str: any} = doc["on"];
+        if (!triggers.hasKey("pull_request")) {
+            return result\fail::<[str]>("it has no pull_request trigger");
+        }
+        final trigger: {str: any} = triggers["pull_request"] ?? {<str: any>};
+        final patterns = mut [<str>];
+        final listed = trigger["branches"];
+        if (listed == null) {
+            return result\ok::<[str]>(patterns);
+        }
+        final names: [any] = if (listed is str) [listed] else listed;
+        foreach (name in names) {
+            patterns.append("{name}");
+        }
+        return result\ok::<[str]>(patterns);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "read on.pull_request of {ciWorkflowPath}");
+    }
+}
+
+// globAt matches s from si against glob from pi: `*` stops at a slash, `**` does not.
+fun globAt(glob: str, pi: int, s: str, si: int) > bool {
+    if (pi == glob.len()) {
+        return si == s.len();
+    }
+    final c = glob.sub(pi, len: 1);
+    if (c == "*") {
+        final deep = pi + 1 < glob.len() and glob.sub(pi + 1, len: 1) == "*";
+        final next = if (deep) pi + 2 else pi + 1;
+        var k = si;
+        while (true) {
+            if (globAt(glob, pi: next, s: s, si: k)) {
+                return true;
+            }
+            if (k == s.len() or (!deep and s.sub(k, len: 1) == "/")) {
+                return false;
+            }
+            k += 1;
+        }
+    }
+    if (si == s.len()) {
+        return false;
+    }
+    final at = s.sub(si, len: 1);
+    if (c == "?") {
+        return at != "/" and globAt(glob, pi: pi + 1, s: s, si: si + 1);
+    }
+    return c == at and globAt(glob, pi: pi + 1, s: s, si: si + 1);
+}
+
+// branchRuns is whether patterns, a `!` pattern removing what an earlier one added, admit base.
+fun branchRuns(patterns: [str], base: str) > bool {
+    var runs = false;
+    foreach (pattern in patterns) {
+        if (pattern.startsWith("!")) {
+            if (globAt(pattern.sub(1), pi: 0, s: base, si: 0)) {
+                runs = false;
+            }
+        } else if (globAt(pattern, pi: 0, s: base, si: 0)) {
+            runs = true;
+        }
+    }
+    return runs;
+}
+
+// decideBase denies a `gh pr create` or `gh pr edit` whose base ci.yaml never runs on, since
+// GitHub shows no pending check there. A draft passes; so does a workflow with no branches
+// filter. A workflow that cannot be read fails closed.
+export fun decideBase(programs: [helpers\Program], workflow: fun () > result\Result::<str>) > GuardVerdict {
+    foreach (p in programs) {
+        final c = matchCommand(p);
+        if (c == null or p.name != "gh" or c!.command[0] != "pr" or c!.base.len() == 0
+            or (c!.command[1] != "create" and c!.command[1] != "edit")) {
+            continue;
+        }
+        final base = last(flagValues(p.args, flags: c!.base)) ?? "";
+        if (base == "" or helpers\hasFlag(p.args, long: "--draft") or p.args.indexOf("-d") != null) {
+            continue;
+        }
+        final read = workflow();
+        final patterns = if (read.error == null) ciBranches(read.value!) else read;
+        if (patterns.error != null) {
+            return magus\guard.deny("{ciWorkflowPath} could not be read, so base {base} is unchecked\n"
+                + "{patterns.error!.message}\n"
+                + "Fix the file, or open the pull request as a draft: `gh pr create --draft --base {base}`.",
+                opts: {"rule": "pr-base-has-no-ci"});
+        }
+        if (patterns.value!.len() > 0 and !branchRuns(patterns.value!, base: base)) {
+            return magus\guard.deny("pull request base {base} gets no CI: {ciWorkflowPath} runs on pull requests into {patterns.value!.join(", ")} only.\n"
+                + "Open it against main once the base merges, or add the branch to on.pull_request.branches. "
+                + "To open it anyway as a draft: `gh pr create --draft --base {base}`",
+                opts: {"rule": "pr-base-has-no-ci"});
+        }
+    }
+    return magus\guard.defer();
 }
 
 // decideCiting is decidePullRequest with the check on cited output refs chosen by the caller.
-fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
+fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation, workflow: fun () > result\Result::<str>) > GuardVerdict {
+    final noCi = decideBase(programs, workflow: workflow);
+    if (noCi.decision == magus\GuardDecision.deny) {
+        return noCi;
+    }
     final problems = mut [<str>];
     final advice = mut [<str>];
     final denied = mut [<str>];
@@ -1901,7 +2136,52 @@ fun decided(programs: [helpers\Program], line: str, files: {str: str}, diff: fun
 // decidedCiting is decideCiting with every denial held to the verdict shape.
 fun decidedCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
     final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
-    return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited), label: label);
+    return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited,
+        workflow: noFilter), label: label);
+}
+
+fun noFilter() > result\Result::<str> {
+    return result\ok::<str>("on:\n  pull_request:\n");
+}
+
+fun mainOnly() > result\Result::<str> {
+    return result\ok::<str>("on:\n  pull_request:\n    branches: [main, 'release/**']\n");
+}
+
+fun asked(argv: [str], workflow: fun () > result\Result::<str>) > GuardVerdict {
+    return verdict\checked(decideBase(helpers\request([argv]), workflow: workflow), label: argv.join(" "));
+}
+
+test "a base the workflow's branches do not match is denied, naming the workflow" {
+    final v = asked(["gh", "pr", "create", "--base", "topic", "--title", "t"], workflow: mainOnly);
+    std\assert(v.decision == magus\GuardDecision.deny and v.rule == "pr-base-has-no-ci", message: v.reason);
+    std\assert(v.reason.indexOf(ciWorkflowPath) != null, message: v.reason);
+    final edit = asked(["gh", "pr", "edit", "3", "-B", "topic"], workflow: mainOnly);
+    std\assert(edit.decision == magus\GuardDecision.deny, message: "edit");
+}
+
+test "a matching base, a draft, or a workflow with no filter passes" {
+    foreach (argv in [
+        ["gh", "pr", "create", "--base", "main"],
+        ["gh", "pr", "create", "--base", "release/1.2"],
+        ["gh", "pr", "create", "--draft", "--base", "topic"],
+        ["gh", "pr", "create", "--base", "topic", "-d"],
+        ["gh", "pr", "create", "--title", "t"],
+    ]) {
+        std\assert(asked(argv, workflow: mainOnly).decision == magus\GuardDecision.defer, message: argv.join(" "));
+    }
+    std\assert(asked(["gh", "pr", "create", "--base", "topic"], workflow: noFilter).decision == magus\GuardDecision.defer,
+        message: "no filter");
+}
+
+test "a workflow that cannot be read fails closed" {
+    final gone = fun () > result\Result::<str> { return result\fail::<str>("no such file"); };
+    final broken = fun () > result\Result::<str> { return result\ok::<str>("on: [\n"); };
+    foreach (reader in [gone, broken]) {
+        final v = asked(["gh", "pr", "create", "--base", "main"], workflow: reader);
+        std\assert(v.decision == magus\GuardDecision.deny and v.rule == "pr-base-has-no-ci", message: v.reason);
+        std\assert(v.reason.indexOf("could not be read") != null, message: v.reason);
+    }
 }
 
 final goodTitle = "fix(guard): keep the key stable";
@@ -2011,7 +2291,7 @@ test "every deny finding is listed with where it sits and its rule, under the ru
 test "an advise finding is graded by proofread, so this rule neither denies nor advises on it" {
     final verdict = Judged{ rule = "verdict", line = 2, message = "Name the behavior 'broken' stands for.", decision = "advise" };
     final v = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(verdict), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(verdict), once: helpers\counter(), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision}: {v.reason}");
 }
 
@@ -2029,7 +2309,7 @@ fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) 
 
 fun citing(body: str, cited: fun (ref: str) > Citation) > GuardVerdict {
     return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(readable()),
-        judge: passing(), once: helpers\counter(), cited: cited);
+        judge: passing(), once: helpers\counter(), cited: cited, workflow: noFilter);
 }
 
 test "a cited ref this checkout does not hold is denied" {
@@ -2092,7 +2372,7 @@ test "a review reply is not held to the runs it cites" {
     final asked = mut [<str>];
     final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: passing(), once: helpers\counter(),
-        cited: holding({<str: magus\OutputRecord>}, asked: asked));
+        cited: holding({<str: magus\OutputRecord>}, asked: asked), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.defer and asked.len() == 0, message: "{v.reason} {asked}");
 }
 
@@ -2140,7 +2420,7 @@ test "each forge command is judged as the kind it writes" {
             return [<Judged>];
         };
         _ = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {"reply.md": "From a file."},
-            diff: facts(readable()), judge: recording, once: helpers\counter());
+            diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
         final got = if (seen.len() > 0) seen[0].kind + "|" + seen[0].text else "not judged";
         std\assert(seen.len() == 1 and got == want, message: "{argv.join(" ")}: {got}");
     }
@@ -2149,7 +2429,7 @@ test "each forge command is judged as the kind it writes" {
 test "a reply denial teaches a reply, not a description" {
     final opener = Judged{ rule = "reply-opener", line = 1, message = "Open with the point you answer." };
     final v = decidePullRequest(helpers\request([["gh", "pr", "comment", "412", "--body", "No, as I said."]]), line: "",
-        files: {<str: str>}, diff: facts(readable()), judge: reporting(opener), once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: reporting(opener), once: helpers\counter(), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
@@ -2159,7 +2439,7 @@ test "a reply denial teaches a reply, not a description" {
 test "a summary denial teaches a review's body" {
     final f = Judged{ rule = "blame", line = 1, message = "Name the code, not the person." };
     final v = decidePullRequest(helpers\request([["gh", "pr", "review", "412", "-r", "-b", "You broke it."]]), line: "",
-        files: {<str: str>}, diff: facts(readable()), judge: reporting(f), once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: reporting(f), once: helpers\counter(), workflow: noFilter);
     std\assert(v.reason.startsWith("this review text breaks a review rule"), message: v.reason);
     std\assert(v.reason.indexOf("the verdict and what blocks it") != null and v.reason.indexOf("say whether you made the change") == null,
         message: v.reason);
@@ -2173,7 +2453,7 @@ fun judgedCalls(argv: [str], files: {str: str}) > [str] {
         return [<Judged>];
     };
     _ = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(readable()),
-        judge: recording, once: helpers\counter());
+        judge: recording, once: helpers\counter(), workflow: noFilter);
     return seen;
 }
 
@@ -2214,21 +2494,21 @@ test "a commit message is judged as a commit message, its subject on line 1" {
         return [<Judged>];
     };
     _ = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
     std\assert(seen.len() == 1 and seen[0].kind == "commit-message" and seen[0].text == "trim a fragment", message: "{seen.len()}");
     _ = decidePullRequest(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment", "-m", "why"]]), line: "",
-        files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+        files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
     std\assert(seen.len() == 2 and seen[1].text == "trim a fragment\n\nwhy", message: "each -m is a paragraph");
-    _ = decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
     _ = decidePullRequest(helpers\vcsRequest([["git", "status"]]), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: recording, once: helpers\counter());
+        diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
     std\assert(seen.len() == 2, message: "a message known only at run time, and another subcommand, go unjudged");
 }
 
 test "a commit message denial names the subject, its rule and the shape, under its own rule name" {
     final mood = Judged{ rule = "subject-mood", line = 1, message = "Open the subject with the imperative: 'Add', not 'Added'.", matched = "Added" };
     final v = decidePullRequest(commit("Added the key"), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(mood), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(mood), once: helpers\counter(), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
     std\assert(v.rule == "commit-message-text", message: "named: {v.rule}");
     std\assert(v.reason.startsWith("this commit message breaks a writing rule"), message: v.reason);
@@ -2236,33 +2516,33 @@ test "a commit message denial names the subject, its rule and the shape, under i
     std\assert(v.reason.indexOf("one line in the imperative") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
     final body = Judged{ rule = "filler", line = 3, message = "Drop 'actually': state the fact.", matched = "actually" };
     final b = decidePullRequest(commit("trim a fragment\n\nIt actually works."), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(body), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(body), once: helpers\counter(), workflow: noFilter);
     std\assert(b.reason.indexOf("line 3: Drop 'actually': state the fact. [filler]") != null, message: b.reason);
 }
 
 test "a commit message's advise finding is graded by proofread and allowed here" {
     final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
     final v = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(claim), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(claim), once: helpers\counter(), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.defer, message: "{v.decision} {v.reason}");
     final low = Judged{ rule = "grade", line = 0, message = "Grade 0.0 is under the minimum of 20." };
     final denied = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(low), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(low), once: helpers\counter(), workflow: noFilter);
     std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("[grade]") != null, message: "{denied.decision} {denied.reason}");
 }
 
 test "a judge that did not run denies a commit message and a pull request, naming the build" {
     final unrun = Judged{ rule = "judge", line = 0, message = "proofread cannot run: it is not built; run `build`, then retry" };
     final c = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter(), workflow: noFilter);
     std\assert(c.decision == magus\GuardDecision.deny, message: "{c.decision} {c.reason}");
     std\assert(c.reason.indexOf("proofread cannot run") != null and c.reason.indexOf("run `build`") != null, message: c.reason);
     final p = decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(unrun), once: helpers\counter(), workflow: noFilter);
     std\assert(p.decision == magus\GuardDecision.deny, message: "{p.decision} {p.reason}");
     final denied = Judged{ rule = "subject-mood", line = 1, message = "Open with the imperative." };
     std\assert(decidePullRequest(commit("Added it"), line: "", files: {<str: str>}, diff: facts(readable()),
-        judge: reporting(denied), once: helpers\counter()).decision == magus\GuardDecision.deny, message: "a finding of a judge that ran still denies");
+        judge: reporting(denied), once: helpers\counter(), workflow: noFilter).decision == magus\GuardDecision.deny, message: "a finding of a judge that ran still denies");
 }
 
 test "an issue is judged with its title on line 1 and denied under the forge-text rule" {
@@ -2270,10 +2550,10 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final bad = Judged{ rule = "blame", line = 3, message = "Describe what happened." };
     final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
     final graded = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(repro), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(repro), once: helpers\counter(), workflow: noFilter);
     std\assert(graded.decision == magus\GuardDecision.defer, message: "{graded.decision} {graded.reason}");
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
-        diff: facts(readable()), judge: reporting(bad), once: helpers\counter());
+        diff: facts(readable()), judge: reporting(bad), once: helpers\counter(), workflow: noFilter);
     std\assert(denied.decision == magus\GuardDecision.deny and denied.rule == "forge-text", message: denied.reason);
     std\assert(denied.reason.startsWith("this issue breaks a writing rule"), message: denied.reason);
     std\assert(denied.reason.indexOf("body line 2: Describe what happened. [blame]") != null, message: denied.reason);
@@ -2283,7 +2563,7 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
 test "release notes are judged as written, with no title, budget or shape" {
     final hedge = Judged{ rule = "hedge", line = 2, message = "Drop 'might fix'." };
     final v = decidePullRequest(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\nMight fix the key."]]),
-        line: "", files: {<str: str>}, diff: facts(readable()), judge: reporting(hedge), once: helpers\counter());
+        line: "", files: {<str: str>}, diff: facts(readable()), judge: reporting(hedge), once: helpers\counter(), workflow: noFilter);
     std\assert(v.decision == magus\GuardDecision.deny and v.rule == "forge-text", message: v.reason);
     std\assert(v.reason.startsWith("these release notes break a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 2: Drop 'might fix'. [hedge]") != null, message: v.reason);
@@ -2489,14 +2769,22 @@ test "the diff is read once per description, for the head and base the call name
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
     _ = decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[1] == "other||", message: "another branch is read by name: {reads}");
+    final short = helpers\request([["gh", "pr", "create", "-H", "other", "--title", goodTitle, "--body", sized(100)]]);
+    _ = decided(short, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    std\assert(reads[2] == "other||", message: "-H names the head too: {reads}");
+    reads.remove(2);
     final edit = helpers\request([["gh", "pr", "edit", "412", "--title", goodTitle, "--body", "Pins the key."]]);
     _ = decided(edit, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[2] == "||412", message: "an edit names its pull request: {reads}");
-    _ = decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    _ = decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter(), workflow: noFilter);
     std\assert(reads.len() == 3, message: "a reply reads no diff");
 }
 
-final featTitle = "feat(cache): hash the key in sorted order";
+fun noReason(head: str, ref: str) > str {
+    return "";
+}
+
+final featTitle ="feat(cache): hash the key in sorted order";
 
 // shippedDiff is the diff of a feature that changes one shipped path, with the fragments'
 // paths gained lines.
@@ -2560,23 +2848,23 @@ test "gh pr edit <n> reads its head and base from gh and counts the lines betwee
         asked.append("{head}:{path}");
         return "### Fixed\n\n- **Key order.** Hashes the key in sorted order.\n";
     };
-    final read = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "", number: "12");
+    final read = diffReader(".", view: view, stat: stat, explain: noReason, fragmentText:text)("", base: "", number: "12");
     std\assert(asked.join(",") == "12,0123abc...origin/release,0123abc:changes/unreleased/key.md", message: "asked {asked}");
     std\assert(read.texts.size() == 1 and (read.texts["changes/unreleased/key.md"] ?? "").startsWith("### Fixed"), message: "the added fragment is read at the pull request's head: {read.texts}");
     std\assert(read.known and read.shipped == 1 and read.fragments == 1 and read.lines == 16, message: "counts {read}");
     std\assert(read.paths.join(",") == "internal/cache/key.go,changes/unreleased/key.md", message: "paths {read.paths}");
     std\assert(read.changed.len() == 3 and read.added.join(",") == "changes/unreleased/key.md", message: "changed {read.changed}, added {read.added}");
 
-    _ = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "main", number: "12");
+    _ = diffReader(".", view: view, stat: stat, explain: noReason, fragmentText:text)("", base: "main", number: "12");
     std\assert(asked[asked.len() - 2] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
     final unseen = fun (number: str) > PullRef? {
         return null;
     };
-    std\assert(!diffReader(".", view: unseen, stat: stat, fragmentText: text)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
+    std\assert(!diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:text)("", base: "", number: "12").known, message: "a pull request gh cannot view is unreadable");
     final unstat = fun (head: str, ref: str) > [FileStat]? {
         return null;
     };
-    std\assert(!diffReader(".", view: view, stat: unstat, fragmentText: text)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
+    std\assert(!diffReader(".", view: view, stat: unstat, explain: noReason, fragmentText:text)("other", base: "main", number: "").known, message: "a diff git cannot count is unreadable");
 }
 
 test "a fragment added on a head is linted from that head, not from the session's checkout" {
@@ -2592,15 +2880,15 @@ test "a fragment added on a head is linted from that head, not from the session'
         }
         return null;
     };
-    final read = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("topic", base: "main", number: "");
+    final read = diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:onHead)("topic", base: "main", number: "");
     std\assert(changelogProblems(featTitle, facts: read).len() == 0, message: "a well-formed fragment on the head passes though this checkout lacks it");
-    final missing = diffReader(".", view: unseen, stat: stat, fragmentText: onHead)("gone", base: "main", number: "");
+    final missing = diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:onHead)("gone", base: "main", number: "");
     final got = changelogProblems(featTitle, facts: missing);
     std\assert(got.len() == 1 and got[0].indexOf("changes/unreleased/elsewhere-only.md: cannot be read at the head") != null, message: got.join(","));
     final bad = fun (head: str, path: str) > str? {
         return "not a fragment\n";
     };
-    final malformed = changelogProblems(featTitle, facts: diffReader(".", view: unseen, stat: stat, fragmentText: bad)("topic", base: "main", number: ""));
+    final malformed = changelogProblems(featTitle, facts: diffReader(".", view: unseen, stat: stat, explain: noReason, fragmentText:bad)("topic", base: "main", number: ""));
     std\assert(malformed.len() == 1 and malformed[0].indexOf("malformed changelog fragment(s)") != null, message: malformed.join(","));
 }
 
@@ -2755,7 +3043,7 @@ test "an unreadable description is judged from the whole line for credit and typ
         return [Judged{ rule = "attribution", line = 1, message = "Drop 'Claude': describe the change." },
             Judged{ rule = "lead-context", line = 2, message = "Open with the outcome." }];
     };
-    final v = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: both, once: helpers\counter());
+    final v = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: both, once: helpers\counter(), workflow: noFilter);
     std\assert(v.reason.indexOf("Drop 'Claude': describe the change. [attribution]") != null, message: v.reason);
     std\assert(v.reason.indexOf("lead-context") == null, message: "a line has no lead: {v.reason}");
     final long = "gh pr create --body \"$BODY\" " + "x".repeat(3000);
@@ -2770,7 +3058,7 @@ test "an unreadable description reaches proofread without its shell quotes" {
     };
     final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
     final line = "gh pr create --title \"feat: add a Claude Code mod\" --body 'written by Claude'";
-    _ = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter(), workflow: noFilter);
     std\assert(seen.len() == 1 and seen[0] == "gh pr create --title feat: add a Claude Code mod --body written by Claude", message: "{seen}");
 }
 
@@ -3507,4 +3795,75 @@ test "a session holding no job, a forge without a verb, and other commands pass"
     final none = fun (argv: [str]) > {str: str}? => null;
     std\assert(decideDelivery(pr, lease: held("fold", parentHead: ""), opens: none).decision == magus\GuardDecision.defer, message: "no verb");
     std\assert(opensWith("fold", parentHead: "", argv: ["gh", "pr", "edit", "3"]).decision == magus\GuardDecision.defer, message: "an edit opens none");
+}
+
+fun mustGit(dir: str, args: [str]) > void {
+    final step = seedGit(dir, args: args);
+    std\assert(step.error == null, message: step.error?.message ?? "");
+}
+
+fun deletionRepo() > str {
+    final ws = fs\tempDir("head-diff") catch "";
+    std\assert(ws != "", message: "a temp dir");
+    mustGit(ws, args: ["init", "-q"]);
+    mustGit(ws, args: ["symbolic-ref", "HEAD", "refs/heads/main"]);
+    fs\mkdirAll("{ws}/internal/old") catch void;
+    foreach (i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]) {
+        fs\writeFile("{ws}/internal/old/f{i}.go", content: "package old\n\nvar F{i} = {i}\n") catch void;
+    }
+    mustGit(ws, args: ["add", "."]);
+    mustGit(ws, args: ["commit", "-q", "-m", "seed"]);
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    mustGit(ws, args: ["checkout", "-q", "-b", "topic"]);
+    mustGit(ws, args: ["rm", "-q", "-r", "internal/old"]);
+    fs\mkdirAll("{ws}/changes/unreleased") catch void;
+    fs\writeFile("{ws}/changes/unreleased/gone.md", content: "### Removed\n\n- **Old.** Drops it.\n") catch void;
+    mustGit(ws, args: ["add", "."]);
+    mustGit(ws, args: ["commit", "-q", "-m", "drop old"]);
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/topic", "HEAD"]);
+    mustGit(ws, args: ["checkout", "-q", "-b", "elsewhere", "main"]);
+    return ws;
+}
+
+test "a head whose diff is mostly deletions is read from another checkout's HEAD, by --head or -H" {
+    final ws = deletionRepo();
+    final read = pullRequestDiff(ws);
+    foreach (head in ["topic", "owner:topic"]) {
+        final facts = read(head, base: "main", number: "");
+        std\assert(facts.known, message: "{head}: {facts.why}");
+        std\assert(facts.changed.len() == 21 and facts.added.join(",") == "changes/unreleased/gone.md", message: "{head}: {facts.changed.len()} paths, added {facts.added}");
+        std\assert(facts.texts.size() == 1, message: "{head}: the fragment is read at the head");
+    }
+    fs\removeAll(ws) catch void;
+}
+
+test "a head only a local branch holds is read, and origin wins when both exist" {
+    final ws = deletionRepo();
+    mustGit(ws, args: ["update-ref", "-d", "refs/remotes/origin/topic"]);
+    std\assert(pullRequestDiff(ws)("topic", base: "main", number: "").known, message: "the local branch stands in");
+    mustGit(ws, args: ["update-ref", "refs/remotes/origin/topic", "main"]);
+    std\assert(!pullRequestDiff(ws)("topic", base: "main", number: "").known, message: "origin/topic is the head, and it carries nothing past main");
+    fs\removeAll(ws) catch void;
+}
+
+test "no head reads the checkout's own branch" {
+    final ws = deletionRepo();
+    mustGit(ws, args: ["checkout", "-q", "topic"]);
+    final facts = pullRequestDiff(ws)("", base: "main", number: "");
+    std\assert(facts.known and facts.changed.len() == 21, message: "{facts.why}");
+    fs\removeAll(ws) catch void;
+}
+
+test "a diff that cannot be read says why and the command that fixes it" {
+    final ws = deletionRepo();
+    final missing = pullRequestDiff(ws)("nope", base: "main", number: "");
+    std\assert(!missing.known and missing.why.indexOf("`git fetch origin nope`") != null, message: missing.why);
+    mustGit(ws, args: ["update-ref", "-d", "refs/remotes/origin/main"]);
+    mustGit(ws, args: ["branch", "-D", "main"]);
+    final nobase = pullRequestDiff(ws)("topic", base: "main", number: "");
+    std\assert(!nobase.known and nobase.why.indexOf("`git fetch origin main`") != null, message: nobase.why);
+    final line = helpers\request([["gh", "pr", "create", "--head", "nope", "--base", "main", "--title", goodTitle, "--body", sized(100)]]);
+    final unreadable = decided(line, line: "", files: {<str: str>}, diff: pullRequestDiff(ws), judge: passing(), once: helpers\counter());
+    std\assert(unreadable.decision == magus\GuardDecision.deny and unreadable.reason.indexOf("`git fetch origin nope`") != null, message: unreadable.reason);
+    fs\removeAll(ws) catch void;
 }

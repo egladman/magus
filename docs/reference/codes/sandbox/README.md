@@ -175,6 +175,7 @@ Two layers run together:
 - [MGS3056](MGS3056.md): a spawn rule asked to order model tiers from two declarations.
 - [MGS3057](MGS3057.md): a ci run under rw that changed the working tree, so it fails until the change is committed.
 - [MGS3058](MGS3058.md): a job store line in an API group or version this magus does not read and no migration reaches.
+- [MGS3059](MGS3059.md): a path another job holds whose row nobody has touched within `jobs.stale_after`.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

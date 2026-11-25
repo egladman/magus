@@ -272,21 +272,28 @@ func (s *Store) RowLive(ctx context.Context, id string) (bool, error) {
 }
 
 // PlaceBuiltBinary copies into dir a ./magus built at base with nothing
-// uncommitted: exe, or the one a standing checkout at base holds. It returns
-// the source, or "" when none is. Each candidate's own version says what it
-// holds, since a checkout's binary can outlive the base its row records.
-func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (string, error) {
+// uncommitted: the first of exes, else one a standing checkout at base holds.
+// It returns the source, or "" when none is. Each candidate's own version
+// says what it holds, since a binary can outlive its row's base. dir's own
+// ./magus may be anyone's build, so it is skipped.
+func (s *Store) PlaceBuiltBinary(ctx context.Context, base, dir string, exes ...string) (string, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
-	candidates := []string{exe}
+	candidates := slices.Clone(exes)
 	for _, r := range rows {
 		if r.Worktree.Standing() && r.Worktree.Base == base && r.Worktree.Binary != "" {
 			candidates = append(candidates, r.Worktree.Binary)
 		}
 	}
+	dst := filepath.Join(dir, binaryName)
+	var asked []string
 	for _, bin := range candidates {
+		if bin == "" || samePath(bin, dst) || slices.ContainsFunc(asked, func(a string) bool { return samePath(a, bin) }) {
+			continue
+		}
+		asked = append(asked, bin)
 		if !builtAt(ctx, bin, base) {
 			continue
 		}
@@ -297,6 +304,10 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 	}
 	return "", nil
 }
+
+// noBootstrapExec stops a magus handing its call to the workspace-local one.
+// It copies internal/workspace's bootstrapExecOptOutVar, which is unexported.
+const noBootstrapExec = "MAGUS_NO_BOOTSTRAP_EXEC=1"
 
 // builtVersion is what `magus version -o json` says about a build.
 type builtVersion struct {
@@ -314,7 +325,11 @@ func askVersion(ctx context.Context, bin string) (builtVersion, bool) {
 	if bin == "" {
 		return v, false
 	}
-	out, err := exec.CommandContext(ctx, bin, "version", "--client", "-o", "json").Output()
+	cmd := exec.CommandContext(ctx, bin, "version", "--client", "-o", "json")
+	// A ./magus a live row pins above the working directory would take the
+	// call and answer for bin.
+	cmd.Env = append(os.Environ(), noBootstrapExec)
+	out, err := cmd.Output()
 	if err != nil {
 		return v, false
 	}

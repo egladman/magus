@@ -30,6 +30,8 @@ type RegeneratedOutput struct {
 	// Source is the target's source glob that matched a written file: the most specific one
 	// when several do.
 	Source string `json:"source" yaml:"source"`
+	// InPlace marks a file the target rewrites where it stands (editsExistingSource).
+	InPlace bool `json:"in_place,omitempty" yaml:"in_place,omitempty"`
 }
 
 // Project is the project of the producing target.
@@ -41,23 +43,11 @@ func (o RegeneratedOutput) Project() string {
 // RegeneratedLimit is how many outputs a text rendering lists before it counts the rest.
 const RegeneratedLimit = 12
 
-// RegeneratedOutside is every declared output (ctx.writesFiles) of a target whose declared
-// sources match a file the row may write, where the output is not itself inside the row's
-// write paths. A read-only row writes nothing and gets nil.
-//
-// A target's sources are its ctx.readsFiles, or its project's sources when it declares
-// none: the footprint the cache keys it on. A write path is expanded against the tree
-// under root, and a literal one names a file even before it exists. An output whose files
-// the VCS ignores is dropped, because it never reaches the diff the job is graded on: its
-// first few files stand for it (see [outputProbes]). ignored may be nil, which drops
-// nothing.
-//
-// Most specific first, by the literal prefix of the matching source glob: a target reading
-// `internal/cli/**/*.go` sorts before one reading `**/*.go`, and a target that declares no
-// reads of its own sorts after every one that does.
-//
-// It sees declarations only. A coupling nobody declares, such as a version constant a test
-// pins, is not here.
+// RegeneratedOutside lists the outputs and in-place updates (ctx.writesFiles) outside the
+// row's write paths whose target reads a file the row may write. A read-only row gets nil.
+// A target reads its ctx.readsFiles, else its project's sources. Ignored outputs are dropped,
+// judged by a few probe files (see [outputProbes]); ignored may be nil. Most specific source
+// first. Declarations only.
 func RegeneratedOutside(root string, row job.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []RegeneratedOutput {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
@@ -67,18 +57,28 @@ func RegeneratedOutside(root string, row job.Job, projects []*types.Project, ign
 		glob        types.Glob
 		specificity int
 	}
+	type declared struct {
+		glob    types.Glob
+		inPlace bool
+	}
 	var (
 		written []string
 		walked  bool
 		found   []candidate
 	)
 	for _, p := range projects {
-		for _, name := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
-			var outside []types.Glob
-			for _, ref := range p.TargetOutputs[name] {
-				if g := ref.Rooted(p.Path); !outputInside(row, g) && !slices.ContainsFunc(outside, func(o types.Glob) bool { return o.Compare(g) == 0 }) {
-					outside = append(outside, g)
+		for _, name := range slices.Sorted(maps.Keys(targetsWriting(p))) {
+			var outside []declared
+			add := func(g types.Glob, inPlace bool) {
+				if !outputInside(row, g) && !slices.ContainsFunc(outside, func(o declared) bool { return o.glob.Compare(g) == 0 }) {
+					outside = append(outside, declared{g, inPlace})
 				}
+			}
+			for _, ref := range p.TargetOutputs[name] {
+				add(ref.Rooted(p.Path), false)
+			}
+			for _, ref := range p.TargetUpdates[name] {
+				add(ref.Rooted(p.Path), true)
 			}
 			if len(outside) == 0 {
 				continue
@@ -100,8 +100,8 @@ func RegeneratedOutside(root string, row job.Job, projects []*types.Project, ign
 			}
 			for _, g := range outside {
 				found = append(found, candidate{
-					out:         RegeneratedOutput{Output: g.String(), Target: fmt.Sprintf("%s:%s", p.Path, name), Source: source.String()},
-					glob:        g,
+					out:         RegeneratedOutput{Output: g.glob.String(), Target: fmt.Sprintf("%s:%s", p.Path, name), Source: source.String(), InPlace: g.inPlace},
+					glob:        g.glob,
 					specificity: specificity,
 				})
 			}
@@ -146,6 +146,17 @@ func RegeneratedOutside(root string, row job.Job, projects []*types.Project, ign
 	return out
 }
 
+func targetsWriting(p *types.Project) map[string]struct{} {
+	names := map[string]struct{}{}
+	for name := range p.TargetOutputs {
+		names[name] = struct{}{}
+	}
+	for name := range p.TargetUpdates {
+		names[name] = struct{}{}
+	}
+	return names
+}
+
 // VCSIgnored answers RegeneratedOutside's ignored question from the VCS at root, or returns
 // nil when there is none to ask. A query that fails returns its error, and each caller
 // decides what an unanswered question means.
@@ -188,6 +199,10 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 	}
 	var lines []string
 	for _, o := range outputs[:min(len(outputs), RegeneratedLimit)] {
+		if o.InPlace {
+			lines = append(lines, fmt.Sprintf("%s (%s, rewrites in place)", o.Output, o.Target))
+			continue
+		}
 		lines = append(lines, fmt.Sprintf("%s (%s)", o.Output, o.Target))
 	}
 	if rest := outputs[min(len(outputs), RegeneratedLimit):]; len(rest) > 0 {

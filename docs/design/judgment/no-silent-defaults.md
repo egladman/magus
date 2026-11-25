@@ -72,6 +72,7 @@ scrolls past, and the build behaves as something nobody configured.
 
 ## See also
 
+- [Stale is never silent](stale-is-never-silent.md)
 - [Told, never guessed](told-never-guessed.md)
 - [A refusal carries its reason](a-refusal-carries-its-reason.md)
 - [Behavior is code, facts are data](../principles/behavior-is-code-facts-are-data.md)

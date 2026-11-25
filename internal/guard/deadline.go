@@ -19,6 +19,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/agent"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -297,7 +298,7 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 		ctx = BeginJudgment(ctx, base.CacheDir, req)
 	}
 	log := &phaseLog{start: time.Now()}
-	ctx = context.WithValue(ctx, phaseLogKey{}, log)
+	ctx = jobstore.WithCallClock(context.WithValue(ctx, phaseLogKey{}, log), log.beginCall)
 	deadline, _ := ctx.Deadline()
 	done := make(chan verdict.Judgment, 1)
 	go func() { done <- judge(ctx) }()
@@ -511,7 +512,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
-		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
+		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}, slowest: log.slowestCall(elapsed)}
 		judged.Decision, judged.Reason, judged.Rule = verdict.Deny, lapseReason(call, lapse, false), string(advisoryUnfinished)
 	case call.changes:
 		where := stallSite(stalled, isStalled, finished)
@@ -623,6 +624,52 @@ type phaseLog struct {
 	deps *Dependencies
 	// denied is whether denyLapse refused the call for the clock.
 	denied bool
+	calls  []*openedCall
+}
+
+// openedCall is a timed call as the log holds it; took is set once it ends.
+type openedCall struct {
+	name  string
+	start time.Time
+	took  time.Duration
+	ended bool
+}
+
+// beginCall times one call from now and returns its end: a job.CallClock.
+func (l *phaseLog) beginCall(name string) (end func()) {
+	if l == nil {
+		return func() {}
+	}
+	c := &openedCall{name: name, start: time.Now()}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, c)
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		c.took, c.ended = time.Since(c.start), true
+	}
+}
+
+// slowestCall is the longest call so far, an open one timed to now, of a
+// phase that has spent of.
+func (l *phaseLog) slowestCall(of time.Duration) timedCall {
+	if l == nil {
+		return timedCall{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var slowest timedCall
+	for _, c := range l.calls {
+		took := c.took
+		if !c.ended {
+			took = time.Since(c.start)
+		}
+		if took > slowest.took {
+			slowest = timedCall{name: c.name, took: took, of: of, open: !c.ended}
+		}
+	}
+	return slowest
 }
 
 type phaseLogKey struct{}
@@ -805,6 +852,22 @@ type ruleLapse struct {
 	// magus\guard.command rule" did not "answer". failed words it under the side's own
 	// failure line: "the rule" did not "answer".
 	said, failed lapseWording
+	// slowest is the phase's longest timed call, zero when it timed none.
+	slowest timedCall
+}
+
+// timedCall is one call a judgment timed. took is how long it ran, or has
+// run so far while open, of the phase's time spent.
+type timedCall struct {
+	name     string
+	took, of time.Duration
+	open     bool
+}
+
+// holdsMost reports a call that took over half the phase. Then no retry gets
+// lucky: that call is the cost.
+func (c timedCall) holdsMost() bool {
+	return c.name != "" && c.of > 0 && 2*c.took > c.of
 }
 
 // lapseWording is a phase as one sentence names it: subject did not verb within the budget.
@@ -843,10 +906,18 @@ func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
 			"A dry run is bounded at %s and a hook at %s, so a hook would deny the call as well.",
 			call.what, l.what(), dryRunBudget, hookBudget)
 	}
+	retry := "A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it. "
+	if l.slowest.holdsMost() {
+		still := ""
+		if l.slowest.open {
+			still = ", still running"
+		}
+		retry = fmt.Sprintf("Its slowest host call, %s, took %s of the %s spent%s, so a retry will not help: report it rather than repeat it. ",
+			l.slowest.name, roundBudget(l.slowest.took), roundBudget(l.slowest.of), still)
+	}
 	return fmt.Sprintf("magus ran out of time judging %s: %s. "+
 		"A call that changes state is denied rather than let through unjudged. "+
-		"A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it. "+
-		"The guard answers within %s, inside the host's hook timeout, "+
+		"%sThe guard answers within %s, inside the host's hook timeout, "+
 		"because a hook the host cuts off is a call it runs with no rule applied.",
-		call.what, l.what(), hookBudget)
+		call.what, l.what(), retry, hookBudget)
 }

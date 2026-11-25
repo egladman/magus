@@ -366,8 +366,28 @@ func diagnose(err error) error {
 	if errors.Is(err, job.ErrUnknownJob) {
 		return fmt.Errorf("%w: `%s` lists the declared ids", err, hint.LsJobs)
 	}
+	if unknown, ok := errors.AsType[*job.UnknownMemberError](err); ok {
+		return refuseUnknownFields(err, unknown)
+	}
 	return file.StoreDiagnostic(err)
 }
+
+// refuseUnknownFields reports a line that decodes but carries fields this build lacks. The
+// line is whole and kept for the build that wrote it, so it is not MGS3050.
+func refuseUnknownFields(err error, unknown *job.UnknownMemberError) error {
+	where := "a job store line"
+	if line, ok := errors.AsType[*codec.LineError](err); ok {
+		where = fmt.Sprintf("%s:%d", line.Path, line.Line)
+	}
+	reader, _ := os.Executable()
+	return types.WrapDiagnostic(types.StoreRecordsNewer, err,
+		"%s holds fields this magus does not know (%s), so a build with another job schema wrote it. Read by %s (%s). The line is kept. Relink from its tree: `%s`",
+		where, strings.Join(unknown.Paths, ", "), cmp.Or(reader, "an unknown binary"), cmp.Or(buildinfo.Version(), buildinfo.UnknownVersion), relink)
+}
+
+// relink is a copy of ward.RelinkAt(""): importing internal/ward would take this package
+// past its import ceiling.
+const relink = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"
 
 // refuseRecordVersion refuses a stored line at version got, which this magus does not read:
 // a newer version of its own group waits for an update, and any other is foreign.

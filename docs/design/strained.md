@@ -79,6 +79,11 @@ The principle pages name debts of their own:
   benchmark run only, or a figure quoted at a size no run reached. The page
   asks for two sizes and a witness from the run journals; today that is
   review's to hold.
+- **Undeclared input against a nondeterministic generator** ([Stale is never silent](judgment/stale-is-never-silent.md)):
+  a generator whose output changes between runs over unchanged declared inputs
+  looks the same as one that reads a file it never declared, and the refusal
+  names neither. Until MGS4012 separates the two, the refusal says only that the
+  output moved, and telling the cases apart is a person's read of the run records.
 - **Where slop is cheap** ([Move fast, but leave nothing worse where it costs](principles/move-fast-leave-nothing-worse.md)):
   no rule reads the `zones` in `analyzers.yaml`, the size limits do not weigh
   churn, no autofix takes leaf-code slop, and no per-directory budget nets

@@ -613,6 +613,10 @@ linters:
           # spells the same way (Dir, Env, Addr, Attr, Exec) and this tree's Ref.
           # A value read off a context is XFromContext, not XFrom.
           suffixes: [To, For, Of, From]
+          # Short forms follow Go idiom, never a stricter house rule. Ctx, Err, Prev
+          # and Repo are idiomatic and stay, as does a role-named context (dialCtx).
+          # A form below is refused only in a func or method name, and before one is
+          # added, the standard library and Go Code Review Comments must spell it out.
           short-forms:
             [
               Src,

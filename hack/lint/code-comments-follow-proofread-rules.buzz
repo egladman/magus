@@ -95,10 +95,10 @@ export object Judged {
     url: str = "",
 }
 
-// compare holds the findings of each file to b's counts. A file past its
-// count fails on each finding past it; one under it fails at its row. A
-// narrow run judges some files, so a row for a file it left out is judged
-// only when exists says the file is gone.
+// compare holds each file's findings to b's counts. A file past its count
+// fails on each finding past it; one under it fails at its row. A narrow run
+// judges a row for a file it left out only when exists says the file is gone.
+// A gone row one rowless file now holds is a move, reported once.
 export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: fun (p: str) > bool) > [Finding] {
     final seen = mut {<str: {str: int}>};
     final acc = mut [<Finding>];
@@ -117,10 +117,22 @@ export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: f
                 hint = COUNT_FIX });
         }
     }
+    final moved = mut {<str: bool>};
     foreach (file in support\sorted(b.counts.keys())) {
         final rules = b.counts[file]!;
         if (!(present[file] ?? false) and exists(file)) {
             continue;
+        }
+        if (!(present[file] ?? false)) {
+            final to = movedTo(rules, seen: seen, rows: b.counts);
+            if (to != null) {
+                moved[to!] = true;
+                final rowLine = support\findLine(b.text, needle: relative(file, file: b.file) + ":");
+                acc.append(Finding{ path = b.file, line = rowLine,
+                    message = "the proofread baseline row {file} names a file that moved to {to!}",
+                    hint = "Rename the row's key to {relative(to!, file: b.file)} in {b.file}; its counts stay as they are." });
+                continue;
+            }
         }
         foreach (rule in support\sorted(rules.keys())) {
             final want = rules[rule]!;
@@ -135,7 +147,37 @@ export fun compare(found: [Judged], b: Baseline, present: {str: bool}, exists: f
                 hint = "A person lowers the count to {got} in {b.file}; it never rises." });
         }
     }
-    return acc;
+    final kept = mut [<Finding>];
+    foreach (f in acc) {
+        if (!(moved[f.path] ?? false)) {
+            kept.append(f);
+        }
+    }
+    return kept;
+}
+
+// movedTo is the one file with no row in rows whose findings equal rules, or
+// null when none or several do.
+fun movedTo(rules: {str: int}, seen: {str: {str: int}}, rows: {str: {str: int}}) > str? {
+    var found: str? = null;
+    var n = 0;
+    foreach (file in support\sorted(seen.keys())) {
+        if (rows[file] != null) {
+            continue;
+        }
+        final got = seen[file]!;
+        var same = got.len() == rules.len();
+        foreach (rule, want in rules) {
+            if ((got[rule] ?? -1) != want) {
+                same = false;
+            }
+        }
+        if (same) {
+            found = file;
+            n += 1;
+        }
+    }
+    return if (n == 1) found else null;
 }
 
 // relative is p relative to the directory holding the policy file.
@@ -262,6 +304,22 @@ test "a count above what the file holds, or a gone file, fails at its row" {
         "the proofread baseline allows 1 banner findings in gone.go, which is gone",
     ], message: "both rows");
     assert\equal(got[0].line, want: 3, message: "the row's line");
+}
+
+test "a gone row whose counts one rowless file holds is one move" {
+    final text = "proofread:\n  baseline:\n    old.go: \{banner: 2}\n";
+    final b = Baseline{ counts = {"old.go": {"banner": 2}}, text = text };
+    final found = [said("new.go", rule: "banner", line: 4), said("new.go", rule: "banner", line: 8)];
+    final got = compare(found, b: b, present: {"new.go": true}, exists: fun (p: str) > bool => p != "old.go");
+    assert\equal(support\messages(got), want: ["the proofread baseline row old.go names a file that moved to new.go"], message: "one finding");
+    assert\equal(got[0].line, want: 3, message: "at the row");
+}
+
+test "a gone row stays gone when two rowless files hold its counts" {
+    final b = Baseline{ counts = {"old.go": {"banner": 1}} };
+    final found = [said("a.go", rule: "banner", line: 1), said("b.go", rule: "banner", line: 1)];
+    final got = compare(found, b: b, present: {"a.go": true, "b.go": true}, exists: fun (p: str) > bool => p != "old.go");
+    assert\equal(got.len(), want: 3, message: "{support\messages(got)}");
 }
 
 test "a row for a file a narrow run left out is not judged" {

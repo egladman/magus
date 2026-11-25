@@ -106,6 +106,7 @@ concepts/generated-files/
 concepts/knowledge/
 concepts/knowledge/historymetrics/
 concepts/knowledge/insight/
+concepts/linters/
 concepts/merge-queue/
 concepts/operations/
 concepts/output-refs/
@@ -203,6 +204,13 @@ decisions/0050-the-harness-is-a-module-named-safetyscissors/
 decisions/0051-the-journal-is-one-package-shaped-like-log-slog/
 decisions/0052-only-a-typed-run-installs/
 decisions/0053-an-op-declares-the-files-it-edits-in-place/
+decisions/0054-a-spell-op-returns-a-result/
+decisions/0055-a-buzz-result-names-its-error-type/
+decisions/0056-one-ps-shows-what-runs-and-what-it-binds/
+decisions/0057-a-hook-runs-its-binarys-glue/
+decisions/0058-buzz-std-natives-are-private-externs/
+decisions/0059-internal-job-file-layout/
+decisions/0060-proofread-rethink/
 dependencies/
 design/
 design/judgment/
@@ -214,6 +222,7 @@ design/judgment/determinism-at-chosen-points/
 design/judgment/manual-on-purpose/
 design/judgment/no-silent-defaults/
 design/judgment/provider-io-is-buzz/
+design/judgment/stale-is-never-silent/
 design/judgment/the-host-wiring-is-yours/
 design/judgment/the-loop-keeps-you-able-to-notice/
 design/judgment/the-outer-harness-stays-outside/
@@ -231,6 +240,7 @@ design/principles/behavior-is-code-facts-are-data/
 design/principles/break-now-hold-still-later/
 design/principles/built-for-the-expensive-era/
 design/principles/built-for-the-largest-monorepos/
+design/principles/buzz-modules-live-in-their-layer/
 design/principles/capability-is-not-a-reason/
 design/principles/clear-is-better-than-clever/
 design/principles/compute-once/
@@ -245,6 +255,8 @@ design/principles/human-first-is-the-ai-integration/
 design/principles/human-in-the-loop/
 design/principles/inform-people-contain-the-engine/
 design/principles/measured-not-asserted/
+design/principles/measures-in-verdicts-out/
+design/principles/move-fast-leave-nothing-worse/
 design/principles/no-generated-code-in-the-build-path/
 design/principles/no-news-is-good-news/
 design/principles/one-source-every-door/
@@ -621,10 +633,12 @@ reference/buzz/platform/
 reference/buzz/proc/
 reference/buzz/progress/
 reference/buzz/reclaimdisk/
+reference/buzz/recorder/
 reference/buzz/result/
 reference/buzz/screen/
 reference/buzz/semver/
 reference/buzz/sort/
+reference/buzz/splice/
 reference/buzz/strings/
 reference/buzz/template/
 reference/buzz/term/
@@ -747,6 +761,7 @@ reference/codes/magusfile/MGS1059/
 reference/codes/magusfile/MGS1060/
 reference/codes/magusfile/MGS1061/
 reference/codes/magusfile/MGS1062/
+reference/codes/magusfile/MGS1063/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -838,6 +853,7 @@ reference/codes/sandbox/MGS3055/
 reference/codes/sandbox/MGS3056/
 reference/codes/sandbox/MGS3057/
 reference/codes/sandbox/MGS3058/
+reference/codes/sandbox/MGS3059/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -907,6 +923,7 @@ reference/proofread/ascii/
 reference/proofread/aside/
 reference/proofread/attribution/
 reference/proofread/banned-word/
+reference/proofread/banner/
 reference/proofread/bare-imperative/
 reference/proofread/bare-lgtm/
 reference/proofread/bare-rule/
@@ -924,8 +941,13 @@ reference/proofread/chatbot/
 reference/proofread/claim/
 reference/proofread/closer/
 reference/proofread/closing-offer/
+reference/proofread/code-comment-budget/
+reference/proofread/code-comment-sentence/
 reference/proofread/comment-block/
 reference/proofread/comment-budget/
+reference/proofread/comment-caps/
+reference/proofread/comment-first-person/
+reference/proofread/comment-history/
 reference/proofread/comment-sentence/
 reference/proofread/compact-costly-abbrev/
 reference/proofread/compact-duplicate/
@@ -940,6 +962,7 @@ reference/proofread/dash/
 reference/proofread/date-format/
 reference/proofread/decline-no-reason/
 reference/proofread/deferral-no-link/
+reference/proofread/doc-path/
 reference/proofread/docstub/
 reference/proofread/emphasis/
 reference/proofread/empty-request-changes/
@@ -968,6 +991,7 @@ reference/proofread/message-commands/
 reference/proofread/message-length/
 reference/proofread/message-rationale/
 reference/proofread/message-tag/
+reference/proofread/next-housekeeping/
 reference/proofread/nit-label/
 reference/proofread/no-body/
 reference/proofread/no-reason/
@@ -975,6 +999,7 @@ reference/proofread/nominalizations/
 reference/proofread/nonspecific/
 reference/proofread/option-list/
 reference/proofread/participles/
+reference/proofread/provenance/
 reference/proofread/repeated-marks/
 reference/proofread/repeated-opener/
 reference/proofread/reply-opener/
@@ -1043,6 +1068,7 @@ reference/rules/code-search/
 reference/rules/compat-marker/
 reference/rules/conflict-commit/
 reference/rules/conflict-rewrite/
+reference/rules/continue-cold-worker/
 reference/rules/copy-write/
 reference/rules/credential-verb/
 reference/rules/dependency-install/
@@ -1266,6 +1292,7 @@ tags/bearer/
 tags/benchmarks/
 tags/bisect/
 tags/bootstrap/
+tags/boundary/
 tags/bounds/
 tags/breaking-changes/
 tags/broker/
@@ -1295,6 +1322,7 @@ tags/client/
 tags/code/
 tags/codegen/
 tags/codex/
+tags/comments/
 tags/commit/
 tags/compatibility/
 tags/completion/
@@ -1302,6 +1330,7 @@ tags/concurrency/
 tags/config/
 tags/configuration/
 tags/conflicts/
+tags/conformance/
 tags/connect/
 tags/connector/
 tags/console/
@@ -1322,6 +1351,7 @@ tags/cursor/
 tags/cycle/
 tags/daemon/
 tags/deadlock/
+tags/debt/
 tags/debugging/
 tags/decision/
 tags/decisions/
@@ -1442,6 +1472,7 @@ tags/leases/
 tags/ledger/
 tags/library/
 tags/lint/
+tags/linters/
 tags/linux/
 tags/load/
 tags/lockfile/
@@ -1488,10 +1519,12 @@ tags/mise/
 tags/model-tier/
 tags/model-tiers/
 tags/module/
+tags/modules/
 tags/monitoring/
 tags/monorepo/
 tags/naming/
 tags/needs/
+tags/net/
 tags/network/
 tags/node/
 tags/notes/
@@ -1574,6 +1607,7 @@ tags/replay/
 tags/reproduce/
 tags/required/
 tags/restart/
+tags/result/
 tags/retrieval/
 tags/retry/
 tags/review/
@@ -1627,8 +1661,10 @@ tags/sources/
 tags/spawn/
 tags/spell/
 tags/spells/
+tags/splice/
 tags/stacks/
 tags/staging/
+tags/stale/
 tags/stall/
 tags/state/
 tags/status/
@@ -1681,6 +1717,7 @@ tags/versioning/
 tags/versions/
 tags/vitest/
 tags/vm/
+tags/voice/
 tags/volatility/
 tags/waivers/
 tags/ward/

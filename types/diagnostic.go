@@ -890,6 +890,11 @@ const UncommittedRepair DiagnosticCode = "MGS3057"
 // holds rows no command here can act on, and the remedy is to fork the job again or
 // start a fresh session.
 const JobStoreRecordForeign DiagnosticCode = "MGS3058"
+
+// LeaseHolderQuiet is a path another job holds whose row nobody has touched within
+// jobs.stale_after. The path stays out of reach: quiet is not proof the holder left. The
+// message names the `job prune --dry-run` line the root or a person checks it with.
+const LeaseHolderQuiet DiagnosticCode = "MGS3059"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1247,6 +1252,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ModelTiersIncomparable,
 	UncommittedRepair,
 	JobStoreRecordForeign,
+	LeaseHolderQuiet,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

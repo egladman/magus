@@ -53,7 +53,8 @@ var ciMeansHost = regexp.MustCompile(`(?i)\b(?:` +
 	`|actions?\s+run` +
 	`|pr\s+checks?` +
 	`|pull[- ]request\s+checks?` +
-	`|host(?:ed)?\s+ci` +
+	`|(?:github|gitlab|hosted|remote)\s+ci` +
+	`|host\s+ci` +
 	`|platform\s+ci` +
 	`)\b`)
 
@@ -100,7 +101,8 @@ func denyAmbiguousCIWord(facts hint.Gate, assumes bool) string {
 	if !assumes || !ambiguousCIWordLive(facts) {
 		return ""
 	}
-	return "\"ci\" is ambiguous here: the magus `ci` target (often `magus affected ci`), or the host's CI/CD (GitHub Actions and the rest). Ask which one, then retry."
+	return "\"ci\" is ambiguous here: the magus `ci` target, or the host's CI/CD.\n" +
+		"The person clears it by typing `magus ci` or `GitHub Actions` in a message; an answer in a question dialog does not count."
 }
 
 // assumesCIWord reports whether a shell line picks magus `ci` or the host's CI/CD:
