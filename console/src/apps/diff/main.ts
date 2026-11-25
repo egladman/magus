@@ -844,9 +844,16 @@ export function activate(host: HTMLElement): AppInstance {
   );
   readingEl.append(readingSince, readingPop.el);
 
+  const graphLink = h(
+    "a",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__graph",
+    "Affected in graph",
+  );
+  graphLink.href = "graph/#" + (demo ? "demo&" : "") + "view=affected";
   actions.append(
     verdictButton,
     overviewButton,
+    graphLink,
     readingGroup.el,
     readingEl,
     modeGroup.el,

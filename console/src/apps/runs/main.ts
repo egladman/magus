@@ -628,6 +628,13 @@ function renderDetail(box: HTMLElement, row: RunRow | undefined, now: number, de
     under.append(h("code", "console-runs__target-ref", o.ref));
     if (o.error) under.append(h("p", "console-runs__target-error", o.error));
     under.append(openLink("Open output", viewerHref("ref", o.ref, demo), "Open output of " + name));
+    const graphLink = openLink(
+      "What depends on this",
+      graphHref(o.project, o.target, demo),
+      "What depends on " + name + ", in the graph",
+    );
+    graphLink.className = "pf-v6-c-button pf-m-link console-runs__graph";
+    under.append(graphLink);
     item.append(under);
     table.append(item);
   }
@@ -795,6 +802,11 @@ function openLink(text: string, href: string, name: string): HTMLElement {
 // "logs/", NOT "../logs/". Every app page ships with `<base href="../">` (see
 // scripts/app-stubs.mjs) so the shell's own relative assets resolve from /console/ - which means
 // a link here already resolves against /console/, and the extra hop landed on /logs/ and 404'd.
+function graphHref(project: string, target: string, demo: boolean): string {
+  const node = "target:" + (project || ".") + ":" + target;
+  return "graph/#" + (demo ? "demo&" : "") + "view=blast&node=" + encodeURIComponent(node);
+}
+
 function viewerHref(key: "inv" | "ref", value: string, demo: boolean): string {
   return "logs/#" + (demo ? "demo&" : "") + key + "=" + encodeURIComponent(value);
 }
