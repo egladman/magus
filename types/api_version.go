@@ -3,11 +3,9 @@ package types
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/egladman/magus/libs/apiversion"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // APIVersion names a versioned format Kubernetes-style, as
@@ -28,21 +26,8 @@ const (
 	StabilityStable Stability = "stable"
 )
 
-var apiVersionRe = regexp.MustCompile(
-	`^([a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*)/v([1-9][0-9]*)(?:(alpha|beta)([1-9][0-9]*))?$`)
-
-// ParseAPIVersion returns s as an APIVersion, or an error naming the
-// shape s breaks.
-func ParseAPIVersion(s string) (APIVersion, error) {
-	if !apiVersionRe.MatchString(s) {
-		return "", fmt.Errorf("api version %q is not <group>/v<major>[alpha<n>|beta<n>], as in %q",
-			s, job.APIVersion)
-	}
-	return APIVersion(s), nil
-}
-
 // Valid reports whether v parses.
-func (v APIVersion) Valid() bool { return apiVersionRe.MatchString(string(v)) }
+func (v APIVersion) Valid() bool { return apiversion.APIVersion(v).Valid() }
 
 func (v APIVersion) String() string { return string(v) }
 

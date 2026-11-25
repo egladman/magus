@@ -48,8 +48,8 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 	for _, p := range paths {
 		m := version.FindStringSubmatch(p)
 		require.NotNil(t, m, "%s is not named <record>.<version>.json", p)
-		v, err := ParseAPIVersion(strings.Replace(string(l.Version), l.Version.Version(), m[1], 1))
-		require.NoError(t, err, p)
+		v := APIVersion(strings.Replace(string(l.Version), l.Version.Version(), m[1], 1))
+		require.True(t, v.Valid(), p)
 		raw, err := os.ReadFile(p)
 		require.NoError(t, err)
 		var g schemaGolden

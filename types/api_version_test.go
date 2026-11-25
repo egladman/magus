@@ -16,35 +16,32 @@ func TestAPIVersion(t *testing.T) {
 	suite.Run(t, new(APIVersionSuite))
 }
 
-func (s *APIVersionSuite) TestParseAcceptsAlpha() {
-	v, err := ParseAPIVersion("safetyscissors.job/v1alpha1")
-	s.Require().NoError(err)
-	s.Equal(APIVersion(job.APIVersion), v)
+func (s *APIVersionSuite) TestValidAcceptsAlpha() {
+	s.True(APIVersion(job.APIVersion).Valid())
 }
 
-func (s *APIVersionSuite) TestParseAcceptsStable() {
-	_, err := ParseAPIVersion("mergequeue.event/v2")
-	s.NoError(err)
+func (s *APIVersionSuite) TestValidAcceptsStable() {
+	s.True(APIVersion("mergequeue.event/v2").Valid())
 }
 
-func (s *APIVersionSuite) TestParseRefusesAnInteger() {
-	_, err := ParseAPIVersion("13")
-	s.EqualError(err, `api version "13" is not <group>/v<major>[alpha<n>|beta<n>], as in "safetyscissors.job/v1alpha1"`)
+func (s *APIVersionSuite) TestValidRefusesAnInteger() {
+	s.False(APIVersion("13").Valid())
 }
 
-func (s *APIVersionSuite) TestParseRefusesAVersionWithNoGroup() {
-	_, err := ParseAPIVersion("v1alpha1")
-	s.Error(err)
+func (s *APIVersionSuite) TestValidRefusesAVersionWithNoGroup() {
+	s.False(APIVersion("v1alpha1").Valid())
 }
 
-func (s *APIVersionSuite) TestParseRefusesAZeroMajor() {
-	_, err := ParseAPIVersion("safetyscissors.job/v0alpha1")
-	s.Error(err)
+func (s *APIVersionSuite) TestValidRefusesASingleLabelGroup() {
+	s.False(APIVersion("magus/v1alpha1").Valid())
 }
 
-func (s *APIVersionSuite) TestParseRefusesAnUnnumberedAlpha() {
-	_, err := ParseAPIVersion("safetyscissors.job/v1alpha")
-	s.Error(err)
+func (s *APIVersionSuite) TestValidRefusesAZeroMajor() {
+	s.False(APIVersion("safetyscissors.job/v0alpha1").Valid())
+}
+
+func (s *APIVersionSuite) TestValidRefusesAnUnnumberedAlpha() {
+	s.False(APIVersion("safetyscissors.job/v1alpha").Valid())
 }
 
 func (s *APIVersionSuite) TestGroupAndVersionSplitAtTheSlash() {
