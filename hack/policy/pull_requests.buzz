@@ -1,39 +1,9 @@
-// The pull-request-text rule: the text a forge command posts to a pull request, either its
-// title and description (the change-description kind), a review's body (review-summary), a
-// comment on a line of the diff (review-inline), or a reply in a thread or on the
-// conversation (review-reply). COMMANDS says which command writes which kind, and through
-// which flags.
+// The pull-request-text rule: the text a forge command posts to a pull request. COMMANDS
+// says which command writes which kind.
 //
-// The words are judged by libs/proofread under this repository's decisions table
-// (hack/policy/proofread.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
-// denied, every one listed with its rule, a grade under the kind's minimum among them; one
-// decided advise is graded there and not repeated here.
-// The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
-// This rule adds the diff's word budget, affected areas and title checks.
-// Next names substantive work after the change. When the text cannot be read,
-// the whole line is judged for credit and typography instead.
-//
-// A description gets a word budget that grows with the change, counted after its lead so a
-// cut never removes the outcome or how the work came up: W = baseWords + wordsPerChange * U,
-// where U, the distinct changes the branch proves, is at least 1 and the largest of:
-//   the changelog fragments it adds or edits, plus one for a title marked breaking;
-//   the clauses its title joins with `;`;
-//   1 + floor(log2(1 + shipped source files));
-//   1 + floor(log2(1 + changed lines / linesPerChange)), over every path not generated.
-// Each term is a lower bound on what a reviewer must check. The paths and lines come from
-// vcs\diffStat against the base for the checkout's own branch, or a git numstat of the head
-// the call names (`--head`, or the head `gh pr view` reports for `gh pr edit <n>`). A
-// description whose diff cannot be read (no base, a failed `gh pr view`, a failed or empty
-// diff) is denied with the fetch that would make it readable, never judged on facts nobody
-// read. The same diff feeds the check CI's pr-changelog target runs: a feat, fix, perf or
-// breaking title that changes a shipped path needs a fragment under changes/unreleased/,
-// and every fragment must lint. A hook that runs out of time fails open as a whole, as
-// every rule does.
-//
-// The shape past the lead: bullets (a list may follow a one-line lead-in ending in `:`),
-// at most one closing sentence after them, and headed sections, whose prose is free. Prose
-// outside that shape, a lead or bullet past blockWords, and an area the diff touches that
-// the description never names are advised, once per pull request.
+// libs/proofread judges the words. This rule adds the diff's word budget, affected areas
+// and title checks. CI's pr-changelog target checks the same diff: a breaking title, or a
+// public API lock or page, needs a fragment.
 namespace agentpolicy\pullRequests;
 
 import "std";
@@ -2528,7 +2498,7 @@ test "the diff is read once per description, for the head and base the call name
 
 final featTitle = "feat(cache): hash the key in sorted order";
 
-// shipped is the diff of a feature that changes one shipped path, with the fragments
+// shippedDiff is the diff of a feature that changes one shipped path, with the fragments'
 // paths gained lines.
 fun shippedDiff(fragments: [str]) > Facts {
     final texts = mut {<str: str>};
@@ -2540,20 +2510,27 @@ fun shippedDiff(fragments: [str]) > Facts {
         added = fragments, texts = texts };
 }
 
-test "a feat that ships code with no fragment is denied with the fix, and a fragment settles it" {
+fun lockDiff(fragments: [str]) > Facts {
+    final base = shippedDiff(fragments);
+    final changed = ["internal/commands/testdata/api.lock"] + fragments;
+    return Facts{ known = true, fragments = base.fragments, shipped = 1, lines = 10, paths = changed,
+        changed = changed, added = base.added, texts = base.texts };
+}
+
+test "a change to a public API lock with no fragment is denied with the fix, and a fragment settles it" {
     final bare = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
+        diff: facts(lockDiff([<str>])), judge: passing(), once: helpers\counter());
     std\assert(bare.decision == magus\GuardDecision.deny, message: bare.reason);
     std\assert(bare.reason.indexOf("adds no changelog fragment") != null and bare.reason.indexOf("changes/unreleased/<branch>.md") != null, message: bare.reason);
-    final refactor = decided(create("refactor(cache): hash the key in sorted order", body: "Pins the key."), line: "", files: {<str: str>},
+    final plain = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
-    std\assert(refactor.decision == magus\GuardDecision.defer, message: "a title that owes no entry needs none: " + refactor.reason);
+    std\assert(plain.decision == magus\GuardDecision.defer, message: "a change off the public API needs none: " + plain.reason);
 
     final dir = fs\tempDir("fragment") catch "";
     final fragment = fs\join(dir, "key.md");
     fs\writeFile(fragment, content: "### Fixed\n\n- **The cache key hashes in sorted order.** Equal maps share one key.\n") catch void;
     final settled = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
-        diff: facts(shippedDiff([fragment])), judge: passing(), once: helpers\counter());
+        diff: facts(lockDiff([fragment])), judge: passing(), once: helpers\counter());
     std\assert(settled.decision == magus\GuardDecision.defer, message: "a well-formed fragment: " + settled.reason);
     fs\removeAll(dir) catch void;
 }

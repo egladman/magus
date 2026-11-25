@@ -685,12 +685,13 @@ push reports all three:
   The shape, the claim and tone rules, and the decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with
   `magus run pr-description . -- "--title=<title>" "--body=<body>"`.
-- A `feat`, `fix` or `perf` change to shipped code adds a changelog
-  fragment, as does any title marked breaking with `!`. Every other type
-  passes without one, and so do changes that touch only docs, tests, workflows,
-  repository tooling and plans; `magusfiles/release/changelog.buzz` lists what does not
-  ship. A change no user can notice is not a `feat`, `fix` or `perf`, so
-  retitle it rather than add an entry. Check a branch with
+- A changelog fragment belongs to a change a magus user notices. One is owed
+  when the diff changes a public API lock (`internal/commands/testdata/api.lock`,
+  `internal/commands/testdata/api-go.lock`, `std/gen/std-api.lock`,
+  `internal/interp/bindings/testdata/magus-api.lock`) or a page under
+  `internal/config/gen/` or `docs/reference/codes/`, and when the title is marked
+  breaking with `!`. Any other change may carry a fragment and never owes one;
+  most add none. Check a branch with
   `magus run pr-changelog . -- "<title>"`.
 
 **Fragments.** The entry is its own file, `changes/unreleased/<branch>.md`: a

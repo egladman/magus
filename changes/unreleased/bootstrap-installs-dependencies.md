@@ -1,5 +1,0 @@
-### Fixed
-
-- **The plain checkout bootstrap installs dependencies too.** Building ./magus with
-  `hack/dev/bootstrap-checkout.buzz` (without `--verify-ready`) now runs `./magus run install --all`
-  after the build, so a fresh checkout's TypeScript index finds tsc.
