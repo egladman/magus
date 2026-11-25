@@ -205,7 +205,7 @@ func notIdentifier(lang, name string) string {
 		// Lexed rather than matched, so the shape is the one gopherbuzz reads: a name that
 		// lexes as one ordinary identifier, or as one keyword, which the reason below names.
 		toks, err := buzztoken.Tokenize(name)
-		if err != nil || len(toks) != 2 || toks[0].Val != name || toks[0].Raw ||
+		if err != nil || len(toks) != 2 || toks[0].Val != name || toks[0].At ||
 			(toks[0].Kind != buzztoken.Ident && !buzztoken.IsKeyword(name)) {
 			return fmt.Sprintf("%q is not a Buzz identifier", name)
 		}

@@ -153,6 +153,8 @@ type Session struct {
 	// parseCache is shared with other sessions by the host; nil lexes every source
 	// afresh. Set via WithParseCache.
 	parseCache *ParseCache
+	// scanner lexes every source the session reads; nil scans upstream Buzz.
+	scanner *token.Scanner
 	// importedTypes accumulates the exported object/enum declarations of flat
 	// imported .buzz modules, so compileShared can hand them to the checker and
 	// the importing file can name those types in annotations and literals. The
@@ -674,6 +676,12 @@ func WithParseCache(c *ParseCache) Option {
 	return func(s *Session) { s.parseCache = c }
 }
 
+// WithScanner has the session and every session it creates lex with sc. A nil
+// sc, like omitting the option, scans upstream Buzz.
+func WithScanner(sc *token.Scanner) Option {
+	return func(s *Session) { s.scanner = sc }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -721,6 +729,7 @@ func (s *Session) NewChild() *Session {
 	c.moduleResolver = s.moduleResolver
 	c.sourceReader = s.sourceReader
 	c.parseCache = s.parseCache
+	c.scanner = s.scanner
 	c.fileImportsDisabled = s.fileImportsDisabled
 	c.ffiDisabled = s.ffiDisabled
 	if c.ffiDisabled {
@@ -1276,7 +1285,7 @@ func claimChunk(o *vmpackage.Owner, c *vmpackage.Chunk) {
 // a line not typed yet.
 func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, warnings []typeError, parseErr error) {
 	parseStart := time.Now()
-	prog, unused, err := parseModedTracked(s.parseCache, code, !s.embedded)
+	prog, unused, err := parseModedTracked(s.parseCache, s.scanner, code, !s.embedded)
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseParse, time.Since(parseStart), err)
 	}
@@ -2660,7 +2669,7 @@ func (s *Session) rememberModuleType(boundName string, d ast.Node) {
 // Only the leading statements are parsed. Every caller either has already executed
 // src or is about to, so a parse error later in the file surfaces there.
 func (s *Session) declaredNamespace(src string) []string {
-	toks, err := s.parseCache.tokenize(src)
+	toks, err := s.parseCache.tokenize(s.scanner, src)
 	if err != nil || len(toks) == 0 {
 		return nil
 	}
@@ -2671,7 +2680,7 @@ func (s *Session) declaredNamespace(src string) []string {
 	default:
 		return nil
 	}
-	p := newParser(toks)
+	p := newParser(s.scanner, toks)
 	p.strict = !s.embedded
 	for !p.check(token.EOF) {
 		stmt, err := p.parseStmt()
@@ -2691,7 +2700,7 @@ func (s *Session) declaredNamespace(src string) []string {
 
 // parse parses src in this session's mode, lexing through its parse cache.
 func (s *Session) parse(src string) (*ast.Program, error) {
-	return parseModed(s.parseCache, src, !s.embedded)
+	return parseModed(s.parseCache, s.scanner, src, !s.embedded)
 }
 
 // bindNamespacePath makes a flat import's exports reachable under its declared
@@ -2897,6 +2906,7 @@ func (s *Session) loadIsolated(ctx context.Context, src string) (*cachedImport, 
 	}
 	sub.sourceReader = s.sourceReader
 	sub.parseCache = s.parseCache
+	sub.scanner = s.scanner
 	sub.compileObserver = s.compileObserver
 	sub.bytecodeStore = s.bytecodeStore
 

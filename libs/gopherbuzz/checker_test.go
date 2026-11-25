@@ -1780,7 +1780,7 @@ func TestCheck_ErrorInsideInterpolationPointsIntoTheString(t *testing.T) {
 		{"undefined call", "final xs = [1, 2];\nfinal s = \"n={len(xs)}\";\n", 2, 14},
 		{"unknown method", "final xs = [1, 2];\nfinal s = \"{xs.zzz()}\";\n", 2, 15},
 		{"second expression", "final xs = [1, 2];\nfinal s = \"{xs.len()} {nope}\";\n", 2, 15},
-		{"raw string, second line", "final xs = [1, 2];\nfinal s = `a\n  {nope}`;\n", 3, 3},
+		{"multiline string, second line", "final xs = [1, 2];\nfinal s = `a\n  {nope}`;\n", 3, 3},
 		{"nested string", "final xs = [1, 2];\nfinal s = \"{\"in {nope}\"}\";\n", 2, 16},
 	}
 	for _, tc := range cases {

@@ -163,6 +163,10 @@ func (s *Session) bytecodeKey(code string) string {
 	h.Write([]byte{s.bytecodeFlags()})
 	writeKeyString(h, s.entryFilterID)
 	writeKeyString(h, s.sourceFile)
+	// An upstream session keeps the key it had before scanners existed.
+	if name := s.scanner.Name(); name != "" {
+		writeKeyString(h, name)
+	}
 	h.Write([]byte(code))
 	return hex.EncodeToString(h.Sum(nil))
 }

@@ -23,7 +23,7 @@ export fun writeManifest(site: Site) > result\Result::<bool> {
         if (site.inputs.config.baseURL == "") { return result\ok::<bool>(true); }
         final basePath = sitePathPrefix(site.inputs.config.baseURL);
         // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
-        // (see gopherbuzz/testdata/54_raw_string.buzz).
+        // (see gopherbuzz/testdata/54_multiline_string.buzz).
         // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
         // Android/Windows install prompts; icon-512-maskable holds the mark inside the 80% safe
         // circle for the crops a launcher applies.

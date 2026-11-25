@@ -2,7 +2,9 @@ package buzz
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,9 +14,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 type memBytecodeStore struct {
@@ -362,4 +366,51 @@ func TestBytecodeStoreIsNotToldOfAStaleImport(t *testing.T) {
 	require.NoError(t, cachingSession(t, store, dir, &got).Exec(context.Background(), "import \"dep\" as dep;\nreport(dep\\v);\n"))
 	assert.Equal(t, []string{"1", "2"}, got)
 	assert.Empty(t, store.unusable)
+}
+
+type bytecodeScannerSuite struct {
+	suite.Suite
+}
+
+func TestBytecodeScannerSuite(t *testing.T) { suite.Run(t, new(bytecodeScannerSuite)) }
+
+// TestUpstreamKeyIsUnchanged pins the key a session with no scanner had before
+// scanners existed, so no cached chunk is orphaned.
+func (s *bytecodeScannerSuite) TestUpstreamKeyIsUnchanged() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	code := "var n = 1;"
+
+	h := sha256.New()
+	var ver [2]byte
+	binary.LittleEndian.PutUint16(ver[:], vmpackage.BytecodeVersion)
+	h.Write(ver[:])
+	h.Write([]byte{sess.bytecodeFlags()})
+	writeKeyString(h, "")
+	writeKeyString(h, "")
+	h.Write([]byte(code))
+	s.Equal(hex.EncodeToString(h.Sum(nil)), sess.bytecodeKey(code))
+
+	zero := NewSession(context.Background(), WithEmbedded(), WithScanner(&token.Scanner{}))
+	s.T().Cleanup(func() { _ = zero.Close() })
+	s.Equal(sess.bytecodeKey(code), zero.bytecodeKey(code), "a zero scanner scans upstream Buzz")
+}
+
+func (s *bytecodeScannerSuite) TestAScannerIsPartOfTheKey() {
+	store := &memBytecodeStore{}
+	quote := quoteScanner(s.T())
+	run := func(opts ...Option) int {
+		counter := &compileCounter{}
+		sess := NewSession(context.Background(), append([]Option{WithEmbedded()}, opts...)...)
+		s.T().Cleanup(func() { _ = sess.Close() })
+		sess.SetBytecodeStore(store)
+		sess.SetCompileObserver(counter)
+		s.Require().NoError(sess.Exec(context.Background(), `var n = "x";`))
+		return counter.n
+	}
+	s.Positive(run())
+	s.Zero(run())
+	s.Positive(run(WithScanner(quote)), "a chunk compiled by an upstream session is not served to a host one")
+	s.Zero(run(WithScanner(quote)))
+	s.Len(store.blobs, 2)
 }

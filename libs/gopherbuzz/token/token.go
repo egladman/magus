@@ -333,15 +333,14 @@ type StringPart struct {
 
 // Token is a single lexical token.
 type Token struct {
-	// optimization: Kind is a byte and sits beside Raw, sharing one padded word.
+	// optimization: Kind is a byte and sits beside At, sharing one padded word.
 	//   measured: unsafe.Sizeof(Token{}) 88 -> 80 B; describe targets retains
 	//   the cached tokens of every module it loads, 1.6 MB less.
 	//   trade-off: fields are not in reading order.
 	Kind Kind
-	// Raw marks an Ident that was written in the free-identifier form @"...".
-	// Its spelling is whatever the quotes held, so the reserved-word rule that
-	// governs ordinary identifiers does not apply to it.
-	Raw   bool
+	// At marks an Ident written in the free-identifier form @"...". Its spelling
+	// is whatever the quotes held, so the reserved-word rule does not apply.
+	At    bool
 	Val   string       // raw text (ident, plain string, number)
 	Parts []StringPart // only for InterpStr
 	Line  int
@@ -355,8 +354,9 @@ type Token struct {
 	Doc string
 }
 
-// lexer tokenizes a Buzz source string.
-type lexer struct {
+// scanner tokenizes a Buzz source string.
+type scanner struct {
+	host   *Scanner // nil scans upstream Buzz
 	src    string
 	pos    int
 	line   int
@@ -383,9 +383,15 @@ var scratch = sync.Pool{New: func() any { return new([]Token) }}
 // 1<<16 kept 4 MB more live at exit for 2 MB less allocated.
 const maxScratch = 1 << 14
 
-// Tokenize lexes src and returns the complete token stream including EOF. The
-// returned slice has no spare capacity and belongs to the caller.
+// Tokenize lexes src as upstream Buzz: it is (*Scanner)(nil).Tokenize.
 func Tokenize(src string) ([]Token, error) {
+	return (*Scanner)(nil).Tokenize(src)
+}
+
+// Tokenize lexes src and returns the complete token stream including EOF. A nil
+// s scans upstream Buzz. The returned slice has no spare capacity and belongs to
+// the caller. Safe for concurrent use.
+func (s *Scanner) Tokenize(src string) ([]Token, error) {
 	// optimization: lex into a pooled buffer and return an exact-length copy.
 	//   measured: BenchmarkTokenize -44% B/op, BenchmarkParseCacheMiss -41% B/op
 	//   (benchstat, n=10); in describe targets the 50 MB newLexer allocated plus
@@ -398,126 +404,126 @@ func Tokenize(src string) ([]Token, error) {
 	if bound := len(src)/4 + 16; cap(*buf) < bound {
 		*buf = make([]Token, 0, bound)
 	}
-	l := lexer{src: src, line: 1, col: 1, tokens: (*buf)[:0]}
-	err := l.tokenize()
+	sc := scanner{host: s, src: src, line: 1, col: 1, tokens: (*buf)[:0]}
+	err := sc.tokenize()
 	var out []Token
 	if err == nil {
-		out = make([]Token, len(l.tokens))
-		copy(out, l.tokens)
+		out = make([]Token, len(sc.tokens))
+		copy(out, sc.tokens)
 	}
-	clear(l.tokens)
-	if cap(l.tokens) <= maxScratch {
-		*buf = l.tokens[:0]
+	clear(sc.tokens)
+	if cap(sc.tokens) <= maxScratch {
+		*buf = sc.tokens[:0]
 		scratch.Put(buf)
 	}
 	return out, err
 }
 
-func (l *lexer) tokenize() error {
+func (sc *scanner) tokenize() error {
 	for {
-		l.skipWhitespaceAndComments()
-		if l.pos >= len(l.src) {
-			l.tokens = append(l.tokens, Token{Kind: EOF, Line: l.line, Col: l.col})
+		sc.skipWhitespaceAndComments()
+		if sc.pos >= len(sc.src) {
+			sc.tokens = append(sc.tokens, Token{Kind: EOF, Line: sc.line, Col: sc.col})
 			return nil
 		}
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
-		tok, err := l.nextToken(r, size)
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
+		tok, err := sc.nextToken(r, size)
 		if err != nil {
 			return err
 		}
 		// Attach a pending doc block only to the token directly below it (no blank
 		// line); either way the pending block is consumed so it can't leak onto a
 		// later token.
-		if l.hasPendingDoc() {
-			if tok.Line == l.pendingDocLine+1 {
-				tok.Doc = l.joinPendingDoc()
+		if sc.hasPendingDoc() {
+			if tok.Line == sc.pendingDocLine+1 {
+				tok.Doc = sc.joinPendingDoc()
 			}
-			l.pendingDoc = l.pendingDoc[:0]
+			sc.pendingDoc = sc.pendingDoc[:0]
 		}
-		l.tokens = append(l.tokens, tok)
-		l.lastTokenLine = l.line
+		sc.tokens = append(sc.tokens, tok)
+		sc.lastTokenLine = sc.line
 	}
 }
 
 // hasPendingDoc reports whether the pending block joins to a non-empty doc. A
 // block that starts with an empty comment line restarts at its next line, so an
 // empty first line only ever appears alone.
-func (l *lexer) hasPendingDoc() bool {
-	return len(l.pendingDoc) > 0 && l.pendingDoc[0] != ""
+func (sc *scanner) hasPendingDoc() bool {
+	return len(sc.pendingDoc) > 0 && sc.pendingDoc[0] != ""
 }
 
-func (l *lexer) joinPendingDoc() string {
-	if len(l.pendingDoc) == 1 {
-		return l.pendingDoc[0]
+func (sc *scanner) joinPendingDoc() string {
+	if len(sc.pendingDoc) == 1 {
+		return sc.pendingDoc[0]
 	}
-	return strings.Join(l.pendingDoc, "\n")
+	return strings.Join(sc.pendingDoc, "\n")
 }
 
 // recordDoc adds a just-scanned comment's text to the pending block. A line gap
 // from the previous comment line starts a fresh block, so only a contiguous run is
 // kept.
-func (l *lexer) recordDoc(text string, line int) {
+func (sc *scanner) recordDoc(text string, line int) {
 	// optimization: lines are joined once, and only for a block that lands on a
 	// token; most comments (headers, section notes, anything above a blank line)
 	// never do.
 	//   measured: describe targets doc text 4.8 MB -> 0.7 MB allocated
 	//   (GODEBUG=memprofilerate=1).
-	//   trade-off: a lexer-lifetime slice of line strings.
-	if !l.hasPendingDoc() || line != l.pendingDocLine+1 {
-		l.pendingDoc = l.pendingDoc[:0]
+	//   trade-off: a scanner-lifetime slice of line strings.
+	if !sc.hasPendingDoc() || line != sc.pendingDocLine+1 {
+		sc.pendingDoc = sc.pendingDoc[:0]
 	}
-	l.pendingDoc = append(l.pendingDoc, text)
-	l.pendingDocLine = line
+	sc.pendingDoc = append(sc.pendingDoc, text)
+	sc.pendingDocLine = line
 }
 
-func (l *lexer) skipWhitespaceAndComments() {
-	for l.pos < len(l.src) {
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+func (sc *scanner) skipWhitespaceAndComments() {
+	for sc.pos < len(sc.src) {
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
 		if r == '\n' {
-			l.pos++
-			l.line++
-			l.col = 1
+			sc.pos++
+			sc.line++
+			sc.col = 1
 			continue
 		}
 		if unicode.IsSpace(r) {
-			l.pos += size
-			l.col += size
+			sc.pos += size
+			sc.col += size
 			continue
 		}
-		if r == '/' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '/' {
-			commentLine := l.line
-			start := l.pos + 2
-			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
-				l.pos++
+		if r == '/' && sc.pos+1 < len(sc.src) && sc.src[sc.pos+1] == '/' {
+			commentLine := sc.line
+			start := sc.pos + 2
+			for sc.pos < len(sc.src) && sc.src[sc.pos] != '\n' {
+				sc.pos++
 			}
-			l.col += l.pos - start + 2
-			if commentLine != l.lastTokenLine { // skip trailing comments
-				l.recordDoc(strings.TrimSpace(l.src[start:l.pos]), commentLine)
+			sc.col += sc.pos - start + 2
+			if commentLine != sc.lastTokenLine { // skip trailing comments
+				sc.recordDoc(strings.TrimSpace(sc.src[start:sc.pos]), commentLine)
 			}
 			continue
 		}
-		if r == '/' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '*' {
-			commentLine := l.line
-			l.pos += 2
-			l.col += 2
-			start := l.pos
-			for l.pos < len(l.src) {
-				if l.src[l.pos] == '\n' {
-					l.line++
-					l.col = 1
-					l.pos++
+		if r == '/' && sc.pos+1 < len(sc.src) && sc.src[sc.pos+1] == '*' {
+			commentLine := sc.line
+			sc.pos += 2
+			sc.col += 2
+			start := sc.pos
+			for sc.pos < len(sc.src) {
+				if sc.src[sc.pos] == '\n' {
+					sc.line++
+					sc.col = 1
+					sc.pos++
 					continue
 				}
-				if l.pos+1 < len(l.src) && l.src[l.pos] == '*' && l.src[l.pos+1] == '/' {
-					if commentLine != l.lastTokenLine { // skip trailing comments
-						l.recordDoc(strings.TrimSpace(l.src[start:l.pos]), l.line)
+				if sc.pos+1 < len(sc.src) && sc.src[sc.pos] == '*' && sc.src[sc.pos+1] == '/' {
+					if commentLine != sc.lastTokenLine { // skip trailing comments
+						sc.recordDoc(strings.TrimSpace(sc.src[start:sc.pos]), sc.line)
 					}
-					l.pos += 2
-					l.col += 2
+					sc.pos += 2
+					sc.col += 2
 					break
 				}
-				l.pos++
-				l.col++
+				sc.pos++
+				sc.col++
 			}
 			continue
 		}
@@ -525,12 +531,23 @@ func (l *lexer) skipWhitespaceAndComments() {
 	}
 }
 
-func (l *lexer) nextToken(r rune, size int) (Token, error) {
-	startLine := l.line
-	startCol := l.col
+func (sc *scanner) nextToken(r rune, size int) (Token, error) {
+	startLine := sc.line
+	startCol := sc.col
 	simple := func(k Kind, n int) Token {
-		l.advance(n)
+		sc.advance(n)
 		return Token{Kind: k, Line: startLine, Col: startCol}
+	}
+
+	if sc.host != nil && r < utf8.RuneSelf && sc.host.prefixes[r] {
+		lit, n, err := sc.claim()
+		if err != nil {
+			return Token{}, err
+		}
+		if n > 0 {
+			sc.skip(n)
+			return Token{Kind: String, Val: lit, Line: startLine, Col: startCol}, nil
+		}
 	}
 
 	switch r {
@@ -553,63 +570,63 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 	case ':':
 		return simple(Colon, size), nil
 	case '.':
-		if l.peekByte() == '.' {
+		if sc.peekByte() == '.' {
 			return simple(DotDot, 2), nil
 		}
 		return simple(Dot, size), nil
 	case '+':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(PlusAssign, 2), nil
 		}
 		return simple(Plus, size), nil
 	case '&':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(AmpAssign, 2), nil
 		}
 		return simple(Amp, size), nil
 	case '|':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(PipeAssign, 2), nil
 		}
 		return simple(Pipe, size), nil
 	case '^':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(CaretAssign, 2), nil
 		}
 		return simple(Caret, size), nil
 	case '~':
 		return simple(Tilde, size), nil
 	case '*':
-		if l.peekByte() == '>' {
+		if sc.peekByte() == '>' {
 			return simple(YieldArrow, 2), nil
 		}
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(StarAssign, 2), nil
 		}
 		return simple(Star, size), nil
 	case '/':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(SlashAssign, 2), nil
 		}
 		return simple(Slash, size), nil
 	case '%':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(PercentAssign, 2), nil
 		}
 		return simple(Percent, size), nil
 	case '=':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(Eq, 2), nil
 		}
-		if l.peekByte() == '>' {
+		if sc.peekByte() == '>' {
 			return simple(FatArrow, 2), nil
 		}
 		return simple(Assign, size), nil
 	case '!':
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(Neq, 2), nil
 		}
-		if l.peekByte() == '>' {
+		if sc.peekByte() == '>' {
 			return simple(ErrArrow, 2), nil
 		}
 		return simple(Bang, size), nil
@@ -617,98 +634,98 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		// `<<` wins over `<` here, matching upstream's scanner. It costs nested
 		// generic type arguments (`::<A::<B>>` scans as `... Shr`), a limitation
 		// upstream shares for the same reason.
-		if l.peekByte() == '<' {
-			if l.peekByteAt(2) == '=' {
+		if sc.peekByte() == '<' {
+			if sc.peekByteAt(2) == '=' {
 				return simple(ShlAssign, 3), nil
 			}
 			return simple(Shl, 2), nil
 		}
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(Le, 2), nil
 		}
 		return simple(Lt, size), nil
 	case '>':
-		if l.peekByte() == '>' {
-			if l.peekByteAt(2) == '=' {
+		if sc.peekByte() == '>' {
+			if sc.peekByteAt(2) == '=' {
 				return simple(ShrAssign, 3), nil
 			}
 			return simple(Shr, 2), nil
 		}
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(Ge, 2), nil
 		}
 		return simple(Gt, size), nil
 	case '?':
-		if l.peekByte() == '?' {
+		if sc.peekByte() == '?' {
 			return simple(Coalesce, 2), nil
 		}
 		return simple(Question, size), nil
 	case '-':
-		if l.peekByte() == '>' {
+		if sc.peekByte() == '>' {
 			return simple(Arrow, 2), nil
 		}
-		if l.peekByte() == '=' {
+		if sc.peekByte() == '=' {
 			return simple(MinusAssign, 2), nil
 		}
 		// Negative numeric literal vs minus operator is resolved by the parser
 		// (unary). Always emit minus here.
 		return simple(Minus, size), nil
 	case '\'':
-		return l.lexChar(startLine, startCol)
+		return sc.lexChar(startLine, startCol)
 	case '"':
-		return l.lexString(startLine, startCol)
+		return sc.lexString(startLine, startCol)
 	case '`':
-		return l.lexRawString(startLine, startCol)
+		return sc.lexMultilineString(startLine, startCol)
 	case '$':
-		if l.peekByte() == '"' {
-			return l.lexPattern(startLine, startCol)
+		if sc.peekByte() == '"' {
+			return sc.lexPattern(startLine, startCol)
 		}
-		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
+		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, sc.line, sc.col)
 	case '\\':
 		return simple(Backslash, size), nil
 	case '@':
-		// Free (raw) identifier: @"any text" names a binding, field, or member
-		// whose spelling the ordinary identifier rules would reject, including a
-		// reserved word or a name with punctuation in it.
-		if l.peekByte() == '"' {
-			l.pos++ // '@'
-			l.col++
-			t, err := l.lexString(startLine, startCol)
+		// Free identifier: @"any text" names a binding, field, or member that the
+		// ordinary identifier rules would reject. A reserved word qualifies, and so
+		// does a name with punctuation in it.
+		if sc.peekByte() == '"' {
+			sc.pos++ // '@'
+			sc.col++
+			t, err := sc.lexString(startLine, startCol)
 			if err != nil {
 				return Token{}, err
 			}
 			if t.Kind != String {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: a free identifier cannot interpolate", startLine, startCol)
 			}
-			return Token{Kind: Ident, Val: t.Val, Raw: true, Line: startLine, Col: startCol}, nil
+			return Token{Kind: Ident, Val: t.Val, At: true, Line: startLine, Col: startCol}, nil
 		}
-		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
+		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, sc.line, sc.col)
 	}
 
 	if r >= '0' && r <= '9' {
-		return l.lexNumber(startLine, startCol)
+		return sc.lexNumber(startLine, startCol)
 	}
 	if isIdentStart(r) {
-		return l.lexIdent(startLine, startCol)
+		return sc.lexIdent(startLine, startCol)
 	}
-	return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
+	return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, sc.line, sc.col)
 }
 
-func (l *lexer) advance(n int) {
-	l.pos += n
-	l.col += n
+func (sc *scanner) advance(n int) {
+	sc.pos += n
+	sc.col += n
 }
 
 // peekByte returns the byte one position ahead of the current one, or 0.
-func (l *lexer) peekByte() byte { return l.peekByteAt(1) }
+func (sc *scanner) peekByte() byte { return sc.peekByteAt(1) }
 
 // peekByteAt returns the byte n positions ahead of the current one, or 0. The
 // three-byte compound shifts (`<<=`, `>>=`) need to look two ahead.
-func (l *lexer) peekByteAt(n int) byte {
-	if l.pos+n >= len(l.src) {
+func (sc *scanner) peekByteAt(n int) byte {
+	if sc.pos+n >= len(sc.src) {
 		return 0
 	}
-	return l.src[l.pos+n]
+	return sc.src[sc.pos+n]
 }
 
 // lexString scans a double-quoted string, splitting on {expr} interpolation.
@@ -716,39 +733,39 @@ func (l *lexer) peekByteAt(n int) byte {
 // holding the rune's codepoint; upstream compares them against integers directly
 // (`'\” == 39`), so a char IS an int and needs no distinct token kind, no distinct
 // value tag, and no VM support at all.
-func (l *lexer) lexChar(line, col int) (Token, error) {
-	l.pos++ // opening quote
-	l.col++
-	if l.pos >= len(l.src) {
+func (sc *scanner) lexChar(line, col int) (Token, error) {
+	sc.pos++ // opening quote
+	sc.col++
+	if sc.pos >= len(sc.src) {
 		return Token{}, fmt.Errorf("buzz: unterminated character literal at line %d:%d", line, col)
 	}
 
-	r := rune(l.src[l.pos])
+	r := rune(sc.src[sc.pos])
 	if r == '\\' {
-		l.pos++
-		l.col++
-		if l.pos >= len(l.src) {
+		sc.pos++
+		sc.col++
+		if sc.pos >= len(sc.src) {
 			return Token{}, fmt.Errorf("buzz: unterminated escape in character literal at line %d:%d", line, col)
 		}
-		esc, ok := charEscapes[l.src[l.pos]]
+		esc, ok := charEscapes[sc.src[sc.pos]]
 		if !ok {
-			return Token{}, fmt.Errorf("buzz: unknown escape %q in character literal at line %d:%d", string(l.src[l.pos]), line, col)
+			return Token{}, fmt.Errorf("buzz: unknown escape %q in character literal at line %d:%d", string(sc.src[sc.pos]), line, col)
 		}
 		r = esc
 	}
-	if l.src[l.pos] == '\n' {
-		l.line++
-		l.col = 1
+	if sc.src[sc.pos] == '\n' {
+		sc.line++
+		sc.col = 1
 	} else {
-		l.col++
+		sc.col++
 	}
-	l.pos++
+	sc.pos++
 
-	if l.pos >= len(l.src) || l.src[l.pos] != '\'' {
+	if sc.pos >= len(sc.src) || sc.src[sc.pos] != '\'' {
 		return Token{}, fmt.Errorf("buzz: unterminated character literal at line %d:%d", line, col)
 	}
-	l.pos++ // closing quote
-	l.col++
+	sc.pos++ // closing quote
+	sc.col++
 	return Token{Kind: Int, Val: strconv.Itoa(int(r)), Line: line, Col: col}, nil
 }
 
@@ -770,18 +787,17 @@ var charEscapes = map[byte]rune{
 	'\'': '\'', '"': '"', '\\': '\\',
 }
 
-func (l *lexer) lexString(line, col int) (Token, error) {
-	l.pos++ // opening "
-	l.col++
+func (sc *scanner) lexString(line, col int) (Token, error) {
+	sc.pos++ // opening "
+	sc.col++
 	var parts []StringPart
-	// optimization: a literal run is a slice of src until an escape rewrites it;
-	// only then is it copied into lit, which holds the run from there on. The
-	// raw string and captureInterpExpr slice src the same way.
+	// optimization: a literal run slices src until an escape copies it into lit.
+	// Multiline strings and captureInterpExpr slice src the same way.
 	//   measured: BenchmarkTokenize 1446 -> 575 allocs/op (benchstat, n=10).
 	//   trade-off: a literal pins its source text, as identifiers already do.
 	var lit strings.Builder
 	escaped := false
-	runStart := l.pos
+	runStart := sc.pos
 	hasExpr := false
 	hidden := 0 // see StringPart.Col
 
@@ -790,18 +806,18 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			parts = append(parts, StringPart{Text: lit.String()})
 			lit.Reset()
 			escaped = false
-		} else if l.pos > runStart {
-			parts = append(parts, StringPart{Text: validRunes(l.src[runStart:l.pos])})
+		} else if sc.pos > runStart {
+			parts = append(parts, StringPart{Text: validRunes(sc.src[runStart:sc.pos])})
 		}
 	}
 
-	for l.pos < len(l.src) {
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+	for sc.pos < len(sc.src) {
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
 		switch r {
 		case '"':
 			flushLit()
-			l.pos++
-			l.col++
+			sc.pos++
+			sc.col++
 			if !hasExpr {
 				s := ""
 				if len(parts) == 1 {
@@ -811,14 +827,14 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			}
 			return Token{Kind: InterpStr, Parts: parts, Line: line, Col: col}, nil
 		case '\\':
-			if l.pos+1 < len(l.src) {
+			if sc.pos+1 < len(sc.src) {
 				if !escaped {
-					lit.WriteString(validRunes(l.src[runStart:l.pos]))
+					lit.WriteString(validRunes(sc.src[runStart:sc.pos]))
 					escaped = true
 				}
-				l.pos++
-				l.col++
-				esc, esz := utf8.DecodeRuneInString(l.src[l.pos:])
+				sc.pos++
+				sc.col++
+				esc, esz := utf8.DecodeRuneInString(sc.src[sc.pos:])
 				switch esc {
 				case 'n':
 					lit.WriteByte('\n')
@@ -838,26 +854,26 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 					// \NNN is a DECIMAL byte escape, not octal: upstream asserts
 					// "\008" is 8 and "\012" is 12, which octal would make 8 and 10.
 					// Exactly three digits, so "\0" followed by text stays unambiguous.
-					if esc >= '0' && esc <= '9' && l.pos+3 <= len(l.src) && allDigits(l.src[l.pos:l.pos+3]) {
-						n, err := strconv.Atoi(l.src[l.pos : l.pos+3])
+					if esc >= '0' && esc <= '9' && sc.pos+3 <= len(sc.src) && allDigits(sc.src[sc.pos:sc.pos+3]) {
+						n, err := strconv.Atoi(sc.src[sc.pos : sc.pos+3])
 						if err != nil || n > 255 {
-							return Token{}, fmt.Errorf("buzz: invalid escape %q in string at line %d:%d", l.src[l.pos:l.pos+3], line, col)
+							return Token{}, fmt.Errorf("buzz: invalid escape %q in string at line %d:%d", sc.src[sc.pos:sc.pos+3], line, col)
 						}
 						lit.WriteByte(byte(n))
-						l.pos += 3
-						l.col += 3
+						sc.pos += 3
+						sc.col += 3
 						continue
 					}
 					lit.WriteRune('\\')
 					lit.WriteRune(esc)
 				}
-				l.pos += esz
+				sc.pos += esz
 				if esc == '\n' {
-					l.line++
-					l.col = 1
+					sc.line++
+					sc.col = 1
 					hidden = 0
 				} else {
-					l.col += esz
+					sc.col += esz
 				}
 				continue
 			}
@@ -866,32 +882,32 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			// Begin interpolation: capture balanced expression source.
 			hasExpr = true
 			flushLit()
-			l.pos++
-			l.col++
-			exprLine, exprCol := l.line, l.col-1-hidden
-			expr, err := l.captureInterpExpr(line, col, true)
+			sc.pos++
+			sc.col++
+			exprLine, exprCol := sc.line, sc.col-1-hidden
+			expr, err := sc.captureInterpExpr(line, col, true)
 			if err != nil {
 				return Token{}, err
 			}
 			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
 			hidden = hiddenAfter(hidden, expr)
-			runStart = l.pos
+			runStart = sc.pos
 			continue
 		case '\n':
-			l.line++
-			l.col = 1
+			sc.line++
+			sc.col = 1
 			hidden = 0
 			if escaped {
 				lit.WriteRune(r)
 			}
-			l.pos += size
+			sc.pos += size
 			continue
 		default:
 			if escaped {
 				lit.WriteRune(r)
 			}
-			l.pos += size
-			l.col += size
+			sc.pos += size
+			sc.col += size
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
@@ -921,14 +937,12 @@ func validRunes(s string) string {
 	return sb.String()
 }
 
-// lexRawString scans a backtick-quoted raw string — upstream Buzz's multiline
-// string form, used above all for zdef declaration blocks. Every byte up to the
-// closing backtick is literal, newlines included; the two exceptions are the \{
-// escape and `{ ... }` interpolation, whose text is left verbatim in the value for
-// the parser to split later.
-func (l *lexer) lexRawString(line, col int) (Token, error) {
-	l.pos++ // opening `
-	l.col++
+// lexMultilineString scans upstream's backtick form, which zdef blocks use most.
+// Every byte up to the closing backtick is literal, newlines included, except
+// the \{ escape and `{ ... }` interpolation. The parser splits those later.
+func (sc *scanner) lexMultilineString(line, col int) (Token, error) {
+	sc.pos++ // opening `
+	sc.col++
 	// Structured exactly like lexString: literal runs accumulate into lit, an
 	// interpolation is captured whole by captureInterpExpr, and the token is a plain
 	// String only when no interpolation appeared. Scanning for the closing backtick
@@ -938,39 +952,37 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 	escaped := false
 	hasExpr := false
 	hidden := 0 // see StringPart.Col
-	start := l.pos
-	runStart := l.pos
+	start := sc.pos
+	runStart := sc.pos
 	flushLit := func() {
 		if escaped {
 			parts = append(parts, StringPart{Text: lit.String()})
 			lit.Reset()
 			escaped = false
-		} else if l.pos > runStart {
-			parts = append(parts, StringPart{Text: l.src[runStart:l.pos]})
+		} else if sc.pos > runStart {
+			parts = append(parts, StringPart{Text: sc.src[runStart:sc.pos]})
 		}
 	}
-	for l.pos < len(l.src) {
-		c := l.src[l.pos]
-		// A raw string needs a way to write a literal brace, since it interpolates;
-		// upstream spells that \{. Nothing else is unescaped: that is what "raw" means,
-		// and a regex or Windows path inside one must survive intact. Handled before the
-		// switch so an escaped brace never opens an interpolation.
-		if c == '\\' && l.pos+1 < len(l.src) && (l.src[l.pos+1] == '{' || l.src[l.pos+1] == '}') {
+	for sc.pos < len(sc.src) {
+		c := sc.src[sc.pos]
+		// Upstream spells a literal brace \{. Nothing else unescapes, so a regex or
+		// Windows path survives intact. Checked first so \{ never interpolates.
+		if c == '\\' && sc.pos+1 < len(sc.src) && (sc.src[sc.pos+1] == '{' || sc.src[sc.pos+1] == '}') {
 			if !escaped {
-				lit.WriteString(l.src[runStart:l.pos])
+				lit.WriteString(sc.src[runStart:sc.pos])
 				escaped = true
 			}
-			lit.WriteByte(l.src[l.pos+1])
-			l.pos += 2
-			l.col += 2
+			lit.WriteByte(sc.src[sc.pos+1])
+			sc.pos += 2
+			sc.col += 2
 			continue
 		}
 		switch c {
 		case '`':
-			raw := l.src[start:l.pos]
+			written := sc.src[start:sc.pos]
 			flushLit()
-			l.pos++
-			l.col++
+			sc.pos++
+			sc.col++
 			if !hasExpr {
 				s := ""
 				if len(parts) == 1 {
@@ -978,43 +990,39 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 				}
 				return Token{Kind: String, Val: s, Line: line, Col: col}, nil
 			}
-			// Val carries the text EXACTLY as written, interpolation delimiters included,
-			// alongside the split Parts. A zdef declaration block is a raw string full of
-			// braces (`extern struct { id: c_int }`) and upstream never interpolates it:
-			// zdefStatement hands the raw token to its FFI parser rather than to the string
-			// parser. Keeping both lets the value path interpolate while zdef reads the
-			// block verbatim (see foldStringConcat).
-			return Token{Kind: InterpStr, Val: raw, Parts: parts, Line: line, Col: col}, nil
+			// Val keeps the text as written beside Parts. Upstream never interpolates
+			// a zdef block, so zdef reads Val (see foldStringConcat).
+			return Token{Kind: InterpStr, Val: written, Parts: parts, Line: line, Col: col}, nil
 		case '{':
 			hasExpr = true
 			flushLit()
-			l.pos++
-			l.col++
-			exprLine, exprCol := l.line, l.col-1-hidden
-			expr, err := l.captureInterpExpr(line, col, false)
+			sc.pos++
+			sc.col++
+			exprLine, exprCol := sc.line, sc.col-1-hidden
+			expr, err := sc.captureInterpExpr(line, col, false)
 			if err != nil {
 				return Token{}, err
 			}
 			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
 			hidden = hiddenAfter(hidden, expr)
-			runStart = l.pos
+			runStart = sc.pos
 		case '\n':
-			l.line++
-			l.col = 1
+			sc.line++
+			sc.col = 1
 			hidden = 0
 			if escaped {
 				lit.WriteByte(c)
 			}
-			l.pos++
+			sc.pos++
 		default:
 			if escaped {
 				lit.WriteByte(c)
 			}
-			l.pos++
-			l.col++
+			sc.pos++
+			sc.col++
 		}
 	}
-	return Token{}, fmt.Errorf("buzz: unterminated raw string at line %d:%d", line, col)
+	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
 }
 
 // lexPattern scans a $"..." pattern literal. Unlike a string, backslash escapes
@@ -1025,110 +1033,110 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 // backslash still defers the next byte either way, so an escaped delimiter does
 // not terminate the literal. The opening $ and " are consumed here; scanning stops
 // at the first unescaped ".
-func (l *lexer) lexPattern(line, col int) (Token, error) {
-	l.pos++ // $
-	l.col++
-	l.pos++ // opening "
-	l.col++
+func (sc *scanner) lexPattern(line, col int) (Token, error) {
+	sc.pos++ // $
+	sc.col++
+	sc.pos++ // opening "
+	sc.col++
 	var sb strings.Builder
-	for l.pos < len(l.src) {
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+	for sc.pos < len(sc.src) {
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
 		switch r {
 		case '\\':
-			l.pos += size
-			l.col += size
-			if l.pos < len(l.src) {
-				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
+			sc.pos += size
+			sc.col += size
+			if sc.pos < len(sc.src) {
+				r2, s2 := utf8.DecodeRuneInString(sc.src[sc.pos:])
 				// Only the delimiter escape collapses; every other escape reaches the
 				// regex engine with its backslash intact.
 				if r2 != '"' {
 					sb.WriteRune(r)
 				}
 				sb.WriteRune(r2)
-				l.pos += s2
+				sc.pos += s2
 				if r2 == '\n' {
-					l.line++
-					l.col = 1
+					sc.line++
+					sc.col = 1
 				} else {
-					l.col += s2
+					sc.col += s2
 				}
 			} else {
 				sb.WriteRune(r)
 			}
 		case '"':
-			l.pos++
-			l.col++
+			sc.pos++
+			sc.col++
 			return Token{Kind: Pat, Val: sb.String(), Line: line, Col: col}, nil
 		case '\n':
-			l.line++
-			l.col = 1
+			sc.line++
+			sc.col = 1
 			sb.WriteRune(r)
-			l.pos += size
+			sc.pos += size
 		default:
 			sb.WriteRune(r)
-			l.pos += size
-			l.col += size
+			sc.pos += size
+			sc.col += size
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated pattern at line %d:%d", line, col)
 }
 
-// captureInterpExpr reads source up to the matching closing brace, honoring
-// nested braces and embedded strings. The opening brace is already consumed.
-// The expression is returned exactly as written. With nest, an interpolation
-// inside an embedded string is captured too, as upstream's scanInterpolation
-// does, so a quote inside it cannot end that string. A raw string passes false:
-// its braces may hold JSON or a template rather than Buzz, and an unparsable
-// interpolation there stays literal text.
-func (l *lexer) captureInterpExpr(line, col int, nest bool) (string, error) {
+// captureInterpExpr returns the source up to the brace matching one already
+// consumed. With nest it captures interpolations inside nested strings too, as
+// upstream's scanInterpolation does. A multiline string passes false, since
+// its braces may hold JSON or a template.
+func (sc *scanner) captureInterpExpr(line, col int, nest bool) (string, error) {
 	depth := 1
-	start := l.pos
-	for l.pos < len(l.src) {
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+	start := sc.pos
+	for sc.pos < len(sc.src) {
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
+		// A host literal may hold `"` or `}`, so it is skipped whole. A bad one is
+		// left to the parser, which lexes the hole again and reports it.
+		if sc.host != nil && r < utf8.RuneSelf && sc.host.prefixes[r] && !sc.inIdent(start) {
+			if _, n, err := sc.claim(); err == nil && n > 0 {
+				sc.skip(n)
+				continue
+			}
+		}
 		switch r {
 		case '{':
 			depth++
 		case '}':
 			depth--
 			if depth == 0 {
-				expr := validRunes(l.src[start:l.pos])
-				l.pos++
-				l.col++
+				expr := validRunes(sc.src[start:sc.pos])
+				sc.pos++
+				sc.col++
 				return expr, nil
 			}
 		case '"', '`':
-			// Skip a nested string whole so its braces aren't miscounted. A BACKTICK
-			// string counts here too: an interpolation may hold a raw string, and its
-			// braces (or an unbalanced one in a zdef block) would otherwise close the
-			// interpolation early. A backslash skips the next rune in either kind:
-			// upstream's scanner lets \` escape a backtick, so "{`a\`}" is
-			// unterminated there as here, though lexRawString ends a top-level raw
-			// string at \`.
+			// Skip a nested string whole so its braces aren't miscounted. Upstream
+			// lets \` escape a backtick here, though not at the top level.
 			delim := r
-			l.pos += size
-			l.col += size
-			for l.pos < len(l.src) {
-				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
-				l.pos += s2
+			sc.pos += size
+			sc.col += size
+			for sc.pos < len(sc.src) {
+				r2, s2 := utf8.DecodeRuneInString(sc.src[sc.pos:])
+				sc.pos += s2
 				if r2 == '\n' {
-					l.line++
-					l.col = 1
+					sc.line++
+					sc.col = 1
 				} else {
-					l.col += s2
+					sc.col += s2
 				}
-				if r2 == '\\' && l.pos < len(l.src) {
-					r3, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
-					l.pos += s3
+				if r2 == '\\' && sc.pos < len(sc.src) {
+					r3, s3 := utf8.DecodeRuneInString(sc.src[sc.pos:])
+					sc.pos += s3
 					if r3 == '\n' {
-						l.line++
-						l.col = 1
+						sc.line++
+						sc.col = 1
 					} else {
-						l.col += s3
+						sc.col += s3
 					}
 					continue
 				}
 				if r2 == '{' && nest {
-					if _, err := l.captureInterpExpr(line, col, nest); err != nil {
+					if _, err := sc.captureInterpExpr(line, col, nest); err != nil {
 						return "", err
 					}
 					continue
@@ -1139,13 +1147,13 @@ func (l *lexer) captureInterpExpr(line, col int, nest bool) (string, error) {
 			}
 			continue
 		case '\n':
-			l.line++
-			l.col = 1
-			l.pos += size
+			sc.line++
+			sc.col = 1
+			sc.pos += size
 			continue
 		}
-		l.pos += size
-		l.col += size
+		sc.pos += size
+		sc.col += size
 	}
 	return "", fmt.Errorf("buzz: unterminated interpolation at line %d:%d", line, col)
 }
@@ -1160,22 +1168,22 @@ func (l *lexer) captureInterpExpr(line, col int, nest bool) (string, error) {
 // Underscores are permitted between digits as a readability separator, but
 // must not appear at the start or end of the digit run; upstream rejects
 // those with "'_' must be between digits". Upstream has NO octal prefix
-// (0o) and NO float exponent syntax (e/E); this lexer matches that.
+// (0o) and NO float exponent syntax (e/E); this scanner matches that.
 // Leading zero on a decimal stays decimal (no implicit-octal C footgun).
-func (l *lexer) lexNumber(line, col int) (Token, error) {
-	start := l.pos
+func (sc *scanner) lexNumber(line, col int) (Token, error) {
+	start := sc.pos
 	// Non-decimal prefix: 0x (hex) or 0b (binary). Lowercase only: upstream
 	// dispatches on '0' followed by literal 'x' / 'b'.
-	if l.pos+1 < len(l.src) && l.src[l.pos] == '0' {
-		switch l.src[l.pos+1] {
+	if sc.pos+1 < len(sc.src) && sc.src[sc.pos] == '0' {
+		switch sc.src[sc.pos+1] {
 		case 'x':
-			l.pos += 2
-			l.col += 2
-			for l.pos < len(l.src) && isHexDigit(l.src[l.pos]) {
-				l.pos++
-				l.col++
+			sc.pos += 2
+			sc.col += 2
+			for sc.pos < len(sc.src) && isHexDigit(sc.src[sc.pos]) {
+				sc.pos++
+				sc.col++
 			}
-			raw := l.src[start:l.pos]
+			raw := sc.src[start:sc.pos]
 			if len(raw) == 2 {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated hexa literal", line, col)
 			}
@@ -1187,13 +1195,13 @@ func (l *lexer) lexNumber(line, col int) (Token, error) {
 			}
 			return Token{Kind: Int, Val: raw, Line: line, Col: col}, nil
 		case 'b':
-			l.pos += 2
-			l.col += 2
-			for l.pos < len(l.src) && isBinaryDigit(l.src[l.pos]) {
-				l.pos++
-				l.col++
+			sc.pos += 2
+			sc.col += 2
+			for sc.pos < len(sc.src) && isBinaryDigit(sc.src[sc.pos]) {
+				sc.pos++
+				sc.col++
 			}
-			raw := l.src[start:l.pos]
+			raw := sc.src[start:sc.pos]
 			if len(raw) == 2 {
 				return Token{}, fmt.Errorf("buzz: line %d:%d: unterminated binary literal", line, col)
 			}
@@ -1206,29 +1214,29 @@ func (l *lexer) lexNumber(line, col int) (Token, error) {
 	}
 	// Decimal integer or float.
 	isFloat := false
-	for l.pos < len(l.src) && isDecimalDigit(l.src[l.pos]) {
-		l.pos++
-		l.col++
+	for sc.pos < len(sc.src) && isDecimalDigit(sc.src[sc.pos]) {
+		sc.pos++
+		sc.col++
 	}
 	// Match upstream: '_' must not trail the integer part.
-	if l.pos > start && l.src[l.pos-1] == '_' {
+	if sc.pos > start && sc.src[sc.pos-1] == '_' {
 		return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 	}
-	if l.pos < len(l.src) && l.src[l.pos] == '.' &&
-		l.pos+1 < len(l.src) && l.src[l.pos+1] >= '0' && l.src[l.pos+1] <= '9' {
+	if sc.pos < len(sc.src) && sc.src[sc.pos] == '.' &&
+		sc.pos+1 < len(sc.src) && sc.src[sc.pos+1] >= '0' && sc.src[sc.pos+1] <= '9' {
 		isFloat = true
-		l.pos++
-		l.col++
-		fracStart := l.pos
-		for l.pos < len(l.src) && isDecimalDigit(l.src[l.pos]) {
-			l.pos++
-			l.col++
+		sc.pos++
+		sc.col++
+		fracStart := sc.pos
+		for sc.pos < len(sc.src) && isDecimalDigit(sc.src[sc.pos]) {
+			sc.pos++
+			sc.col++
 		}
-		if l.pos > fracStart && l.src[l.pos-1] == '_' {
+		if sc.pos > fracStart && sc.src[sc.pos-1] == '_' {
 			return Token{}, fmt.Errorf("buzz: line %d:%d: '_' must be between digits", line, col)
 		}
 	}
-	raw := l.src[start:l.pos]
+	raw := sc.src[start:sc.pos]
 	if isFloat {
 		return Token{Kind: Float, Val: raw, Line: line, Col: col}, nil
 	}
@@ -1246,17 +1254,17 @@ func isHexDigit(b byte) bool {
 // isBinaryDigit accepts 0, 1, or _.
 func isBinaryDigit(b byte) bool { return b == '0' || b == '1' || b == '_' }
 
-func (l *lexer) lexIdent(line, col int) (Token, error) {
-	start := l.pos
-	for l.pos < len(l.src) {
-		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
+func (sc *scanner) lexIdent(line, col int) (Token, error) {
+	start := sc.pos
+	for sc.pos < len(sc.src) {
+		r, size := utf8.DecodeRuneInString(sc.src[sc.pos:])
 		if !isIdentContinue(r) {
 			break
 		}
-		l.pos += size
-		l.col += size
+		sc.pos += size
+		sc.col += size
 	}
-	word := l.src[start:l.pos]
+	word := sc.src[start:sc.pos]
 	if kind, ok := keywords[word]; ok {
 		return Token{Kind: kind, Val: word, Line: line, Col: col}, nil
 	}

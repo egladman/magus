@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestParse_ValidProgram(t *testing.T) {
@@ -210,12 +212,12 @@ func TestParseCache_SharedAcrossSessions(t *testing.T) {
 	first := NewSession(ctx, WithEmbedded(), WithParseCache(c))
 	require.NoError(t, first.Exec(ctx, src))
 	assert.Equal(t, int64(42), first.GetGlobal("answer").AsInt())
-	require.Equal(t, []string{src}, slices.Collect(maps.Keys(c.tokens)))
+	require.Equal(t, []parseKey{{src: src}}, slices.Collect(maps.Keys(c.tokens)))
 	assert.Equal(t, entrySize(t, src), c.bytes)
 
 	swapped, err := token.Tokenize("var answer = 7;")
 	require.NoError(t, err)
-	c.tokens[src] = swapped
+	c.tokens[parseKey{src: src}] = swapped
 
 	second := NewSession(ctx, WithEmbedded(), WithParseCache(c))
 	require.NoError(t, second.Exec(ctx, src))
@@ -242,7 +244,7 @@ fun greet(name: str) > str {
 }
 var msg = greet("buzz");`)
 	c := NewParseCache(1 << 20)
-	toks, err := c.tokenize(src)
+	toks, err := c.tokenize(nil, src)
 	require.NoError(t, err)
 	want := make([]token.Token, len(toks))
 	for i, tok := range toks {
@@ -256,7 +258,7 @@ var msg = greet("buzz");`)
 		assert.Empty(t, s.Diagnostics(src))
 	}
 
-	got := c.tokens[src]
+	got := c.tokens[parseKey{src: src}]
 	assert.Equal(t, want, got)
 	assert.Same(t, &toks[0], &got[0], "the entry must be the one first cached, not a replacement")
 }
@@ -289,12 +291,12 @@ func TestParseCache_StartsOverAtTheBound(t *testing.T) {
 	a, b := padded("var a = 1;"), padded("var b = 2;")
 	c := NewParseCache(entrySize(t, a) + entrySize(t, b) - 1)
 
-	_, err := c.tokenize(a)
+	_, err := c.tokenize(nil, a)
 	require.NoError(t, err)
-	_, err = c.tokenize(b)
+	_, err = c.tokenize(nil, b)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{b}, slices.Collect(maps.Keys(c.tokens)))
+	assert.Equal(t, []parseKey{{src: b}}, slices.Collect(maps.Keys(c.tokens)))
 	assert.Equal(t, entrySize(t, b), c.bytes)
 }
 
@@ -306,7 +308,7 @@ func TestParseCache_RetainsNothingItCannotHold(t *testing.T) {
 		"negative bound":              NewParseCache(-1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			toks, err := c.tokenize(src)
+			toks, err := c.tokenize(nil, src)
 			require.NoError(t, err)
 			assert.NotEmpty(t, toks)
 			assert.Empty(t, c.tokens)
@@ -318,9 +320,9 @@ func TestParseCache_RetainsNothingItCannotHold(t *testing.T) {
 func TestParseCache_SkipsShortAndUnlexableSources(t *testing.T) {
 	c := NewParseCache(1 << 20)
 
-	_, err := c.tokenize("var x = 1;")
+	_, err := c.tokenize(nil, "var x = 1;")
 	require.NoError(t, err)
-	_, err = c.tokenize(padded(`var s = "unterminated`))
+	_, err = c.tokenize(nil, padded(`var s = "unterminated`))
 	require.Error(t, err)
 
 	assert.Empty(t, c.tokens)
@@ -330,9 +332,9 @@ func TestParseCache_NilLexesAfresh(t *testing.T) {
 	var c *ParseCache
 	src := padded("var x = 1;")
 
-	a, err := c.tokenize(src)
+	a, err := c.tokenize(nil, src)
 	require.NoError(t, err)
-	b, err := c.tokenize(src)
+	b, err := c.tokenize(nil, src)
 	require.NoError(t, err)
 
 	assert.Equal(t, a, b)
@@ -623,4 +625,118 @@ func BenchmarkParseCacheMiss(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// quoteScanner adds a test-only form, q"..."q, whose content may hold `"` and `}`.
+func quoteScanner(t testing.TB) *token.Scanner {
+	t.Helper()
+	sc, err := token.NewScanner(token.LiteralScanner{
+		Name:   "quote",
+		Prefix: 'q',
+		Scan: func(src string) (string, int, error) {
+			if !strings.HasPrefix(src, `q"`) {
+				return "", 0, nil
+			}
+			end := strings.Index(src[2:], `"q`)
+			if end < 0 {
+				return "", 0, errors.New("unterminated quote literal")
+			}
+			return src[2 : 2+end], end + 4, nil
+		},
+	})
+	require.NoError(t, err)
+	return sc
+}
+
+// BenchmarkTokenizeWithScanner is BenchmarkTokenize with a literal registered
+// that the module never uses, so it measures the hook's cost alone.
+func BenchmarkTokenizeWithScanner(b *testing.B) {
+	sc := quoteScanner(b)
+	src := benchModule(30)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := sc.Tokenize(src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+type parserScannerSuite struct {
+	suite.Suite
+	quote *token.Scanner
+}
+
+func TestParserScannerSuite(t *testing.T) { suite.Run(t, new(parserScannerSuite)) }
+
+func (s *parserScannerSuite) SetupTest() { s.quote = quoteScanner(s.T()) }
+
+func (s *parserScannerSuite) stringValue(prog *ast.Program) string {
+	s.Require().Len(prog.Stmts, 1)
+	decl, ok := prog.Stmts[0].(*ast.DeclStmt)
+	s.Require().True(ok, "%T", prog.Stmts[0])
+	lit, ok := decl.Value.(*ast.StringLit)
+	s.Require().True(ok, "%T", decl.Value)
+	return lit.Val
+}
+
+func (s *parserScannerSuite) TestRawStringAfterABoundNameIsRefused() {
+	src := "final r = 1;\nfinal a = r\"x\";"
+	_, err := ParseEmbedded(src)
+	s.EqualError(err, "buzz: line 2:12: expected ';' after statement, got string literal")
+	_, err = Parse(src)
+	s.EqualError(err, "buzz: line 2:12: expected ';' after statement, got string literal")
+	_, err = ParseEmbedded("final r = 1;\nr\"x\";")
+	s.EqualError(err, "buzz: line 2:2: expected ';' after statement, got string literal")
+}
+
+func (s *parserScannerSuite) TestRawStringInACallIsRefused() {
+	_, err := ParseEmbedded(`f(r"x");`)
+	s.EqualError(err, "buzz: line 1:4: expected ')', got string literal")
+}
+
+func (s *parserScannerSuite) TestAStringOnTheNextLineStillEndsTheStatement() {
+	_, err := ParseEmbedded("final a = 1\n\"x\";")
+	s.NoError(err)
+}
+
+func (s *parserScannerSuite) TestParserLexesWithItsScanner() {
+	src := `final a = q"x"q;`
+	prog, err := Parser{Scanner: s.quote}.ParseEmbedded(src)
+	s.Require().NoError(err)
+	s.Equal("x", s.stringValue(prog))
+
+	_, err = Parser{}.ParseEmbedded(src)
+	s.EqualError(err, "buzz: line 1:12: expected ';' after statement, got string literal")
+}
+
+func (s *parserScannerSuite) TestInterpolationHoleLexesWithTheScanner() {
+	prog, err := Parser{Scanner: s.quote}.ParseEmbedded(`final a = "<{q"}"q}>";`)
+	s.Require().NoError(err)
+	decl, ok := prog.Stmts[0].(*ast.DeclStmt)
+	s.Require().True(ok)
+	interp, ok := decl.Value.(*ast.InterpExpr)
+	s.Require().True(ok, "%T", decl.Value)
+	s.Require().Len(interp.Parts, 3)
+	lit, ok := interp.Parts[1].Expr.(*ast.StringLit)
+	s.Require().True(ok, "%T", interp.Parts[1].Expr)
+	s.Equal("}", lit.Val)
+}
+
+func (s *parserScannerSuite) TestParseCacheKeepsAnEntryPerScanner() {
+	c := NewParseCache(1 << 20)
+	src := padded(`final a = q"x"q;`)
+	host := Parser{Scanner: s.quote, Cache: c}
+	plain := Parser{Cache: c}
+
+	prog, err := host.ParseEmbedded(src)
+	s.Require().NoError(err)
+	s.Equal("x", s.stringValue(prog))
+	_, err = plain.ParseEmbedded(src)
+	s.Error(err, "a plain parse must not read the host's tokens")
+	prog, err = host.ParseEmbedded(src)
+	s.Require().NoError(err)
+	s.Equal("x", s.stringValue(prog))
+
+	s.ElementsMatch([]parseKey{{src: src}, {scanner: s.quote, src: src}}, slices.Collect(maps.Keys(c.tokens)))
 }

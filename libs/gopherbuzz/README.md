@@ -160,6 +160,44 @@ Read that list as "the shape parses and runs", not as "matches upstream in every
 detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are): `as` coerces rather than asserts, a compound assign
 evaluates its target twice, and generics are erased outside an object's type arguments.
 
+### Host syntax
+
+A host can add a string-literal form to the scanner. gopherbuzz registers none, so
+with no scanner set it lexes exactly what upstream lexes.
+
+- `token.LiteralScanner{Name, Prefix, Scan}` is one form. `Prefix` is the ASCII
+  letter that opens it; `Scan` returns the literal's value and its width in bytes, or
+  0 to decline.
+- `token.NewScanner(...)` builds a `*token.Scanner`. Its zero value and a nil pointer
+  scan upstream Buzz, and `token.Tokenize(src)` is `(*token.Scanner)(nil).Tokenize(src)`.
+- `buzz.WithScanner(sc)` makes a session, its children and its imports lex with `sc`.
+  `buzz.Parser{Scanner, Cache}` gives the same choice to `Parse` and `ParseEmbedded`.
+
+A literal is asked only at a token start, outside comments, strings and patterns, and
+yields only a plain `String` token. The scanner refuses a claim no wider than the
+identifier at that position, so a literal never takes an identifier or a keyword, and
+it refuses a claim past the end of the source. Parsing, checking and compiling have no
+hook. Upstream has no token that is a letter followed directly by `"` or `#`, so every
+program upstream accepts lexes the same with or without a scanner.
+
+The parse cache keeps one entry per scanner. The bytecode cache folds `Scanner.Name()`
+into its key when it is not empty, so an upstream session's keys are unchanged.
+
+Upstream has no such hook. Its issue
+[#315, "Raw strings"](https://github.com/buzz-language/buzz/issues/315) asks for a
+string with no escapes, and a host literal is how gopherbuzz can carry one before
+upstream decides.
+
+These names and messages changed with the hook, as deliberate breaks:
+
+- The backtick form is a multiline string, as upstream calls it. An unterminated one
+  reports `buzz: unterminated string at line L:C`, upstream's wording, where it said
+  `unterminated raw string`.
+- `Token.Raw` is `Token.At`, after upstream's `atIdentifier`. It marks `@"..."`.
+- A string literal on the same line after a statement with no `;` is refused with
+  `expected ';' after statement`, as upstream's E74 refuses it. `final a = r"x";` used
+  to read as `final a = r` followed by the statement `"x"`.
+
 ### What does not
 
 **No open gaps remain.** Every one of the nine still-failing files is blocked by a
@@ -198,7 +236,7 @@ reproducible difference at the pinned ref.
 - **A backtick string interpolates, and an unparsable `{...}` stays literal.** Upstream
   interpolates too, but would reject the malformed case; here it silently becomes text.
   That leniency is load-bearing (it is what lets a Mustache template and a `zdef` block
-  live in a raw string), and it means a regex quantifier written `` `[0-9]{3}` `` becomes
+  live in a multiline string), and it means a regex quantifier written `` `[0-9]{3}` `` becomes
   `[0-9]3` with no diagnostic.
 
 **Checks that are recorded but not enforced.** Declared and then trusted.
@@ -608,7 +646,7 @@ under `buzz_safe`.
 - Strings and interpolation text slice the source rather than copy it, until an
   escape rewrites a run, and a doc comment block joins once, only when it lands
   on a token. A surviving literal pins its source string, as identifiers do.
-- `Token` is 80 bytes on 64-bit: `token.Kind` is a byte beside `Raw`, sharing
+- `Token` is 80 bytes on 64-bit: `token.Kind` is a byte beside `At`, sharing
   one padded word. The parse cache holds one `Token` per lexeme of every module
   it keeps; `TestTokenSize` pins the layout.
 

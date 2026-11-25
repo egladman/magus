@@ -112,7 +112,7 @@ func (s *stream) identRange(i int) (scip.Range, bool) {
 	}
 	t, text := s.toks[i], s.src.text
 	start := t.off
-	if t.Raw {
+	if t.At {
 		if !strings.HasPrefix(text[start:], `@"`) {
 			return scip.Range{}, false
 		}
@@ -122,7 +122,7 @@ func (s *stream) identRange(i int) (scip.Range, bool) {
 	if t.Val == "" || end > len(text) || text[start:end] != t.Val || strings.ContainsRune(t.Val, '\n') {
 		return scip.Range{}, false
 	}
-	if t.Raw && (end >= len(text) || text[end] != '"') {
+	if t.At && (end >= len(text) || text[end] != '"') {
 		return scip.Range{}, false
 	}
 	return s.src.span(start, end), true
@@ -201,7 +201,7 @@ func (s *stream) sub(i int) []*stream {
 
 // interpStarts returns the byte offset where each interpolated expression's
 // source begins in the string literal at off. It retraces token.lexString and
-// lexRawString, which keep only upstream's approximate columns.
+// lexMultilineString, which keep only upstream's approximate columns.
 func interpStarts(text string, off int) []int {
 	if off < 0 || off >= len(text) {
 		return nil
