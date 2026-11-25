@@ -63,12 +63,10 @@ func (h *Helper) ValueUse() bool {
 	return false
 }
 
-// find returns the private package-level functions of pass whose body is one
-// statement, or a nil check and then one return, keeping the ones keep
-// accepts. It skips a method, a generic function, init and main, a function
-// carrying a //go: directive, one holding a function literal, and one with a
-// same-named declaration in a file the build excludes, which is the other
-// half of a build-constrained pair.
+// find returns private package-level functions of pass with a one-statement
+// body, or a nil check and one return, that keep accepts. It skips methods,
+// generics, init, main, //go: and literals. A twin in an excluded file is a
+// build-constrained pair.
 func find(pass *analysis.Pass, ignored []*ast.File, keep func(*Helper) bool) []*Helper {
 	siblings := map[string]bool{}
 	for _, f := range ignored {
@@ -139,8 +137,8 @@ func candidate(fd *ast.FuncDecl) bool {
 	return true
 }
 
-// shape fills Expr, Returns and Guarded from a body of one statement, or of
-// `v := E; return v`, or of a nil check returning nil and then a return.
+// shape fills Expr, Returns and Guarded from a one-statement body. So does
+// `v := E; return v`, or a nil check returning nil and then a return.
 func shape(h *Helper) bool {
 	list := h.Decl.Body.List
 	switch len(list) {

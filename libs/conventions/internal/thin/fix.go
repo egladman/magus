@@ -12,13 +12,9 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// inline returns the edits that replace one site with the helper's body. It
-// returns nil when no edit is known to keep the program's meaning. That is a
-// site in a go or defer statement, a variadic call, or an argument with effects
-// the body would drop, repeat or reorder. It is also a name the site resolves
-// differently, or an import the site's file cannot take under the body's name.
-// Every edit lands in the site's own file, as golangci-lint applies a fix to
-// the file of its diagnostic.
+// inline returns the edits that replace one site with the helper's body, or nil
+// when none is known to keep the program's meaning. Every edit lands in the
+// site's own file, where golangci-lint applies a fix.
 func inline(pass *analysis.Pass, h *Helper, s site) []analysis.TextEdit {
 	if h.Guarded {
 		return nil
@@ -230,9 +226,8 @@ func (ed *editor) paramType(i int) ast.Expr {
 	return nil
 }
 
-// argument is the text a parameter use becomes: the argument, converted when
-// its type is not the parameter's, so the body still sees the type it was
-// written against.
+// argument is the text a parameter use becomes, converted when its type is not
+// the parameter's.
 func (ed *editor) argument(arg ast.Expr, want types.Type, typeExpr ast.Expr, tight bool) (string, bool) {
 	src, ok := ed.source(arg)
 	if !ok {
@@ -259,9 +254,8 @@ func (ed *editor) argument(arg ast.Expr, want types.Type, typeExpr ast.Expr, tig
 	return text, true
 }
 
-// natural is the type e has standing alone, as in `x := e`. go/types records
-// an untyped constant at the type its context converted it to, so a constant
-// that is not a typed constant's name takes its kind's default type here.
+// natural is the type e has standing alone, as in `x := e`. go/types records an
+// untyped constant at its context's type, so it takes its kind's default here.
 func (ed *editor) natural(e ast.Expr) types.Type {
 	tv, ok := ed.pass.TypesInfo.Types[e]
 	if !ok || tv.Type == nil {
@@ -307,9 +301,9 @@ func typedConst(pass *analysis.Pass, e ast.Expr) bool {
 	return !untyped || b.Info()&types.IsUntyped == 0
 }
 
-// converted reports whether a value of type got must be converted to stand
-// where want was declared: unless the two are identical, got is untyped nil,
-// or want is an interface got fills.
+// converted reports whether got must be converted to stand where want was
+// declared. It need not when they are identical, got is nil, or want is an
+// interface got fills.
 func converted(got, want types.Type) bool {
 	if types.Identical(got, want) {
 		return false
@@ -361,8 +355,8 @@ func (ed *editor) result(text string) (string, bool, bool) {
 	return conversion(typeExpr, typeSrc, text), true, true
 }
 
-// conversion writes text converted to the type typeExpr spells, wrapping a
-// type that is not a name, such as *T, so it parses as a conversion.
+// conversion writes text converted to typeExpr's type. A type that is not a
+// name, such as *T, is wrapped so it parses as a conversion.
 func conversion(typeExpr ast.Expr, typeSrc []byte, text string) string {
 	switch typeExpr.(type) {
 	case *ast.Ident, *ast.SelectorExpr:
@@ -372,9 +366,8 @@ func conversion(typeExpr ast.Expr, typeSrc []byte, text string) string {
 }
 
 // dynamicOnly reports whether the site hands its value straight to a typed
-// destination, where an interface result and the concrete value it held
-// behave alike. A definition such as `err := f()` takes the static type, so
-// it does not qualify, and neither does a selector or a generic call.
+// destination, where an interface result and its concrete value behave alike.
+// `err := f()` takes the static type, so it does not qualify.
 func (ed *editor) dynamicOnly() bool {
 	switch p := ed.site.Parent.(type) {
 	case *ast.ReturnStmt, *ast.KeyValueExpr, *ast.CompositeLit, *ast.SendStmt:
@@ -400,11 +393,9 @@ func (ed *editor) dynamicOnly() bool {
 	return false
 }
 
-// argumentsSafe reports whether evaluating the body in place of the call
-// evaluates each argument's effects exactly as the call did. An argument
-// that is a name, a literal or a field read has none, so it may be dropped,
-// repeated or moved. One argument with effects is safe when its parameter is
-// read once and the body makes no other call it could be reordered against.
+// argumentsSafe reports whether the body in place of the call runs each
+// argument's effects as the call did. A name, literal or field read has none.
+// An effectful argument needs a parameter read once and no call to reorder with.
 func (ed *editor) argumentsSafe(args []ast.Expr, uses []int) bool {
 	effectful := 0
 	for i, a := range args {
@@ -480,9 +471,8 @@ func needsParens(parent, child ast.Node) bool {
 	return false
 }
 
-// resolvable reports whether every name n reads, other than the parameters
-// it substitutes, means the same thing at the site, adding an import the
-// site's file lacks.
+// resolvable reports whether each name n reads, except substituted parameters,
+// means the same at the site, adding an import the file lacks.
 func (ed *editor) resolvable(n ast.Node, params map[*types.Var]int) bool {
 	ok := true
 	inspect(n, func(id *ast.Ident, _ ast.Node) {

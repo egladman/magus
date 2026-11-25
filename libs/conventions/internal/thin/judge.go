@@ -22,9 +22,8 @@ type Rule struct {
 	// MaxSites is the most use sites a reported helper has.
 	MaxSites int
 
-	// MaxRepeatedText is the most runes of string literal a body may hold and
-	// still be judged when it has two sites or more: inlining it there writes
-	// the text twice, and two copies of one message drift apart.
+	// MaxRepeatedText is the most runes of string literal a body with two sites
+	// or more may hold. Inlining writes the text twice, and copies drift.
 	MaxRepeatedText int
 
 	// ValueUseExempt skips a helper some site passes as a value.
@@ -118,9 +117,9 @@ func touches(pass *analysis.Pass, changes Changes, h *Helper) (bool, error) {
 	return gitdiff.Overlaps(changed, from, to), nil
 }
 
-// Report reports d: at each site with the edit that inlines it, at the
-// declaration for sites in files this build excludes, and at the declaration
-// with the edit that deletes it when nothing references it.
+// Report reports d at each site with the edit that inlines it. Sites in
+// excluded files go to the declaration, as does the deleting edit when nothing
+// references it.
 func Report(pass *analysis.Pass, d Departure, hint string) {
 	name := d.Func.Name()
 	if d.Uses() == 0 {
