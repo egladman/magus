@@ -3,6 +3,8 @@
 //
 // A declared footprint replaces the project's, so types-generate declaring only
 // .buzzgen.yaml replayed stale output after an edit to libs/safetyscissors.
+//
+// Tier 1, mechanical: the fix names the Go tree.
 namespace generatorsread;
 
 import "assert";
