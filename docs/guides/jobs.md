@@ -177,6 +177,7 @@ In `../shop-pricing` she takes the first job:
 ```console
 $ magus job exec refactor/pricing
 recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d, which is the checkpoint it was handed. Nothing to reconcile; carry on.
+job refactor/pricing adopted the checkout ~/src/shop-pricing: wait grades it there, and it is taken there and nowhere else.
 took refactor/pricing in ~/src/shop-pricing; read the spec with `magus describe job refactor/pricing`
 ```
 
@@ -215,6 +216,7 @@ grouping history
 
 the only check you run
 magus run test .
+checkout ~/src/shop-pricing: adopted for job refactor/pricing at 58d5e2c343b3; its holder takes it there with `magus job exec refactor/pricing`, and magus never removes it
 refactor/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
@@ -283,6 +285,7 @@ gives it back with no result:
 ```console
 $ magus job exit refactor/tax
 ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
+checkout ~/src/shop-tax: kept after job refactor/tax ended: the fork adopted it rather than making it, so magus never removes it
 ```
 
 `no_return` is not a failure. A failed job came back and said so; an abandoned one
@@ -301,6 +304,7 @@ its holder reports it ran magus run test .
 postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
+checkout ~/src/shop-pricing: kept after job refactor/pricing ended: the fork adopted it rather than making it, so magus never removes it
 ```
 
 `wait` reopened the run the ref names in the worktree that took the job, confirmed it
