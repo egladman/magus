@@ -181,6 +181,20 @@ test("the empty state names no menu that does not feed this app", () => {
   assert.match(empty.textContent ?? "", /#demo/);
 });
 
+test("the first screen names only the command that exists", () => {
+  const host = parse();
+  assert.doesNotMatch(scaffold, /magus graph open/);
+  const command = host.querySelector("#graph-empty-state [data-empty-way] code");
+  assert.equal(command?.textContent, "magus graph export --open");
+});
+
+test("the empty state describes no arrangement or colouring", () => {
+  const host = parse();
+  const empty = host.querySelector("#graph-empty-state");
+  assert.ok(empty);
+  assert.doesNotMatch(empty.textContent ?? "", /arrang|colou?r/i);
+});
+
 test("data-conditional is the only mechanism for data-backed visibility", () => {
   // The marker used to mean two things: a CSS rule scoped to .console-graph-views__chip, plus a
   // separately-set `hidden` for anything else (a PF button outspecifies a bare attribute

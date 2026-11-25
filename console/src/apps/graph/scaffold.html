@@ -177,7 +177,6 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Computed here from the layered layout; there is no layer: query field to type."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
             <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
           </div>
-          <p class="console-graph-display__controlhint">Color paints over the kind palette; click an active one to clear it.</p>
           </div>
           <!-- The KEY for whatever coloring is active, directly under the control that sets it.
                It used to float over the canvas at 88% opacity, which put it on top of the stage's
@@ -283,7 +282,7 @@
                 <div data-empty-way>
                   <span data-empty-way-label>Open your workspace</span>
                   <div class="pf-v6-c-clipboard-copy pf-m-inline pf-m-block pf-m-readonly">
-                    <code class="pf-v6-c-clipboard-copy__text pf-m-code">magus graph open</code>
+                    <code class="pf-v6-c-clipboard-copy__text pf-m-code">magus graph export --open</code>
                   </div>
                 </div>
                 <!-- No button, matching every other app. The demo is the magus repo's committed
@@ -334,12 +333,12 @@
     <details class="console-graph-help" data-ref-section>
       <summary>Loading a graph by URL</summary>
       <div class="console-graph-help__body">
-      <p><code>magus graph open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>
+      <p><code>magus graph export --open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>
       <dl>
         <dt><code>#data=&lt;blob&gt;</code></dt>
         <dd>An inline graph: the node-link JSON, gzipped then base64url-encoded. Decoded in the browser. Bounded by the browser's URL length.</dd>
         <dt><code>#src=&lt;url&gt;</code></dt>
-        <dd>A URL-encoded address the page fetches the JSON from: a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
+        <dd>A URL-encoded address the page fetches the JSON from: a loopback server (<code>magus graph export --open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
         <dt><code>#port=7391&amp;token=&lt;bearer&gt;</code></dt>
         <dd>Connect to a running server for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph export --open --follow</code> to build this link. Not available in Safari (see console docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
