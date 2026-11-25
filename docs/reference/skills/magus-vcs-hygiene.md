@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 11464
-skill_short_bytes: 6418
+skill_full_bytes: 10841
+skill_short_bytes: 6124
 ---
 
 # magus-vcs-hygiene
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `4809b05952a8` |
+| `skill-content` | `b7ad5db0fb44` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -132,10 +132,6 @@ Read change before staging.
 `magus diff --impact`: uncommitted changes ordered by what they can break, generated files folded; appends landing cost: rebuilds, recent editors, time estimate, advisors, anchored notes.
 Context, never verdict.
 Empty section: nobody could measure, not nothing found.
-
-Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build without committing." Build in place; whole-tree revert destroys concurrent agent's untracked work.
-If you need pristine tree (like diffing regenerated output) -> throwaway `git worktree
-add`, never live tree.
 
 ## Buzz VCS facts
 
@@ -322,14 +318,6 @@ None of it is a verdict: nothing is gated on it and the exit code is unchanged,
 and each section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 
-Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
-without committing." The working tree is ALREADY what you want to verify,
-so run `magus run build` / `magus affected ci` in place; building does not
-require committing first. A whole-tree revert also unrecoverably
-destroys any untracked work a concurrent agent is writing. If you need
-a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
-add`, never the live tree.
-
 ## VCS facts from Buzz
 
 For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
@@ -381,9 +369,7 @@ Then, whatever the backend:
 1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
    revision answers "what changed" without touching a tree that may hold a
    concurrent agent's untracked work.
-2. Restore PER FILE, never whole-tree. The scoped form is what the guard
-   advises on; the whole-tree forms it denies, because that untracked work is in no
-   commit to recover from.
+2. Restore PER FILE, never whole-tree.
 
 `magus affected --explain <project>` shows the chain that put a project in the
 affected set, when the result surprises you. `client`

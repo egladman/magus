@@ -124,7 +124,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git restore .", rule: wholeTree("git restore .")},
 		// A path-scoped revert advises now: discarding a file because you did not
 		// hand-edit it is the most common wrong reflex about generated output.
-		{command: "git restore cmd/magus/agent.go", context: "magus-vcs-hygiene"},
+		{command: "git restore cmd/magus/agent.go", context: "classify before reverting"},
 		{command: "git checkout -- gen/", context: "role=output"},
 		{command: "git checkout HEAD -- docs/gen", context: "role=output"},
 		{command: "git clean -fd", rule: wholeTree("git clean")},
@@ -138,7 +138,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git clean --exclude=build"},
 		{command: "git clean -n -fd"},
 		{command: "git clean -ndx"},
-		{command: "git commit -m 'x'", context: "magus-vcs-hygiene"},
+		{command: "git commit -m 'x'", context: "git add -- <paths>"},
 		// A deny refuses the whole line, so it says so when the line held more than the
 		// one command that earned it. The reason text was always right about the construct
 		// and always silent about the blast radius, and a reader who fixes the named
@@ -207,8 +207,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git status && git add .", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add -A && git push", rule: denyRule{Name: denyRuleStageAll}},
 		// Deliberate staging is still only advised: that IS the replacement.
-		{command: "git add cmd/magus/agent.go", context: "magus-vcs-hygiene"},
-		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs-hygiene"},
+		{command: "git add cmd/magus/agent.go", context: "git add -- <paths>"},
+		{command: "git add docs/gen/index.html src/main.go", context: "git add -- <paths>"},
 		// A raw tool denies only when a registered spell renders that exact base
 		// command and verb. Unsupported runners remain available: a guard funnels
 		// capability Magus has, never removes capability it does not.
@@ -252,7 +252,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// alternation inside a quoted argument. Peeling must not reintroduce this:
 		// splitting the line into segments does, which is why peeling substitutes.
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
-		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
+		{command: "git commit -m 'stop using git add -A'", context: "git add -- <paths>"},
 		{command: "grep -rn 'go test' docs/"},
 		// The cd rule is about magus landing on the wrong project, not about cd itself:
 		// a cd ahead of ordinary, non-magus work falls through to whatever rule that
@@ -536,7 +536,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		if tt.context == "" {
 			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
 		} else {
-			assert.Contains(t, advised(v), tt.context, "%q context names the skill", tt.command)
+			assert.Contains(t, advised(v), tt.context, "%q context advises", tt.command)
 		}
 	}
 }

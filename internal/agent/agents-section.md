@@ -4,18 +4,8 @@ This repo is a magus workspace. magus holds a verified model of it: the project
 graph, each target's inputs and outputs, and what a diff affects. Ask that model
 instead of reading files to rediscover it.
 
-Load the matching magus-* skill (in .claude/skills/, .opencode/skills/ or
-.agents/skills/) before you act:
-
-| before you                                                  | load                  |
-| ----------------------------------------------------------- | --------------------- |
-| git commit, add, stash or reset, or read a diff             | magus-vcs-hygiene     |
-| build, test, lint, format or generate                       | magus-run             |
-| grep for what exists, depends on or uses X                  | magus-query           |
-| answer "how does magus X" from memory                       | magus-upstream-docs   |
-| blame magus: a crash, or behavior against its docs          | magus-upstream-source |
-| summarize what merged recently                              | magus-change-summary  |
-| edit an installed skill, or answer recurring guard feedback | magus-workspace-rules |
+The magus-* skills (in .claude/skills/, .opencode/skills/ or .agents/skills/)
+hold the long form; a guard denial prints what it refuses and why.
 
 Query before grepping.
 {{routing-index}}

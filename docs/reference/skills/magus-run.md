@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15139
-skill_short_bytes: 8887
+skill_full_bytes: 13014
+skill_short_bytes: 8019
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `862100233235` |
+| `skill-content` | `934efc9e5168` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -89,8 +89,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - Silence with `-s`. Do not stop; do not drop to raw language tool.
 2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
    Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
-   - `magus run ci <project>` for project you work in.
-   - `magus affected ci`: final gate once change done.
+   - Workspace's own instructions (AGENTS.md or CLAUDE.md) decide final gate; none named -> `magus affected ci` once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.
    - Gate you ADDED this session not proven by its green. Make it FAIL once (break input it checks, watch red, restore) before counting its pass; check wired to wrong path passes same way.
    - Verify in place; never `git stash`/`reset` first: destroys concurrent agent's untracked work, and tree already is what you verify.
@@ -103,15 +102,11 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 ## Command patterns
 
 ```sh
-magus run ci web                  # verify one project: the composed pipeline, in order
-magus affected ci                 # the final gate: everything the diff reaches
-magus run test web                # iterate on the one failing target ci named
+magus affected ci                 # the final gate where the workspace names none: everything the diff reaches
+magus run test web                # iterate on one target
 magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
-
-Wrong: `go test ./...` after editing Go; hand-sequencing `magus run lint`, `format`, `test` to check own work.
-Right: `magus run ci <project>` while working; `magus affected ci` once done.
 
 ## Output control
 
@@ -135,16 +130,7 @@ For magus records, use `-o template` or `-o json` with a JSON projection. Full
 records stay available for audit; replaying every claim, permitted deviation and
 routine guard event spends context without changing the next action.
 
-### Never pipe or redirect magus
-
-Never pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, `wc`. Never redirect with `> file`, `>> file`, `2>&1`. Guard denies both.
-- Pipe REPLACES exit status with last stage's: `magus affected ci | tail` reports tail's success -> failing gate reads as exit 0.
-- Never need to capture output: every run persists full log; failure prints path with output ref.
-
-Flag instead:
-- `-o template` lists fields. Use their JSON names in the template.
-- `-o name`: bare identifiers; `-o json`: parse.
-- `-s`: quieten.
+### Composing magus commands
 
 Piping magus INTO magus supported, encouraged; composition seam: `--stdin`.
 `--tee <file>` not composition seam: mirrors STRUCTURED output only (`-o json|yaml|jsonl|template`), never console text.
@@ -193,7 +179,6 @@ Run generators before the full test run, so a drift test does not fail for nothi
 ## When another magus process holds project
 
 Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.
-- Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.
 - `magus server status`: reads lock state once: holder PID, command, directory, age. To wait: background run as `magus job exec --timeout <d> -- <command>`, wait for its completion notice.
 - Long-running holder alone: not evidence of hang.
 
@@ -296,10 +281,12 @@ VCS.
    Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
    the rest). When the person says "ci" without naming one meaning, ask which; the
    `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
-   - Run `magus run ci <project>` for the project you are working in.
-   - Run `magus affected ci` as the final gate once the change is done; it runs the
-     full pipeline over every project your change reaches, which is how you learn
-     about ramifications in projects you never touched.
+   - The workspace's own instructions (its AGENTS.md or CLAUDE.md) decide the final
+     gate. Where they name none, run `magus affected ci` once the change is done; it
+     runs the full pipeline over every project your change reaches, which is how you
+     learn about ramifications in projects you never touched.
+   - While working, narrow to the target the instructions name, not to a wider run
+     than they allow.
    - Never hand-run lint, format, and test one at a time. That re-derives an order
      the magusfile owns, and the step you forget fails silently by omission.
    - A gate you ADDED this session is not proven by its green. Make it FAIL once
@@ -330,20 +317,14 @@ VCS.
 ## Command patterns
 
 ```sh
-magus run ci web                  # verify one project: the composed pipeline, in order
-magus affected ci                 # the final gate: everything the diff reaches
-magus run test web                # iterate on the one failing target ci named
+magus affected ci                 # the final gate where the workspace names none: everything the diff reaches
+magus run test web                # iterate on one target
 magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
 
 MCP equivalents: `client` (`magus\run`) with the arguments of `magus run`.
 `magus\change().affected` returns the affected project set and does not run it. `magus\change().impact` is why each project is in that set. `magus\where` answers which project contains a directory.
-
-WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
-hand-sequencing `magus run lint`, `format`, `test` to check your own work.
-CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
-change is done, and a single narrower target only to iterate on a failure.
 
 ## Output control: silence runs, read structure
 
@@ -381,44 +362,12 @@ For magus records, use `-o template` or `-o json` with a JSON projection. Full
 records stay available for audit; replaying every claim, permitted deviation and
 routine guard event spends context without changing the next action.
 
-### Never pipe or redirect a magus command
-
-**Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, or
-`wc`. Do NOT redirect it with `> file`, `>> file`, or `2>&1`.** The guard denies
-both.
-
-- A pipe REPLACES the exit status with the last stage's. `magus affected ci | tail`
-  reports tail's success, so a failing gate reads as exit 0.
-- You never need to capture the output. Every run persists its full log, and a
-  failure prints that path with the output ref.
-
-Every magus command already has an output contract, so filtering its
-text after the fact is always the wrong tool. It is not a style preference; it
-actively breaks things:
-
-- It is lossy in the direction that matters. A truncating filter drops the
-  failing tail and the output ref, which is the only part you needed.
-- It hides progress on a long run, so a working command looks hung and gets
-  killed.
-- It scrapes a human-facing layout that is free to change, instead of reading a
-  stable contract that is not.
-- `grep` cannot see structure. A field you matched textually may belong to a
-  different record entirely.
-
-Replace the filter with the flag that already does it:
-
-| Instead of | Use |
-|---|---|
-| `\| grep <field>` | `-o template` lists available fields; select one with `-o template='{{.field}}'` |
-| `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
-| `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
-| `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
-| `\| awk '{print $1}'` | `-o name` |
+### Composing magus commands
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
 `--stdin`. `--tee <file>` is not a composition seam: it mirrors STRUCTURED output
-only (`-o json|yaml|jsonl|template`), never console text. These are contracts on both
-ends, so they are the opposite of the antipattern above:
+only (`-o json|yaml|jsonl|template`), never console text. The guard denies piping
+magus output through a text filter, since a pipe hides the exit status.
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
@@ -426,10 +375,6 @@ magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
 Save a background run with `-o jsonl --tee <file>`. Read the failure's output ref for the full log.
-
-WRONG: `magus run test | head -50` (drops the failing tail that matters).
-WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
-CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a
 target just to see its error again.
@@ -486,8 +431,6 @@ Run generators before the full test run, so a drift test does not fail for nothi
 A run whose project lock or machine budget another magus invocation holds exits 75
 at once, naming the holder.
 
-- Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
-  `pidof`, and `ps` for this reason.
 - `magus server status` reads that lock state once: holder PID, command, directory,
   and age. To wait, background your run as `magus job exec --timeout <d> -- <command>`
   and wait for its completion notice.

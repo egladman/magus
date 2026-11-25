@@ -164,16 +164,6 @@ None of it is a verdict: nothing is gated on it and the exit code is unchanged,
 and each section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.{{end}}
 
-{{if .Full}}Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
-without committing." The working tree is ALREADY what you want to verify,
-so run `{{cmd "run"}} build` / `{{cmd "affected"}} ci` in place; building does not
-require committing first. A whole-tree revert also unrecoverably
-destroys any untracked work a concurrent agent is writing. If you need
-a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
-add`, never the live tree.{{else}}Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build without committing." Build in place; whole-tree revert destroys concurrent agent's untracked work.
-If you need pristine tree (like diffing regenerated output) -> throwaway `git worktree
-add`, never live tree.{{end}}
-
 {{if .Full}}## VCS facts from Buzz{{else}}## Buzz VCS facts{{end}}
 
 {{if .Full}}For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
@@ -236,9 +226,7 @@ Then, any backend:{{end}}
 {{if .Full}}1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
    revision answers "what changed" without touching a tree that may hold a
    concurrent agent's untracked work.{{else}}1. Inspect out of place, never restore in place. Scratch checkout of recorded revision answers "what changed" without touching live tree (may hold concurrent agent's untracked work).{{end}}
-{{if .Full}}2. Restore PER FILE, never whole-tree. The scoped form is what the guard
-   advises on; the whole-tree forms it denies, because that untracked work is in no
-   commit to recover from.{{else}}2. Restore PER FILE, never whole-tree.{{end}}
+2. Restore PER FILE, never whole-tree.
 
 {{if .Full}}`{{cmd "affected"}} --explain <project>` shows the chain that put a project in the
 affected set, when the result surprises you. `{{tool "client"}}`

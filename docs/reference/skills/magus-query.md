@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15809
-skill_short_bytes: 9345
+skill_full_bytes: 15547
+skill_short_bytes: 9233
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `3ad266d1fdf8` |
+| `skill-content` | `8a3e4c464e54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -113,8 +113,7 @@ Never drive rewrite from pattern: not `sed -i`, not scripted substitute-and-writ
 - Regex cannot tell YOUR symbol from dependency's same-named symbol, and writes before anyone reads diff.
 - Index knows which is which. Apply reported sites, then let compiler enumerate what still moved. Widening pattern until errors stop: same mistake.
 
-Not-indexed project is stop, not empty result: `magus refs` says `verdict: unknown, not absent`, names projects it could not see -> run `magus graph build`, ask again.
-Fresh worktree starts unindexed: normal state when you most want rename.
+A fresh worktree starts unindexed, so `magus refs` often answers `unknown, not absent` first; `magus graph build` and ask again.
 
 Three things decide whether result usable; skipping any corrupts file in bulk rewrite:
 - Edit only `verified` sites. Each occurrence carries `status`. `verified`: magus read that exact range, found symbol. `mismatch`, `unreadable`: index predates edit; `text` and `names` let you check.
@@ -324,11 +323,7 @@ substitute-and-write.
   enumerate what still moved. Widening the pattern until the errors stop is the
   same mistake.
 
-**A not-indexed project is a stop, not an empty result.** `magus refs` says
-`verdict: unknown, not absent` and names the projects it could not see. Run
-`magus graph build` and ask again. Reading that verdict as "no matches" and falling
-back to text search misses every site in an unindexed project. A fresh worktree
-starts unindexed, so this is the normal state when you most want a rename.
+A fresh worktree starts unindexed, so `magus refs` often answers `unknown, not absent` first; `magus graph build` and ask again.
 
 Three things decide whether the result is usable. Skipping any of them is how a bulk
 rewrite corrupts a file:

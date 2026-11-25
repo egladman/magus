@@ -80,10 +80,12 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
    the rest). When the person says "ci" without naming one meaning, ask which; the
    `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
-   - Run `{{cmd "run"}} ci <project>` for the project you are working in.
-   - Run `{{cmd "affected"}} ci` as the final gate once the change is done; it runs the
-     full pipeline over every project your change reaches, which is how you learn
-     about ramifications in projects you never touched.
+   - The workspace's own instructions (its AGENTS.md or CLAUDE.md) decide the final
+     gate. Where they name none, run `{{cmd "affected"}} ci` once the change is done; it
+     runs the full pipeline over every project your change reaches, which is how you
+     learn about ramifications in projects you never touched.
+   - While working, narrow to the target the instructions name, not to a wider run
+     than they allow.
    - Never hand-run lint, format, and test one at a time. That re-derives an order
      the magusfile owns, and the step you forget fails silently by omission.
    - A gate you ADDED this session is not proven by its green. Make it FAIL once
@@ -92,8 +94,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - Verify in place; never `git stash`/`reset` first (data-loss-prone and pointless: the tree is
      already what you want to verify).{{else}}2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
    Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
-   - `{{cmd "run"}} ci <project>` for project you work in.
-   - `{{cmd "affected"}} ci`: final gate once change done.
+   - Workspace's own instructions (AGENTS.md or CLAUDE.md) decide final gate; none named -> `{{cmd "affected"}} ci` once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.
    - Gate you ADDED this session not proven by its green. Make it FAIL once (break input it checks, watch red, restore) before counting its pass; check wired to wrong path passes same way.
    - Verify in place; never `git stash`/`reset` first: destroys concurrent agent's untracked work, and tree already is what you verify.{{end}}
@@ -122,9 +123,8 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 ## Command patterns
 
 ```sh
-magus run ci web                  # verify one project: the composed pipeline, in order
-magus affected ci                 # the final gate: everything the diff reaches
-magus run test web                # iterate on the one failing target ci named
+magus affected ci                 # the final gate where the workspace names none: everything the diff reaches
+magus run test web                # iterate on one target
 magus run test web -- -k 'name'   # rerun only the failing tests (pytest filter shown)
 magus affected test               # only projects affected by the VCS diff
 ```
@@ -132,12 +132,6 @@ magus affected test               # only projects affected by the VCS diff
 MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `{{cmd "run"}}`.
 `{{buzz "change.affected"}}` returns the affected project set and does not run it. `{{buzz "change.impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
 {{end}}
-{{if .Full}}WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
-hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check your own work.
-CORRECT: `{{cmd "run"}} ci <project>` while working, `{{cmd "affected"}} ci` once the
-change is done, and a single narrower target only to iterate on a failure.{{else}}Wrong: `go test ./...` after editing Go; hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check own work.
-Right: `{{cmd "run"}} ci <project>` while working; `{{cmd "affected"}} ci` once done.{{end}}
-
 {{if .Full}}## Output control: silence runs, read structure{{else}}## Output control{{end}}
 {{if .Full}}
 You are a machine reader; no news is good news. Shape the output instead of
@@ -174,48 +168,12 @@ For magus records, use `-o template` or `-o json` with a JSON projection. Full
 records stay available for audit; replaying every claim, permitted deviation and
 routine guard event spends context without changing the next action.
 
-{{if .Full}}### Never pipe or redirect a magus command{{else}}### Never pipe or redirect magus{{end}}
-
-{{if .Full}}**Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, or
-`wc`. Do NOT redirect it with `> file`, `>> file`, or `2>&1`.** The guard denies
-both.
-{{else}}Never pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`, `wc`. Never redirect with `> file`, `>> file`, `2>&1`. Guard denies both.{{end}}
-{{if .Full}}- A pipe REPLACES the exit status with the last stage's. `{{cmd "affected"}} ci | tail`
-  reports tail's success, so a failing gate reads as exit 0.{{else}}- Pipe REPLACES exit status with last stage's: `{{cmd "affected"}} ci | tail` reports tail's success -> failing gate reads as exit 0.{{end}}
-{{if .Full}}- You never need to capture the output. Every run persists its full log, and a
-  failure prints that path with the output ref.{{else}}- Never need to capture output: every run persists full log; failure prints path with output ref.{{end}}{{if .Full}}
-
-Every magus command already has an output contract, so filtering its
-text after the fact is always the wrong tool. It is not a style preference; it
-actively breaks things:{{end}}{{if .Full}}
-
-- It is lossy in the direction that matters. A truncating filter drops the
-  failing tail and the output ref, which is the only part you needed.
-- It hides progress on a long run, so a working command looks hung and gets
-  killed.
-- It scrapes a human-facing layout that is free to change, instead of reading a
-  stable contract that is not.
-- `grep` cannot see structure. A field you matched textually may belong to a
-  different record entirely.{{end}}{{if .Full}}
-
-Replace the filter with the flag that already does it:{{end}}
-
-{{if .Full}}| Instead of | Use |
-|---|---|
-| `\| grep <field>` | `-o template` lists available fields; select one with `-o template='{{"{{.field}}"}}'` |
-| `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
-| `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
-| `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
-| `\| awk '{print $1}'` | `-o name` |
-{{else}}Flag instead:
-- `-o template` lists fields. Use their JSON names in the template.
-- `-o name`: bare identifiers; `-o json`: parse.
-- `-s`: quieten.{{end}}
+### Composing magus commands
 
 {{if .Full}}**Piping magus INTO magus is supported and encouraged.** The composition seam is
 `--stdin`. `--tee <file>` is not a composition seam: it mirrors STRUCTURED output
-only (`-o json|yaml|jsonl|template`), never console text. These are contracts on both
-ends, so they are the opposite of the antipattern above:{{else}}Piping magus INTO magus supported, encouraged; composition seam: `--stdin`.
+only (`-o json|yaml|jsonl|template`), never console text. The guard denies piping
+magus output through a text filter, since a pipe hides the exit status.{{else}}Piping magus INTO magus supported, encouraged; composition seam: `--stdin`.
 `--tee <file>` not composition seam: mirrors STRUCTURED output only (`-o json|yaml|jsonl|template`), never console text.{{end}}
 
 ```sh
@@ -224,10 +182,6 @@ magus affected ci --plan | magus run --stdin      # plan -> run its shards
 ```
 
 Save a background run with `-o jsonl --tee <file>`. Read the failure's output ref for the full log.{{if .Full}}
-
-WRONG: `{{cmd "run"}} test | head -50` (drops the failing tail that matters).
-WRONG: `{{cmd "query"}} "kind=target" -o name | grep -c .` (use the JSON count).
-CORRECT: `{{cmd "run"}} test -s`, then fetch the printed ref for full detail.{{end}}{{if .Full}}
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a
 target just to see its error again.
@@ -286,8 +240,6 @@ Run generators before the full test run, so a drift test does not fail for nothi
 {{if .Full}}A run whose project lock or machine budget another magus invocation holds exits 75
 at once, naming the holder.
 {{else}}Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.{{end}}
-{{if .Full}}- Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
-  `pidof`, and `ps` for this reason.{{else}}- Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.{{end}}
 {{if .Full}}- `{{cmd "server status"}}` reads that lock state once: holder PID, command, directory,
   and age. To wait, background your run as `{{cmd "job exec"}} --timeout <d> -- <command>`
   and wait for its completion notice.{{else}}- `{{cmd "server status"}}`: reads lock state once: holder PID, command, directory, age. To wait: background run as `{{cmd "job exec"}} --timeout <d> -- <command>`, wait for its completion notice.{{end}}
