@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
+	"golang.org/x/sync/errgroup"
 )
 
 // LeaseMarkerName is the file that binds a lease to a checkout for a caller its host names
@@ -908,24 +909,27 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 		slog.DebugContext(ctx, "each finished branch is read for merged on its own", attr.Error(err))
 	}
 	answers := readMissingCache(root)
-	var out []Unintegrated
-	for _, row := range finished {
-		branch := jobBranch(ctx, driver, row)
-		tip, standing := tips[branch]
-		// A branch that does not stand holds no work this checkout can name.
-		if integrating[branch] || !standing || merged[branch] {
-			continue
-		}
-		missing, known := answers.get(meta.ID, tip)
-		if !known {
-			missing, err = driver.MissingCommits(ctx, root, meta.ID, tip)
-			if err != nil {
-				continue
+	reads := make([]branchRead, len(finished))
+	var g errgroup.Group
+	g.SetLimit(branchReadWorkers)
+	for i, row := range finished {
+		g.Go(func() error {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			answers.put(meta.ID, tip, missing)
+			reads[i] = readBranch(ctx, driver, root, meta.ID, row, tips, merged, integrating, answers)
+			return nil
+		})
+	}
+	// The context's error is the only one a worker returns; it is reported below.
+	_ = g.Wait()
+	var out []Unintegrated
+	for i, r := range reads {
+		if r.fresh {
+			answers.put(meta.ID, r.tip, r.missing)
 		}
-		if missing > 0 {
-			out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
+		if r.missing > 0 {
+			out = append(out, Unintegrated{Job: finished[i].ID, Branch: r.branch, Commits: r.missing})
 		}
 	}
 	if err := answers.write(meta.ID); err != nil {
@@ -936,6 +940,37 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 		return nil, fmt.Errorf("the finished branches: %w", err)
 	}
 	return out, nil
+}
+
+// branchReadWorkers bounds the git processes one pass runs at once. Eight hides process
+// start-up; 250 rows must not fork 250 gits together.
+const branchReadWorkers = 8
+
+type branchRead struct {
+	branch  string
+	tip     string
+	missing int
+	// fresh is a count from a range read, so the cache has not got it yet.
+	fresh bool
+}
+
+// readBranch only reads answers, so rows may run it concurrently. The caller puts what
+// each read learned. A branch whose range cannot be read counts as zero.
+func readBranch(ctx context.Context, driver types.VCSDriver, root, rev string, row job.Job, tips map[string]string, merged, integrating map[string]bool, answers *missingCache) branchRead {
+	branch := jobBranch(ctx, driver, row)
+	tip, standing := tips[branch]
+	// A branch that does not stand holds no work this checkout can name.
+	if integrating[branch] || !standing || merged[branch] {
+		return branchRead{}
+	}
+	if missing, known := answers.get(rev, tip); known {
+		return branchRead{branch: branch, missing: missing}
+	}
+	missing, err := driver.MissingCommits(ctx, root, rev, tip)
+	if err != nil {
+		return branchRead{}
+	}
+	return branchRead{branch: branch, tip: tip, missing: missing, fresh: true}
 }
 
 // forkFactsCall is what [ForkFacts] times itself as: the host call

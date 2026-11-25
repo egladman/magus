@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +18,10 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // The records-swept log is read by its last line and compacted to one line once it is due.
@@ -835,11 +838,11 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 // countedMissing counts the range reads MissingCommits runs.
 type countedMissing struct {
 	types.VCSDriver
-	reads *int
+	reads *atomic.Int64
 }
 
 func (c countedMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
-	*c.reads++
+	c.reads.Add(1)
 	return c.VCSDriver.MissingCommits(ctx, dir, branch, head)
 }
 
@@ -860,7 +863,7 @@ func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
 	}
 	driver, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, driver, why)
-	reads := 0
+	var reads atomic.Int64
 	counted := countedMissing{VCSDriver: driver, reads: &reads}
 
 	first, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
@@ -870,7 +873,7 @@ func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
 
 	want := []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}
 	assert.Equal(t, []any{want, want}, []any{first, second})
-	assert.Equal(t, 2, reads, "the first read asks pending and squashed; a merged or gone branch and every second answer cost none")
+	assert.EqualValues(t, 2, reads.Load(), "the first read asks pending and squashed; a merged or gone branch and every second answer cost none")
 }
 
 func TestForkFactsTimesItselfOnTheCallClock(t *testing.T) {
@@ -885,4 +888,116 @@ func TestForkFactsTimesItselfOnTheCallClock(t *testing.T) {
 	ForkFacts(ctx, repo.Root(), nil, FullTest{})
 
 	assert.Equal(t, []string{forkFactsCall}, timed)
+}
+
+type BranchReadSuite struct {
+	suite.Suite
+	repo     *testkit.Repo
+	finished []job.Job
+}
+
+func TestBranchReadSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(BranchReadSuite))
+}
+
+// branchFixture is a repository with n finished rows. Every third branch is missing two
+// commits, every fifth is merged, and every seventh never existed.
+func branchFixture(tb testkit.TB, n int) (*testkit.Repo, []job.Job) {
+	repo := testkit.NewRepository(tb, map[string]string{"base.txt": "base\n"})
+	var finished []job.Job
+	for i := range n {
+		name := fmt.Sprintf("job-%03d", i)
+		finished = append(finished, job.Job{ID: name, State: job.StateExited})
+		if i%7 == 0 {
+			continue
+		}
+		repo.Git("switch", "-q", "-c", name, "main")
+		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
+		if i%3 == 0 {
+			repo.Commit(name+"-more", map[string]string{name + "-more.txt": "more\n"})
+		}
+		repo.Git("switch", "-q", "main")
+		if i%5 == 0 {
+			repo.Git("merge", "-q", "--no-ff", "-m", "merge "+name, name)
+		}
+	}
+	return repo, finished
+}
+
+// sequentialBranches reads one row at a time, as unintegratedWith did before it ran rows together.
+func sequentialBranches(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job) ([]Unintegrated, error) {
+	meta, err := driver.Metadata(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	tips, err := driver.BranchHeads(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	merged, err := vcs.MergedBranches(ctx, driver, root, meta.ID)
+	if err != nil {
+		return nil, err
+	}
+	var out []Unintegrated
+	for _, row := range finished {
+		branch := jobBranch(ctx, driver, row)
+		tip, standing := tips[branch]
+		if !standing || merged[branch] {
+			continue
+		}
+		missing, err := driver.MissingCommits(ctx, root, meta.ID, tip)
+		if err != nil {
+			continue
+		}
+		if missing > 0 {
+			out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
+		}
+	}
+	return out, nil
+}
+
+func (s *BranchReadSuite) SetupTest() {
+	s.repo, s.finished = branchFixture(s.T(), 60)
+}
+
+func (s *BranchReadSuite) TestConcurrentReadMatchesTheSequentialOneInOrder() {
+	ctx := s.T().Context()
+	driver, why := resolveDriver(ctx, s.repo.Root())
+	s.Require().NotNil(driver, why)
+	want, err := sequentialBranches(ctx, driver, s.repo.Root(), s.finished)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(want)
+
+	got, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+	s.Require().NoError(err)
+
+	s.Equal(want, got)
+}
+
+func (s *BranchReadSuite) TestACancelledContextIsReportedNotReadAsIntegrated() {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	driver, why := resolveDriver(ctx, s.repo.Root())
+	s.Require().NotNil(driver, why)
+	cancel()
+
+	_, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+
+	s.Require().Error(err)
+}
+
+func BenchmarkForkFacts(b *testing.B) {
+	repo, finished := branchFixture(b, 250)
+	driver, why := resolveDriver(b.Context(), repo.Root())
+	if driver == nil {
+		b.Fatal(why)
+	}
+	b.ResetTimer()
+	for range b.N {
+		// A cold answer cache, so every row pays its range read.
+		_ = os.Remove(missingCommitsPath(repo.Root()))
+		if _, err := unintegratedWith(b.Context(), driver, repo.Root(), finished, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
