@@ -450,6 +450,42 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 	}
 }
 
+// A host call holding a judgment past its deadline is named in the deny. The
+// deny says a retry will not help.
+func TestJudgeWithinNamesTheHostCallThatHeldALapse(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	waitForLapsedWork(t)
+	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
+
+	v := JudgeWithin(ctx, Dependencies{}, req, func(ctx context.Context) verdict.Judgment {
+		end := judgmentPhases(ctx).beginCall("job.forkFacts")
+		defer end()
+		<-release
+		return verdict.Judgment{Decision: verdict.Defer}
+	})
+
+	assert.Equal(t, verdict.Deny, v.Decision)
+	assert.Contains(t, v.Reason, "Its slowest host call, job.forkFacts, took ")
+	assert.Contains(t, v.Reason, "still running, so a retry will not help")
+	assert.NotContains(t, v.Reason, "A retry passes only if")
+}
+
+// A lapse no one call explains keeps the advice to retry once.
+func TestLapseReasonKeepsTheRetryWhenNoCallHoldsMost(t *testing.T) {
+	call := judgedCall{what: "this command"}
+	lapse := ruleLapse{budget: time.Second, said: lapseWording{"the rule", "answer"},
+		slowest: timedCall{name: "job.forkFacts", took: 300 * time.Millisecond, of: time.Second}}
+
+	reason := lapseReason(call, lapse, false)
+
+	assert.Contains(t, reason, "A retry passes only if judging costs less this time")
+	assert.NotContains(t, reason, "job.forkFacts")
+}
+
 // A judgment that answers in time is the verdict, and a dry run is judged to the end.
 func TestJudgeWithinKeepsAJudgmentThatAnswersBeforeTheDeadline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
