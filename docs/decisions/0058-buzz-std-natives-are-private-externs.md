@@ -1,5 +1,5 @@
 ---
-title: "ADR 0058: Buzz std natives are private externs"
+title: "ADR 0058: buzz std natives are private externs"
 order: 58
 description: A gopherbuzz std module declares its Go natives as non-exported extern funs in its own .buzz file, as upstream Buzz does, bound from a private table registered under the module's own name. The four *core helper modules go, and their import names stop resolving.
 tags: [adr, decision, buzz, gopherbuzz, stdlib, modules]
@@ -7,7 +7,7 @@ status: accepted
 date: 2026-11-24
 ---
 
-# ADR 0058: Buzz std natives are private externs
+# ADR 0058: buzz std natives are private externs
 
 ## Context
 
@@ -42,7 +42,7 @@ helpers inside its boundary.
 | Two modules that need one native share it in Go. A shared Buzz helper module is refused.                                                                                    | review                          | planned |
 | `pureStdlib` names public modules only, and a closure test asserts that every import of a provided module is itself provided.                                               | a test beside `PureStdlib`      | planned |
 | `serialize` is reconciled with upstream in the same change: it exports `serializeValue` and imports `buzz:buffer` and `buzz:std`.                                           | gopherbuzz std sources          | planned |
-| `Module.Labels` stays.                                                                                                                                                      | `libs/gopherbuzz`               | kept    |
+| `Module.Labels` stays.                                                                                                                                                      | `libs/gopherbuzz`               | done    |
 
 The private table is keyed by the module that declares the externs, so an
 `extern fun` in one module never binds a native registered for another. A script

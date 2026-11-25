@@ -30,17 +30,17 @@ Free codes used below: MGS3059 and MGS4012. MGS4009 is retired
 
 ## Kept
 
-| #   | Trap                                         | Answer                              | Priority |
-| --- | -------------------------------------------- | ----------------------------------- | -------- |
-| 1   | Same cache key, different output             | new MGS4012                         | P1       |
-| 6   | A store line from a build with other fields  | reuse MGS3047, stop using MGS3050   | P1       |
-| 9   | A check rewrites a file outside the job      | widen MGS3044                       | P1       |
-| 8   | A path held by a row nobody is working       | new MGS3059                         | P2       |
-| 3   | A baseline row orphaned by a rename          | second message in the lint          | P2       |
-| 4   | A pull request whose base CI never runs on   | new rule in `hack/policy`           | P2       |
+| #   | Trap                                          | Answer                              | Priority |
+| --- | --------------------------------------------- | ----------------------------------- | -------- |
+| 1   | Same cache key, different output              | new MGS4012                         | P1       |
+| 6   | A store line from a build with other fields   | reuse MGS3047, stop using MGS3050   | P1       |
+| 9   | A check rewrites a file outside the job       | widen MGS3044                       | P1       |
+| 8   | A path held by a row nobody is working        | new MGS3059                         | P2       |
+| 3   | A baseline row orphaned by a rename           | second message in the lint          | P2       |
+| 4   | A pull request whose base CI never runs on    | new rule in `hack/policy`           | P2       |
 | 12  | "ci" stays ambiguous after the person answers | patterns and a fix line in the rule | P2       |
-| 11  | `job exec` on a compound line                | one more sentence in the refusal    | P3       |
-| 14  | A narrow run that judged no file passes      | fail in the check                   | P1       |
+| 11  | `job exec` on a compound line                 | one more sentence in the refusal    | P3       |
+| 14  | A narrow run that judged no file passes       | fail in the check                   | P1       |
 
 P1 is a wrong answer or a job that cannot finish. P2 is a refusal that is right and names
 no way out. P3 is wording.
