@@ -1281,6 +1281,9 @@ const KnowledgeGraphDiffDefinition = "graph diff reports how the knowledge graph
 	"changed between a base revision and the working tree: the nodes and edges added, " +
 	"removed, or (for nodes) changed. It is the PR-review blast-radius artifact - what " +
 	"a change did to the domain's shape - emitted as json or markdown, never rendered. " +
+	"What git history derives (author nodes, authored and co_changes edges, churn and " +
+	"staleness attrs) moves with every commit, so it is reported apart under history " +
+	"and left out of the structural deltas. " +
 	"Edge diffs are structural: an edge is identified by (source, target, relation), so " +
 	"a re-scored or re-provenanced edge that keeps those three is not reported as changed."
 
@@ -1296,6 +1299,23 @@ type KnowledgeGraphDiff struct {
 	NodesChanged []KnowledgeNodeChange `json:"nodes_changed,omitempty"  yaml:"nodes_changed,omitempty"`
 	EdgesAdded   []KnowledgeEdge       `json:"edges_added,omitempty"    yaml:"edges_added,omitempty"`
 	EdgesRemoved []KnowledgeEdge       `json:"edges_removed,omitempty"  yaml:"edges_removed,omitempty"`
+	// History is what changed in the git-derived part, which the fields above leave
+	// out. Nil when that part agrees on both sides.
+	History *KnowledgeGraphHistoryDiff `json:"history,omitempty" yaml:"history,omitempty"`
+}
+
+// KnowledgeGraphHistoryDiff is the git-derived part of a graph diff: author nodes,
+// authored and co_changes edges, and churn and staleness attrs. A commit moves them
+// without changing the tree. A NodesChanged before/after carries only those attrs.
+type KnowledgeGraphHistoryDiff struct {
+	// Note is set when one side has no history at all. The lists are then empty: they
+	// would only restate the other side's history.
+	Note         string                `json:"note,omitempty"          yaml:"note,omitempty"`
+	NodesAdded   []KnowledgeNode       `json:"nodes_added,omitempty"   yaml:"nodes_added,omitempty"`
+	NodesRemoved []KnowledgeNode       `json:"nodes_removed,omitempty" yaml:"nodes_removed,omitempty"`
+	NodesChanged []KnowledgeNodeChange `json:"nodes_changed,omitempty" yaml:"nodes_changed,omitempty"`
+	EdgesAdded   []KnowledgeEdge       `json:"edges_added,omitempty"   yaml:"edges_added,omitempty"`
+	EdgesRemoved []KnowledgeEdge       `json:"edges_removed,omitempty" yaml:"edges_removed,omitempty"`
 }
 
 // KnowledgeNodeChange is one node present in both graphs whose data differs: the

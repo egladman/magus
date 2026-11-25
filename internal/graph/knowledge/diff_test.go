@@ -1,12 +1,14 @@
 package knowledge
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestDiffGraphs(t *testing.T) {
@@ -97,32 +99,172 @@ func TestDiffGraphsAttrChange(t *testing.T) {
 	assert.Equal(t, []string{"attrs"}, d.NodesChanged[0].Fields)
 }
 
-// TestStripVCSAttrsLeavesTheSourceGraphIntact guards the aliasing bug the helper's
-// replace-never-mutate rule exists to prevent: Graph.Output() hands back the LIVE graph's
-// attr maps by reference, so deleting in place would corrupt the graph being diffed.
-func TestStripVCSAttrsLeavesTheSourceGraphIntact(t *testing.T) {
-	shared := map[string]string{"vcs_last_commit": "abc", "lang": "go"}
-	untouched := map[string]string{"lang": "ts"}
-	g := types.KnowledgeGraphOutput{Nodes: []types.KnowledgeNode{
-		{ID: "file:a.go", Attrs: shared},
-		{ID: "file:b.ts", Attrs: untouched},
-		{ID: "file:c.md", Attrs: map[string]string{"vcs_count": "3"}},
-		{ID: "file:d.md"},
-	}}
+// DiffHistorySuite diffs a base without history against a head with it, as
+// `graph diff --rev` does. Only the tree's change may count as structure.
+type DiffHistorySuite struct {
+	suite.Suite
+}
 
-	StripVCSAttrs(&g)
+func TestDiffHistorySuite(t *testing.T) { suite.Run(t, new(DiffHistorySuite)) }
 
-	assert.Equal(t, map[string]string{"lang": "go"}, g.Nodes[0].Attrs)
-	assert.Equal(t, map[string]string{"vcs_last_commit": "abc", "lang": "go"}, shared,
-		"the caller's map must survive; Output() shares it with the live graph")
+func (s *DiffHistorySuite) base() types.KnowledgeGraphOutput {
+	return types.KnowledgeGraphOutput{
+		Nodes: []types.KnowledgeNode{
+			{ID: "dir:pkg", Kind: types.KindDir, Attrs: map[string]string{AttrDirFiles: "2"}},
+			{ID: "file:pkg/a.go", Kind: types.KindFile, Attrs: map[string]string{"language": "go"}},
+			{ID: "file:pkg/b.go", Kind: types.KindFile},
+			{ID: "function:pkg/a.go:run", Kind: types.KindFunction},
+		},
+		Links: []types.KnowledgeEdge{
+			{Source: "dir:pkg", Target: "file:pkg/a.go", Relation: types.RelationContains},
+			{Source: "dir:pkg", Target: "file:pkg/b.go", Relation: types.RelationContains},
+		},
+	}
+}
 
-	// A node with nothing to strip keeps the very same map rather than a copy.
-	assert.Equal(t, untouched, g.Nodes[1].Attrs)
+// head is the base plus one call edge, with history on every node that can carry it.
+func (s *DiffHistorySuite) head() types.KnowledgeGraphOutput {
+	return types.KnowledgeGraphOutput{
+		Nodes: []types.KnowledgeNode{
+			{ID: "author:Eli", Kind: types.KindAuthor},
+			{ID: "dir:pkg", Kind: types.KindDir, Attrs: map[string]string{AttrDirFiles: "2", AttrDirCommits: "7"}},
+			{ID: "file:pkg/a.go", Kind: types.KindFile, Attrs: map[string]string{"language": "go", attrVCSCommits: "5", attrVCSLastCommit: "abc"}},
+			{ID: "file:pkg/b.go", Kind: types.KindFile, Attrs: map[string]string{attrVCSCommits: "2"}},
+			{ID: "function:pkg/a.go:run", Kind: types.KindFunction},
+		},
+		Links: []types.KnowledgeEdge{
+			{Source: "dir:pkg", Target: "file:pkg/a.go", Relation: types.RelationContains},
+			{Source: "dir:pkg", Target: "file:pkg/b.go", Relation: types.RelationContains},
+			{Source: "function:pkg/a.go:run", Target: "file:pkg/b.go", Relation: types.RelationCalls},
+			{Source: "author:Eli", Target: "file:pkg/a.go", Relation: types.RelationAuthored},
+			{Source: "file:pkg/a.go", Target: "file:pkg/b.go", Relation: types.RelationCoChanges},
+		},
+	}
+}
 
-	// Stripping the last attr yields nil, not an empty map: an empty map serializes as
-	// `attrs: {}` and would report as a change against a base that omits the key.
-	assert.Nil(t, g.Nodes[2].Attrs)
-	assert.Nil(t, g.Nodes[3].Attrs)
+func (s *DiffHistorySuite) TestOnlyTheTreeChangeIsStructural() {
+	d := DiffGraphs("main", s.base(), s.head())
+
+	s.Empty(d.NodesAdded, "an author node is history, not structure")
+	s.Empty(d.NodesRemoved)
+	s.Empty(d.NodesChanged, "history attrs alone are not a node change")
+	s.Equal([]types.KnowledgeEdge{
+		{Source: "function:pkg/a.go:run", Target: "file:pkg/b.go", Relation: types.RelationCalls},
+	}, d.EdgesAdded)
+	s.Empty(d.EdgesRemoved)
+}
+
+func (s *DiffHistorySuite) TestOneSidedHistoryIsNotedNotListed() {
+	d := DiffGraphs("main", s.base(), s.head())
+
+	s.Require().NotNil(d.History)
+	s.Equal(types.KnowledgeGraphHistoryDiff{
+		Note: "not compared: the base carries no version-control history, and the current side has it on 4 nodes and 2 edges",
+	}, *d.History)
+
+	reversed := DiffGraphs("main", s.head(), s.base())
+	s.Require().NotNil(reversed.History)
+	s.Contains(reversed.History.Note, "the current side carries no version-control history")
+}
+
+func (s *DiffHistorySuite) TestHistoryOnBothSidesIsDiffed() {
+	before := s.head()
+	before.Nodes = before.Nodes[1:] // no author yet
+	before.Nodes[0].Attrs = map[string]string{AttrDirFiles: "2", AttrDirCommits: "6"}
+	before.Links = append(before.Links[:2:2], types.KnowledgeEdge{Source: "file:pkg/a.go", Target: "file:pkg/b.go", Relation: types.RelationCoChanges})
+
+	d := DiffGraphs("main", before, s.head())
+
+	s.Require().NotNil(d.History)
+	s.Empty(d.History.Note)
+	s.Equal([]types.KnowledgeNode{{ID: "author:Eli", Kind: types.KindAuthor}}, d.History.NodesAdded)
+	s.Require().Len(d.History.NodesChanged, 1)
+	change := d.History.NodesChanged[0]
+	s.Equal("dir:pkg", change.ID)
+	s.Equal(map[string]string{AttrDirCommits: "6"}, change.Before.Attrs, "a history change carries only history attrs")
+	s.Equal(map[string]string{AttrDirCommits: "7"}, change.After.Attrs)
+	s.Equal([]types.KnowledgeEdge{
+		{Source: "author:Eli", Target: "file:pkg/a.go", Relation: types.RelationAuthored},
+	}, d.History.EdgesAdded)
+	s.Equal([]types.KnowledgeEdge{
+		{Source: "function:pkg/a.go:run", Target: "file:pkg/b.go", Relation: types.RelationCalls},
+	}, d.EdgesAdded)
+}
+
+func (s *DiffHistorySuite) TestNoHistoryChangeLeavesTheSectionOut() {
+	s.Nil(DiffGraphs("main", s.base(), s.base()).History)
+	s.Nil(DiffGraphs("main", s.head(), s.head()).History, "identical history is no change")
+}
+
+// TestInputsSurvive guards the aliasing hazard: Graph.Output shares attr maps with the
+// live graph, so a split must never delete from them.
+func (s *DiffHistorySuite) TestInputsSurvive() {
+	head := s.head()
+	shared := head.Nodes[2].Attrs
+	want := maps.Clone(shared)
+
+	DiffGraphs("main", s.base(), head)
+
+	s.Equal(want, shared)
+	s.Len(head.Nodes, 5)
+	s.Len(head.Links, 5)
+}
+
+func (s *DiffHistorySuite) TestTextPrintsEdgesAndTheHistoryLine() {
+	var buf strings.Builder
+	s.Require().NoError(DiffText(&buf, DiffGraphs("main", s.base(), s.head())))
+
+	s.Equal("graph diff against main\n"+
+		"  nodes: +0 -0 ~0\n"+
+		"  edges: +1 -0\n"+
+		"  + function:pkg/a.go:run --calls--> file:pkg/b.go\n"+
+		"  History, not compared: the base carries no version-control history, and the current side has it on 4 nodes and 2 edges.\n",
+		buf.String())
+}
+
+func (s *DiffHistorySuite) TestMarkdownCarriesTheHistorySection() {
+	md := string(RenderDiffMarkdown(DiffGraphs("main", s.base(), s.head())))
+
+	s.Contains(md, "Nodes +0 -0 ~0; edges +1 -0.")
+	s.Contains(md, "## History")
+	s.Contains(md, "History, not compared: the base carries no version-control history")
+}
+
+func (s *DiffHistorySuite) TestTextCountsMovesAndEdgesOfRemovedNodes() {
+	d := types.KnowledgeGraphDiff{
+		Base:         "main",
+		NodesRemoved: []types.KnowledgeNode{{ID: "doc:gone.md", Kind: types.KindDoc}},
+		NodesChanged: []types.KnowledgeNodeChange{
+			{ID: "function:a.buzz:run", Fields: []string{"source"}, Before: types.KnowledgeNode{Source: "a.buzz:10"}, After: types.KnowledgeNode{Source: "a.buzz:14"}},
+			{ID: "function:a.buzz:walk", Fields: []string{"source"}, Before: types.KnowledgeNode{Source: "a.buzz:20"}, After: types.KnowledgeNode{Source: "b.buzz:3"}},
+			{ID: "function:a.buzz:stop", Fields: []string{"doc", "source"}, Before: types.KnowledgeNode{Source: "a.buzz:30"}, After: types.KnowledgeNode{Source: "a.buzz:31"}},
+		},
+		EdgesRemoved: []types.KnowledgeEdge{
+			{Source: "dir:.", Target: "doc:gone.md", Relation: types.RelationContains},
+			{Source: "function:a.buzz:run", Target: "function:a.buzz:stop", Relation: types.RelationCalls},
+		},
+	}
+	var buf strings.Builder
+	s.Require().NoError(DiffText(&buf, d))
+
+	s.Equal("graph diff against main\n"+
+		"  nodes: +0 -1 ~3\n"+
+		"  edges: +0 -2\n"+
+		"  - doc:gone.md\n"+
+		"  ~ function:a.buzz:walk ([source])\n"+
+		"  ~ function:a.buzz:stop ([doc source])\n"+
+		"  ~ 1 more nodes moved within their file (source line only)\n"+
+		"  - function:a.buzz:run --calls--> function:a.buzz:stop\n"+
+		"  - 1 more edges of the removed nodes\n",
+		buf.String())
+}
+
+func (s *DiffHistorySuite) TestComparedHistoryIsCounted() {
+	h := types.KnowledgeGraphHistoryDiff{
+		NodesAdded: []types.KnowledgeNode{{ID: "author:Eli", Kind: types.KindAuthor}},
+		EdgesAdded: []types.KnowledgeEdge{{Source: "author:Eli", Target: "file:a", Relation: types.RelationAuthored}},
+	}
+	s.Equal("History, not counted above: nodes +1 -0 ~0; edges +1 -0.", historySummary(&h))
 }
 
 func TestBaselineHasSymbols(t *testing.T) {
