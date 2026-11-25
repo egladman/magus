@@ -708,11 +708,13 @@ export fun conventionsCheck(root: str, docs: str, files: [str]) > result\Result:
     try {
         final r4 = conventionPages(root + "/" + docs);
         if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final unmatched = unmatchedFiles(r4.value!, files: files, root: root, docs: docs);
-        if (unmatched.len() > 0) {
-            return result\fail::<bool>(unmatched.join("\n"));
+        final named = pagesIn(r4.value!, files: files);
+        // A changed-files run names assets and scripts beside pages; only one that names no
+        // page judges nothing.
+        if (files.len() > 0 and named.len() == 0) {
+            return result\fail::<bool>(unmatchedFiles(r4.value!, files: files, root: root, docs: docs).join("\n"));
         }
-        final sorted = pagesIn(r4.value!, files: files).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        final sorted = named.cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
         final violations: mut [str] = mut [<str>];
         var checked = 0;
