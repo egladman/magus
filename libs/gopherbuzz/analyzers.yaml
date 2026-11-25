@@ -34,7 +34,7 @@ exhaustive-switch:
     - {path: vm/ffi_purego.go, symbol: buzzToReflectArg, type: valueTag, reason: "Only values supported by the pure-Go FFI are converted to reflect arguments; other runtime tags return an unsupported-argument error."}
     - {path: vm/ffi_purego.go, symbol: reflectArgToBuzz, type: CType, reason: "Only callback-legal argument kinds have a Go-to-Buzz mapping; an unexpected kind returns null as the trampoline's defensive fallback."}
     - {path: vm/gc_collect.go, symbol: markReachable, type: valueTag, reason: "Reachability follows only heap-backed values that can own references; scalar tags have no outgoing objects to mark."}
-    - {path: vm/heapprofile.go, symbol: kindName, type: valueTag, reason: "Heap profiles name heap object categories; immediate scalar tags use the generic fallback because they are not heap allocations."}
+    - {path: vm/heap_profile.go, symbol: kindName, type: valueTag, reason: "Heap profiles name heap object categories; immediate scalar tags use the generic fallback because they are not heap allocations."}
     - {path: vm/jit_arm64.go, symbol: compileJIT, type: OpCode, reason: "The ARM64 JIT compiles only its implemented opcode subset; any other opcode rejects JIT compilation so execution falls back to the VM."}
     - {path: vm/jit_shared.go, symbol: depths, type: OpCode, reason: "The verifier computes stack effects only for opcodes it can model; an unknown effect makes the chunk ineligible for JIT compilation."}
     - {path: vm/jit_shared.go, symbol: jitSubOK, type: OpCode, reason: "The fused JIT operation supports only arithmetic and comparison sub-opcodes; other opcodes cannot occupy that superinstruction slot."}
@@ -198,9 +198,9 @@ proofread:
     vm/gc_collect_test.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1, comment-history: 2}
     vm/heap_stats.go: {code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 1}
     vm/heap_stats_test.go: {code-comment-sentence: 4}
-    vm/heapattr.go: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 2}
-    vm/heapprofile.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
-    vm/heapstats_other.go: {code-comment-budget: 1, code-comment-sentence: 1}
+    vm/heap_attr.go: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 2}
+    vm/heap_profile.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
+    vm/heap_stats_other.go: {code-comment-budget: 1, code-comment-sentence: 1}
     vm/jit.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 4}
     vm/jit_amd64.go: {code-comment-budget: 7, code-comment-sentence: 2, comment-caps: 4, comment-history: 1}
     vm/jit_arm64.go: {code-comment-budget: 9, code-comment-sentence: 8, comment-caps: 14, comment-first-person: 1}

@@ -68,6 +68,7 @@ its holder reports it ran magus run test api
 postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
+checkout ~/src/ana: kept after job upgrade/api ended: the fork adopted it rather than making it, so magus never removes it
 ```
 
 and the whole set is done when every row reads `pass`:
@@ -225,6 +226,7 @@ verified release-1.3/changelog, recorded pass
 postcondition changelog: verified
 footprint: where its diff since the checkpoint landed
   CHANGELOG.md:3-6
+checkout ~/src/changelog: kept after job release-1.3/changelog ended: the fork adopted it rather than making it, so magus never removes it
 ```
 
 <!-- golden: job_people_release.txtar wait-notes.out -->

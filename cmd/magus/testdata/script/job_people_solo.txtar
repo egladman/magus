@@ -35,6 +35,8 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/exec.out
 exec magus describe job refactor/pricing
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/describe.out
 
 cp $WORK/total.sh pricing/total.sh
@@ -51,6 +53,8 @@ cmp stdout $WORK/exit.out
 cd ../shop-tax
 exec magus job exec refactor/tax
 exec magus job exit refactor/tax
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/abandon.out
 
 cd ../shop
@@ -113,6 +117,7 @@ refactor/tax      -       declared  bounded  1      disjoint  magus run test .
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
 recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d, which is the checkpoint it was handed. Nothing to reconcile; carry on.
+job refactor/pricing adopted the checkout ~/src/shop-pricing: wait grades it there, and it is taken there and nowhere else.
 took refactor/pricing in ~/src/shop-pricing; read the spec with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
@@ -143,6 +148,7 @@ grouping history
 
 the only check you run
 magus run test .
+checkout ~/src/shop-pricing: adopted for job refactor/pricing at 58d5e2c343b3; its holder takes it there with `magus job exec refactor/pricing`, and magus never removes it
 refactor/pricing: 0 of 1 postcondition(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
@@ -170,12 +176,14 @@ exited refactor/pricing, recorded exited, with its result filed. Whoever forked 
   check: out<hex> is attempt out<hex>, which passed
 -- abandon.out --
 ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
+checkout ~/src/shop-tax: kept after job refactor/tax ended: the fork adopted it rather than making it, so magus never removes it
 -- wait.out --
 verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .
 postcondition check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
+checkout ~/src/shop-pricing: kept after job refactor/pricing ended: the fork adopted it rather than making it, so magus never removes it
 -- ls-done.out --
 JOB               HOLDER        STATE      MODEL    PATHS  PROOF     CHECK
 refactor/pricing  shop-pricing  pass       bounded  1      alone     magus run test .

@@ -1026,9 +1026,9 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		// A linked checkout the fork did not run in is adopted.
 		Worktree:   &jobtypes.Worktree{Root: abs, Source: got.ForkedIn, Base: head, Created: got.Worktree.Created},
 		Generation: 1,
-		Validated:    row.Validated,
-		Created:      got.Created,
-		Updated:      got.Updated,
+		Validated:  row.Validated,
+		Created:    got.Created,
+		Updated:    got.Updated,
 	}, got)
 }
 
