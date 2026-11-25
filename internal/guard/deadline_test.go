@@ -486,6 +486,23 @@ func TestLapseReasonKeepsTheRetryWhenNoCallHoldsMost(t *testing.T) {
 	assert.NotContains(t, reason, "job.forkFacts")
 }
 
+// A workspace rule's lapse names the host call that held the judgment, as the whole
+// judgment's lapse does.
+func TestDenyLapseNamesTheHostCallThatHeldARuleLapse(t *testing.T) {
+	now := time.Now()
+	log := &phaseLog{start: now.Add(-time.Second)}
+	log.calls = append(log.calls, &openedCall{name: "job.forkFacts", start: now.Add(-900 * time.Millisecond)})
+	asked := &rulesAnswer{log: log, lapse: &ruleLapse{side: decidedByApproved, budget: 0,
+		said: lapseWording{"resolving the approved magus\\guard.command rule", "finish"}}}
+
+	require.True(t, denyLapse(asked, judgedCall{what: "this command", changes: true}))
+
+	assert.Equal(t, verdict.Deny, asked.answer.Decision)
+	assert.Contains(t, asked.answer.Reason, "Its slowest host call, job.forkFacts, took ")
+	assert.Contains(t, asked.answer.Reason, "still running, so a retry will not help")
+	assert.NotContains(t, asked.answer.Reason, "A retry passes only if")
+}
+
 // A judgment that answers in time is the verdict, and a dry run is judged to the end.
 func TestJudgeWithinKeepsAJudgmentThatAnswersBeforeTheDeadline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
