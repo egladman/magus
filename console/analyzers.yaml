@@ -127,7 +127,7 @@ proofread:
     src/apps/graph/flow.ts: {code-comment-sentence: 2}
     src/apps/graph/layout.test.ts: {banner: 2, code-comment-sentence: 1, comment-caps: 2}
     src/apps/graph/layout.ts: {banner: 7, code-comment-budget: 13, code-comment-sentence: 14, comment-caps: 7, comment-first-person: 6}
-    src/apps/graph/main.ts: {banner: 23, code-comment-budget: 256, code-comment-sentence: 318, comment-caps: 196, comment-first-person: 8, comment-history: 52, provenance: 6}
+    src/apps/graph/main.ts: {banner: 22, code-comment-budget: 251, code-comment-sentence: 315, comment-caps: 195, comment-first-person: 8, comment-history: 52, provenance: 6}
     src/apps/graph/notice-dom.test.ts: {code-comment-sentence: 1, comment-caps: 1}
     src/apps/graph/notice.ts: {code-comment-budget: 1, code-comment-sentence: 4, comment-history: 1}
     src/apps/graph/querybuilder-dom.test.ts: {code-comment-sentence: 1, comment-caps: 1}
@@ -140,8 +140,8 @@ proofread:
     src/apps/graph/types.ts: {banner: 1, code-comment-budget: 2, code-comment-sentence: 5, comment-caps: 1}
     src/apps/graph/viewport.test.ts: {comment-caps: 1}
     src/apps/graph/viewport.ts: {code-comment-budget: 4, code-comment-sentence: 8, comment-caps: 3}
-    src/apps/graph/views.test.ts: {code-comment-budget: 5, code-comment-sentence: 5, comment-caps: 1, comment-history: 1}
-    src/apps/graph/views.ts: {code-comment-budget: 5, code-comment-sentence: 11, comment-caps: 15, comment-history: 1}
+    src/apps/graph/views.test.ts: {code-comment-budget: 3, code-comment-sentence: 2, comment-caps: 1, comment-history: 1}
+    src/apps/graph/views.ts: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 5}
     src/apps/index.ts: {code-comment-sentence: 1}
     src/apps/logs/demo.ts: {code-comment-budget: 5, code-comment-sentence: 12, comment-caps: 7, comment-history: 2}
     src/apps/logs/dom.ts: {banner: 1, code-comment-budget: 3, code-comment-sentence: 8, comment-caps: 6, comment-first-person: 1}
