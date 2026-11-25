@@ -81,7 +81,7 @@ import {
 } from "../lib/server";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
-import { DEMO_CONNECTION_HINT, notConnectedHint, writeConnection } from "./connection";
+import { notConnectedHint, writeConnection } from "./connection";
 import {
   SPLIT_WORD,
   closeGlyph,
@@ -1708,7 +1708,7 @@ export function startConsole(
     if (wantsDemo(parseHash()) || current?.dataset.state === "demo") {
       // The dot may not exist yet at #demo - it is docked by whichever app is showing, and on the
       // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
-      if (current) writeConnection(current, { hint: DEMO_CONNECTION_HINT, health: null });
+      if (current) writeConnection(current, { health: null });
       // A SYNTHETIC pulse, not null. Everything in the demo is fabricated and says so - the status bar
       // reads "demo", the workspace menu tags its roots - so a pool reading here is consistent with the
       // rest of it rather than a claim about a server. Nulling it meant the demo was the one mode where
@@ -1810,7 +1810,7 @@ export function startConsole(
     const conn = document.getElementById("console-conn");
     if (!conn) return; // momentarily absent between tab swaps
     if (conn.dataset.state === "demo") {
-      writeConnection(conn, { hint: DEMO_CONNECTION_HINT, health: null });
+      writeConnection(conn, { health: null });
       return;
     }
     const ageSec = Math.max(0, Math.round((Date.now() - at) / 1000));

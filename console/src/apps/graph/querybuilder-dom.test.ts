@@ -141,17 +141,13 @@ describe("the question builder", () => {
     const items = [
       ...qb.el.querySelectorAll<HTMLElement>("#console-graph-qb-panel-view .pf-v6-c-menu__item"),
     ];
-    assert.equal(items.length, 8, "one row per view");
+    assert.equal(items.length, 6, "one row per view");
     const cycles = items.find((i) => /circular/.test(i.textContent ?? ""));
     assert.ok(cycles);
     assert.equal(cycles.getAttribute("aria-disabled"), "true");
     assert.match(cycles.textContent ?? "", /Switch to the target graph/);
     cycles.click();
     assert.deepEqual(ran, []);
-    const hubs = items.find((i) => /everything depend on/.test(i.textContent ?? ""));
-    assert.ok(hubs);
-    hubs.click();
-    assert.deepEqual(ran, ["hubs"]);
   });
 
   test("the examples are PF menu items that load a filter into the rows", () => {

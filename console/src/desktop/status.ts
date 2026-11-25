@@ -1,7 +1,7 @@
 // Renders the shell-owned status bar from one contribution shape.
 
 import { parseHash, wantsDemo } from "../lib/server";
-import { DEMO_CONNECTION_HINT, writeConnection } from "./connection";
+import { writeConnection } from "./connection";
 
 export type ConnectionState = "none" | "connecting" | "connected" | "disconnected" | "demo";
 
@@ -41,11 +41,7 @@ export function publishStatus(contribution: StatusContribution): void {
       label: demoing ? "demo" : (contribution.label ?? ""),
       state: demoing ? "demo" : contribution.connection,
       health: contribution.health && !demoing ? contribution.health : null,
-      ...(demoing
-        ? { hint: DEMO_CONNECTION_HINT }
-        : contribution.hint
-          ? { hint: contribution.hint }
-          : {}),
+      ...(contribution.hint && !demoing ? { hint: contribution.hint } : {}),
     });
   }
   const count = document.getElementById("console-count");

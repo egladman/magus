@@ -22,8 +22,6 @@
           <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What breaks if I change this?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td class="pf-v6-c-table__td"><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
           <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">Why does A depend on B?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td class="pf-v6-c-table__td"><code>magus explain &lt;a&gt; --to &lt;b&gt;</code></td></tr>
           <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's slow?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td class="pf-v6-c-table__td"><code>magus graph deps -o json</code></td></tr>
-          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's a hub?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td class="pf-v6-c-table__td">no CLI equivalent</td></tr>
-          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's dead?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td class="pf-v6-c-table__td">no CLI equivalent</td></tr>
         </tbody>
       </table>
       </div>
@@ -116,7 +114,6 @@
         <!-- RESULTS: what the search or the question actually returned, directly under the controls
              that produce it. This used to sit at the very foot of the panel, below every display
              control, so the answer was the last thing on screen. -->
-        <div id="suggestions" class="console-graph-sidebar__suggestions" hidden aria-label="Suggestions"></div>
         <button id="projection-unfold-btn" type="button" class="pf-v6-c-button pf-m-link console-graph-sidebar__unfold" hidden><span class="pf-v6-c-button__text">Show full graph</span></button>
         <button id="list-toggle" class="pf-v6-c-button pf-m-link console-graph-sidebar__count" type="button" aria-expanded="false" aria-controls="node-list">
           <span class="pf-v6-c-button__text" id="graph-count">loading...</span>
