@@ -299,6 +299,10 @@ export fun pilot(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "pilot"] + args});
 }
 
+export fun unroll(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "unroll"] + args});
+}
+
 // Runs llama-bench pp512 and tg128 over every pinned GGUF and appends each one's rates to
 // runs.jsonl. Args after -- go to `train gguf-bench`, e.g. `-- -prefix gguf/qwen`. Manual,
 // never part of ci.
