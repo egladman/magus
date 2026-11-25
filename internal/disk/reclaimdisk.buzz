@@ -193,8 +193,33 @@ export fun liveLeases(leases: [Lease]) > {str: [str]} {
     return byRoot;
 }
 
+/// ownedRoots are the dirs whose worktrees a reclaim may remove: magus's checkouts under the
+/// cache dir, plus each root the caller includes.
+export fun ownedRoots(include: [str]) > [str] {
+    final roots = mut [<str>];
+    final xdg = os\env("XDG_CACHE_HOME") ?? "";
+    final home = os\env("HOME") ?? "";
+    final cache = if (xdg.startsWith("/")) xdg else if (home != "") "{home}/.cache" else "";
+    if (cache != "") {
+        roots.append("{cache}/magus/tmp");
+        roots.append("{cache}/magus/checkouts");
+    }
+    foreach (r in include) { roots.append(r); }
+    return roots;
+}
+
+/// owns says whether a worktree is magus's or Claude's to remove: any `.claude/worktrees`
+/// child, or a path under one of roots.
+export fun owns(path: str, roots: [str]) > bool {
+    if (path.indexOf("/.claude/worktrees/") != null) { return true; }
+    foreach (r in roots) {
+        if (path.startsWith(if (r.endsWith("/")) r else r + "/")) { return true; }
+    }
+    return false;
+}
+
 /// classify decides one worktree, listing every reason to keep it rather than the first.
-export fun classify(o: Observed, main: str, own: str, leases: {str: [str]}, pids: {str: [str]}, now: double, keepRecent: double, shown: str) > Item {
+export fun classify(o: Observed, main: str, own: str, owned: bool, leases: {str: [str]}, pids: {str: [str]}, now: double, keepRecent: double, shown: str) > Item {
     final reasons = mut [<str>];
     final keys = mut [<str>];
     fun keep(key: str, why: str) > void {
@@ -203,6 +228,7 @@ export fun classify(o: Observed, main: str, own: str, leases: {str: [str]}, pids
     }
     if (o.path == main) { keep("main", why: "the main worktree, which holds the repository"); }
     if (o.path == own) { keep("own", why: "the caller's own checkout"); }
+    if (!owned) { keep("foreign", why: "outside magus's and Claude's worktree dirs; --include <root> names another"); }
     if (o.dirty < 0) {
         keep("gone", why: "its directory is gone, so nothing to reclaim; `git worktree prune` clears the record");
     }
@@ -320,7 +346,7 @@ fun pad(s: str, width: int) > str {
     return s + " ".repeat(width - s.len());
 }
 
-final KEY_ORDER = ["dirty", "unique", "lease", "process", "locked", "recent", "own", "main", "gone"];
+final KEY_ORDER = ["dirty", "unique", "lease", "process", "locked", "recent", "own", "foreign", "main", "gone"];
 
 export fun render(items: [Item]) > [str] {
     var width = 4;
@@ -587,7 +613,7 @@ fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) >
 
 /// survey reads every worktree and agent branch of the repository at the working directory
 /// and returns the plan, unranked; measure runs du on each removable worktree.
-export fun survey(base: str, now: double, keepRecent: double, measure: bool, deadline: double) > result\Result::<Survey> {
+export fun survey(base: str, now: double, keepRecent: double, measure: bool, include: [str], deadline: double) > result\Result::<Survey> {
     try {
         final root = vcs\root();
         final listed = git(root, args: ["worktree", "list", "--porcelain"], deadline: deadline);
@@ -602,6 +628,7 @@ export fun survey(base: str, now: double, keepRecent: double, measure: bool, dea
         final leases = liveLeases(jobs.value!);
         final cwds = processCwds(deadline);
         if (cwds.error -> e) { return result\Result::<Survey>{ error = e }; }
+        final roots = ownedRoots(include);
         final pids = pidsByWorktree(cwds.value!, paths: trees.map(fun (i: int, t: Worktree) > str => t.path));
 
         final items = mut [<Item>];
@@ -610,7 +637,7 @@ export fun survey(base: str, now: double, keepRecent: double, measure: bool, dea
         foreach (t in trees) {
             final seen = observe(t, main: main, base: base, baseOk: baseOk, deadline: deadline);
             if (seen.error -> e) { return result\Result::<Survey>{ error = e }; }
-            final it = classify(seen.value!, main: main, own: root, leases: leases, pids: pids, now: now, keepRecent: keepRecent, shown: displayPath(t.path, main: main));
+            final it = classify(seen.value!, main: main, own: root, owned: owns(t.path, roots: roots), leases: leases, pids: pids, now: now, keepRecent: keepRecent, shown: displayPath(t.path, main: main));
             if (t.branch != "" and t.branch != "(detached)") { held[t.branch] = t.path; }
             if (it.class == "removable") {
                 removable.append(t.path);
@@ -651,7 +678,24 @@ fun magusBin() > result\Result::<str> {
     }
 }
 
+/// holder says what holds a worktree now, "" when nothing does. The plan can be minutes old
+/// when a removal comes up.
+fun holder(path: str, deadline: double) > result\Result::<str> {
+    final jobs = jobLeases();
+    if (jobs.error -> e) { return result\Result::<str>{ error = e }; }
+    final lease = liveLeases(jobs.value!)[path] ?? [<str>];
+    if (lease.len() > 0) { return result\ok::<str>("live job {lease.join(", ")}"); }
+    final cwds = processCwds(deadline);
+    if (cwds.error -> e) { return result\Result::<str>{ error = e }; }
+    final pids = pidsByWorktree(cwds.value!, paths: [path])[path] ?? [<str>];
+    if (pids.len() > 0) { return result\ok::<str>("working directory of pid {pids.join(", ")}"); }
+    return result\ok::<str>("");
+}
+
 fun removeWorktree(it: Item, root: str, deadline: double) > str {
+    final held = holder(it.path, deadline: deadline);
+    if (held.error -> e) { return "skipped: could not recheck it: {e.message}"; }
+    if (held.value! != "") { return "skipped: now held by {held.value!}"; }
     final line = guardLine(root, path: it.path);
     if (line == null) { return "skipped: its path needs shell quoting, which the guard check does not cover"; }
     final bin = magusBin();
@@ -814,7 +858,7 @@ export fun trimDeclared(fence: double, deadline: double) > result\Result::<[Cach
 /// It returns the whole plan with each row's result, and errors past deadline.
 export fun chunk(deadline: double) > result\Result::<[Item]> {
     try {
-        final surveyed = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
+        final surveyed = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, include: [<str>], deadline: deadline);
         if (surveyed.error -> err) { return result\Result::<[Item]>{ error = err }; }
         final s = surveyed.value!;
         final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
@@ -991,16 +1035,27 @@ test "classify keeps a dirty, unpushed, leased, busy or locked worktree and says
     final now = 100000000.0;
     final old = now - 86400000.0;
     final none = {<str: [str]>};
-    final dirty = classify(Observed{ path = "/r/w/d", dirty = 2, touched = old }, main: "/r", own: "/r", leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "d");
+    final dirty = classify(Observed{ path = "/r/w/d", dirty = 2, touched = old }, main: "/r", own: "/r", owned: true, leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "d");
     assert\equal(dirty.reasons, want: ["2 uncommitted files"], message: "dirty");
-    final unpushed = classify(Observed{ path = "/r/w/u", unique = 1, touched = old }, main: "/r", own: "/r", leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "u");
+    final unpushed = classify(Observed{ path = "/r/w/u", unique = 1, touched = old }, main: "/r", own: "/r", owned: true, leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "u");
     assert\equal(unpushed.keys, want: ["unique"], message: "unpushed");
-    final leased = classify(Observed{ path = "/r/w/l", touched = old }, main: "/r", own: "/r", leases: {"/r/w/l": ["j (running)"]}, pids: {"/r/w/l": ["9"]}, now: now, keepRecent: 7200000.0, shown: "l");
+    final leased = classify(Observed{ path = "/r/w/l", touched = old }, main: "/r", own: "/r", owned: true, leases: {"/r/w/l": ["j (running)"]}, pids: {"/r/w/l": ["9"]}, now: now, keepRecent: 7200000.0, shown: "l");
     assert\equal(leased.keys, want: ["lease", "process"], message: "leased and busy");
-    final locked = classify(Observed{ path = "/r/w/k", locked = "", touched = old }, main: "/r", own: "/r", leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "k");
+    final locked = classify(Observed{ path = "/r/w/k", locked = "", touched = old }, main: "/r", own: "/r", owned: true, leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "k");
     assert\equal(locked.keys, want: ["locked"], message: "a lock with no reason");
-    final clean = classify(Observed{ path = "/r/w/c", touched = old }, main: "/r", own: "/r", leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "c");
+    final clean = classify(Observed{ path = "/r/w/c", touched = old }, main: "/r", own: "/r", owned: true, leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "c");
     assert\equal(clean.class, want: "removable", message: "clean and idle");
+    final foreign = classify(Observed{ path = "/r/w/f", touched = old }, main: "/r", own: "/r", owned: false, leases: none, pids: none, now: now, keepRecent: 7200000.0, shown: "f");
+    assert\equal(foreign.keys, want: ["foreign"], message: "another tool's worktree");
+}
+
+test "only magus's checkout dirs, a .claude/worktrees child or an included root are owned" {
+    final roots = ["/c/magus/tmp", "/extra/"];
+    assert\equal(owns("/repo/.claude/worktrees/a", roots: roots), want: true, message: "claude");
+    assert\equal(owns("/c/magus/tmp/job", roots: roots), want: true, message: "magus");
+    assert\equal(owns("/extra/w", roots: roots), want: true, message: "included");
+    assert\equal(owns("/home/.codex/worktrees/a/repo", roots: roots), want: false, message: "codex");
+    assert\equal(owns("/c/magus/tmpx/job", roots: roots), want: false, message: "prefix only");
 }
 
 test "a chunk takes the oldest removable worktrees, their branches and unheld ones, never a kept row" {
