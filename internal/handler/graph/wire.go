@@ -7,7 +7,10 @@
 package graph
 
 import (
+	"slices"
+
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -173,4 +176,90 @@ func sitesToProto(in []knowledge.ContextSite) []*graphv1.DefinitionSite {
 		})
 	}
 	return out
+}
+
+// chainsToProto walks each chain from its seed, so every depends_on edge is crossed against
+// its own direction: the dependent is the edge's source.
+func chainsToProto(in []types.AffectedPath) []*graphv1.AffectedChain {
+	out := make([]*graphv1.AffectedChain, 0, len(in))
+	for _, p := range in {
+		c := &graphv1.AffectedChain{Seed: projectID(p.Seed)}
+		for i := 0; i+1 < len(p.Chain); i++ {
+			c.Steps = append(c.Steps, &graphv1.PathStep{
+				From: projectID(p.Chain[i]), To: projectID(p.Chain[i+1]),
+				Relation: string(types.RelationDependsOn), Forward: false,
+			})
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// seedsToProto charges each changed path to the seed the affected set put it under, so every
+// project named here is one in ids.
+func seedsToProto(r *types.AffectedResult, files []types.FileEntry) []*graphv1.AffectedSeed {
+	owner := map[string]string{}
+	for seed, paths := range r.FilesBySeed {
+		for _, p := range paths {
+			owner[p] = seed
+		}
+	}
+	undeclared := map[string]bool{}
+	for _, paths := range r.UndeclaredBySeed {
+		for _, p := range paths {
+			undeclared[p] = true
+		}
+	}
+	role := make(map[string]string, len(files))
+	for _, f := range files {
+		role[f.Path] = f.Role
+	}
+	changed := slices.Sorted(slices.Values(r.Changed))
+	out := make([]*graphv1.AffectedSeed, 0, len(changed))
+	for _, p := range changed {
+		s := &graphv1.AffectedSeed{Path: p, Role: role[p], Undeclared: undeclared[p]}
+		if seed, ok := owner[p]; ok {
+			s.Project = projectID(seed)
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// planToProto flattens the shards to their units and keeps each unit's first place, since
+// stage one may replay a unit stage zero computed.
+func planToProto(target, base string, plan types.ShardPlan) *graphv1.AffectedPlan {
+	args := []string{target}
+	if base != "" {
+		args = append(args, "--base", base)
+	}
+	out := &graphv1.AffectedPlan{
+		Target:      target,
+		Source:      plan.Source,
+		UnboundedBy: plan.UnboundedBy,
+		Command:     hint.Affected.WithAs(hint.DefaultBinaryName, args...),
+		Unreached:   unitsToProto(plan.Unreached),
+	}
+	seen := map[types.Unit]bool{}
+	for _, s := range slices.Concat(plan.StageZero, plan.Shards) {
+		for _, u := range s.Units {
+			if !seen[u] {
+				seen[u] = true
+				out.Units = append(out.Units, unitToProto(u))
+			}
+		}
+	}
+	return out
+}
+
+func unitsToProto(in []types.Unit) []*graphv1.PlanUnit {
+	out := make([]*graphv1.PlanUnit, 0, len(in))
+	for _, u := range in {
+		out = append(out, unitToProto(u))
+	}
+	return out
+}
+
+func unitToProto(u types.Unit) *graphv1.PlanUnit {
+	return &graphv1.PlanUnit{Project: projectID(u.Project), Target: u.Target}
 }
