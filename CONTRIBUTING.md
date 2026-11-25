@@ -686,7 +686,7 @@ push reports all three:
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with
   `magus run pr-description . -- "--title=<title>" "--body=<body>"`.
 - A changelog fragment belongs to a change a magus user notices. One is owed
-  when the diff changes a public-surface lock (`internal/commands/testdata/api.lock`,
+  when the diff changes a public API lock (`internal/commands/testdata/api.lock`,
   `internal/commands/testdata/api-go.lock`, `std/gen/std-api.lock`,
   `internal/interp/bindings/testdata/magus-api.lock`) or a page under
   `internal/config/gen/` or `docs/reference/codes/`, and when the title is marked

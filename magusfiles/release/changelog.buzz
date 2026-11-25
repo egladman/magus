@@ -281,7 +281,7 @@ fun trimEnd(text: str) > str {
 }
 
 // problem returns "" when the pull request passes, else the reason, phrased to be printed.
-// An entry is owed only for a breaking title or a public-surface change (see owed).
+// An entry is owed only for a breaking title or a public API change (see owed).
 //
 // The title's `!` and a fragment's `Breaking:` headline are one claim made twice, so each
 // refuses without the other. marked says an added fragment carries such an entry.
@@ -310,7 +310,7 @@ export fun problem(title: str, changed: [str], added: [str], marked: bool) > str
     if (owing.len() > 10) {
         listed = owing.sub(0, len: 10).join("\n  ") + "\n  ...and {owing.len() - 10} more";
     }
-    return "\"{title}\" is breaking or changes {owing.len()} public-surface path(s) and adds no changelog fragment. "
+    return "\"{title}\" is breaking or changes {owing.len()} public API path(s) and adds no changelog fragment. "
         + "Add {FRAGMENT_DIR}<branch>.md (changes/README.md has the format).\n  " + listed;
 }
 
@@ -337,7 +337,7 @@ export fun hasBreakingEntry(text: str) > bool {
 }
 
 // owed returns the paths in changed that make a pull request owe an entry. A breaking title
-// owes for all of them; any other owes only for public-surface ones (see noticed).
+// owes for all of them; any other owes only for public API ones (see noticed).
 export fun owed(title: str, changed: [str]) > [str] {
     if (commits\isBreaking(title)) {
         return changed;
@@ -349,7 +349,7 @@ export fun owed(title: str, changed: [str]) > [str] {
     return seen;
 }
 
-// noticed reports whether path is a public-surface lock or page: a change a magus user sees.
+// noticed reports whether path is a public API lock or page: a change a magus user sees.
 export fun noticed(path: str) > bool {
     final locks = [
         "internal/commands/testdata/api.lock", "internal/commands/testdata/api-go.lock",
@@ -430,9 +430,9 @@ test "engine code ships and the exempt paths do not" {
     std\assert(ships("cmd/magus/gen/cli_flags.go"), message: "generated code in the binary");
 }
 
-test "a change to a public-surface lock or page without an entry fails" {
+test "a change to a public API lock or page without an entry fails" {
     final got = problem("feat(cli): add a flag", changed: ["internal/commands/testdata/api.lock"], added: [<str>], marked: false);
-    std\assert(got.startsWith("\"feat(cli): add a flag\" is breaking or changes 1 public-surface path(s)"), message: got);
+    std\assert(got.startsWith("\"feat(cli): add a flag\" is breaking or changes 1 public API path(s)"), message: got);
     std\assert(got.endsWith("\n  internal/commands/testdata/api.lock"), message: "names the path");
     std\assert(problem("feat(cli): add a flag", changed: ["internal/commands/testdata/api.lock"], added: ["changes/unreleased/key.md"], marked: false) == "",
         message: "a fragment covers it");
@@ -442,7 +442,7 @@ test "a change to a public-surface lock or page without an entry fails" {
     }
 }
 
-test "a change outside the public surface owes nothing, whatever its type" {
+test "a change outside the public API owes nothing, whatever its type" {
     foreach (kind in ["feat", "fix", "perf", "refactor", "build", "chore", "ci", "docs", "revert", "test"]) {
         std\assert(problem("{kind}: tidy", changed: ["internal/cache/key.go", "spells/golang/spell.buzz"], added: [<str>], marked: false) == "",
             message: kind);

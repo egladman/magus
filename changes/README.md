@@ -21,7 +21,7 @@ Changelog group heading, a blank line, and one or more entries.
 - A breaking change starts its headline with `Breaking:` (or `Breaking for SDK
   callers:`). The pull request title then carries `!` after its type, and a `!`
   title needs one such entry; `pr-changelog` refuses either marker without the other.
-- A fragment is owed only for a breaking title or a change to a public-surface lock or
+- A fragment is owed only for a breaking title or a change to a public API lock or
   page (`noticed` in `magusfiles/release/changelog.buzz` lists them). Add one for any
   other change only when a magus user would notice it.
 - Name the file after the branch, `unreleased/<branch>.md`. Entries under two

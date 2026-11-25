@@ -3,7 +3,7 @@
 //
 // libs/proofread judges the words. This rule adds the diff's word budget, affected areas
 // and title checks. CI's pr-changelog target checks the same diff: a breaking title, or a
-// public-surface lock or page, needs a fragment.
+// public API lock or page, needs a fragment.
 namespace agentpolicy\pullRequests;
 
 import "std";
@@ -2517,14 +2517,14 @@ fun lockDiff(fragments: [str]) > Facts {
         changed = changed, added = base.added, texts = base.texts };
 }
 
-test "a change to a public-surface lock with no fragment is denied with the fix, and a fragment settles it" {
+test "a change to a public API lock with no fragment is denied with the fix, and a fragment settles it" {
     final bare = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(lockDiff([<str>])), judge: passing(), once: helpers\counter());
     std\assert(bare.decision == magus\GuardDecision.deny, message: bare.reason);
     std\assert(bare.reason.indexOf("adds no changelog fragment") != null and bare.reason.indexOf("changes/unreleased/<branch>.md") != null, message: bare.reason);
     final plain = decided(create(featTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(shippedDiff([<str>])), judge: passing(), once: helpers\counter());
-    std\assert(plain.decision == magus\GuardDecision.defer, message: "a change off the public surface needs none: " + plain.reason);
+    std\assert(plain.decision == magus\GuardDecision.defer, message: "a change off the public API needs none: " + plain.reason);
 
     final dir = fs\tempDir("fragment") catch "";
     final fragment = fs\join(dir, "key.md");
