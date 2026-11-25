@@ -188,6 +188,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	facts := TermsFacts{
 		Stage:              release.Stage{Tag: "v0.4.0"},
 		DeletionCandidates: []types.UnreferencedEntry{{ID: "a", Label: "stale", Kind: "Function", Source: "internal/ledger/x.go:4"}},
+		DeletionsLeftOut:   2,
 	}
 
 	got := NewTerms(row, facts).String()
@@ -202,7 +203,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	for _, section := range []string{
 		"\nmay break\n  --old-flag\n  ledger.Open\n",
 		"\nrelease stage\n  newest release v0.4.0: below 1.0 a major floor ships as a minor release\n",
-		"\n" + deletionHeading + "\n  stale (function) at internal/ledger/x.go:4\n",
+		"\n" + deletionHeading + "\n  stale (function) at internal/ledger/x.go:4\n  2 more left out: each is named inside its own file; `magus unreferenced` lists them\n",
 		"\nwrite paths\n",
 	} {
 		assert.Contains(t, got, section)

@@ -23,18 +23,25 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// DeletionCandidates is the unreferenced symbols in row's write paths, or nil when the
-// symbol index is not there to ask: no index is not the same as nothing to delete, and the
-// fork must not fail for it.
-func DeletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row jobtypes.Job) []types.UnreferencedEntry {
+// DeletionCandidates is the unreferenced symbols in row's write paths that their own file
+// does not name, and how many it left out. No symbol index answers nil: that is not the same
+// as nothing to delete, and the fork must not fail for it.
+func DeletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row jobtypes.Job) (candidates []types.UnreferencedEntry, leftOut int) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
-		return nil
+		return nil, 0
 	}
 	g := load(ctx)
 	if g == nil {
-		return nil
+		return nil, 0
 	}
-	return job.UnreferencedInPaths(row, g.Unreferenced())
+	for _, e := range job.UnreferencedInPaths(row, g.Unreferenced()) {
+		if g.UsedInOwnFile(e.ID) {
+			leftOut++
+			continue
+		}
+		candidates = append(candidates, e)
+	}
+	return candidates, leftOut
 }
 
 // ReferencedOutside is the files outside row's write paths that use what they define, and
@@ -92,6 +99,7 @@ func LeaseBoundary(ctx context.Context, root string, store *job.Store, row jobty
 	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" }, quiet)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	regenerated, unrun := env.Notes(ctx, m, row)
+	deletions, deletionsLeftOut := DeletionCandidates(ctx, graph.LoadScoped(row.Paths.Write), row)
 	facts := job.TermsFacts{
 		Projects:           affected.Affected,
 		DerivedDenyPaths:   derived,
@@ -99,7 +107,8 @@ func LeaseBoundary(ctx context.Context, root string, store *job.Store, row jobty
 		UnrunGates:         unrun,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 		Stage:              types.NewestReleaseStage(rootTags(ctx, m)),
-		DeletionCandidates: DeletionCandidates(ctx, graph.LoadScoped(row.Paths.Write), row),
+		DeletionCandidates: deletions,
+		DeletionsLeftOut:   deletionsLeftOut,
 		TestScope:          job.NarrowTestScope(m.All(), row.Paths.Write, here),
 	}
 	facts.ReferencedOutside, facts.ReferencedOutsideGap = ReferencedOutside(ctx, graph.LoadScoped(row.Paths.Write), m.Root(), row, m.All())

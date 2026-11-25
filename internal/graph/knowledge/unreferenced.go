@@ -73,6 +73,27 @@ func (g *Graph) Unreferenced() []types.UnreferencedEntry {
 	return out
 }
 
+// UsedInOwnFile reports whether a symbol's own definition files name it. A recursive call
+// does not count. Unreferenced keeps listing such symbols; a job's report sets them aside.
+func (g *Graph) UsedInOwnFile(id string) bool {
+	g.ensureAdj()
+	defFiles := g.definingFiles(id)
+	for _, e := range g.in[id] {
+		switch e.Relation {
+		case types.RelationCalls:
+			if e.Source != id && g.definedWithin(e.Source, defFiles) {
+				return true
+			}
+		case types.RelationReferences:
+			if defFiles[e.Source] {
+				return true
+			}
+		case types.RelationAnnotates, types.RelationAuthored, types.RelationCoChanges, types.RelationConsumes, types.RelationContains, types.RelationDefines, types.RelationDependsOn, types.RelationDepicts, types.RelationDocuments, types.RelationEmits, types.RelationImplements, types.RelationImports, types.RelationOwns, types.RelationProduces, types.RelationRationaleFor, types.RelationSplits, types.RelationUses:
+		}
+	}
+	return false
+}
+
 // definingFiles returns the file node IDs that define the symbol.
 func (g *Graph) definingFiles(id string) map[string]bool {
 	files := map[string]bool{}

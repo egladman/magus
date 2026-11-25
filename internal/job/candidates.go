@@ -47,8 +47,8 @@ func UnreferencedInPaths(row job.Job, unreferenced []types.UnreferencedEntry) []
 
 // RenderDeletionCandidates writes candidates as the block [Terms] renders, for a command
 // that prints no terms. Nothing is written for none.
-func RenderDeletionCandidates(w io.Writer, candidates []types.UnreferencedEntry) {
-	renderBlock(w, deletionHeading, deletionLines(candidates))
+func RenderDeletionCandidates(w io.Writer, candidates []types.UnreferencedEntry, leftOut int) {
+	renderBlock(w, deletionHeading, deletionLines(candidates, leftOut))
 }
 
 func renderBlock(w io.Writer, heading string, lines []string) {
@@ -61,10 +61,9 @@ func renderBlock(w io.Writer, heading string, lines []string) {
 	}
 }
 
-// deletionLines is one line per candidate up to findingsLimit, then the caveat
-// the measurement carries. The graph cannot see reflection, interface dispatch or a
-// consumer outside the workspace, so a candidate is a place to look before deleting.
-func deletionLines(candidates []types.UnreferencedEntry) []string {
+// deletionLines is one line per candidate up to findingsLimit, the count left out, then the
+// caveat. The graph cannot see reflection or outside consumers, so look before deleting.
+func deletionLines(candidates []types.UnreferencedEntry, leftOut int) []string {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -82,6 +81,9 @@ func deletionLines(candidates []types.UnreferencedEntry) []string {
 	}
 	if rest := len(candidates) - len(shown); rest > 0 {
 		lines = append(lines, fmt.Sprintf("and %d more; -o json lists every one", rest))
+	}
+	if leftOut > 0 {
+		lines = append(lines, fmt.Sprintf("%d more left out: each is named inside its own file; `magus unreferenced` lists them", leftOut))
 	}
 	return append(lines,
 		"finish each or delete it; reflection, interface dispatch and consumers outside this workspace are invisible to this list, so confirm before deleting")
