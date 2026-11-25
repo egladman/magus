@@ -190,7 +190,7 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         tool = tool + "paths = .\{ write = [\"<paths>\"] }";
     }
     fork = fork + " --instructions \"<what done means>\"";
-    tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"resume\"}} })";
+    tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"new\", \"reason\": \"<why a new worker starts>\"}} })";
     var scope = "";
     if (spawn.lease != "") {
         scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "
@@ -244,6 +244,13 @@ test "a title naming a missing row is denied with the real command" {
     std\assert(v.reason.indexOf("magus\\workspace().putJob(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
     std\assert(v.reason.indexOf("read_only = true") != null, message: "names the read-only field");
     std\assert(v.reason.indexOf("`v050-prep/scout nothing-here`") != null, message: "names the retitle");
+}
+
+test "the printed putJob worker is one the store accepts" {
+    final v = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "missing row");
+    std\assert(v.reason.indexOf("\"worker\": \{\"type\": \"new\", \"reason\": \"<why a new worker starts>\"}}") != null, message: v.reason);
+    std\assert(v.reason.indexOf("\"resume\"") == null, message: "names no retired worker type");
 }
 
 test "an ended row is denied" {
