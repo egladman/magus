@@ -690,7 +690,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	default:
 		fromFlags = true
 		retry = true
-		flags.Visit(func(f *flag.Flag) { retry = retry && !slices.Contains(forkSpecFlags, f.Name) })
+		flags.Visit(func(f *flag.Flag) {
+			retry = retry && (f.Name == "checkpoint" || !slices.Contains(forkSpecFlags, f.Name))
+		})
 	}
 
 	root = resolveRootOrEmpty(root)
@@ -716,8 +718,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if retry {
+		flagged := row
 		if row, err = job.RetriedDeclaration(ctx, store, row); err != nil {
 			return err
+		}
+		// --checkpoint moves where the stored job starts from; it is no spec to re-declare.
+		if flagged.Checkpoint != "" {
+			row.Checkpoint = flagged.Checkpoint
 		}
 	}
 	if row, err = job.StackedHead(ctx, root, row, configuredVCS()); err != nil {
