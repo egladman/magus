@@ -694,7 +694,7 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 	projects := r.selected(ws)
 	own := r.ownOutputs(job.RegeneratedOutside(j.root, j.row, projects, nil))
 	if !v.permitted {
-		if !r.regeneratesOwn(own) {
+		if !r.regeneratesOwn(own) && !r.checksWrittenModule(ws, j.row.Paths.Write) {
 			return v
 		}
 		v.permitted = true
@@ -1231,6 +1231,19 @@ func (r targetRun) writesOutside(projects []*types.Project, writePaths []string,
 		}
 	}
 	return outside
+}
+
+// checksWrittenModule reports a run of a target testing or linting each project it names,
+// every one owning a file of writePaths ([job.ModuleChecks]). Every project, `/`, is beyond
+// any write set. The rw charm still holds the run to them.
+func (r targetRun) checksWrittenModule(ws types.WorkspaceReader, writePaths []string) bool {
+	if r.verb != "run" || slices.Contains(r.selection(), "/") {
+		return false
+	}
+	checks := job.ModuleChecks(ws.All(), writePaths)
+	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+		return !slices.ContainsFunc(checks[path.Clean(p)], func(t string) bool { return sameTarget(t, r.target) })
+	})
 }
 
 // selected is the projects the run selects, read from ws: every project for `/`.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -393,4 +394,25 @@ func (s *ownerChainSuite) TestRootAndOwnerChainsListEachRequiredCheckOnce() {
 	got := UnrunGates(s.T().TempDir(), row, ownerChainWorkspace(), nil, nil)
 
 	s.Equal([]string{".:lint", "console:lint"}, gateTargets(got))
+}
+
+func TestModuleChecksAreTheLintAndTestTargetsOfEachWrittenProject(t *testing.T) {
+	t.Parallel()
+
+	kit := &types.Project{
+		Path:           "libs/kit",
+		ResolvedSpells: []*spells.Spell{scopedSpell("go", ".go", map[string][]string{"go-test": {"./{dir}"}})},
+		TargetChains: map[string][]types.ChainStep{
+			"ci": {{Target: "lint"}, {Target: "test"}, {Target: "race"}, {Target: "format"}}, "race": {{Target: "generate"}},
+		},
+		TargetSpellOps: map[string][]types.TargetSpellUse{
+			"test": {{Spell: "go", Ops: []string{"go-test"}}}, "race": {{Spell: "go", Ops: []string{"go-test"}}},
+		},
+	}
+	other := &types.Project{Path: "libs/other", TargetChains: kit.TargetChains}
+
+	got := ModuleChecks([]*types.Project{kit, other}, []string{"libs/kit/a.go", "libs/kit/b/c.go"})
+
+	assert.Equal(t, map[string][]string{"libs/kit": {"lint", "go::go-test", "test"}}, got,
+		"race composes generate, so it runs more than tests; libs/other holds no written file")
 }
