@@ -11,19 +11,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
-// workSource is CPU-bound and allocation-light, so wall time scaling reflects
-// the VM and not the garbage collector.
-const workSource = `
-fun recurse(n: int) > int {
-    if (n < 2) {
-        return n;
-    }
-    return recurse(n - 1) + recurse(n - 2);
-}
-
-final total = recurse(24);
-`
-
 // BenchmarkIsolateScaling runs N independent sessions on N goroutines. Perfect
 // isolation holds wall-ns/run flat as N grows; contention shows as growth.
 func BenchmarkIsolateScaling(b *testing.B) {
@@ -85,11 +72,4 @@ func BenchmarkIsolateMemory(b *testing.B) {
 	}
 	b.ReportMetric(fresh/float64(b.N), "fresh-B/session")
 	b.ReportMetric(ran/float64(b.N), "ran-B/session")
-}
-
-func heapInUse() int64 {
-	runtime.GC()
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	return int64(m.HeapAlloc)
 }
