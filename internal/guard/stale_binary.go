@@ -94,9 +94,9 @@ func pinnedAuthority(row job.Job) string {
 	return row.Authority
 }
 
-// authorityRevision is the part of an authority token version control resolves.
-func authorityRevision(token string) string {
-	revision, _ := types.ParseCheckpointToken(token)
+// authorityRevision is the part of an authority version control resolves.
+func authorityRevision(pinned string) string {
+	revision, _ := types.ParseCheckpointToken(pinned)
 	return revision
 }
 
@@ -135,13 +135,13 @@ func authorityRecovery(ctx context.Context, at location, lease, revision string)
 // judgment reuses it. A failed read is never kept.
 var authorityTrees sync.Map
 
-type authorityKey struct{ root, token string }
+type authorityKey struct{ root, pinned string }
 
-// authorityContract is the binary's contract against root at an authority
-// token, kept by the whole token so a dirty patch is its own entry.
-func authorityContract(ctx context.Context, root, token string) (contract.Skew, error) {
-	rev := authorityRevision(token)
-	key := authorityKey{root: root, token: token}
+// authorityContract is the binary's contract against root at an authority,
+// kept by the whole value so a dirty patch is its own entry.
+func authorityContract(ctx context.Context, root, pinned string) (contract.Skew, error) {
+	rev := authorityRevision(pinned)
+	key := authorityKey{root: root, pinned: pinned}
 	if kept, ok := authorityTrees.Load(key); ok {
 		if tree, ok := kept.(string); ok {
 			bin, err := contract.Binary()
