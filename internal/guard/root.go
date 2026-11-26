@@ -667,7 +667,7 @@ func refreshesOwnCheckout(ctx context.Context, line string, at location) bool {
 	if moved, found := gitCommit(ctx, root, ref); !ok || !found || moved != tip {
 		return false
 	}
-	if gitQuiet(ctx, root, "diff", "--cached", "--quiet") != nil {
+	if exec.CommandContext(ctx, "git", "-C", root, "diff", "--cached", "--quiet").Run() != nil {
 		return false
 	}
 	rows, err := leaseRows(ctx, at)
@@ -696,11 +696,6 @@ func gitCommit(ctx context.Context, root, ref string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(string(out)), true
-}
-
-// gitQuiet runs git in root for its exit status alone.
-func gitQuiet(ctx context.Context, root string, args ...string) error {
-	return exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...).Run()
 }
 
 func recoversOwnCheckout(line, root string) bool {

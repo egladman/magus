@@ -1001,7 +1001,7 @@ func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 type RefreshesOwnCheckoutSuite struct {
 	suite.Suite
 	at   location
-	ctx  context.Context
+	rows []jobtypes.Job
 	tip  string
 	base string
 }
@@ -1019,17 +1019,17 @@ func (s *RefreshesOwnCheckoutSuite) SetupTest() {
 	fixtureGit(t, s.at.workspace, "update-ref", "refs/remotes/origin/main", s.tip)
 	fixtureGit(t, s.at.workspace, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
 	fixtureGit(t, s.at.workspace, "checkout", "-q", "--detach", s.base)
-	s.ctx = job.WithSnapshot(t.Context(), job.Snapshot{Rows: []jobtypes.Job{{ID: "a1", State: jobtypes.StateRunning}}})
+	s.rows = []jobtypes.Job{{ID: "a1", State: jobtypes.StateRunning}}
 }
 
 func (s *RefreshesOwnCheckoutSuite) refreshes(line string) bool {
-	return refreshesOwnCheckout(s.ctx, line, s.at)
+	return refreshesOwnCheckout(job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: s.rows}), line, s.at)
 }
 
 func (s *RefreshesOwnCheckoutSuite) TestAFastForwardToTheTipIsRootWork() {
 	s.True(s.refreshes("git merge --ff-only origin/main"))
 	s.True(s.refreshes("git checkout --detach origin/main"))
-	s.True(s.refreshes("git checkout " + s.tip + " --detach"))
+	s.True(s.refreshes(fmt.Sprintf("git checkout %s --detach", s.tip)))
 }
 
 func (s *RefreshesOwnCheckoutSuite) TestAnyOtherMoveIsIntegration() {
@@ -1057,7 +1057,7 @@ func (s *RefreshesOwnCheckoutSuite) TestStagedWorkStaysTheIntegrators() {
 func (s *RefreshesOwnCheckoutSuite) TestALiveRowEditingTheCheckoutKeepsIt() {
 	row := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: s.at.workspace}
 	row.Paths.Write = []string{"a.go"}
-	s.ctx = job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: []jobtypes.Job{row}})
+	s.rows = []jobtypes.Job{row}
 	s.False(s.refreshes("git merge --ff-only origin/main"))
 }
 
