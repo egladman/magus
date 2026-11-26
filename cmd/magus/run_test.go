@@ -445,3 +445,29 @@ func TestRootedSelectionIsALocalRunNamingRoot(t *testing.T) {
 	assert.False(t, rootedSelection(ctx, ""), "no --root")
 	assert.False(t, rootedSelection(proc.WithCurrentWorkingDirectory(ctx, "/ws/sub"), "/ws"), "an adopted run carries the server's root")
 }
+
+// TestRunDotAnchorsAtRootFromAnotherProject proves `--root R run build .` names the
+// project at R, not the project the caller happens to stand in.
+func TestRunDotAnchorsAtRootFromAnotherProject(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
+	body := func(name string) string {
+		return `import "magus";
+import "fs";
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["` + name + `"]);
+    fs\writeFile("` + name + `", "1");
+}
+`
+	}
+	write("magusfile.buzz", body("ran-at-root.marker"))
+	write("sub/magusfile.buzz", body("ran-at-sub.marker"))
+	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
+	t.Chdir(filepath.Join(root, "sub"))
+
+	err := runTarget(t.Context(), root, runConfig{}, []string{"build", "."})
+	require.NoError(t, err, "'.' must resolve at --root, not at the cwd's project")
+	assert.FileExists(t, filepath.Join(root, "ran-at-root.marker"))
+	assert.NoFileExists(t, filepath.Join(root, "sub", "ran-at-sub.marker"))
+}
