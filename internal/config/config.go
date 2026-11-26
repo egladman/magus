@@ -373,6 +373,8 @@ type SpellsConfig struct {
 	//	spells:
 	//	  ghcr.io/team/spells/lint:
 	//	    tag: "1.4"            # a remote spell; magus.lock pins its digest
+	//	  ghcr.io/team/spells/strings:
+	//	    tag: "2.0"            # a Buzz module library, declared the same way
 	//	  magus/spell/go:
 	//	    path: spells/go       # a workspace copy replaces the embedded spell
 	//
@@ -381,9 +383,12 @@ type SpellsConfig struct {
 	Imports map[string]SpellImport `json:",inline" yaml:",inline"`
 }
 
-// SpellImport declares one spell import path. Exactly one field is set: Tag for a
-// remote spell, which only the update charm resolves, or Path for a workspace
-// directory that replaces an embedded or remote spell, the way Go's replace does.
+// SpellImport declares one import path, a spell or a Buzz module library. The pulled
+// artifact says which, so there is no kind field.
+//
+// Exactly one field is set. Tag names a remote artifact, which only the update charm
+// resolves. Path names a workspace directory that replaces an embedded or remote one,
+// the way Go's replace does.
 type SpellImport struct {
 	Tag  string `json:"tag,omitempty" yaml:"tag,omitempty"`
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`

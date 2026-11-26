@@ -387,13 +387,13 @@ func humanReason(f FieldFailure) string {
 	case "unique":
 		return fmt.Sprintf("each entry needs a distinct %s", strings.ToLower(f.Param))
 	case "spell_import_path":
-		msg := fmt.Sprintf("is not a spell import path: a remote spell is a lowercase registry path (ghcr.io/team/spells/lint), an embedded one starts with magus/spell/ (got %q)", f.Value)
+		msg := fmt.Sprintf("is not an import path: a remote spell or Buzz module library is a lowercase registry path (ghcr.io/team/spells/lint), an embedded spell starts with magus/spell/ (got %q)", f.Value)
 		if f.Param != "" {
 			msg += fmt.Sprintf("; did you mean %q?", f.Param)
 		}
 		return msg
 	case "spell_tag_or_path":
-		return "declare exactly one of tag (the remote spell magus.lock pins) or path (a workspace directory that replaces it)"
+		return "declare exactly one of tag (the remote spell or module library magus.lock pins) or path (a workspace directory that replaces it)"
 	case "spell_embedded_tag":
 		return fmt.Sprintf("an embedded spell ships inside magus and has no tag; declare path to replace it with a workspace copy (got %q)", f.Value)
 	case "spell_tag":
@@ -416,7 +416,7 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("entry %s must be one of: %s (got %q)", f.Param,
 			strings.Join(SourceVerdict("").Values(), ", "), f.Value)
 	case "spell_path_nested":
-		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
+		return fmt.Sprintf("nests inside spells.%s; each remote spell or module library is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:
 		if f.Param != "" {
 			return fmt.Sprintf("failed %s=%s (got %q)", f.Tag, f.Param, f.Value)

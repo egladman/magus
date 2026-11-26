@@ -195,6 +195,7 @@ func TestValidate_SpellImports(t *testing.T) {
 		"ghcr.io/egladman/magus/spells/cursor": {Tag: "1.4"},
 		"localhost:5000/team/spells/lint":      {Path: "vendor/lint"},
 		"magus/spell/go":                       {Path: "spells/go"},
+		"ghcr.io/team/modules/strings":         {Tag: "2.0"},
 	}
 	require.NoError(t, Validate(valid))
 
@@ -236,6 +237,10 @@ func TestValidate_SpellImports(t *testing.T) {
 		"override escapes the workspace": {
 			imports: map[string]SpellImport{"magus/spell/go": {Path: "../go"}},
 			want:    []FieldFailure{{Field: "spells.magus/spell/go.path", Tag: "spell_override_path", Value: "../go"}},
+		},
+		"module library with neither tag nor path": {
+			imports: map[string]SpellImport{"ghcr.io/team/modules/strings": {}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/team/modules/strings", Tag: "spell_tag_or_path"}},
 		},
 		"nested remote paths": {
 			imports: map[string]SpellImport{"ghcr.io/team/lint": {Tag: "1"}, "ghcr.io/team/lint/extra": {Tag: "1"}},
@@ -488,4 +493,12 @@ func TestValidate_ConformanceScalars(t *testing.T) {
 			assert.Contains(t, ve.Failures[0].Field, tc.field)
 		})
 	}
+}
+
+func TestValidate_ModuleLibraryFixLine(t *testing.T) {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs, Console: Defaults().Console}
+	cfg.Spells.Imports = map[string]SpellImport{"ghcr.io/team/modules/strings": {}}
+	err := Validate(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spells.ghcr.io/team/modules/strings: declare exactly one of tag (the remote spell or module library magus.lock pins)")
 }
