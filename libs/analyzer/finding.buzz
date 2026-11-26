@@ -1,0 +1,37 @@
+// finding is what an analyzer reports and how the runner prints it.
+namespace finding;
+
+// Finding is one thing an analyzer reports. The runner sets analyzer, and sets fix
+// to the analyzer's own when the finding leaves it empty.
+export object Finding {
+    analyzer: str = "",
+    path: str = "",
+    // line and col count from 1; 0 means the finding has no single position.
+    line: int = 0,
+    col: int = 0,
+    // item is the unit a baseline row or an exit names; "" means the whole file.
+    item: str = "",
+    message: str = "",
+    fix: str = "",
+    url: str = "",
+}
+
+// render is f as two or more lines: `path:line:col: message [analyzer]`, then the
+// fix and the url indented under it.
+export fun render(f: Finding) > str {
+    var pos = f.path;
+    if (f.line > 0) {
+        pos = pos + ":{f.line}";
+        if (f.col > 0) {
+            pos = pos + ":{f.col}";
+        }
+    }
+    var s = pos + ": " + f.message + " [" + f.analyzer + "]";
+    if (f.fix != "") {
+        s = s + "\n    " + f.fix.replace("\n", with: "\n    ");
+    }
+    if (f.url != "") {
+        s = s + "\n    see: " + f.url;
+    }
+    return s;
+}

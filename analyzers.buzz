@@ -1,0 +1,175 @@
+// analyzers.buzz is this repository's plan: the analyzers the conventions target runs.
+// Each rule in hack/lint keeps its magus/lint shape and runs through the library's
+// adapter. An analyzer nothing names here never runs.
+//
+//	magus buzz analyzers.buzz -- [--only <name>] [<path>...]
+import "os";
+import "magus/lint";
+import "libs/analyzer/analyzer" as analyzer;
+import "libs/analyzer/adapter" as adapter;
+import "libs/analyzer/runner" as runner;
+import "hack/lint/run" as lintrun;
+import "hack/lint/banned-words" as bannedwords;
+import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
+import "hack/lint/buzz-sources-pass-the-static-check" as buzzcheck;
+import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
+import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
+import "hack/lint/code-comments-follow-proofread-rules" as codecomments;
+import "hack/lint/code-follows-mined-precedents" as precedents;
+import "hack/lint/closed-switches-name-every-member" as closedswitches;
+import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
+import "hack/lint/decisions-meet-their-evidence" as decisionsevidence;
+import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
+import "hack/lint/diagram-imports-are-named" as diagramimports;
+import "hack/lint/file-name-words-tell-siblings-apart" as filesiblings;
+import "hack/lint/diagram-modules-type-check-strictly" as diagramcheck;
+import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/generators-declare-what-they-read" as generatorsread;
+import "hack/lint/gate-pages-say-what-they-do-not-measure" as gatemeasures;
+import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
+import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
+import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
+import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
+import "hack/lint/lint-findings-carry-a-message-and-a-fix" as findingshape;
+import "hack/lint/local-skills-reach-every-host" as localskills;
+import "hack/lint/lockfiles-are-sorted" as lockfiles;
+import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
+import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
+import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
+import "hack/lint/markdown-proofread" as markdownproofread;
+import "hack/lint/measured-claims-cite-their-run" as measuredclaims;
+import "hack/lint/no-hand-bound-flags" as handboundflags;
+import "hack/lint/no-throw" as nothrow;
+import "hack/lint/package-install-targets-never-replay" as installs;
+import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
+import "hack/lint/proofread-case-moves-name-their-origin" as casemoves;
+import "hack/lint/prompts-stay-interactive" as promptsinteractive;
+import "hack/lint/provider-io-is-buzz" as providerio;
+import "hack/lint/prose-names-targets-that-exist" as prosetargets;
+import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
+import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
+import "hack/lint/rules-name-their-tier" as ruletiers;
+import "hack/lint/sdk-exports" as sdkexports;
+import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
+import "hack/lint/skill-renders-follow-markdown-and-description-budgets" as skillrenders;
+import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
+import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
+import "hack/lint/testpairing-pairing-has-no-exemptions" as testpairing;
+import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
+import "hack/lint/typescript-never-throws" as typescriptthrows;
+import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
+import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
+
+final MECHANICAL = analyzer\Tier.mechanical;
+final MEASURED = analyzer\Tier.measured;
+
+// WALK leaves out gen, tracked output no ignore rule excludes, and other checkouts.
+// It keeps the generated trees a rule reads, and the ignored .claude rules read.
+final WALK = analyzer\Walk{
+    pruned = ["node_modules", ".pnpm-store", ".testcache", "gen"],
+    prunedPaths = [".claude/worktrees", ".claude/tmp"],
+    keptPaths = ["docs/site/diagrams/gen", "internal/handler/mcp/gen"],
+    keptIgnored = [".claude"],
+};
+
+// rule is the hack/lint rule name as an analyzer.
+fun rule(name: str, tier: analyzer\Tier, reads: [str], check: fun (files: [Path]) > [Finding] !> any) > analyzer\Analyzer {
+    return adapter\rule(name, tier: tier, fix: "Change the file as hack/lint/{name}.buzz says.",
+        source: "hack/lint/{name}.buzz", reads: reads, check: check);
+}
+
+// rules is every hack/lint rule that runs.
+fun rules() > [analyzer\Analyzer] {
+    return [
+        rule("lockfiles-are-sorted", tier: MECHANICAL, reads: lockfiles\reads(), check: lockfiles\check),
+        rule("trusted-jobs-restore-no-actions-cache", tier: MECHANICAL, reads: trustedcache\reads(), check: trustedcache\check),
+        rule("cd-runs-agree-across-workflows", tier: MECHANICAL, reads: cdruns\reads(), check: cdruns\check),
+        rule("setup-magus-mints-the-queue-app-token-only-as-an-output", tier: MECHANICAL, reads: queuetoken\reads(), check: queuetoken\check),
+        rule("published-magus-is-built-first-and-verified-by-digest", tier: MECHANICAL, reads: publishedmagus\reads(), check: publishedmagus\check),
+        rule("package-install-targets-never-replay", tier: MECHANICAL, reads: installs\reads(), check: installs\check),
+        rule("package-manifests-carry-no-scripts", tier: MECHANICAL, reads: manifestscripts\reads(), check: manifestscripts\check),
+        rule("whole-tree-targets-key-on-the-go-tree", tier: MECHANICAL, reads: wholetree\reads(), check: wholetree\check),
+        rule("generators-declare-what-they-read", tier: MECHANICAL, reads: generatorsread\reads(), check: generatorsread\check),
+        rule("root-project-declares-the-configs-its-tools-read", tier: MECHANICAL, reads: rootconfigs\reads(), check: rootconfigs\check),
+        rule("skills-generate-declares-every-shipped-skill", tier: MECHANICAL, reads: skills\reads(), check: skills\check),
+        rule("local-skills-reach-every-host", tier: MECHANICAL, reads: localskills\reads(), check: localskills\check),
+        rule("generate-drift-throw-names-the-engine-drift-code", tier: MECHANICAL, reads: generatedrift\reads(), check: generatedrift\check),
+        rule("generated-go-packages-name-their-owner", tier: MECHANICAL, reads: generatedpackages\reads(), check: generatedpackages\check),
+        rule("landing-rotator-slots-match-headline-count", tier: MECHANICAL, reads: landing\reads(), check: landing\check),
+        rule("buzz-glue-is-wired-as-plain-argv", tier: MECHANICAL, reads: buzzglue\reads(), check: buzzglue\check),
+        rule("magusfiles-hold-no-tests", tier: MECHANICAL, reads: magusfiletests\reads(), check: magusfiletests\check),
+        rule("markdown-carries-no-mermaid", tier: MECHANICAL, reads: nomermaid\reads(), check: nomermaid\check),
+        rule("markdown-proofread", tier: MECHANICAL, reads: markdownproofread\reads(), check: markdownproofread\check),
+        rule("banned-words", tier: MECHANICAL, reads: bannedwords\reads(), check: bannedwords\check),
+        rule("no-hand-bound-flags", tier: MECHANICAL, reads: handboundflags\reads(), check: handboundflags\check),
+        rule("no-throw", tier: MEASURED, reads: nothrow\reads(), check: nothrow\check),
+        rule("provider-io-is-buzz", tier: MECHANICAL, reads: providerio\reads(), check: providerio\check),
+        rule("hack-scripts-start-with-a-verb", tier: MECHANICAL, reads: hackverbs\reads(), check: hackverbs\check),
+        rule("hack-scripts-parse-argv-with-flags", tier: MECHANICAL, reads: scriptflags\reads(), check: scriptflags\check),
+        rule("magusfile-modules-have-no-main", tier: MECHANICAL, reads: magusfilemodules\reads(), check: magusfilemodules\check),
+        rule("prompts-stay-interactive", tier: MECHANICAL, reads: promptsinteractive\reads(), check: promptsinteractive\check),
+        rule("diagram-imports-are-named", tier: MECHANICAL, reads: diagramimports\reads(), check: diagramimports\check),
+        rule("diagram-modules-type-check-strictly", tier: MECHANICAL, reads: diagramcheck\reads(), check: diagramcheck\check),
+        rule("buzz-sources-pass-the-static-check", tier: MECHANICAL, reads: buzzcheck\reads(), check: buzzcheck\check),
+        rule("diagnostic-codes-have-docs-pages", tier: MECHANICAL, reads: codepages\reads(), check: codepages\check),
+        rule("testpairing-pairing-has-no-exemptions", tier: MECHANICAL, reads: testpairing\reads(), check: testpairing\check),
+        rule("prose-names-targets-that-exist", tier: MECHANICAL, reads: prosetargets\reads(), check: prosetargets\check),
+        rule("code-follows-mined-precedents", tier: MECHANICAL, reads: precedents\reads(), check: precedents\check),
+        rule("code-stays-within-the-conformance-ceiling", tier: MEASURED, reads: conformanceceiling\reads(), check: conformanceceiling\check),
+        rule("symbol-docs-follow-proofread-rules", tier: MECHANICAL, reads: symbolproofread\reads(), check: symbolproofread\check),
+        rule("code-comments-follow-proofread-rules", tier: MEASURED, reads: codecomments\reads(), check: codecomments\check),
+        rule("cli-help-follows-proofread-rules", tier: MECHANICAL, reads: clihelp\reads(), check: clihelp\check),
+        rule("tool-descriptions-follow-proofread-rules", tier: MECHANICAL, reads: tooldesc\reads(), check: tooldesc\check),
+        rule("skill-renders-follow-markdown-and-description-budgets", tier: MECHANICAL, reads: skillrenders\reads(), check: skillrenders\check),
+        rule("proofread-case-moves-name-their-origin", tier: MECHANICAL, reads: casemoves\reads(), check: casemoves\check),
+        rule("decisions-meet-their-evidence", tier: MECHANICAL, reads: decisionsevidence\reads(), check: decisionsevidence\check),
+        rule("rules-name-their-tier", tier: MECHANICAL, reads: ruletiers\reads(), check: ruletiers\check),
+        // Its header names judgment, yet a stale or missing allow-list key fails the run.
+        rule("sdk-exports", tier: MEASURED, reads: sdkexports\reads(), check: sdkexports\check),
+        rule("closed-switches-name-every-member", tier: MEASURED, reads: closedswitches\reads(), check: closedswitches\check),
+        rule("typescript-never-throws", tier: MEASURED, reads: typescriptthrows\reads(), check: typescriptthrows\check),
+        rule("gate-pages-say-what-they-do-not-measure", tier: MECHANICAL, reads: gatemeasures\reads(), check: gatemeasures\check),
+        rule("lint-findings-carry-a-message-and-a-fix", tier: MECHANICAL, reads: findingshape\reads(), check: findingshape\check),
+        rule("measured-claims-cite-their-run", tier: MECHANICAL, reads: measuredclaims\reads(), check: measuredclaims\check),
+        rule("file-name-words-tell-siblings-apart", tier: MECHANICAL, reads: filesiblings\reads(), check: filesiblings\check),
+        // TODO: list touched-functions-keep-change-risk-under-10 once main's CI
+        // has published its base coverage profile (ADR 0023, State).
+    ];
+}
+
+// footprint is hack/lint/run.buzz's check over globs, every rule's reads. It reads
+// magusfile.buzz, where its findings sit, and walks the tree itself.
+fun footprint(globs: [str]) > analyzer\Analyzer {
+    return adapter\rule(lintrun\FOOTPRINT, tier: MECHANICAL, fix: "Key what the rules read in the conventions target.",
+        source: "hack/lint/run.buzz", reads: ["magusfile.buzz"],
+        check: fun (files: [Path]) > [Finding] !> any {
+            final found = lintrun\footprint(globs, w: WALK);
+            if (found.error -> e) {
+                throw e.message;
+            }
+            return found.value!;
+        });
+}
+
+// plan is every analyzer this repository runs: the rules, then the footprint over their
+// reads.
+fun plan() > analyzer\Plan {
+    final own = rules();
+    final globs = mut [<str>];
+    foreach (a in own) {
+        foreach (glob in a.files) {
+            globs.append(glob);
+        }
+    }
+    return analyzer\Plan{ own = own + [footprint(globs)], walk = WALK };
+}
+
+fun main(args: [str]) > void !> any {
+    final code = runner\lint(args, plan: plan());
+    if (code.error -> e) {
+        throw e.message;
+    }
+    if (code.value! != 0) {
+        os\exit(code.value!);
+    }
+}

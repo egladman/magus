@@ -3082,16 +3082,17 @@ export fun conformance_base(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("conformance base measured at {commit}");
 }
 
-// Holds the repository's non-Go files to conventions no off-the-shelf linter checks;
-// each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
-// reads and this footprint. A tree glob stops at a nested project, hence the named paths.
+// Holds the repository's non-Go files to conventions no off-the-shelf linter checks.
+// analyzers.buzz runs each rule, hack/lint/<rule>.buzz, and hack/lint/run.buzz reports
+// drift between their reads and this footprint. A tree glob stops at a nested project,
+// hence the named paths.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     // This rule reads broad source and prose globs. Run every formatter CI uses first so
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
         testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format,
         safetyscissors\format, secrets\format, codec\format, proofreadlib\proofread_build, conformance_base, textsearch\install);
-    ctx.readsFiles(["hack/lint/*.buzz",
+    ctx.readsFiles(["hack/lint/*.buzz", "analyzers.buzz", "libs/analyzer/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                     "hack/README.md",
                     ".github/**/*.buzz",
@@ -3179,7 +3180,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     // Freshen them all under this lock: the child is refused it (MGS3007).
     // A bare magus\graph() freshens without mining precedents; the child mines its own.
     _ = magus\graph();
-    _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
+    _ = magus\cmd("buzz", args: ["analyzers.buzz"]);
 }
 
 // Fails when a local host installation lacks what its wired harness spell renders,
@@ -3289,8 +3290,8 @@ fun lintFiles(ctx: magus\Context, args: [str]) > result\Result::<bool> {
         // magus\graph() freshens them, as in conventions.
         // A bare magus\graph() freshens without mining precedents; the child mines its own.
         _ = magus\graph();
-        if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
-            failures.append("hack/lint/run.buzz reported findings above");
+        if (!magus\cmd("buzz", args: ["analyzers.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
+            failures.append("analyzers.buzz reported findings above");
         }
         final libs = mut [<str>];
         foreach (mod in fs\glob("libs/**/go.mod")) { libs.append(fs\dirname(mod.value)); }

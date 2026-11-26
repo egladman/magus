@@ -1,0 +1,758 @@
+// runner runs a workspace's plan. A workspace's analyzers.buzz calls main:
+//
+//	magus buzz analyzers.buzz                      every analyzer over the whole tree
+//	magus buzz analyzers.buzz -- <path>...         the findings at these files
+//	magus buzz analyzers.buzz -- --only <name>     one analyzer over the whole tree
+//
+// Each analyzer gets the files its globs match and its settings. A finding prints as
+// `path:line:col: message [analyzer]` with the fix under it. A glob matching nothing is
+// a finding: the analyzer is misconfigured, not clean.
+namespace runner;
+
+import "flags";
+import "fs";
+import "os";
+import "path";
+import "crypto";
+import "encoding/json";
+import "env";
+import "magus";
+import "result";
+import "std";
+import "time";
+import "vcs";
+import "libs/analyzer/analyzer" as analyzer;
+import "libs/analyzer/finding" as finding;
+import "libs/analyzer/policy" as policy;
+
+// ENTRY is the workspace file that declares the plan, where a finding about the plan
+// itself sits.
+export final ENTRY = "analyzers.buzz";
+
+// ALWAYS_PRUNED are the names the walk never enters, whatever the plan says. A
+// worktree's .git is a file.
+final ALWAYS_PRUNED = [".git", ".magus"];
+
+// Tree is what a run judges: the walked files, the workspace's project roots, and each
+// project's policy by project root. A project with no entry in policies has none.
+export object Tree {
+    files: [str],
+    projects: [str] = ["."],
+    policies: {str: {str: policy\Policy}} = {<str: {str: policy\Policy}>},
+}
+
+// Timing is one analyzer's wall time over all its calls, in whole milliseconds.
+export object Timing {
+    analyzer: str,
+    ms: int,
+}
+
+// Ran is what a run found, and how long each analyzer that ran took.
+export object Ran {
+    found: [finding\Finding],
+    timings: [Timing],
+}
+
+// Walker is the walk's pruning sets, keyed for lookup.
+object Walker {
+    pruned: {str: bool},
+    prunedPaths: {str: bool},
+    keptPaths: {str: bool},
+    keptIgnored: {str: bool},
+}
+
+fun keyed(names: [str]) > {str: bool} {
+    final acc = mut {<str: bool>};
+    foreach (n in names) {
+        acc[n] = true;
+    }
+    return acc;
+}
+
+fun walker(w: analyzer\Walk) > Walker {
+    return Walker{ pruned = keyed(ALWAYS_PRUNED + w.pruned), prunedPaths = keyed(w.prunedPaths),
+        keptPaths = keyed(w.keptPaths), keptIgnored = keyed(w.keptIgnored) };
+}
+
+// walk returns every file under root outside the pruned trees and the VCS ignore
+// rules, as root-relative paths. They come in the order a depth-first walk of sorted
+// directories meets them. The vcs module lists no tree, so on git one ls-files lists
+// it, and any other VCS is asked one directory at a time.
+export fun walk(root: str, w: analyzer\Walk) > result\Result::<[str]> {
+    final k = walker(w);
+    try {
+        if (vcs\name() == "git") {
+            return walkListing(root, k: k);
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
+    }
+    return walkInto(root, rel: "", kept: false, k: k);
+}
+
+// walkDirectories is walk asking the VCS one directory at a time, as on a VCS other
+// than git.
+export fun walkDirectories(root: str, w: analyzer\Walk) > result\Result::<[str]> {
+    return walkInto(root, rel: "", kept: false, k: walker(w));
+}
+
+// walkInto returns the files below rel, in the order a depth-first walk meets them.
+fun walkInto(root: str, rel: str, kept: bool, k: Walker) > result\Result::<[str]> {
+    try {
+        final acc = mut [<str>];
+        final dir = if (rel == "") root else root + "/" + rel;
+        final names = fs\listDir(dir);
+        final ignored = mut {<str, bool>};
+        if (!kept) {
+            final paths = mut [<str>];
+            foreach (name in names) {
+                paths.append(if (rel == "") name else rel + "/" + name);
+            }
+            foreach (p in vcs\ignoredFiles(paths, dir: root)) {
+                ignored[p] = true;
+            }
+        }
+        foreach (name in names) {
+            final p = if (rel == "") name else rel + "/" + name;
+            if (ignored[p] != null and k.keptIgnored[p] == null) {
+                continue;
+            }
+            if ((k.pruned[name] != null and k.keptPaths[p] == null) or k.prunedPaths[p] != null) {
+                continue;
+            }
+            if (!fs\isDir(root + "/" + p)) {
+                acc.append(p);
+            } else {
+                final below = walkInto(root, rel: p, kept: kept or ignored[p] != null, k: k);
+                if (below.error != null) {
+                    return below;
+                }
+                foreach (b in below.value!) {
+                    acc.append(b);
+                }
+            }
+        }
+        return result\ok::<[str]>(acc);
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
+    }
+}
+
+// walkListing is walk through one git ls-files. It asks the VCS which tracked paths the
+// ignore rules cover, as walkInto asks, and walks a directory the listing does not
+// enter with walkInto.
+fun walkListing(root: str, k: Walker) > result\Result::<[str]> {
+    try {
+        final listed = mut [<ListedPath>];
+        final tracked = mut [<str>];
+        final entries = gitListing(root);
+        if (entries.error != null) {
+            return result\Result::<[str]>{ error = entries.error };
+        }
+        foreach (l in entries.value!) {
+            if (!isPruned(l.path, k: k)) {
+                listed.append(l);
+                if (l.tracked) {
+                    tracked.append(l.path);
+                }
+            }
+        }
+        final ignored = mut {<str: bool>};
+        foreach (p in vcs\ignoredFiles(tracked, dir: root)) {
+            ignored[p] = true;
+        }
+        final acc = mut [<str>];
+        foreach (l in listed) {
+            if (ignored[l.path] != null) {
+                continue;
+            }
+            if (l.dir) {
+                final below = walkInto(root, rel: l.path, kept: false, k: k);
+                if (below.error != null) {
+                    return below;
+                }
+                foreach (b in below.value!) {
+                    acc.append(b);
+                }
+            } else {
+                acc.append(l.path);
+            }
+        }
+        final kept = mut [<str>];
+        foreach (dir, _ in k.keptIgnored) {
+            if (fs\isDir(root + "/" + dir)) {
+                kept.append(dir);
+            }
+        }
+        foreach (dir in vcs\ignoredFiles(kept, dir: root)) {
+            final below = walkInto(root, rel: dir, kept: true, k: k);
+            if (below.error != null) {
+                return below;
+            }
+            foreach (b in below.value!) {
+                acc.append(b);
+            }
+        }
+        return result\ok::<[str]>(walkOrder(acc));
+    } catch (err: any) {
+        return result\caught::<[str]>(err);
+    }
+}
+
+// ListedPath is one path git ls-files reports. dir marks one the listing does not
+// enter: a nested repository, a submodule or a directory symlink.
+object ListedPath {
+    path: str,
+    tracked: bool,
+    dir: bool,
+}
+
+// gitListing is each tracked path git ls-files reports still on disk, once for all its
+// index stages, and each untracked path no ignore rule covers.
+fun gitListing(root: str) > result\Result::<[ListedPath]> {
+    try {
+        // -t tags a tracked path deleted from disk R beside its cached entry.
+        // -s adds the mode that marks a submodule or a symlink.
+        final stdout = vcs\cmd(["ls-files", "-z", "-t", "-s", "--cached", "--deleted", "--others", "--exclude-standard"],
+            opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+        final gone = mut {<str: bool>};
+        final seen = mut {<str: bool>};
+        final listed = mut [<ListedPath>];
+        foreach (entry in stdout.split(std\char(0))) {
+            if (entry == "") {
+                continue;
+            }
+            if (entry.startsWith("? ")) {
+                final p = entry.sub(2, len: entry.len() - 2);
+                if (p.endsWith("/")) {
+                    listed.append(ListedPath{ path = p.sub(0, len: p.len() - 1), tracked = false, dir = true });
+                } else {
+                    listed.append(ListedPath{ path = p, tracked = false, dir = fs\isDir(root + "/" + p) });
+                }
+                continue;
+            }
+            final tab = entry.indexOf("\t");
+            if (tab == null) {
+                return result\fail::<[ListedPath]>("analyzers: git ls-files -s printed \"{entry}\", which holds no tab before its path");
+            }
+            final p = entry.sub(tab! + 1, len: entry.len() - tab! - 1);
+            final mode = entry.sub(2, len: 6);
+            if (entry.startsWith("R ")) {
+                gone[p] = true;
+            } else if (seen[p] == null) {
+                seen[p] = true;
+                final linked = mode == "160000" or mode == "120000";
+                listed.append(ListedPath{ path = p, tracked = true, dir = linked and fs\isDir(root + "/" + p) });
+            }
+        }
+        return result\ok::<[ListedPath]>(listed.filter(fun (index: int, l: ListedPath) > bool => gone[l.path] == null));
+    } catch (err: any) {
+        return result\caught::<[ListedPath]>(err);
+    }
+}
+
+// walkOrder sorts paths as a depth-first walk of sorted directories meets them. A
+// separator below every byte a name holds makes that byte order: directory a's files
+// come before its sibling a.b.
+fun walkOrder(paths: [str]) > [str] {
+    final sep = std\char(1);
+    final keys = mut [<str>];
+    foreach (p in paths) {
+        keys.append(p.replace("/", with: sep));
+    }
+    final sorted = mut [<str>];
+    foreach (key in keys.sort(fun (left: str, right: str) > bool => left < right)) {
+        sorted.append(key.replace(sep, with: "/"));
+    }
+    return sorted;
+}
+
+// isPruned reports whether p, or a directory above it, has a name or path the walk
+// never enters or lists.
+fun isPruned(p: str, k: Walker) > bool {
+    final parts = p.split("/");
+    var dir = "";
+    for (var i = 0; i < parts.len(); i = i + 1) {
+        dir = if (i == 0) parts[0] else dir + "/" + parts[i];
+        if (k.prunedPaths[dir] != null or (k.pruned[parts[i]] != null and k.keptPaths[dir] == null)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Selected is the files an analyzer's globs match, and the globs matching none.
+export object Selected {
+    matched: [str],
+    unmatched: [str],
+}
+
+// select matches files against globs in one pass. Only a matched file can hit a glob,
+// so only it is tested against the globs no file has hit yet.
+export fun select(files: [str], globs: [str]) > result\Result::<Selected> {
+    try {
+        final matched = mut [<str>];
+        var pending = globs;
+        foreach (f in files) {
+            if (!path\matchesAny(globs, path: f)) {
+                continue;
+            }
+            matched.append(f);
+            if (pending.len() > 0) {
+                final still = mut [<str>];
+                foreach (glob in pending) {
+                    if (!path\matches(glob, path: f)) {
+                        still.append(glob);
+                    }
+                }
+                pending = still;
+            }
+        }
+        return result\ok::<Selected>(Selected{ matched = matched, unmatched = pending });
+    } catch (err: any) {
+        return result\caught::<Selected>(err);
+    }
+}
+
+// inputs are the calls a's check gets over matched: one for the workspace, or one per
+// project in the order its first file was walked.
+export fun inputs(a: analyzer\Analyzer, matched: [str], tree: Tree) > [analyzer\Input] {
+    if (a.reach == analyzer\Reach.workspace) {
+        return [analyzer\Input{ project = ".", files = matched, settings = settingsOf(tree, project: ".", name: a.name) }];
+    }
+    final order = mut [<str>];
+    final byProject = mut {<str: mut [str]>};
+    foreach (f in matched) {
+        final p = policy\owner(f, projects: tree.projects);
+        if (byProject[p] == null) {
+            order.append(p);
+            byProject[p] = mut [<str>];
+        }
+        byProject[p]!.append(f);
+    }
+    return order.map(fun (index: int, p: str) > analyzer\Input
+        => analyzer\Input{ project = p, files = byProject[p]!, settings = settingsOf(tree, project: p, name: a.name) });
+}
+
+fun settingsOf(tree: Tree, project: str, name: str) > {str: any} {
+    final held = tree.policies[project];
+    if (held == null) {
+        return {<str: any>};
+    }
+    final p = held![name];
+    if (p == null) {
+        return {<str: any>};
+    }
+    return p!.settings;
+}
+
+// stamped is what the runner reports for f, which a reported: f with a's name and,
+// when f sets none, a's fix. A finding with no message, or with no fix from either, is
+// refused in a finding at a's source.
+export fun stamped(a: analyzer\Analyzer, f: finding\Finding) > finding\Finding {
+    if (f.message == "") {
+        return finding\Finding{ analyzer = a.name, path = a.source,
+            message = "reported a finding at {f.path} with no message",
+            fix = "Set the finding's message to why the file breaks the rule." };
+    }
+    final fix = if (f.fix != "") f.fix else a.fix;
+    if (fix == "") {
+        return finding\Finding{ analyzer = a.name, path = a.source,
+            message = "reported \"{f.message}\" at {f.path} with no fix, and the analyzer declares none",
+            fix = "Set the analyzer's fix, or the finding's, to what to change." };
+    }
+    return finding\Finding{ analyzer = a.name, path = f.path, line = f.line, col = f.col, item = f.item,
+        message = f.message, fix = fix, url = f.url };
+}
+
+// run applies each of analyzers to the files of tree its globs match and returns every
+// finding, stamped. An analyzer with a glob matching nothing does not run.
+export fun run(analyzers: [analyzer\Analyzer], tree: Tree) > result\Result::<Ran> {
+    final found = mut [<finding\Finding>];
+    final timings = mut [<Timing>];
+    foreach (a in analyzers) {
+        final picked = select(tree.files, globs: a.files);
+        if (picked.error != null) {
+            return result\Result::<Ran>{ error = picked.error };
+        }
+        final sel = picked.value!;
+        foreach (glob in sel.unmatched) {
+            found.append(finding\Finding{ analyzer = a.name, path = a.source,
+                message = "reads " + glob + ", which matches no file in the tree",
+                fix = "Restore the file, or point the analyzer's files at what it reads now." });
+        }
+        if (sel.unmatched.len() > 0) {
+            continue;
+        }
+        final started = os\time();
+        foreach (input in inputs(a, matched: sel.matched, tree: tree)) {
+            final checked = judged(a, input: input);
+            if (checked.error != null) {
+                return result\Result::<Ran>{ error = checked.error };
+            }
+            foreach (f in checked.value!) {
+                found.append(stamped(a, f: f));
+            }
+        }
+        timings.append(Timing{ analyzer = a.name, ms = std\toInt(os\time() - started) });
+    }
+    return result\ok::<Ran>(Ran{ found = found, timings = timings });
+}
+
+// judged is one call of a's check, with what it raised named for a.
+fun judged(a: analyzer\Analyzer, input: analyzer\Input) > result\Result::<[finding\Finding]> {
+    try {
+        return result\ok::<[finding\Finding]>(a.check(input));
+    } catch (err: any) {
+        return result\caught::<[finding\Finding]>(err, doing: "analyzers: {a.name}");
+    }
+}
+
+// planned is each finding about plan itself: an analyzer listed twice, one both used
+// and declined, and a decline with no reason.
+export fun planned(plan: analyzer\Plan) > [finding\Finding] {
+    final found = mut [<finding\Finding>];
+    final seen = mut {<str: bool>};
+    foreach (a in analyzer\listed(plan)) {
+        if (seen[a.name] != null) {
+            found.append(finding\Finding{ analyzer = a.name, path = ENTRY, message = "is listed twice",
+                fix = "List each analyzer once." });
+        }
+        seen[a.name] = true;
+    }
+    foreach (d in plan.decline) {
+        if (seen[d.name] != null) {
+            found.append(finding\Finding{ analyzer = d.name, path = ENTRY, message = "is both run and declined",
+                fix = "Keep it in use or in decline, not both." });
+        }
+        if (d.reason.trim() == "") {
+            found.append(finding\Finding{ analyzer = d.name, path = ENTRY, message = "is declined with no reason",
+                fix = "Say why the workspace does not run it." });
+        }
+    }
+    return found;
+}
+
+final usage = "usage: magus buzz analyzers.buzz [-- [--firings [--session <id>]] [--timings] [--only <name>] [<path>...]]\n"
+    + "  bare            every analyzer over the whole tree\n"
+    + "  <path>...       only the findings at these files, from the analyzers that read them\n"
+    + "  --only <name>   only that analyzer\n"
+    + "  --timings       after the findings, each analyzer's wall time in ms, slowest first\n"
+    + "  --firings       append the run's findings to firings.jsonl under $XDG_STATE_HOME/magus; whole tree only\n"
+    + "  --session <id>  the agent session the run belongs to, recorded with --firings";
+
+// Selection is what a run judges. only names one analyzer, or every one runs when it
+// is null; paths keep the findings at them, or every finding when empty. firings
+// appends the run's firings, tagged with session.
+export object Selection {
+    only: str?,
+    paths: [str],
+    firings: bool = false,
+    session: str = "",
+    timings: bool = false,
+}
+
+// parse reads --only, --firings, --session, --timings and the paths. It refuses any
+// other flag, an analyzer not in names and a recorded run narrowed to paths. A path
+// after `--` may start with a dash.
+export fun parse(args: [str], names: [str]) > result\Result::<Selection> {
+    try {
+        final parsed = flags\parse(args, switches: ["--firings", "--timings"], valued: ["--only", "--session"]);
+        final paths = mut [<str>];
+        foreach (word in parsed.unknown) {
+            if (word.startsWith("-")) {
+                return result\fail::<Selection>("analyzers: unknown flag {word}\n{usage}");
+            }
+            paths.append(word);
+        }
+        // A bare word ends the flags, so a flag after a path arrives here. Read as a
+        // path, it would match no analyzer and pass in silence.
+        final first = args.len() - parsed.positionals.len();
+        var literal = first > 0 and args[first - 1] == "--";
+        foreach (word in parsed.positionals) {
+            if (!literal and word == "--") {
+                literal = true;
+            } else if (!literal and word.startsWith("-")) {
+                return result\fail::<Selection>("analyzers: flag {word} follows a path; flags go first\n{usage}");
+            } else {
+                paths.append(word);
+            }
+        }
+        // walk yields paths with no ./ prefix, and at compares against them.
+        final clean = paths.map(fun (index: int, p: str) > str => if (p.startsWith("./")) p.sub(2, len: p.len() - 2) else p);
+        final only = parsed.values["--only"];
+        if (only != null and names.indexOf(only!) == null) {
+            return result\fail::<Selection>("analyzers: no analyzer is named \"{only!}\"; the analyzers are:\n  " + names.join("\n  "));
+        }
+        final firings = parsed.values["--firings"] != null;
+        if (firings and clean.len() > 0) {
+            return result\fail::<Selection>("analyzers: --firings reads the whole tree; a path would record an analyzer as clean over files it skipped\n{usage}");
+        }
+        if (!firings and parsed.values["--session"] != null) {
+            return result\fail::<Selection>("analyzers: --session tags a recorded run; pass --firings\n{usage}");
+        }
+        return result\ok::<Selection>(Selection{ only = only, paths = clean, firings = firings,
+            session = parsed.values["--session"] ?? "", timings = parsed.values["--timings"] != null });
+    } catch (err: any) {
+        return result\caught::<Selection>(err);
+    }
+}
+
+// pick returns the analyzers sel runs: the one it names, or all, less those whose globs
+// match none of its paths.
+export fun pick(all: [analyzer\Analyzer], sel: Selection) > result\Result::<[analyzer\Analyzer]> {
+    try {
+        final picked = mut [<analyzer\Analyzer>];
+        foreach (a in all) {
+            if (sel.only != null and a.name != sel.only!) {
+                continue;
+            }
+            var reads = sel.paths.len() == 0;
+            foreach (p in sel.paths) {
+                reads = reads or path\matchesAny(a.files, path: p);
+            }
+            if (reads) {
+                picked.append(a);
+            }
+        }
+        return result\ok::<[analyzer\Analyzer]>(picked);
+    } catch (err: any) {
+        return result\caught::<[analyzer\Analyzer]>(err);
+    }
+}
+
+// at keeps the findings located at one of paths, or every finding when paths is empty.
+// A finding at a directory holding one of paths is kept too. It is a whole project's
+// verdict, such as an index too stale to judge any of its files; dropping it would pass
+// them unjudged.
+export fun at(found: [finding\Finding], paths: [str]) > [finding\Finding] {
+    if (paths.len() == 0) {
+        return found;
+    }
+    return found.filter(fun (index: int, f: finding\Finding) > bool
+        => paths.filter(fun (i: int, p: str) > bool => f.path == p or f.path == "." or p.startsWith(f.path + "/")).len() > 0);
+}
+
+// slowestFirst orders timings by wall time, slowest first.
+export fun slowestFirst(timings: [Timing]) > [Timing] {
+    return timings.cloneMutable().sort(fun (left: Timing, right: Timing) > bool => left.ms > right.ms);
+}
+
+// Report is a run's findings split by whether they fail, how many analyzers ran, and
+// each one's wall time.
+export object Report {
+    analyzers: int,
+    failed: [finding\Finding],
+    advised: [finding\Finding],
+    timings: [Timing],
+}
+
+// split is found as a Report: a finding of a judgment analyzer advises, and any other
+// fails. A finding about the plan, whose analyzer the plan may not list, fails.
+export fun split(found: [finding\Finding], analyzers: [analyzer\Analyzer], ran: int, timings: [Timing]) > Report {
+    final judgment = mut {<str: bool>};
+    foreach (a in analyzers) {
+        if (a.tier == analyzer\Tier.judgment) {
+            judgment[a.name] = true;
+        }
+    }
+    return Report{ analyzers = ran, timings = timings,
+        failed = found.filter(fun (index: int, f: finding\Finding) > bool => judgment[f.analyzer] == null),
+        advised = found.filter(fun (index: int, f: finding\Finding) > bool => judgment[f.analyzer] != null) };
+}
+
+// treeOf is the walked tree with the policies picked needs: the root's for an analyzer
+// reaching the workspace, every project's for one reaching projects.
+fun treeOf(files: [str], picked: [analyzer\Analyzer]) > result\Result::<Tree> {
+    try {
+        var projects = ["."];
+        var perProject = false;
+        var workspace = false;
+        foreach (a in picked) {
+            perProject = perProject or a.reach == analyzer\Reach.project;
+            workspace = workspace or a.reach == analyzer\Reach.workspace;
+        }
+        if (perProject) {
+            final roots = mut [<str>];
+            foreach (p in magus\describe.project().projects) {
+                roots.append(p.path);
+            }
+            projects = roots;
+        }
+        final policies = mut {<str: {str: policy\Policy}>};
+        final needed = if (perProject) projects else if (workspace) ["."] else [<str>];
+        foreach (p in needed) {
+            final read = policy\read(p);
+            if (read.error != null) {
+                return result\Result::<Tree>{ error = read.error };
+            }
+            policies[p] = read.value!;
+        }
+        return result\ok::<Tree>(Tree{ files = files, projects = projects, policies = policies });
+    } catch (err: any) {
+        return result\caught::<Tree>(err, doing: "analyzers: read the projects");
+    }
+}
+
+// check runs plan over the tree under the working directory as sel says. A picked
+// analyzer still reads every file its globs match: one relating several files would
+// judge half a relation over a subset.
+export fun check(plan: analyzer\Plan, sel: Selection) > result\Result::<Report> {
+    final all = analyzer\listed(plan);
+    final picked = pick(all, sel: sel);
+    if (picked.error != null) {
+        return result\Result::<Report>{ error = picked.error };
+    }
+    final files = walk(".", w: plan.walk);
+    if (files.error != null) {
+        return result\Result::<Report>{ error = files.error };
+    }
+    final tree = treeOf(files.value!, picked: picked.value!);
+    if (tree.error != null) {
+        return result\Result::<Report>{ error = tree.error };
+    }
+    final ran = run(picked.value!, tree: tree.value!);
+    if (ran.error != null) {
+        return result\Result::<Report>{ error = ran.error };
+    }
+    final found = if (sel.only == null) planned(plan) + ran.value!.found else ran.value!.found;
+    return result\ok::<Report>(split(at(found, paths: sel.paths), analyzers: all, ran: picked.value!.len(), timings: ran.value!.timings));
+}
+
+// Firing is one line of firings.jsonl. hack/retro/rule-precision.buzz reads the same
+// shape, under its own copy.
+export object Firing {
+    rule: str,
+    source: str,
+    path: str,
+    line: int,
+    fingerprint: str,
+    decision: str,
+    ts: int,
+    session: str,
+    commit: str,
+}
+
+// fingerprint names a finding by its analyzer, path and message, so a moved line keeps
+// its identity.
+export fun fingerprint(rule: str, path: str, text: str) > str {
+    return "lint/v1:" + crypto\sha256Hex("{rule}\n{path}\n{text}").sub(0, len: 16);
+}
+
+// stateFile is firings.jsonl under $XDG_STATE_HOME/magus. Never commit it.
+export fun stateFile() > result\Result::<str> {
+    try {
+        final base = env\getOr("XDG_STATE_HOME", def: "");
+        final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
+        return result\ok::<str>(fs\join(root, name: "magus/firings.jsonl"));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
+}
+
+export fun firingLine(f: Firing) > result\Result::<str> {
+    try {
+        return result\ok::<str>(json\stringify({
+            "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
+            "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
+        }));
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
+}
+
+// firingsOf is the lines a recorded run appends. Each finding is one line, deny when it
+// fails and advise when it advises. Each analyzer in ran that found nothing is one line
+// marked ran.
+export fun firingsOf(report: Report, ran: [str], at: Firing) > [Firing] {
+    final lines = mut [<Firing>];
+    final fired = mut {<str: bool>};
+    final found: [finding\Finding] = report.failed + report.advised;
+    foreach (i, f in found) {
+        fired[f.analyzer] = true;
+        lines.append(Firing{
+            rule = f.analyzer, source = "lint", path = f.path, line = f.line,
+            fingerprint = fingerprint(rule: f.analyzer, path: f.path, text: f.message),
+            decision = if (i < report.failed.len()) "deny" else "advise", ts = at.ts, session = at.session, commit = at.commit,
+        });
+    }
+    foreach (name in ran) {
+        if (fired[name] == null) {
+            lines.append(Firing{
+                rule = name, source = "lint", path = "", line = 0, fingerprint = "", decision = "ran",
+                ts = at.ts, session = at.session, commit = at.commit,
+            });
+        }
+    }
+    return lines;
+}
+
+// record appends report's firings to stateFile and returns the line count.
+fun record(report: Report, ran: [str], session: str) > result\Result::<int> {
+    try {
+        final stamp = Firing{
+            rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "",
+            ts = std\toInt(time\parse("2006-01-02T15:04:05Z07:00", value: time\nowIso())), session = session, commit = vcs\commit().id,
+        };
+        final lines = mut [<str>];
+        foreach (firing in firingsOf(report, ran: ran, at: stamp)) {
+            final line = firingLine(firing);
+            if (line.error != null) {
+                return result\Result::<int>{ error = line.error };
+            }
+            lines.append(line.value!);
+        }
+        final state = stateFile();
+        if (state.error != null) {
+            return result\Result::<int>{ error = state.error };
+        }
+        final file = state.value!;
+        fs\mkdirAll(fs\dirname(file));
+        fs\appendFile(file, content: lines.join("\n") + "\n");
+        std\print("analyzers: recorded {lines.len()} line(s) to {file}");
+        return result\ok::<int>(lines.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "analyzers: record firings");
+    }
+}
+
+// lint runs plan as args say and prints what it found. Its value is the exit code: 1
+// when a finding fails, else 0. A passing run prints only its advice.
+export fun lint(args: [str], plan: analyzer\Plan) > result\Result::<int> {
+    final names = analyzer\listed(plan).map(fun (index: int, a: analyzer\Analyzer) > str => a.name);
+    final parsed = parse(args, names: names);
+    if (parsed.error != null) {
+        return result\Result::<int>{ error = parsed.error };
+    }
+    final sel = parsed.value!;
+    final checked = check(plan, sel: sel);
+    if (checked.error != null) {
+        return result\Result::<int>{ error = checked.error };
+    }
+    final report = checked.value!;
+    foreach (f in report.failed) {
+        std\print(finding\render(f));
+    }
+    if (report.advised.len() > 0) {
+        std\print("analyzers: {report.advised.len()} finding(s) of judgment, which advise and never fail:");
+        foreach (f in report.advised) {
+            std\print(finding\render(f));
+        }
+    }
+    if (sel.timings) {
+        foreach (t in slowestFirst(report.timings)) {
+            std\print("{t.analyzer}: {t.ms} ms");
+        }
+    }
+    if (sel.firings) {
+        final recorded = record(report, ran: if (sel.only != null) [sel.only!] else names, session: sel.session);
+        if (recorded.error != null) {
+            return result\Result::<int>{ error = recorded.error };
+        }
+    }
+    if (report.failed.len() > 0) {
+        std\print("analyzers: {report.failed.len()} finding(s) failed");
+        return result\ok::<int>(1);
+    }
+    return result\ok::<int>(0);
+}
