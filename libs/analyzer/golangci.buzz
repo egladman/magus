@@ -1,0 +1,19 @@
+// golangci runs the Go passes through one golangci binary. Until that engine is wired
+// it refuses any pass rather than report a clean run it did not make.
+namespace golangci;
+
+import "libs/analyzer/analyzer" as analyzer;
+import "libs/analyzer/finding" as finding;
+
+// run is the findings of passes over projects, the roots of the projects whose Go the
+// passes judge. With no passes it has nothing to run and reports nothing; with any, it
+// reports one failing finding, since no pass has judged anything.
+export fun run(passes: [analyzer\Analyzer], projects: [str]) > [finding\Finding] {
+    if (passes.len() == 0) {
+        return [<finding\Finding>];
+    }
+    final names = passes.map(fun (i: int, a: analyzer\Analyzer) > str => a.name);
+    return [finding\Finding{ analyzer = "golangci", path = passes[0].source,
+        message = "the golang engine is not wired; {passes.len()} pass(es) listed ({names.join(", ")}) judged nothing over {projects.len()} project(s)",
+        fix = "Take the pass out of the plan until the engine is wired." }];
+}

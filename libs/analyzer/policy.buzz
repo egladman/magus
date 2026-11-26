@@ -3,9 +3,11 @@
 // reads it.
 namespace policy;
 
+import "std";
 import "fs";
 import "result";
 import "encoding/yaml";
+import "libs/analyzer/finding" as finding;
 
 export final FILE = "analyzers.yaml";
 
@@ -108,4 +110,146 @@ export fun read(project: str, root: str = ".") > result\Result::<{str: Policy}> 
     } catch (err: any) {
         return result\caught::<{str: Policy}>(err, doing: "policy: read {project}");
     }
+}
+
+// Row is one baseline or exits row. item "" names the whole file; count is how many
+// findings a baseline row absorbs; reason is what an exit is kept for.
+export object Row {
+    path: str,
+    item: str = "",
+    count: int = 1,
+    reason: str = "",
+}
+
+final ROW_KEYS = {"path": true, "item": true, "count": true, "reason": true};
+
+// rows reads one analyzer's list under key as Rows. A row of any other shape becomes
+// a finding at file and is left out of the rows.
+fun rows(raw: any, name: str, key: str, file: str, problems: mut [finding\Finding]) > [Row] {
+    final got = mut [<Row>];
+    if (raw == null) {
+        return got;
+    }
+    if (!(raw is [any])) {
+        problems.append(finding\Finding{ analyzer = name, path = file, message = "{name}.{key} is not a list of rows",
+            fix = "Write {name}.{key} as a list of rows with a path, an item and a count." });
+        return got;
+    }
+    final list: [any] = raw;
+    foreach (i, row in list) {
+        final bad = rowProblem(row, key: key);
+        if (bad != "") {
+            problems.append(finding\Finding{ analyzer = name, path = file, message = "{name}.{key}[{i}] {bad}",
+                fix = "Write each row with a path, an item and a count; an exit also carries a reason." });
+            continue;
+        }
+        final fields: {str: any} = row;
+        final item = fields["item"];
+        final count = fields["count"];
+        final reason = fields["reason"];
+        got.append(Row{ path = fields["path"], item = if (item is str) item else "", count = if (count is int) count else 1,
+            reason = if (reason is str) reason else "" });
+    }
+    return got;
+}
+
+// rowProblem says why row is not a row of key, or "" when it is one.
+fun rowProblem(row: any, key: str) > str {
+    if (!(row is {str: any})) {
+        return "is not a mapping";
+    }
+    final fields: {str: any} = row;
+    foreach (field, _ in fields) {
+        if (ROW_KEYS[field] == null) {
+            return "has the field {field}, which no row holds";
+        }
+    }
+    if (!(fields["path"] is str)) {
+        return "has no path";
+    }
+    if (fields["item"] != null and !(fields["item"] is str)) {
+        return "has an item that is not a string";
+    }
+    if (key == "baseline") {
+        if (fields["reason"] != null) {
+            return "has a reason; only an exit carries one";
+        }
+        if (fields["count"] != null and (!(fields["count"] is int) or std\toInt(fields["count"]) < 1)) {
+            return "has a count that is not a whole number of 1 or more";
+        }
+    } else {
+        if (fields["count"] != null) {
+            return "has a count; only a baseline row carries one";
+        }
+        final reason = fields["reason"];
+        if (!(reason is str)) {
+            return "has no reason";
+        }
+        final text: str = reason;
+        if (text.trim() == "") {
+            return "has no reason";
+        }
+    }
+    return "";
+}
+
+// apply is found with policy.exits applied, then policy.baseline. An exit drops the
+// findings at its path and item. A baseline row absorbs up to its count.
+// An unsound row is a finding at file: a bad shape, an exit that excuses nothing, a
+// baseline count above what it absorbed.
+export fun apply(name: str, found: [finding\Finding], policy: Policy, file: str) > [finding\Finding] {
+    final problems = mut [<finding\Finding>];
+    final exits = rows(policy.exits, name: name, key: "exits", file: file, problems: problems);
+    final baseline = rows(policy.baseline, name: name, key: "baseline", file: file, problems: problems);
+    final used = mut [<int>];
+    foreach (_ in exits) {
+        used.append(0);
+    }
+    final absorbed = mut [<int>];
+    foreach (_ in baseline) {
+        absorbed.append(0);
+    }
+    final kept = mut [<finding\Finding>];
+    foreach (f in found) {
+        var gone = false;
+        foreach (i, row in exits) {
+            if (row.path == f.path and row.item == f.item) {
+                used[i] = used[i] + 1;
+                gone = true;
+                break;
+            }
+        }
+        if (!gone) {
+            foreach (i, row in baseline) {
+                if (row.path == f.path and row.item == f.item and absorbed[i] < row.count) {
+                    absorbed[i] = absorbed[i] + 1;
+                    gone = true;
+                    break;
+                }
+            }
+        }
+        if (!gone) {
+            kept.append(f);
+        }
+    }
+    foreach (i, row in exits) {
+        if (used[i] == 0) {
+            problems.append(finding\Finding{ analyzer = name, path = file, item = row.item,
+                message = "{name}.exits excuses nothing at {row.path}{suffix(row.item)}",
+                fix = "Delete the exit row; the code no longer needs it." });
+        }
+    }
+    foreach (i, row in baseline) {
+        if (absorbed[i] < row.count) {
+            problems.append(finding\Finding{ analyzer = name, path = file, item = row.item,
+                message = "{name}.baseline allows {row.count} at {row.path}{suffix(row.item)} but {absorbed[i]} remain; a baseline only falls",
+                fix = if (absorbed[i] == 0) "Delete the baseline row." else "Lower the count to {absorbed[i]}." });
+        }
+    }
+    return kept + problems;
+}
+
+// suffix is item as the tail of a path in a message.
+fun suffix(item: str) > str {
+    return if (item == "") "" else " ({item})";
 }
