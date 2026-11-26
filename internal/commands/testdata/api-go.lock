@@ -2135,14 +2135,6 @@ github.com/egladman/magus/types.FunctionGap.Reason field string
 github.com/egladman/magus/types.FunctionGap.Symbol field string
 github.com/egladman/magus/types.GateNotRun const DiagnosticCode = "MGS3045"
 github.com/egladman/magus/types.GateSuperseded const DiagnosticCode = "MGS3014"
-github.com/egladman/magus/types.GateWaiver type struct
-github.com/egladman/magus/types.GateWaiver.At field int64 "json:\"at\" yaml:\"at\""
-github.com/egladman/magus/types.GateWaiver.By field github.com/egladman/magus/libs/safetyscissors/job.Origin "json:\"by\" yaml:\"by\""
-github.com/egladman/magus/types.GateWaiver.Commit field string "json:\"commit\" yaml:\"commit\""
-github.com/egladman/magus/types.GateWaiver.Covers method func(commit string) bool
-github.com/egladman/magus/types.GateWaiver.Key method func() string
-github.com/egladman/magus/types.GateWaiver.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
-github.com/egladman/magus/types.GateWaiver.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.GeneratedPathReporter type interface
 github.com/egladman/magus/types.GeneratedPathReporter.GeneratedPaths imethod func(ctx context.Context, root string, rev string, paths []string) (map[string]bool, error)
 github.com/egladman/magus/types.GeneratedSource func(lines [][]byte) bool
@@ -2333,10 +2325,6 @@ github.com/egladman/magus/types.HarnessWired.Key field string "json:\"key\""
 github.com/egladman/magus/types.HarnessWrite const HarnessChangeOp = "write"
 github.com/egladman/magus/types.HasCharm func(ctx context.Context, charm string) bool
 github.com/egladman/magus/types.HasInvocationAncestor func(ctx context.Context, pid int, id string) bool
-github.com/egladman/magus/types.HeldRevision type struct
-github.com/egladman/magus/types.HeldRevision.Head field string
-github.com/egladman/magus/types.HeldRevision.Kind field WorkKind
-github.com/egladman/magus/types.HeldRevision.Name field string
 github.com/egladman/magus/types.History type struct
 github.com/egladman/magus/types.History.Commits field int "json:\"commits\""
 github.com/egladman/magus/types.History.Dir field string "json:\"dir\""
@@ -4648,37 +4636,6 @@ github.com/egladman/magus/types.WithReturnCapture func(ctx context.Context) (con
 github.com/egladman/magus/types.WithStepLog func(ctx context.Context, r *StepLog) context.Context
 github.com/egladman/magus/types.WithTrace func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithWorkspace func(ctx context.Context, ws WorkspaceRepository) context.Context
-github.com/egladman/magus/types.WorkAbsorbed const WorkState = "absorbed"
-github.com/egladman/magus/types.WorkBranch const WorkKind = "branch"
-github.com/egladman/magus/types.WorkCheckout const WorkKind = "checkout"
-github.com/egladman/magus/types.WorkClear const WorkState = "clear"
-github.com/egladman/magus/types.WorkEnded const WorkState = "ended"
-github.com/egladman/magus/types.WorkItem type struct
-github.com/egladman/magus/types.WorkItem.At field int64
-github.com/egladman/magus/types.WorkItem.Base field string
-github.com/egladman/magus/types.WorkItem.Commits field int
-github.com/egladman/magus/types.WorkItem.Dirty field int
-github.com/egladman/magus/types.WorkItem.Dropped field bool
-github.com/egladman/magus/types.WorkItem.Gone field bool
-github.com/egladman/magus/types.WorkItem.Head field string
-github.com/egladman/magus/types.WorkItem.Key method func() string
-github.com/egladman/magus/types.WorkItem.Kind field WorkKind
-github.com/egladman/magus/types.WorkItem.MarshalJSON method func() ([]byte, error)
-github.com/egladman/magus/types.WorkItem.Name field string
-github.com/egladman/magus/types.WorkItem.Reason field string
-github.com/egladman/magus/types.WorkItem.Repo field string
-github.com/egladman/magus/types.WorkItem.State field WorkState
-github.com/egladman/magus/types.WorkItem.UnmarshalJSON method(ptr) func(b []byte) error
-github.com/egladman/magus/types.WorkItem.Why field string
-github.com/egladman/magus/types.WorkKind type string
-github.com/egladman/magus/types.WorkKinds func() []WorkKind
-github.com/egladman/magus/types.WorkLocalOnly const WorkState = "local-only"
-github.com/egladman/magus/types.WorkPreserved const WorkKind = "preserved"
-github.com/egladman/magus/types.WorkStash const WorkKind = "stash"
-github.com/egladman/magus/types.WorkState type string
-github.com/egladman/magus/types.WorkStates func() []WorkState
-github.com/egladman/magus/types.WorkTracked const WorkState = "tracked"
-github.com/egladman/magus/types.WorkUnaccounted const WorkState = "unaccounted"
 github.com/egladman/magus/types.WorkingCopyReporter type interface
 github.com/egladman/magus/types.WorkingCopyReporter.Dirty imethod func(ctx context.Context, dir string, paths []string) (bool, error)
 github.com/egladman/magus/types.WorkingCopyReporter.DirtyDiff imethod func(ctx context.Context, dir string, paths []string) (string, error)
