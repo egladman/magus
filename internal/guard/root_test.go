@@ -1168,7 +1168,7 @@ func (s *RefreshesMainCheckoutSuite) TestADetachedMainCheckoutDirtyInOutputsSwit
 	fixtureGit(t, s.main, "add", s.generated[0], "internal/guard/root.go")
 	fixtureGit(t, s.main, "commit", "-q", "-m", "outputs")
 	s.Require().NoError(os.WriteFile(filepath.Join(s.main, s.generated[0]), []byte("rewritten\n"), 0o644))
-	s.True(s.refreshes(s.git("restore " + s.generated[0])), "a restore off the base branch")
+	s.True(s.refreshes(s.git("restore "+s.generated[0])), "a restore off the base branch")
 	s.True(s.refreshes(s.git("switch main")))
 	s.False(refreshesCheckout(t.Context(), s.git("switch main"), s.at, nil), "nothing classifies the dirt")
 	s.Require().NoError(os.WriteFile(filepath.Join(s.main, "internal/guard/root.go"), []byte("package edited\n"), 0o644))
