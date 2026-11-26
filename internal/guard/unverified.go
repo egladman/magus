@@ -10,8 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/unverified"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,6 +51,7 @@ func guardUnverified(deps Dependencies) unverified.Reader {
 			return types.UnverifiedReport{}, errors.New("this caller cannot open the workspace, so no run can be read")
 		}
 		checkout, noWorkspace, ok := unverifiedCheckout(deps, dir)
+		checkout.Recorded = jobRowRuns(ctx)
 		if !ok {
 			return types.UnverifiedReport{Revision: revision, Unknown: fmt.Sprintf("the output store of the workspace holding `%s` cannot be located", dir)}, nil
 		}
@@ -62,6 +66,25 @@ func guardUnverified(deps Dependencies) unverified.Reader {
 		answered[key] = report
 		return report, nil
 	}
+}
+
+// jobRowRuns are the runs the pinned job rows recorded. A worker ran them in a checkout that
+// may be gone; unreadable rows add none.
+func jobRowRuns(ctx context.Context) []cache.OutputDescriptor {
+	snap, ok := job.SnapshotFromContext(ctx)
+	if !ok || snap.Err != nil {
+		return nil
+	}
+	var captured []jobtypes.CapturedRun
+	for _, row := range snap.Rows {
+		if row.Attempt != nil {
+			captured = append(captured, *row.Attempt)
+		}
+		for _, g := range row.PostconditionAttempts {
+			captured = append(captured, g.Attempt)
+		}
+	}
+	return unverified.RecordedRuns(captured)
 }
 
 // unverifiedCheckout is the checkout a read of dir weighs: the workspace holding it and its

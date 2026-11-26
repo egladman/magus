@@ -253,7 +253,7 @@ fun unverifiedDenial(p: CommandPush, report: UnverifiedReport, checkable: [Unver
     if (unclaimed.len() > 0) {
         lines.append(unclaimedNote(unclaimed, report: report, dir: p.dir));
     }
-    lines.append("A run counts when it passed and, as it ran, the file was the same as in {short(p.revision)}; only runs recorded in this checkout (`{p.dir}`) count. The files are those changed since the merge base with {report.base}.");
+    lines.append("A run counts when it passed and, as it ran, the file was the same as in {short(p.revision)}; only runs recorded in this checkout (`{p.dir}`) or on a job row count. The files are those changed since the merge base with {report.base}.");
     return lines.join("\n");
 }
 
