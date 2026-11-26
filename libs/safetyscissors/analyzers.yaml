@@ -90,7 +90,7 @@ proofread:
     session/lock.go: {code-comment-budget: 2, code-comment-sentence: 2}
     session/rotate.go: {code-comment-budget: 10, code-comment-sentence: 20, comment-caps: 2, comment-history: 1}
     session/rotate_test.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-caps: 2, comment-history: 2}
-    session/session.go: {code-comment-budget: 20, code-comment-sentence: 41, comment-caps: 23}
+    session/session.go: {code-comment-budget: 19, code-comment-sentence: 40, comment-caps: 23}
     session/session_test.go: {code-comment-sentence: 6, comment-caps: 5}
     step/step.go: {code-comment-budget: 1, code-comment-sentence: 1, doc-path: 1}
     tier/assignment.go: {code-comment-sentence: 1}
