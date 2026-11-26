@@ -88,10 +88,26 @@ loosening stays pending until the root's authority holds it.
 
 The integrator places the judging binary in a job's checkout (`job.MirroredBinary`, or a
 build from the authority's revision), and the store records the binary's path and content
-hash on the row. The root's hook hands a call only to a binary at a path and hash a live
-row records. Any other `./magus` is not run, and the session's own binary judges the call.
-That one check covers every door in Context: a relink, `go generate`, `go-build`, the
-bootstrap and a test that writes the file each leave a binary the hook does not run.
+hash on the row. In a checkout a live row works in, the root's hook hands a call only to a
+binary at a path and hash a live row records. Any other `./magus` there is not run, and the
+session's own binary judges the call. That one check covers every door in Context: a
+relink, `go generate`, `go-build`, the bootstrap and a test that writes the file each leave
+a binary the hook does not run.
+
+A checkout no live row works in is the root's, so no worker chose its `./magus`. The hook
+hands a call there to that binary when the checkout is a root of the session's repository
+and the binary reports, through `magus version -o json`, a clean stamp the session would
+take as its replacement (`MagusBuild.AcceptsReplacement`, the test `magus self place`
+uses). An older build, a build of a modified tree, an unstamped session or an unreadable
+answer is refused, and the session judges as before. The bootstrap exec reads the same
+rule (`HookEnv.UnpinnedBinary`).
+
+Evidence, 2026-11-26: the main checkout's `./magus` predated the rule that lets the root
+refresh it (#945). No row could pin the root's freshly relinked worktree binary, so the
+stale binary judged every call and refused the refresh. The way out was a throwaway job,
+`relink-overnight-plan`, that adopted the root's worktree so a placed `./magus` could be
+pinned there with `hack/dev/bootstrap-worktree.buzz --build-from`. With this rule the
+root's own `./magus run go-build .` in an unheld checkout is the judge from then on.
 
 The hash is cached against the file's identity and size and modification time. A worker
 can forge those, which section 1 accepts.

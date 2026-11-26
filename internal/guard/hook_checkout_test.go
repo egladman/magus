@@ -24,6 +24,7 @@ import (
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 func TestCallDirIsWhereTheCallLands(t *testing.T) {
@@ -388,6 +389,76 @@ func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
 
 func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
 	s.Equal(s.repo.Root(), hookCallDir(s.line()))
+}
+
+// UnheldRefusalSuite pins which ./magus judges in a checkout no live row works in:
+// a build of the session's repository newer than the session's, built clean.
+type UnheldRefusalSuite struct {
+	suite.Suite
+	repo    *testkit.Repo
+	session string
+	self    types.MagusBuild
+}
+
+func TestUnheldRefusalSuite(t *testing.T) {
+	suite.Run(t, new(UnheldRefusalSuite))
+}
+
+func (s *UnheldRefusalSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.session = s.repo.AddWorktree("session").Root()
+	s.self = types.StampedBuild("v0.4.0", "1111111", "2026-11-01T00:00:00Z")
+}
+
+// stampIn writes a ./magus into root that answers `version -o json` with body.
+func (s *UnheldRefusalSuite) stampIn(root, body string) string {
+	own := filepath.Join(root, "magus")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s' '%s'\n", body)
+	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	return own
+}
+
+func (s *UnheldRefusalSuite) refusal(own string) string {
+	return unheldRefusal(s.T().Context(), own, s.session, s.self)
+}
+
+func (s *UnheldRefusalSuite) TestANewerCleanBuildOfTheRepositoryJudges() {
+	own := s.stampIn(s.repo.Root(), `{"commit":"2222222","dirty":false,"build_date":"2026-11-20T00:00:00Z"}`)
+	s.Empty(s.refusal(own))
+}
+
+func (s *UnheldRefusalSuite) TestAnOlderBuildNeverTakesOver() {
+	own := s.stampIn(s.repo.Root(), `{"commit":"0000000","dirty":false,"build_date":"2026-10-01T00:00:00Z"}`)
+	s.Contains(s.refusal(own), "is not newer than the running")
+}
+
+func (s *UnheldRefusalSuite) TestABuildOfAModifiedTreeNeverTakesOver() {
+	own := s.stampIn(s.repo.Root(), `{"commit":"2222222","dirty":true,"build_date":"2026-11-20T00:00:00Z"}`)
+	s.Contains(s.refusal(own), "built from a modified tree")
+}
+
+func (s *UnheldRefusalSuite) TestAnUnreadableVersionNeverTakesOver() {
+	own := s.stampIn(s.repo.Root(), "2222222")
+	s.Contains(s.refusal(own), "reported a version this binary cannot read")
+}
+
+func (s *UnheldRefusalSuite) TestAnUnstampedSessionHandsNothingOn() {
+	own := s.stampIn(s.repo.Root(), `{"commit":"2222222","dirty":false,"build_date":"2026-11-20T00:00:00Z"}`)
+	s.self = types.MagusBuild{Commit: "unknown", Date: "unknown"}
+	s.Contains(s.refusal(own), "carries no build stamp")
+}
+
+func (s *UnheldRefusalSuite) TestAnotherRepositorysBuildNeverTakesOver() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	own := s.stampIn(clone.Root(), `{"commit":"2222222","dirty":false,"build_date":"2026-11-20T00:00:00Z"}`)
+	s.Contains(s.refusal(own), "not of this session's repository")
+}
+
+func (s *UnheldRefusalSuite) TestABuildPlantedBelowACheckoutRootNeverTakesOver() {
+	planted := filepath.Join(s.session, "planted")
+	s.Require().NoError(os.MkdirAll(planted, 0o755))
+	own := s.stampIn(planted, `{"commit":"2222222","dirty":false,"build_date":"2026-11-20T00:00:00Z"}`)
+	s.Contains(s.refusal(own), "no checkout's root")
 }
 
 // JudgedBySuite pins what a verdict says about the binary that judged it.
