@@ -900,6 +900,55 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 	assert.True(t, denyWorkerCheckOnly(ctx, rw, row.ID, "./magus run go-fmt .").refused(), "go-fmt honors rw, so default rw rewrites through it")
 }
 
+// TestWorkerCheckOnlyHoldsAnOpRewriteToItsForwardedFiles: go-fmt maps a forwarded file to
+// itself in place of its sources walk. So a worker formats exactly its own files under rw.
+// An arg the op would not map leaves the walk in place, and is refused as before. A mapped
+// file past the write paths, or in a deny path, is refused by name.
+func TestWorkerCheckOnlyHoldsAnOpRewriteToItsForwardedFiles(t *testing.T) {
+	row := testCheckLease()
+	row.Paths.Deny = []string{"internal/guard/gen/**"}
+	ctx, root := fleetFixture(t, row)
+	for _, f := range []string{"internal/guard/a.go", "internal/guard/b.go", "internal/guard/gen/c.go", "internal/guard/notes.md", "cmd/x.go"} {
+		p := filepath.Join(root, filepath.FromSlash(f))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte("package x\n"), 0o644))
+	}
+	deps := composingWorkspace(t)
+
+	for _, tt := range []struct {
+		name, command string
+		outside       string // the file the refusal names; "" for a pass
+	}{
+		{"its own file", "./magus run go::go-fmt:rw . -- internal/guard/a.go", ""},
+		{"its own files", "./magus run go-fmt:rw . -- internal/guard/a.go internal/guard/b.go", ""},
+		{"a file past the write paths", "./magus run go::go-fmt:rw . -- internal/guard/a.go cmd/x.go", "cmd/x.go"},
+		{"a file in a deny path", "./magus run go::go-fmt:rw . -- internal/guard/gen/c.go", "internal/guard/gen/c.go"},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if tt.outside == "" {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.True(t, reason.refused(), tt.name)
+		assert.Contains(t, reason.Say, "rewrites", tt.name)
+		assert.Contains(t, reason.Say, tt.outside, tt.name)
+	}
+
+	for _, tt := range []struct{ name, command string }{
+		{"no file", "./magus run go::go-fmt:rw ."},
+		{"a flag", "./magus run go::go-fmt:rw . -- -l"},
+		{"a file beside a flag", "./magus run go::go-fmt:rw . -- -l internal/guard/a.go"},
+		{"a directory", "./magus run go::go-fmt:rw . -- internal/guard"},
+		{"a missing file", "./magus run go::go-fmt:rw . -- internal/guard/z.go"},
+		{"a file the op takes no operand for", "./magus run go::go-fmt:rw . -- internal/guard/notes.md"},
+		{"a file above the project", "./magus run go::go-fmt:rw . -- ../a.go"},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		require.True(t, reason.refused(), tt.name)
+		assert.Contains(t, reason.Say, "runs a spell op under the rw charm", tt.name)
+	}
+}
+
 // A worker may always vet the projects holding its write paths, beside a check that composes
 // no vet there: vetting compiles and writes nothing, so a worker whose check the machine
 // cannot fit still learns whether its code builds.

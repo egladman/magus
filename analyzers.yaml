@@ -1073,7 +1073,7 @@ proofread:
     internal/guard/interpreter_test.go: {code-comment-sentence: 2}
     internal/guard/lapse.go: {code-comment-budget: 3, code-comment-sentence: 6, comment-history: 1}
     internal/guard/lapse_test.go: {code-comment-sentence: 5, comment-history: 1}
-    internal/guard/lease.go: {code-comment-budget: 90, code-comment-sentence: 129, comment-caps: 30, comment-first-person: 6, comment-history: 4, doc-path: 1, provenance: 1}
+    internal/guard/lease.go: {code-comment-budget: 89, code-comment-sentence: 127, comment-caps: 30, comment-first-person: 6, comment-history: 4, doc-path: 1, provenance: 1}
     internal/guard/lease_claim.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-first-person: 1}
     internal/guard/lease_test.go: {code-comment-budget: 23, code-comment-sentence: 77, comment-caps: 13, comment-history: 4, doc-path: 3}
     internal/guard/load_contract.go: {code-comment-budget: 2, code-comment-sentence: 2}
