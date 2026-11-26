@@ -241,3 +241,18 @@ func (s *MutateSuite) TestAWideningOfTheWritePathsKeepsTheGeneration() {
 	s.Require().NoError(err)
 	s.Equal(1, got)
 }
+
+func (s *MutateSuite) TestAnEndedRowForkedAgainRecordsTheNewHead() {
+	head := "abc123"
+	st := s.open(WithHead(func(context.Context) string { return head }))
+	_, err := st.Update(s.T().Context(), "a", func(*Job) {})
+	s.Require().NoError(err)
+	_, err = st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateNoReturn })
+	s.Require().NoError(err)
+
+	head = "def456"
+	row, err := st.Update(s.T().Context(), "a", func(r *Job) { r.State = StateDeclared })
+
+	s.Require().NoError(err)
+	s.Equal("def456", row.Authority)
+}
