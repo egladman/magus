@@ -1209,3 +1209,78 @@ func (s *productLineSuite) TestAWorkerMayNotRecoverThroughIt() {
 	at := location{workspace: s.T().TempDir(), policies: magusRepoAt.policies}
 	s.False(recoveryLine("bin/magus run go-build .", DialectBash, "lease-b", false, at))
 }
+
+// MainRefreshSuite pins the stale-binary deny an orchestrator gets in a worktree. The main
+// checkout's ./magus judges, built at a commit one behind origin/main.
+type MainRefreshSuite struct {
+	suite.Suite
+	main, tree string
+	judge      judgeIdentity
+	tip        string
+}
+
+func TestMainRefreshSuite(t *testing.T) {
+	suite.Run(t, new(MainRefreshSuite))
+}
+
+func (s *MainRefreshSuite) SetupTest() {
+	t := s.T()
+	s.main = canonicalPath(t.TempDir())
+	s.Require().NoError(os.WriteFile(filepath.Join(s.main, "magus"), []byte("binary"), 0o755))
+	writeSource(t, s.main, "a.go")
+	base := commitCheckout(t, s.main)
+	s.tip = commitCheckout(t, s.main)
+	fixtureGit(t, s.main, "update-ref", "refs/remotes/origin/main", s.tip)
+	fixtureGit(t, s.main, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+	fixtureGit(t, s.main, "reset", "-q", "--hard", base)
+	s.tree = filepath.Join(s.main, ".claude", "worktrees", "orchestrator")
+	fixtureGit(t, s.main, "worktree", "add", "-q", "--detach", s.tree, s.tip)
+	s.judge = judgeIdentity{path: filepath.Join(s.main, "magus"), commit: base}
+}
+
+func (s *MainRefreshSuite) deny() denial {
+	return staleBinaryDenial(judgedCall{what: "this command", builds: true, judge: s.judge}, unloadStale, nil, true, s.tree)
+}
+
+func (s *MainRefreshSuite) TestTheOrchestratorIsToldToRefreshTheMainCheckout() {
+	d := s.deny()
+	s.Contains(d.Say, fmt.Sprintf("%s/magus, built at %.12s, is older than main at %.12s", s.main, s.judge.commit, s.tip))
+	s.Contains(d.Say, fmt.Sprintf("`git -C %[1]s pull --ff-only`, then `%[1]s/magus --root %[1]s run go-build %[1]s`, each alone on its line", s.main))
+	s.NotContains(d.Say, "\n")
+}
+
+func (s *MainRefreshSuite) TestADetachedMainCheckoutSwitchesBackFirst() {
+	fixtureGit(s.T(), s.main, "checkout", "-q", "--detach")
+	s.Contains(s.deny().Say, fmt.Sprintf("`git -C %[1]s switch main`, `git -C %[1]s pull --ff-only`", s.main))
+}
+
+func (s *MainRefreshSuite) TestAMainCheckoutHoldingChangesIsAPersonsToRefresh() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.main, "a.go"), []byte("package changed\n"), 0o644))
+	s.Contains(s.deny().Say, "so a person refreshes it")
+}
+
+func (s *MainRefreshSuite) TestAJudgeBuiltAtTheTipKeepsTheRelink() {
+	s.judge.commit = s.tip
+	s.NotContains(s.deny().Say, "is older than")
+}
+
+func (s *MainRefreshSuite) TestAnotherBinaryKeepsTheRelink() {
+	s.judge.path = filepath.Join(s.tree, "magus")
+	s.NotContains(s.deny().Say, "is older than")
+}
+
+func (s *MainRefreshSuite) TestAnUnstampedJudgeKeepsTheRelink() {
+	s.judge.commit = "unknown"
+	s.NotContains(s.deny().Say, "is older than")
+}
+
+func (s *MainRefreshSuite) TestTheRefreshLinesChangeNothingTheStaleBinaryHolds() {
+	at := magusRepoAt
+	at.workspace, at.dir = s.tree, s.tree
+	ctx := job.WithSnapshot(s.T().Context(), job.Snapshot{})
+	pull := fmt.Sprintf("git -C %s pull --ff-only", s.main)
+	for _, line := range []string{pull, fmt.Sprintf("git -C %s fetch", s.main)} {
+		s.False(commandCall(ctx, commandRuleInput{command: line, dialect: DialectBash}, at).changes, line)
+	}
+	s.True(commandCall(ctx, commandRuleInput{command: pull, dialect: DialectBash, lease: "w1"}, at).changes, "a worker's pull")
+}

@@ -670,7 +670,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		assert.Contains(t, v.Reason, fmt.Sprintf("`%s` cites a failed run (libs/conventions:go-test)", failed.Ref))
 		v = run(citing("outc3c3c3c3c3c3"))
 		assert.Equal(t, verdictWithRule(verdict.Deny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "`outc3c3c3c3c3c3` cites a run this checkout holds no record of")
+		assert.Contains(t, v.Reason, "`outc3c3c3c3c3c3` cites a run neither this checkout nor a verified job row holds a record of")
 
 		// attribution ships off; this repository's decisions table turns it on.
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")

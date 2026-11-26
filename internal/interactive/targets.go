@@ -30,6 +30,9 @@ type RunSelection struct {
 	// server adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
 	// threaded in rather than read here.
 	Cwd string
+	// Rooted is a run whose --root named the workspace: a relative project arg or skip
+	// anchors at the root whatever Cwd is. Cwd still scopes a run naming no project.
+	Rooted bool
 }
 
 // ResolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all,
@@ -38,7 +41,10 @@ type RunSelection struct {
 // The subtraction happens here, at the one place the selection is finalized, so the run
 // header, --dry-run and the fan-out all describe the same set.
 func ResolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, sel RunSelection) ([]types.Target, string, error) {
-	anchor := currentWorkingDirectoryAnchor(ws.Root(), sel.Cwd)
+	anchor := "."
+	if !sel.Rooted {
+		anchor = currentWorkingDirectoryAnchor(ws.Root(), sel.Cwd)
+	}
 
 	// The four ways a selection is named, in precedence order.
 	var (

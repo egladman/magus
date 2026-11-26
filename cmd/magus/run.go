@@ -262,7 +262,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := interactive.ResolveTargets(ctx, ws, listTarget, interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: clientCurrentWorkingDirectory(ctx)})
+		targets, source, err := interactive.ResolveTargets(ctx, ws, listTarget, interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: clientCurrentWorkingDirectory(ctx), Rooted: rootedSelection(ctx, root)})
 		if err != nil {
 			return err
 		}
@@ -295,7 +295,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the server's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCurrentWorkingDirectory(ctx)
-	sel := interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: cwd}
+	sel := interactive.RunSelection{Projects: projectArgs, Skips: skips.refs, Cwd: cwd, Rooted: rootedSelection(ctx, root)}
 	if saved != nil {
 		// A plan's paths are workspace-relative; anchored at the caller's cwd, "." in a
 		// subdirectory would name the wrong project.
@@ -608,6 +608,12 @@ func clientCurrentWorkingDirectory(ctx context.Context) string {
 		return ""
 	}
 	return cwd
+}
+
+// rootedSelection reports a run whose --root named its workspace. An adopted run's root
+// is the server's own, never the client's flag, so its args keep the client's cwd anchor.
+func rootedSelection(ctx context.Context, root string) bool {
+	return root != "" && proc.CurrentWorkingDirectoryFromContext(ctx) == ""
 }
 
 func targetUsage() error {

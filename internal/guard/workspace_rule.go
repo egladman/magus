@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/recorder"
@@ -74,6 +75,8 @@ type rulesAnswer struct {
 	// loadFailure is why the working tree did not load, for denyUnloaded to tell a binary
 	// older than the tree from a typo.
 	loadFailure error
+	// judge is the binary judging the call, for the stale-binary deny to name and date.
+	judge judgeIdentity
 	// rule is the built-in rule denyUnloaded refused under, "" when the answer is the
 	// workspace rule's own.
 	rule denyRuleName
@@ -103,6 +106,10 @@ type rulesAnswer struct {
 func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
 	log := judgmentPhases(ctx)
 	out := rulesAnswer{loadFailure: config.WithRunningVersion(deps.LoadFailure, deps.BinaryVersion), dryRun: isDryRun(ctx), log: log}
+	if deps.LoadFailure != nil {
+		commit, _ := buildinfo.Commit()
+		out.judge = judgeIdentity{path: deps.Binary, commit: commit}
+	}
 	lapsed := func(l ruleLapse) {
 		out.failures = append(out.failures, recorder.RuleFailure{Side: l.side, Error: l.failure()})
 		if out.lapse == nil {
@@ -331,7 +338,13 @@ type judgedCall struct {
 	// policyNote says how a command call's target policies were read when the knowledge
 	// store's record could not answer, "" when it did or the line runs no target.
 	policyNote string
+	// judge is the binary judging the call, zero when the caller does not know it.
+	judge judgeIdentity
 }
+
+// judgeIdentity is the running magus: its path and the commit it was built from,
+// "unknown" when nothing stamped one.
+type judgeIdentity struct{ path, commit string }
 
 // denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
 // whether it denied.
@@ -381,6 +394,7 @@ func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at l
 				return true
 			}
 		}
+		call.judge = asked.judge
 		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && (recorded || unknown):
 		broken = false

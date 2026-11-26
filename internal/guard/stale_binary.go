@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -708,7 +709,8 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	}
 	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at) &&
 		!writesOnlyOutside(in.command, in.dialect, cmp.Or(at.dir, at.workspace), at.workspace, userHome()) &&
-		!checkpointReset(ctx, in.command, in.dialect, at) && !unpushedUndo(ctx, in.command, in.dialect, at)
+		!checkpointReset(ctx, in.command, in.dialect, at) && !unpushedUndo(ctx, in.command, in.dialect, at) &&
+		(in.lease != "" || !refreshesCheckout(ctx, in.command, at, nil))
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -734,6 +736,11 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 	case own:
 		problem = "./magus was built from another contract than this tree carries and cannot load its guard policy"
 	}
+	if own && call.lease == "" {
+		if behind, refresh, ok := mainRefreshFix(root, call.judge); ok {
+			problem, fix.say = behind, refresh
+		}
+	}
 	var why strings.Builder
 	why.WriteString(call.what + " changes state, and the guard policy that would judge it is not running:")
 	for _, f := range failures {
@@ -755,6 +762,40 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 		why.WriteString("\n" + call.policyNote)
 	}
 	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
+}
+
+// mainRefreshFix is the problem and fix when judge is the main checkout's ./magus, built
+// at a commit behind origin/HEAD. A main checkout holding changes is a person's to refresh.
+func mainRefreshFix(root string, judge judgeIdentity) (problem, say string, ok bool) {
+	ctx := context.Background()
+	main := repositoryMainCheckout(root)
+	bin := filepath.Join(main, "magus")
+	if main == "" || judge.commit == "" || judge.commit == "unknown" || !sameFile(judge.path, bin) {
+		return "", "", false
+	}
+	tip, okTip := gitCommit(ctx, main, "refs/remotes/origin/HEAD")
+	base, okBase := baseBranch(ctx, main)
+	if !okTip || !okBase || strings.HasPrefix(tip, judge.commit) ||
+		exec.CommandContext(ctx, "git", "-C", main, "merge-base", "--is-ancestor", judge.commit, tip).Run() != nil {
+		return "", "", false
+	}
+	problem = fmt.Sprintf("%s, built at %.12s, is older than %s at %.12s and cannot load this tree", bin, judge.commit, base, tip)
+	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build %s`", main, bin, main, main)
+	if !onBaseBranch(ctx, main) {
+		lines = fmt.Sprintf("`git -C %s switch %s`, %s", main, base, lines)
+	}
+	dirty, err := exec.CommandContext(ctx, "git", "-C", main, "status", "--porcelain", "--untracked-files=no").Output()
+	if err != nil || len(dirty) > 0 {
+		return problem, fmt.Sprintf("%s holds changes, so a person refreshes it: commit or set them aside, then run %s", main, lines), true
+	}
+	return problem, fmt.Sprintf("refresh the main checkout with %s, each alone on its line", lines), true
+}
+
+// sameFile reports a and b one file on disk.
+func sameFile(a, b string) bool {
+	ai, errA := os.Stat(a)
+	bi, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ai, bi)
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
