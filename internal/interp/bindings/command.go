@@ -97,8 +97,9 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	// Warn on the real execution path only (not the describe/render path, which
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
-	if !opts.hasArgs && len(tgt.PathScope) > 0 && len(opts.args) > 0 {
-		scoped, err := scopeForwardedPaths(ctx, tgt.Command, opName(opts.op, tgt.Bin), dir, opts.args)
+	pathScoped := !opts.hasArgs && len(tgt.PathScope) > 0 && len(opts.args) > 0
+	if pathScoped {
+		scoped, mapped, err := scopeForwardedPaths(ctx, tgt.Command, opName(opts.op, tgt.Bin), dir, opts.args)
 		if err != nil {
 			return spawn.ExecResult{}, err
 		}
@@ -107,7 +108,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 		if len(scoped) == 0 {
 			return spawn.ExecResult{}, nil
 		}
-		opts.args = scoped
+		opts.args, pathScoped = scoped, mapped
 	}
 	// Explicit call-site args replace the declared defaults; anything else
 	// (including `magus run <t> -- <extra>` forwarding, which arrives with
@@ -202,9 +203,8 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 		ctx = spawn.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
 	}
 	var res spawn.ExecResult
-	// A forwarded scope operand names the files to run, so the declared sources
-	// would only widen it back to the whole project.
-	if len(tgt.Sources) == 0 || namesTestScope(tgt.Command, opts.args) {
+	// A forwarded scope operand or mapped file names the files; sources would widen it.
+	if len(tgt.Sources) == 0 || pathScoped || namesTestScope(tgt.Command, opts.args) {
 		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, tgt.Quiet)
 	} else {
 		res, err = runSourcedCommand(ctx, tgt, bin, dir, args, opts)
@@ -681,7 +681,7 @@ var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
 // each operand once. A flag or package passes unchanged. PathScopeFiles
 // drops a file with a notice, and a path it takes that names nothing errors:
 // the tool would misread it.
-func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, args []string) ([]string, error) {
+func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, args []string) (_ []string, mapped bool, _ error) {
 	var scoped, dropped, missing []string
 	seen := map[string]bool{}
 	for _, a := range args {
@@ -704,6 +704,7 @@ func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, 
 			dropped = append(dropped, a)
 			continue
 		}
+		mapped = true
 		for _, o := range operands {
 			if !seen[o] {
 				seen[o] = true
@@ -712,7 +713,7 @@ func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, 
 		}
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("%s: the forwarded path(s) %s name no file under %s: create each one, or drop it from the args",
+		return nil, false, fmt.Errorf("%s: the forwarded path(s) %s name no file under %s: create each one, or drop it from the args",
 			op, strings.Join(missing, " "), dir)
 	}
 	if len(dropped) > 0 {
@@ -720,7 +721,7 @@ func scopeForwardedPaths(ctx context.Context, c spells.Command, op, dir string, 
 		_, _ = fmt.Fprintf(stderr, "%s: takes no operand for the forwarded file(s) %s, so it leaves them out\n",
 			op, strings.Join(dropped, " ")) // best effort: a lost notice changes no result
 	}
-	return scoped, nil
+	return scoped, mapped, nil
 }
 
 // forwardedFile is arg as a slash-separated path relative to dir when it names

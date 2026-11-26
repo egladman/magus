@@ -533,6 +533,39 @@ func (s *runCommandPathScopeSuite) TestNoArgsKeepsTheTrailingPattern() {
 	s.Equal([]string{"vet", "./..."}, s.run(commandOpts{}))
 }
 
+// runSourced runs an op on gofmt's shape: Sources walk the project, and PathScope
+// maps a forwarded file to itself. It returns each argv the op ran with.
+func (s *runCommandPathScopeSuite) runSourced(opts commandOpts) [][]string {
+	op := spells.Op{Command: spells.Command{
+		Bin:            "sh",
+		Args:           []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "fmt"},
+		Sources:        []string{"**/*.go"},
+		PathScope:      []string{"{file}"},
+		PathScopeFiles: []string{"**/*.go"},
+	}}
+	opts.op = "go-fmt"
+	opts.env = map[string]string{"LOGFILE": s.logFile}
+	ctx := std.WithCurrentWorkingDirectory(testContext(), s.dir)
+	ctx = spawn.WithOutputWriters(ctx, io.Discard, &s.stderr)
+	_, err := runCommand(ctx, op, opts)
+	s.Require().NoError(err)
+	var argvs [][]string
+	for _, line := range logLines(s.T(), s.logFile) {
+		argvs = append(argvs, strings.Fields(line))
+	}
+	return argvs
+}
+
+func (s *runCommandPathScopeSuite) TestAForwardedFileReplacesTheSources() {
+	s.Equal([][]string{{"fmt", "pkg/a.go"}}, s.runSourced(commandOpts{args: []string{"pkg/a.go"}}),
+		"a rewriting tool handed the whole walk writes past the file it was given")
+}
+
+func (s *runCommandPathScopeSuite) TestAForwardedFlagKeepsTheSources() {
+	s.Equal([][]string{{"fmt", "-l", "main.go", "pkg/a.go", "pkg/b.go", "pkg/testdata/x.go"}},
+		s.runSourced(commandOpts{args: []string{"-l"}}))
+}
+
 // TestRunCommandNeedsArgs pins the refusal: no caller args, absent or empty, stops the
 // command before it spawns, and the op's own Args and DefaultArgs do not satisfy it.
 func TestRunCommandNeedsArgs(t *testing.T) {

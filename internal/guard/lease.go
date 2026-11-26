@@ -660,15 +660,9 @@ type runVerdict struct {
 	unchecked error
 }
 
-// verdict judges r. A permitted run under the rw charm, named on its target or carried by
-// default_charms, is held to the write paths; a target whose chain declares no write
-// passes, since nothing says what it touches. A spell op run on its own under an rw charm
-// it honors is refused: an op declares no writes, so it would always pass.
-//
-// A generator of an output the row's own write paths regenerate outside them (MGS3044) is
-// permitted too, and that output counts as inside the write paths: the worker regenerates
-// it and commits it with the change rather than leave its lint stale. It is refused when
-// another live lease holds the output, so two leases never overwrite each other's copy.
+// verdict judges r. An rw run is held to the write paths by its declared writes; an op
+// run alone, by the files its PathScope maps, or refused. An output the row regenerates
+// is inside unless another lease holds it.
 func (j rowJudge) verdict(r targetRun) runVerdict {
 	r, err := r.fromDir(j.root, j.dir, j.workspace)
 	v := runVerdict{run: r}
@@ -706,6 +700,10 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 		return v
 	}
 	if r.runsOp(ws) && opHonorsRewrite(j.deps.spells(), r.target) {
+		if outside, ok := r.operandsOutside(j.deps.spells(), j.root, projects, j.row.Paths.Write, j.row.Paths.Deny); ok {
+			v.outside = outside
+			return v
+		}
 		v.op, v.composers = true, r.composers(j.graph)
 		return v
 	}
@@ -1201,6 +1199,61 @@ func (r targetRun) readOnly(defaults []string) string {
 		args = append(append(args, "--"), r.forwarded...)
 	}
 	return hint.Run.With(args...)
+}
+
+// operandsOutside holds an op run alone under the rw charm to the operands PathScope maps
+// its forwarded files to, which replace the sources walk. ok is false unless each arg is
+// an existing file PathScope takes in every project.
+func (r targetRun) operandsOutside(catalog []*spells.Spell, root string, projects []*types.Project, writePaths, denyPaths []string) (outside []string, ok bool) {
+	op, found := catalogOp(catalog, r.target)
+	if !found || len(op.PathScope) == 0 || len(r.forwarded) == 0 || len(projects) == 0 {
+		return nil, false
+	}
+	for _, p := range projects {
+		for _, arg := range r.forwarded {
+			rel := path.Clean(filepath.ToSlash(arg))
+			if strings.HasPrefix(arg, "-") || path.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, "../") {
+				return nil, false
+			}
+			// The runner passes a directory on unmapped, and the walk runs beside it.
+			if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(p.Path), filepath.FromSlash(rel))); err != nil || !info.Mode().IsRegular() {
+				return nil, false
+			}
+			operands, keep := op.ScopePath(rel)
+			if !keep {
+				return nil, false
+			}
+			for _, o := range operands {
+				rooted := path.Join(p.Path, o)
+				_, covered, errWrite := declarationCovering(writePaths, rooted)
+				_, denied, errDeny := declarationCovering(denyPaths, rooted)
+				if (errWrite != nil || errDeny != nil || !covered || denied) && !slices.Contains(outside, rooted) {
+					outside = append(outside, rooted)
+				}
+			}
+		}
+	}
+	return outside, true
+}
+
+// catalogOp is the one op catalog declares for target. A bare op name two spells declare
+// names no single op.
+func catalogOp(catalog []*spells.Spell, target string) (spells.Op, bool) {
+	spell, _ := splitSpell(target)
+	name := targetName(target)
+	var found []spells.Op
+	for _, s := range catalog {
+		if spell != "" && s.Name() != spell {
+			continue
+		}
+		if op, ok := s.Op(name); ok {
+			found = append(found, op)
+		}
+	}
+	if len(found) != 1 {
+		return spells.Op{}, false
+	}
+	return found[0], true
 }
 
 // writesOutside reads what a run under the rw charm writes from the workspace's

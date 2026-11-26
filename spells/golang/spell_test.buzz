@@ -222,6 +222,12 @@ test "golangci-lint keys on the platform and the Go toolchain selectors" {
     }
 }
 
+test "go-fmt formats a forwarded file alone" {
+    final fmt = command("go-fmt");
+    std\assert(fmt.pathScope.join(" ") == "\{file\}", message: "a forwarded file is its own operand");
+    std\assert(fmt.pathScopeFiles.join(" ") == fmt.sources.join(" "), message: "it takes the files the walk would");
+}
+
 test "an op that rewrites in place declares the files it edits" {
     std\assert(command("go-fmt").edits.indexOf("**/*.go") != null, message: "gofmt -w rewrites Go sources");
     std\assert(command("golangci-lint").edits.indexOf("**/*.go") != null, message: "--fix rewrites Go sources");

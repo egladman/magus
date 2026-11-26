@@ -247,7 +247,9 @@ fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"],
 fun goFmt(target: Target) > Command {
     final args = ["-d"];
     // The walk keeps dot dirs, and .claude/worktrees holds other checkouts.
-    return Command{bin = "gofmt", args = args, sources = ["**/*.go", "!**/.*/**"], edits = ["**/*.go", "!**/.*/**"], charms = {
+    // A forwarded file replaces the walk, so `go::go-fmt:rw -- a.go` rewrites a.go alone.
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go", "!**/.*/**"], edits = ["**/*.go", "!**/.*/**"],
+        pathScope = ["\{file\}"], pathScopeFiles = ["**/*.go", "!**/.*/**"], charms = {
         "rw": set(args, "-d", "-w"),
     }};
 }
