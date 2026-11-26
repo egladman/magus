@@ -33,8 +33,10 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "modules' go.mod, go.sum or go.work), and that digest must be this worktree's. Docs, console, tests, a package nothing links and a separate module such as\n"
     + "libs/train do not count, so a base commit later than the binary's usually qualifies, and so does a binary built\n"
     + "from uncommitted changes. Otherwise the script refuses and names what to build in the root.\n"
-    + "--build-from <checkout> is --from after building: it runs `<checkout>/magus --root <checkout> run go-build .` first, then\n"
-    + "judges that binary the same way. A session holding a job lease is refused, since a worker never compiles magus.\n"
+    + "--build-from <checkout> is --from after building: it links <checkout>/magus with `go build`, stamped as go-build stamps it, then\n"
+    + "judges that binary the same way. It runs after the main-checkout refusal and never loads <checkout>'s magusfile, so a checkout whose\n"
+    + "own change its old ./magus cannot load still builds; it links the checked-in generated files, and regenerating a stale one is the\n"
+    + "integrator's `go-build`. A session holding a job lease is refused, since a worker never compiles magus.\n"
     + "--check prints that verdict and writes nothing.";
 final MODULE = "module github.com/egladman/magus";
 
@@ -89,6 +91,10 @@ export fun checkReusable(stamped: str, digest: str) > result\Result::<bool> {
 // stampProbe prints the build stamp of the magus running it, from which hack/policy/stale.buzz
 // reads the Go input digest the binary was built with.
 final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary().stamp);`;
+
+// buildStampProbe prints the stamp go-build would link for the tree it runs in, from that tree's own
+// hack/policy/stale.buzz. The binary running it only has to run a script, never to load the magusfile.
+final buildStampProbe = `import "std"; import "./hack/policy/stale" as stale; std\print(stale\buildStamp(".") catch "");`;
 
 // A previous claim's reported base can predate this worktree.
 fun checkHead(row: Row, head: str) > result\Result::<bool> {
@@ -226,9 +232,28 @@ export fun leaseOf(baggage: str) > str {
     return "";
 }
 
-// buildArgs is the go-build run in source that --build-from makes before it judges the binary.
-export fun buildArgs(source: str) > [str] {
-    return ["--root", source, "run", "go-build", "."];
+// Link is what --build-from hands to go: the stamp and the build identity go-build links.
+export object Link {
+    stamp: str,
+    version: str,
+    commit: str,
+    commitDate: str,
+    builtBy: str,
+}
+
+// ldFlags are go-build's linker flags (magusfile.buzz's ld_flags) plus the build stamp.
+export fun ldFlags(link: Link) > str {
+    return "-w -s"
+        + " -X github.com/egladman/magus/internal/buildinfo.version=" + link.version
+        + " -X github.com/egladman/magus/internal/buildinfo.commit=" + link.commit
+        + " -X github.com/egladman/magus/internal/buildinfo.commitDate=" + link.commitDate
+        + " -X main.builtBy=" + link.builtBy
+        + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + link.stamp;
+}
+
+// buildArgs is the `env` run that links out from source, as go-build's link_magus does.
+export fun buildArgs(source: str, link: Link, dest: str) > [str] {
+    return ["GOEXPERIMENT=jsonv2", "go", "-C", source, "build", "-trimpath", "-ldflags", ldFlags(link), "-o", dest, "./cmd/magus"];
 }
 
 // buildRefusal is what a leased worker is told for --build-from: it never compiles magus. It
@@ -276,8 +301,29 @@ fun buildFrom(source: str, root: str) > result\Result::<bool> {
             return result\fail::<bool>(refused);
         }
     }
+    final stamped = magusAt(bin, root: source, args: ["buzz", "-e", buildStampProbe]);
+    if (stamped.error -> e) {
+        return result\fail::<bool>("bootstrap-worktree: stamp the build of {source}: {e.message}");
+    }
+    if (stamped.value!.trim() == "") {
+        return result\fail::<bool>("bootstrap-worktree: {source}'s hack/policy/stale.buzz could not stamp its tree, so nothing was built");
+    }
     try {
-        _ = proc\exec(bin, args: buildArgs(source));
+        final at = vcs\CommandOptions{ dir = source, quiet = true };
+        final described = vcs\cmd(["describe", "--tags", "--always", "--dirty", "--match", "v[0-9]*"], opts: at).stdout.trim();
+        final link = Link{
+            stamp = stamped.value!.trim(),
+            version = if (described == "") "unknown" else described,
+            commit = vcs\cmd(["rev-parse", "HEAD"], opts: at).stdout.trim(),
+            commitDate = vcs\cmd(["show", "-s", "--format=%cI", "HEAD"], opts: at).stdout.trim(),
+            builtBy = env\getOr("BUILT_BY", def: "") catch "",
+        };
+        // Link beside ./magus and rename over it, as bootstrap places its copy.
+        final built = "{bin}.build";
+        _ = proc\exec("env", args: buildArgs(source, link: link, dest: built));
+        // The first exec of a new executable is slow on macOS; pay for it here.
+        _ = proc\exec(built, args: ["version"], dir: source, opts: proc\ExecOptions{ quiet = true });
+        fs\rename(built, dst: bin);
     } catch (err: any) {
         return result\caught::<bool>(err, doing: "bootstrap-worktree: build {source}/magus");
     }
@@ -324,7 +370,8 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
         fs\chmod("{local}.bootstrap", mode: 493);
         fs\rename("{local}.bootstrap", dst: local);
         std\print("placed " + placed(v.bin, digest: v.digest));
-        std\print(checkout\seedLine([origin, main], dir: root));
+        final headOf = fun (at: str) > str => vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = at, quiet = true, allowFailure = true }).stdout.trim() catch "";
+        std\print(checkout\seedLine([origin, main], dir: root, headOf: headOf));
     } catch (err: any) {
         return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
     }
@@ -440,7 +487,9 @@ export fun render(row: Row, root: str) > [str] {
     ];
 }
 
-fun sourceChecked(values: {str: str}, root: str) > result\Result::<str> {
+// sourceChecked is the checkout whose ./magus to judge. --build-from compiles it, and only after
+// refuse allows root, so a refused checkout is never regenerated or rebuilt.
+export fun sourceChecked(values: {str: str}, root: str, refuse: fun () > result\Result::<bool>, build: fun (source: str) > result\Result::<bool>) > result\Result::<str> {
     final source = values["--from"] ?? "";
     final built = values["--build-from"] ?? "";
     if (built == "") {
@@ -452,7 +501,11 @@ fun sourceChecked(values: {str: str}, root: str) > result\Result::<str> {
     if (values["--check"] != null) {
         return result\fail::<str>("bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}");
     }
-    final compiled = buildFrom(built, root: root);
+    final allowed = refuse();
+    if (allowed.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    final compiled = build(built);
     if (compiled.error -> err) {
         return result\Result::<str>{ error = err };
     }
@@ -469,7 +522,18 @@ export fun main(args: [str]) > void !> any {
         throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final root = vcs\root();
-    final chosen = sourceChecked(parsed.values, root: root);
+    final chosen = sourceChecked(
+        parsed.values,
+        root: root,
+        refuse: fun () > result\Result::<bool> {
+            final found = checkRepository(root);
+            if (found.error -> err) {
+                return result\Result::<bool>{ error = err };
+            }
+            return result\ok::<bool>(true);
+        },
+        build: fun (built: str) > result\Result::<bool> => buildFrom(built, root: root),
+    );
     if (chosen.error -> err) {
         throw err.message;
     }
@@ -635,7 +699,6 @@ test "the refusal names who builds" {
 }
 
 test "--build-from builds in the source checkout and is refused under a lease, naming who builds" {
-    assert\equal(buildArgs("/r"), want: ["--root", "/r", "run", "go-build", "."], message: "the build runs in the source checkout");
     assert\equal(leaseOf("a=b, magus.lease=policy-bootstrap ,c=d"), want: "policy-bootstrap", message: "the lease entry of a baggage header");
     assert\equal(leaseOf("a=b"), want: "", message: "no lease");
     assert\equal(leaseOf(""), want: "", message: "no baggage");
@@ -655,4 +718,65 @@ test "a command killed by a signal names the signal, not exit -1" {
 test "the main worktree is the porcelain's first stanza" {
     assert\equal(checkout\mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
         want: "/work/magus", message: "main");
+}
+
+test "--build-from refuses the main checkout before it builds anything" {
+    final ran = mut [<str>];
+    final refuse = fun () > result\Result::<bool> {
+        ran.append("refuse");
+        return result\fail::<bool>("is the main checkout");
+    };
+    final build = fun (source: str) > result\Result::<bool> {
+        ran.append("build {source}");
+        return result\ok::<bool>(true);
+    };
+    final refused = sourceChecked({"--build-from": "/m"}, root: "/m", refuse: refuse, build: build);
+    assert\equal(refused.error!.message, want: "is the main checkout", message: "the refusal is the error");
+    assert\equal(ran.join("|"), want: "refuse", message: "nothing built");
+}
+
+test "--build-from builds only after the checkout is allowed; --from builds nothing" {
+    final ran = mut [<str>];
+    final refuse = fun () > result\Result::<bool> {
+        ran.append("refuse");
+        return result\ok::<bool>(true);
+    };
+    final build = fun (source: str) > result\Result::<bool> {
+        ran.append("build {source}");
+        return result\ok::<bool>(true);
+    };
+    final chosen = sourceChecked({"--build-from": "/j"}, root: "/w", refuse: refuse, build: build);
+    assert\equal(chosen.value!, want: "/j", message: "the built checkout is the source");
+    assert\equal(ran.join("|"), want: "refuse|build /j", message: "refusal first");
+    final plain = sourceChecked({"--from": "/j"}, root: "/w", refuse: refuse, build: build);
+    assert\equal(plain.value!, want: "/j", message: "the source is --from");
+    assert\equal(ran.len(), want: 2, message: "no further step ran");
+}
+
+test "--build-from rejects differing checkouts and --check before refusing or building" {
+    final ran = mut [<str>];
+    final refuse = fun () > result\Result::<bool> {
+        ran.append("refuse");
+        return result\ok::<bool>(true);
+    };
+    final build = fun (source: str) > result\Result::<bool> {
+        ran.append("build");
+        return result\ok::<bool>(true);
+    };
+    assert\equal(sourceChecked({"--build-from": "/a", "--from": "/b"}, root: "/w", refuse: refuse, build: build).error != null, want: true, message: "differing checkouts");
+    assert\equal(sourceChecked({"--build-from": "/a", "--check": "true"}, root: "/w", refuse: refuse, build: build).error != null, want: true, message: "--check");
+    assert\equal(ran.len(), want: 0, message: "nothing ran");
+}
+
+test "the build links with go directly, stamped as go-build stamps, without loading the magusfile" {
+    final link = Link{ stamp = "a=1,@inputs=ff", version = "v1-dirty", commit = "abc", commitDate = "2026-11-25T00:00:00Z", builtBy = "" };
+    assert\equal(buildArgs("/j", link: link, dest: "/j/magus.build"), want: [
+        "GOEXPERIMENT=jsonv2", "go", "-C", "/j", "build", "-trimpath", "-ldflags",
+        "-w -s -X github.com/egladman/magus/internal/buildinfo.version=v1-dirty -X github.com/egladman/magus/internal/buildinfo.commit=abc"
+            + " -X github.com/egladman/magus/internal/buildinfo.commitDate=2026-11-25T00:00:00Z -X main.builtBy="
+            + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=a=1,@inputs=ff",
+        "-o", "/j/magus.build", "./cmd/magus",
+    ], message: "go build argv");
+    assert\equal(buildStampProbe.indexOf("stale\\buildStamp(") != null, want: true, message: "the stamp is the tree's own buildStamp");
+    assert\equal(buildStampProbe.indexOf("run") == null, want: true, message: "no target run, so no magusfile load");
 }
