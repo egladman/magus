@@ -18,6 +18,7 @@ export fun buzzPackagesDiagram() > result\Result::<diagram\Diagram> {
         final tree = magus\graph().dir("libs/gopherbuzz/ast");
         final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
         final vm = magus\graph().dir("libs/gopherbuzz/vm");
+        final literals = magus\graph().dir("libs/gopherbuzz/x/literal");
         return result\ok::<diagram\Diagram>(diagram\of("buzz-packages",
                 title: "The root package drives every step; vm runs what it compiles",
                 eyebrow: "gopherbuzz",
@@ -27,6 +28,7 @@ export fun buzzPackagesDiagram() > result\Result::<diagram\Diagram> {
                 level: diagram\Level.package)
             .box(session, label: "Session", sub: "parse, import, check, compile", focal: true)
             .box(lexer, label: "Lexer", sub: "token.Tokenize")
+            .box(literals, label: "Literal scanners", sub: "token.LiteralScanner")
             .box(tree, label: "Syntax tree", sub: "ast.Program")
             .box(typeSystem, label: "Types", sub: "types.Type")
             .box(vm, label: "VM", sub: "interpreter, baseline JIT")
