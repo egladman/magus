@@ -3,7 +3,7 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 13782
+skill_full_bytes: 13788
 skill_short_bytes: 9990
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `3714b78d66c0` |
+| `skill-content` | `48ae51a9a37a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -475,7 +475,7 @@ Strings are indexed by BYTE: `s.sub(0, len: 8)` can cut a multi-byte character i
 half, and `s.len()` counts bytes. Integer division truncates (`7 / 2` is `3`), and
 `//` starts a comment, never an operator.
 
-A raw string is backticks. Use it for JSON, regexes and Mustache templates, since
+A multiline string is backticks. Use it for JSON, regexes and Mustache templates, since
 its quotes need no escaping:
 
 ```buzz
