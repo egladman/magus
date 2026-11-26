@@ -301,6 +301,29 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
 }
 
+// A re-fork of a stored id with only --checkout and --checkpoint overlays them on the
+// stored row, so the instructions, write paths and check stay.
+func TestJobForkByIdWithCheckoutAndCheckpointKeepsTheStoredRow(t *testing.T) {
+	resetOpenedWorkspaces(t)
+	repo, cacheDir := execRepositoryFixture(t)
+	root := repo.Root()
+	head := repo.Head()
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "magus.yaml", "--instructions", "run"}))
+
+	own := filepath.Join(t.TempDir(), "own")
+	captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"w", "--checkout", own, "--checkpoint", head[:9]}))
+	})
+	rows, err := store.List(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "run", rows[0].Instructions())
+	assert.Equal(t, []string{"magus.yaml"}, rows[0].Paths.Write)
+	assert.False(t, rows[0].Check.IsZero(), "the stored check stays")
+	assert.Equal(t, head, rows[0].Checkpoint)
+}
+
 // A --stdin record and --checkout combine: the fork makes the checkout the flag names and
 // judges the record against it, so a live job in the forking checkout refuses nothing.
 // The same record without the flag is still refused, and a record naming another checkout
