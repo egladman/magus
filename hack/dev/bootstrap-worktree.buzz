@@ -97,9 +97,15 @@ final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary()
 final buildStampProbe = `import "std"; import "./hack/policy/stale" as stale; std\print(stale\buildStamp(".") catch "");`;
 
 // A previous claim's reported base can predate this worktree.
-fun checkHead(row: Row, head: str) > result\Result::<bool> {
+// A source that is the job's own checkout is exempt: its tree is what the binary is built from,
+// whatever commit this checkout is at.
+fun checkHead(row: Row, head: str, source: str = "") > result\Result::<bool> {
+    if (source != "" and row.checkoutRoot != "" and path\clean(source) == path\clean(row.checkoutRoot)) {
+        return result\ok::<bool>(true);
+    }
     if (row.checkpoint != "" and row.checkpoint.split("+")[0] != head) {
-        return result\fail::<bool>("bootstrap-worktree: job {row.id} has checkpoint {row.checkpoint}, but this checkout is at {head}; bootstrap in a worktree at the checkpoint");
+        final named = if (row.checkoutRoot == "") "" else "; or build from the job's own checkout with `--build-from {row.checkoutRoot}`";
+        return result\fail::<bool>("bootstrap-worktree: job {row.id} has checkpoint {row.checkpoint}, but this checkout is at {head}; bootstrap in a worktree at the checkpoint{named}");
     }
     return result\ok::<bool>(true);
 }
@@ -350,7 +356,7 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
     }
     try {
         final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout.trim();
-        final checked = checkHead(jobRow.value!, head: head);
+        final checked = checkHead(jobRow.value!, head: head, source: source);
         if (checked.error -> err) {
             return result\Result::<Row>{ error = err };
         }
@@ -652,6 +658,13 @@ test "bootstrap refuses a checkout ahead of the job before placing its binary" {
     final refused = checkHead(row, head: row.reportedBase);
     assert\isTrue(refused.error!.message.indexOf(row.checkpoint) != null, message: "name the checkpoint");
     assert\isTrue(checkHead(row, head: row.checkpoint).error == null, message: "a fresh checkout at the checkpoint passes despite a previous divergent claim");
+}
+
+test "a source that is the job's own checkout is not held to the checkpoint" {
+    final row = Row{ id = "j", state = "declared", checkpoint = "abc", reportedBase = "abc", baseVerdict = "match", checkoutRoot = "/j" };
+    assert\isTrue(checkHead(row, head: "def", source: "/j/").error == null, message: "own checkout");
+    final refused = checkHead(row, head: "def", source: "/other");
+    assert\isTrue(refused.error!.message.indexOf("checkpoint abc") != null and refused.error!.message.indexOf("at def") != null and refused.error!.message.indexOf("--build-from /j") != null, message: "names both commits and the build-from");
 }
 
 test "a diverged worktree with tracked edits is still refused and not detached" {
