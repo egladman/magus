@@ -18,6 +18,7 @@ export fun gopherbuzzPackages() > result\Result::<[magus\Dir]> {
 export fun gopherbuzzAround() > result\Result::<[magus\Dir]> {
     try {
         return result\ok::<[magus\Dir]>([
+            magus\graph().dir("libs/gopherbuzz/benchmarks"),
             magus\graph().dir("libs/gopherbuzz/benchmarks/comparison"),
             magus\graph().dir("libs/gopherbuzz/benchmarks/upstream"),
             magus\graph().dir("libs/gopherbuzz/buzzgen"),
@@ -27,10 +28,11 @@ export fun gopherbuzzAround() > result\Result::<[magus\Dir]> {
             magus\graph().dir("libs/gopherbuzz/internal/stdgen"),
             magus\graph().dir("libs/gopherbuzz/std/internal/boxed"),
             magus\graph().dir("libs/gopherbuzz/wasm"),
+            magus\graph().dir("libs/gopherbuzz/x/langservice"),
         ]);
     } catch (err: any) {
         return result\caught::<[magus\Dir]>(err);
     }
 }
 
-export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, the stdlib generator and its boxed values, two benchmarks and an example: built on the pipeline, not a stage of it";
+export final AROUND_WHY = "the buzz CLI, the WASI build, the Go-to-Buzz type mirror, the stdlib generator and its boxed values, the benchmarks, the language service and an example: built on the pipeline, not a stage of it";

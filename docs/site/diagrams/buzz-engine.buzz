@@ -15,6 +15,7 @@ export fun buzzEngineDiagram() > result\Result::<diagram\Diagram> {
         final pipeline = [
             session,
             magus\graph().dir("libs/gopherbuzz/token"),
+            magus\graph().dir("libs/gopherbuzz/x/literal"),
             magus\graph().dir("libs/gopherbuzz/ast"),
             magus\graph().dir("libs/gopherbuzz/types"),
             magus\graph().dir("libs/gopherbuzz/vm"),

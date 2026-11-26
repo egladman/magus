@@ -2,11 +2,11 @@
   "claims": {
     "calls": 0,
     "flow": 0,
-    "imports": 6
+    "imports": 7
   },
   "diagram": "buzz-packages",
   "findings": [],
   "level": "package",
-  "stamp": "sha256:fba889190490d12309967fcf38152dc6881346a2d9df2c861300db755e1890f9",
+  "stamp": "sha256:0786584b8193b188a1bd6298908467fb8eb0f0e192332201b914c8e1cbf4b677",
   "undrilled": []
 }
