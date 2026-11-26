@@ -918,8 +918,8 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 
 	_, err = MagusOutput(ctx, "build")
 	require.ErrorContains(t, err, "not an output ref")
-	_, err = MagusOutput(ctx, "out0000000000")
-	require.ErrorContains(t, err, "no stored output")
+	_, err = MagusOutput(job.WithSnapshot(ctx, job.Snapshot{}), "out0000000000")
+	require.ErrorIs(t, err, types.OutputRefMissing)
 }
 
 // A guard rule has no workspace on its context; the guard pins the judged checkout's store.
@@ -940,6 +940,37 @@ func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 	require.ErrorContains(t, err, "no stored output")
 	_, err = MagusQuery(ctx, "x", types.KnowledgeQueryOptions{})
 	require.ErrorIs(t, err, types.MagusfileOnlyMember, "the pin opens the output store and no other member")
+}
+
+func (s *stdSuite) TestOutputReadsARunAVerifiedRowRecorded() {
+	run := jobtypes.CapturedRun{Found: true, Ref: "out1a2b3c4d5e6f", Project: "pkg/a", Target: "test", DurationMs: 9, Revision: "abc123", AttemptID: "a1"}
+	dirty := jobtypes.CapturedRun{Found: true, Ref: "out2a2b3c4d5e6f", Project: "pkg/a", Target: "test", Revision: "abc123", Dirty: true}
+	rows := []jobtypes.Job{
+		{ID: "running", State: jobtypes.StateRunning, Attempt: &jobtypes.CapturedRun{Found: true, Ref: "out3a2b3c4d5e6f", Revision: "abc123"}},
+		{ID: "passed", State: jobtypes.StatePass, PostconditionAttempts: []jobtypes.PostconditionAttempt{
+			{PostconditionID: "check", Attempt: run}, {PostconditionID: "lint", Attempt: dirty},
+		}},
+	}
+	pinned := func(snap job.Snapshot) context.Context {
+		return job.WithSnapshot(types.WithOutputCacheDir(withSecrets(s.T().Context()), s.T().TempDir()), snap)
+	}
+	ctx := pinned(job.Snapshot{Rows: rows})
+
+	got, err := MagusOutput(ctx, run.Ref)
+	s.Require().NoError(err)
+	s.Equal(types.OutputRecord{
+		Ref: run.Ref, Project: "pkg/a", Target: "test", DurationMs: 9,
+		Output: "job row `passed` recorded this run passing at abc123; its log stayed in the store of the checkout that ran it\n",
+	}, got)
+
+	for _, ref := range []string{dirty.Ref, "out3a2b3c4d5e6f", "out9a2b3c4d5e6f"} {
+		_, err = MagusOutput(ctx, ref)
+		s.Require().ErrorIsf(err, types.OutputRefMissing, "%s is no verified row's passing run", ref)
+	}
+
+	_, err = MagusOutput(pinned(job.Snapshot{Err: errors.New("locked")}), run.Ref)
+	s.Require().ErrorContains(err, "job rows that could record it are unread: locked")
+	s.NotErrorIs(err, types.OutputRefMissing, "unread rows say nothing about the run")
 }
 
 // With no store, "no passed full test" claims a read nobody made.
