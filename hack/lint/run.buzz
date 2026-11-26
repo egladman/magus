@@ -418,14 +418,31 @@ export fun run(rules: [Rule], files: [str]) > result\Result::<[Finding]> {
     if (byRule.error != null) {
         return result\Result::<[Finding]>{ error = byRule.error };
     }
-    return ruleFindings(rules, byRule: byRule.value!);
+    final ruled = ruleFindings(rules, byRule: byRule.value!);
+    if (ruled.error != null) {
+        return result\Result::<[Finding]>{ error = ruled.error };
+    }
+    return result\ok::<[Finding]>(ruled.value!.found);
+}
+
+// Ruled is what ruleFindings found, and how long each checked rule took.
+object Ruled {
+    found: [Finding],
+    timings: [RuleTime],
+}
+
+// RuleTime is one rule's wall time over its matched files, in whole milliseconds.
+export object RuleTime {
+    rule: str,
+    ms: int,
 }
 
 // ruleFindings runs each of rules over its entry in byRule, which holds
 // them all.
-fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > result\Result::<[Finding]> {
+fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > result\Result::<Ruled> {
     try {
         final found = mut [<Finding>];
+        final timings = mut [<RuleTime>];
         foreach (r in rules) {
             final sel = byRule[r.name]!;
             foreach (glob in sel.unmatched) {
@@ -436,14 +453,17 @@ fun ruleFindings(rules: [Rule], byRule: {str: RuleFiles}) > result\Result::<[Fin
             if (sel.unmatched.len() > 0) {
                 continue;
             }
-            foreach (f in r.check(sel.matched)) {
+            final started = os\time();
+            final checked = r.check(sel.matched);
+            timings.append(RuleTime{ rule = r.name, ms = std\toInt(os\time() - started) });
+            foreach (f in checked) {
                 found.append(Finding{ path = f.path, line = f.line, col = f.col, rule = r.name,
                     message = f.message, hint = f.hint, url = f.url });
             }
         }
-        return result\ok::<[Finding]>(found);
+        return result\ok::<Ruled>(Ruled{ found = found, timings = timings });
     } catch (err: any) {
-        return result\caught::<[Finding]>(err);
+        return result\caught::<Ruled>(err);
     }
 }
 
@@ -602,10 +622,11 @@ export fun render(f: Finding) > str {
     return s;
 }
 
-final usage = "usage: magus buzz hack/lint/run.buzz [-- [--record [--session <id>]] [--rule <name>] [<path>...]]\n"
+final usage = "usage: magus buzz hack/lint/run.buzz [-- [--record [--session <id>]] [--timings] [--rule <name>] [<path>...]]\n"
     + "  bare            every rule over the whole tree\n"
     + "  <path>...       only the findings at these files, from the rules that read them\n"
     + "  --rule <name>   only that rule\n"
+    + "  --timings       after the findings, each rule's wall time in ms, slowest first\n"
     + "  --record        append the run's findings to firings.jsonl under $XDG_STATE_HOME/magus; whole tree only\n"
     + "  --session <id>  the agent session the run belongs to, recorded with --record";
 
@@ -617,14 +638,15 @@ export object Selection {
     paths: [str],
     record: bool = false,
     session: str = "",
+    timings: bool = false,
 }
 
-// parse reads --rule, --record, --session and the paths. It refuses any
+// parse reads --rule, --record, --session, --timings and the paths. It refuses any
 // other flag, a rule not in names and a recorded run narrowed to paths.
 // A path after `--` may start with a dash.
 export fun parse(args: [str], names: [str]) > result\Result::<Selection> {
     try {
-        final parsed = flags\parse(args, switches: ["--record"], valued: ["--rule", "--session"]);
+        final parsed = flags\parse(args, switches: ["--record", "--timings"], valued: ["--rule", "--session"]);
         final paths = mut [<str>];
         foreach (word in parsed.unknown) {
             if (word.startsWith("-")) {
@@ -671,7 +693,8 @@ export fun parse(args: [str], names: [str]) > result\Result::<Selection> {
         if (!record and parsed.values["--session"] != null) {
             return result\fail::<Selection>("lint: --session tags a recorded run; pass --record\n{usage}");
         }
-        return result\ok::<Selection>(Selection{ rule = rule, paths = clean, record = record, session = parsed.values["--session"] ?? "" });
+        final timings = parsed.values["--timings"] != null;
+        return result\ok::<Selection>(Selection{ rule = rule, paths = clean, record = record, session = parsed.values["--session"] ?? "", timings = timings });
     } catch (err: any) {
         return result\caught::<Selection>(err);
     }
@@ -721,10 +744,16 @@ export fun at(found: [Finding], paths: [str]) > [Finding] {
     return kept;
 }
 
-// Report is a run's findings and how many rules produced them.
+// Report is a run's findings, how many rules produced them, and each checked rule's wall time.
 export object Report {
     rules: int,
     findings: [Finding],
+    timings: [RuleTime],
+}
+
+// slowestFirst orders timings by wall time, slowest first, so the costliest rule heads the list.
+export fun slowestFirst(timings: [RuleTime]) > [RuleTime] {
+    return timings.cloneMutable().sort(fun (left: RuleTime, right: RuleTime) > bool => left.ms > right.ms);
 }
 
 // check lints the tree under the working directory as sel says. A picked rule still reads
@@ -755,7 +784,7 @@ export fun check(sel: Selection) > result\Result::<Report> {
     if (ruled.error != null) {
         return result\Result::<Report>{ error = ruled.error };
     }
-    var found = ruled.value!;
+    var found = ruled.value!.found;
     if (footprinted) {
         final footprinting = footprint(all, files: files.value!, byRule: byRule.value!);
         if (footprinting.error != null) {
@@ -763,7 +792,7 @@ export fun check(sel: Selection) > result\Result::<Report> {
         }
         found = found + footprinting.value!;
     }
-    return result\ok::<Report>(Report{ rules = picked.value!.len(), findings = at(found, paths: sel.paths) });
+    return result\ok::<Report>(Report{ rules = picked.value!.len(), findings = at(found, paths: sel.paths), timings = ruled.value!.timings });
 }
 
 // Firing is one line of firings.jsonl. hack/retro/rule-precision.buzz reads
@@ -851,6 +880,11 @@ export fun main(args: [str]) > void !> any {
     foreach (f in report.findings) {
         std\print(render(f));
     }
+    if (sel.timings) {
+        foreach (t in slowestFirst(report.timings)) {
+            std\print("{t.rule}: {t.ms} ms");
+        }
+    }
     if (sel.record) {
         final ran = if (sel.rule != null) [sel.rule!] else names;
         final stamp = Firing{
@@ -906,6 +940,17 @@ test "--rule precedes the paths, and a dashed path follows --" {
     assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
     assert\equal(parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).value!.paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
     assert\equal(refusal(["x.lock", "--rule", "b"]), want: "lint: flag --rule follows a path; flags go first\n" + usage, message: "a flag after a path");
+}
+
+test "--timings is a switch, and timings sort slowest first" {
+    assert\isTrue(parse(["--timings"], names: ["a"]).value!.timings, message: "flag set");
+    assert\isTrue(!parse([<str>], names: ["a"]).value!.timings, message: "off by default");
+    final sorted = slowestFirst([
+        RuleTime{ rule = "fast", ms = 1 },
+        RuleTime{ rule = "slow", ms = 9 },
+        RuleTime{ rule = "mid", ms = 4 },
+    ]);
+    assert\equal(sorted.map(fun (index: int, t: RuleTime) > str => t.rule), want: ["slow", "mid", "fast"], message: "slowest first");
 }
 
 test "an unknown flag and an unknown rule are refused" {
