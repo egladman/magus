@@ -61,6 +61,7 @@ func Observer(root string, graphIn func(tree string) *Graph, env Env) job.Observ
 			return seen, err
 		}
 		seen.CurrentRun = runsAtCurrentKey(graphIn, env)
+		seen.Regenerated = job.RegeneratedDelivered(tree, row, seen.Changed, graph.jobWorkspace(ctx, tree))
 		if delta, ok := observeSymbolDelta(ctx, tree, row, seen, graph); ok {
 			seen.AddedExports, seen.LeftUnreferenced, seen.SymbolDeltaKnown = delta.Added, delta.Left, true
 		}

@@ -219,6 +219,16 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 	})
 }
 
+// jobWorkspace is the workspace this graph reads as a job record's checks read it,
+// Unavailable when there is none or it will not load.
+func (r *Graph) jobWorkspace(ctx context.Context, root string) job.Workspace {
+	if r == nil || r.workspace == nil {
+		return job.Workspace{Unavailable: "no workspace is open to read declared outputs from"}
+	}
+	m, err := r.workspace(ctx)
+	return job.NewWorkspace(ctx, root, m, err, func(err error) string { return job.LoadFailureText(err, "") })
+}
+
 // ExtendedFootprint adds to rec's write paths the tests beside what it writes.
 // It permits the outputs they regenerate as the integrator's. Each kind gets a
 // count line. It skips a bound caller and a workspace that did not load.
@@ -247,7 +257,7 @@ func ExtendedFootprint(ctx context.Context, store *job.Store, graph *Graph, root
 		notes = append(notes, fmt.Sprintf("%d test file(s) beside the write paths were added to them: -o json lists each", len(paths)))
 	}
 	if len(deviations) > 0 {
-		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted: the integrator owns them", len(deviations)))
+		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted as deviations: wait notes one in the diff instead of refusing it, and the integrator regenerates it again", len(deviations)))
 	}
 	return rec, notes
 }

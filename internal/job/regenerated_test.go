@@ -84,7 +84,7 @@ func TestRegeneratedOutsideNamesInPlaceUpdates(t *testing.T) {
 	assert.Equal(t, []RegeneratedOutput{{Output: "docs/design.md", Target: "docs:index-generate", Source: "docs/design/**/*.md", InPlace: true}}, got)
 	assert.Equal(t, []string{
 		"docs/design.md (docs:index-generate, rewrites in place)",
-		"never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes",
+		"never hand-edit them: regenerate them with their target. `job wait` notes one in the diff instead of refusing it, and the integrator regenerates it again; unstage what the target named beside one writes",
 	}, regeneratedLines(got))
 	assert.Contains(t, regeneratedProblems(got)[0].Message, "rewrites docs/design.md in place")
 
@@ -219,7 +219,7 @@ func TestRenderRegeneratedCapsTheListing(t *testing.T) {
 		want += fmt.Sprintf("  docs/ref/%d.md (docs:content-generate)\n", i)
 	}
 	want += "  and 3 more from 2 target(s); -o json lists every one\n" +
-		"  never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes\n"
+		"  never hand-edit them: regenerate them with their target. `job wait` notes one in the diff instead of refusing it, and the integrator regenerates it again; unstage what the target named beside one writes\n"
 	assert.Equal(t, want, b.String())
 
 	b.Reset()
