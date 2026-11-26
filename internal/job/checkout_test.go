@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -833,6 +834,46 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 
 	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"})
 	assert.NotEmpty(t, gone.TestUnknown, "a revision the history lost is unknown, not zero")
+}
+
+// failedMissing fails every range read MissingCommits runs.
+type failedMissing struct {
+	types.VCSDriver
+}
+
+func (failedMissing) MissingCommits(context.Context, string, string, string) (int, error) {
+	return 0, errors.New("git rev-list --count: bad object")
+}
+
+func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
+	t.Parallel()
+	_, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	for _, name := range []string{"pending", "landed"} {
+		repo.Git("switch", "-q", "-c", name, main)
+		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
+		repo.Git("switch", "-q", main)
+	}
+	repo.Git("merge", "-q", "--ff-only", "landed")
+	finished := []job.Job{{ID: "pending", State: job.StateExited}, {ID: "landed", State: job.StatePass}}
+	driver, why := resolveDriver(t.Context(), repo.Root())
+	require.NotNil(t, driver, why)
+
+	got, err := unintegratedWith(t.Context(), failedMissing{VCSDriver: driver}, repo.Root(), finished, nil)
+	require.NoError(t, err)
+
+	require.Len(t, got, 1, "the merged branch costs no range read, so only pending is unread")
+	assert.Equal(t, "pending", got[0].Branch)
+	assert.Zero(t, got[0].Commits)
+	assert.Contains(t, got[0].Unread, "git rev-list --count: bad object", "the unread state names the failed read")
+
+	facts := withBranches(job.ForkFacts{}, append(got, Unintegrated{Job: "done", Branch: "done", Commits: 2}))
+	assert.Equal(t, []string{"done (job done, 2 commit(s))"}, facts.FinishedBranches, "an unread branch is not unmerged")
+	assert.Contains(t, facts.BranchesUnknown, "1 finished branch(es) unread: pending (job pending)")
+	assert.Contains(t, facts.IntegrateRecord, `"integrates":["done"]`)
+	line := ForkFactsLine(facts)
+	assert.Contains(t, line, "1 finished branch(es) off the base: done")
+	assert.Contains(t, line, "bad object")
 }
 
 // countedMissing counts the range reads MissingCommits runs.
