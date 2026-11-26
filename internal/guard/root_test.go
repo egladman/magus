@@ -1023,7 +1023,7 @@ func (s *RefreshesOwnCheckoutSuite) SetupTest() {
 }
 
 func (s *RefreshesOwnCheckoutSuite) refreshes(line string) bool {
-	return refreshesOwnCheckout(job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: s.rows}), line, s.at)
+	return refreshesCheckout(job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: s.rows}), line, s.at, nil)
 }
 
 func (s *RefreshesOwnCheckoutSuite) TestAFastForwardToTheTipIsRootWork() {
@@ -1064,6 +1064,108 @@ func (s *RefreshesOwnCheckoutSuite) TestALiveRowEditingTheCheckoutKeepsIt() {
 func (s *RefreshesOwnCheckoutSuite) TestNoOriginHeadNamesNoTip() {
 	fixtureGit(s.T(), s.at.workspace, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
 	s.False(s.refreshes("git merge --ff-only origin/main"))
+}
+
+// RefreshesMainCheckoutSuite pins the refresh of the main checkout from a session in a
+// worktree nested under it. The main checkout is on main, one commit behind origin/main.
+type RefreshesMainCheckoutSuite struct {
+	suite.Suite
+	at   location
+	main string
+	rows []jobtypes.Job
+	tip  string
+	// generated is the paths the restore classifier calls declared outputs.
+	generated []string
+}
+
+func TestRootRefreshesMainCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(RefreshesMainCheckoutSuite))
+}
+
+func (s *RefreshesMainCheckoutSuite) SetupTest() {
+	t := s.T()
+	at, _ := orchestratorFixture(t)
+	s.Require().NoError(os.Remove(filepath.Join(at.workspace, ".git")))
+	base := commitCheckout(t, at.workspace)
+	s.tip = commitCheckout(t, at.workspace)
+	fixtureGit(t, at.workspace, "update-ref", "refs/remotes/origin/main", s.tip)
+	fixtureGit(t, at.workspace, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+	fixtureGit(t, at.workspace, "reset", "-q", "--hard", base)
+	s.main = canonicalPath(at.workspace)
+	tree := filepath.Join(at.workspace, ".claude", "worktrees", "orchestrator")
+	fixtureGit(t, at.workspace, "worktree", "add", "-q", "--detach", tree, s.tip)
+	at.workspace, at.dir = tree, tree
+	s.at = at
+	s.rows = []jobtypes.Job{{ID: "a1", State: jobtypes.StateRunning}}
+	s.generated = []string{"internal/spell/gen/decls/std.buzz"}
+}
+
+func (s *RefreshesMainCheckoutSuite) refreshes(line string) bool {
+	generated := func(root string, rel []string) bool {
+		return root == s.main && !slices.ContainsFunc(rel, func(p string) bool { return !slices.Contains(s.generated, p) })
+	}
+	return refreshesCheckout(job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: s.rows}), line, s.at, generated)
+}
+
+func (s *RefreshesMainCheckoutSuite) git(args string) string {
+	return fmt.Sprintf("git -C %s %s", s.main, args)
+}
+
+func (s *RefreshesMainCheckoutSuite) relink(project string) string {
+	return fmt.Sprintf("%s/magus --root %s run go-build %s", s.main, s.main, project)
+}
+
+func (s *RefreshesMainCheckoutSuite) TestThePullAndTheFetchAreRootWork() {
+	s.True(s.refreshes(s.git("pull --ff-only")))
+	s.True(s.refreshes(s.git("fetch")))
+	s.True(s.refreshes(s.git("fetch origin")))
+	s.True(s.refreshes(s.git("merge --ff-only origin/main")))
+}
+
+func (s *RefreshesMainCheckoutSuite) TestTheRelinkWaitsForTheTip() {
+	s.False(s.refreshes(s.relink(s.main)), "HEAD behind the tip")
+	fixtureGit(s.T(), s.main, "merge", "-q", "--ff-only", s.tip)
+	s.True(s.refreshes(s.relink(s.main)))
+	s.True(s.refreshes(s.relink(".")))
+	s.False(s.refreshes(fmt.Sprintf("%s/magus --root %s run go-build %s", s.at.workspace, s.main, s.main)), "another checkout's binary")
+	s.False(s.refreshes(fmt.Sprintf("%s/magus --root %s run go-build docs", s.main, s.main)), "another project")
+	s.False(s.refreshes(fmt.Sprintf("%s/magus --root %s run generate .", s.main, s.main)), "only the relink")
+}
+
+func (s *RefreshesMainCheckoutSuite) TestARestoreOfGeneratedOutputsIsRootWork() {
+	s.True(s.refreshes(s.git("restore internal/spell/gen/decls/std.buzz")))
+	s.True(s.refreshes(s.git("restore -- internal/spell/gen/decls/std.buzz")))
+	s.False(s.refreshes(s.git("restore internal/guard/root.go")), "a source a person wrote")
+	s.False(s.refreshes(s.git("restore .")), "everything")
+	s.False(s.refreshes(s.git("restore --staged internal/spell/gen/decls/std.buzz")), "a flag")
+	s.False(refreshesCheckout(s.T().Context(), s.git("restore internal/spell/gen/decls/std.buzz"), s.at, nil), "nothing classifies")
+}
+
+func (s *RefreshesMainCheckoutSuite) TestAnyOtherLineInTheMainCheckoutStaysRefused() {
+	s.False(s.refreshes(s.git("pull")))
+	s.False(s.refreshes(s.git("reset --hard origin/main")))
+	s.False(s.refreshes(s.git("checkout --detach origin/main")), "leaves the base branch")
+	s.False(s.refreshes(fmt.Sprintf("git -C %s/internal pull --ff-only", s.main)), "not a checkout root")
+	s.False(s.refreshes(fmt.Sprintf("git -C %s pull --ff-only", s.T().TempDir())))
+	s.False(s.refreshes(fmt.Sprintf("%s && %s", s.git("fetch"), s.git("merge --ff-only origin/main"))))
+}
+
+func (s *RefreshesMainCheckoutSuite) TestAMainCheckoutOffTheBaseBranchStaysAPersons() {
+	fixtureGit(s.T(), s.main, "checkout", "-q", "--detach")
+	s.False(s.refreshes(s.git("pull --ff-only")))
+}
+
+func (s *RefreshesMainCheckoutSuite) TestStagedWorkInTheMainCheckoutKeepsIt() {
+	writeSource(s.T(), s.main, "staged.go")
+	fixtureGit(s.T(), s.main, "add", "staged.go")
+	s.False(s.refreshes(s.git("pull --ff-only")))
+}
+
+func (s *RefreshesMainCheckoutSuite) TestALiveRowEditingTheMainCheckoutKeepsIt() {
+	row := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: s.main}
+	row.Paths.Write = []string{"a.go"}
+	s.rows = []jobtypes.Job{row}
+	s.False(s.refreshes(s.git("pull --ff-only")))
 }
 
 func TestARowNamingFableSpawnsOnFable(t *testing.T) {

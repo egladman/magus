@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 )
 
 // The cost rules judge the main thread of a session: the context every one of its calls
@@ -322,7 +323,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, judged verdict.Jud
 	}
 	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
 	// Refused, the root relays the ref to a worker and never sees the evidence itself.
-	if call.work != "" && (readsOutputRef(in.command) || recoversOwnCheckout(in.command, at.workspace) || refreshesOwnCheckout(ctx, in.command, at)) {
+	if call.work != "" && (readsOutputRef(in.command) || recoversOwnCheckout(in.command, at.workspace) || refreshesCheckout(ctx, in.command, at, generatedIn(ctx, deps))) {
 		call.work = ""
 	}
 	if call.work != "" {
@@ -636,12 +637,11 @@ func citesPath(cited []string, abs string) bool {
 	return false
 }
 
-// refreshesOwnCheckout reports a line, alone in at's checkout, that moves it to origin/HEAD
-// or relinks ./magus there. A stale root binary refuses every fork. Nothing staged and no
-// live row editing the checkout means the move carries no one's work.
-func refreshesOwnCheckout(ctx context.Context, line string, at location) bool {
-	root := at.workspace
-	if root == "" || (at.dir != "" && !within(at.dir, root)) {
+// refreshesCheckout reports a line, alone, that brings at's checkout or the main checkout
+// to origin/HEAD, or relinks ./magus there. A main checkout left behind judges every
+// session from an old tree. generated vets a restore's paths; nil refuses every restore.
+func refreshesCheckout(ctx context.Context, line string, at location, generated func(root string, rel []string) bool) bool {
+	if at.workspace == "" {
 		return false
 	}
 	call, ok := soleCall(line, DialectBash)
@@ -649,29 +649,220 @@ func refreshesOwnCheckout(ctx context.Context, line string, at location) bool {
 		return false
 	}
 	words := literalWords(call.Args)
-	ref := "HEAD"
+	if len(words) < 2 {
+		return false
+	}
+	var r refresh
 	switch {
-	case len(words) == 4 && words[0] == "git":
-		if ref, ok = movesToRef(words[1], words[2:]); !ok {
-			return false
-		}
-	case len(words) > 1 && filepath.Base(words[0]) == "magus":
-		r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
-		if !ok || !runRelinks(at.declared().ix, r) {
-			return false
-		}
+	case words[0] == "git":
+		r, ok = gitRefresh(words[1:], at)
+	case filepath.Base(words[0]) == "magus":
+		r, ok = relinkRefresh(words, at)
 	default:
 		return false
 	}
-	tip, ok := gitCommit(ctx, root, "refs/remotes/origin/HEAD")
-	if moved, found := gitCommit(ctx, root, ref); !ok || !found || moved != tip {
+	if !ok || (r.restore != nil && (generated == nil || !generated(r.root, r.restore))) {
 		return false
 	}
-	if exec.CommandContext(ctx, "git", "-C", root, "diff", "--cached", "--quiet").Run() != nil {
+	return r.lands(ctx, at)
+}
+
+// refresh is one line refreshesCheckout lets through. ref is where the line must leave
+// root, "" for a fetch, a pull or a restore.
+type refresh struct {
+	root    string
+	ref     string
+	restore []string
+	main    bool
+	detach  bool
+}
+
+// refreshTarget is the checkout dir names, or the call's own when dir is "". Only at's
+// checkout and its repository's main checkout qualify.
+func refreshTarget(dir string, at location) (root string, main, ok bool) {
+	own := canonicalPath(at.workspace)
+	if dir == "" {
+		if at.dir != "" && !within(at.dir, at.workspace) {
+			return "", false, false
+		}
+		return own, false, true
+	}
+	named := canonicalPath(resolvePath(cmp.Or(at.dir, at.workspace), dir))
+	if found, _, ok := gitCheckout(named); !ok || found != named {
+		return "", false, false
+	}
+	if named == own {
+		return own, false, true
+	}
+	isMain := named == repositoryMainCheckout(at.workspace)
+	return named, isMain, isMain
+}
+
+// repositoryMainCheckout is the main checkout of the repository holding root, "" for a bare
+// repository or a root in none.
+func repositoryMainCheckout(root string) string {
+	_, common, ok := gitCheckout(root)
+	if !ok || filepath.Base(common) != ".git" {
+		return ""
+	}
+	return filepath.Dir(common)
+}
+
+// gitRefresh reads `git [-C <checkout>]` running `fetch [origin]`, `pull --ff-only`,
+// `merge --ff-only <ref>`, `checkout --detach <ref>` or `restore [--] <path>...`.
+func gitRefresh(args []string, at location) (refresh, bool) {
+	dir := ""
+	if len(args) >= 3 && args[0] == "-C" {
+		if dir = args[1]; dir == "" {
+			return refresh{}, false
+		}
+		args = args[2:]
+	}
+	root, main, ok := refreshTarget(dir, at)
+	if !ok || len(args) == 0 {
+		return refresh{}, false
+	}
+	r := refresh{root: root, main: main}
+	switch sub, rest := args[0], args[1:]; {
+	case sub == "fetch" && (len(rest) == 0 || slices.Equal(rest, []string{"origin"})):
+		return r, true
+	case sub == "pull" && slices.Equal(rest, []string{"--ff-only"}):
+		return r, true
+	case sub == "restore":
+		r.restore = restorePaths(rest)
+		return r, r.restore != nil
+	default:
+		ref, ok := movesToRef(sub, rest)
+		r.ref, r.detach = ref, sub == "checkout"
+		return r, ok
+	}
+}
+
+// restorePaths is the paths of `git restore [--] <path>...`, nil when any is a flag, a
+// glob, absolute or climbs out of the checkout.
+func restorePaths(args []string) []string {
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	for _, p := range args {
+		if strings.HasPrefix(p, "-") || strings.ContainsAny(p, "*?[") || !filepath.IsLocal(p) {
+			return nil
+		}
+	}
+	return slices.Clone(args)
+}
+
+// relinkRefresh reads `./magus run <relink> .` in at's checkout, or `<main>/magus --root
+// <main> run <relink> <main or .>`: the main checkout's own binary, rooted there.
+func relinkRefresh(words []string, at location) (refresh, bool) {
+	r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
+	if !ok {
+		return refresh{}, false
+	}
+	named, flagged := magusFlagValue(words[1:], "root")
+	if !flagged {
+		root, _, ok := refreshTarget("", at)
+		return refresh{root: root, ref: "HEAD"}, ok && runRelinks(at.declared().ix, r)
+	}
+	root, main, ok := refreshTarget(named, at)
+	if !ok || !main || len(r.projects) == 0 || canonicalPath(resolvePath(cmp.Or(at.dir, at.workspace), words[0])) != filepath.Join(root, "magus") {
+		return refresh{}, false
+	}
+	// --root anchors a project path at the main checkout, so its root project is ".".
+	for i, p := range r.projects {
+		if p != "." && canonicalPath(p) != root {
+			return refresh{}, false
+		}
+		r.projects[i] = "."
+	}
+	return refresh{root: root, ref: "HEAD", main: true}, runRelinks(at.declared().ix, r)
+}
+
+// magusFlagValue is the value of the global flag name before the subcommand, spelled
+// `--name v` or `--name=v`.
+func magusFlagValue(args []string, name string) (string, bool) {
+	for i, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			return "", false
+		}
+		flag, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		switch {
+		case flag != name:
+			continue
+		case joined:
+			return value, true
+		case i+1 < len(args):
+			return args[i+1], true
+		}
+		return "", false
+	}
+	return "", false
+}
+
+// lands reports r carrying no one's work: its ref is the tip, nothing is staged and no
+// live row edits root. A main checkout also stays on the base branch.
+func (r refresh) lands(ctx context.Context, at location) bool {
+	tip, ok := gitCommit(ctx, r.root, "refs/remotes/origin/HEAD")
+	if !ok {
+		return false
+	}
+	if r.ref != "" {
+		if moved, found := gitCommit(ctx, r.root, r.ref); !found || moved != tip {
+			return false
+		}
+	}
+	if r.main && (r.detach || !onBaseBranch(ctx, r.root)) {
+		return false
+	}
+	if exec.CommandContext(ctx, "git", "-C", r.root, "diff", "--cached", "--quiet").Run() != nil {
 		return false
 	}
 	rows, err := leaseRows(ctx, at)
-	return err == nil && len(job.HeldIn(rows, root)) == 0
+	return err == nil && !heldAt(rows, r.root)
+}
+
+// onBaseBranch reports root checked out on the branch origin/HEAD names.
+func onBaseBranch(ctx context.Context, root string) bool {
+	base, ok := baseBranch(ctx, root)
+	if !ok {
+		return false
+	}
+	head, err := exec.CommandContext(ctx, "git", "-C", root, "symbolic-ref", "-q", "HEAD").Output()
+	return err == nil && strings.TrimSpace(string(head)) == "refs/heads/"+base
+}
+
+// baseBranch is the branch origin/HEAD names in root's repository.
+func baseBranch(ctx context.Context, root string) (string, bool) {
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "symbolic-ref", "-q", "refs/remotes/origin/HEAD").Output()
+	if err != nil {
+		return "", false
+	}
+	return strings.CutPrefix(strings.TrimSpace(string(out)), "refs/remotes/origin/")
+}
+
+// heldAt reports a live row editing the checkout at root, a canonical path. A row records
+// its checkout as spelled, so it is resolved before it compares.
+func heldAt(rows []jobtypes.Job, root string) bool {
+	return slices.ContainsFunc(rows, func(row jobtypes.Job) bool {
+		return row.CheckoutRoot != "" && canonicalPath(row.CheckoutRoot) == root && len(job.HeldIn([]jobtypes.Job{row}, row.CheckoutRoot)) > 0
+	})
+}
+
+// generatedIn reports every path a declared output of the workspace deps opens at root.
+// A workspace that does not open classifies nothing.
+func generatedIn(ctx context.Context, deps Dependencies) func(root string, rel []string) bool {
+	return func(root string, rel []string) bool {
+		ws, err := deps.inspect(ctx, root)
+		if err != nil || ws == nil {
+			return false
+		}
+		files, err := ws.ClassifyFiles(ctx, rel)
+		return err == nil && len(files) == len(rel) &&
+			!slices.ContainsFunc(files, func(f types.FileEntry) bool { return f.Role != diff.RoleOutput })
+	}
 }
 
 // movesToRef is the ref of `merge --ff-only <ref>` or `checkout --detach <ref>`, flag on
