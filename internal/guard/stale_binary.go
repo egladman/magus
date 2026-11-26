@@ -807,7 +807,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		return binaryFix{
 			say: bootstrapSay(bootstrap, readyCheckoutLine(root)),
 			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
-				"and builds the graph, the symbol digest and the proofread binary the commit guard runs.",
+				"and builds whatever else the hook declares, such as the graph and the symbol digest.",
 		}
 	}
 	return binaryFix{
