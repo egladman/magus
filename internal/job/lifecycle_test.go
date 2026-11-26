@@ -1877,6 +1877,56 @@ func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
 	}
 }
 
+// A cached run is dirty whenever its tree held any uncommitted file. A path that reads as
+// the run's revision does was read as it stands, whatever its file time says.
+func TestWaitEvidenceHoldsADirtyRunToItsRevisionWherePathsMatch(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		alter func(t *testing.T, j waiterEvidenceJob)
+		want  string
+	}{
+		"every path reads as the revision does": {},
+		"a path differing from the revision, dated after the run started": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				for _, dir := range []string{j.holder, j.waiter} {
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "cmd", "magus", "ledger.go"), []byte("package b\n"), 0o644))
+				}
+			},
+			want: "cmd/magus/ledger.go",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := testkit.NewRepository(t, map[string]string{"tools.go": "package a\n"})
+			j := exitedWithRunsIn(t, repo.Root(), acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
+			require.NoError(t, os.WriteFile(filepath.Join(j.holder, "tools.go"), []byte("package a\n"), 0o644))
+			cached := passedHere
+			cached.Revision, cached.Dirty = repo.Commit("the work", nil), true
+			cached.TimestampMs, cached.DurationMs = time.Now().Add(time.Hour).UnixMilli(), (2 * time.Hour).Milliseconds()
+			observed := claimed(j.result)
+			observed.Changed = append(slices.Clone(observed.Changed), "tools.go")
+			if tc.alter != nil {
+				tc.alter(t, j)
+			}
+
+			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": cached}, map[string]string{job.PrimaryPostconditionID: "here"},
+				func(context.Context, job.Job) (Observed, error) { return observed, nil })
+
+			if tc.want == "" {
+				require.NoError(t, err)
+				assert.True(t, status.Verified, status.Violations)
+				return
+			}
+			require.ErrorContains(t, err, "did not change after it started")
+			assert.Contains(t, err.Error(), tc.want)
+			j.requireUnmoved(t)
+		})
+	}
+}
+
 // A ref may name a step, which its next run answers for; the job records the execution
 // the ref resolved to.
 func TestWaitEvidenceRecordsTheAttemptTheRefResolvedTo(t *testing.T) {
