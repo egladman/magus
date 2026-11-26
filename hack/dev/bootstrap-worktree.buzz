@@ -241,7 +241,8 @@ export object Link {
     builtBy: str,
 }
 
-// ldFlags are go-build's linker flags (magusfile.buzz's ld_flags) plus the build stamp.
+// ldFlags are go-build's linker flags plus the build stamp. A copy of ld_flags in magusfile.buzz,
+// kept because that magusfile cannot load under the old binary this build exists to replace.
 export fun ldFlags(link: Link) > str {
     return "-w -s"
         + " -X github.com/egladman/magus/internal/buildinfo.version=" + link.version
