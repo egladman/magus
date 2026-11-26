@@ -203,19 +203,16 @@ func (s *Store) readyCheckout(ctx context.Context, row job.Job, wt job.Worktree,
 	if followed.Base != wt.Base {
 		execNote(ctx, fmt.Sprintf("moved %s from %.12s to %.12s, the checkpoint of %s", followed.Root, wt.Base, followed.Base, row.ID))
 	}
-	provisioned := BuildsItsOwnMagus(followed.Root) && p.Provision != nil
-	// Provision runs the steps itself, after the build it may need first.
 	readied := func(placed job.Worktree) (job.Worktree, error) {
-		if provisioned {
-			return placed, nil
-		}
-		if _, err := runReadySteps(ctx, placed.Root); err != nil {
+		ran, err := RunReadySteps(ctx, placed.Root)
+		if err != nil {
 			return wt, fmt.Errorf("readying %s for %s: %w", placed.Root, row.ID, err)
 		}
+		placed.Ready = ran
 		return placed, nil
 	}
 	switch {
-	case provisioned:
+	case BuildsItsOwnMagus(followed.Root) && p.Provision != nil:
 		reused, err := p.Provision(ctx, row, followed)
 		if err != nil {
 			return wt, err

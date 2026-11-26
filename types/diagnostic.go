@@ -895,6 +895,11 @@ const JobStoreRecordForeign DiagnosticCode = "MGS3058"
 // jobs.stale_after. The path stays out of reach: quiet is not proof the holder left. The
 // message names the `job prune --dry-run` line the root or a person checks it with.
 const LeaseHolderQuiet DiagnosticCode = "MGS3059"
+
+// CheckoutReadyStepFailed is a checkout.ready step that failed in a checkout a job's fork
+// made or exec adopted. No later step runs and the fork or adoption fails. The message
+// names the step, its output ref and the `magus run` line that reruns it there.
+const CheckoutReadyStepFailed DiagnosticCode = "MGS3060"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1253,6 +1258,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UncommittedRepair,
 	JobStoreRecordForeign,
 	LeaseHolderQuiet,
+	CheckoutReadyStepFailed,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -175,12 +176,12 @@ func (s *ReadyCheckoutSuite) calls(path string) string {
 func (s *ReadyCheckoutSuite) TestEachStepRunsInOrderInTheCheckoutAndKeepsItsRef() {
 	root, calls := s.checkout(twoReadySteps, "")
 
-	ran, err := runReadySteps(s.T().Context(), root)
+	ran, err := RunReadySteps(s.T().Context(), root)
 
 	s.Require().NoError(err)
-	s.Equal([]readyRun{
-		{Step: config.ReadyStep{Target: "build", Project: "libs/a"}, Ref: "ref-build"},
-		{Step: config.ReadyStep{Target: "graph", Project: "."}, Ref: "ref-graph"},
+	s.Equal([]job.ReadyStep{
+		{Target: "build", Project: "libs/a", Ref: "ref-build"},
+		{Target: "graph", Project: ".", Ref: "ref-graph"},
 	}, ran)
 	real, err := filepath.EvalSymlinks(root)
 	s.Require().NoError(err)
@@ -190,11 +191,14 @@ func (s *ReadyCheckoutSuite) TestEachStepRunsInOrderInTheCheckoutAndKeepsItsRef(
 func (s *ReadyCheckoutSuite) TestAFailingStepStopsTheRestAndNamesItsRefAndRerun() {
 	root, calls := s.checkout(twoReadySteps, "build")
 
-	ran, err := runReadySteps(s.T().Context(), root)
+	ran, err := RunReadySteps(s.T().Context(), root)
 
 	var failed *readyStepError
 	s.Require().ErrorAs(err, &failed)
 	s.Equal(readyStepError{Root: root, Step: config.ReadyStep{Target: "build", Project: "libs/a"}, Ref: "ref-dep", Err: failed.Err}, *failed)
+	var exitErr *exec.ExitError
+	s.ErrorAs(err, &exitErr, "the step's own failure stays in the chain")
+	s.ErrorContains(err, string(types.CheckoutReadyStepFailed))
 	s.ErrorContains(err, "`./magus query output ref-dep`")
 	s.ErrorContains(err, "`./magus run build libs/a` reruns it there")
 	s.ErrorContains(err, "no later step ran")
@@ -205,7 +209,7 @@ func (s *ReadyCheckoutSuite) TestAFailingStepStopsTheRestAndNamesItsRefAndRerun(
 func (s *ReadyCheckoutSuite) TestNoDeclarationIsSaidOnceAndRunsNothing() {
 	root, calls := s.checkout("", "")
 
-	ran, err := runReadySteps(s.T().Context(), root)
+	ran, err := RunReadySteps(s.T().Context(), root)
 
 	s.Require().NoError(err)
 	s.Empty(ran)
@@ -217,7 +221,7 @@ func (s *ReadyCheckoutSuite) TestACheckoutWithNoMagusIsRefused() {
 	root, _ := s.checkout(twoReadySteps, "")
 	s.Require().NoError(os.Remove(filepath.Join(root, binaryName)))
 
-	ran, err := runReadySteps(s.T().Context(), root)
+	ran, err := RunReadySteps(s.T().Context(), root)
 
 	s.Require().ErrorContains(err, "declares 2 checkout.ready step(s) and holds no ./magus to run them, so none ran")
 	s.Empty(ran)

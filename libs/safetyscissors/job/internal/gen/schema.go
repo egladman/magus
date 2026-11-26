@@ -127,6 +127,12 @@ var entryRecord = codec.ObjectSchema{Name: "entryRecord", Closed: true, Fields: 
 	"consumed": nil,
 }}
 
+var readyStepRecord = codec.ObjectSchema{Name: "readyStepRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{
+	"target":  nil,
+	"project": nil,
+	"ref":     nil,
+}}
+
 var worktreeRecord = codec.ObjectSchema{Name: "worktreeRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{
 	"root":          nil,
 	"source":        nil,
@@ -137,6 +143,7 @@ var worktreeRecord = codec.ObjectSchema{Name: "worktreeRecord", Closed: true, Fi
 	"removed":       nil,
 	"kept":          nil,
 	"made":          nil,
+	"ready":         &codec.ObjectSchema{Element: &readyStepRecord},
 }}
 
 var runAttemptRecord = codec.ObjectSchema{Name: "runAttemptRecord", Closed: true, Fields: map[string]*codec.ObjectSchema{

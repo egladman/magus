@@ -209,7 +209,7 @@ func (s *ExecRefusalSuite) TestPlacingExecPinsNothingWhenNoBuildAtTheCheckpointS
 }
 
 // A checkout that builds its own ./magus is readied by its checkout.bootstrap
-// hook, the run that also builds proofread, and exec pins what it left.
+// hook, and exec pins what it left.
 func (s *ExecRefusalSuite) TestPlacingExecProvisionsACheckoutThatBuildsItsOwn() {
 	builds := s.repo.Commit("builds its own", map[string]string{"magus.yaml": hookConfig, testHook: "namespace b;\n"})
 	_, row := s.writers()
@@ -228,6 +228,29 @@ func (s *ExecRefusalSuite) TestPlacingExecProvisionsACheckoutThatBuildsItsOwn() 
 	want, err := BinaryDigest(filepath.Join(host, "magus"))
 	s.Require().NoError(err)
 	s.Equal(want, took.Worktree.BinaryDigest)
+}
+
+func (s *ExecRefusalSuite) TestPlacingExecRunsTheReadyStepsAfterTheBuildAndRecordsEachRef() {
+	ready := hookConfig + "  ready:\n    - target: graph\n      project: .\n"
+	builds := s.repo.Commit("readies", map[string]string{"magus.yaml": ready, testHook: "namespace b;\n"})
+	_, row := s.writers()
+	row.Checkpoint = builds
+	host := s.linked("host", builds)
+	plant(s.T(), s.store, recent(row))
+	built := "#!/bin/sh\necho '{\"type\":\"run.target.result\",\"target\":\"'\"$2\"'\",\"status\":\"ok\",\"ref\":\"ref-'\"$2\"'\"}'\n"
+	placement := Placement{Provision: func(_ context.Context, _ job.Job, wt job.Worktree) (bool, error) {
+		return false, os.WriteFile(filepath.Join(wt.Root, "magus"), []byte(built), 0o755)
+	}}
+
+	took, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: host}).Exec(s.T().Context(), row.ID, Placing(placement))
+
+	s.Require().NoError(err)
+	s.Equal([]job.ReadyStep{{Target: "graph", Project: ".", Ref: "ref-graph"}}, took.Worktree.Ready)
+	stored, err := s.store.List(s.T().Context())
+	s.Require().NoError(err)
+	i := slices.IndexFunc(stored, func(r job.Job) bool { return r.ID == row.ID })
+	s.Require().GreaterOrEqual(i, 0)
+	s.Equal(took.Worktree.Ready, stored[i].Worktree.Ready, "the row keeps each step's ref")
 }
 
 // recent is row touched now: placement lists the store, and that sweep ends

@@ -653,6 +653,16 @@ type Worktree struct {
 	// removes once the job ends. A checkout the fork adopted, or one recorded
 	// before Made existed, reads false and stands until its maker removes it.
 	Made bool `json:"made" yaml:"made,omitempty"`
+	// Ready is each checkout.ready step the checkout ran, in order, once its runner stood.
+	Ready []ReadyStep `json:"ready,omitempty" yaml:"ready,omitempty"`
+}
+
+// ReadyStep is one checkout.ready step that ran in a checkout.
+type ReadyStep struct {
+	Target  string `json:"target" yaml:"target"`
+	Project string `json:"project" yaml:"project"`
+	// Ref is the output ref its run printed, "" when it printed none.
+	Ref string `json:"ref,omitempty" yaml:"ref,omitempty"`
 }
 
 // Standing reports whether the checkout has not been removed: it binds its job's holder,

@@ -213,7 +213,7 @@ func recordStatus(row Job, prev jobStatus) jobStatus {
 // recordRuns sets the worktree and the run evidence of st from row.
 func recordRuns(st *jobStatus, row Job) {
 	if row.Worktree != nil {
-		w := worktreeRecord(*row.Worktree)
+		w := recordWorktree(*row.Worktree)
 		st.Worktree = &w
 	}
 	if row.Attempt != nil {
@@ -301,7 +301,7 @@ func (st jobStatus) populate(row *Job, bad *wireReads, creds wireEnum[Credential
 		row.Entries = append(row.Entries, Entry{Path: e.Path, By: e.By.origin(bad, creds), At: e.At, Consumed: e.Consumed})
 	}
 	if st.Worktree != nil {
-		w := Worktree(*st.Worktree)
+		w := st.Worktree.worktree()
 		row.Worktree = &w
 	}
 	if st.Attempt != nil {
@@ -677,15 +677,44 @@ func (r *rejectionRecord) rejection() *Rejection {
 }
 
 type worktreeRecord struct {
-	Root         string `json:"root"`
-	Source       string `json:"source"`
-	Base         string `json:"base"`
-	Created      int64  `json:"created"`
-	Binary       string `json:"binary,omitempty"`
-	BinaryDigest string `json:"binary_digest,omitempty"`
-	Removed      int64  `json:"removed,omitzero"`
-	Kept         string `json:"kept,omitempty"`
-	Made         bool   `json:"made,omitzero"`
+	Root         string            `json:"root"`
+	Source       string            `json:"source"`
+	Base         string            `json:"base"`
+	Created      int64             `json:"created"`
+	Binary       string            `json:"binary,omitempty"`
+	BinaryDigest string            `json:"binary_digest,omitempty"`
+	Removed      int64             `json:"removed,omitzero"`
+	Kept         string            `json:"kept,omitempty"`
+	Made         bool              `json:"made,omitzero"`
+	Ready        []readyStepRecord `json:"ready,omitempty"`
+}
+
+type readyStepRecord struct {
+	Target  string `json:"target"`
+	Project string `json:"project"`
+	Ref     string `json:"ref,omitempty"`
+}
+
+func recordWorktree(w Worktree) worktreeRecord {
+	r := worktreeRecord{
+		Root: w.Root, Source: w.Source, Base: w.Base, Created: w.Created,
+		Binary: w.Binary, BinaryDigest: w.BinaryDigest, Removed: w.Removed, Kept: w.Kept, Made: w.Made,
+	}
+	for _, s := range w.Ready {
+		r.Ready = append(r.Ready, readyStepRecord(s))
+	}
+	return r
+}
+
+func (r worktreeRecord) worktree() Worktree {
+	w := Worktree{
+		Root: r.Root, Source: r.Source, Base: r.Base, Created: r.Created,
+		Binary: r.Binary, BinaryDigest: r.BinaryDigest, Removed: r.Removed, Kept: r.Kept, Made: r.Made,
+	}
+	for _, s := range r.Ready {
+		w.Ready = append(w.Ready, ReadyStep(s))
+	}
+	return w
 }
 
 type runAttemptRecord struct {

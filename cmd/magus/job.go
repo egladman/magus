@@ -848,6 +848,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				return job.FailedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))
 			}
 		}
+		if worktree.Ready, err = job.RunReadySteps(ctx, worktree.Root); err != nil {
+			return job.FailedProvision(ctx, store, worktree, made, err)
+		}
 		rows, err := store.List(ctx)
 		if err != nil {
 			return err

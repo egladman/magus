@@ -100,8 +100,8 @@ func ForkCheckout(ctx context.Context, store *Store, root string, row job.Declar
 
 // ProvisionCheckout readies a checkout a fork made or moved, or exec adopted.
 // It reuses a ./magus built at the checkout's base, else the script builds one.
-// It then installs only the projects row touches and runs the checkout's own
-// checkout.ready steps ([runReadySteps]). reused says no build ran.
+// It then installs only the projects row touches. reused says no build ran.
+// The caller runs [RunReadySteps] once the ./magus it pins stands.
 func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Disk, exe, forker string, row job.Job, wt job.Worktree) (reused bool, err error) {
 	placed, err := store.PlaceBuiltBinary(ctx, wt.Base, wt.Root, exe, filepath.Join(forker, binaryName))
 	if err != nil {
@@ -110,29 +110,20 @@ func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Dis
 	if placed != "" {
 		slog.InfoContext(ctx, fmt.Sprintf("reused %s, already built at %.12s", placed, wt.Base), attr.Notice("note"))
 	}
-	var flags []string
 	if ws.Unavailable != "" {
 		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
-	} else {
-		flags = []string{"--install", InstallProjects(forker, wt.Root, row, ws.Projects)}
+		return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root)
 	}
-	if err := bootstrapCheckout(ctx, disk, exe, forker, wt.Root, flags...); err != nil {
-		return placed != "", err
-	}
-	_, err = runReadySteps(ctx, wt.Root)
-	return placed != "", err
+	install := InstallProjects(forker, wt.Root, row, ws.Projects)
+	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", install)
 }
 
-// readyRun is one checkout.ready step that ran, and the output ref its run printed.
-type readyRun struct {
-	Step config.ReadyStep
-	Ref  string
-}
-
-// runReadySteps runs root's own checkout.ready steps in order with root's ./magus.
-// A failing step returns a [readyStepError] and stops the rest. No declaration is
-// said once. Steps with no ./magus are refused. Passed runs come back either way.
-func runReadySteps(ctx context.Context, root string) ([]readyRun, error) {
+// RunReadySteps runs root's own checkout.ready steps in order with root's ./magus, read
+// from root's magus.yaml, and returns each step that ran with its output ref. A failing
+// step stops the rest and returns a [types.CheckoutReadyStepFailed] error beside the
+// steps that passed. No declaration is said once; steps declared in a checkout with no
+// ./magus are refused.
+func RunReadySteps(ctx context.Context, root string) ([]job.ReadyStep, error) {
 	cfg, err := config.LoadWorkspaceOnly(root)
 	if err != nil {
 		return nil, fmt.Errorf("reading checkout.ready in %s: %w", root, err)
@@ -145,7 +136,7 @@ func runReadySteps(ctx context.Context, root string) ([]readyRun, error) {
 	if _, err := os.Stat(exe); err != nil {
 		return nil, fmt.Errorf("%s declares %d checkout.ready step(s) and holds no ./magus to run them, so none ran: %w", root, len(cfg.Checkout.Ready), err)
 	}
-	ran := make([]readyRun, 0, len(cfg.Checkout.Ready))
+	ran := make([]job.ReadyStep, 0, len(cfg.Checkout.Ready))
 	for _, step := range cfg.Checkout.Ready {
 		slog.InfoContext(ctx, fmt.Sprintf("readying %s: ./magus run %s %s", root, step.Target, step.Project), attr.Notice("note"))
 		run, err := runReadyStep(ctx, exe, root, step)
@@ -157,7 +148,8 @@ func runReadySteps(ctx context.Context, root string) ([]readyRun, error) {
 	return ran, nil
 }
 
-// readyStepError is a checkout.ready step that failed in Root.
+// readyStepError is a checkout.ready step that failed in Root. It reads and unwraps as
+// its [types.CheckoutReadyStepFailed] diagnostic, which unwraps to Err.
 type readyStepError struct {
 	Root string
 	Step config.ReadyStep
@@ -166,16 +158,19 @@ type readyStepError struct {
 	Err error
 }
 
-func (e *readyStepError) Error() string {
+func (e *readyStepError) diagnostic() *types.DiagnosticError {
 	ref := "it printed no output ref"
 	if e.Ref != "" {
 		ref = fmt.Sprintf("`./magus query output %s` holds its output", e.Ref)
 	}
-	return fmt.Sprintf("the checkout.ready step %[1]s %[2]s failed in %[3]s, so no later step ran (%[4]v): %[5]s, and `./magus run %[1]s %[2]s` reruns it there",
+	return types.WrapDiagnostic(types.CheckoutReadyStepFailed, e.Err,
+		"the checkout.ready step %[1]s %[2]s failed in %[3]s, so no later step ran (%[4]v): %[5]s, and `./magus run %[1]s %[2]s` reruns it there",
 		e.Step.Target, e.Step.Project, e.Root, e.Err, ref)
 }
 
-func (e *readyStepError) Unwrap() error { return e.Err }
+func (e *readyStepError) Error() string { return e.diagnostic().Error() }
+
+func (e *readyStepError) Unwrap() error { return e.diagnostic() }
 
 // readyResult is the part of a `magus run -o jsonl` target result line a ready step
 // reads. The report package declares the whole record and imports this one.
@@ -188,12 +183,12 @@ type readyResult struct {
 
 // runReadyStep runs step with exe in root. Its ref is the failed target's when one
 // failed, else step's own target's.
-func runReadyStep(ctx context.Context, exe, root string, step config.ReadyStep) (readyRun, error) {
+func runReadyStep(ctx context.Context, exe, root string, step config.ReadyStep) (job.ReadyStep, error) {
 	cmd := exec.CommandContext(ctx, exe, "run", step.Target, step.Project, "-o", "jsonl")
 	var out bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = root, &out, progressWriter(ctx)
 	runErr := cmd.Run()
-	run := readyRun{Step: step}
+	run := job.ReadyStep{Target: step.Target, Project: step.Project}
 	var failed string
 	for line := range bytes.Lines(out.Bytes()) {
 		var r readyResult

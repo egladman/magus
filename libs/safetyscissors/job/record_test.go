@@ -210,7 +210,8 @@ func (s *RecordSuite) TestAMemberANewerWriterStoredOnAnAttemptIsRefused() {
 func (s *RecordSuite) TestEveryNestedRecordRoundTrips() {
 	row := Job{ID: "a", State: StateDeclared, Agent: &Agent{Instructions: "go", Worker: Worker{Type: WorkerTypeNew}},
 		Postconditions: []Postcondition{{ID: "tests", Kind: PostconditionKindCheck, Expect: ExpectPassed, Check: checkJSON("test", "."), Accept: []Basis{BasisWitnessed}}},
-		RegisteredBy:   Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc"},
+		RegisteredBy:   Origin{User: "eli"}, Worktree: &Worktree{Root: "/w", Source: "/s", Base: "abc",
+			Ready: []ReadyStep{{Target: "build", Project: ".", Ref: "out1"}, {Target: "graph", Project: "."}}},
 		Rejection: &Rejection{Submission: 2, Unmet: []VerificationStatus{{ID: "tests"}}, At: 1}}
 	out, err := MarshalRecord(row, nil)
 	s.Require().NoError(err)
