@@ -929,6 +929,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 	}
 	referenced, referencedGap := evidence.ReferencedOutside(ctx, graph.LoadScoped(stored.Paths.Write), root, stored, jobWS.Projects)
+	deletions, deletionsLeftOut := evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored)
 	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
@@ -948,7 +949,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if len(derived) > 0 {
 			fmt.Printf("its symbol postconditions claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
-		job.RenderDeletionCandidates(os.Stdout, evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored))
+		job.RenderDeletionCandidates(os.Stdout, deletions, deletionsLeftOut)
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the budget so the holder never does.
@@ -967,7 +968,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, job.ForkReport{
 		ForkOutput: job.ForkOutput{
 			Job:                  stored,
-			DeletionCandidates:   evidence.DeletionCandidates(ctx, graph.LoadScoped(stored.Paths.Write), stored),
+			DeletionCandidates:   deletions,
+			DeletionsLeftOut:     deletionsLeftOut,
 			ReferencedOutside:    referenced,
 			ReferencedOutsideGap: referencedGap,
 			ForegroundOverrun:    overrun,

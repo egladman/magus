@@ -138,7 +138,7 @@ func TestRenderDeletionCandidatesCapsAndCarriesTheCaveat(t *testing.T) {
 	t.Parallel()
 
 	var empty strings.Builder
-	RenderDeletionCandidates(&empty, nil)
+	RenderDeletionCandidates(&empty, nil, 0)
 	assert.Empty(t, empty.String(), "nothing is written for none")
 
 	var many []types.UnreferencedEntry
@@ -146,12 +146,13 @@ func TestRenderDeletionCandidatesCapsAndCarriesTheCaveat(t *testing.T) {
 		many = append(many, unreferenced(fmt.Sprintf("f%02d", i), "Function", "a.go:1"))
 	}
 	var out strings.Builder
-	RenderDeletionCandidates(&out, many)
+	RenderDeletionCandidates(&out, many, 4)
 	got := out.String()
 
 	assert.True(t, strings.HasPrefix(got, deletionHeading+"\n  f00 (function) at a.go:1\n"), got)
 	assert.Contains(t, got, "f11 (function)")
 	assert.NotContains(t, got, "f12 (function)")
 	assert.Contains(t, got, "and 3 more; -o json lists every one")
+	assert.Contains(t, got, "4 more left out: each is named inside its own file")
 	assert.Contains(t, got, "reflection, interface dispatch and consumers outside this workspace are invisible")
 }

@@ -136,6 +136,10 @@ func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 		t.Fatal("a row that writes nothing loaded the graph")
 		return nil
 	}
-	assert.Nil(t, DeletionCandidates(t.Context(), load, job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"a.go"}}}))
-	assert.Nil(t, DeletionCandidates(t.Context(), load, job.Job{}))
+	got, leftOut := DeletionCandidates(t.Context(), load, job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"a.go"}}})
+	assert.Nil(t, got)
+	assert.Zero(t, leftOut)
+	got, leftOut = DeletionCandidates(t.Context(), load, job.Job{})
+	assert.Nil(t, got)
+	assert.Zero(t, leftOut)
 }

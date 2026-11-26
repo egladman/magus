@@ -73,6 +73,8 @@ type Terms struct {
 	// DeletionCandidates are the unreferenced symbols in the write paths, from
 	// [UnreferencedInPaths]: findings to finish or delete, never postconditions.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	// DeletionsLeftOut counts the symbols set aside because their own file names them.
+	DeletionsLeftOut int `json:"deletions_left_out,omitempty" yaml:"deletions_left_out,omitempty"`
 	// ReferencedOutside are the files outside the write paths that use what they define,
 	// from [ReferencedOutside]: findings, never a boundary.
 	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
@@ -135,6 +137,7 @@ type TermsFacts struct {
 	Grouping             *types.Grouping
 	Stage                release.Stage
 	DeletionCandidates   []types.UnreferencedEntry
+	DeletionsLeftOut     int
 	ReferencedOutside    []ReferencedFile
 	ReferencedOutsideGap string
 	TestScope            []TestScope
@@ -156,6 +159,7 @@ func NewTerms(row job.Job, facts TermsFacts) Terms {
 		Grouping:             facts.Grouping,
 		Stage:                facts.Stage,
 		DeletionCandidates:   facts.DeletionCandidates,
+		DeletionsLeftOut:     facts.DeletionsLeftOut,
 		ReferencedOutside:    facts.ReferencedOutside,
 		ReferencedOutsideGap: facts.ReferencedOutsideGap,
 		TestScope:            facts.TestScope,
@@ -189,7 +193,7 @@ func (b Terms) String() string {
 	if b.Stage.Known() {
 		writeList(&s, "release stage", []string{stageLine(b.Stage)})
 	}
-	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
+	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates, b.DeletionsLeftOut))
 	writeList(&s, "write paths", b.Lease.Paths.Write)
 	writeList(&s, "deny paths", b.Lease.Paths.Deny)
 	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside, b.ReferencedOutsideGap))

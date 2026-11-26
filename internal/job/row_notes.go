@@ -205,6 +205,8 @@ type ForkOutput struct {
 	// DeletionCandidates are the unreferenced symbols the write paths cover: findings to
 	// finish or delete, never postconditions.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
+	// DeletionsLeftOut counts the symbols set aside because their own file names them.
+	DeletionsLeftOut int `json:"deletions_left_out,omitempty" yaml:"deletions_left_out,omitempty"`
 	// ReferencedOutside are the files outside the write paths that use what they define.
 	ReferencedOutside []ReferencedFile `json:"referenced_outside,omitempty" yaml:"referenced_outside,omitempty"`
 	// ReferencedOutsideGap says why ReferencedOutside is unknown; empty when a symbol index

@@ -126,6 +126,27 @@ func TestUnreferencedCarriesKindAndLanguage(t *testing.T) {
 	}}, got)
 }
 
+func TestUsedInOwnFileSeesASameFileCallAndReference(t *testing.T) {
+	caller := sym("x Caller().", "pkg/a/a.go")
+	caller.Calls = []types.KnowledgeSymbolCall{{Key: "x Callee().", Count: 1}}
+	kind := sym("x Kind#", "pkg/a/a.go")
+	kind.Refs = []types.KnowledgeSymbolRef{{Path: "pkg/a/a.go", Count: 1, Lines: []int{4}}}
+	g := unrefGraph(t, []types.KnowledgeSymbol{caller, sym("x Callee().", "pkg/a/a.go"), kind, sym("x Lonely().", "pkg/a/a.go")})
+
+	assert.True(t, g.UsedInOwnFile("symbol:x Callee()."))
+	assert.True(t, g.UsedInOwnFile("symbol:x Kind#"))
+	assert.False(t, g.UsedInOwnFile("symbol:x Caller()."))
+	assert.False(t, g.UsedInOwnFile("symbol:x Lonely()."))
+}
+
+func TestUsedInOwnFileIgnoresRecursion(t *testing.T) {
+	loop := sym("x Loop().", "pkg/a/a.go")
+	loop.Calls = []types.KnowledgeSymbolCall{{Key: "x Loop().", Count: 1}}
+	g := unrefGraph(t, []types.KnowledgeSymbol{loop})
+
+	assert.False(t, g.UsedInOwnFile("symbol:x Loop()."), "only its own body names it")
+}
+
 func unrefOne(t *testing.T, s types.KnowledgeSymbol) []types.UnreferencedEntry {
 	t.Helper()
 	return unrefGraph(t, []types.KnowledgeSymbol{s}).Unreferenced()
