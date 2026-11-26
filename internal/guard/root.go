@@ -661,20 +661,41 @@ func refreshesCheckout(ctx context.Context, line string, at location, generated 
 	default:
 		return false
 	}
-	if !ok || (r.restore != nil && (generated == nil || !generated(r.root, r.restore))) {
+	if !ok || (r.restore != nil && !allGenerated(generated, r.root, r.restore)) {
 		return false
+	}
+	if r.switchTo != "" {
+		dirty, ok := unstagedPaths(ctx, r.root)
+		if !ok || (len(dirty) > 0 && !allGenerated(generated, r.root, dirty)) {
+			return false
+		}
 	}
 	return r.lands(ctx, at)
 }
 
 // refresh is one line refreshesCheckout lets through. ref is where the line must leave
-// root, "" for a fetch, a pull or a restore.
+// root, "" for a fetch, a pull, a restore or a switch.
 type refresh struct {
-	root    string
-	ref     string
-	restore []string
-	main    bool
-	detach  bool
+	root     string
+	ref      string
+	restore  []string
+	switchTo string
+	main     bool
+	detach   bool
+}
+
+// allGenerated asks generated about paths, false when nothing classifies.
+func allGenerated(generated func(root string, rel []string) bool, root string, paths []string) bool {
+	return generated != nil && generated(root, paths)
+}
+
+// unstagedPaths is the tracked files root's working tree changed, relative to root.
+func unstagedPaths(ctx context.Context, root string) ([]string, bool) {
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "diff", "--name-only", "-z").Output()
+	if err != nil {
+		return nil, false
+	}
+	return strings.FieldsFunc(string(out), func(r rune) bool { return r == 0 }), true
 }
 
 // refreshTarget is the checkout dir names, or the call's own when dir is "". Only at's
@@ -709,7 +730,8 @@ func repositoryMainCheckout(root string) string {
 }
 
 // gitRefresh reads `git [-C <checkout>]` running `fetch [origin]`, `pull --ff-only`,
-// `merge --ff-only <ref>`, `checkout --detach <ref>` or `restore [--] <path>...`.
+// `merge --ff-only <ref>`, `checkout --detach <ref>` or `restore [--] <path>...`. The main
+// checkout may also run `switch <branch>`.
 func gitRefresh(args []string, at location) (refresh, bool) {
 	dir := ""
 	if len(args) >= 3 && args[0] == "-C" {
@@ -731,6 +753,12 @@ func gitRefresh(args []string, at location) (refresh, bool) {
 	case sub == "restore":
 		r.restore = restorePaths(rest)
 		return r, r.restore != nil
+	case sub == "switch":
+		if len(rest) != 1 || rest[0] == "" || strings.HasPrefix(rest[0], "-") {
+			return refresh{}, false
+		}
+		r.switchTo = rest[0]
+		return r, main
 	default:
 		ref, ok := movesToRef(sub, rest)
 		r.ref, r.detach = ref, sub == "checkout"
@@ -803,7 +831,8 @@ func magusFlagValue(args []string, name string) (string, bool) {
 }
 
 // lands reports r carrying no one's work: its ref is the tip, nothing is staged and no
-// live row edits root. A main checkout also stays on the base branch.
+// live row edits root. A main checkout moves only on the base branch, and switches only
+// onto it; a restore readies either.
 func (r refresh) lands(ctx context.Context, at location) bool {
 	tip, ok := gitCommit(ctx, r.root, "refs/remotes/origin/HEAD")
 	if !ok {
@@ -814,7 +843,13 @@ func (r refresh) lands(ctx context.Context, at location) bool {
 			return false
 		}
 	}
-	if r.main && (r.detach || !onBaseBranch(ctx, r.root)) {
+	switch {
+	case !r.main || r.restore != nil:
+	case r.switchTo != "":
+		if base, ok := baseBranch(ctx, r.root); !ok || r.switchTo != base {
+			return false
+		}
+	case r.detach || !onBaseBranch(ctx, r.root):
 		return false
 	}
 	if exec.CommandContext(ctx, "git", "-C", r.root, "diff", "--cached", "--quiet").Run() != nil {

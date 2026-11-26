@@ -736,8 +736,8 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 	case own:
 		problem = "./magus was built from another contract than this tree carries and cannot load its guard policy"
 	}
-	if own && !hasBinary && call.lease == "" {
-		if behind, refresh, ok := mainRefreshFix(root); ok {
+	if own && call.lease == "" {
+		if behind, refresh, ok := mainRefreshFix(root, call.judge); ok {
 			problem, fix.say = behind, refresh
 		}
 	}
@@ -764,29 +764,38 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
 }
 
-// mainRefreshFix is the problem and fix for a checkout with no ./magus while the main
-// checkout, whose ./magus judges it, sits behind origin/HEAD. A main checkout holding
-// changes or off the base branch is a person's to refresh.
-func mainRefreshFix(root string) (problem, say string, ok bool) {
+// mainRefreshFix is the problem and fix when judge is the main checkout's ./magus, built
+// at a commit behind origin/HEAD. A main checkout holding changes is a person's to refresh.
+func mainRefreshFix(root string, judge judgeIdentity) (problem, say string, ok bool) {
 	ctx := context.Background()
 	main := repositoryMainCheckout(root)
-	if main == "" || main == canonicalPath(root) || !hasMagusBinary(main) {
+	bin := filepath.Join(main, "magus")
+	if main == "" || judge.commit == "" || judge.commit == "unknown" || !sameFile(judge.path, bin) {
 		return "", "", false
 	}
-	head, okHead := gitCommit(ctx, main, "HEAD")
 	tip, okTip := gitCommit(ctx, main, "refs/remotes/origin/HEAD")
 	base, okBase := baseBranch(ctx, main)
-	if !okHead || !okTip || !okBase || head == tip ||
-		exec.CommandContext(ctx, "git", "-C", main, "merge-base", "--is-ancestor", head, tip).Run() != nil {
+	if !okTip || !okBase || strings.HasPrefix(tip, judge.commit) ||
+		exec.CommandContext(ctx, "git", "-C", main, "merge-base", "--is-ancestor", judge.commit, tip).Run() != nil {
 		return "", "", false
 	}
-	problem = fmt.Sprintf("the main checkout's ./magus judges this from %.12s, behind %s at %.12s, and cannot load this tree", head, base, tip)
-	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build %s`", main, filepath.Join(main, "magus"), main, main)
+	problem = fmt.Sprintf("%s, built at %.12s, is older than %s at %.12s and cannot load this tree", bin, judge.commit, base, tip)
+	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build %s`", main, bin, main, main)
+	if !onBaseBranch(ctx, main) {
+		lines = fmt.Sprintf("`git -C %s switch %s`, %s", main, base, lines)
+	}
 	dirty, err := exec.CommandContext(ctx, "git", "-C", main, "status", "--porcelain", "--untracked-files=no").Output()
-	if err != nil || len(dirty) > 0 || !onBaseBranch(ctx, main) {
-		return problem, fmt.Sprintf("%s holds changes or is off %s, so a person refreshes it: commit or set them aside, switch it to %s, then run %s", main, base, base, lines), true
+	if err != nil || len(dirty) > 0 {
+		return problem, fmt.Sprintf("%s holds changes, so a person refreshes it: commit or set them aside, then run %s", main, lines), true
 	}
 	return problem, fmt.Sprintf("refresh the main checkout with %s, each alone on its line", lines), true
+}
+
+// sameFile reports a and b one file on disk.
+func sameFile(a, b string) bool {
+	ai, errA := os.Stat(a)
+	bi, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ai, bi)
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,

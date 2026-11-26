@@ -1150,9 +1150,29 @@ func (s *RefreshesMainCheckoutSuite) TestAnyOtherLineInTheMainCheckoutStaysRefus
 	s.False(s.refreshes(fmt.Sprintf("%s && %s", s.git("fetch"), s.git("merge --ff-only origin/main"))))
 }
 
-func (s *RefreshesMainCheckoutSuite) TestAMainCheckoutOffTheBaseBranchStaysAPersons() {
+func (s *RefreshesMainCheckoutSuite) TestAMainCheckoutOffTheBaseBranchSwitchesBackFirst() {
 	fixtureGit(s.T(), s.main, "checkout", "-q", "--detach")
-	s.False(s.refreshes(s.git("pull --ff-only")))
+	s.False(s.refreshes(s.git("pull --ff-only")), "a pull off the base branch")
+	s.True(s.refreshes(s.git("switch main")))
+	s.False(s.refreshes(s.git("switch topic")), "not the base branch")
+	s.False(s.refreshes(s.git("switch -c main")))
+	s.False(refreshesCheckout(s.T().Context(), "git switch main", s.at, nil), "the session's own checkout")
+}
+
+// The state on 11-26: main detached and dirty only in a build's rewritten outputs.
+func (s *RefreshesMainCheckoutSuite) TestADetachedMainCheckoutDirtyInOutputsSwitchesBack() {
+	t := s.T()
+	fixtureGit(t, s.main, "checkout", "-q", "--detach")
+	writeSource(t, s.main, s.generated[0])
+	writeSource(t, s.main, "internal/guard/root.go")
+	fixtureGit(t, s.main, "add", s.generated[0], "internal/guard/root.go")
+	fixtureGit(t, s.main, "commit", "-q", "-m", "outputs")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.main, s.generated[0]), []byte("rewritten\n"), 0o644))
+	s.True(s.refreshes(s.git("restore " + s.generated[0])), "a restore off the base branch")
+	s.True(s.refreshes(s.git("switch main")))
+	s.False(refreshesCheckout(t.Context(), s.git("switch main"), s.at, nil), "nothing classifies the dirt")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.main, "internal/guard/root.go"), []byte("package edited\n"), 0o644))
+	s.False(s.refreshes(s.git("switch main")), "a person's edit")
 }
 
 func (s *RefreshesMainCheckoutSuite) TestStagedWorkInTheMainCheckoutKeepsIt() {
