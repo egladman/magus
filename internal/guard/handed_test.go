@@ -30,10 +30,15 @@ func (s *StopRuleSuite) TestAHandedAllowedCommandAndProsePass() {
 }
 
 func (s *StopRuleSuite) TestAgentOnlyRulesNeverRefuseAHandedCommand() {
-	for _, rule := range []denyRuleName{denyRuleStaleBinary, denyRuleOrchestratorGroundwork, denyRuleLeaseVCS, denyRuleSpawnWaiter, denyRuleHumanOnly} {
+	for _, rule := range []denyRuleName{denyRuleStaleBinary, denyRuleOrchestratorGroundwork, denyRuleLeaseVCS, denyRuleSpawnWaiter, denyRuleHumanOnly, denyRuleAgentSignOff, denyRuleCredentialVerb} {
 		s.True(agentOnlyRule(string(rule)), rule)
 	}
 	for _, rule := range []denyRuleName{denyRuleRawTool, denyRuleSiblingCheckout, denyRuleOutputPipe, denyRuleStageAll} {
 		s.False(agentOnlyRule(string(rule)), rule)
 	}
+}
+
+func (s *StopRuleSuite) TestARuleNoRowCarriesRefusesAHandedCommand() {
+	s.False(agentOnlyRule(workspaceShellPrefix+"root-only"))
+	s.False(agentOnlyRule("spawn-not-a-rule"))
 }
