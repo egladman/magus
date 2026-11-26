@@ -1022,26 +1022,34 @@ func digestCache(path string) (file.JSONL[binaryDigest], error) {
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it
 // may. It may when a live row's standing checkout records bin as its Binary
-// and bin still hashes to that row's BinaryDigest.
-func (s *Store) PinRefusal(ctx context.Context, bin string) (string, error) {
+// and bin still hashes to that row's BinaryDigest. unheld marks a refusal where
+// no live row works in bin's checkout at all, so no worker there chose bin.
+func (s *Store) PinRefusal(ctx context.Context, bin string) (why string, unheld bool, err error) {
 	rows, err := s.List(ctx)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	pinning := slices.DeleteFunc(rows, func(r job.Job) bool {
-		return !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
+	live := slices.DeleteFunc(rows, func(r job.Job) bool { return !r.State.Live() })
+	pinning := slices.DeleteFunc(slices.Clone(live), func(r job.Job) bool {
+		return !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
 	})
 	if len(pinning) == 0 {
-		return "no live job row records it as its checkout's binary", nil
+		checkout := filepath.Dir(bin)
+		if i := slices.IndexFunc(live, func(r job.Job) bool {
+			return samePath(r.CheckoutRoot, checkout) || (r.Worktree.Standing() && samePath(r.Worktree.Root, checkout))
+		}); i >= 0 {
+			return fmt.Sprintf("job %s works in its checkout, and no live job row records it as its checkout's binary", live[i].ID), false, nil
+		}
+		return "no live job row records it as its checkout's binary", true, nil
 	}
 	digest, err := s.cachedDigest(bin)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if slices.ContainsFunc(pinning, func(r job.Job) bool { return r.Worktree.BinaryDigest == digest }) {
-		return "", nil
+		return "", false, nil
 	}
-	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), nil
+	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), false, nil
 }
 
 // PinBinary records the hash ./magus in job id's checkout has now on every

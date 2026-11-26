@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -11,14 +12,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types"
 )
 
 // takeDelegation marks ctx with the binary that handed this call on, if one
@@ -104,19 +108,74 @@ func BinaryCheckout(bin string) string {
 	return dir
 }
 
-// UnpinnedBinary says why the session's job store does not pin own, "" when a
-// live row records own and its hash (ADR 0045 section 4). The read skips the
-// sweep's writes.
+// UnpinnedBinary says why the session may not hand a call to own, "" when it may.
+// It may when a live row records own and its hash. It may also when no live row
+// works in own's checkout and [unheldRefusal] takes own. The read skips the sweep's
+// writes.
 func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string {
 	store, err := e.OpenJobs(ctx, session)
 	if err != nil {
 		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	why, err := store.PinRefusal(ctx, own)
+	why, unheld, err := store.PinRefusal(ctx, own)
 	if err != nil {
 		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
-	return why
+	if why == "" || !unheld {
+		return why
+	}
+	refused := unheldRefusal(ctx, own, session, buildinfo.Self())
+	if refused == "" {
+		return ""
+	}
+	return why + ", and " + refused
+}
+
+// unheldRefusal says why own may not judge in place of self, "" when it may. No
+// worker picks a binary where no row works. Only a newer clean stamp takes over.
+func unheldRefusal(ctx context.Context, own, session string, self types.MagusBuild) string {
+	root, common, ok := gitCheckout(filepath.Dir(own))
+	_, sessionCommon, sessionOK := gitCheckout(session)
+	switch {
+	case !ok || root != canonicalPath(filepath.Dir(own)):
+		return "its directory is no checkout's root"
+	case !sessionOK || canonicalPath(common) != canonicalPath(sessionCommon):
+		return "its checkout is not of this session's repository"
+	case self.Source == types.BuildSourceNone:
+		return "this binary carries no build stamp to compare it with"
+	}
+	stamp, err := reportedStamp(ctx, own)
+	if err != nil {
+		return err.Error()
+	}
+	if err := self.AcceptsReplacement(stamp); err != nil {
+		return fmt.Sprintf("this binary would not take it as its replacement: %v", err)
+	}
+	return ""
+}
+
+// stampTimeout bounds the version call, which spends the hook's own budget.
+const stampTimeout = 2 * time.Second
+
+// reportedStamp asks bin for its build stamp. The sentinel keeps bin from re-execing
+// into another ./magus to answer. It copies selfupdate's readPlaceStamp, whose errors
+// speak for `magus self place`.
+func reportedStamp(ctx context.Context, bin string) (types.BuildStamp, error) {
+	ctx, cancel := context.WithTimeout(ctx, stampTimeout)
+	defer cancel()
+	var out bytes.Buffer
+	cmd := exec.CommandContext(ctx, bin, "version", "-o", "json")
+	cmd.Dir = filepath.Dir(bin)
+	cmd.Env = append(os.Environ(), workspace.BootstrapExecSentinelVar+"=1")
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return types.BuildStamp{}, fmt.Errorf("it did not report its version: %w", err)
+	}
+	var stamp types.BuildStamp
+	if err := codec.Unmarshal(out.Bytes(), &stamp); err != nil {
+		return types.BuildStamp{}, fmt.Errorf("it reported a version this binary cannot read: %w", err)
+	}
+	return stamp, nil
 }
 
 // evalOrClean is p with symlinks resolved, or p cleaned when they cannot be. Not realPath,
@@ -160,11 +219,9 @@ func CheckoutBinary(dir, running string) string {
 	return own
 }
 
-// delegateToCheckout hands a hook call, argv and input, to the ./magus of the
-// checkout it lands in, when a live row of the session's job store pins it.
-// A ./magus behind HEAD judges too, and its own stale-binary
-// rules name the bootstrap. An empty argv is declined, since a bare ./magus
-// answers with its usage. On handled false this binary judges, and declined
+// delegateToCheckout hands a hook call to the ./magus of the checkout it lands
+// in, when [HookEnv.UnpinnedBinary] allows it. An empty argv is declined: a bare
+// ./magus prints its usage. On handled false this binary judges, and declined
 // says why.
 func (e HookEnv) delegateToCheckout(ctx context.Context, argv []string, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if delegatedBy(ctx) != "" {

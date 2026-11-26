@@ -1341,9 +1341,29 @@ func (s *BinaryPinSuite) write(body string) {
 }
 
 func (s *BinaryPinSuite) refusal(bin string) string {
-	why, err := s.store.PinRefusal(s.T().Context(), bin)
-	s.Require().NoError(err)
+	why, _ := s.refusalHeld(bin)
 	return why
+}
+
+// refusalHeld is refusal and whether the store reports bin's checkout unheld.
+func (s *BinaryPinSuite) refusalHeld(bin string) (string, bool) {
+	why, unheld, err := s.store.PinRefusal(s.T().Context(), bin)
+	s.Require().NoError(err)
+	return why, unheld
+}
+
+func (s *BinaryPinSuite) TestACheckoutARowWorksInIsHeldThoughNothingIsPinned() {
+	why, unheld := s.refusalHeld(s.bin)
+	s.False(unheld)
+	s.Contains(why, "job w1 works in its checkout")
+}
+
+func (s *BinaryPinSuite) TestACheckoutNoLiveRowWorksInIsUnheld() {
+	_, err := s.store.Update(s.T().Context(), "w1", func(cur *job.Job) { cur.State = job.StatePass })
+	s.Require().NoError(err)
+	why, unheld := s.refusalHeld(s.bin)
+	s.True(unheld)
+	s.Equal("no live job row records it as its checkout's binary", why)
 }
 
 func (s *BinaryPinSuite) TestPinRecordsTheBinaryAndItsHash() {
