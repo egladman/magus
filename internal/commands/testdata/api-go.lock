@@ -542,6 +542,7 @@ github.com/egladman/magus/std.ImagePush func(ctx context.Context, layout string,
 github.com/egladman/magus/std.ImageReferrers func(ctx context.Context, path string, name string) ([]github.com/egladman/magus/types/image.Document, error)
 github.com/egladman/magus/std.ImageWriteProvenance func(ctx context.Context, layout string, p github.com/egladman/magus/types/image.Provenance, path string) (github.com/egladman/magus/types/image.Document, error)
 github.com/egladman/magus/std.ImageWriteSBOM func(ctx context.Context, layout string, path string) (github.com/egladman/magus/types/image.Document, error)
+github.com/egladman/magus/std.LanguagesFromContext func(ctx context.Context) ([]github.com/egladman/magus/spells.Language, bool)
 github.com/egladman/magus/std.Log var Module
 github.com/egladman/magus/std.LogAt func(ctx context.Context, level string, message string, attrs map[string]any) error
 github.com/egladman/magus/std.LogDebug func(ctx context.Context, message string, attrs map[string]any) error
@@ -925,6 +926,7 @@ github.com/egladman/magus/std.ValidateModule func(m Module) error
 github.com/egladman/magus/std.Vcs var Module
 github.com/egladman/magus/std.WithCurrentWorkingDirectory func(ctx context.Context, dir string) context.Context
 github.com/egladman/magus/std.WithEditJudge func(ctx context.Context, j EditJudge) context.Context
+github.com/egladman/magus/std.WithLanguages func(ctx context.Context, resolved []*github.com/egladman/magus/spells.Spell) context.Context
 github.com/egladman/magus/types.APIVersion type string
 github.com/egladman/magus/types.APIVersion.Compare method func(w APIVersion) int
 github.com/egladman/magus/types.APIVersion.Group method func() string

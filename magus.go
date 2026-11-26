@@ -1072,10 +1072,6 @@ func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 // declare. at reads a file at the revision a delta is measured from and working its
 // changed content; with either nil, a comment-only edit classifies as code.
 func (m *Magus) changeClassifier(at func(ctx context.Context, rev, path string) (string, error), working func(path string) (string, error)) risk.Classifier {
-	var resolved []*spells.Spell
-	for _, p := range m.All() {
-		resolved = append(resolved, p.ResolvedSpells...)
-	}
 	return risk.Classifier{
 		At:      at,
 		Working: working,
@@ -1091,7 +1087,7 @@ func (m *Magus) changeClassifier(at func(ctx context.Context, rev, path string) 
 			return roles, nil
 		},
 		Prose:  risk.ProseScopes(m.All()),
-		Syntax: spells.CommentSyntaxIndex(resolved),
+		Syntax: spells.CommentSyntaxIndex(m.resolvedSpells()),
 	}
 }
 
