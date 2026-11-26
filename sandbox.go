@@ -62,7 +62,7 @@ func (m *Magus) SandboxMode() types.SandboxMode { return m.cfg.Sandbox.Mode.Reso
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	mode := m.cfg.Sandbox.Mode
 	if !mode.Enabled() {
-		return std.WithEditJudge(ctx, m.editJudge()), nil
+		return m.withHostState(ctx), nil
 	}
 	loc := m.jobPlace()
 	// Every spell the workspace loaded, so a script, a magusfile body and a nested magus
@@ -99,7 +99,22 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		ctx = sandbox.WithMetrics(ctx, prov)
 		recordRules(ctx, prov, p)
 	}
-	return std.WithEditJudge(sandbox.WithPolicy(ctx, p), m.editJudge()), nil
+	return m.withHostState(sandbox.WithPolicy(ctx, p)), nil
+}
+
+// withHostState installs what host modules read from the workspace beside the sandbox
+// policy: the edit judge the fs writers consult and the resolved spells' languages.
+func (m *Magus) withHostState(ctx context.Context) context.Context {
+	return std.WithLanguages(std.WithEditJudge(ctx, m.editJudge()), m.resolvedSpells())
+}
+
+// resolvedSpells is every project's resolved spells, in project order.
+func (m *Magus) resolvedSpells() []*spells.Spell {
+	var resolved []*spells.Spell
+	for _, p := range m.All() {
+		resolved = append(resolved, p.ResolvedSpells...)
+	}
+	return resolved
 }
 
 // productPaths is every product path a target declares, sorted and unique.

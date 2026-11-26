@@ -68,6 +68,55 @@ func TestEveryModuleDeclBundleDeclaresTheTypesItNames(t *testing.T) {
 	}
 }
 
+// A declaration naming another host module's type imports that module and leaves the
+// mirror to the module's own file.
+func TestModuleDeclsImportTheHostModuleTheyName(t *testing.T) {
+	probe := std.Module{
+		Name: "probe",
+		Doc:  "Probe.",
+		Methods: []std.Method{{
+			Name:    "show",
+			Doc:     "Shows a plan, like `splice\\plan` does.",
+			Args:    []std.Arg{{Name: "plan", Type: std.TypeAnyMap, Object: `splice\SplicePlan`}},
+			Returns: []std.Ret{{Type: std.TypeString}},
+		}},
+	}
+	src, err := renderModuleDecls(probe)
+	require.NoError(t, err)
+	assert.Contains(t, src, `export extern fun show(plan: splice\SplicePlan) > str;`)
+	assert.NotContains(t, src, "export object SplicePlan")
+
+	imports := namespaceImports(probe.Name, src)
+	assert.Equal(t, "import \"splice\";\n\n", imports)
+
+	prog, err := buzz.Parse(imports + src)
+	require.NoError(t, err)
+	assert.Empty(t, undeclaredTypeNames(prog))
+
+	var splice std.Module
+	for _, mod := range hostmodules.All() {
+		if mod.Name == "splice" {
+			splice = mod
+		}
+	}
+	spliceSrc, err := renderModuleDecls(splice)
+	require.NoError(t, err)
+	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls(result.ModulePath, result.Source)
+	sess.SetModuleDecls("splice", namespaceImports("splice", spliceSrc)+spliceSrc)
+	sess.SetModuleDecls("probe", imports+src)
+	require.NoError(t, sess.Exec(t.Context(), `import "splice";
+import "probe";
+export fun shown(plan: splice\SplicePlan) > str {
+    return probe\show(plan);
+}
+`))
+
+	assert.Empty(t, namedHostModules("splice", `export extern fun x(p: splice\SplicePlan) > str;`), "a module never imports itself")
+	assert.Empty(t, namedHostModules("probe", "// see `splice\\SplicePlan`\n"), "a comment names no type")
+}
+
 // newNamespaceSession is a session holding every nested namespace's
 // declarations, as one magus registers.
 func newNamespaceSession(t *testing.T) *buzz.Session {
