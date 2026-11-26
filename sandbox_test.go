@@ -23,6 +23,7 @@ import (
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	scissors "github.com/egladman/magus/libs/safetyscissors/sandbox"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,6 +47,8 @@ func TestApplySandboxLeavesAnOffWorkspaceAlone(t *testing.T) {
 	ctx, err := m.ApplySandbox(t.Context())
 	require.NoError(t, err)
 	assert.Nil(t, sandbox.PolicyFromContext(ctx))
+	_, ok := std.LanguagesFromContext(ctx)
+	assert.True(t, ok, "an off sandbox still installs the languages host modules read")
 }
 
 // Best-effort attaches the policy whatever the host: the binding checks and the env
@@ -58,6 +61,8 @@ func TestApplySandboxAttachesTheWorkspacePolicy(t *testing.T) {
 	require.NotNil(t, p)
 	assert.Equal(t, types.SandboxModeBestEffort, p.Mode)
 	assert.Equal(t, types.SandboxModeBestEffort, m.SandboxMode())
+	_, ok := std.LanguagesFromContext(ctx)
+	assert.True(t, ok)
 }
 
 // The daemon applies the sandbox for a run it adopted, and its own environment names

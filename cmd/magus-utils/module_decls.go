@@ -124,19 +124,63 @@ func renderNamespaceDecls(module string) (string, error) {
 // namespaceImports is the import line of each nested namespace other than
 // module's own that src names a type of.
 func namespaceImports(module, src string) string {
-	var b strings.Builder
+	var paths []string
 	if strings.Contains(src, `result\Result::<`) {
-		b.WriteString("import \"result\";\n")
+		paths = append(paths, "result")
 	}
-	for _, nested := range nestedModules() {
-		if nested != module && strings.Contains(src, qualifiedName(nested, "")) {
-			fmt.Fprintf(&b, "import %q;\n", nested)
+	paths = slices.Concat(paths, namedNamespaces(module, src), namedHostModules(module, src))
+	if len(paths) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, path := range paths {
+		fmt.Fprintf(&b, "import %q;\n", path)
+	}
+	return b.String() + "\n"
+}
+
+// namedNamespaces lists the nested namespaces other than module's own that src names.
+func namedNamespaces(module, src string) []string {
+	return slices.DeleteFunc(nestedModules(), func(nested string) bool {
+		return nested == module || !strings.Contains(src, qualifiedName(nested, ""))
+	})
+}
+
+// namedHostModules lists, sorted, the top-level host modules other than module whose type
+// src names as `host\Type`. A comment line is skipped: a doc may name `splice\plan`.
+func namedHostModules(module, src string) []string {
+	var code strings.Builder
+	for line := range strings.SplitSeq(src, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "//") {
+			code.WriteString(line)
+			code.WriteByte('\n')
 		}
 	}
-	if b.Len() > 0 {
-		b.WriteByte('\n')
+	var out []string
+	for _, mod := range hostmodules.All() {
+		if mod.Name == module || mod.Name == "result" {
+			continue
+		}
+		named := regexp.MustCompile(fmt.Sprintf(`(^|[^\w\\])%s\\[A-Z]`, regexp.QuoteMeta(mod.Name)))
+		if named.MatchString(code.String()) {
+			out = append(out, mod.Name)
+		}
 	}
-	return b.String()
+	slices.Sort(out)
+	return out
+}
+
+// foreignHostType reports whether name is a type another top-level host module declares,
+// spelled `host\Type`. That module's own file carries the mirror.
+func foreignHostType(module, name string) bool {
+	host, _, qualified := strings.Cut(name, `\`)
+	if !qualified || host == module {
+		return false
+	}
+	if slices.ContainsFunc(nestedModules(), func(n string) bool { return strings.HasPrefix(name, qualifiedName(n, "")) }) {
+		return false
+	}
+	return slices.ContainsFunc(hostmodules.All(), func(m std.Module) bool { return m.Name == host })
 }
 
 // renderModuleDecls renders one module's declaration source: the object mirrors its
@@ -592,7 +636,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 	var order []string
 	var visit func(name string) error
 	visit = func(name string) error {
-		if name == "" || seen[name] {
+		if name == "" || seen[name] || foreignHostType(mod.Name, name) {
 			return nil
 		}
 		entry, ok := boundaryTypeIn(mod.Name, name)
