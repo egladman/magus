@@ -124,14 +124,17 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtype
 		return job.CheckVerdict{Deferred: why}
 	}
 	dir := job.WorkingCheckout(root, row)
-	if row.Worktree.Standing() && row.CheckoutRoot == "" {
-		// Until the fork makes the checkout, root, the repository it is made from, stands in.
+	if row.Worktree.Standing() {
+		// Until the fork makes the checkout, root stands in. A re-fork already has
+		// CheckoutRoot set and a new directory just as bare.
 		if _, err := os.Stat(dir); err != nil {
 			worktree := *row.Worktree
 			worktree.Root, dir = root, root
 			row.Worktree = &worktree
+			row.CheckoutRoot = dir
+		} else if row.CheckoutRoot == "" {
+			row.CheckoutRoot = dir
 		}
-		row.CheckoutRoot = dir
 	}
 	judge := func(pending jobtypes.Job, c types.LeaseCheck) (verdict.Judgment, bool) {
 		return JudgeLapsed(ctx, deps, Request{

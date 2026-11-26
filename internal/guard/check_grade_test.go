@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,4 +49,27 @@ func (s *GradeCheckSuite) TestARealDenyStillRefuses() {
 
 	s.True(verdict.Denied)
 	s.Empty(verdict.Deferred)
+}
+
+// A re-fork into a new checkout grades from root, as a first fork does. The new directory has
+// no ./magus yet.
+func (s *GradeCheckSuite) TestAReforkIsGradedFromRootUntilItsCheckoutExists() {
+	root := s.T().TempDir()
+	var dirs []string
+	rule := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
+		if req.Lease != nil && req.Lease.Worktree != nil {
+			dirs = append(dirs, req.Lease.Worktree.Root)
+		}
+		return verdict.Verdict{}, nil
+	}
+	s.row.Worktree = &jobtypes.Worktree{Root: filepath.Join(s.T().TempDir(), "new-checkout")}
+	s.row.CheckoutRoot = filepath.Join(s.T().TempDir(), "old-checkout")
+
+	verdict := gradeCheck(s.T().Context(), Dependencies{CommandRule: rule}, root, s.row)
+
+	s.Equal(job.CheckVerdict{}, verdict)
+	s.NotEmpty(dirs)
+	for _, d := range dirs {
+		s.Equal(root, d)
+	}
 }
