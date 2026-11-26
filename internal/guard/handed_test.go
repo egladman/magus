@@ -28,3 +28,12 @@ func (s *StopRuleSuite) TestAHandedAllowedCommandAndProsePass() {
 	v := s.judge(Dependencies{}, s.reply("Done. `git add -A` was refused, so:\n\n```bash\ngit status\n```\n", false))
 	s.NotEqual(verdict.Deny, v.Decision)
 }
+
+func (s *StopRuleSuite) TestAgentOnlyRulesNeverRefuseAHandedCommand() {
+	for _, rule := range []denyRuleName{denyRuleStaleBinary, denyRuleOrchestratorGroundwork, denyRuleLeaseVCS, denyRuleSpawnWaiter, denyRuleHumanOnly} {
+		s.True(agentOnlyRule(string(rule)), rule)
+	}
+	for _, rule := range []denyRuleName{denyRuleRawTool, denyRuleSiblingCheckout, denyRuleOutputPipe, denyRuleStageAll} {
+		s.False(agentOnlyRule(string(rule)), rule)
+	}
+}
