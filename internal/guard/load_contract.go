@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 )
@@ -168,19 +170,47 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	}
 	if err != nil {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: cannot read the contract %s carries (%v); relink ./magus, alone on its line: `%s`.",
-				root, err, ward.RelinkAt(root)),
+			Say: fmt.Sprintf("magus workspace: cannot read the contract %s carries (%v); %s.",
+				root, err, ward.RelinkAndStampAt(root)),
 			Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
 		}.full()
 	}
 	if currentTreeAtOtherAuthority(root, skew) {
+		if endsRow(line, d, deps.lease) {
+			return ""
+		}
 		return authorityRecovery(ctx, at, deps.lease, skew.Revision).full()
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; relink ./magus, alone on its line: `%s`.",
-			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, skew.TreeName(), skew.Tree, ward.RelinkAt(root)),
+		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; %s.",
+			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, skew.TreeName(), skew.Tree, ward.RelinkAndStampAt(root)),
 		Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
 	}.full()
+}
+
+// endsRow reports a lone `magus job exit <lease>` or `magus job wait <lease>`,
+// stdin redirects allowed. Neither reads the tree at the row's authority, so
+// its holder can end a row whose recorded contract the tree has moved past.
+func endsRow(command string, d Dialect, lease string) bool {
+	if lease == "" {
+		return false
+	}
+	f, err := parseFile(withoutLeaseExport(command, d), d)
+	if err != nil || len(f.Stmts) != 1 {
+		return false
+	}
+	st := f.Stmts[0]
+	call, ok := st.Cmd.(*syntax.CallExpr)
+	if !ok || st.Negated || st.Background || st.Coprocess || len(call.Args) == 0 ||
+		!readOnlyRedirects(st.Redirs) || !onlyBaggageAssigns(call.Assigns) {
+		return false
+	}
+	words := literalWords(call.Args)
+	if path.Base(words[0]) != "magus" {
+		return false
+	}
+	sub := magusSubcommandWords(words[1:])
+	return (hint.JobExit.MatchedBy(sub) || hint.JobWait.MatchedBy(sub)) && slices.Equal(sub[2:], []string{lease})
 }
 
 // leadPath names the first of paths and how many more there are.

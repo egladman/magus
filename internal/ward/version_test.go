@@ -1,6 +1,7 @@
 package ward
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -109,6 +110,16 @@ func (s *RelinkSuite) TestNoRootIsTheBareLine() {
 
 func (s *RelinkSuite) TestQuotesARootAShellWouldSplit() {
 	s.Equal(`GOEXPERIMENT=jsonv2 go -C '/a b/it'\''s' build -trimpath -o magus ./cmd/magus`, RelinkAt("/a b/it's"))
+}
+
+func (s *RelinkSuite) TestTheStampRunsTheRelinkedBinaryAtTheRoot() {
+	s.Equal("/src/magus/magus --root /src/magus run go-build .", stampAt("/src/magus"))
+	s.Equal("./magus run go-build .", stampAt(""))
+	s.Equal(`'/a b/magus' --root '/a b' run go-build .`, stampAt("/a b"))
+}
+
+func (s *RelinkSuite) TestTheRepairNamesTheRelinkThenTheStamp() {
+	s.Equal(fmt.Sprintf("relink ./magus, then stamp it, each alone on its line: `%s`, then `/r/magus --root /r run go-build .`", RelinkAt("/r")), RelinkAndStampAt("/r"))
 }
 
 func TestPinnedRelease(t *testing.T) {

@@ -48,7 +48,7 @@ func (s *ContractSkewSuite) deny(line string) string {
 
 func (s *ContractSkewSuite) TestADifferingContractRefusesAChangeAndNamesTheRelink() {
 	s.carryContract()
-	s.Contains(s.deny("touch notes.txt"), fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(s.root)))
+	s.Contains(s.deny("touch notes.txt"), ward.RelinkAndStampAt(s.root))
 }
 
 func (s *ContractSkewSuite) TestADifferingContractLetsAReadThrough() {
@@ -145,15 +145,33 @@ func (s *AuthorityContractSuite) TestAnAuthorityCarryingAnotherContractIsRefused
 	moved := s.commit("another contract")
 	carryOwnContract(s.T(), s.root)
 	s.git("add", "--", "internal/commands/testdata/api.lock")
-	for _, line := range []string{"./magus job exit worker --stdin", "./magus job advance worker"} {
+	for _, line := range []string{"./magus job advance worker", "touch notes.txt", "./magus job exit other --stdin"} {
 		s.deps.lease = "worker"
 		msg := denyContractSkew(s.T().Context(), s.deps, s.at(moved), line, DialectBash)
 		s.Contains(msg, s.root)
 		s.Contains(msg, moved[:12])
 		s.Contains(msg, "matches the working tree")
+		s.Contains(msg, "end it with `./magus job exit worker`")
 		s.Contains(msg, "git status --short")
 		s.Contains(msg, "./magus job advance worker")
 		s.NotContains(msg, "relink")
+	}
+}
+
+func (s *AuthorityContractSuite) TestTheHolderEndsOrAwaitsARowAtAnotherContract() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	s.deps.lease = "worker"
+	for _, line := range []string{
+		"./magus job exit worker --stdin <<'EOF'\n{}\nEOF",
+		"./magus job exit worker --stdin < result.json",
+		"export BAGGAGE=lease=worker && magus job exit worker",
+		"./magus job wait worker",
+	} {
+		s.Empty(denyContractSkew(s.T().Context(), s.deps, s.at(moved), line, DialectBash), line)
+	}
+	for _, line := range []string{"./magus job exit worker > out.txt", "./magus job exit worker && touch x", "./magus job wait worker other"} {
+		s.NotEmpty(denyContractSkew(s.T().Context(), s.deps, s.at(moved), line, DialectBash), line)
 	}
 }
 
