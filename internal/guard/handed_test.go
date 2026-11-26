@@ -39,6 +39,6 @@ func (s *StopRuleSuite) TestAgentOnlyRulesNeverRefuseAHandedCommand() {
 }
 
 func (s *StopRuleSuite) TestARuleNoRowCarriesRefusesAHandedCommand() {
-	s.False(agentOnlyRule(workspaceShellPrefix+"root-only"))
+	s.False(agentOnlyRule(workspaceShellPrefix + "root-only"))
 	s.False(agentOnlyRule("spawn-not-a-rule"))
 }

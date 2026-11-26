@@ -22,10 +22,10 @@ type parser struct {
 	// against the file's declarations once parsing finishes. See applyPendingExports.
 	pendingExports []string
 	// scanner lexes interpolation holes the way the program itself was lexed.
-	scanner        *token.Scanner
-	tokens         []token.Token
-	pos            int
-	depth          int
+	scanner *token.Scanner
+	tokens  []token.Token
+	pos     int
+	depth   int
 	// strict enables the script-conformance rules upstream Buzz enforces: no
 	// control-flow statements at the program top level, and labeled call
 	// arguments. On by default via Parse (upstream parity); ParseEmbedded clears

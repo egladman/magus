@@ -42,7 +42,7 @@ func (s *rawSuite) TestGoTextComesThroughByteExact() {
 }
 
 func (s *rawSuite) TestEachHazardOnItsOwn() {
-	for _, text := range []string{"`", "{}", "{{x}}", `\d`, "${n}", `\n`, `\`,"a\n\tb\r\nc"} {
+	for _, text := range []string{"`", "{}", "{{x}}", `\d`, "${n}", `\n`, `\`, "a\n\tb\r\nc"} {
 		s.Equal(text, s.eval(`r"`+text+`"`), text)
 	}
 }
