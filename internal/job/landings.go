@@ -277,6 +277,11 @@ func (s *Store) landedInIntegration(ctx context.Context, row job.Job, rows []job
 // held says which of the two held, for the end reason.
 func contentLanded(ctx context.Context, driver types.VCSDriver, row job.Job, head types.Commit, targetRoot string, target types.Commit) (paths int, held string) {
 	checkpoint := checkpointRevision(row.Checkpoint)
+	// A checkout on target holds target's content, not work of its own: every path
+	// reads the same there whatever the row did.
+	if head.ID == target.ID {
+		return 0, ""
+	}
 	if dirty, err := driver.Dirty(ctx, row.CheckoutRoot, nil); err != nil || dirty {
 		return 0, ""
 	}
