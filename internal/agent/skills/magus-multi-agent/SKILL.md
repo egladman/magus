@@ -41,6 +41,43 @@ of source, no runs of its own. It plans from the graph and moves jobs; a scout a
 The guard enforces this by role, and the role is the live lease: the root may take ONE row with
 `{{cmd "job exec"}} <row>` until `{{cmd "job exit"}} <row>` ([the root's role](reference.md#the-roots-role)).
 
+## Plan from the interfaces first
+
+Before any partitioning, the plan lists its interfaces in one table. An interface is
+anything two pieces of work both touch: a function, a type, an event, a file's row
+shape, a config key, a command's arguments. One row each:
+
+| column | holds |
+| --- | --- |
+| name | the symbol as `{{cmd "refs"}}` resolves it, or the key, flag or row shape |
+| file | the one file it lives in, with no consumer's code in it |
+| signature | the declaration, as the index renders it |
+| stub | one sentence: what it answers correctly, what it refuses and with what message |
+| test | the test that runs the stub |
+| filled by | the chunk that replaces the body, or `final` when the stub is the body |
+| used by | the chunks that call it |
+
+An honest stub is a minimal real implementation: it answers what it can correctly and
+refuses the rest loudly. It is never a panic, a mock or a zero value{{if .Full}}, which pass
+a consumer's check and then fail in the integration run{{end}}. A stub that needs more than a
+screen of code is too wide: cut the interface thinner. Only an interface edge yields to a
+stub. A shared file or a behavior edge stays an order.
+
+Then cut chunks in these six steps, in order:
+
+1. Moves and renames first, alone, while nothing else is open.
+2. One contract chunk per layer a single narrow run can check. It writes the `file`
+   column and the tests, and switches no caller.
+3. One filler chunk per row not marked `final`, writing that row's file.
+4. One consumer chunk per group of files that share no file with another group. A file
+   two groups need goes to one of them, or to the integration row if both only add to it.
+5. Each chunk's check runs its own side against the stub, never through a sibling chunk.
+6. Last: deletions, steps a person takes, and anything outside the repository.
+
+Fork the contract chunk first. When it passes, run `{{cmd "graph build"}}`, then fork every
+filler and consumer at once, each naming the contract in `depends_on`. A consumer never
+names a filler: if it must, step 5 failed for that pair and the two run in order.
+
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker carries
@@ -106,12 +143,10 @@ validation or accepts a material risk gets one plain sentence and its evidence l
 never pasted waiver objects, claim lists or guard transcripts.{{else}}Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
 Waiver skipping validation or accepting material risk: one plain sentence + evidence link, never pasted waiver objects, claim lists, guard transcripts.{{end}}
 
-## Declare the interface before any job forks
+## Make the names gradeable before any job forks
 
-When a change adds a shared API, the ROOT names it before any edit. A shared
-API is a module several call sites use, a type, an event, or an exported
-function. Name its path, every exported name with its signature, and the EXISTING
-symbols it must reuse, not restate.
+The table's names are the ROOT's before any edit. Add the EXISTING symbols each must
+reuse, not restate.
 
 Workers implement the names they were handed and never coin a public one. A name
 invented at each call site is how one concept ends up with five spellings

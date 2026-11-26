@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27583
-skill_short_bytes: 21594
+skill_full_bytes: 29535
+skill_short_bytes: 23442
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `119f7d7cb99a` |
+| `skill-content` | `602f26412fab` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -94,6 +94,42 @@ of source, no runs of its own. It plans from the graph and moves jobs; a scout a
 The guard enforces this by role, and the role is the live lease: the root may take ONE row with
 `magus job exec <row>` until `magus job exit <row>` ([the root's role](reference.md#the-roots-role)).
 
+## Plan from the interfaces first
+
+Before any partitioning, the plan lists its interfaces in one table. An interface is
+anything two pieces of work both touch: a function, a type, an event, a file's row
+shape, a config key, a command's arguments. One row each:
+
+| column | holds |
+| --- | --- |
+| name | the symbol as `magus refs` resolves it, or the key, flag or row shape |
+| file | the one file it lives in, with no consumer's code in it |
+| signature | the declaration, as the index renders it |
+| stub | one sentence: what it answers correctly, what it refuses and with what message |
+| test | the test that runs the stub |
+| filled by | the chunk that replaces the body, or `final` when the stub is the body |
+| used by | the chunks that call it |
+
+An honest stub is a minimal real implementation: it answers what it can correctly and
+refuses the rest loudly. It is never a panic, a mock or a zero value. A stub that needs more than a
+screen of code is too wide: cut the interface thinner. Only an interface edge yields to a
+stub. A shared file or a behavior edge stays an order.
+
+Then cut chunks in these six steps, in order:
+
+1. Moves and renames first, alone, while nothing else is open.
+2. One contract chunk per layer a single narrow run can check. It writes the `file`
+   column and the tests, and switches no caller.
+3. One filler chunk per row not marked `final`, writing that row's file.
+4. One consumer chunk per group of files that share no file with another group. A file
+   two groups need goes to one of them, or to the integration row if both only add to it.
+5. Each chunk's check runs its own side against the stub, never through a sibling chunk.
+6. Last: deletions, steps a person takes, and anything outside the repository.
+
+Fork the contract chunk first. When it passes, run `magus graph build`, then fork every
+filler and consumer at once, each naming the contract in `depends_on`. A consumer never
+names a filler: if it must, step 5 failed for that pair and the two run in order.
+
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker carries
@@ -133,12 +169,10 @@ magus job fork --stdin --dry-run -o 'template={{.job.id}}{{range .problems}}{{pr
 Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
 Waiver skipping validation or accepting material risk: one plain sentence + evidence link, never pasted waiver objects, claim lists, guard transcripts.
 
-## Declare the interface before any job forks
+## Make the names gradeable before any job forks
 
-When a change adds a shared API, the ROOT names it before any edit. A shared
-API is a module several call sites use, a type, an event, or an exported
-function. Name its path, every exported name with its signature, and the EXISTING
-symbols it must reuse, not restate.
+The table's names are the ROOT's before any edit. Add the EXISTING symbols each must
+reuse, not restate.
 
 Workers implement the names they were handed and never coin a public one. A name
 invented at each call site is how one concept ends up with five spellings.
@@ -501,10 +535,11 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 
 ## Contents
 
+- Plan from the interfaces first
 - Coalesce what the write sets allow
 - Run the graph-engineering loop
 - Keep worker records out of the user update
-- Declare the interface before any job forks
+- Make the names gradeable before any job forks
 - Set one topology boundary
 - Seed the partition with magus
 - Prove that jobs do not collide
@@ -512,6 +547,43 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 - Declare the criteria magus can check for you
 - Observe through the correct control plane
 - Integrate and verify
+
+## Plan from the interfaces first
+
+Before any partitioning, the plan lists its interfaces in one table. An interface is
+anything two pieces of work both touch: a function, a type, an event, a file's row
+shape, a config key, a command's arguments. One row each:
+
+| column | holds |
+| --- | --- |
+| name | the symbol as `magus refs` resolves it, or the key, flag or row shape |
+| file | the one file it lives in, with no consumer's code in it |
+| signature | the declaration, as the index renders it |
+| stub | one sentence: what it answers correctly, what it refuses and with what message |
+| test | the test that runs the stub |
+| filled by | the chunk that replaces the body, or `final` when the stub is the body |
+| used by | the chunks that call it |
+
+An honest stub is a minimal real implementation: it answers what it can correctly and
+refuses the rest loudly. It is never a panic, a mock or a zero value, which pass
+a consumer's check and then fail in the integration run. A stub that needs more than a
+screen of code is too wide: cut the interface thinner. Only an interface edge yields to a
+stub. A shared file or a behavior edge stays an order.
+
+Then cut chunks in these six steps, in order:
+
+1. Moves and renames first, alone, while nothing else is open.
+2. One contract chunk per layer a single narrow run can check. It writes the `file`
+   column and the tests, and switches no caller.
+3. One filler chunk per row not marked `final`, writing that row's file.
+4. One consumer chunk per group of files that share no file with another group. A file
+   two groups need goes to one of them, or to the integration row if both only add to it.
+5. Each chunk's check runs its own side against the stub, never through a sibling chunk.
+6. Last: deletions, steps a person takes, and anything outside the repository.
+
+Fork the contract chunk first. When it passes, run `magus graph build`, then fork every
+filler and consumer at once, each naming the contract in `depends_on`. A consumer never
+names a filler: if it must, step 5 failed for that pair and the two run in order.
 
 ## Coalesce what the write sets allow
 
@@ -571,12 +643,10 @@ update; collapse repeats into the current blocker and next action. A waiver that
 validation or accepts a material risk gets one plain sentence and its evidence link,
 never pasted waiver objects, claim lists or guard transcripts.
 
-## Declare the interface before any job forks
+## Make the names gradeable before any job forks
 
-When a change adds a shared API, the ROOT names it before any edit. A shared
-API is a module several call sites use, a type, an event, or an exported
-function. Name its path, every exported name with its signature, and the EXISTING
-symbols it must reuse, not restate.
+The table's names are the ROOT's before any edit. Add the EXISTING symbols each must
+reuse, not restate.
 
 Workers implement the names they were handed and never coin a public one. A name
 invented at each call site is how one concept ends up with five spellings, and how a plan that says "collapse two state types into one" ships
