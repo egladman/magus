@@ -475,7 +475,7 @@ func attemptKey(run job.CapturedRun) string { return cmp.Or(run.AttemptID, run.R
 func unreadSince(ctx context.Context, here string, paths []string, run job.CapturedRun) string {
 	name := attemptKey(run)
 	var driver types.VCSDriver
-	if run.Revision != "" && !run.Dirty {
+	if run.Revision != "" {
 		driver = revisionReader(ctx, here, run.Revision)
 	}
 	started := time.UnixMilli(run.TimestampMs - run.DurationMs)
@@ -483,10 +483,14 @@ func unreadSince(ctx context.Context, here string, paths []string, run job.Captu
 	for _, p := range paths {
 		if driver != nil {
 			if same, decided := readsAsRevision(ctx, driver, here, run.Revision, p); decided {
-				if !same {
+				switch {
+				case same:
+					continue
+				case !run.Dirty:
 					moved = append(moved, p)
+					continue
 				}
-				continue
+				// A dirty run may have read this path edited, so only its file time can date it.
 			}
 		}
 		if modifiedSince(here, filepath.FromSlash(p), started) {
