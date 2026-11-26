@@ -102,7 +102,7 @@ func ResolveAuthority(ctx context.Context, base Dependencies, req Request) CallA
 	if !ok {
 		return unleased
 	}
-	return CallAuthority{Lease: lease, Checkout: rowCheckout(row), Revision: row.Authority}
+	return CallAuthority{Lease: lease, Checkout: rowCheckout(row), Revision: authorityRevision(pinnedAuthority(row))}
 }
 
 // rowCheckout is the checkout row's holder works in, "" when none stands.

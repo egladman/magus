@@ -190,6 +190,16 @@ func (s *AuthorityContractSuite) TestAnEndedRowPinsNothing() {
 	s.NotEmpty(denyContractSkew(s.T().Context(), s.deps, s.at(moved), "touch notes.txt", DialectBash), "a running row stays pinned")
 }
 
+func TestOnlyALiveRowPinsItsAuthorityRevision(t *testing.T) {
+	for state, want := range map[job.State]string{
+		job.StateDeclared: "abc", job.StateRunning: "abc",
+		job.StateExited: "", job.StatePass: "", job.StateFail: "", job.StateNoReturn: "",
+	} {
+		got := authorityRevision(pinnedAuthority(job.Job{State: state, Authority: "abc+digest"}))
+		assert.Equal(t, want, got, string(state))
+	}
+}
+
 // A fork records a checkpoint token, a revision plus the dirty-patch digest,
 // and the contract is read at its revision half.
 func (s *AuthorityContractSuite) TestAnAuthorityTokenIsReadAtItsRevision() {
