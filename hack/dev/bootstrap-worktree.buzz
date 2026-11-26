@@ -97,9 +97,19 @@ final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary()
 final buildStampProbe = `import "std"; import "./hack/policy/stale" as stale; std\print(stale\buildStamp(".") catch "");`;
 
 // A previous claim's reported base can predate this worktree.
-fun checkHead(row: Row, head: str) > result\Result::<bool> {
+// isOwnCheckout is whether source is the checkout the job row names.
+fun isOwnCheckout(row: Row, source: str) > bool {
+    return source != "" and row.checkoutRoot != "" and path\clean(source) == path\clean(row.checkoutRoot);
+}
+
+// A job's own checkout is exempt: the worker has moved it past the checkpoint.
+fun checkHead(row: Row, head: str, source: str = "") > result\Result::<bool> {
+    if (isOwnCheckout(row, source: source)) {
+        return result\ok::<bool>(true);
+    }
     if (row.checkpoint != "" and row.checkpoint.split("+")[0] != head) {
-        return result\fail::<bool>("bootstrap-worktree: job {row.id} has checkpoint {row.checkpoint}, but this checkout is at {head}; bootstrap in a worktree at the checkpoint");
+        final named = if (row.checkoutRoot == "") "" else "; or build from the job's own checkout with `--build-from {row.checkoutRoot}`";
+        return result\fail::<bool>("bootstrap-worktree: job {row.id} has checkpoint {row.checkpoint}, but this checkout is at {head}; bootstrap in a worktree at the checkpoint{named}");
     }
     return result\ok::<bool>(true);
 }
@@ -107,7 +117,6 @@ fun checkHead(row: Row, head: str) > result\Result::<bool> {
 // checkFit fails with every way the taken lease is unfit for a worker in root.
 // A row with no checkpoint has no base to check, which render reports.
 // trackedClean is whether root's tracked files match its HEAD.
-// Untracked files alone read as revision-match, the checkpoint's tree.
 export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > result\Result::<bool> {
     final found = mut [<str>];
     if (path\clean(row.checkoutRoot) != path\clean(root)) {
@@ -348,47 +357,54 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
     if (jobRow.error -> err) {
         return result\Result::<Row>{ error = err };
     }
+    // The job's own checkout already holds its built binary. Judge that tree, not this script's.
+    final own = isOwnCheckout(jobRow.value!, source: source);
+    final at = if (own) source else root;
     try {
-        final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout.trim();
-        final checked = checkHead(jobRow.value!, head: head);
+        final head = vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = at, quiet = true }).stdout.trim();
+        final checked = checkHead(jobRow.value!, head: head, source: source);
         if (checked.error -> err) {
             return result\Result::<Row>{ error = err };
         }
     } catch (err: any) {
-        return result\caught::<Row>(err, doing: "bootstrap-worktree: read HEAD in {root}");
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: read HEAD in {at}");
     }
-    final local = "{root}/magus";
-    final binary = reusable(root, source: origin);
+    final local = "{at}/magus";
+    final binary = reusable(at, source: origin);
     if (binary.error -> why) {
         return result\fail::<Row>(refusal(why.message, source: origin));
     }
     final v = binary.value!;
-    // Copy beside it, then rename over it: a copy truncates ./magus in place, and this script
-    // is often running from that file (magus re-execs into a workspace's own ./magus). On
-    // darwin every later exec of an executable rewritten in place is SIGKILLed.
-    try {
-        fs\copyFile(v.bin, dst: "{local}.bootstrap");
-        fs\chmod("{local}.bootstrap", mode: 493);
-        fs\rename("{local}.bootstrap", dst: local);
-        std\print("placed " + placed(v.bin, digest: v.digest));
-        final headOf = fun (at: str) > str => vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = at, quiet = true, allowFailure = true }).stdout.trim() catch "";
-        std\print(checkout\seedLine([origin, main], dir: root, headOf: headOf));
-    } catch (err: any) {
-        return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
+    if (own) {
+        std\print("kept " + placed(v.bin, digest: v.digest));
+    } else {
+        // Copy beside it, then rename over it: a copy truncates ./magus in place.
+        // On darwin every later exec of an executable rewritten in place is SIGKILLed.
+        try {
+            fs\copyFile(v.bin, dst: "{local}.bootstrap");
+            fs\chmod("{local}.bootstrap", mode: 493);
+            fs\rename("{local}.bootstrap", dst: local);
+            std\print("placed " + placed(v.bin, digest: v.digest));
+            final headOf = fun (dir: str) > str => vcs\cmd(["rev-parse", "HEAD"], opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }).stdout.trim() catch "";
+            std\print(checkout\seedLine([origin, main], dir: root, headOf: headOf));
+        } catch (err: any) {
+            return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
+        }
     }
     // The root's hook runs only a ./magus a live row pins.
     final pinned = magusAt(v.bin, root: origin, args: ["job", "pin", job]);
     if (pinned.error -> e) {
         io\stderr.write("bootstrap-worktree: placed ./magus, and no row pins it, so the root's hook judges with its own binary: {e.message}\n");
     }
-    return claimThenIndex(
-        fun (args: [str]) > result\Result::<str> => magusAt(local, root: root, args: args),
-        root: root,
+    return settle(
+        fun (args: [str]) > result\Result::<str> => magusAt(local, root: at, args: args),
+        own: own,
+        root: at,
         job: job,
         main: main,
         trackedClean: fun () > result\Result::<bool> {
             try {
-                return result\ok::<bool>((vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true }).code) == 0);
+                return result\ok::<bool>((vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = at, quiet = true, allowFailure = true }).code) == 0);
             } catch (err: any) {
                 return result\caught::<bool>(err, doing: "bootstrap-worktree: diff the tracked files against HEAD");
             }
@@ -460,6 +476,16 @@ export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: s
         std\print("built the graph");
     }
     return result\ok::<Row>(row);
+}
+
+// settle takes the job in root, unless own: a job's own checkout is taken by its worker's job exec.
+// An empty row says nothing was taken.
+export fun settle(run: fun (args: [str]) > result\Result::<str>, own: bool, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>) > result\Result::<Row> {
+    if (own) {
+        std\print("built and kept ./magus in {root}; take job {job} there with `./magus job exec {job}`");
+        return result\ok::<Row>(Row{ id = "", state = "", checkpoint = "", reportedBase = "", baseVerdict = "", checkoutRoot = root });
+    }
+    return claimThenIndex(run, root: root, job: job, main: main, trackedClean: trackedClean);
 }
 
 // graphBuildFailed is the line printed when the graph build fails after the lease is taken: the
@@ -652,6 +678,34 @@ test "bootstrap refuses a checkout ahead of the job before placing its binary" {
     final refused = checkHead(row, head: row.reportedBase);
     assert\isTrue(refused.error!.message.indexOf(row.checkpoint) != null, message: "name the checkpoint");
     assert\isTrue(checkHead(row, head: row.checkpoint).error == null, message: "a fresh checkout at the checkpoint passes despite a previous divergent claim");
+}
+
+test "a source that is the job's own checkout is not held to the checkpoint" {
+    final row = Row{ id = "j", state = "declared", checkpoint = "abc", reportedBase = "abc", baseVerdict = "match", checkoutRoot = "/j" };
+    assert\isTrue(checkHead(row, head: "def", source: "/j/").error == null, message: "own checkout");
+    final refused = checkHead(row, head: "def", source: "/other");
+    assert\isTrue(refused.error!.message.indexOf("checkpoint abc") != null and refused.error!.message.indexOf("at def") != null and refused.error!.message.indexOf("--build-from /j") != null, message: "names both commits and the build-from");
+}
+
+test "an orchestrator root differing from the job checkout is judged by the job checkout" {
+    final row = Row{ id = "j", state = "running", checkpoint = "abc", reportedBase = "def", baseVerdict = "diverged", checkoutRoot = "/j" };
+    assert\isTrue(isOwnCheckout(row, source: "/j/"), message: "own checkout");
+    assert\isTrue(!isOwnCheckout(row, source: "/o"), message: "another checkout");
+    final ran = mut [<str>];
+    final taken = settle(
+        fun (args: [str]) > result\Result::<str> {
+            ran.append(args.join(" "));
+            return result\ok::<str>("");
+        },
+        own: true,
+        root: "/j",
+        job: "j",
+        main: MAIN,
+        trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(false),
+    );
+    assert\isTrue(taken.error == null, message: "the own-checkout path succeeds");
+    assert\equal(taken.value!.id, want: "", message: "no row is taken, so main prints no took-job lines");
+    assert\equal(ran.len(), want: 0, message: "no job exec, describe or graph build: the worker takes the job in its checkout");
 }
 
 test "a diverged worktree with tracked edits is still refused and not detached" {
