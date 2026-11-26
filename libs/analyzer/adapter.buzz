@@ -1,0 +1,29 @@
+// adapter declares a rule written to the magus/lint shape, a reads() list and a
+// check(files: [Path]) returning magus/lint findings, as an analyzer. It goes once no
+// rule has that shape left.
+namespace adapter;
+
+import "libs/analyzer/analyzer" as analyzer;
+import "libs/analyzer/finding" as finding;
+import "magus/lint";
+
+// rule is the analyzer the magus/lint rule name declares in source. It reaches the
+// whole workspace, as a rule was always handed every file its reads match, and a
+// finding's hint becomes its fix.
+export fun rule(name: str, tier: analyzer\Tier, fix: str, source: str, reads: [str],
+                check: fun (files: [Path]) > [Finding] !> any) > analyzer\Analyzer {
+    return analyzer\check(name, tier: tier, fix: fix, source: source, files: reads, reach: analyzer\Reach.workspace,
+        run: fun (input: analyzer\Input) > [finding\Finding] !> any => converted(check(paths(input.files))));
+}
+
+// paths is files as the magus/lint Path a rule reads them through.
+export fun paths(files: [str]) > [Path] {
+    return files.map(fun (index: int, f: str) > Path => Path{ value = f });
+}
+
+// converted is each magus/lint finding as an analyzer finding. Its rule is dropped:
+// the runner stamps the analyzer's name.
+export fun converted(found: [Finding]) > [finding\Finding] {
+    return found.map(fun (index: int, f: Finding) > finding\Finding => finding\Finding{
+        path = f.path, line = f.line, col = f.col, message = f.message, fix = f.hint, url = f.url });
+}

@@ -1,0 +1,111 @@
+// policy reads a project's analyzers.yaml: one top-level key per analyzer, each holding
+// settings, baseline and exits, plus zones. A person types the file; the runner only
+// reads it.
+namespace policy;
+
+import "fs";
+import "result";
+import "encoding/yaml";
+
+export final FILE = "analyzers.yaml";
+
+// ZONES is the one top-level key that names no analyzer.
+final ZONES = "zones";
+
+final KEYS = {"settings": true, "baseline": true, "exits": true};
+
+// Policy is one analyzer's block. baseline and exits are kept as typed: each analyzer
+// reads its own rows until the runner applies one row shape for all.
+export object Policy {
+    settings: {str: any} = {<str: any>},
+    baseline: any = null,
+    exits: any = null,
+}
+
+// file is the workspace path of project's analyzers.yaml.
+export fun file(project: str) > str {
+    return if (project == ".") FILE else project + "/" + FILE;
+}
+
+// owner is the project holding path: the deepest project root path sits under, or "."
+// for the root project.
+export fun owner(path: str, projects: [str]) > str {
+    var best = ".";
+    foreach (p in projects) {
+        if (p != "." and path.startsWith(p + "/") and (best == "." or p.len() > best.len())) {
+            best = p;
+        }
+    }
+    return best;
+}
+
+// parse reads text, the content of the file at path, into each analyzer's Policy. It
+// refuses a top-level value that is not a mapping and a key beside settings, baseline
+// and exits, naming path.
+export fun parse(text: str, path: str) > result\Result::<{str: Policy}> {
+    try {
+        final got = mut {<str: Policy>};
+        final parsed = yaml\parse(text);
+        if (parsed == null) {
+            return result\ok::<{str: Policy}>(got);
+        }
+        if (parsed is {str: any}) {
+            final doc: {str: any} = parsed;
+            foreach (name, block in doc) {
+                if (name == ZONES) {
+                    continue;
+                }
+                final read = blockOf(block, name: name, path: path);
+                if (read.error != null) {
+                    return result\Result::<{str: Policy}>{ error = read.error };
+                }
+                got[name] = read.value!;
+            }
+            return result\ok::<{str: Policy}>(got);
+        }
+        return result\fail::<{str: Policy}>("{path}: the top level is not a mapping of analyzer names");
+    } catch (err: any) {
+        return result\caught::<{str: Policy}>(err, doing: "policy: parse {path}");
+    }
+}
+
+// blockOf is the Policy under name, one top-level key of path.
+fun blockOf(block: any, name: str, path: str) > result\Result::<Policy> {
+    if (block == null) {
+        return result\ok::<Policy>(Policy{});
+    }
+    if (block is {str: any}) {
+        final fields: {str: any} = block;
+        foreach (key, _ in fields) {
+            if (KEYS[key] == null) {
+                return result\fail::<Policy>("{path}: {name}.{key} is not a policy key; an analyzer's block holds settings, baseline and exits");
+            }
+        }
+        var settings = {<str: any>};
+        final raw = fields["settings"];
+        if (raw != null) {
+            if (raw is {str: any}) {
+                settings = raw;
+            } else {
+                return result\fail::<Policy>("{path}: {name}.settings is not a mapping");
+            }
+        }
+        return result\ok::<Policy>(Policy{ settings = settings, baseline = fields["baseline"], exits = fields["exits"] });
+    }
+    return result\fail::<Policy>("{path}: {name} is not a mapping of settings, baseline and exits");
+}
+
+// read is the policy of project under root. A project with no analyzers.yaml has none,
+// which leaves every analyzer strict.
+export fun read(project: str, root: str = ".") > result\Result::<{str: Policy}> {
+    try {
+        final path = file(project);
+        final full = if (root == ".") path else root + "/" + path;
+        if (!fs\exists(full)) {
+            return result\ok::<{str: Policy}>({<str: Policy>});
+        }
+        return parse(fs\readFile(full), path: path);
+    } catch (err: any) {
+        return result\caught::<{str: Policy}>(err, doing: "policy: read {project}");
+    }
+}

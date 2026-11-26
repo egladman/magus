@@ -1,0 +1,92 @@
+// analyzer is the record every analyzer is declared with, and the plan a workspace's
+// analyzers.buzz hands the runner.
+namespace analyzer;
+
+import "libs/analyzer/finding" as finding;
+
+// Tier says what a finding does: a judgment finding prints as advice and never fails
+// the run; the other two fail it.
+export enum Tier { mechanical, measured, judgment }
+
+// Engine is what runs an analyzer's judge.
+export enum Engine { buzz }
+
+// Reach is what one call of check is handed. project hands it the matched files of
+// one project with that project's settings, once per project. workspace hands it
+// every matched file at once with the root project's settings, for an analyzer
+// that relates files across projects.
+export enum Reach { project, workspace }
+
+// Input is one call's share of the tree.
+export object Input {
+    // project is the owning project's root, workspace-relative; "." is the root.
+    project: str = ".",
+    // files are workspace-relative paths, in walk order.
+    files: [str] = [<str>],
+    // settings is this analyzer's settings block from project's analyzers.yaml.
+    settings: {str: any} = {<str: any>},
+}
+
+// Analyzer is one named judge. name, tier, fix, engine, source and check have no
+// default, so the checker refuses a record that leaves one out.
+export object Analyzer {
+    // name is what a finding prints and what analyzers.yaml keys.
+    name: str,
+    tier: Tier,
+    // fix is the sentence a finding carries when it sets none.
+    fix: str,
+    engine: Engine,
+    // source is the workspace path of the file declaring the analyzer, where the
+    // runner places a finding about the analyzer itself.
+    source: str,
+    // files are globs relative to the workspace root. One that matches no file is a
+    // finding, and the analyzer does not run.
+    files: [str] = [<str>],
+    reach: Reach = Reach.project,
+    check: fun (input: Input) > [finding\Finding] !> any,
+}
+
+// check declares an analyzer whose judge is the Buzz function run.
+export fun check(name: str, tier: Tier, fix: str, source: str, files: [str], run: fun (input: Input) > [finding\Finding] !> any,
+                 reach: Reach) > Analyzer {
+    return Analyzer{ name = name, tier = tier, fix = fix, engine = Engine.buzz, source = source, files = files,
+        reach = reach, check = run };
+}
+
+// Declined is a shipped analyzer a workspace chose not to run, and why.
+export object Declined {
+    name: str,
+    reason: str,
+}
+
+// declined records that a workspace does not run a, for reason.
+export fun declined(a: Analyzer, reason: str) > Declined {
+    return Declined{ name = a.name, reason = reason };
+}
+
+// Walk says which trees the runner's walk of the workspace leaves out or keeps. The
+// walk always leaves out .git and .magus, and whatever the VCS ignores.
+export object Walk {
+    // pruned are directory names never entered, at any depth.
+    pruned: [str] = [<str>],
+    // prunedPaths are workspace paths never entered.
+    prunedPaths: [str] = [<str>],
+    // keptPaths are paths entered although a name in pruned would leave them out.
+    keptPaths: [str] = [<str>],
+    // keptIgnored are ignored directories entered anyway, with all they hold.
+    keptIgnored: [str] = [<str>],
+}
+
+// Plan is what a workspace runs: use are the shipped analyzers it runs, decline
+// those it does not, own its own.
+export object Plan {
+    use: [Analyzer] = [<Analyzer>],
+    decline: [Declined] = [<Declined>],
+    own: [Analyzer] = [<Analyzer>],
+    walk: Walk,
+}
+
+// listed is every analyzer plan runs, use before own.
+export fun listed(plan: Plan) > [Analyzer] {
+    return plan.use + plan.own;
+}

@@ -1,0 +1,246 @@
+import "assert";
+import "fs";
+import "vcs";
+import "magus/lint";
+import "libs/analyzer/analyzer" as analyzer;
+import "libs/analyzer/adapter" as adapter;
+import "libs/analyzer/finding" as finding;
+import "libs/analyzer/policy" as policy;
+import "libs/analyzer/runner" as runner;
+
+fun none(input: analyzer\Input) > [finding\Finding] {
+    return [<finding\Finding>];
+}
+
+// each is an analyzer reporting one finding per file it is handed.
+fun each(name: str, files: [str], reach: analyzer\Reach = analyzer\Reach.workspace) > analyzer\Analyzer {
+    return analyzer\check(name, tier: analyzer\Tier.mechanical, fix: "Fix it.", source: "rules/{name}.buzz", files: files, reach: reach,
+        run: fun (input: analyzer\Input) > [finding\Finding] !> any
+            => input.files.map(fun (i: int, f: str) > finding\Finding => finding\Finding{ path = f, message = "in {input.project}" }));
+}
+
+fun messages(found: [finding\Finding]) > [str] {
+    return found.map(fun (i: int, f: finding\Finding) > str => f.message);
+}
+
+fun refusal(args: [str]) > str {
+    final parsed = runner\parse(args, names: ["a", "b"]);
+    if (parsed.error -> e) {
+        return e.message;
+    }
+    return "";
+}
+
+test "a bare run selects every analyzer over the whole tree" {
+    final sel = runner\parse([<str>], names: ["a"]).value!;
+    assert\equal(sel.only, want: null, message: "no analyzer named");
+    assert\equal(sel.paths.len(), want: 0, message: "no paths");
+}
+
+test "--only precedes the paths, and a dashed path follows --" {
+    final sel = runner\parse(["--only", "b", "./x.lock", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]).value!;
+    assert\equal(sel.only!, want: "b", message: "only");
+    assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
+    assert\equal(runner\parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).value!.paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
+    assert\isTrue(refusal(["x.lock", "--only", "b"]).startsWith("analyzers: flag --only follows a path; flags go first\n"), message: "a flag after a path");
+}
+
+test "an unknown flag and an unknown analyzer are refused" {
+    assert\isTrue(refusal(["--fix"]).startsWith("analyzers: unknown flag --fix\n"), message: "flag");
+    assert\equal(refusal(["--only", "c"]), want: "analyzers: no analyzer is named \"c\"; the analyzers are:\n  a\n  b", message: "analyzer");
+    assert\isTrue(refusal(["--only"]) != "", message: "--only with no value");
+}
+
+test "--firings reads the whole tree, and --session needs it" {
+    final sel = runner\parse(["--firings", "--session", "s9", "--timings"], names: ["a"]).value!;
+    assert\isTrue(sel.firings, message: "firings");
+    assert\equal(sel.session, want: "s9", message: "session");
+    assert\isTrue(sel.timings, message: "timings");
+    assert\isTrue(refusal(["--firings", "x.lock"]).startsWith("analyzers: --firings reads the whole tree"), message: "a path narrows the run");
+    assert\isTrue(refusal(["--session", "s"]).startsWith("analyzers: --session tags a recorded run; pass --firings\n"), message: "session alone");
+}
+
+test "paths pick the analyzers that read them, and a path none reads picks none" {
+    final all = [each("locks", files: ["**/*.lock"]), each("workflows", files: [".github/workflows/*.yaml"])];
+    assert\equal(runner\pick(all, sel: runner\Selection{ only = null, paths = [<str>] }).value!.len(), want: 2, message: "bare");
+    final locks = runner\pick(all, sel: runner\Selection{ only = null, paths = ["docs/a.lock"] }).value!;
+    assert\equal(locks.map(fun (i: int, a: analyzer\Analyzer) > str => a.name), want: ["locks"], message: "one reads it");
+    assert\equal(runner\pick(all, sel: runner\Selection{ only = null, paths = ["README.md"] }).value!.len(), want: 0, message: "none reads it");
+    assert\equal(runner\pick(all, sel: runner\Selection{ only = "workflows", paths = ["a.lock"] }).value!.len(), want: 0, message: "--only and a path it does not read");
+}
+
+test "with paths, only the findings at them and at a project holding them are kept" {
+    final found = [finding\Finding{ path = "a.lock" }, finding\Finding{ path = "b.lock" }, finding\Finding{ path = "libs/x" }, finding\Finding{ path = "." }];
+    assert\equal(runner\at(found, paths: [<str>]).len(), want: 4, message: "bare keeps all");
+    assert\equal(runner\at(found, paths: ["b.lock"]).map(fun (i: int, f: finding\Finding) > str => f.path), want: ["b.lock", "."], message: "the file and the root");
+    assert\equal(runner\at(found, paths: ["libs/x/a.go"]).len(), want: 2, message: "both projects hold it");
+    assert\equal(runner\at(found, paths: ["libs/xy/a.go"]).len(), want: 1, message: "a sibling sharing the prefix is outside libs/x");
+}
+
+test "every finding carries its analyzer's name and, when it sets none, its fix" {
+    final got = runner\run([each("always", files: ["*.lock"])], tree: runner\Tree{ files = ["x.lock", "y.txt"] }).value!.found;
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].analyzer, want: "always", message: "stamped");
+    assert\equal(got[0].path, want: "x.lock", message: "the matched file");
+    assert\equal(got[0].fix, want: "Fix it.", message: "the analyzer's fix");
+}
+
+test "a finding with no message, or no fix from either side, is refused at the analyzer's source" {
+    final a = analyzer\check("bare", tier: analyzer\Tier.mechanical, fix: "", source: "rules/bare.buzz", files: ["*.lock"], reach: analyzer\Reach.workspace,
+        run: fun (input: analyzer\Input) > [finding\Finding] !> any => [finding\Finding{ path = "x.lock" }, finding\Finding{ path = "x.lock", message = "m" }]);
+    final got = runner\run([a], tree: runner\Tree{ files = ["x.lock"] }).value!.found;
+    assert\equal(messages(got), want: [
+        "reported a finding at x.lock with no message",
+        "reported \"m\" at x.lock with no fix, and the analyzer declares none",
+    ], message: "both refused");
+    assert\equal(got[1].path, want: "rules/bare.buzz", message: "at the source");
+}
+
+test "a glob that matches nothing is a finding, and its analyzer does not run" {
+    final got = runner\run([each("absent", files: ["x.lock", "gone.json"])], tree: runner\Tree{ files = ["x.lock"] }).value!.found;
+    assert\equal(messages(got), want: ["reads gone.json, which matches no file in the tree"], message: "only the unmatched glob");
+    assert\equal(got[0].path, want: "rules/absent.buzz", message: "at the source");
+}
+
+test "a check that raises fails the run, naming the analyzer" {
+    final a = analyzer\check("raises", tier: analyzer\Tier.mechanical, fix: "f", source: "s.buzz", files: ["*.lock"], reach: analyzer\Reach.workspace,
+        run: fun (input: analyzer\Input) > [finding\Finding] !> any {
+            throw "boom";
+        });
+    final ran = runner\run([a], tree: runner\Tree{ files = ["x.lock"] });
+    assert\isTrue(ran.error!.message.startsWith("analyzers: raises"), message: ran.error!.message);
+}
+
+test "project reach calls check once per project with that project's settings" {
+    final a = analyzer\check("perproject", tier: analyzer\Tier.mechanical, fix: "f", source: "s.buzz", files: ["**/*.lock"], reach: analyzer\Reach.project,
+        run: fun (input: analyzer\Input) > [finding\Finding] !> any
+            => [finding\Finding{ path = input.project, message = "{input.files.len()} {input.settings["word"] ?? "none"}" }]);
+    final tree = runner\Tree{ files = ["a.lock", "libs/x/b.lock", "libs/x/c.lock", "libs/xy/d.lock"], projects = [".", "libs/x"],
+        policies = {"libs/x": {"perproject": policy\Policy{ settings = {"word": "x"} }}} };
+    assert\equal(messages(runner\run([a], tree: tree).value!.found), want: ["2 none", "2 x"], message: "the root holds libs/xy");
+    final whole = runner\run([each("whole", files: ["**/*.lock"])], tree: tree).value!.found;
+    assert\equal(whole.len(), want: 4, message: "workspace reach is one call over every file");
+}
+
+test "a judgment finding advises and the rest fail" {
+    final advice = analyzer\check("advice", tier: analyzer\Tier.judgment, fix: "f", source: "s.buzz", files: ["*.lock"], reach: analyzer\Reach.workspace, run: none);
+    final found = [finding\Finding{ analyzer = "advice", message = "a" }, finding\Finding{ analyzer = "hard", message = "b" }];
+    final report = runner\split(found, analyzers: [advice, each("hard", files: ["*.lock"])], ran: 2, timings: [<runner\Timing>]);
+    assert\equal(messages(report.failed), want: ["b"], message: "failed");
+    assert\equal(messages(report.advised), want: ["a"], message: "advised");
+}
+
+test "the plan refuses an analyzer listed twice, run and declined, or declined with no reason" {
+    final plan = analyzer\Plan{ own = [each("a", files: ["*"]), each("a", files: ["*"])],
+        decline = [analyzer\declined(each("a", files: ["*"]), reason: "why"), analyzer\declined(each("b", files: ["*"]), reason: " ")], walk = WALK };
+    assert\equal(messages(runner\planned(plan)), want: ["is listed twice", "is both run and declined", "is declined with no reason"], message: "plan");
+    assert\equal(runner\planned(analyzer\Plan{ own = [each("a", files: ["*"])], walk = WALK }).len(), want: 0, message: "a clean plan");
+}
+
+test "timings sort slowest first" {
+    final sorted = runner\slowestFirst([runner\Timing{ analyzer = "fast", ms = 1 }, runner\Timing{ analyzer = "slow", ms = 9 }, runner\Timing{ analyzer = "mid", ms = 4 }]);
+    assert\equal(sorted.map(fun (i: int, t: runner\Timing) > str => t.analyzer), want: ["slow", "mid", "fast"], message: "slowest first");
+}
+
+test "render names the position, message, analyzer and indented fix" {
+    assert\equal(finding\render(finding\Finding{ path = "a.lock", line = 3, analyzer = "r", message = "b follows c", fix = "Move it.\nSecond line." }),
+        want: "a.lock:3: b follows c [r]\n    Move it.\n    Second line.", message: "full");
+    assert\equal(finding\render(finding\Finding{ path = "a.lock", line = 3, col = 7, analyzer = "r", message = "m" }), want: "a.lock:3:7: m [r]", message: "column");
+    assert\equal(finding\render(finding\Finding{ path = "a.lock", analyzer = "r", message = "gone", url = "u" }), want: "a.lock: gone [r]\n    see: u", message: "no line");
+}
+
+test "a recorded run keeps one line per finding and marks a quiet analyzer ran" {
+    final report = runner\Report{ analyzers = 2, timings = [<runner\Timing>], advised = [<finding\Finding>],
+        failed = [finding\Finding{ path = "a.md", line = 3, analyzer = "banned-words", message = "m", fix = "f" }] };
+    final stamp = runner\Firing{ rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "", ts = 7, session = "s", commit = "c" };
+    final got = runner\firingsOf(report, ran: ["banned-words", "lockfiles-are-sorted"], at: stamp);
+    assert\equal(got.len(), want: 2, message: "a finding and a quiet analyzer");
+    assert\equal(got[0].decision, want: "deny", message: "the finding");
+    assert\equal(got[0].fingerprint, want: "lint/v1:ea581ab5bd37c1de", message: "fingerprint, pinned to rule-precision.buzz");
+    assert\equal(got[1].decision, want: "ran", message: "the quiet analyzer");
+    assert\equal(got[1].rule, want: "lockfiles-are-sorted", message: "its name");
+}
+
+final WALK = analyzer\Walk{ pruned = ["node_modules", "gen"], prunedPaths = [".claude/worktrees"],
+    keptPaths = ["docs/site/diagrams/gen"], keptIgnored = [".claude"] };
+
+test "the walk prunes what the plan leaves out" {
+    final root = fs\tempDir("analyzer-walk-");
+    foreach (p in ["a.lock", "gen/b.lock", "x/node_modules/c.lock", ".claude/worktrees/w/d.lock", ".claude/settings.json",
+                   "docs/site/diagrams/gen/e.buzz", ".magus/f"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    assert\equal(runner\walk(root, w: WALK).value!, want: [".claude/settings.json", "a.lock", "docs/site/diagrams/gen/e.buzz"], message: "three survive");
+}
+
+test "the walk skips what the VCS ignores and keeps a kept ignored tree" {
+    final root = fs\tempDir("analyzer-ignore-");
+    foreach (p in [".gitignore", "tracked.lock", "kept.lock", "installed/a.js", "stray.log", ".claude/skills/a/SKILL.md"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: if (p == ".gitignore") "installed/\n*.log\n/.claude/\n" else "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    _ = vcs\cmd(["add", "tracked.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    assert\equal(runner\walk(root, w: WALK).value!, want: [".claude/skills/a/SKILL.md", ".gitignore", "kept.lock", "tracked.lock"], message: "ignored dir and file skipped");
+}
+
+test "the walk leaves out a deleted tracked file and lists a directory before its dotted sibling" {
+    final root = fs\tempDir("analyzer-order-");
+    foreach (p in ["a.b", "a/c", "a-d", "gone.lock"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    _ = vcs\cmd(["add", "a.b", "gone.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    fs\remove(root + "/gone.lock");
+    assert\equal(runner\walk(root, w: WALK).value!, want: ["a/c", "a-d", "a.b"], message: "sorted names, depth first");
+}
+
+test "the listing selects what the per-directory walk selects, ignored tracked files and nested repositories included" {
+    final root = fs\tempDir("analyzer-parity-");
+    final files = [".gitignore", "plain", "keep.log", "ig/t.txt", "ig/u.txt", "stray.log", "kept.lock", "nest/g",
+                   "x/gen", "x/node_modules/r/f", ".claude/worktrees/w/f", ".claude/skills/a/SKILL.md"];
+    foreach (p in files) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: if (p == ".gitignore") "*.log\nig/\n" else "");
+    }
+    foreach (dir in ["", "/nest", "/x/node_modules/r", "/.claude/worktrees/w"]) {
+        _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root + dir, quiet = true });
+    }
+    _ = vcs\cmd(["add", "--force", ".gitignore", "plain", "keep.log", "ig/t.txt"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    final want = [".claude/skills/a/SKILL.md", ".gitignore", "kept.lock", "nest/g", "plain"];
+    assert\equal(runner\walk(root, w: WALK).value!, want: want, message: "one listing");
+    assert\equal(runner\walkDirectories(root, w: WALK).value!, want: want, message: "a directory at a time");
+}
+
+test "the policy reader keeps each analyzer's block and refuses an unknown key" {
+    final got = policy\parse("a:\n  settings:\n    word: x\n  baseline: []\nb:\nzones:\n  z: 1\n", path: "p/analyzers.yaml").value!;
+    assert\equal(got.keys().cloneMutable().sort(fun (l: str, r: str) > bool => l < r), want: ["a", "b"], message: "zones names no analyzer");
+    assert\equal(got["a"]!.settings["word"], want: "x", message: "settings");
+    assert\equal(policy\parse("a:\n  setting: 1\n", path: "p/analyzers.yaml").error!.message,
+        want: "p/analyzers.yaml: a.setting is not a policy key; an analyzer's block holds settings, baseline and exits", message: "a typo");
+    assert\equal(policy\parse("a: 3\n", path: "x").error!.message, want: "x: a is not a mapping of settings, baseline and exits", message: "a scalar block");
+    assert\equal(policy\parse("", path: "x").value!.len(), want: 0, message: "an empty file");
+}
+
+test "a project with no analyzers.yaml has no policy, and a file names its owner" {
+    final root = fs\tempDir("analyzer-policy-");
+    assert\equal(policy\read("libs/x", root: root).value!.len(), want: 0, message: "none means strict");
+    assert\equal(policy\file("."), want: "analyzers.yaml", message: "root");
+    assert\equal(policy\file("libs/x"), want: "libs/x/analyzers.yaml", message: "nested");
+    assert\equal(policy\owner("libs/x/y/a.go", projects: [".", "libs/x", "libs/x/y"]), want: "libs/x/y", message: "deepest");
+    assert\equal(policy\owner("libs/xy/a.go", projects: [".", "libs/x"]), want: ".", message: "a sibling sharing the prefix");
+}
+
+test "the adapter hands a rule its files as paths and its hints as fixes" {
+    final a = adapter\rule("old", tier: analyzer\Tier.mechanical, fix: "Generic.", source: "hack/lint/old.buzz", reads: ["*.lock"],
+        check: fun (files: [Path]) > [Finding] !> any
+            => files.map(fun (i: int, p: Path) > Finding => Finding{ path = p.value, rule = "other", message = "m", hint = if (i == 0) "h" else "" }));
+    final tree = runner\Tree{ files = ["a.lock", "libs/x/b.lock"], projects = [".", "libs/x"] };
+    assert\equal(runner\inputs(a, matched: tree.files, tree: tree).len(), want: 1, message: "a rule reads the whole workspace in one call");
+    final got = runner\run([a], tree: runner\Tree{ files = ["a.lock", "b.lock"] }).value!.found;
+    assert\equal(got.map(fun (i: int, f: finding\Finding) > str => "{f.analyzer} {f.path} {f.fix}"),
+        want: ["old a.lock h", "old b.lock Generic."], message: "stamped by the runner, hint as fix");
+}

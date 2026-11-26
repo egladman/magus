@@ -456,7 +456,7 @@ proofread:
     hack/lint/published-magus-is-built-first-and-verified-by-digest.buzz: {code-comment-sentence: 1}
     hack/lint/root-project-declares-the-configs-its-tools-read.buzz: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 1, comment-history: 1}
     hack/lint/rules-name-their-tier.buzz: {doc-path: 1}
-    hack/lint/run.buzz: {code-comment-budget: 1, code-comment-sentence: 7, comment-history: 1}
+    hack/lint/run.buzz: {code-comment-sentence: 1}
     hack/lint/sdk-exports.buzz: {code-comment-budget: 1, code-comment-sentence: 1, comment-history: 1}
     hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output.buzz: {code-comment-budget: 1, code-comment-sentence: 2}
     hack/lint/skill-renders-follow-markdown-and-description-budgets.buzz: {code-comment-budget: 2, code-comment-sentence: 4, doc-path: 1}
@@ -1054,7 +1054,7 @@ proofread:
     internal/guard/heartbeat.go: {code-comment-budget: 5, code-comment-sentence: 8}
     internal/guard/heartbeat_test.go: {provenance: 1}
     internal/guard/heredoc.go: {code-comment-budget: 4, code-comment-sentence: 4}
-    internal/guard/hook_checkout.go: {code-comment-budget: 2, code-comment-sentence: 2, doc-path: 1}
+    internal/guard/hook_checkout.go: {code-comment-budget: 1, code-comment-sentence: 1}
     internal/guard/hook_checkout_test.go: {code-comment-sentence: 1}
     internal/guard/hook_deps.go: {code-comment-budget: 4, code-comment-sentence: 8}
     internal/guard/hook_deps_test.go: {code-comment-sentence: 1}
@@ -2377,7 +2377,6 @@ proofread:
     types/exec_cost_test.go: {code-comment-budget: 1}
     types/exit.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 2}
     types/feedback/feedback.go: {code-comment-sentence: 3}
-    types/gate_waiver.go: {code-comment-sentence: 1}
     types/graph.go: {code-comment-budget: 2, code-comment-sentence: 2, comment-caps: 2}
     types/graph_request.go: {code-comment-sentence: 1}
     types/grouping.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-history: 1, doc-path: 1}
@@ -2445,7 +2444,6 @@ proofread:
     types/vcs_test.go: {code-comment-sentence: 1, comment-caps: 3, comment-history: 1}
     types/version.go: {code-comment-budget: 3, code-comment-sentence: 4}
     types/volatility.go: {code-comment-budget: 1, code-comment-sentence: 2, doc-path: 1}
-    types/work_item.go: {comment-history: 1}
     types/workspace.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 1}
     types/workspace_test.go: {comment-caps: 1}
     vcs/checkpoint.go: {code-comment-budget: 4, code-comment-sentence: 10, comment-caps: 7}
