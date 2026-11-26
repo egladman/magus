@@ -1569,16 +1569,41 @@ export object Citation {
     note: str = "",
 }
 
-// citedRun judges the run ref names in this checkout's output store. A `grd` ref is a guard
-// verdict, not a run, and never reaches here. A lookup that fails for any reason but the
-// store lacking ref says nothing about the author's runs, so it fails open with a note, as
-// a rule that raises does.
+// citedRun judges the run ref names in this checkout's output store, then in the runs a
+// passed job row recorded. A `grd` ref is a guard verdict, not a run. Any other failed
+// lookup says nothing about the author's runs, so it fails open with a note.
 export fun citedRun(ref: str) > Citation {
     try {
         return Citation{ problem = runProblem(ref, run: magus\output(ref)) };
     } catch (e) {
-        return lookupFailed(ref, code: thrownField(e, name: "code"), message: thrownField(e, name: "message"));
+        final code = thrownField(e, name: "code");
+        if (code == unknownRef) {
+            return Citation{ problem = runProblem(ref, run: verifiedRun(ref)) };
+        }
+        return lookupFailed(ref, code: code, message: thrownField(e, name: "message"));
     }
+}
+
+// verifiedRun is the run a passed job row recorded under ref, or null. The row outlives
+// its checkout, so another checkout's ref is real. An unreadable list holds none.
+fun verifiedRun(ref: str) > magus\OutputRecord? {
+    final list = magus\workspace().jobs() catch magus\JobList{};
+    return recordedRun(list, ref: ref);
+}
+
+// recordedRun is verifiedRun over list.
+fun recordedRun(list: magus\JobList, ref: str) > magus\OutputRecord? {
+    foreach (job in list.jobs) {
+        if (job.state != magus\JobState.pass) {
+            continue;
+        }
+        foreach (pa in job.postconditionAttempts) {
+            if (pa.attempt.found and pa.attempt.ref == ref) {
+                return magus\OutputRecord{ ref = ref, project = pa.attempt.project, target = pa.attempt.target, failed = pa.attempt.failed };
+            }
+        }
+    }
+    return null;
 }
 
 // lookupFailed is citedRun's verdict when looking ref up raised code and message.
@@ -2348,6 +2373,17 @@ test "a cited ref the store lacks is denied and a lookup that failed is advised"
     std\assert(broken.note.indexOf("`out1a2b3c4d5e6f` went unchecked") != null and broken.note.indexOf("permission denied") != null, message: broken.note);
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: fun (ref: str) > Citation => lookupFailed(ref, code: "", message: "magus\\output: open outputs: permission denied"));
     std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("went unchecked") != null, message: "{v.decision}: {v.reason}");
+}
+
+test "a ref a passed job row recorded is a run, one no row holds is not" {
+    final attempt = magus\JobAttempt{ found = true, ref = "out1a2b3c4d5e6f", project = "libs/cache", target = "go-test" };
+    final held = [magus\JobPostconditionAttempt{ postconditionID = "check", attempt = attempt }];
+    final pass = magus\Job{ id = "a", state = magus\JobState.pass, postconditionAttempts = held };
+    final open = magus\Job{ id = "b", state = magus\JobState.running, postconditionAttempts = held };
+    final found = recordedRun(magus\JobList{ jobs = [open, pass] }, ref: "out1a2b3c4d5e6f");
+    std\assert(found != null and found!.project == "libs/cache" and found!.target == "go-test" and !found!.failed, message: "pass row");
+    std\assert(recordedRun(magus\JobList{ jobs = [open] }, ref: "out1a2b3c4d5e6f") == null, message: "unverified row");
+    std\assert(recordedRun(magus\JobList{ jobs = [pass] }, ref: "out999999999999") == null, message: "other ref");
 }
 
 test "CI skips the cited refs a checkout cannot hold" {
