@@ -25,21 +25,15 @@ func (s *Store) noteNoAuthority(row job.Job) {
 	fmt.Fprintf(out, "job: %s records no authority, so the guard refuses its holder's work: %s\n", row.ID, cause)
 }
 
-// committedRevision is the full revision of the store's checkout HEAD, or ""
-// where no checkout or version control answers.
+// committedRevision is the authority a fork records: the checkout's HEAD, with
+// a dirty-patch digest when the tree is dirty. It is "" where no checkout or
+// version control answers.
 func (s *Store) committedRevision(ctx context.Context) string {
-	if s.root == "" {
-		return ""
-	}
-	driver, _ := resolveDriver(ctx, s.root)
-	if driver == nil {
-		return ""
-	}
-	head, err := driver.FindCommit(ctx, s.root, "")
+	token, err := s.CheckoutToken(ctx)
 	if err != nil {
 		return ""
 	}
-	return head.ID
+	return token
 }
 
 // AdvanceAuthority moves row id's Authority to the store checkout's HEAD and

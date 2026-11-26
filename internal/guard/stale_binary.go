@@ -79,10 +79,25 @@ func judgedContract(ctx context.Context, at location, lease, root string) (contr
 	}
 	// lease-authority refuses a row with no authority.
 	row, ok := leaseRow(ctx, at, lease)
-	if !ok || row.Authority == "" {
+	if !ok || pinnedAuthority(row) == "" {
 		return contract.Check(root)
 	}
 	return authorityContract(ctx, root, row.Authority)
+}
+
+// pinnedAuthority is the authority row pins its calls to, "" for none. Only a
+// declared or running row pins, so an ended id can be forked at a newer commit.
+func pinnedAuthority(row job.Job) string {
+	if row.State != job.StateDeclared && row.State != job.StateRunning {
+		return ""
+	}
+	return row.Authority
+}
+
+// authorityRevision is the part of an authority version control resolves.
+func authorityRevision(pinned string) string {
+	revision, _ := types.ParseCheckpointToken(pinned)
+	return revision
 }
 
 // currentTreeAtOtherAuthority requires both digests. An unreadable working
@@ -120,11 +135,13 @@ func authorityRecovery(ctx context.Context, at location, lease, revision string)
 // judgment reuses it. A failed read is never kept.
 var authorityTrees sync.Map
 
-type authorityKey struct{ root, rev string }
+type authorityKey struct{ root, pinned string }
 
-// authorityContract is the binary's contract against root at rev.
-func authorityContract(ctx context.Context, root, rev string) (contract.Skew, error) {
-	key := authorityKey{root: root, rev: rev}
+// authorityContract is the binary's contract against root at an authority,
+// kept by the whole value so a dirty patch is its own entry.
+func authorityContract(ctx context.Context, root, pinned string) (contract.Skew, error) {
+	rev := authorityRevision(pinned)
+	key := authorityKey{root: root, pinned: pinned}
 	if kept, ok := authorityTrees.Load(key); ok {
 		if tree, ok := kept.(string); ok {
 			bin, err := contract.Binary()

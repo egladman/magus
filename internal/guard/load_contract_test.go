@@ -117,7 +117,7 @@ func (s *AuthorityContractSuite) commit(msg string) string {
 // authority.
 func (s *AuthorityContractSuite) at(authority string) location {
 	return location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir(),
-		rows: authorityRows{{ID: "worker", Authority: authority, CheckoutRoot: s.root}}}
+		rows: authorityRows{{ID: "worker", State: job.StateRunning, Authority: authority, CheckoutRoot: s.root}}}
 }
 
 func (s *AuthorityContractSuite) deny(lease, authority string) string {
@@ -175,6 +175,37 @@ func (s *AuthorityContractSuite) TestTheHolderEndsOrAwaitsARowAtAnotherContract(
 	}
 }
 
+// A row pins the contract its call is judged by only while it is declared or
+// running. An id forked again at a newer commit must not stay refused under the
+// commit its ended row recorded.
+func (s *AuthorityContractSuite) TestAnEndedRowPinsNothing() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	s.deps.lease = "worker"
+	for _, state := range []job.State{job.StatePass, job.StateFail, job.StateNoReturn, job.StateExited} {
+		at := s.at(moved)
+		at.rows = authorityRows{{ID: "worker", State: state, Authority: moved, CheckoutRoot: s.root}}
+		s.Empty(denyContractSkew(s.T().Context(), s.deps, at, "touch notes.txt", DialectBash), string(state))
+	}
+	s.NotEmpty(denyContractSkew(s.T().Context(), s.deps, s.at(moved), "touch notes.txt", DialectBash), "a running row stays pinned")
+}
+
+func TestOnlyALiveRowPinsItsAuthorityRevision(t *testing.T) {
+	for state, want := range map[job.State]string{
+		job.StateDeclared: "abc", job.StateRunning: "abc",
+		job.StateExited: "", job.StatePass: "", job.StateFail: "", job.StateNoReturn: "",
+	} {
+		got := authorityRevision(pinnedAuthority(job.Job{State: state, Authority: "abc+digest"}))
+		assert.Equal(t, want, got, string(state))
+	}
+}
+
+// A fork records a checkpoint token, a revision plus the dirty-patch digest,
+// and the contract is read at its revision half.
+func (s *AuthorityContractSuite) TestAnAuthorityTokenIsReadAtItsRevision() {
+	s.Empty(s.deny("worker", s.authority+"+0123456789abcdef"))
+}
+
 func (s *AuthorityContractSuite) TestAnUnreadableAuthorityIsRefused() {
 	s.Contains(s.deny("worker", "0123456789abcdef0123456789abcdef01234567"), "cannot read the contract")
 }
@@ -184,7 +215,7 @@ func (s *AuthorityContractSuite) TestRecoveryNamesTheJobCheckoutWhenTheCallLands
 	carryOwnContract(s.T(), s.root)
 	checkout := s.T().TempDir()
 	at := s.at(moved)
-	at.rows = authorityRows{{ID: "worker", Authority: moved, CheckoutRoot: checkout}}
+	at.rows = authorityRows{{ID: "worker", State: job.StateRunning, Authority: moved, CheckoutRoot: checkout}}
 	s.deps.lease = "worker"
 	reason := denyContractSkew(s.T().Context(), s.deps, at, "./magus job advance worker", DialectBash)
 	summary, _, _ := strings.Cut(reason, "\n")

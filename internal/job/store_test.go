@@ -1777,6 +1777,15 @@ func (s *authoritySuite) TestARootForkRecordsTheRootCheckoutsCommittedRevision()
 	s.Equal(s.repo.Head(), stored.Authority)
 }
 
+func (s *authoritySuite) TestAForkFromADirtyTreeRecordsTheRevisionAndPatchDigest() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), "dirty.txt"), []byte("x\n"), 0o644))
+	stored, err := s.fork(NewStore(s.loc), job.Job{ID: "a", Paths: job.Paths{Write: []string{"a.go"}}})
+	s.Require().NoError(err)
+	revision, digest := types.ParseCheckpointToken(stored.Authority)
+	s.Equal(s.repo.Head(), revision)
+	s.NotEmpty(digest)
+}
+
 func (s *authoritySuite) TestNeitherADeclaredCheckpointNorASentAuthoritySetsIt() {
 	head := s.repo.Head()
 	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
