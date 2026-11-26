@@ -830,6 +830,9 @@ fun rename(p: Push, name: str, current: str) > str {
     if (p.tool == "gh" and p.source != "") {
         return "  git branch -m {pushed} {served}\n  git push -u {remote} {served}\n  then open the pull request with --head {served}";
     }
+    if (p.tool == "git" and p.source != "" and p.source != "HEAD") {
+        return "  git push {remote} {shellWord(p.source + ":refs/heads/" + name)}";
+    }
     if (p.tool == "git" or p.tool == "gh") {
         // First: `gh pr create --head` reads the local branch of that name.
         if (current != "" and current != name) {
@@ -1263,4 +1266,11 @@ test "a host-generated suffix or claude prefix is refused with the rename comman
     final hexed = decideNames(helpers\vcsRequest([["git", "push", "origin", "HEAD:practical-gates-5ccb26"]]), current: "x", remote: remote([<str>]), topic: practical, once: helpers\counter());
     std\assert(hexed.decision == magus\GuardDecision.deny, message: hexed.reason);
     std\assert(verdictRules(judgeName("sha256-sums", topic: unknownTopic())).len() == 0, message: "an ordinary name");
+}
+
+test "a sha refspec push names the pushed commit and leaves the checkout's branch alone" {
+    final sha = decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/practical-gates-5ccb26"]]), current: "hook-lease", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(sha.decision == magus\GuardDecision.deny, message: sha.reason);
+    std\assert(sha.reason.indexOf("git push origin bafc60786:refs/heads/") != null, message: "names the commit and ref: {sha.reason}");
+    std\assert(sha.reason.indexOf("git branch -m") == null, message: "does not rename the checkout's branch: {sha.reason}");
 }
