@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -241,17 +243,9 @@ func projectLabel(ws types.WorkspaceRepository, path string) string {
 	return types.ProjectLabel(path, "")
 }
 
-// currentWorkingDirectoryAnchor returns cwd as a slash path relative to root, the anchor for
-// resolving relative project args. It falls back to "." (the workspace root)
-// when cwd is empty, cannot be made relative to root, or lies OUTSIDE it.
-//
-// That last case is what `--root <path>` selects: the caller is standing
-// somewhere else, and filepath.Rel happily hands back a "../.."-prefixed path,
-// which every relative project ref then inherits and fails the escape check on.
-// `magus --root <ws> run build .` reported `project path "." escapes workspace
-// root from "../<dir>"` for exactly that reason. A relative ref is measured from
-// the workspace the caller NAMED, so an outside cwd contributes nothing to it.
-// A cwd inside the workspace is untouched, which is every invocation without --root.
+// currentWorkingDirectoryAnchor is cwd relative to root, the anchor for relative project
+// args, or "." when cwd lies outside root or in another checkout nested under it. A ref
+// is measured from the workspace --root named.
 func currentWorkingDirectoryAnchor(root, cwd string) string {
 	if cwd == "" {
 		return "."
@@ -259,13 +253,27 @@ func currentWorkingDirectoryAnchor(root, cwd string) string {
 	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
 		cwd = resolved
 	}
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	rel, err := filepath.Rel(root, cwd)
 	if err != nil {
 		return "."
 	}
 	rel = filepath.ToSlash(rel)
-	if rel == ".." || strings.HasPrefix(rel, "../") {
+	if rel == ".." || strings.HasPrefix(rel, "../") || inNestedCheckout(root, rel) {
 		return "."
 	}
 	return rel
+}
+
+// inNestedCheckout reports rel, a slash path under root, inside a directory below root
+// that holds its own .git.
+func inNestedCheckout(root, rel string) bool {
+	for dir := rel; dir != "." && dir != "/"; dir = path.Dir(dir) {
+		if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(dir), ".git")); err == nil {
+			return true
+		}
+	}
+	return false
 }
