@@ -109,8 +109,10 @@ func (s *testSelectionSuite) TestForwardingTargetWithNeedsReadsDeclaredDialect()
 	s.Equal("go", dialect)
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	s.Empty(narrowedTestProblems(store, job.Job{ID: "scoped", Paths: job.Paths{Write: []string{"pkg/a.go"}},
-		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}})}), "scoped to the written package")
+	s.Len(narrowedTestProblems(store, job.Job{ID: "scoped", Paths: job.Paths{Write: []string{"pkg/a.go"}},
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}})}), 1, "scoped to the written package, -run still leaves tests out")
+	s.Empty(narrowedTestProblems(store, job.Job{ID: "whole", Paths: job.Paths{Write: []string{"pkg/a.go"}},
+		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg"}})}), "the written package unnarrowed")
 	s.Len(narrowedTestProblems(store, job.Job{ID: "unscoped", Paths: job.Paths{Write: []string{"pkg/a.go"}},
 		Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"-run", "Alpha"}})}), 1, "-run alone still leaves tests out")
 }

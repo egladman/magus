@@ -645,7 +645,7 @@ func (s *lintPostconditionArgsSuite) args(project, sources string, write ...stri
 	}
 	projects := []*types.Project{lintable("."), lintable("libs/kit")}
 	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
-	got, notes := lintPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
+	got, notes := derivedCheckPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
 	for _, p := range got {
 		if p.Check.Project == project {
 			return p.Check.Args, notes
@@ -714,7 +714,7 @@ func (s *testPostconditionSuite) module(path string, chain ...string) *types.Pro
 
 func (s *testPostconditionSuite) derive(check types.LeaseCheck, projects ...*types.Project) ([]types.Postcondition, []string) {
 	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"libs/kit/session/session.go"}}, Check: fixtureCheck(check)}
-	return lintPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
+	return derivedCheckPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
 }
 
 func (s *testPostconditionSuite) TestAWrittenModuleGetsItsTestScopedToWhatItWrote() {
@@ -733,6 +733,52 @@ func (s *testPostconditionSuite) TestACheckThatTestsTheModuleAlreadyGetsNone() {
 	got, _ := s.derive(types.LeaseCheck{Target: "test", Project: "libs/kit"}, s.module(".", "test"), s.module("libs/kit", "test"))
 
 	s.Empty(got)
+}
+
+func (s *testPostconditionSuite) TestACheckOverExactlyTheWrittenOperandsGetsNone() {
+	got, _ := s.derive(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session"}}, s.module(".", "test"), s.module("libs/kit", "test"))
+
+	s.Empty(got)
+}
+
+// requireFloor derives with check as the row's own and requires the unnarrowed test
+// postcondition of libs/kit among the result.
+func (s *testPostconditionSuite) requireFloor(check types.LeaseCheck, projects ...*types.Project) {
+	if len(projects) == 0 {
+		projects = []*types.Project{s.module(".", "test"), s.module("libs/kit", "test")}
+	}
+	got, _ := s.derive(check, projects...)
+
+	i := slices.IndexFunc(got, func(p types.Postcondition) bool { return p.Derived && p.Check.Target == "go::go-test" })
+	s.Require().GreaterOrEqual(i, 0, "postconditions: %v", got)
+	s.Equal(types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session"}}, got[i].Check)
+}
+
+func (s *testPostconditionSuite) TestACheckNarrowedByRunLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session", "-run", "TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestACheckNarrowedBySkipLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session", "-skip", "TestTwo"}})
+}
+
+func (s *testPostconditionSuite) TestTheQualifiedOpNarrowedLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session", "-run=TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestACheckOverNarrowerOperandsLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./other"}})
+}
+
+func (s *testPostconditionSuite) TestAChainMemberNarrowedLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "test", Project: "libs/kit", Args: []string{"-run", "TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestArgsForwardedThroughAnotherProjectsChainLeaveTheFloor() {
+	root := s.module(".", "test")
+	root.TargetChains["ci"] = append(root.TargetChains["ci"], types.ChainStep{Project: "libs/kit", Target: "test"})
+
+	s.requireFloor(types.LeaseCheck{Target: "ci", Project: ".", Args: []string{"./session"}}, root, s.module("libs/kit", "test"))
 }
 
 func (s *testPostconditionSuite) TestAChainInvokingNoTestOpGetsNoneAndSaysSo() {

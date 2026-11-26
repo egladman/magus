@@ -36,9 +36,6 @@ import (
 // nothing about Go tests. A pattern that does not
 // compile is left to go test, which refuses it itself. The paths are relative to the
 // store's workspace root; a nil store, or one with no root, has no tree to read.
-//
-// A check naming exactly the packages of the write paths ([scopedToWritePackages]) may
-// narrow their tests too: the integration that merges the job runs the full go-test.
 func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
@@ -50,7 +47,7 @@ func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 	var ps types.JobProblems
 	for _, gc := range checks {
 		g := gc.Postcondition
-		if g.Kind != job.PostconditionKindCheck || scopedToWritePackages(store.root, gc.Check, row.Paths.Write, store.testSelection()) {
+		if g.Kind != job.PostconditionKindCheck {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
@@ -147,12 +144,11 @@ func summarizeTests(names []string) string {
 }
 
 // widenRunFix is the advice for tests -run leaves out.
-// Naming every written package scopes the run, so -run may narrow inside it.
 func widenRunFix(runArg string, notRun []string) string {
 	if covering := fmt.Sprintf("%s|%s", runArg, exactTestPattern(notRun)); len(covering) <= maxPastedPattern {
-		return fmt.Sprintf("widen -run to `%s`, drop -run, or name every written package (`./<dir>`) beside it", covering)
+		return fmt.Sprintf("widen -run to `%s` or drop -run", covering)
 	}
-	return "drop -run, or name every written package (`./<dir>`) beside it, since the tests it leaves out are too many for one pattern"
+	return "drop -run, since the tests it leaves out are too many for one pattern"
 }
 
 // narrowSkipFix is widenRunFix for the tests -skip drops.
@@ -411,41 +407,6 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 	}
 	sel, ok := star.X.(*ast.SelectorExpr)
 	return ok && sel.Sel.Name == "T"
-}
-
-// scopedToWritePackages reports whether check is a go test naming exactly the packages of
-// writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
-// one of them is named.
-func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string, selection testSelection) bool {
-	if root == "" || !selection.goTests(check) {
-		return false
-	}
-	patterns := goTestPackages(check.Args)
-	var dirs []string
-	for _, p := range writePaths {
-		dirs = append(dirs, writePathDirs(root, p)...)
-	}
-	if len(patterns) == 0 || len(dirs) == 0 {
-		return false
-	}
-	names := func(pattern, dir string) bool {
-		pattern = path.Clean(pattern)
-		if tree, ok := strings.CutSuffix(pattern, "/..."); ok {
-			return job.CoversPath(tree, dir) || tree == "."
-		}
-		return pattern == dir
-	}
-	for _, pattern := range patterns {
-		if !slices.ContainsFunc(dirs, func(d string) bool { return names(pattern, d) }) {
-			return false
-		}
-	}
-	for _, d := range dirs {
-		if !slices.ContainsFunc(patterns, func(p string) bool { return names(p, d) }) {
-			return false
-		}
-	}
-	return true
 }
 
 // goTestBoolFlags are the go test and go build flags that take no value, so the argument

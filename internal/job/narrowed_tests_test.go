@@ -388,10 +388,9 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
 }
 
-// A check scoped to the packages of the write paths leaves the rest of the suite to the
-// integration's full go-test, so it may narrow those packages' tests too. Scoped to a
-// package outside them, or leaving one of them out, it is still refused.
-func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
+// A check naming exactly the write paths' packages may not narrow their tests. Such a
+// check is how a worker would run only the test it chose.
+func TestNarrowedTestsRefuseAWritePackageScopedCheckThatNarrows(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
@@ -404,9 +403,11 @@ func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
 		return out
 	}
 
-	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg", "-run", "Alpha"), "the package plus -run")
-	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg/...", "-run", "Alpha"), "the package as a pattern")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./pkg", "-run", "Alpha"), "the package plus -run")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./pkg/...", "-run", "Alpha"), "the package as a pattern")
+	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./pkg", "-skip", "Beta"), "the package minus -skip")
 	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg"), "the package alone")
+	assert.Empty(t, refused([]string{"pkg/a.go"}, "./pkg", "-run", "Alpha|Beta|Gamma"), "a pattern covering every test")
 	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go"}, "./other", "-run", "Alpha"), "a package outside the write paths")
 	assert.Equal(t, []string{"MGS3040 check"}, refused([]string{"pkg/a.go", "nested/x/deep.go"}, "./pkg", "-run", "Alpha"),
 		"a write path's package the check leaves out")

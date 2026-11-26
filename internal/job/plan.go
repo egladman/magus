@@ -560,7 +560,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 	paths := append(slices.Clone(probe.Paths.Write), placed...)
 	if ws, why := store.loadedWorkspace(); why == "" {
 		probe.Postconditions, probe.Paths.Write = postconditions, paths
-		if added, notes := lintPostconditions(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
+		if added, notes := derivedCheckPostconditions(ctx, store.root, probe, ws, store.checkGrader()); len(added) > 0 {
 			modules := make([]job.Postcondition, len(added))
 			for i, g := range added {
 				m, err := g.Module()
@@ -578,8 +578,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 				fmt.Fprintf(out, "job: %s: %s\n", id, n)
 			}
 			for _, g := range added {
-				fmt.Fprintf(out, "job: %s: added the postcondition %q: the %s target of %s reads %d written file(s) (%s) and no check or postcondition runs it\n",
-					id, g.ID, g.Check.Target, g.Check.Project, len(g.Check.Args), strings.Join(g.Check.Args, " "))
+				fmt.Fprintf(out, "job: %s: %s\n", id, derivedNotice(g))
 			}
 		}
 	}
@@ -587,6 +586,22 @@ func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, 
 		merge(u)
 		u.Postconditions, u.Paths.Write = postconditions, paths
 	}, nil
+}
+
+// derivedNotice says why a fork added g. A lint postcondition reads written files; a test
+// postcondition tests its operands, which are packages or dirs, not the files.
+func derivedNotice(g types.Postcondition) string {
+	c := g.Check
+	if c.Target == lintTarget {
+		return fmt.Sprintf("added the postcondition %q: the %s target of %s reads %d written file(s) (%s) and no check or postcondition runs it",
+			g.ID, c.Target, c.Project, len(c.Args), strings.Join(c.Args, " "))
+	}
+	if len(c.Args) == 0 {
+		return fmt.Sprintf("added the postcondition %q: %s tests the whole of %s, which owns a written file, and no check or postcondition runs it unnarrowed",
+			g.ID, c.Target, c.Project)
+	}
+	return fmt.Sprintf("added the postcondition %q: %s tests %d operand(s) of %s (%s) and no check or postcondition runs it over them unnarrowed",
+		g.ID, c.Target, len(c.Args), c.Project, strings.Join(c.Args, " "))
 }
 
 // PlaceDerivedClaims holds the claims [ResolveSymbolPostconditions] derived to the one rule every

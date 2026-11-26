@@ -221,9 +221,9 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintPostconditions is every check postcondition a fork derives: the lint ones
+// derivedCheckPostconditions is every check postcondition a fork derives: the lint ones
 // ([lintOverWritten]), then each owning project's tests ([testPostconditions]).
-func lintPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) ([]types.Postcondition, []string) {
+func derivedCheckPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) ([]types.Postcondition, []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
 	}
@@ -244,7 +244,8 @@ func testPostconditions(root string, row job.Job, ws Workspace, written []string
 		byPath[p.Path] = p
 	}
 	lookup := func(path string) *types.Project { return byPath[path] }
-	run := runTargets(row, lookup)
+	// A row whose checks do not read runs nothing, so every floor is derived.
+	checks, _ := effectiveChecks(row)
 	taken := map[string]bool{}
 	for _, g := range row.EffectivePostconditions() {
 		taken[g.ID] = true
@@ -267,8 +268,8 @@ func testPostconditions(root string, row job.Job, ws Workspace, written []string
 			notes = append(notes, fmt.Sprintf("no test postcondition for %s: no target of its ci chain invokes %s", scope.Project, scope.Op))
 			continue
 		}
-		if run[types.ChainVisit{Project: p, Target: types.Normalize(op)}.Key()] ||
-			slices.ContainsFunc(members, func(m string) bool { return run[types.ChainVisit{Project: p, Target: m}.Key()] }) {
+		runs := append([]string{types.Normalize(op)}, members...)
+		if slices.ContainsFunc(checks, func(gc postconditionCheck) bool { return testsUnnarrowed(ws, gc, p, runs, scope, lookup) }) {
 			continue
 		}
 		postcondition := unrunPostcondition(p.Path, scope.Op, taken)
@@ -285,6 +286,56 @@ func testPostconditions(root string, row job.Job, ws Workspace, written []string
 		postconditions = append(postconditions, graded)
 	}
 	return postconditions, notes
+}
+
+// testsUnnarrowed reports whether gc runs one of p's test runs over all of scope. A flag may
+// select tests, and args forwarded through another target's chain reach an unknown op, so
+// either leaves the floor in place.
+func testsUnnarrowed(ws Workspace, gc postconditionCheck, p *types.Project, runs []string, scope TestScope, lookup func(string) *types.Project) bool {
+	g := gc.Check
+	if gc.Postcondition.Kind != job.PostconditionKindCheck || g.Script != "" || g.Target == "" {
+		return false
+	}
+	names := []string{g.Target}
+	if _, tail, ok := strings.Cut(g.Target, "::"); ok {
+		names = append(names, tail)
+	}
+	from := lookup(cmp.Or(g.Project, "."))
+	reached := false
+	for _, name := range names {
+		if err := types.WalkChain(from, name, lookup, func(v types.ChainVisit) error {
+			reached = reached || (v.Project == p && slices.Contains(runs, v.Target))
+			return nil
+		}); err != nil {
+			return false
+		}
+	}
+	if !reached {
+		return false
+	}
+	if len(g.Args) == 0 {
+		return true
+	}
+	direct := from == p && slices.ContainsFunc(names, func(n string) bool { return slices.Contains(runs, types.Normalize(n)) })
+	if !direct || slices.ContainsFunc(g.Args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
+		return false
+	}
+	// Only go test reads `dir/...` as every package under dir.
+	dialect, known := resolvedTestSelection(ws, g)
+	trees := known && dialect == "go"
+	covers := func(arg, operand string) bool {
+		if tree, ok := strings.CutSuffix(arg, "/..."); ok && trees {
+			tree = path.Clean(tree)
+			return tree == "." || job.CoversPath(tree, path.Clean(operand))
+		}
+		return path.Clean(arg) == path.Clean(operand)
+	}
+	if scope.Whole != "" {
+		return trees && slices.Contains(g.Args, "./...")
+	}
+	return len(scope.Operands) > 0 && !slices.ContainsFunc(scope.Operands, func(o string) bool {
+		return !slices.ContainsFunc(g.Args, func(a string) bool { return covers(a, o) })
+	})
 }
 
 // wholeWins folds the scopes of one project's one test op into one. A group that cannot

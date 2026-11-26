@@ -1532,3 +1532,29 @@ func (s *applyDroppedPostconditionsSuite) TestDroppingPostconditionsWithoutRelea
 func (s *applyDroppedPostconditionsSuite) TestNarrowingWithThePostconditionsKeptIsAccepted() {
 	s.Require().NoError(s.apply(s.record([]string{"notes/a.txt"}, "keep-a", "keep-b")))
 }
+
+type derivedNoticeSuite struct {
+	suite.Suite
+}
+
+func TestDerivedNotice(t *testing.T) { suite.Run(t, new(derivedNoticeSuite)) }
+
+func (s *derivedNoticeSuite) TestALintPostconditionReadsTheWrittenFiles() {
+	got := derivedNotice(types.Postcondition{Postcondition: job.Postcondition{ID: "lint"}, Check: types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go", "b.go"}}})
+
+	s.Equal(`added the postcondition "lint": the lint target of . reads 2 written file(s) (a.go b.go) and no check or postcondition runs it`, got)
+}
+
+func (s *derivedNoticeSuite) TestATestPostconditionTestsItsOperands() {
+	got := derivedNotice(types.Postcondition{Postcondition: job.Postcondition{ID: "go-go-test-libs-kit"}, Check: types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session"}}})
+
+	s.Equal(`added the postcondition "go-go-test-libs-kit": go::go-test tests 1 operand(s) of libs/kit (./session)`+
+		` and no check or postcondition runs it over them unnarrowed`, got)
+}
+
+func (s *derivedNoticeSuite) TestATestPostconditionWithNoOperandsTestsTheWholeProject() {
+	got := derivedNotice(types.Postcondition{Postcondition: job.Postcondition{ID: "go-go-test"}, Check: types.LeaseCheck{Target: "go::go-test", Project: "."}})
+
+	s.Equal(`added the postcondition "go-go-test": go::go-test tests the whole of ., which owns a written file,`+
+		` and no check or postcondition runs it unnarrowed`, got)
+}
