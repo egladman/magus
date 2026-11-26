@@ -327,3 +327,24 @@ try {
 		})
 	}
 }
+
+// Docs render as `///` lines. A variadic method's doc opens with its Buzz
+// signature, and a namespace member's doc is indented with it.
+func (s *ModuleDeclsSuite) TestDocsRenderAsTripleSlashLines() {
+	mod := std.Module{
+		Name: "probe",
+		Doc:  "Probe module.\n\nSecond paragraph.",
+		Methods: []std.Method{
+			{Name: "plain", Doc: "Does a thing.", Args: []std.Arg{{Name: "x", Type: std.TypeString}}},
+			{Name: "join", Doc: "Joins parts.", Args: []std.Arg{{Name: "parts", Type: std.TypeString, Variadic: true}}},
+		},
+		Namespaces: []std.Namespace{{Name: "ns", Methods: []std.Method{{Name: "go", Doc: "Goes."}}}},
+	}
+	src, err := renderModuleDecls(mod)
+	s.Require().NoError(err)
+	s.Contains(src, "/// Does a thing.\nexport extern fun plain(")
+	s.Contains(src, fmt.Sprintf("/// %s\n/// Joins parts.\n", std.BuzzSignature(mod, mod.Methods[1])))
+	s.Contains(src, "    /// Goes.\n    static extern fun go(")
+	s.Equal("/// Probe module.\n///\n/// Second paragraph.\n", docComment(mod.Doc))
+	s.Empty(docComment(""))
+}
