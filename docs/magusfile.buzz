@@ -224,7 +224,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("libs/**/*.go"), workspace\file("libs/**/go.mod"), workspace\file("libs/**/go.sum"),
         workspace\file("go.mod"), workspace\file("go.sum"), workspace\file("go.work"), workspace\file("go.work.sum"),
         workspace\file("spells/**"),
-        workspace\file("std/lib/*.buzz"), workspace\file("internal/spell/**/*.buzz"),
+        workspace\file("std/lib/*.buzz"), workspace\file("internal/**/*.buzz"),
         workspace\file("internal/queue/provider/*.buzz"),
         workspace\file("internal/selfupdate/release-keys.json"), workspace\file("internal/textrank/weights.json"),
         workspace\file("libs/embed/testdata/probe.txt"), workspace\file("internal/agent/agents/**"),

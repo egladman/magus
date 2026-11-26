@@ -94,17 +94,43 @@ liveLeases is each checkout's live jobs as "<id> (<state>)". Exited counts as li
 
 **Returns:** {str:[str]}
 
+### ownedRoots
+
+ownedRoots are the dirs whose worktrees a reclaim may remove: magus's checkouts under the
+
+**Signature:** `reclaimdisk\ownedRoots(include) -> [str]`
+
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `include` | `[str]` |          |             |
+
+**Returns:** [str]
+
+### owns
+
+owns says whether a worktree is magus's or Claude's to remove: any `.claude/worktrees`
+
+**Signature:** `reclaimdisk\owns(path, roots) -> bool`
+
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `path`    | `str`   |          |             |
+| `roots`   | `[str]` |          |             |
+
+**Returns:** bool
+
 ### classify
 
 classify decides one worktree, listing every reason to keep it rather than the first.
 
-**Signature:** `reclaimdisk\classify(o, main, own, leases, pids, now, keepRecent, shown) -> Item`
+**Signature:** `reclaimdisk\classify(o, main, own, owned, leases, pids, now, keepRecent, shown) -> Item`
 
 | Parameter    | Type          | Optional | Description |
 | ------------ | ------------- | -------- | ----------- |
 | `o`          | `Observed`    |          |             |
 | `main`       | `str`         |          |             |
 | `own`        | `str`         |          |             |
+| `owned`      | `bool`        |          |             |
 | `leases`     | `{str:[str]}` |          |             |
 | `pids`       | `{str:[str]}` |          |             |
 | `now`        | `double`      |          |             |
@@ -229,7 +255,7 @@ status reads one worktree's dirt; a directory that is gone reads dirty -1.
 
 survey reads every worktree and agent branch of the repository at the working directory
 
-**Signature:** `reclaimdisk\survey(base, now, keepRecent, measure, deadline) -> result\Result::<Survey>`
+**Signature:** `reclaimdisk\survey(base, now, keepRecent, measure, include, deadline) -> result\Result::<Survey>`
 
 | Parameter    | Type     | Optional | Description |
 | ------------ | -------- | -------- | ----------- |
@@ -237,6 +263,7 @@ survey reads every worktree and agent branch of the repository at the working di
 | `now`        | `double` |          |             |
 | `keepRecent` | `double` |          |             |
 | `measure`    | `bool`   |          |             |
+| `include`    | `[str]`  |          |             |
 | `deadline`   | `double` |          |             |
 
 **Returns:** result\Result::<Survey>
