@@ -28,7 +28,7 @@ exec magus ls jobs -o name
 
 exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
 stdout '^forked flags/shell, declared, with 2 write path\(s\)\.'
-stderr '^note: 2 regenerated output\(s\) outside the write paths are permitted: the integrator owns them$'
+stderr '^note: 2 regenerated output\(s\) outside the write paths are permitted as deviations: wait notes one in the diff instead of refusing it, and the integrator regenerates it again$'
 
 stdin $WORK/fork.json
 exec magus job fork --stdin
