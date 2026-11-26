@@ -669,6 +669,7 @@ func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	forked := costState{Forked: []string{"a1", "a2"}}
 
 	assert.Empty(t, mainWork(ctx, at, forked, "./magus run go-test . -s"))
+	assert.Empty(t, mainWork(ctx, at, costState{Held: []string{"a1"}}, "./magus run go-test . -s"), "a row it took back with job exec")
 	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, costState{}, "./magus run go-test . -s"), "a row another session forked")
 	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, forked, "./magus run lint docs"), "a row that ended")
 	assert.Equal(t, types.DelegableRun, mainWork(ctx, at, forked, "./magus run go-test internal/guard"), "another project")

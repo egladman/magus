@@ -200,6 +200,9 @@ type costState struct {
 	// Forked are the rows the thread handed out: forks the store confirmed and rows a
 	// titled spawn bound. A row the thread then takes itself with `magus job exec` leaves.
 	Forked []string `json:"forked,omitempty"`
+	// Held are the rows the thread took back from Forked with `magus job exec`. It runs
+	// their checks as a holder would, before its exit and after.
+	Held []string `json:"held,omitempty"`
 	// Refs are the output, invocation and verdict refs the thread's tool results named,
 	// oldest first and at most refsCap, so reading one back is checking its own work.
 	Refs []string `json:"refs,omitempty"`
@@ -208,7 +211,8 @@ type costState struct {
 // refsCap bounds Refs, dropping the oldest first.
 const refsCap = 256
 
-// forget drops id from the rows the thread handed out, reporting whether it was there.
+// forget moves id from the rows the thread handed out to the rows it holds, reporting
+// whether it was there.
 func (st *costState) forget(id string) bool {
 	_, pending := st.Forks[id]
 	delete(st.Forks, id)
@@ -217,7 +221,11 @@ func (st *costState) forget(id string) bool {
 	}
 	n := len(st.Forked)
 	st.Forked = slices.DeleteFunc(st.Forked, func(f string) bool { return f == id })
-	return pending || len(st.Forked) != n
+	moved := pending || len(st.Forked) != n
+	if moved && !slices.Contains(st.Held, id) {
+		st.Held = append(st.Held, id)
+	}
+	return moved
 }
 
 type pendingCall struct {
@@ -844,6 +852,7 @@ func sessionCostState(at location, who hookAttribution, live func(id string) (jo
 	if len(st.Forks) > 0 {
 		confirmForks(&st, live, now)
 	}
+	st.Held = slices.DeleteFunc(st.Held, func(id string) bool { _, ok := live(id); return !ok })
 	st.Orchestrates = ""
 	if slices.ContainsFunc(st.Forked, func(id string) bool { _, ok := live(id); return ok }) {
 		st.Orchestrates = types.OrchestrationProven
@@ -1173,10 +1182,9 @@ func magusOnlyImports(prog *ast.Program) (bound, imported map[string]bool, ok bo
 	return bound, imported, true
 }
 
-// mainWork is rootWorkClass for line, less what an orchestrator owes the rows it forked:
-// running the check of a live row this thread forked, reading any row's recorded check
-// output, and reading back a ref its own tool results named. The store is read only for a
-// line that could be one of those.
+// mainWork is rootWorkClass for line, less what an orchestrator owes its rows. It runs the
+// check of a live row it forked or took back. It reads any row's check output and a ref its
+// own tool results named.
 func mainWork(ctx context.Context, at location, st costState, line string) types.DelegableClass {
 	class := rootWorkClass(line, at)
 	if class != types.DelegableRun && class != types.DelegableRead {
@@ -1206,7 +1214,7 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 	}
 	if r, ok := parseTargetRun(cmds[0]); ok {
 		for _, row := range rows {
-			if row.State.Live() && slices.Contains(st.Forked, row.ID) && runsCheck(row.Check, r) {
+			if row.State.Live() && (slices.Contains(st.Forked, row.ID) || slices.Contains(st.Held, row.ID)) && runsCheck(row.Check, r) {
 				return ""
 			}
 		}
