@@ -3747,3 +3747,65 @@ func (s *sessionScannerSuite) TestOneParseCacheServesEachScannerItsOwnTokens() {
 	s.Error(plain.Exec(ctx, src), "a plain session must not read the host's tokens")
 	s.Len(c.tokens, 2)
 }
+
+// TestNestedImportAliasBindsUnderThePath mirrors upstream t5 (Parser.zig
+// parseNamespace after `as`): `as x\y` binds the import as x\y, and two imports
+// aliased under one prefix coexist.
+func TestNestedImportAliasBindsUnderThePath(t *testing.T) {
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	defer s.Close()
+	s.SetModuleDecls("first", `namespace lint; export fun go() > str { return "one"; }`)
+	s.SetModuleDecls("second", `namespace lint; export fun go() > str { return "two"; }`)
+	require.NoError(t, s.Exec(ctx, `
+import "first" as a\lint;
+import "second" as b\lint;
+final one = a\lint\go();
+final two = b\lint\go();
+`))
+	globals := s.Globals()
+	assert.Equal(t, "one", globals["one"].String())
+	assert.Equal(t, "two", globals["two"].String())
+}
+
+// TestNestedImportAliasOfAFileIsUsedByItsPath covers the file-import binding of
+// `as x\y` (upstream t5), and that reaching it as `x\y\name` counts as a use.
+func TestNestedImportAliasOfAFileIsUsedByItsPath(t *testing.T) {
+	dir := writeTxtar(t, `
+-- strings.buzz --
+namespace strings;
+export fun upper(s: str) > str { return "up:" + s; }
+`)
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	defer s.Close()
+	s.SetIncludeDirs([]string{dir})
+	require.NoError(t, s.Exec(ctx, `
+import "strings" as x\y;
+final got = x\y\upper("al");
+`))
+	assert.Equal(t, "up:al", s.Globals()["got"].String())
+	assert.Empty(t, s.Warnings(), "x\\y\\upper uses the import")
+}
+
+// TestNestedImportAliasNamesItsTypes covers a type annotation, an object
+// literal and a return type spelled through a nested alias.
+func TestNestedImportAliasNamesItsTypes(t *testing.T) {
+	dir := writeTxtar(t, `
+-- finding.buzz --
+namespace finding;
+export object Finding { msg: str }
+`)
+	ctx := context.Background()
+	s := NewSession(ctx, WithEmbedded())
+	defer s.Close()
+	s.SetIncludeDirs([]string{dir})
+	require.NoError(t, s.Exec(ctx, `
+import "finding" as x\y;
+final f: x\y\Finding = x\y\Finding{ msg = "hi" };
+fun make(m: str) > x\y\Finding { return x\y\Finding{ msg = m }; }
+final g = make("there");
+`))
+	assert.Contains(t, s.Globals()["f"].String(), "hi")
+	assert.Contains(t, s.Globals()["g"].String(), "there")
+}

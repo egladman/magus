@@ -1764,6 +1764,12 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		boundName = imp.Alias
 	}
 	nested := s.nestedDeclNamespace(resolvePath, imp)
+	if strings.Contains(imp.Alias, `\`) && !s.collectImportPrivate {
+		if s.entryNested == nil {
+			s.entryNested = map[string]bool{}
+		}
+		s.entryNested[imp.Alias] = true
+	}
 	if nested != "" {
 		if !s.collectImportPrivate {
 			if s.entryNested == nil {
@@ -1878,7 +1884,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			return ImportNative, nil
 		}
 		s.adoptNamespacePrefix(boundName, v)
-		s.env.Define(boundName, v)
+		s.bindAliasValue(boundName, v)
 		return ImportNative, nil
 	}
 
@@ -2649,7 +2655,36 @@ func (s *Session) bindCachedAlias(alias string, c *cachedImport) {
 			s.env.Define(QualifiedTypeKey(alias, n), v)
 		}
 	}
-	s.env.Define(alias, values)
+	s.bindAliasValue(alias, values)
+}
+
+// bindAliasValue binds an import's namespace value under its alias. A nested
+// alias `x\y` binds the value at y inside a map bound at x, merging into an
+// x another alias already made, so `as a\lint` and `as b\lint` coexist.
+func (s *Session) bindAliasValue(alias string, v vmpackage.Value) {
+	segments := strings.Split(alias, `\`)
+	if len(segments) == 1 {
+		s.env.Define(alias, v)
+		return
+	}
+	cur, ok := s.env.Get(segments[0])
+	if !ok || !cur.IsMap() {
+		cur = vmpackage.NewMap()
+		s.env.Define(segments[0], cur)
+		if s.namespacePrefixes == nil {
+			s.namespacePrefixes = map[string]bool{}
+		}
+		s.namespacePrefixes[segments[0]] = true
+	}
+	for _, seg := range segments[1 : len(segments)-1] {
+		next, ok := cur.MapGet(seg)
+		if !ok || !next.IsMap() {
+			next = vmpackage.NewMap()
+			cur.MapSet(seg, next)
+		}
+		cur = next
+	}
+	cur.MapSet(segments[len(segments)-1], v)
 }
 
 // rememberModuleType records one exported type declaration under its module's bound
@@ -2742,6 +2777,10 @@ func (s *Session) programNestedImports(prog *ast.Program) *chunkNamespaces {
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok {
+			continue
+		}
+		if strings.Contains(imp.Alias, `\`) {
+			out.bound[imp.Alias] = true
 			continue
 		}
 		ns := s.nestedDeclNamespace(strings.TrimPrefix(imp.Path, "buzz:"), imp)

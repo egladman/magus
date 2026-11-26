@@ -725,6 +725,14 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 		// Accept any identifier including "_" (flat/erase import)
 		if p.check(token.Ident) {
 			alias = p.advance().Val
+			for p.check(token.Backslash) {
+				p.advance()
+				seg, err := p.eat(token.Ident)
+				if err != nil {
+					return nil, err
+				}
+				alias += `\` + seg.Val
+			}
 		}
 	}
 	p.optSemicolon()
@@ -2527,7 +2535,12 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, Namespaced: true}
+			member := &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, Namespaced: true}
+			// A nested alias (`as x\y`) is used by `x\y\name`, which marks only x above.
+			if len(p.importUsage) > 0 {
+				p.markImportUsed(nestedPath(member))
+			}
+			node = member
 		case token.Bang:
 			// Postfix force-unwrap: operand!. A lone '!' here (not '!=') unwraps an
 			// optional, erroring at runtime if the value is null.
