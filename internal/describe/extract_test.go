@@ -1121,11 +1121,33 @@ func TestSpellHandle(t *testing.T) {
 		{path: "spells/harness/cursor", alias: "cursor", want: "cursor", ok: true},
 		{path: "spells/harness/cursor", want: "cursor", ok: true},
 		{path: "project/libs/json", alias: "json"},
+		{path: "ghcr.io/team/libs/widget"},
+		{path: "ghcr.io/team/libs/widget", alias: "w"},
+		{path: "spells/widget", want: "widget", ok: true},
 	} {
-		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias})
+		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias}, map[string]bool{"widget": true, "w": true})
 		assert.Equal(t, tc.ok, ok, tc.path)
 		assert.Equal(t, tc.want, got, tc.path)
 	}
+}
+
+// A registry import read with a backslash is a module library. Its calls are no
+// spell ops, and a registry spell beside it keeps its op.
+func TestRegistryModuleCallsAreNoSpellOps(t *testing.T) {
+	g := Extract(`import "magus";
+import "ghcr.io/team/libs/widget" as w;
+import "ghcr.io/team/libs/gadget";
+import "ghcr.io/team/spells/lint";
+export fun check(ctx: magus\Context, args: [str]) > void { w\run(ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { final p = gadget\Part{ size = 1 }; gadget.run(ctx); }
+export fun vet(ctx: magus\Context, args: [str]) > void { lint.vet(ctx); }
+`)
+	check, _ := nodeByName(g, "check")
+	assert.Empty(t, check.Spells, "w is read with a backslash: a module")
+	build, _ := nodeByName(g, "build")
+	assert.Empty(t, build.Spells, "gadget names a namespace in an object literal: a module")
+	vet, _ := nodeByName(g, "vet")
+	assert.Equal(t, []types.TargetSpellUse{{Spell: "lint", Ops: []string{"vet"}}}, vet.Spells)
 }
 
 // BenchmarkExtract measures the static parse of the real magusfile.buzz — the

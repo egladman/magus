@@ -123,6 +123,29 @@ func spellDir(t *testing.T) string {
 	return dir
 }
 
+// moduleDir writes a module library named name: its entry imports a sibling by bare
+// name, as a library published under any path does.
+func moduleDir(t *testing.T, name string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), name)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name+".buzz"), []byte("import \"helper\";\nexport object Part { size: int }\nexport fun make(n: int) > Part { return Part{ size = twice(n) }; }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "helper.buzz"), []byte("export fun twice(n: int) > int { return n * 2; }\n"), 0o644))
+	return dir
+}
+
+// pushTo publishes dir to repository on the fixture under tag v1 and returns its pin.
+func pushTo(t *testing.T, reg *registry, dir, repository string) Ref {
+	t.Helper()
+	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: filepath.Base(dir)})
+	require.NoError(t, err)
+	d, err := (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), oci.Reference{Registry: reg.host(), Repository: repository}, content, "v1")
+	require.NoError(t, err)
+	ref, err := Pinned(reg.host()+"/"+repository, d)
+	require.NoError(t, err)
+	return ref
+}
+
 // allTracked reports every path it is asked about as tracked.
 type allTracked struct{}
 
@@ -229,6 +252,68 @@ func TestPackRefuses(t *testing.T) {
 	require.NoError(t, os.Symlink(entryFile, filepath.Join(linked, "alias")))
 	_, err = Pack(t.Context(), linked, allTracked{})
 	require.ErrorContains(t, err, "is not a regular file")
+}
+
+// A directory with no spell.buzz packs as a module when it holds <base>.buzz.
+func TestPackAcceptsAModule(t *testing.T) {
+	t.Parallel()
+	layer, err := Pack(t.Context(), moduleDir(t, "widget"), allTracked{})
+	require.NoError(t, err)
+	files, err := tarFiles(layer)
+	require.NoError(t, err)
+	var names []string
+	for _, f := range files {
+		names = append(names, f.path)
+	}
+	assert.Equal(t, []string{"helper.buzz", "widget.buzz"}, names)
+
+	renamed := filepath.Join(t.TempDir(), "gadget")
+	require.NoError(t, os.Rename(moduleDir(t, "widget"), renamed))
+	_, err = Pack(t.Context(), renamed, allTracked{})
+	require.ErrorContains(t, err, "holds no tracked spell.buzz, which makes a spell, nor gadget.buzz, which makes a module")
+}
+
+func TestArtifactEntry(t *testing.T) {
+	t.Parallel()
+	spell := spellDir(t)
+	file, isSpell, err := artifactEntry(spell, "ghcr.io/team/spells/x")
+	require.NoError(t, err)
+	assert.True(t, isSpell)
+	assert.Equal(t, filepath.Join(spell, entryFile), file)
+
+	module := moduleDir(t, "widget")
+	for _, importPath := range []string{"ghcr.io/team/libs/widget", "ghcr.io/team/libs/widget:v1@sha256:abc"} {
+		file, isSpell, err = artifactEntry(module, importPath)
+		require.NoError(t, err, importPath)
+		assert.False(t, isSpell, importPath)
+		assert.Equal(t, filepath.Join(module, "widget.buzz"), file, importPath)
+	}
+	_, _, err = artifactEntry(module, "ghcr.io/team/libs/other")
+	require.ErrorContains(t, err, "holds neither spell.buzz, which makes a spell, nor other.buzz, which makes a module")
+
+	require.NoError(t, os.WriteFile(filepath.Join(module, entryFile), []byte("export fun mgs_getName() > str { return \"w\"; }\n"), 0o644))
+	_, isSpell, err = artifactEntry(module, "ghcr.io/team/libs/widget")
+	require.NoError(t, err)
+	assert.True(t, isSpell, "spell.buzz decides, whatever else the artifact holds")
+}
+
+// A module artifact pulls and verifies as a spell does. One published under a path
+// whose last segment names no entry it holds is refused at the pull.
+func TestResolvePullsAModule(t *testing.T) {
+	reg := newRegistry(t)
+	src := moduleDir(t, "widget")
+	ref := pushTo(t, reg, src, "team/libs/widget")
+	dir, err := Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
+	require.NoError(t, err)
+	want, err := dirFiles(src)
+	require.NoError(t, err)
+	got, err := dirFiles(dir)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+
+	misnamed := pushTo(t, reg, src, "team/libs/gadget")
+	_, err = Resolve(t.Context(), misnamed, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
+	require.ErrorContains(t, err, "nor gadget.buzz, which makes a module")
 }
 
 // Only tracked files reach the layer, so an untracked dotfile on one machine does not

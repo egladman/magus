@@ -143,6 +143,9 @@ type Session struct {
 	// on demand (e.g. a magus spell handle for `import "spells/hello"`). A false
 	// return falls through to the file search. Set via SetModuleResolver.
 	moduleResolver func(importPath string) (vmpackage.Value, bool)
+	// importFile, if set, names the file an import path loads, ahead of the module
+	// resolver and the file search. Given by WithImportFile.
+	importFile func(importPath string) (path string, ok bool)
 	// resolverBound holds the names moduleResolver bound. Its values are spell
 	// handles read with a dot, so the checker must not treat them as modules.
 	resolverBound map[string]bool
@@ -404,6 +407,26 @@ func prependEach[T any](first, later map[string][]T) map[string][]T {
 // return leaves the import for the includeDirs file search.
 func (s *Session) SetModuleResolver(fn func(importPath string) (vmpackage.Value, bool)) {
 	s.moduleResolver = fn
+}
+
+// hostImportFile is the file WithImportFile's fn names for importPath, or "".
+func (s *Session) hostImportFile(importPath string) string {
+	if s.importFile == nil {
+		return ""
+	}
+	if p, ok := s.importFile(importPath); ok {
+		return p
+	}
+	return ""
+}
+
+// locateImport is the file importPath loads: the one the host names, else the file
+// search's answer, else "".
+func (s *Session) locateImport(importPath string) string {
+	if p := s.hostImportFile(importPath); p != "" {
+		return p
+	}
+	return s.findIncludeFile(importPath)
 }
 
 // SetSourceReader installs fn to read the content of every file import this session and
@@ -682,6 +705,13 @@ func WithScanner(sc *token.Scanner) Option {
 	return func(s *Session) { s.scanner = sc }
 }
 
+// WithImportFile has fn name the file an import path loads, ahead of the module
+// resolver and the file search. A false return falls through. Child and alias
+// sub-sessions inherit fn.
+func WithImportFile(fn func(importPath string) (path string, ok bool)) Option {
+	return func(s *Session) { s.importFile = fn }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -727,6 +757,7 @@ func (s *Session) NewChild() *Session {
 	c.nativeModules = s.nativeModules
 	c.rejectedImports = s.rejectedImports
 	c.moduleResolver = s.moduleResolver
+	c.importFile = s.importFile
 	c.sourceReader = s.sourceReader
 	c.parseCache = s.parseCache
 	c.scanner = s.scanner
@@ -1791,7 +1822,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		// A chunk compiled here was checked against the types that file declared,
 		// so it depends on the file as much as the import that first loaded it.
 		if len(s.importFrames) > 0 && !s.fileImportsDisabled {
-			if path := s.findIncludeFile(resolvePath); path != "" {
+			if path := s.locateImport(resolvePath); path != "" {
 				if abs, err := filepath.Abs(path); err == nil {
 					noted.files = s.importCache[abs].closureAs(resolvePath)
 				}
@@ -1915,7 +1946,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		}
 		s.loadedPaths[key] = true
 		if len(imp.Only) > 0 || aliased {
-			cached, err := s.loadIsolated(ctx, src)
+			cached, err := s.loadIsolated(ctx, src, "")
 			if err != nil {
 				delete(s.loadedPaths, key)
 				return ImportDecls, err
@@ -1956,9 +1987,11 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		return ImportDecls, nil
 	}
 
-	// A host module resolver (e.g. local magus spells: `import "spells/hello"`)
-	// gets first refusal on path-style imports, ahead of the file search.
-	if s.moduleResolver != nil {
+	// A file the host names comes first. Then the host module resolver (e.g. local
+	// magus spells: `import "spells/hello"`) gets first refusal on path-style imports,
+	// ahead of the file search.
+	path := s.hostImportFile(resolvePath)
+	if path == "" && s.moduleResolver != nil {
 		if v, ok := s.moduleResolver(resolvePath); ok {
 			s.env.Define(boundName, v)
 			s.owner.Claim(v)
@@ -1973,7 +2006,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	if s.fileImportsDisabled {
 		return ImportNotFound, bzz.Errorf(UnresolvedImport, "buzz: import %q: file imports are unavailable in this session", imp.Path)
 	}
-	path := s.findIncludeFile(resolvePath)
+	if path == "" {
+		path = s.findIncludeFile(resolvePath)
+	}
 	if path == "" {
 		// Nothing resolved this import: not an already-bound name, a synthetic
 		// or declaration module, the host module resolver, or a .buzz file on the
@@ -2030,12 +2065,12 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 
 	if len(imp.Only) > 0 || imp.Alias != "" && imp.Alias != "_" {
 		// The importer sees only the selected names or the alias.
-		cached, err := s.loadIsolated(ctx, string(data))
+		cached, err := s.loadIsolated(ctx, string(data), moduleDir)
 		if err != nil {
 			return ImportFile, importFailed(imp.Path, path, err)
 		}
 		if len(s.importFrames) > 0 {
-			noted.files = append(noted.files, isolatedClosure(s.lastClosure)...)
+			noted.files = append(noted.files, isolatedClosure(s.lastClosure, moduleDir)...)
 		}
 		cached.files = noted.files
 		s.importCache[abs] = cached
@@ -2926,9 +2961,14 @@ func (s *Session) bindNamespacePath(segments []string, exports vmpackage.Value, 
 	return nil
 }
 
-// loadIsolated keeps module globals out of the importer's scope.
-func (s *Session) loadIsolated(ctx context.Context, src string) (*cachedImport, error) {
+// loadIsolated keeps module globals out of the importer's scope. dir is the module
+// file's directory, "" for a source with no file; the module's own imports resolve
+// against it first, as a flat import's do.
+func (s *Session) loadIsolated(ctx context.Context, src, dir string) (*cachedImport, error) {
 	sub := newSession(s.ctx, withOwner(s.owner))
+	if dir != "" {
+		sub.importingDirs = []string{dir}
+	}
 	sub.embedded = s.embedded // inherit the parent session's parse mode
 	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
@@ -2937,6 +2977,7 @@ func (s *Session) loadIsolated(ctx context.Context, src string) (*cachedImport, 
 	sub.nativeModules = s.nativeModules
 	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
+	sub.importFile = s.importFile
 	sub.rejectedImports = s.rejectedImports
 	sub.fileImportsDisabled = s.fileImportsDisabled
 	sub.ffiDisabled = s.ffiDisabled

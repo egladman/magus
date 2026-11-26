@@ -73,6 +73,55 @@ func TestRelockThenLoadFrozen(t *testing.T) {
 	got, err := dirFiles(dir)
 	require.NoError(t, err)
 	assert.Equal(t, want, got, "the locked bytes, not what the tag names now")
+	_, module := im.Module(path)
+	assert.False(t, module, "a spell is no module")
+}
+
+// A module library locks and loads as a spell does, and Module names its entry
+// under the view.
+func TestRelockThenLoadAModule(t *testing.T) {
+	reg := newRegistry(t)
+	ref := pushTo(t, reg, moduleDir(t, "widget"), "team/libs/widget")
+	cfg := declare(ref.Import, "v1")
+	root, cache := t.TempDir(), t.TempDir()
+	opts := fixtureOptions(reg, cache)
+	require.NoError(t, UpdateLock(t.Context(), root, func(Lock) (Lock, error) { return Relock(t.Context(), cfg, opts) }))
+
+	im, err := LoadImports(t.Context(), root, cfg, opts)
+	require.NoError(t, err)
+	require.NoError(t, im.Error())
+	file, ok := im.Module(ref.Import)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(im.View(), filepath.FromSlash(ref.Import), "widget.buzz"), file)
+	dir, err := im.Dir(ref.Import)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Dir(file), dir)
+}
+
+// A module's workspace copy overrides it the way a spell's copy does.
+func TestLoadImportsOverridesAModule(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	lib := filepath.Join(root, "libs", "widget")
+	require.NoError(t, os.MkdirAll(lib, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lib, "widget.buzz"), []byte("export fun n() > int { return 1; }\n"), 0o644))
+	const path = "ghcr.io/team/libs/widget"
+
+	im, err := LoadImports(t.Context(), root, config.SpellsConfig{Imports: map[string]config.SpellImport{path: {Path: "libs/widget"}}}, LoadOptions{})
+	require.NoError(t, err)
+	file, ok := im.Module(path)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(lib, "widget.buzz"), file)
+
+	for name, cfg := range map[string]config.SpellsConfig{
+		"no entry for the path":          {Imports: map[string]config.SpellImport{"ghcr.io/team/libs/gadget": {Path: "libs/widget"}}},
+		"a module cannot replace a spell": {Imports: map[string]config.SpellImport{"magus/spell/widget": {Path: "libs/widget"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadImports(t.Context(), root, cfg, LoadOptions{})
+			require.ErrorIs(t, err, types.SpellOverrideInvalid)
+		})
+	}
 }
 
 // A stale pin is held against its path, not the load: the target that repairs the lock

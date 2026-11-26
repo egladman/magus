@@ -53,9 +53,9 @@ func (c *compileCounter) Import(string, ImportOutcome, time.Duration, error) {}
 
 // cachingSession is a session on store that resolves imports from dir only and
 // reports each value the program passes to report().
-func cachingSession(t *testing.T, store BytecodeStore, dir string, got *[]string) *Session {
+func cachingSession(t *testing.T, store BytecodeStore, dir string, got *[]string, opts ...Option) *Session {
 	t.Helper()
-	sess := NewSession(context.Background(), WithEmbedded(), WithSearchPaths(filepath.Join(dir, "?.buzz")))
+	sess := NewSession(context.Background(), append([]Option{WithEmbedded(), WithSearchPaths(filepath.Join(dir, "?.buzz"))}, opts...)...)
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetIncludeDirs(nil)
 	sess.SetBytecodeStore(store)
@@ -154,6 +154,39 @@ func TestBytecodeStoreFilterReadsJoinTheClosure(t *testing.T) {
 	writeFiles(t, dir, map[string]string{"later.buzz": "var y = 1;\n"})
 	assert.Positive(t, run(), "a file the filter found missing appeared")
 	assert.Equal(t, []bool{true, true, true}, found)
+}
+
+// A cached chunk's closure re-resolves a host-named file through the host. The chunk
+// is served while that file holds its bytes, and recompiled once it changes.
+func TestBytecodeStoreHonorsTheImportFileHook(t *testing.T) {
+	dir := t.TempDir()
+	entry := filepath.Join(dir, "lib", "widget", "widget.buzz")
+	writeFiles(t, dir, map[string]string{
+		"lib/widget/widget.buzz": "import \"helper\";\nexport fun n() > int { return one(); }\n",
+		"lib/widget/helper.buzz": "export fun one() > int { return 1; }\n",
+	})
+	store := &memBytecodeStore{}
+	run := func() (int, []string) {
+		t.Helper()
+		var got []string
+		sess := cachingSession(t, store, t.TempDir(), &got, WithImportFile(func(importPath string) (string, bool) {
+			return entry, importPath == "reg.example/widget"
+		}))
+		counter := &compileCounter{}
+		sess.SetCompileObserver(counter)
+		require.NoError(t, sess.Exec(context.Background(), "import \"reg.example/widget\" as w;\nreport(w\\n());\n"))
+		return counter.n, got
+	}
+	n, got := run()
+	assert.Positive(t, n)
+	assert.Equal(t, []string{"1"}, got)
+	n, got = run()
+	assert.Zero(t, n, "the closure resolves through the hook, so the chunk is fresh")
+	assert.Equal(t, []string{"1"}, got)
+	writeFiles(t, dir, map[string]string{"lib/widget/helper.buzz": "export fun one() > int { return 2; }\n"})
+	n, got = run()
+	assert.Positive(t, n, "the named file's sibling changed")
+	assert.Equal(t, []string{"2"}, got)
 }
 
 func TestBytecodeStoreImportChangeRecompiles(t *testing.T) {

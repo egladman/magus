@@ -76,6 +76,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	funcs := map[string]*ast.FunDecl{} // every fun decl (exported targets + plain helpers), for helper-following
 	spellHandles := map[string]bool{}
 	projectAliases := map[string]string{} // alias -> project path (as written after "project/")
+	namespaced := namespacedReads(prog)
 	for _, stmt := range prog.Stmts {
 		switch s := stmt.(type) {
 		case *ast.FunDecl:
@@ -84,7 +85,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 				names = append(names, norm(s.Name))
 			}
 		case *ast.ImportStmt:
-			if h, ok := spellHandle(s); ok {
+			if h, ok := spellHandle(s, namespaced); ok {
 				spellHandles[h] = true
 			}
 			if alias, path, ok := projectImport(s); ok {
@@ -906,20 +907,43 @@ func charmCall(e *ast.CallExpr) (string, bool) {
 	return lit.Val, true
 }
 
-// spellHandle returns the handle a spell import binds, and ok=true when the import
-// is a spell. Built-in spells (`import "magus/spell/<name>"`), remote spells
-// (`import "ghcr.io/<...>/<name>"`) and workspace spells (`import "spells/<...>"`)
-// all bind by value (checker.go's importBindsByValue), so all three default to the
-// basename with no alias; an explicit alias wins over it, and BZZ1008 refuses one
-// that merely repeats it.
-func spellHandle(s *ast.ImportStmt) (string, bool) {
-	if spells.IsEmbeddedImport(s.Path) || spells.IsRemoteImport(s.Path) || strings.HasPrefix(s.Path, "spells/") {
-		if s.Alias != "" && s.Alias != "_" {
-			return s.Alias, true
-		}
-		return lastPathSegment(s.Path), true
+// spellHandle returns the handle a spell import binds: its alias, else its basename.
+// A registry path may name a module library instead. The source reads a module
+// with a backslash, never a spell, and namespaced holds those names.
+func spellHandle(s *ast.ImportStmt, namespaced map[string]bool) (string, bool) {
+	if !spells.IsEmbeddedImport(s.Path) && !spells.IsRemoteImport(s.Path) && !strings.HasPrefix(s.Path, "spells/") {
+		return "", false
 	}
-	return "", false
+	handle := lastPathSegment(s.Path)
+	if s.Alias != "" && s.Alias != "_" {
+		handle = s.Alias
+	}
+	if spells.IsRemoteImport(s.Path) && namespaced[handle] {
+		return "", false
+	}
+	return handle, true
+}
+
+// namespacedReads is every name prog reads as an imported module: the object of a
+// backslash member (w\run) or the namespace of an object literal (w\Part{...}).
+func namespacedReads(prog *ast.Program) map[string]bool {
+	out := map[string]bool{}
+	for _, stmt := range prog.Stmts {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			switch e := n.(type) {
+			case *ast.MemberExpr:
+				if id, ok := e.Object.(*ast.IdentExpr); ok && e.Namespaced {
+					out[id.Name] = true
+				}
+			case *ast.ObjectLit:
+				if head, _, _ := strings.Cut(e.Namespace, `\`); head != "" {
+					out[head] = true
+				}
+			}
+			return true
+		})
+	}
+	return out
 }
 
 // dispatchOnly reports whether fn's body is one or more statements of exactly the form

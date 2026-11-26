@@ -1435,7 +1435,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// imports to the magusfiles layout (see magusSearchPaths); WithSearchPaths
 	// replaces gopherbuzz's upstream default so a magusfile resolves siblings the same
 	// way regardless of the process cwd, and cannot escape via BUZZ_INCLUDE_PATH.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, src.Dir)...), buzz.WithImportFile(remotespell.ImportsFromContext(ctx).Module))
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
@@ -1700,7 +1700,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
 	// one statement at a time, so an import "unused so far" may just be used by a
 	// line not typed yet.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...), buzz.WithImportFile(remotespell.ImportsFromContext(ctx).Module))
 	buzzSess.SetIncludeDirs(nil)
 	if read := confineImportReads(ctx, dir, nil); read != nil {
 		buzzSess.SetSourceReader(read)
