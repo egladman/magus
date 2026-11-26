@@ -140,7 +140,7 @@ proofread:
     module.go: {code-comment-budget: 1, code-comment-sentence: 5}
     observer.go: {code-comment-budget: 3, code-comment-sentence: 3}
     observer_test.go: {banner: 4, code-comment-sentence: 2, comment-first-person: 1}
-    parser.go: {code-comment-budget: 47, code-comment-sentence: 55, comment-caps: 17, comment-first-person: 1, comment-history: 4, provenance: 1}
+    parser.go: {code-comment-budget: 23, code-comment-sentence: 29, comment-caps: 7, comment-first-person: 1, comment-history: 2}
     parser_test.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 6, comment-history: 1}
     pool.go: {banner: 1, code-comment-budget: 10, code-comment-sentence: 20, comment-caps: 11, comment-first-person: 1, comment-history: 1}
     pool_test.go: {code-comment-budget: 9, code-comment-sentence: 14, comment-caps: 4}
@@ -173,7 +173,7 @@ proofread:
     std/std.go: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 3}
     std/std_test.go: {code-comment-budget: 5, code-comment-sentence: 3, comment-caps: 4}
     std/testing.buzz: {code-comment-budget: 2, code-comment-sentence: 7, comment-caps: 5, comment-history: 2}
-    token/token.go: {code-comment-budget: 15, code-comment-sentence: 15, comment-caps: 9, comment-history: 1}
+    token/token.go: {code-comment-budget: 9, code-comment-sentence: 10, comment-caps: 7, comment-history: 1}
     token/token_test.go: {code-comment-budget: 5, code-comment-sentence: 8, comment-caps: 8, comment-first-person: 1}
     types/types.go: {code-comment-budget: 13, code-comment-sentence: 18, comment-caps: 10, comment-history: 1}
     types/types_test.go: {code-comment-sentence: 1}
