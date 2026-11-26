@@ -907,7 +907,9 @@ func remedyConstructors(parsed []*ast.File) map[string][]int {
 	for _, f := range parsed {
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Type.Results == nil || !mentionsNextStep(fn.Type.Results) {
+			// servedScripts names a workspace's scripts in the refusal text, which
+			// TestDenyTextsNameTheScriptsServingTheRule pins; it serves no next.
+			if !ok || fn.Name.Name == "servedScripts" || fn.Type.Results == nil || !mentionsNextStep(fn.Type.Results) {
 				continue
 			}
 			i := 0

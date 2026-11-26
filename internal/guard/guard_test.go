@@ -713,7 +713,18 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 
 	covered["code-comments"] = true
 	t.Run("code-comments", func(t *testing.T) {
+		// Without the built judge the verdict refuses naming it, not the one under test.
+		proofreadMod := filepath.Join(root, "libs", "proofread")
+		require.FileExists(t, filepath.Join(proofreadMod, "gen", "proofread"), "the comment judge is not built; run `magus run proofread-build libs/proofread`")
+		linkJudge := func(ws string) {
+			require.NoError(t, os.MkdirAll(filepath.Join(ws, "libs"), 0o755))
+			require.NoError(t, os.Symlink(proofreadMod, filepath.Join(ws, "libs", "proofread")))
+			decisions := filepath.Join("hack", "policy", "gen")
+			require.NoError(t, os.MkdirAll(filepath.Join(ws, "hack", "policy"), 0o755))
+			require.NoError(t, os.Symlink(filepath.Join(root, decisions), filepath.Join(ws, decisions)))
+		}
 		ctx, ws, _ := writeFixture(t)
+		linkJudge(ws)
 		write := func(name, content string) verdict.Judgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Write",
@@ -732,16 +743,19 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		longComment := fmt.Sprintf("package a\n\nfunc f() {\n\t// %s\n\tg()\n}\n", long)
 		v = write("c.go", longComment)
 		assert.Equal(t, verdictWithRule(verdict.Deny, workspaceWriteRule), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "a sentence of 26 words, over the limit of 25")
+		assert.Contains(t, v.Reason, "c.go:4: Sentence runs 26 words against a budget of 25: split it. [code-comment-sentence]")
 		v = write("d.buzz", fmt.Sprintf("// %s %s\nfun f() > void {}\n", long, long))
 		assert.Equal(t, verdict.Deny, v.Decision, "a Buzz doc comment: %s", v.Reason)
 
 		repo := testkit.NewRepository(t, map[string]string{"README.md": "# a\n"})
+		linkJudge(repo.Root())
+		// The commit's comment check reads the judge from the working directory.
+		t.Chdir(repo.Root())
 		require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.go"), []byte(longComment), 0o644))
 		repo.Git("add", "a.go")
 		v = shellIn(t, "trim-key", repo.Root())(`git commit -m "trim the key"`)
 		assert.Equal(t, verdictWithRule(verdict.Deny, workspaceCommandRule), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25")
+		assert.Contains(t, v.Reason, "a.go:4: Sentence runs 26 words against a budget of 25: split it. [code-comment-sentence]")
 	})
 
 	covered["host-cursor-rules"] = true
