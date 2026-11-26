@@ -372,6 +372,9 @@ func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at l
 		if cause == unloadStale && call.lease != "" {
 			skew, err := judgedContract(ctx, at, call.lease, at.workspace)
 			if err == nil && currentTreeAtOtherAuthority(at.workspace, skew) {
+				if endsRow(call.command, call.dialect, call.lease) {
+					return false
+				}
 				d = authorityRecovery(ctx, at, call.lease, skew.Revision)
 				asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: d.full()}
 				asked.rule, asked.by, asked.next = denyRuleStaleBinary, decidedByBuiltin, nil

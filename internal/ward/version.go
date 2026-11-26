@@ -2,6 +2,7 @@ package ward
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -118,6 +119,23 @@ func RelinkAt(root string) string {
 		return relinkCommand
 	}
 	return strings.Replace(relinkCommand, " go ", fmt.Sprintf(" go -C %s ", shellWord(root)), 1)
+}
+
+// stampAt is the go-build run of the checkout at root by the ./magus the relink
+// put there, aimed with --root, and bare for root "". The relink stamps no version
+// and no build stamp, and the stale-binary rule reads an unstamped ./magus as
+// stale. The relinked binary carries the tree's contract, so it loads the magusfile.
+func stampAt(root string) string {
+	if root == "" {
+		return "./magus run go-build ."
+	}
+	return fmt.Sprintf("%s --root %s run go-build .", shellWord(filepath.Join(root, "magus")), shellWord(root))
+}
+
+// RelinkAndStampAt words the repair of the checkout at root: [RelinkAt], then
+// [stampAt], each alone on its line.
+func RelinkAndStampAt(root string) string {
+	return fmt.Sprintf("relink ./magus, then stamp it, each alone on its line: `%s`, then `%s`", RelinkAt(root), stampAt(root))
 }
 
 // shellWord quotes word for a POSIX shell, and leaves it bare when it can.
@@ -241,11 +259,9 @@ func (b StaleBuild) gap() string {
 	}
 }
 
-// belowFloor reports whether running fails constraint, comparing the release alone as
-// [CheckRequiredVersion] does; ok is false when either side does not parse.
-//
-// Unlike that ward it compares dev builds too: git-describe's v0.4.3-122-gabc is 122
-// commits past v0.4.3, so it is below a ">= 0.4.4" floor and meets ">= 0.4.3".
+// belowFloor reports whether running fails constraint on the release alone; ok is
+// false when either side does not parse. It compares dev builds too:
+// v0.4.3-122-gabc is below ">= 0.4.4" and meets ">= 0.4.3".
 func belowFloor(running, constraint string) (below, ok bool) {
 	c, err := semver.NewConstraint(constraint)
 	if err != nil {

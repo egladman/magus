@@ -103,7 +103,7 @@ func servesPlacement(t *testing.T, root string) {
 // checkout of magus at root, whoever asks.
 func staleOwnSay(root string) string {
 	return fmt.Sprintf("./magus was built from another contract than this tree carries and cannot load its guard policy; "+
-		"relink ./magus, alone on its line: `%s`.", ward.RelinkAt(root))
+		"%s.", ward.RelinkAndStampAt(root))
 }
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
@@ -178,7 +178,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	v := judgeUnloaded(ctx, deps, "touch notes.txt")
 	assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
-	assert.Contains(t, v.Reason, "relink ./magus, alone on its line")
+	assert.Contains(t, v.Reason, "relink ./magus, then stamp it, each alone on its line")
 }
 
 func TestPathMagusDropsTheStepRules(t *testing.T) {

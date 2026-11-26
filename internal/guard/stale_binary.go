@@ -94,19 +94,23 @@ func currentTreeAtOtherAuthority(root string, skew contract.Skew) bool {
 	return err == nil && tree.Tree == skew.Binary
 }
 
+// authorityRecovery refuses a call under lease whose row recorded another
+// contract; endsRow's lines pass before it. It names the exit line first,
+// since that line always runs.
 func authorityRecovery(ctx context.Context, at location, lease, revision string) denial {
+	exit := "./" + hint.JobExit.With(shellWord(lease))
 	row, ok := leaseRow(ctx, at, lease)
 	if !ok || row.CheckoutRoot == "" {
-		return denial{Say: fmt.Sprintf("Job %s uses another contract at %.12s. Ask an unleased orchestrator to locate its registered checkout before changing the job.", lease, revision)}
+		return denial{Say: fmt.Sprintf("Job %s uses another contract at %.12s; end it with `%s`, or have an unleased orchestrator locate its checkout before changing it.", lease, revision, exit)}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s. An unleased orchestrator must retire the obsolete job or reconcile its authority in %s.",
-			lease, revision, shellWord(row.CheckoutRoot)),
-		Why: fmt.Sprintf("In the registered checkout, inspect `git status --short` and confirm that the intended branch preserves the work. "+
-			"If the job is obsolete, an unleased orchestrator can close only that job with `./magus job exit %s`. "+
+		Say: fmt.Sprintf("magus matches the working tree, but job %s uses another contract at %.12s; end it with `%s` or have an unleased orchestrator reconcile it in %s.",
+			lease, revision, exit, shellWord(row.CheckoutRoot)),
+		Why: fmt.Sprintf("Its holder or an unleased orchestrator ends the job with `%s` and waits on it with `./%s`; neither reads the tree at the job's authority. "+
+			"In the registered checkout, inspect `git status --short` and confirm that the intended branch preserves the work. "+
 			"If work continues, review the staged and working changes and verify the intended contract is committed on the intended branch. "+
 			"Only then run `./magus job advance %s` in the registered checkout and verify its authority against HEAD. See docs/conventions.md#recovering-a-checkout-binary.",
-			shellWord(lease), shellWord(lease)),
+			exit, hint.JobWait.With(shellWord(lease)), shellWord(lease)),
 	}
 }
 
@@ -795,7 +799,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		return fix
 	case own && hasBinary:
 		return binaryFix{
-			say: fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(root)),
+			say: ward.RelinkAndStampAt(root),
 			why: relinkWhy,
 		}
 	case lease != "":
@@ -855,6 +859,7 @@ const onePerBase = "There is one binary per base commit: the checkout's integrat
 
 // relinkWhy is why the relink is the one remedy for whoever builds ./magus.
 const relinkWhy = "The relink loads no magusfile, so it runs while nothing loads the tree, and the binary it links embeds the tree's contract. " +
+	"It links no version and no go-build stamp, and the stale-binary rule reads an unstamped ./magus as stale, so the relinked binary then runs go-build, which loads the tree and stamps it. " +
 	"If the load error names a magusfile line instead, fix that line. " +
 	"If it names generated code the tree's sources moved past, regenerate it with `go generate ./<package>`, alone on its line, then relink."
 
