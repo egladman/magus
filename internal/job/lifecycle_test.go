@@ -69,6 +69,23 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 	assert.Empty(t, probe.EndReason)
 }
 
+// Only the holder files a result. A row nobody took names `job exec`.
+func TestExitRefusesAResultFromANonHolder(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	s := tempStore(t, root)
+	seed(t, s, job.Job{ID: "untaken", ReadOnly: true, State: job.StateDeclared})
+	seed(t, s, job.Job{ID: "mine", ReadOnly: true, State: job.StateRunning, Registered: 1, CheckoutRoot: root})
+	none := func(context.Context, string) (job.CapturedRun, error) { return job.CapturedRun{}, nil }
+
+	_, err := Exit(t.Context(), s, "untaken", &job.Result{}, none)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "job exec untaken")
+	_, err = Exit(t.Context(), s, "mine", &job.Result{}, none)
+	require.NoError(t, err, "the holder files its own result")
+}
+
 // observeClaim is an observer whose diff shows exactly what rep claims.
 func observeClaim(rep job.Result) Observer {
 	return func(context.Context, job.Job) (Observed, error) { return claimed(rep), nil }

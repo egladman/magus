@@ -83,6 +83,11 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 	if rows[i].State.Terminal() {
 		return job.Job{}, &alreadyEndedError{Row: rows[i]}
 	}
+	if result != nil {
+		if err := refuseNonHolder(rows[i]); err != nil {
+			return job.Job{}, err
+		}
+	}
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
 		return job.Job{}, err
 	}
@@ -170,6 +175,16 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 			row.State = job.StatePass
 		}
 	})
+}
+
+// refuseNonHolder refuses a result for a declared row: nobody took it with `job exec`, so
+// there is no holder to file one.
+func refuseNonHolder(row job.Job) error {
+	if row.State != job.StateDeclared {
+		return nil
+	}
+	return fmt.Errorf("job: %s is not held here, so it takes no result: take it first with `%s`, in the checkout that will do its work",
+		row.ID, hint.JobExec.With(row.ID))
 }
 
 // workspaceDefaultCharms are the defaults a wait grades tree's runs under.
