@@ -824,11 +824,14 @@ func IntegrationOverlaps(rows []job.Job, row job.Job) []string {
 	return notes
 }
 
-// Unintegrated is a finished job whose branch holds commits the checkout has not got.
+// Unintegrated is a finished job whose branch holds commits the checkout has not got, or
+// whose range could not be read. Unread then names the failing read, and Commits is
+// unknown rather than zero.
 type Unintegrated struct {
 	Job     string
 	Branch  string
 	Commits int
+	Unread  string
 }
 
 // ownTree reports whether row belongs to a job tree forked from the checkout at root. A
@@ -845,26 +848,29 @@ func ownTree(rows []job.Job, root string, row job.Job) bool {
 	return true
 }
 
-// UnintegratedBranches is every job at pass or exited whose branch holds commits the
-// revision checked out at the store's root does not, in store order. Only jobs of a tree
-// forked from the store's root count (see [ownTree]): another checkout's backlog is its
-// own to integrate and never blocks this one. A job's branch is the
-// one its standing checkout has checked out, else a branch named for the job. Skipped as
-// integrated:
-//
-//   - a branch any integration job names, whatever that job's state: a merge that failed
-//     is retried by another integration job, not by counting the branch again;
-//   - an integration job's own branch once the job passed;
-//   - a branch the checkout holds a copy of ([types.RangeReporter]), as a
-//     squash or replay leaves it with no commit an ancestor.
-//
-// An error means no range could be read at all: a gap read as zero would hide the backlog.
+// UnintegratedBranches is every passed or exited job of this checkout's tree ([ownTree])
+// whose branch holds commits the root's revision lacks, in store order. A branch an
+// integration job names, or whose work the root holds as a copy, is integrated. An error
+// means some range went unread: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return unintegratedBranches(ctx, s.root, rows)
+	waiting, err := unintegratedBranches(ctx, s.root, rows)
+	if err != nil {
+		return nil, err
+	}
+	var unread error
+	for _, w := range waiting {
+		if w.Unread != "" {
+			unread = errors.Join(unread, errors.New(w.Unread))
+		}
+	}
+	if unread != nil {
+		return nil, unread
+	}
+	return waiting, nil
 }
 
 func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]Unintegrated, error) {
@@ -921,23 +927,22 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 			return nil
 		})
 	}
-	// The context's error is the only one a worker returns; it is reported below.
-	_ = g.Wait()
+	// A row skipped because the deadline passed would read as integrated.
+	waitErr := g.Wait()
 	var out []Unintegrated
 	for i, r := range reads {
 		if r.fresh {
 			answers.put(meta.ID, r.tip, r.missing)
 		}
-		if r.missing > 0 {
-			out = append(out, Unintegrated{Job: finished[i].ID, Branch: r.branch, Commits: r.missing})
+		if r.missing > 0 || r.unread != "" {
+			out = append(out, Unintegrated{Job: finished[i].ID, Branch: r.branch, Commits: r.missing, Unread: r.unread})
 		}
 	}
 	if err := answers.write(meta.ID); err != nil {
 		slog.WarnContext(ctx, "missing-commit answers not stored", attr.Component("magus"), attr.Error(err))
 	}
-	// Rows skipped because the deadline passed would read as integrated.
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("the finished branches: %w", err)
+	if waitErr != nil {
+		return nil, fmt.Errorf("the finished branches: %w", waitErr)
 	}
 	return out, nil
 }
@@ -952,10 +957,12 @@ type branchRead struct {
 	missing int
 	// fresh is a count from a range read, so the cache has not got it yet.
 	fresh bool
+	// unread is the failed range read, so missing is unknown rather than zero.
+	unread string
 }
 
 // readBranch only reads answers, so rows may run it concurrently. The caller puts what
-// each read learned. A branch whose range cannot be read counts as zero.
+// each read learned.
 func readBranch(ctx context.Context, driver types.VCSDriver, root, rev string, row job.Job, tips map[string]string, merged, integrating map[string]bool, answers *missingCache) branchRead {
 	branch := jobBranch(ctx, driver, row)
 	tip, standing := tips[branch]
@@ -968,7 +975,7 @@ func readBranch(ctx context.Context, driver types.VCSDriver, root, rev string, r
 	}
 	missing, err := driver.MissingCommits(ctx, root, rev, tip)
 	if err != nil {
-		return branchRead{}
+		return branchRead{branch: branch, unread: fmt.Sprintf("%s (job %s): the commits %s holds that %s lacks: %s", branch, row.ID, tip, rev, err)}
 	}
 	return branchRead{branch: branch, tip: tip, missing: missing, fresh: true}
 }
@@ -1006,7 +1013,9 @@ type FullTest struct {
 }
 
 // ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
-// nothing, and a side it cannot read says why rather than reading as zero.
+// nothing, and a side it cannot read says why rather than reading as zero:
+// each finished branch is merged (absent), unmerged (FinishedBranches) or
+// unread (named in BranchesUnknown with its failed read).
 // It times itself on ctx's [CallClock] as "job.forkFacts".
 func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) job.ForkFacts {
 	defer timeCall(ctx, forkFactsCall)()
@@ -1015,22 +1024,34 @@ func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) 
 	if err != nil {
 		facts.BranchesUnknown = err.Error()
 	}
-	branches := make([]string, len(waiting))
-	for i, w := range waiting {
-		branches[i] = w.Branch
+	facts = withBranches(facts, waiting)
+	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
+	return facts
+}
+
+func withBranches(facts job.ForkFacts, waiting []Unintegrated) job.ForkFacts {
+	var branches, unread []string
+	for _, w := range waiting {
+		if w.Unread != "" {
+			unread = append(unread, w.Unread)
+			continue
+		}
+		branches = append(branches, w.Branch)
 		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
 	}
-	if len(waiting) > 0 {
+	if len(unread) > 0 {
+		facts.BranchesUnknown = fmt.Sprintf("%d finished branch(es) unread: %s", len(unread), strings.Join(unread, "; "))
+	}
+	if len(branches) > 0 {
 		record, _ := codec.Marshal(map[string]any{
 			"api_version": job.APIVersion,
-			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
+			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(branches))),
 			"agent":       map[string]any{"instructions": "merge each finished branch with --no-ff, resolve, regenerate, and pass the check", "worker": map[string]string{"type": "resumed"}},
 			"integrates":  branches,
 			"check":       map[string]string{"target": "<target>", "project": "<project>"},
 		})
 		facts.IntegrateRecord = string(record)
 	}
-	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
 	return facts
 }
 
@@ -1063,14 +1084,12 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 
 // ForkFactsLine renders facts as the one line a fork prints.
 func ForkFactsLine(facts job.ForkFacts) string {
-	var branches string
-	switch {
-	case facts.BranchesUnknown != "":
-		branches = "finished branches off the base: unknown, " + facts.BranchesUnknown
-	case len(facts.FinishedBranches) == 0:
-		branches = "0 finished branches off the base"
-	default:
+	branches := "0 finished branches off the base"
+	if len(facts.FinishedBranches) > 0 {
 		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+	}
+	if facts.BranchesUnknown != "" {
+		branches += "; finished branches off the base unknown: " + facts.BranchesUnknown
 	}
 	commits := "commits since the last full test: unknown, " + facts.TestUnknown
 	if facts.TestUnknown == "" {
