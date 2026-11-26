@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -321,7 +322,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, judged verdict.Jud
 	}
 	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
 	// Refused, the root relays the ref to a worker and never sees the evidence itself.
-	if call.work != "" && (readsOutputRef(in.command) || recoversOwnCheckout(in.command, at.workspace)) {
+	if call.work != "" && (readsOutputRef(in.command) || recoversOwnCheckout(in.command, at.workspace) || refreshesOwnCheckout(ctx, in.command, at)) {
 		call.work = ""
 	}
 	if call.work != "" {
@@ -633,6 +634,73 @@ func citesPath(cited []string, abs string) bool {
 		}
 	}
 	return false
+}
+
+// refreshesOwnCheckout reports a line, alone in at's checkout, that moves it to origin/HEAD
+// or relinks ./magus there. A stale root binary refuses every fork. Nothing staged and no
+// live row editing the checkout means the move carries no one's work.
+func refreshesOwnCheckout(ctx context.Context, line string, at location) bool {
+	root := at.workspace
+	if root == "" || (at.dir != "" && !within(at.dir, root)) {
+		return false
+	}
+	call, ok := soleCall(line, DialectBash)
+	if !ok || len(call.Assigns) > 0 {
+		return false
+	}
+	words := literalWords(call.Args)
+	ref := "HEAD"
+	switch {
+	case len(words) == 4 && words[0] == "git":
+		if ref, ok = movesToRef(words[1], words[2:]); !ok {
+			return false
+		}
+	case len(words) > 1 && filepath.Base(words[0]) == "magus":
+		r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
+		if !ok || !runRelinks(at.declared().ix, r) {
+			return false
+		}
+	default:
+		return false
+	}
+	tip, ok := gitCommit(ctx, root, "refs/remotes/origin/HEAD")
+	if moved, found := gitCommit(ctx, root, ref); !ok || !found || moved != tip {
+		return false
+	}
+	if gitQuiet(ctx, root, "diff", "--cached", "--quiet") != nil {
+		return false
+	}
+	rows, err := leaseRows(ctx, at)
+	return err == nil && len(job.HeldIn(rows, root)) == 0
+}
+
+// movesToRef is the ref of `merge --ff-only <ref>` or `checkout --detach <ref>`, flag on
+// either side, false for any other subcommand or shape.
+func movesToRef(sub string, args []string) (string, bool) {
+	flag := map[string]string{"merge": "--ff-only", "checkout": "--detach"}[sub]
+	i := slices.Index(args, flag)
+	if flag == "" || len(args) != 2 || i < 0 {
+		return "", false
+	}
+	ref := args[1-i]
+	if ref == "" || strings.HasPrefix(ref, "-") {
+		return "", false
+	}
+	return ref, true
+}
+
+// gitCommit is the commit ref names in root, false when it names none.
+func gitCommit(ctx context.Context, root, ref string) (string, bool) {
+	out, err := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--verify", "--quiet", ref+"^{commit}").Output()
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
+// gitQuiet runs git in root for its exit status alone.
+func gitQuiet(ctx context.Context, root string, args ...string) error {
+	return exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...).Run()
 }
 
 func recoversOwnCheckout(line, root string) bool {

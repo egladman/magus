@@ -451,6 +451,7 @@ func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
 	bindOnExec(t.Context(), at, who, "./magus job exec own")
 	assert.Empty(t, readCostState(facts).Forked, "a row the session takes itself is no longer handed out")
 	assert.Empty(t, readCostState(facts).Forks)
+	assert.Equal(t, []string{"own"}, readCostState(facts).Held, "it runs the row's check as its holder")
 	releaseOnEnd(at, who, "./magus job exit own --stdin")
 	_, err := job.NewStore(at.jobs()).Update(t.Context(), "own", func(cur *jobtypes.Job) { cur.State = jobtypes.StateExited })
 	require.NoError(t, err)
@@ -992,6 +993,77 @@ func (s *RecoversOwnCheckoutSuite) TestTheHookWithoutRecoverIsNotRecovery() {
 func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 	declareCheckoutHook(s.T(), s.root)
 	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover && git push", s.root))
+}
+
+// RefreshesOwnCheckoutSuite pins which move of the root's own checkout to its base branch
+// tip, and which build there, is the root's work. The checkout is detached one commit
+// behind origin/main.
+type RefreshesOwnCheckoutSuite struct {
+	suite.Suite
+	at   location
+	ctx  context.Context
+	tip  string
+	base string
+}
+
+func TestRootRefreshesOwnCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(RefreshesOwnCheckoutSuite))
+}
+
+func (s *RefreshesOwnCheckoutSuite) SetupTest() {
+	t := s.T()
+	s.at, _ = orchestratorFixture(t)
+	s.Require().NoError(os.Remove(filepath.Join(s.at.workspace, ".git")))
+	s.base = commitCheckout(t, s.at.workspace)
+	s.tip = commitCheckout(t, s.at.workspace)
+	fixtureGit(t, s.at.workspace, "update-ref", "refs/remotes/origin/main", s.tip)
+	fixtureGit(t, s.at.workspace, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+	fixtureGit(t, s.at.workspace, "checkout", "-q", "--detach", s.base)
+	s.ctx = job.WithSnapshot(t.Context(), job.Snapshot{Rows: []jobtypes.Job{{ID: "a1", State: jobtypes.StateRunning}}})
+}
+
+func (s *RefreshesOwnCheckoutSuite) refreshes(line string) bool {
+	return refreshesOwnCheckout(s.ctx, line, s.at)
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestAFastForwardToTheTipIsRootWork() {
+	s.True(s.refreshes("git merge --ff-only origin/main"))
+	s.True(s.refreshes("git checkout --detach origin/main"))
+	s.True(s.refreshes("git checkout " + s.tip + " --detach"))
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestAnyOtherMoveIsIntegration() {
+	s.False(s.refreshes("git merge origin/main"), "a merge that may record a commit")
+	s.False(s.refreshes("git merge --ff-only "+s.base), "not the tip")
+	s.False(s.refreshes("git reset --hard origin/main"))
+	s.False(s.refreshes("git checkout origin/main"))
+	s.False(s.refreshes("git fetch && git merge --ff-only origin/main"), "only alone on its line")
+	s.False(s.refreshes("cd .. && git merge --ff-only origin/main"))
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestTheBuildWaitsForTheTip() {
+	s.False(s.refreshes("./magus run go-build ."), "HEAD behind the tip")
+	fixtureGit(s.T(), s.at.workspace, "checkout", "-q", "--detach", s.tip)
+	s.True(s.refreshes("./magus run go-build ."))
+	s.False(s.refreshes("./magus run generate ."), "only the relink")
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestStagedWorkStaysTheIntegrators() {
+	writeSource(s.T(), s.at.workspace, "staged.go")
+	fixtureGit(s.T(), s.at.workspace, "add", "staged.go")
+	s.False(s.refreshes("git merge --ff-only origin/main"))
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestALiveRowEditingTheCheckoutKeepsIt() {
+	row := jobtypes.Job{ID: "w1", State: jobtypes.StateRunning, CheckoutRoot: s.at.workspace}
+	row.Paths.Write = []string{"a.go"}
+	s.ctx = job.WithSnapshot(s.T().Context(), job.Snapshot{Rows: []jobtypes.Job{row}})
+	s.False(s.refreshes("git merge --ff-only origin/main"))
+}
+
+func (s *RefreshesOwnCheckoutSuite) TestNoOriginHeadNamesNoTip() {
+	fixtureGit(s.T(), s.at.workspace, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+	s.False(s.refreshes("git merge --ff-only origin/main"))
 }
 
 func TestARowNamingFableSpawnsOnFable(t *testing.T) {
