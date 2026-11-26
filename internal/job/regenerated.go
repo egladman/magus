@@ -40,6 +40,34 @@ func (o RegeneratedOutput) Project() string {
 	return project
 }
 
+// Holds reports whether file is one the declared output names.
+func (o RegeneratedOutput) Holds(file string) bool {
+	pattern, except, _ := strings.Cut(o.Output, " !")
+	g := types.Glob{Pattern: pattern}
+	if except != "" {
+		g.Except = strings.Split(except, " !")
+	}
+	return g.Match(file)
+}
+
+// RegeneratedDelivered are the outputs `job wait` may note in a diff instead of
+// refusing. In-place updates are left out: they rewrite someone else's source.
+// Nothing is read unless a changed path falls outside the write paths.
+func RegeneratedDelivered(root string, row job.Job, changed []string, ws Workspace) []RegeneratedOutput {
+	if row.ReadOnly || row.Integrating() || ws.Unavailable != "" {
+		return nil
+	}
+	outside := slices.ContainsFunc(changed, func(p string) bool {
+		_, inside := job.Matching(row.Paths.Write, p)
+		return !inside && !types.IsMagusMaintained(p)
+	})
+	if !outside {
+		return nil
+	}
+	outputs := RegeneratedOutside(root, row, ws.Projects, ws.Ignored)
+	return slices.DeleteFunc(outputs, func(o RegeneratedOutput) bool { return o.InPlace })
+}
+
 // RegeneratedLimit is how many outputs a text rendering lists before it counts the rest.
 const RegeneratedLimit = 12
 
@@ -213,7 +241,7 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 		lines = append(lines, fmt.Sprintf("and %d more from %d target(s); -o json lists every one", len(rest), len(targets)))
 	}
 	return append(lines,
-		"never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes")
+		"never hand-edit them: regenerate them with their target. `job wait` notes one in the diff instead of refusing it, and the integrator regenerates it again; unstage what the target named beside one writes")
 }
 
 // outputInside reports whether the row's write paths hold every file g can name, read the

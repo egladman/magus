@@ -70,6 +70,9 @@ type Observed struct {
 	changedFiles []string
 	// namedFiles says which postcondition arguments name a file: see [namedFiles].
 	namedFiles map[string]bool
+	// Regenerated are the declared outputs of the row's write paths that the diff may
+	// hold. Empty when the workspace could not be read, which leaves them refused.
+	Regenerated []RegeneratedOutput
 	// Present are the paths that exist in the tree right now, and PresentKnown says
 	// somebody looked. Separate from Changed because they answer different questions: a
 	// file can exist and be untouched, or be deleted and therefore changed.
@@ -446,6 +449,15 @@ func checkCovers(full, c types.LeaseCheck) bool {
 		(len(full.Args) == 0 || slices.Equal(full.Args, c.Args))
 }
 
+// regeneratedAs is the declared output that holds file, when the row's write paths regenerate one.
+func (o Observed) regeneratedAs(file string) (RegeneratedOutput, bool) {
+	i := slices.IndexFunc(o.Regenerated, func(r RegeneratedOutput) bool { return r.Holds(file) })
+	if i < 0 {
+		return RegeneratedOutput{}, false
+	}
+	return o.Regenerated[i], true
+}
+
 // covering reports whether any observed path is covered by the declared glob.
 func (o Observed) covering(declared string, paths []string) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return job.Covers(declared, p) })
@@ -756,6 +768,11 @@ func checkDelivery(v *Status, row job.Job, rep job.Result, seen Observed) {
 			if types.IsMagusMaintained(p) {
 				v.Notes = append(v.Notes, fmt.Sprintf("changed path %q is outside the job's write paths and is one magus maintains itself,"+
 					" regenerated beside the change, so it was not graded against them", p))
+				continue
+			}
+			if o, ok := seen.regeneratedAs(p); ok {
+				v.Notes = append(v.Notes, fmt.Sprintf("changed path %q is outside the job's write paths and is an output %s regenerates from them (%s),"+
+					" so it was not graded against them", p, o.Target, o.Output))
 				continue
 			}
 			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
