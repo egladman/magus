@@ -39,24 +39,10 @@ func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, di
 	return verdict.Judgment{}, false
 }
 
-// agentOnlyPrefixes name rule families about an agent's lease, role, spawns and cost.
-var agentOnlyPrefixes = []string{"lease-", "worker-", "spawn-", "root-", "continue-cold-worker"}
-
-// agentOnlyRules steer an agent only. A person's terminal is the way out of an
-// agent's lockout, so none of them may refuse a handed command.
-var agentOnlyRules = map[string]bool{
-	string(denyRuleStaleBinary):            true,
-	string(denyRulePolicyUnloaded):         true,
-	string(denyRuleOrchestratorGroundwork): true,
-	string(denyRuleHumanOnly):              true,
-	string(denyRuleGrantIsAPersons):        true,
-	string(denyRuleStall):                  true,
-	string(denyRuleUnjudgedStep):           true,
-	string(denyRuleEditUngraded):           true,
-	string(denyRuleFocusRead):              true,
-	string(denyRuleReadPaging):             true,
-}
-
+// agentOnlyRule reports whether rule's catalog row binds an agent alone. A workspace
+// rule has no row, so it refuses a handed command.
 func agentOnlyRule(rule string) bool {
-	return agentOnlyRules[rule] || slices.ContainsFunc(agentOnlyPrefixes, func(p string) bool { return strings.HasPrefix(rule, p) })
+	return slices.ContainsFunc(ruleDocRegistry, func(e ruleDocEntry) bool {
+		return e.doc.Name == rule && e.audience == audienceAgent
+	})
 }

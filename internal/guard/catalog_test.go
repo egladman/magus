@@ -184,6 +184,15 @@ func pascalCase(id string) string {
 	return b.String()
 }
 
+// TestEveryRuleDeclaresItsAudience refuses a row with no audience. A handed command is
+// judged by its rule's row, so an undeclared row has no answer.
+func TestEveryRuleDeclaresItsAudience(t *testing.T) {
+	t.Parallel()
+	for _, e := range ruleDocRegistry {
+		assert.Containsf(t, []ruleAudience{audienceAgent, audiencePerson}, e.audience, "%q declares no audience: set audience to audienceAgent or audiencePerson", e.doc.Name)
+	}
+}
+
 // TestEnrolledAdvisoriesAreMarkerKinds keeps the enrolled flag honest: only a
 // hint.MarkerKind constant can hold an advisory to one firing per session.
 func TestEnrolledAdvisoriesAreMarkerKinds(t *testing.T) {
