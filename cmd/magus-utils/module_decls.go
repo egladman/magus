@@ -357,12 +357,8 @@ func documentedExternDecl(mod std.Module, m std.Method) (string, error) {
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
-//
-// A variadic method is declared as an `any` value. Buzz has no variadic
-// parameter, and the call it has to accept (fs\join("a", "b", "c")) cannot be
-// spelled with a fixed parameter list. Declaring it as a list parameter would reject
-// every existing call site, so the method keeps today's untyped behavior and says so
-// in the generated output rather than going silently missing.
+// Buzz has no variadic parameter, so a variadic method becomes an untyped `any`
+// value, marked as variadic.
 func externDecl(m std.Method) (string, error) {
 	name := std.CamelCase(m.Name)
 	if m.BuzzName != "" {
@@ -404,11 +400,8 @@ func externDecl(m std.Method) (string, error) {
 		if name := argumentEnum(m, i); name != "" {
 			typ = name
 		}
-		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
-		// either, which is what lets a SigV4 chain feed a str secret into the same call
-		// whose byte-list result keys the next one. Buzz cannot spell that union, so
-		// `any` is the honest annotation; the RETURN keeps [int], which is what the host
-		// really hands back.
+		// A byte-slice argument takes a str or a list, which Buzz cannot spell as
+		// a union, so it is `any`. A byte-slice return stays [int].
 		if a.Type == std.TypeByteSlice {
 			typ = "any"
 		}
@@ -426,12 +419,8 @@ func externDecl(m std.Method) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// A raising Method emits `!> any`, not a specific error type: every host error
-	// crosses the VM boundary through ffi.Error, which wraps it in a map
-	// (StructuredError.BuzzError()) rather than a plain str; see
-	// internal/interp/bindings/ffi/convert.go. `any` is the honest declared shape,
-	// and it is also what an untyped `catch (e)` already binds to, so it costs
-	// existing call sites nothing.
+	// Host errors cross the VM as a map (see ffi/convert.go), not a str,
+	// so a raising method declares `!> any`.
 	raises := ""
 	if m.Raises {
 		raises = " !> any"
@@ -439,10 +428,8 @@ func externDecl(m std.Method) (string, error) {
 	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
 }
 
-// optionalRecord reports whether argument i is an optional object, not a list of them.
-// It defaults to null rather than `T{}`: a default is evaluated at the call site, where a
-// bare T can name another module's record of the same name (magus and vcs both export
-// CommandOptions). The trampoline decodes a null as the zero record.
+// optionalRecord reports whether argument i is an optional object, not a list.
+// It defaults to null, not `T{}`, which could name another module's record.
 func optionalRecord(m std.Method, i int) bool {
 	a := m.Args[i]
 	return a.Optional && a.Object != "" && !strings.HasPrefix(a.Object, "[")
@@ -473,22 +460,8 @@ func buzzArgType(t std.TypeTag) (string, error) {
 	return "", fmt.Errorf("no Buzz annotation for type tag %d", t)
 }
 
-// buzzDefault renders the default an optional parameter declares, so a caller may
-// omit it.
-//
-// Arg.Default is what the caller gets, NOT the type's zero, and the difference is not
-// cosmetic: fs.mkdirAll's perm defaults to 0o755, so declaring the zero would have Buzz
-// pass an explicit mode 0 and create a directory nothing can then write into. Before
-// these declarations existed the trampoline applied the default itself and the omission
-// never reached the host; now the declaration is what fills the gap, so it has to carry
-// the same value.
-//
-// It dispatches on the DECLARED TypeTag, not on the default's dynamic Go type. Those
-// can disagree (std does not cross-check them), and dispatching on the dynamic type
-// renders the disagreement faithfully instead of catching it: {Type: TypeFloat,
-// Default: 1} would emit `x: double = 1`. That parses, so the codegen parse gate waves
-// it through, and the checker then rejects correct call sites against a declaration
-// nobody looked at. Keying on the tag turns a mismatched default into a codegen error.
+// buzzDefault renders the default of an optional parameter: Arg.Default, not
+// the type's zero. It dispatches on the declared tag, so a mismatch fails here.
 func buzzDefault(a std.Arg) (string, error) {
 	if a.Default == nil {
 		return buzzZero(a.Type)
@@ -545,9 +518,7 @@ func floatLiteral(v any) (string, bool) {
 }
 
 // buzzZero is the default for an optional parameter that declares none.
-//
-// An unmapped tag is an error rather than a fallback: `null` is not the zero of any
-// tag, and an optional callback has no default a caller could mean.
+// An unmapped tag is an error: `null` is not the zero of any other tag.
 func buzzZero(t std.TypeTag) (string, error) {
 	switch t {
 	case std.TypeString:
@@ -579,10 +550,8 @@ func buzzEmptyLiteral(t std.TypeTag) (string, error) {
 
 // buzzReturnType renders a method's Buzz return annotation.
 //
-// Several returns marshal to a LIST, not a tuple (os.platform crosses as
-// [goos, goarch, arch] and magusfile.buzz reads os\platform()[1]), so the
-// annotation follows the wire shape, using the element type when the returns agree
-// and [any] when they do not (env.lookup is (str, bool)).
+// Several returns marshal to a list, so the annotation follows the wire
+// shape: the element type when the returns agree, else [any].
 func buzzReturnType(m std.Method) (string, error) {
 	if len(m.Returns) == 0 {
 		return "void", nil
@@ -616,16 +585,8 @@ func buzzReturnType(m std.Method) (string, error) {
 	return buzzArgType(r.Type)
 }
 
-// collectMirrors returns the object mirrors a module's declarations must carry, in
-// leaf-first order: every object its methods return, plus every object those
-// reference transitively. Derived from the returns rather than hand-listed, so a new
-// object return cannot be declared without its mirror traveling with it.
-//
-// An unresolvable name is an ERROR, not a skip. Skipping was the original shape and it
-// defeated the point: a Ret.Object naming a type no registry row claims produced a
-// module whose mirror was missing while the extern still referenced it by name, which
-// parses fine (buzz.Parse is syntax-only) and is then rejected at check time, dropping
-// the module's declarations wholesale, with no codegen error to say why.
+// collectMirrors returns the mirrors a module must carry, leaf-first.
+// An unresolvable name is an error: a missing mirror parses but fails the check.
 func collectMirrors(mod std.Module) ([]string, error) {
 	seen := map[string]bool{}
 	var order []string
@@ -651,12 +612,8 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		order = append(order, name) // after its dependencies: declare-before-use
 		return nil
 	}
-	// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
-	// references just as a return does, and emitting only the return side left
-	// http\get's `retry: HttpRetry` pointing at a type the file never declared,
-	// which the checker rejects, taking the whole module's signatures down with
-	// it. encoding\buildUrl never caught this because its URL argument is also
-	// parseUrl's return, so the type came along by accident.
+	// Arguments name types as returns do: http\get's `retry: HttpRetry` needs
+	// its mirror declared.
 	visitMethod := func(m std.Method) error {
 		for _, obj := range methodObjects(m) {
 			if err := visit(obj); err != nil {
@@ -670,10 +627,8 @@ func collectMirrors(mod std.Module) ([]string, error) {
 			return nil, err
 		}
 	}
-	// A Namespace member's Args/Returns reference objects the same way a top-level
-	// method's do (magus\ledger.list returns JobList), so it needs the same
-	// declare-before-use walk; otherwise the object never gets emitted and the
-	// namespace's extern signature points at an undeclared type.
+	// A namespace member references objects like a top-level method does
+	// (magus\ledger.list returns JobList), so it needs the same walk.
 	for _, ns := range mod.Namespaces {
 		for _, m := range sortedNamespaceMethods(ns) {
 			if err := visitMethod(m); err != nil {
@@ -723,8 +678,7 @@ func methodObjects(m std.Method) []string {
 }
 
 // declaredHere is the name mod declares entry under, and whether this visit
-// declares it. Another namespace's mirror comes from its own file, and a
-// mirror reached under both spellings is declared once.
+// declares it. Another namespace's mirror comes from its own file.
 func declaredHere(mod std.Module, entry boundaryType, name string, seen map[string]bool) (string, bool) {
 	if entry.nested() && entry.Module != mod.Name {
 		return "", false
@@ -738,11 +692,7 @@ func declaredHere(mod std.Module, entry boundaryType, name string, seen map[stri
 }
 
 // collectEnums returns the enum declarations a module's signatures and its mirrors'
-// fields name, in first-use order, then the ones .buzzgen.yaml scopes to the module.
-//
-// Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
-// not travel with its use leaves the bundle naming an undefined type, and running the
-// bundle to make its records constructible stops at the first such name.
+// fields name, in first-use order, then the ones .buzzgen.yaml scopes to it.
 func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 	seen := map[string]bool{}
 	var order []boundaryEnum
@@ -835,8 +785,7 @@ var (
 )
 
 // undeclaredTypeNames lists, sorted, every type name prog's annotations use that prog
-// itself does not declare. A bundle is executed on its own to make its records
-// constructible, so a name another bundle declares still breaks it.
+// itself does not declare. A bundle runs alone, so another bundle's name breaks it.
 func undeclaredTypeNames(prog *ast.Program) []string {
 	declared := map[string]bool{}
 	var imported []string
@@ -877,23 +826,16 @@ func undeclaredTypeNames(prog *ast.Program) []string {
 	return slices.Sorted(maps.Keys(missing))
 }
 
-// sortedMethods orders a module's methods by name. Both the mirror walk and the extern
-// emission read it, so reordering two methods in a std module cannot rewrite the
-// generated file: generated drift is a CI gate here, and a no-op diff wastes it.
+// sortedMethods orders a module's methods by name, so reordering methods in a
+// std module cannot rewrite the generated file.
 func sortedMethods(mod std.Module) []std.Method {
 	methods := slices.Clone(mod.Methods)
 	slices.SortFunc(methods, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
 	return methods
 }
 
-// referencedObjects lists the Buzz object names rt's fields reference, so a mirror is
-// never emitted before one it depends on.
-//
-// time.Time is excluded explicitly: it is a struct, but it crosses the boundary as an
-// RFC3339 str (see buzzType), so treating it as a referenced object would ask for a
-// mirror named "Time" that must not exist. It was previously swallowed by collectMirrors's
-// silent skip; now that an unresolvable name is an error, the exclusion has to be
-// stated rather than relied upon.
+// referencedObjects lists the Buzz object names rt's fields reference.
+// time.Time is excluded: it crosses as an RFC3339 str, so no "Time" mirror exists.
 func referencedObjects(module string, rt reflect.Type) []string {
 	var out []string
 	for _, f := range emit.ObjectFields(rt) {
