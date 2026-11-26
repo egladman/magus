@@ -372,7 +372,7 @@ type pushEvidence struct {
 	replay sessions.GateRecord
 	// unrun is the gate at commit that could not run every target here.
 	unrun  sessions.GateRecord
-	waiver types.GateWaiver
+	waiver gateWaiver
 	// remoteGate is the workspace's ci.remote_gate, read when no local verdict
 	// covers the commit.
 	remoteGate string
@@ -481,7 +481,7 @@ func (ev *pushEvidence) readGates(ctx context.Context, r *pushReads, deps Depend
 	}
 	if ev.cover != gatePassed && ev.cover != gateUnknown {
 		type waiver struct {
-			w      types.GateWaiver
+			w      gateWaiver
 			waived bool
 		}
 		got := pushStep(ctx, r, phasePushWaiver, func() waiver {

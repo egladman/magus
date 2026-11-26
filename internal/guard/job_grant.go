@@ -90,13 +90,13 @@ func GrantForCommit(ctx context.Context, out io.Writer, dir, rev string, rest []
 		return err
 	}
 	if opts.Revoke {
-		if _, err := RevokeGateWaiver(ctx, store, commit); err != nil {
+		if _, err := revokeGateWaiver(ctx, store, commit); err != nil {
 			return fmt.Errorf("magus job grant: %w", err)
 		}
 		fmt.Fprintf(out, "revoked the waiver of %s: a push of it meets the gate again\n", commit)
 		return nil
 	}
-	w, err := WaiveGate(ctx, store, commit, opts.Reason)
+	w, err := waiveGate(ctx, store, commit, opts.Reason)
 	if err != nil {
 		return fmt.Errorf("magus job grant: %w", err)
 	}

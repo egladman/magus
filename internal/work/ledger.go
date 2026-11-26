@@ -32,7 +32,7 @@ const itemBudget = time.Second
 // preserved captures a repository holds. A backend without it leaves both
 // kinds unsurveyed, and the survey says so in [report.Unknown].
 type heldReporter interface {
-	HeldRevisions(ctx context.Context, dir string) ([]types.HeldRevision, error)
+	HeldRevisions(ctx context.Context, dir string) ([]heldRevision, error)
 }
 
 // ledger is the work ledger of one repository: an append-only JSONL file
@@ -41,7 +41,7 @@ type heldReporter interface {
 // and never touches the work itself.
 type ledger struct {
 	repo  string
-	items file.JSONL[types.WorkItem]
+	items file.JSONL[workItem]
 	facts file.JSONL[fact]
 	now   func() time.Time
 }
@@ -60,12 +60,12 @@ func open(repo string) (*ledger, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("work ledger: %w", err)
 	}
-	items, err := file.NewJSONL(codec.JSONLConfig[types.WorkItem]{
+	items, err := file.NewJSONL(codec.JSONLConfig[workItem]{
 		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(dir, "work.jsonl"),
 		Perm: 0o644,
-		Key:  types.WorkItem.Key,
-		Live: func(w types.WorkItem) bool { return !w.Dropped },
+		Key:  workItem.Key,
+		Live: func(w workItem) bool { return !w.Dropped },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("work ledger: %w", err)
@@ -83,7 +83,7 @@ func open(repo string) (*ledger, error) {
 }
 
 // Items is what the ledger says now, without asking the version control.
-func (l *ledger) Items() ([]types.WorkItem, error) {
+func (l *ledger) Items() ([]workItem, error) {
 	return l.items.Load()
 }
 
@@ -94,16 +94,16 @@ func (l *ledger) End(ctx context.Context, key, reason string) error {
 		return fmt.Errorf("work ledger: ending %s needs a reason", key)
 	}
 	found := false
-	err := l.items.Update(ctx, func(items []types.WorkItem) []types.WorkItem {
-		i := slices.IndexFunc(items, func(w types.WorkItem) bool { return w.Key() == key })
+	err := l.items.Update(ctx, func(items []workItem) []workItem {
+		i := slices.IndexFunc(items, func(w workItem) bool { return w.Key() == key })
 		if i < 0 {
 			return nil
 		}
 		found = true
 		ended := items[i]
-		ended.State, ended.Reason, ended.Why = types.WorkEnded, reason, "ended by a person"
+		ended.State, ended.Reason, ended.Why = stateEnded, reason, "ended by a person"
 		ended.At = l.now().Unix()
-		return []types.WorkItem{ended}
+		return []workItem{ended}
 	})
 	if err != nil {
 		return fmt.Errorf("work ledger: %w", err)
@@ -126,7 +126,7 @@ type surveyTerms struct {
 
 // report is the ledger after a survey, and what the survey left unread.
 type report struct {
-	Items []types.WorkItem
+	Items []workItem
 	// Unknown names what the survey could not read and why.
 	Unknown []string
 }
@@ -204,10 +204,10 @@ type survey struct {
 	driver         types.VCSDriver
 	in             surveyTerms
 	base, baseTree string
-	stored         map[string]types.WorkItem
+	stored         map[string]workItem
 	facts          map[string]fact
 	asked          []fact
-	found          []types.WorkItem
+	found          []workItem
 	// kept are stored keys a cut read leaves as they were.
 	kept map[string]bool
 	// unread is why a checkout with no stored line went unread.
@@ -218,8 +218,8 @@ type survey struct {
 	now     int64
 }
 
-func indexItems(items []types.WorkItem) map[string]types.WorkItem {
-	out := make(map[string]types.WorkItem, len(items))
+func indexItems(items []workItem) map[string]workItem {
+	out := make(map[string]workItem, len(items))
 	for _, w := range items {
 		out[w.Key()] = w
 	}
@@ -231,7 +231,7 @@ func (r *survey) readCheckouts(ctx context.Context, checkouts []types.Registered
 		if why := r.holdingJob(c.Root); why != "" && c.Head != "" {
 			r.trackAt[c.Head] = why
 		}
-		item := types.WorkItem{Kind: types.WorkCheckout, Name: c.Root, Head: c.Head}
+		item := workItem{Kind: kindCheckout, Name: c.Root, Head: c.Head}
 		if r.readItem(ctx, &item) {
 			r.found = append(r.found, item)
 		}
@@ -240,10 +240,10 @@ func (r *survey) readCheckouts(ctx context.Context, checkouts []types.Registered
 
 // readItem fills item's facts within [itemBudget]. It reports false when
 // the read was cut, which leaves any stored line for the item as it was.
-func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
+func (r *survey) readItem(ctx context.Context, item *workItem) bool {
 	ctx, cancel := context.WithTimeout(ctx, itemBudget)
 	defer cancel()
-	if item.Kind == types.WorkCheckout {
+	if item.Kind == kindCheckout {
 		dirty, gone, err := r.dirty(ctx, item.Name)
 		if err != nil {
 			r.cutItem(*item, err)
@@ -265,13 +265,13 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 
 // cutItem keeps a stored line as it was. A checkout with none is still
 // listed, as unaccounted: an unread checkout is not a clear one.
-func (r *survey) cutItem(item types.WorkItem, err error) {
+func (r *survey) cutItem(item workItem, err error) {
 	r.cut++
 	if _, ok := r.stored[item.Key()]; ok {
 		r.kept[item.Key()] = true
 		return
 	}
-	if item.Kind == types.WorkCheckout {
+	if item.Kind == kindCheckout {
 		r.unread[item.Key()] = fmt.Sprintf("not read within %s: %v", itemBudget, err)
 		r.found = append(r.found, item)
 	}
@@ -317,7 +317,7 @@ func (r *survey) readBranches(ctx context.Context) {
 	heads, err := r.driver.BranchHeads(ctx, r.ledger.repo)
 	if err != nil {
 		r.notes = append(r.notes, fmt.Sprintf("branches were not read: %v", err))
-		r.keepKind(types.WorkBranch)
+		r.keepKind(kindBranch)
 		return
 	}
 	names := make([]string, 0, len(heads))
@@ -326,7 +326,7 @@ func (r *survey) readBranches(ctx context.Context) {
 	}
 	slices.Sort(names)
 	for _, name := range names {
-		item := types.WorkItem{Kind: types.WorkBranch, Name: name, Head: heads[name]}
+		item := workItem{Kind: kindBranch, Name: name, Head: heads[name]}
 		if r.readItem(ctx, &item) && item.Commits > 0 {
 			r.found = append(r.found, item)
 		}
@@ -337,17 +337,17 @@ func (r *survey) readHeld(ctx context.Context) {
 	held, ok := r.driver.(heldReporter)
 	if !ok {
 		r.notes = append(r.notes, fmt.Sprintf("%s lists no stashes or preserved captures, so neither was surveyed", r.driver.Name()))
-		r.keepKind(types.WorkStash, types.WorkPreserved)
+		r.keepKind(kindStash, kindPreserved)
 		return
 	}
 	revs, err := held.HeldRevisions(ctx, r.ledger.repo)
 	if err != nil {
 		r.notes = append(r.notes, fmt.Sprintf("stashes and preserved captures were not read: %v", err))
-		r.keepKind(types.WorkStash, types.WorkPreserved)
+		r.keepKind(kindStash, kindPreserved)
 		return
 	}
 	for _, h := range revs {
-		item := types.WorkItem{Kind: h.Kind, Name: h.Name, Head: h.Head}
+		item := workItem{Kind: h.Kind, Name: h.Name, Head: h.Head}
 		if r.readItem(ctx, &item) {
 			r.found = append(r.found, item)
 		}
@@ -356,7 +356,7 @@ func (r *survey) readHeld(ctx context.Context) {
 
 // keepKind leaves every stored item of kinds as it was: a kind nobody read
 // is not a kind that is gone.
-func (r *survey) keepKind(kinds ...types.WorkKind) {
+func (r *survey) keepKind(kinds ...itemKind) {
 	for key, w := range r.stored {
 		if slices.Contains(kinds, w.Kind) {
 			r.kept[key] = true
@@ -377,31 +377,31 @@ func (r *survey) holdingJob(root string) string {
 }
 
 // decide gives item its state. The order of the cases is the precedence.
-func (r *survey) decide(item types.WorkItem) types.WorkItem {
-	held := item.Kind == types.WorkStash || item.Kind == types.WorkPreserved
+func (r *survey) decide(item workItem) workItem {
+	held := item.Kind == kindStash || item.Kind == kindPreserved
 	f := r.facts[fact{Head: item.Head, Base: r.base}.key()]
 	tracked, glob := r.tracked(item), r.localOnly(item)
 	switch {
 	case r.unread[item.Key()] != "":
-		item.State, item.Why = types.WorkUnaccounted, r.unread[item.Key()]
+		item.State, item.Why = stateUnaccounted, r.unread[item.Key()]
 	case !held && item.Dirty == 0 && item.Commits == 0:
-		item.State, item.Why = types.WorkClear, "no uncommitted file and no unpublished revision"
+		item.State, item.Why = stateClear, "no uncommitted file and no unpublished revision"
 	case item.Dirty == 0 && f.Absorbed:
-		item.State, item.Why = types.WorkAbsorbed, fmt.Sprintf("merging it into %s leaves the tree as it is", r.in.Base)
+		item.State, item.Why = stateAbsorbed, fmt.Sprintf("merging it into %s leaves the tree as it is", r.in.Base)
 	case tracked != "":
-		item.State, item.Why = types.WorkTracked, tracked
+		item.State, item.Why = stateTracked, tracked
 	case glob != "":
-		item.State, item.Why = types.WorkLocalOnly, "matches work.local_only "+glob
+		item.State, item.Why = stateLocalOnly, "matches work.local_only "+glob
 	case r.ended(item):
 		prior := r.stored[item.Key()]
-		item.State, item.Why, item.Reason = types.WorkEnded, prior.Why, prior.Reason
+		item.State, item.Why, item.Reason = stateEnded, prior.Why, prior.Reason
 	default:
-		item.State, item.Why = types.WorkUnaccounted, unaccountedWhy(item)
+		item.State, item.Why = stateUnaccounted, unaccountedWhy(item)
 	}
 	return item
 }
 
-func unaccountedWhy(item types.WorkItem) string {
+func unaccountedWhy(item workItem) string {
 	switch {
 	case item.Gone && item.Commits > 0:
 		return fmt.Sprintf("its directory is gone and %d revision(s) exist only here", item.Commits)
@@ -415,22 +415,22 @@ func unaccountedWhy(item types.WorkItem) string {
 	return "it holds a revision no branch reaches, and no job or glob holds it"
 }
 
-func (r *survey) tracked(item types.WorkItem) string {
+func (r *survey) tracked(item workItem) string {
 	switch item.Kind {
-	case types.WorkCheckout:
+	case kindCheckout:
 		return r.holdingJob(item.Name)
-	case types.WorkBranch:
+	case kindBranch:
 		return r.trackAt[item.Head]
-	case types.WorkStash, types.WorkPreserved:
+	case kindStash, kindPreserved:
 	}
 	return ""
 }
 
 // localOnly is the glob item matches: a checkout by its directory name,
 // anything else by its name. Survey has validated every glob.
-func (r *survey) localOnly(item types.WorkItem) string {
+func (r *survey) localOnly(item workItem) string {
 	name := item.Name
-	if item.Kind == types.WorkCheckout {
+	if item.Kind == kindCheckout {
 		name = filepath.Base(item.Name)
 	}
 	for _, glob := range r.in.LocalOnly {
@@ -441,9 +441,9 @@ func (r *survey) localOnly(item types.WorkItem) string {
 	return ""
 }
 
-func (r *survey) ended(item types.WorkItem) bool {
+func (r *survey) ended(item workItem) bool {
 	prior, ok := r.stored[item.Key()]
-	return ok && prior.State == types.WorkEnded && prior.Head == item.Head && prior.Dirty == item.Dirty
+	return ok && prior.State == stateEnded && prior.Head == item.Head && prior.Dirty == item.Dirty
 }
 
 func (r *survey) unknown() []string {
@@ -464,9 +464,9 @@ func (r *survey) write(ctx context.Context) error {
 			return fmt.Errorf("work survey: %w", err)
 		}
 	}
-	err := r.ledger.items.Update(ctx, func(current []types.WorkItem) []types.WorkItem {
+	err := r.ledger.items.Update(ctx, func(current []workItem) []workItem {
 		latest := indexItems(current)
-		var add []types.WorkItem
+		var add []workItem
 		seen := map[string]bool{}
 		for _, item := range r.found {
 			item = r.decide(item)
@@ -493,7 +493,135 @@ func (r *survey) write(ctx context.Context) error {
 	return nil
 }
 
-func same(a, b types.WorkItem) bool {
+func same(a, b workItem) bool {
 	a.At, b.At = 0, 0
 	return a == b
+}
+
+// itemKind is what holds a piece of work a person could lose.
+type itemKind string
+
+const (
+	// kindCheckout is a registered checkout: its files and its head.
+	kindCheckout itemKind = "checkout"
+	// kindBranch is a local branch holding unpublished revisions.
+	kindBranch itemKind = "branch"
+	// kindStash is a stash entry.
+	kindStash itemKind = "stash"
+	// kindPreserved is a capture Preserve anchored.
+	kindPreserved itemKind = "preserved"
+)
+
+// itemState is what accounts for a piece of work, if anything does.
+type itemState string
+
+const (
+	// stateUnaccounted is work nothing accounts for.
+	stateUnaccounted itemState = "unaccounted"
+	// stateTracked is work a live job row holds.
+	stateTracked itemState = "tracked"
+	// stateLocalOnly matches a work.local_only glob: never published.
+	stateLocalOnly itemState = "local-only"
+	// stateAbsorbed merges into the base without changing its tree.
+	stateAbsorbed itemState = "absorbed"
+	// stateEnded is work a person ended, with a reason, at its head.
+	stateEnded itemState = "ended"
+	// stateClear holds nothing to lose: no uncommitted file and no
+	// unpublished revision.
+	stateClear itemState = "clear"
+)
+
+// workItem is one line of the work ledger: a checkout, branch, stash or
+// preserved capture of one repository, and what accounts for it. The last
+// line per [workItem.Key] is the item.
+type workItem struct {
+	Kind itemKind
+	// Name is the checkout root, branch, stash ref or preserved handle.
+	Name string
+	// Repo is the primary checkout's root, so a reader of every ledger
+	// can tell whose an item is.
+	Repo  string
+	State itemState
+	// Head is the revision the item holds; Base is what it was judged
+	// absorbed against.
+	Head, Base string
+	// Dirty counts a checkout's uncommitted files.
+	Dirty int
+	// Commits counts revisions from Head that no remote or Base reaches.
+	Commits int
+	// Gone marks a registered checkout whose directory is gone.
+	Gone bool
+	// Why is what decided State: a job, a glob, an unanswered read.
+	Why string
+	// Reason is what the person said when they ended the item.
+	Reason string
+	// At is unix seconds when this line was written.
+	At int64
+	// Dropped ends the key: the item is gone.
+	Dropped bool
+}
+
+// Key is "<kind>:<name>".
+func (w workItem) Key() string {
+	return fmt.Sprintf("%s:%s", w.Kind, w.Name)
+}
+
+type workItemWire struct {
+	Kind    itemKind  `json:"kind"`
+	Name    string    `json:"name"`
+	Repo    string    `json:"repo"`
+	State   itemState `json:"state"`
+	Head    string    `json:"head,omitempty"`
+	Base    string    `json:"base,omitempty"`
+	Dirty   int       `json:"dirty,omitempty"`
+	Commits int       `json:"commits,omitempty"`
+	Gone    bool      `json:"gone,omitempty"`
+	Why     string    `json:"why,omitempty"`
+	Reason  string    `json:"reason,omitempty"`
+	At      int64     `json:"at"`
+	Dropped bool      `json:"dropped,omitempty"`
+}
+
+// MarshalJSON refuses an unknown kind or state, so the ledger never
+// holds a line its reader would refuse.
+func (w workItem) MarshalJSON() ([]byte, error) {
+	if err := w.valid(); err != nil {
+		return nil, err
+	}
+	return codec.Marshal(workItemWire(w))
+}
+
+// UnmarshalJSON refuses an unknown kind or state rather than guess one.
+func (w *workItem) UnmarshalJSON(b []byte) error {
+	var wire workItemWire
+	if err := codec.Unmarshal(b, &wire); err != nil {
+		return fmt.Errorf("decode work item: %w", err)
+	}
+	item := workItem(wire)
+	if err := item.valid(); err != nil {
+		return err
+	}
+	*w = item
+	return nil
+}
+
+func (w workItem) valid() error {
+	kinds := []itemKind{kindCheckout, kindBranch, kindStash, kindPreserved}
+	if !slices.Contains(kinds, w.Kind) {
+		return fmt.Errorf("work item %q: kind %q is not one of %v", w.Name, w.Kind, kinds)
+	}
+	states := []itemState{stateUnaccounted, stateTracked, stateLocalOnly, stateAbsorbed, stateEnded, stateClear}
+	if !slices.Contains(states, w.State) {
+		return fmt.Errorf("work item %s: state %q is not one of %v", w.Key(), w.State, states)
+	}
+	return nil
+}
+
+// heldRevision is a revision a repository holds apart from its branches.
+type heldRevision struct {
+	// Kind is kindStash or kindPreserved.
+	Kind itemKind
+	// Name is the backend's own name: a stash ref, a preserved handle.
+	Name string
+	Head string
 }

@@ -68,14 +68,14 @@ func (s *ledgerSuite) survey(in surveyTerms) report {
 	return report
 }
 
-func (s *ledgerSuite) item(report report, key string) types.WorkItem {
+func (s *ledgerSuite) item(report report, key string) workItem {
 	for _, w := range report.Items {
 		if w.Key() == key {
 			return w
 		}
 	}
 	s.Failf("no item", "%s is not in %v", key, report.Items)
-	return types.WorkItem{}
+	return workItem{}
 }
 
 func (s *ledgerSuite) lines() []string {
@@ -91,7 +91,7 @@ func (s *ledgerSuite) TestACleanPublishedCheckoutIsClear() {
 	s.branches(nil)
 	got := s.item(s.survey(surveyTerms{}), "checkout:"+s.repo)
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkCheckout, Name: s.repo, Repo: s.repo, State: types.WorkClear,
+	s.Equal(workItem{Kind: kindCheckout, Name: s.repo, Repo: s.repo, State: stateClear,
 		Head: "h1", Base: "b0", Why: "no uncommitted file and no unpublished revision"}, got)
 }
 
@@ -102,7 +102,7 @@ func (s *ledgerSuite) TestADirtyCheckoutNothingHoldsIsUnaccounted() {
 	s.branches(nil)
 	got := s.item(s.survey(surveyTerms{}), "checkout:"+s.repo)
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkCheckout, Name: s.repo, Repo: s.repo, State: types.WorkUnaccounted,
+	s.Equal(workItem{Kind: kindCheckout, Name: s.repo, Repo: s.repo, State: stateUnaccounted,
 		Head: "h1", Base: "b0", Dirty: 2, Why: "2 uncommitted file(s), and no job or glob holds them"}, got)
 }
 
@@ -113,7 +113,7 @@ func (s *ledgerSuite) TestABranchWhoseMergeLeavesTheBaseTreeIsAbsorbed() {
 	s.merges("h2", types.TreeMergeResult{Tree: "tree-b0"})
 	got := s.item(s.survey(surveyTerms{}), "branch:topic")
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkBranch, Name: "topic", Repo: s.repo, State: types.WorkAbsorbed,
+	s.Equal(workItem{Kind: kindBranch, Name: "topic", Repo: s.repo, State: stateAbsorbed,
 		Head: "h2", Base: "b0", Commits: 1, Why: "merging it into main leaves the tree as it is"}, got)
 }
 
@@ -122,7 +122,7 @@ func (s *ledgerSuite) TestAMergeWithConflictsIsNotAbsorbed() {
 	s.branches(map[string]string{"topic": "h2"})
 	s.unpublished("h2", "h2")
 	s.merges("h2", types.TreeMergeResult{Tree: "tree-b0", Conflicts: []types.Conflict{{}}})
-	s.Equal(types.WorkUnaccounted, s.item(s.survey(surveyTerms{}), "branch:topic").State)
+	s.Equal(stateUnaccounted, s.item(s.survey(surveyTerms{}), "branch:topic").State)
 }
 
 func (s *ledgerSuite) TestABranchWithNothingUnpublishedIsNoItem() {
@@ -139,9 +139,9 @@ func (s *ledgerSuite) TestACheckoutALiveJobHoldsIsTrackedWithItsBranch() {
 	s.merges("h3", types.TreeMergeResult{Tree: "tree-h3"})
 	s.branches(map[string]string{"topic": "h3"})
 	report := s.survey(surveyTerms{Jobs: []job.Job{{ID: "fix", State: job.StateRunning, CheckoutRoot: s.repo}}})
-	s.Equal(types.WorkTracked, s.item(report, "checkout:"+s.repo).State)
+	s.Equal(stateTracked, s.item(report, "checkout:"+s.repo).State)
 	s.Equal("job fix (running)", s.item(report, "checkout:"+s.repo).Why)
-	s.Equal(types.WorkTracked, s.item(report, "branch:topic").State)
+	s.Equal(stateTracked, s.item(report, "branch:topic").State)
 }
 
 func (s *ledgerSuite) TestATerminalJobTracksNothing() {
@@ -150,7 +150,7 @@ func (s *ledgerSuite) TestATerminalJobTracksNothing() {
 	s.unpublished("h3")
 	s.branches(nil)
 	report := s.survey(surveyTerms{Jobs: []job.Job{{ID: "fix", State: job.StatePass, CheckoutRoot: s.repo}}})
-	s.Equal(types.WorkUnaccounted, s.item(report, "checkout:"+s.repo).State)
+	s.Equal(stateUnaccounted, s.item(report, "checkout:"+s.repo).State)
 }
 
 func (s *ledgerSuite) TestALocalOnlyGlobMatchesACheckoutByItsDirectoryName() {
@@ -161,10 +161,10 @@ func (s *ledgerSuite) TestALocalOnlyGlobMatchesACheckoutByItsDirectoryName() {
 	s.unpublished("h4", "h4")
 	s.merges("h4", types.TreeMergeResult{Tree: "tree-h4"})
 	report := s.survey(surveyTerms{LocalOnly: []string{filepath.Base(s.repo), "buzzed-*"}})
-	s.Equal(types.WorkLocalOnly, s.item(report, "checkout:"+s.repo).State)
+	s.Equal(stateLocalOnly, s.item(report, "checkout:"+s.repo).State)
 	got := s.item(report, "branch:buzzed-fold")
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkBranch, Name: "buzzed-fold", Repo: s.repo, State: types.WorkLocalOnly,
+	s.Equal(workItem{Kind: kindBranch, Name: "buzzed-fold", Repo: s.repo, State: stateLocalOnly,
 		Head: "h4", Base: "b0", Commits: 1, Why: "matches work.local_only buzzed-*"}, got)
 }
 
@@ -193,7 +193,7 @@ func (s *ledgerSuite) TestAnEndedItemStaysEndedAtItsHead() {
 	s.Require().NoError(s.ledger.End(context.Background(), "branch:topic", "an experiment, dropped"))
 	got := s.item(s.survey(surveyTerms{}), "branch:topic")
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkBranch, Name: "topic", Repo: s.repo, State: types.WorkEnded,
+	s.Equal(workItem{Kind: kindBranch, Name: "topic", Repo: s.repo, State: stateEnded,
 		Head: "h5", Base: "b0", Commits: 1, Why: "ended by a person", Reason: "an experiment, dropped"}, got)
 	s.Len(s.lines(), 2, "the second survey agreed with the ended line")
 }
@@ -208,7 +208,7 @@ func (s *ledgerSuite) TestAnEndedItemWhoseHeadMovedIsUnaccountedAgain() {
 	s.Require().NoError(s.ledger.End(context.Background(), "branch:topic", "dropped"))
 	got := s.item(s.survey(surveyTerms{}), "branch:topic")
 	got.At = 0 // the clock the survey wrote the line with
-	s.Equal(types.WorkItem{Kind: types.WorkBranch, Name: "topic", Repo: s.repo, State: types.WorkUnaccounted,
+	s.Equal(workItem{Kind: kindBranch, Name: "topic", Repo: s.repo, State: stateUnaccounted,
 		Head: "h6", Base: "b0", Commits: 1, Why: "1 unpublished revision(s), and no job or glob holds them"}, got)
 }
 
@@ -256,7 +256,7 @@ func (s *ledgerSuite) TestAGoneCheckoutWithUnpublishedRevisionsIsUnaccounted() {
 	s.branches(nil)
 	got := s.item(s.survey(surveyTerms{}), "checkout:"+gone)
 	s.True(got.Gone)
-	s.Equal(types.WorkUnaccounted, got.State)
+	s.Equal(stateUnaccounted, got.State)
 	s.Contains(got.Why, "directory is gone")
 }
 
@@ -269,10 +269,10 @@ func (s *ledgerSuite) TestABackendListingNoHeldRevisionsSaysSo() {
 
 type heldDriver struct {
 	*typestest.MockVCSDriver
-	held []types.HeldRevision
+	held []heldRevision
 }
 
-func (d heldDriver) HeldRevisions(context.Context, string) ([]types.HeldRevision, error) {
+func (d heldDriver) HeldRevisions(context.Context, string) ([]heldRevision, error) {
 	return d.held, nil
 }
 
@@ -281,32 +281,32 @@ func (s *ledgerSuite) TestAStashIsSurveyedWhenTheBackendListsIt() {
 	s.branches(nil)
 	s.unpublished("h8", "h8")
 	s.merges("h8", types.TreeMergeResult{Tree: "tree-h8"})
-	driver := heldDriver{MockVCSDriver: s.vcs, held: []types.HeldRevision{{Kind: types.WorkStash, Name: "stash@{0}", Head: "h8"}}}
+	driver := heldDriver{MockVCSDriver: s.vcs, held: []heldRevision{{Kind: kindStash, Name: "stash@{0}", Head: "h8"}}}
 	report, err := s.ledger.Survey(context.Background(), driver, surveyTerms{Base: "main"})
 	s.Require().NoError(err)
 	s.Empty(report.Unknown)
-	s.Equal(types.WorkUnaccounted, s.item(report, "stash:stash@{0}").State)
+	s.Equal(stateUnaccounted, s.item(report, "stash:stash@{0}").State)
 }
 
 func (s *ledgerSuite) TestAWorkItemRefusesAnUnknownState() {
-	var w types.WorkItem
-	err := codec.Unmarshal([]byte(`{"kind":"branch","name":"topic","state":"lost","at":1}`), &w) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	var w workItem
+	err := codec.Unmarshal([]byte(`{"kind":"branch","name":"topic","state":"lost","at":1}`), &w) //nolint:musttag // workItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().Error(err)
 	s.Contains(err.Error(), `state "lost"`)
 }
 
 func (s *ledgerSuite) TestAWorkItemRefusesAnUnknownKind() {
-	_, err := codec.Marshal(types.WorkItem{Kind: "tag", Name: "v1", State: types.WorkClear}) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	_, err := codec.Marshal(workItem{Kind: "tag", Name: "v1", State: stateClear}) //nolint:musttag // workItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().Error(err)
 	s.Contains(err.Error(), `kind "tag"`)
 }
 
 func (s *ledgerSuite) TestAWorkItemRoundTrips() {
-	in := types.WorkItem{Kind: types.WorkBranch, Name: "topic", Repo: s.repo, State: types.WorkEnded,
+	in := workItem{Kind: kindBranch, Name: "topic", Repo: s.repo, State: stateEnded,
 		Head: "h1", Base: "b0", Commits: 2, Reason: "dropped", At: 5}
-	data, err := codec.Marshal(in) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	data, err := codec.Marshal(in) //nolint:musttag // workItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().NoError(err)
-	var out types.WorkItem
-	s.Require().NoError(codec.Unmarshal(data, &out)) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	var out workItem
+	s.Require().NoError(codec.Unmarshal(data, &out)) //nolint:musttag // workItem encodes through MarshalJSON and its tagged workItemWire
 	s.Equal(in, out)
 }
