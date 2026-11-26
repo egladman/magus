@@ -117,8 +117,7 @@ fun checkHead(row: Row, head: str, source: str = "") > result\Result::<bool> {
 // checkFit fails with every way the taken lease is unfit for a worker in root.
 // A row with no checkpoint has no base to check, which render reports.
 // trackedClean is whether root's tracked files match its HEAD.
-// ownTree skips the base check: a worker's edits move its checkout off the checkpoint.
-export fun checkFit(row: Row, root: str, main: str, trackedClean: bool, ownTree: bool = false) > result\Result::<bool> {
+export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > result\Result::<bool> {
     final found = mut [<str>];
     if (path\clean(row.checkoutRoot) != path\clean(root)) {
         final where = if (row.checkoutRoot == "") "no checkout" else row.checkoutRoot;
@@ -127,7 +126,7 @@ export fun checkFit(row: Row, root: str, main: str, trackedClean: bool, ownTree:
         found.append("job {row.id} names {where} as its checkout, not {root}{why}; rerun `./magus job exec {row.id}` from {root}");
     }
     final sameTree = row.baseVerdict == "match" or (row.baseVerdict == "revision-match" and trackedClean);
-    if (row.checkpoint != "" and !sameTree and !ownTree) {
+    if (row.checkpoint != "" and !sameTree) {
         found.append("job {row.id} recorded base {row.reportedBase}, verdict {row.baseVerdict}, but its checkpoint is {row.checkpoint}; "
             + "`git switch --detach {row.checkpoint}` (or the row's branch at it), then bootstrap again");
     }
@@ -397,12 +396,12 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
     if (pinned.error -> e) {
         io\stderr.write("bootstrap-worktree: placed ./magus, and no row pins it, so the root's hook judges with its own binary: {e.message}\n");
     }
-    return claimThenIndex(
+    return settle(
         fun (args: [str]) > result\Result::<str> => magusAt(local, root: at, args: args),
+        own: own,
         root: at,
         job: job,
         main: main,
-        ownTree: own,
         trackedClean: fun () > result\Result::<bool> {
             try {
                 return result\ok::<bool>((vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = at, quiet = true, allowFailure = true }).code) == 0);
@@ -447,7 +446,7 @@ fun heldElsewhere(run: fun (args: [str]) > result\Result::<str>, job: str, execE
 // run executes a magus subcommand and returns its output. When the exec fails on a running
 // job, its holder already holds the lease: that is said on stderr, and the row comes back
 // with no id, taken by nobody here.
-export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>, ownTree: bool = false) > result\Result::<Row> {
+export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>) > result\Result::<Row> {
     final took = run(["job", "exec", job]);
     if (took.error -> e) {
         return heldElsewhere(run, job: job, execError: e);
@@ -466,7 +465,7 @@ export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: s
     if (cleanNow.error -> err) {
         return result\Result::<Row>{ error = err };
     }
-    final fit = checkFit(row, root: root, main: main, trackedClean: cleanNow.value!, ownTree: ownTree);
+    final fit = checkFit(row, root: root, main: main, trackedClean: cleanNow.value!);
     if (fit.error -> e) {
         return result\fail::<Row>("bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e.message}");
     }
@@ -477,6 +476,16 @@ export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: s
         std\print("built the graph");
     }
     return result\ok::<Row>(row);
+}
+
+// settle takes the job in root, unless own: a job's own checkout is taken by its worker's job exec.
+// An empty row says nothing was taken.
+export fun settle(run: fun (args: [str]) > result\Result::<str>, own: bool, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>) > result\Result::<Row> {
+    if (own) {
+        std\print("built and kept ./magus in {root}; take job {job} there with `./magus job exec {job}`");
+        return result\ok::<Row>(Row{ id = "", state = "", checkpoint = "", reportedBase = "", baseVerdict = "", checkoutRoot = root });
+    }
+    return claimThenIndex(run, root: root, job: job, main: main, trackedClean: trackedClean);
 }
 
 // graphBuildFailed is the line printed when the graph build fails after the lease is taken: the
@@ -682,23 +691,21 @@ test "an orchestrator root differing from the job checkout is judged by the job 
     final row = Row{ id = "j", state = "running", checkpoint = "abc", reportedBase = "def", baseVerdict = "diverged", checkoutRoot = "/j" };
     assert\isTrue(isOwnCheckout(row, source: "/j/"), message: "own checkout");
     assert\isTrue(!isOwnCheckout(row, source: "/o"), message: "another checkout");
-    assert\isTrue(checkFit(row, root: "/o", main: MAIN, trackedClean: false, ownTree: true).error != null, message: "the orchestrator's root is not the job's checkout");
-    assert\isTrue(checkFit(row, root: "/j", main: MAIN, trackedClean: false).error != null, message: "a diverged base is refused by default");
-    assert\isTrue(checkFit(row, root: "/j", main: MAIN, trackedClean: false, ownTree: true).error == null, message: "the job's own tree passes at the job's checkout");
     final ran = mut [<str>];
-    final taken = claimThenIndex(
+    final taken = settle(
         fun (args: [str]) > result\Result::<str> {
             ran.append(args.join(" "));
-            return result\ok::<str>(if (args[0] == "describe") "\{\"job\":\{\"id\":\"j\",\"state\":\"running\",\"checkpoint\":\"abc\",\"reported_base\":\"def\",\"base_verdict\":\"diverged\",\"checkout_root\":\"/j\"}}" else "");
+            return result\ok::<str>("");
         },
+        own: true,
         root: "/j",
         job: "j",
         main: MAIN,
         trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(false),
-        ownTree: true,
     );
-    assert\isTrue(taken.error == null, message: "the job's own tree is fit");
-    assert\equal(ran.join("|"), want: "job exec j|describe job j -o json|graph build --silent", message: "step order");
+    assert\isTrue(taken.error == null, message: "the own-checkout path succeeds");
+    assert\equal(taken.value!.id, want: "", message: "no row is taken, so main prints no took-job lines");
+    assert\equal(ran.len(), want: 0, message: "no job exec, describe or graph build: the worker takes the job in its checkout");
 }
 
 test "a diverged worktree with tracked edits is still refused and not detached" {
