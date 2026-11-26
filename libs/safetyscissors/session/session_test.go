@@ -485,6 +485,24 @@ func (s *ReadSuite) TestSetAsideRetiredRenamesOnlyOldGroupFiles() {
 	s.Require().NoError(err, "the store reads once the old file is set aside")
 }
 
+// A file holding a retired decision is renamed to <id>.retired-decision with its bytes.
+func (s *ReadSuite) TestSetAsideRetiredRenamesAFileHoldingARetiredDecision() {
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	body := `{"v":"safetyscissors.session/v1alpha1","invocation":"sess1","seq":1,"kind":"agent_event","ts":10,` +
+		`"payload":{"host":"h1","event":"shell.command","ref":"r1","at":10,"verdict":"pass"}}` + "\n"
+	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
+
+	aside, err := SetAsideRetired(s.T().Context(), dir)
+	s.Require().NoError(err)
+	set := filepath.Join(dir, "sess1.retired-decision")
+	s.Equal([]string{set}, aside)
+	s.NoFileExists(path)
+	kept, err := os.ReadFile(set)
+	s.Require().NoError(err)
+	s.Equal(body, string(kept))
+}
+
 // A record from before the module took the store carries magus.sessions, and the store
 // is refused with the file named rather than read with that record missing.
 func (s *ReadSuite) TestARetiredGroupRefusesTheStore() {
