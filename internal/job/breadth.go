@@ -133,10 +133,9 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 	}
 }
 
-// narrowestCover returns the write paths the row's own postconditions and criteria point at: the
-// files defining its symbol postconditions with the Go tests beside them, then each existing file
-// or `file#declaration` claim named in its criteria. A nil read or an unanswered symbol
-// contributes nothing, so the cover is then the criteria's alone.
+// narrowestCover returns the files defining the row's symbol postconditions, then each file or
+// claim its criteria name. No test file joins them: existing tests go to their own row
+// ([types.WritePathExistingTests]). An unanswered symbol contributes nothing.
 func narrowestCover(ctx context.Context, root string, row job.Job, read SymbolReader) []string {
 	var cover []string
 	add := func(p string) {
@@ -155,9 +154,6 @@ func narrowestCover(ctx context.Context, root string, row job.Job, read SymbolRe
 			}
 			for _, f := range fact.DefinedIn {
 				add(f)
-				if path.Ext(f) == ".go" {
-					add(path.Join(path.Dir(f), "*_test.go"))
-				}
 			}
 		}
 	}

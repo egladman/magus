@@ -895,6 +895,12 @@ const JobStoreRecordForeign DiagnosticCode = "MGS3058"
 // jobs.stale_after. The path stays out of reach: quiet is not proof the holder left. The
 // message names the `job prune --dry-run` line the root or a person checks it with.
 const LeaseHolderQuiet DiagnosticCode = "MGS3059"
+
+// WritePathExistingTests is a job writing a package's code and test declarations that
+// exist at its base. Its worker could weaken the test that grades its own change. The fix
+// moves the existing tests to a row a new worker takes, denied in the implementation row.
+// New tests stay allowed there.
+const WritePathExistingTests DiagnosticCode = "MGS3060"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1253,6 +1259,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UncommittedRepair,
 	JobStoreRecordForeign,
 	LeaseHolderQuiet,
+	WritePathExistingTests,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

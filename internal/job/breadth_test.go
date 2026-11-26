@@ -188,7 +188,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	}
 }
 
-func TestNarrowestCoverNamesTheDefiningFileItsTestsAndTheCriteriaFiles(t *testing.T) {
+func TestNarrowestCoverNamesTheDefiningFileAndTheCriteriaFilesButNoTests(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := job.Job{
 		ID:             "fill",
@@ -198,5 +198,5 @@ func TestNarrowestCoverNamesTheDefiningFileItsTestsAndTheCriteriaFiles(t *testin
 
 	got := narrowestCover(context.Background(), root, row, symbolsAt(map[string][]string{"Foo": {"pkg/a.go"}}))
 
-	assert.Equal(t, []string{"pkg/a.go", "pkg/*_test.go", "web/x.go", "pkg/b.go#Bar"}, got)
+	assert.Equal(t, []string{"pkg/a.go", "web/x.go", "pkg/b.go#Bar"}, got)
 }

@@ -111,6 +111,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		}
 		checks := addedChecks(prev, merged, checkChanged)
 		ps = append(ps, deniedCheckProblems(graded, store, checks)...)
+		ps = append(ps, newProblems(existingTestProblems(ctx, store, prev), existingTestProblems(ctx, store, merged))...)
 		judged = job.Job{ID: id, Paths: job.Paths{Write: added}, Check: checks.Check, Postconditions: checks.Postconditions, ReadOnly: merged.ReadOnly}
 		if !slices.Equal(prev.Paths.Write, merged.Paths.Write) {
 			v.WriteProof = store.WriteProof(rows, merged)
@@ -125,6 +126,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		ps = append(ps, mergedDirectoryProblems(ctx, store, merged, merged.Integrates)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
+		ps = append(ps, existingTestProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
 		ps = append(ps, unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(merged))...)
 		ps = append(ps, narrowedTestProblems(store, merged)...)
