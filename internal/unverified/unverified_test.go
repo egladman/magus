@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -105,6 +106,20 @@ func (s *ReadSuite) TestACleanPassingRunAtTheRevisionReadsTheFile() {
 	s.Equal([]string{"a.go"}, got.Changed)
 	s.Empty(got.Unverified)
 	s.Empty(got.Runs, "no run claims an unverified file")
+}
+
+func (s *ReadSuite) TestOnlyAPassingCleanRunAtAKnownRevisionIsRecorded() {
+	run := jobtypes.CapturedRun{Found: true, Ref: "r", Project: ".", Target: "test", Revision: "abc"}
+	got := RecordedRuns([]jobtypes.CapturedRun{
+		run,
+		{Found: true, Target: "test", Revision: "abc", Failed: true},
+		{Found: true, Target: "test", Revision: "abc", Dirty: true},
+		{Found: true, Target: "test"},
+		{Found: false, Target: "test", Revision: "abc"},
+		{Found: true, Revision: "abc"},
+	})
+	s.Require().Len(got, 1)
+	s.Equal(cache.OutputDescriptor{Ref: "r", Project: ".", Target: "test", Revision: "abc"}, got[0])
 }
 
 func (s *ReadSuite) TestACleanRunAtAnOlderRevisionReadsAFileUnchangedSince() {

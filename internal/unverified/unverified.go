@@ -29,6 +29,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -104,6 +105,9 @@ type Checkout struct {
 	// recorded no run.
 	Dir, Workspace, CacheDir string
 	VCS                      types.VCSOptions
+	// Recorded are runs kept outside the store, from [RecordedRuns]. They weigh as the
+	// store's runs do.
+	Recorded []cache.OutputDescriptor
 	// Projects opens the workspace, as readInput.Projects.
 	Projects func(context.Context) (Projects, error)
 }
@@ -148,9 +152,28 @@ func Open(ctx context.Context, c Checkout, revision string) types.UnverifiedRepo
 			if c.CacheDir == "" {
 				return []cache.OutputDescriptor{}, nil
 			}
-			return cache.NewOutputStore(c.CacheDir).ListDescriptors()
+			stored, err := cache.NewOutputStore(c.CacheDir).ListDescriptors()
+			return append(stored, c.Recorded...), err
 		},
 	})
+}
+
+// RecordedRuns are the passing runs among captured that ran over a clean tree at a known
+// revision. A job row outlives its worker's checkout, so the revision is all that says what a
+// run read; a dirty run names none.
+func RecordedRuns(captured []jobtypes.CapturedRun) []cache.OutputDescriptor {
+	var out []cache.OutputDescriptor
+	for _, c := range captured {
+		if !c.Found || c.Failed || c.Dirty || c.Revision == "" || c.Target == "" {
+			continue
+		}
+		out = append(out, cache.OutputDescriptor{
+			Ref: c.Ref, Project: c.Project, Target: c.Target, Spell: c.Spell, Attempt: c.AttemptID,
+			TimestampMs: c.TimestampMs, DurationMs: c.DurationMs, Revision: c.Revision, Lease: c.Lease,
+			ExtraArgs: slices.Clone(c.ExtraArgs),
+		})
+	}
+	return out
 }
 
 func errorMessage(err error) string {

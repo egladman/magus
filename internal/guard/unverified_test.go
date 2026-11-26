@@ -15,6 +15,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -92,6 +94,48 @@ func (s *UnverifiedReaderSuite) TestTheReadLocatesTheCheckoutHoldingDir() {
 	s.Require().NoError(err)
 	s.Empty(got.Unknown)
 	s.Empty(got.Unverified, "the run recorded in the other checkout's store reads its file")
+}
+
+// onRow pins a job row that recorded run as its check's run, as a worker's exit files it.
+func (s *UnverifiedReaderSuite) onRow(run jobtypes.CapturedRun) context.Context {
+	row := jobtypes.Job{ID: "worker", Attempt: &run}
+	return job.WithSnapshot(withSecrets(s.T().Context()), job.Snapshot{Rows: []jobtypes.Job{row}})
+}
+
+func (s *UnverifiedReaderSuite) TestAJobRowsRunAtThePushedContentReadsTheFile() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	ctx := s.onRow(jobtypes.CapturedRun{Found: true, Ref: "ref", Project: ".", Target: "test", Revision: head})
+
+	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
+	s.Require().NoError(err)
+	s.Empty(got.Unknown)
+	s.Empty(got.Unverified, "the worker's run read a.go as the pushed commit holds it")
+}
+
+func (s *UnverifiedReaderSuite) TestAJobRowsRunAtOtherContentDoesNotReadTheFile() {
+	older := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	head := s.repo.Commit("again", map[string]string{"a.go": "package a\n\nvar A = 2\n"})
+	ctx := s.onRow(jobtypes.CapturedRun{Found: true, Ref: "ref", Project: ".", Target: "test", Revision: older})
+
+	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go"}, pathsOf(got.Unverified))
+}
+
+func (s *UnverifiedReaderSuite) TestNoJobRowsLeaveTheFileUnverified() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+
+	got, err := guardUnverified(s.deps)(withSecrets(s.T().Context()), s.repo.Root(), head)
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go"}, pathsOf(got.Unverified))
+}
+
+func pathsOf(files []types.UnverifiedFile) []string {
+	var out []string
+	for _, f := range files {
+		out = append(out, f.Path)
+	}
+	return out
 }
 
 func (s *UnverifiedReaderSuite) TestALapsedReadIsUnknownAndAPhaseRecordedLapsed() {
