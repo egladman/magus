@@ -117,6 +117,11 @@ final lineRules = ["attribution", "dash", "ascii"];
 // and skips it, so they come off before it reads the line.
 final shellQuote = $"[\"']";
 
+// The parser renders a shell variable, or a heredoc it cannot pair, as empty text. Its words
+// are unread, so the line is never judged as a title.
+final heldText = "the title or body comes from a shell variable or a heredoc this rule cannot pair, so its words are unread: "
+    + "write the body to a file and pass `--body-file <file>` with a literal `--title \"...\"`";
+
 final spacedHyphen = $"\S - \S";
 final word = $"\S+";
 final heading = $"^ {0,3}#{1,6}(\s|$)";
@@ -1765,8 +1770,11 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
     foreach (problem in changelog) {
         problems.append(problem);
     }
+    if (file == null and (title == "" or body == "")) {
+        problems.append(heldText);
+    }
     foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: kind)) {
-        if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
+        if (f.decision == "deny" and lineRules.indexOf(f.rule) != null) {
             problems.append("{f.message} [{f.rule}]");
         }
     }
@@ -2390,6 +2398,12 @@ test "proofread reads the title and the description as one pull request" {
     _ = decided(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
         diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
+    final held = decided(unread, line: "gh pr create --title \"$TITLE\" --body \"$BODY\"", files: {<str: str>},
+        diff: facts(readable()), judge: recording, once: helpers\counter());
+    std\assert(held.decision == magus\GuardDecision.deny and held.reason.indexOf("--body-file <file>") != null, message: "a held body is refused with the fix: {held.reason}");
+    final held = decided(unread, line: "gh pr create --title \"$TITLE\" --body \"$BODY\"", files: {<str: str>},
+        diff: facts(readable()), judge: recording, once: helpers\counter());
+    std\assert(held.decision == magus\GuardDecision.deny and held.reason.indexOf("--body-file <file>") != null, message: "a held body is refused with the fix: {held.reason}");
 }
 
 test "each forge command is judged as the kind it writes" {
