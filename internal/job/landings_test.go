@@ -855,3 +855,24 @@ func (s *unmergedSuite) TestSettleRefusesALeaseHolder() {
 
 	s.Require().ErrorContains(err, "only its orchestrator")
 }
+
+// A checkout on the base tip holds the base, not work of its own. Every path
+// reads the same there because the checkout is the base. A job forked from an
+// older checkpoint that adopts the orchestrator's checkout is such a row.
+func TestARowWhoseCheckoutIsTheBaseTipIsNotLanded(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n\nfunc A()   {}\n"})
+	seedRev := repo.Head()
+	wt := repo.AddWorktree("job")
+	repo.Commit("other work", map[string]string{"a.go": "package a\n\nfunc A() { _ = 1 }\n"})
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+	wt.Git("reset", "-q", "--hard", repo.Head())
+
+	s := tempStore(t, repo.Root())
+	s.notices = io.Discard
+	plant(t, s, job.Job{ID: "job", State: job.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		Paths: job.Paths{Write: []string{"a.go"}}, Updated: 1})
+	got := states(t, s)["job"]
+
+	assert.False(t, got.Landed, got.EndReason)
+	assert.Equal(t, job.StateRunning, got.State)
+}
