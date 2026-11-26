@@ -1030,7 +1030,7 @@ func (s *NarrowPushSuite) TestARefusalNamesTheProducingTargetForAnOutput() {
 func (s *NarrowPushSuite) TestTheWaiverStillAdmits() {
 	const waived = "abc1234def567890abc1234def567890abc12345"
 	v := waivedPush(s.T(), "abc1234", func(ctx context.Context, store *job.Store) {
-		_, err := WaiveGate(ctx, store, waived, "CI gates the release branch")
+		_, err := waiveGate(ctx, store, waived, "CI gates the release branch")
 		s.Require().NoError(err)
 	})
 	s.NotEqual(verdict.Deny, v.Decision, v.Reason)

@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // grantRows are two live parentless rows, so a root session holding either commits from
@@ -102,9 +101,9 @@ func waivedPush(t *testing.T, revision string, fill func(context.Context, *job.S
 func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 	const waived = "abc1234def567890abc1234def567890abc12345"
 	waive := func(ctx context.Context, store *job.Store) {
-		w, err := WaiveGate(ctx, store, waived, "CI gates the release branch")
+		w, err := waiveGate(ctx, store, waived, "CI gates the release branch")
 		require.NoError(t, err)
-		assert.Equal(t, types.GateWaiver{Commit: waived, By: w.By, At: w.At, Reason: "CI gates the release branch"}, w)
+		assert.Equal(t, gateWaiver{Commit: waived, By: w.By, At: w.At, Reason: "CI gates the release branch"}, w)
 		assert.NotZero(t, w.At)
 	}
 
@@ -119,7 +118,7 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 
 	v = waivedPush(t, "abc1234", func(ctx context.Context, store *job.Store) {
 		waive(ctx, store)
-		_, err := RevokeGateWaiver(ctx, store, waived)
+		_, err := revokeGateWaiver(ctx, store, waived)
 		require.NoError(t, err)
 	})
 	assert.Equal(t, verdict.Judgment{Decision: verdict.Deny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "a revoked waiver covers nothing")
@@ -128,18 +127,34 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 func TestGateWaiverIsAPersonsKeystroke(t *testing.T) {
 	_, root := fleetFixture(t)
 	leased := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{Lease: "guard/worker"}})
-	_, err := WaiveGate(t.Context(), leased, "abc1234def5678", "skip")
+	_, err := waiveGate(t.Context(), leased, "abc1234def5678", "skip")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `acts under lease "guard/worker"`)
 
 	person := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, Actor: &jobtypes.Actor{}})
-	_, err = WaiveGate(t.Context(), person, "abc1234def5678", " ")
+	_, err = waiveGate(t.Context(), person, "abc1234def5678", " ")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--reason")
 }
 
 func TestWaiverNoteNamesWhoWhenAndWhy(t *testing.T) {
-	w := types.GateWaiver{Commit: "abc1234def5678", By: jobtypes.Origin{User: "eli"}, At: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC).Unix(), Reason: "CI is down"}
+	w := gateWaiver{Commit: "abc1234def5678", By: jobtypes.Origin{User: "eli"}, At: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC).Unix(), Reason: "CI is down"}
 	want := fmt.Sprintf("magus workspace: abc1234 goes out ungated under the waiver %s typed at 2026-10-24T12:00:00Z: CI is down", w.By.Label())
 	assert.Equal(t, want, waiverNote("abc1234", w))
+}
+func TestGateWaiverCoverageItsCommitAlone(t *testing.T) {
+	w := gateWaiver{Commit: "abc1234def5678", Reason: "CI is down"}
+	for commit, want := range map[string]bool{
+		"abc1234def5678": true,
+		"abc1234":        true,
+		"abc123":         false,
+		"abc1235":        false,
+		"":               false,
+		"fff1234def5678": false,
+	} {
+		assert.Equal(t, want, w.Covers(commit), "%q", commit)
+	}
+	w.Revoked = true
+	assert.False(t, w.Covers("abc1234def5678"), "a revoked waiver covers nothing")
+	assert.Equal(t, "abc1234def5678", w.Key())
 }
