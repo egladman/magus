@@ -349,6 +349,24 @@ func (s *AttentionSuite) TestOpenRequestSetsAsideAFilePredatingTheGroupRename() 
 	assert.FileExists(t, filepath.Join(dir, "old.retired-magus.sessions"))
 }
 
+func (s *AttentionSuite) TestOpenRequestSetsAsideAFileHoldingARetiredDecision() {
+	t := s.T()
+	dir := t.TempDir()
+	old := filepath.Join(dir, "old.jsonl")
+	body := `{"v":"safetyscissors.session/v1alpha1","invocation":"old","seq":1,"kind":"agent_event","ts":10,` +
+		`"payload":{"host":"h1","event":"shell.command","ref":"r1","at":10,"verdict":"pass"}}` + "\n"
+	require.NoError(t, os.WriteFile(old, []byte(body), 0o644))
+
+	id, opened, err := OpenRequest(t.Context(), dir, "sess-1", blocked("needs a decision"), session.InvocationStart{Workspace: "/repo"})
+	require.NoError(t, err)
+	assert.True(t, opened)
+	assert.Equal(t, []string{id}, queueIDs(t, dir))
+	assert.NoFileExists(t, old)
+	kept, err := os.ReadFile(filepath.Join(dir, "old.retired-decision"))
+	require.NoError(t, err)
+	assert.Equal(t, body, string(kept))
+}
+
 func (s *AttentionSuite) TestOpenRequestWritesOneRequestAndReportsIt() {
 	t := s.T()
 	dir := t.TempDir()

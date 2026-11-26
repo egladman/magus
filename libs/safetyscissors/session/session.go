@@ -510,10 +510,9 @@ func (e *RetiredGroupError) Error() string {
 	return fmt.Sprintf("session: %s holds a record stamped %s, a group this build no longer reads (it reads %s)", e.Path, e.Version, APIVersion)
 }
 
-// SetAsideRetired renames every invocation file under dir holding a record stamped
-// [retiredGroup] to <id>.retired-<group> beside it and returns the new paths, so the
-// records stay on disk and no reader sees an invocation. The new name drops [FileExt]
-// because the readers list by that suffix: a name that kept it would be refused again.
+// SetAsideRetired renames each invocation file under dir stamped [retiredGroup] to
+// <id>.retired-<group>, and each holding a retired guard decision to <id>.retired-decision.
+// It returns the new paths. They drop [FileExt] because readers list by that suffix.
 // A file it cannot rename is a [*StoreError] and the rest are still tried.
 //
 // It stops early and returns ctx.Err() as is once ctx is done.
@@ -535,10 +534,14 @@ func SetAsideRetired(ctx context.Context, dir string) ([]string, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		if decodeFile(path).retired == "" {
+		suffix := ".retired-" + retiredGroup
+		switch decodeFile(path).refusal(path).(type) {
+		case nil:
 			continue
+		case *RetiredDecisionError:
+			suffix = ".retired-decision"
 		}
-		to := filepath.Join(dir, strings.TrimSuffix(e.Name(), FileExt)+".retired-"+retiredGroup)
+		to := filepath.Join(dir, strings.TrimSuffix(e.Name(), FileExt)+suffix)
 		if err := os.Rename(path, to); err != nil {
 			if !os.IsNotExist(err) {
 				errs = append(errs, &StoreError{Op: "set aside retired", Path: path, Err: err})
