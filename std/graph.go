@@ -17,6 +17,8 @@ import (
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -568,11 +570,8 @@ func workspaceLayers(ctx context.Context) map[string]string {
 	return layers
 }
 
-// MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
-// `magus query output <ref>` prints, with the run's identity beside them. It reads this
-// checkout's output store, so a ref minted in another worktree does not resolve here.
-// Inside a guard rule there is no workspace, and the store is the one the guard pinned for
-// the checkout it judges.
+// MagusOutput backs magus\output: one run's output by ref, from this checkout's store, else
+// as a verified job row recorded it. A guard rule reads what the guard pinned.
 func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	if !cache.LooksLikeRef(ref) {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, such as out1a2b3c)", ref)
@@ -583,7 +582,7 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	}
 	data, desc, err := cache.NewOutputStore(cacheDir).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
-		return types.OutputRecord{}, types.DiagnosticErrorf(types.OutputRefMissing, "magus\\output: no stored output for ref %q in this checkout", ref)
+		return rowOutput(ctx, ref)
 	}
 	if err != nil {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: %w", err)
@@ -596,6 +595,72 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 		DurationMs: desc.DurationMs,
 		Output:     string(data),
 	}, nil
+}
+
+// rowOutput answers a ref the store lacks. Unread rows are an error, not MGS8001: they say
+// nothing about the run. A row keeps no log, so Output names the row.
+func rowOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
+	rows, err := outputRows(ctx)
+	if err != nil {
+		return types.OutputRecord{}, fmt.Errorf("magus\\output: no stored output for ref %q in this checkout, and the job rows that could record it are unread: %w", ref, err)
+	}
+	for _, r := range verifiedRowRuns(rows) {
+		if r.Run.Ref != ref {
+			continue
+		}
+		return types.OutputRecord{
+			Ref: ref, Project: r.Run.Project, Target: r.Run.Target, DurationMs: r.Run.DurationMs,
+			Output: fmt.Sprintf("job row `%s` recorded this run passing at %s; its log stayed in the store of the checkout that ran it\n", r.Job, r.Run.Revision),
+		}, nil
+	}
+	return types.OutputRecord{}, types.DiagnosticErrorf(types.OutputRefMissing, "magus\\output: no stored output for ref %q in this checkout, and no verified job row records it", ref)
+}
+
+// outputRows are the job rows a guard pinned, or else the workspace store's.
+func outputRows(ctx context.Context) ([]jobtypes.Job, error) {
+	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
+		return snap.Rows, snap.Err
+	}
+	store, err := jobStoreFromContext(ctx, "output")
+	if err != nil {
+		return nil, err
+	}
+	return store.List(ctx)
+}
+
+// rowRun is one run a verified job row recorded, with the row's id.
+type rowRun struct {
+	Job string
+	Run jobtypes.CapturedRun
+}
+
+// verifiedRowRuns are the passing runs that pass rows recorded, once per attempt. A run
+// with no revision or over uncommitted edits names no commit and is left out.
+//
+// TODO: copy of job.VerifiedRuns on push-generated-integrate; fold once that lands.
+func verifiedRowRuns(rows []jobtypes.Job) []rowRun {
+	var out []rowRun
+	seen := map[[2]string]bool{}
+	add := func(id string, run jobtypes.CapturedRun) {
+		key := [2]string{run.AttemptID, run.Ref}
+		if !run.Found || run.Failed || run.Dirty || run.Revision == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, rowRun{Job: id, Run: run})
+	}
+	for _, row := range rows {
+		if row.State != jobtypes.StatePass {
+			continue
+		}
+		if row.Attempt != nil {
+			add(row.ID, *row.Attempt)
+		}
+		for _, p := range row.PostconditionAttempts {
+			add(row.ID, p.Attempt)
+		}
+	}
+	return out
 }
 
 // nonNegative refuses a negative window option, the first in name order.
