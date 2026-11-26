@@ -5,6 +5,7 @@ import "magus/lint";
 import "libs/analyzer/analyzer" as analyzer;
 import "libs/analyzer/adapter" as adapter;
 import "libs/analyzer/finding" as finding;
+import "libs/analyzer/golangci" as golangci;
 import "libs/analyzer/policy" as policy;
 import "libs/analyzer/runner" as runner;
 
@@ -243,4 +244,43 @@ test "the adapter hands a rule its files as paths and its hints as fixes" {
     final got = runner\run([a], tree: runner\Tree{ files = ["a.lock", "b.lock"] }).value!.found;
     assert\equal(got.map(fun (i: int, f: finding\Finding) > str => "{f.analyzer} {f.path} {f.fix}"),
         want: ["old a.lock h", "old b.lock Generic."], message: "stamped by the runner, hint as fix");
+}
+
+fun at(path: str, item: str = "") > finding\Finding {
+    return finding\Finding{ analyzer = "a", path = path, item = item, message = "m" };
+}
+
+fun applied(found: [finding\Finding], yaml: str) > [str] {
+    final got = policy\parse(yaml, path: "analyzers.yaml").value!;
+    return policy\apply("a", found: found, policy: got["a"]!, file: "analyzers.yaml")
+        .map(fun (i: int, f: finding\Finding) > str => "{f.path} {f.item}: {f.message}");
+}
+
+test "an exit drops the findings at its path and item, and one that excuses nothing is a finding" {
+    final yaml = "a:\n  exits:\n    - \{path: x.go, item: f, reason: on purpose}\n    - \{path: y.go, reason: gone}\n";
+    assert\equal(applied([at("x.go", item: "f"), at("x.go", item: "g")], yaml: yaml),
+        want: ["x.go g: m", "analyzers.yaml : a.exits excuses nothing at y.go"], message: "one dropped, one unused");
+}
+
+test "a baseline row absorbs up to its count, and a row above the actual count names the prune" {
+    final yaml = "a:\n  baseline:\n    - \{path: x.go, item: f, count: 2}\n    - \{path: y.go, count: 3}\n";
+    assert\equal(applied([at("x.go", item: "f"), at("x.go", item: "f"), at("x.go", item: "f"), at("y.go")], yaml: yaml),
+        want: ["x.go f: m", "analyzers.yaml : a.baseline allows 3 at y.go but 1 remain; a baseline only falls"], message: "the third is not absorbed");
+}
+
+test "a row of any other shape is a finding" {
+    final got = applied([at("x.go")], yaml: "a:\n  exits:\n    - \{path: x.go}\n    - \{path: x.go, reason: r, count: 2}\n    - 3\n  baseline:\n    - \{path: x.go, extra: 1}\n    - \{path: x.go, count: 0}\n");
+    assert\equal(got.len(), want: 6, message: "five bad rows and the finding kept");
+    assert\isTrue(got[1].indexOf("a.exits[0] has no reason") != null, message: "no reason");
+    assert\isTrue(got[4].indexOf("a.baseline[0] has the field extra") != null, message: "extra field");
+}
+
+test "the golangci stub reports nothing for no passes and one failing finding for any" {
+    assert\equal(golangci\run([<analyzer\Analyzer>], projects: ["."]).len(), want: 0, message: "no passes");
+    final pass = analyzer\check("diagmsg", tier: analyzer\Tier.mechanical, fix: "Fix it.", source: "hack/lint/diagmsg.buzz", files: ["**/*.go"],
+        run: none, reach: analyzer\Reach.project);
+    final got = golangci\run([pass], projects: ["."]);
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\isTrue(got[0].message.startsWith("the golang engine is not wired"), message: "says why");
+    assert\equal(got[0].path, want: "hack/lint/diagmsg.buzz", message: "at the pass's source");
 }
