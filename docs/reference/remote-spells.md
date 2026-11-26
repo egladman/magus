@@ -1,7 +1,7 @@
 ---
 title: Remote spells
-description: Import a spell published as an OCI artifact by its registry path. magus.yaml declares the tag, magus.lock pins the manifest digest, only the update charm resolves a tag, and a pinned spell loads offline once cached.
-tags: [spells, imports, remote, oci, registry, pinning, digest, lockfile, offline, harness, publish, credentials, override]
+description: Import a spell or a Buzz module library published as an OCI artifact by its registry path. magus.yaml declares the tag, magus.lock pins the manifest digest, only the update charm resolves a tag, and a pinned artifact loads offline once cached.
+tags: [spells, imports, remote, oci, registry, pinning, digest, lockfile, offline, harness, publish, credentials, override, modules, libraries]
 ---
 
 # Remote spells
@@ -116,6 +116,42 @@ when the built-in has changed since, or when a copy is identical to it; merging 
 you. A release publishes every spell magus ships with no revision or creation annotation,
 so the digest follows the spell's files alone: a release that leaves a spell unchanged
 publishes the digest the last one did, and the binary computes it from what it embeds.
+
+## Module libraries
+
+An artifact need not be a spell. One with no `spell.buzz` is a Buzz module library, and
+its entry is named for the import path's last segment:
+
+| Artifact holds                    | Imported as                | Kind   | Binds                                    |
+| --------------------------------- | -------------------------- | ------ | ---------------------------------------- |
+| `spell.buzz`                      | `ghcr.io/team/spells/lint` | spell  | a spell handle, `lint`                   |
+| `widget.buzz` and no `spell.buzz` | `ghcr.io/team/libs/widget` | module | an ordinary file import of `widget.buzz` |
+
+A module is declared, locked, overridden and pulled exactly as a spell is, under
+`spells:` in `magus.yaml`:
+
+```yaml
+spells:
+  ghcr.io/team/libs/widget:
+    tag: v0.6.0
+```
+
+```buzz
+import "ghcr.io/team/libs/widget";          // flat: its exports, and widget\..., in scope
+import "ghcr.io/team/libs/widget" as w;     // aliased: only w\...
+```
+
+It loads like any `.buzz` file the workspace imports. Its exported objects and enums are
+types the importer's checker knows, so a library function or member a binary lacks fails
+the check with a position. Inside the library, a file imports its sibling by bare name
+(`import "helper";`), which resolves beside the importing file wherever the artifact
+sits. An artifact holding both `spell.buzz` and `<name>.buzz` is a spell.
+
+To publish one, name its directory for the repository's last segment and give it a
+`<name>.buzz`: a directory `widget` holding `widget.buzz` pushes to `ghcr.io/<owner>/<repo>/widget`.
+`magus spell build` and `push` refuse a directory holding neither entry. A pull refuses an
+artifact whose repository names an entry it does not hold, so a push under another name
+fails at the first lock rather than at an import.
 
 ## Publish your own spell
 
@@ -271,10 +307,12 @@ against the layer. An entry that does not verify is replaced by a fresh pull. Wi
 `MAGUS_OFFLINE=1` magus never pulls: an uncached reference fails, and a cached one that
 does not verify fails with [MGS1042](codes/magusfile/MGS1042.md) instead of refetching.
 
-The verified spells are then laid out by import path under
+The verified artifacts are then laid out by import path under
 `$XDG_CACHE_HOME/magus/spells/views/<id>/`, so `<view>/ghcr.io/team/spells/lint/spell.buzz`
-is the entry of `import "ghcr.io/team/spells/lint"`. The view is named by the pins it
-holds, so a changed lock names a new view and an existing one never changes.
+is the entry of `import "ghcr.io/team/spells/lint"`, and
+`<view>/ghcr.io/team/libs/widget/widget.buzz` that of the module
+`import "ghcr.io/team/libs/widget"`. The view is named by the pins it holds, so a changed
+lock names a new view and an existing one never changes.
 
 ## Resolution order
 
@@ -283,7 +321,8 @@ Remote spells resolve once per workspace load, before any magusfile runs, from
 view joins the magusfile search roots after the workspace's own, and a workspace
 directory at a declared remote path is refused rather than searched, so no local file,
 relative to the process working directory or the workspace, can stand in for a remote
-spell.
+spell. A declared module's entry is named to the session before its resolver runs, so it
+too is read only from the view or its declared override.
 
 ## See also
 

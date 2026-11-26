@@ -137,10 +137,14 @@ func nestedClosure(files []bytecodeFile, moduleDir string) []bytecodeFile {
 }
 
 // isolatedClosure marks files resolved in a sub-session that did not inherit
-// the importer's directory stack.
-func isolatedClosure(files []bytecodeFile) []bytecodeFile {
+// the importer's directory stack. moduleDir, when set, was that sub-session's
+// whole stack, so via records it in full.
+func isolatedClosure(files []bytecodeFile, moduleDir string) []bytecodeFile {
 	out := make([]bytecodeFile, len(files))
 	for i, f := range files {
+		if !f.isolated && moduleDir != "" {
+			f.via = append([]string{moduleDir}, f.via...)
+		}
 		f.isolated = true
 		out[i] = f
 	}
@@ -253,7 +257,7 @@ func (s *Session) closureFresh(files []bytecodeFile) bool {
 	return true
 }
 
-// resolveRecorded repeats the file search that found f, under the directory
+// resolveRecorded repeats the resolution that found f, under the directory
 // stack it was found under.
 func (s *Session) resolveRecorded(f bytecodeFile) string {
 	saved := s.importingDirs
@@ -263,7 +267,7 @@ func (s *Session) resolveRecorded(f bytecodeFile) string {
 		s.importingDirs = append(slices.Clip(saved), f.via...)
 	}
 	defer func() { s.importingDirs = saved }()
-	return s.findIncludeFile(f.importPath)
+	return s.locateImport(f.importPath)
 }
 
 func sameFile(a, b string) bool {

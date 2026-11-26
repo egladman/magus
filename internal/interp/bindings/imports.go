@@ -184,13 +184,15 @@ func resolveSpellCandidate(ctx context.Context, probes *interp.ImportProbes, pat
 }
 
 // resolveRemoteSpellImport binds a spell imported by registry path from its verified
-// copy under the workspace's view, where <view>/<import path>/spell.buzz is its entry.
-// It always claims the import, binding null on failure, because returning false would
-// hand the path to the file search, where a crafted local directory could answer it.
+// copy under the workspace's view. It always claims the import, binding null on
+// failure: returning false would let a crafted local directory answer the path.
 func resolveRemoteSpellImport(ctx context.Context, im *remotespell.Imports, importPath string) (vm.Value, bool) {
 	dir, err := im.Dir(importPath)
 	if err != nil {
 		return importFailed(ctx, err)
+	}
+	if _, module := im.Module(importPath); module {
+		return importFailed(ctx, fmt.Errorf("remote artifact %s is a module library, and this session imports only spells by registry path", importPath))
 	}
 	m, ok := loadLocalSpell(ctx, filepath.Join(dir, "spell.buzz"))
 	if !ok {

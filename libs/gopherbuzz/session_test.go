@@ -211,6 +211,49 @@ var x = widget.answer;
 	assert.Equal(t, int64(7), v.AsInt(), "x = %v, want 7", v)
 }
 
+// The file a host names loads as a file import, ahead of the module resolver. Its types
+// reach the importer's checker, and its sibling resolves beside it.
+func TestSession_ImportFile(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "reg.example", "team", "widget")
+	require.NoError(t, os.MkdirAll(lib, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lib, "helper.buzz"), []byte(`export fun twice(n: int) > int { return n * 2; }`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(lib, "widget.buzz"), []byte(`import "helper";
+export object Part { size: int }
+export fun make(n: int) > Part { return Part{ size = twice(n) }; }
+`), 0o644))
+	entry := filepath.Join(lib, "widget.buzz")
+
+	for _, src := range []string{
+		"import \"reg.example/team/widget\";\nvar p = make(3);\nvar q = Part{ size = p.size + 1 };\nvar x = q.size;\n",
+		"import \"reg.example/team/widget\" as w;\nvar p = w\\make(3);\nvar x = p.size + 1;\n",
+	} {
+		var asked []string
+		s := NewSession(context.Background(), WithEmbedded(), WithImportFile(func(importPath string) (string, bool) {
+			asked = append(asked, importPath)
+			return entry, importPath == "reg.example/team/widget"
+		}))
+		s.SetModuleResolver(func(importPath string) (vm.Value, bool) {
+			assert.NotEqual(t, "reg.example/team/widget", importPath, "the module resolver was asked for the named file")
+			return vm.Null, false
+		})
+		require.NoError(t, s.Exec(context.Background(), src), src)
+		assert.Contains(t, asked, "reg.example/team/widget", src)
+		v, ok := s.Globals()["x"]
+		require.True(t, ok, src)
+		assert.Equal(t, int64(7), v.AsInt(), src)
+	}
+}
+
+// A path the host declines still reaches the module resolver.
+func TestSession_ImportFileDeclined(t *testing.T) {
+	s := NewSession(context.Background(), WithEmbedded(), WithImportFile(func(string) (string, bool) { return "", false }))
+	mod := vm.NewMap()
+	mod.MapSet("answer", vm.IntValue(7))
+	s.SetModuleResolver(func(importPath string) (vm.Value, bool) { return mod, importPath == "spells/widget" })
+	require.NoError(t, s.Exec(context.Background(), "import \"spells/widget\";\nvar x = widget.answer;\n"))
+	assert.Equal(t, int64(7), s.Globals()["x"].AsInt())
+}
+
 // The file search still picks the path; the reader only supplies its bytes, so a host can
 // evaluate a revision's copy of a file that also exists on disk.
 func TestSession_SourceReader(t *testing.T) {

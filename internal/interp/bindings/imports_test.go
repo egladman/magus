@@ -186,6 +186,108 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 	require.NoError(t, err)
 }
 
+// everyFileTracked reports every path it is asked about as tracked.
+type everyFileTracked struct{}
+
+func (everyFileTracked) TrackedFiles(_ context.Context, _ string, paths []string) ([]string, error) {
+	return paths, nil
+}
+
+// pulledContext caches each directory as a pull leaves it and pins it in magus.lock.
+// It returns a context carrying the load's imports, held offline to that cache.
+func pulledContext(t *testing.T, root string, dirs map[string]string) context.Context {
+	t.Helper()
+	t.Setenv("MAGUS_OFFLINE", "1")
+	cache := t.TempDir()
+	cfg := config.SpellsConfig{Imports: map[string]config.SpellImport{}}
+	pins := map[string]remotespell.LockEntry{}
+	for importPath, dir := range dirs {
+		content, err := remotespell.Build(t.Context(), dir, everyFileTracked{}, remotespell.Provenance{Title: filepath.Base(dir)})
+		require.NoError(t, err)
+		m, err := content.Manifest()
+		require.NoError(t, err)
+		slot := filepath.Join(cache, fmt.Sprintf("%s-%s", m.Digest.Algorithm(), m.Digest.Encoded()))
+		require.NoError(t, os.CopyFS(filepath.Join(slot, "src"), os.DirFS(dir)))
+		require.NoError(t, os.WriteFile(filepath.Join(slot, "manifest.json"), m.Body, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(slot, content.Blobs[0].Title), content.Blobs[0].Data, 0o644))
+		cfg.Imports[importPath] = config.SpellImport{Tag: "v1"}
+		pins[importPath] = remotespell.LockEntry{Tag: "v1", Digest: m.Digest}
+	}
+	require.NoError(t, remotespell.UpdateLock(t.Context(), root, func(l remotespell.Lock) (remotespell.Lock, error) {
+		l.Spells = pins
+		return l, nil
+	}))
+	im, err := remotespell.LoadImports(t.Context(), root, cfg, remotespell.LoadOptions{CacheRoot: cache})
+	require.NoError(t, err)
+	require.NoError(t, im.Error())
+	return types.WithWorkspace(t.Context(), spellImportsWS{rootOnlyWS{root: root}, im})
+}
+
+// A pulled module binds as a file import: its type constructs, its sibling resolves.
+// A pulled spell beside it still binds a spell handle.
+func TestPulledModuleBindsAsAFileImport(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "widget")
+	require.NoError(t, os.MkdirAll(lib, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lib, "widget.buzz"), []byte(`import "helper";
+export object Part { size: int }
+export fun part(n: int) > Part { return Part{ size = twice(n) }; }
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(lib, "helper.buzz"), []byte(`export fun twice(n: int) > int { return n * 2; }`), 0o644))
+	lint := filepath.Join(t.TempDir(), "lint")
+	require.NoError(t, os.MkdirAll(lint, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lint, "spell.buzz"), []byte(`export fun mgs_getName() > str { return "lint"; }`), 0o644))
+
+	for name, magusfile := range map[string]string{
+		"flat": `import "magus";
+import "ghcr.io/team/libs/widget";
+import "ghcr.io/team/spells/lint";
+
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    final q = Part{ size = part(3).size + 1 };
+    if (q.size != 7) { throw "flat import: wrong size"; }
+    if (lint.name != "lint") { throw "lint.name: " + lint.name; }
+}
+`,
+		"aliased": `import "magus";
+import "ghcr.io/team/libs/widget" as w;
+
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    final p: w\Part = w\part(3);
+    if (p.size != 6) { throw "aliased import: wrong size"; }
+}
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := testkit.NewWorkspace(t)
+			root := w.Root()
+			w.Write("magusfile.buzz", magusfile)
+			ctx := pulledContext(t, root, map[string]string{"ghcr.io/team/libs/widget": lib, "ghcr.io/team/spells/lint": lint})
+			_, err := interp.RunDir(ctx, root, "check", nil)
+			require.NoError(t, err)
+		})
+	}
+}
+
+// A workspace copy declared for a module path binds as the pulled module would.
+func TestModuleOverrideBindsTheWorkspaceCopy(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("libs/widget/widget.buzz", "import \"helper\";\nexport fun answer() > int { return twice(21); }\n")
+	w.Write("libs/widget/helper.buzz", "export fun twice(n: int) > int { return n * 2; }\n")
+	w.Write("magusfile.buzz", `import "magus";
+import "ghcr.io/team/libs/widget";
+
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (answer() != 42) { throw "answer"; }
+}
+`)
+	ctx := declaredContext(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
+		"ghcr.io/team/libs/widget": {Path: "libs/widget"},
+	}})
+	_, err := interp.RunDir(ctx, root, "check", nil)
+	require.NoError(t, err)
+}
+
 // TestRootFirstLevels pins the walk-up spell-search chain: root-first from the
 // workspace root down to the importing file's dir, bounded to the workspace.
 func TestRootFirstLevels(t *testing.T) {

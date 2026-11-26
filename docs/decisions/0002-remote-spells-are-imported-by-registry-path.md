@@ -1,7 +1,7 @@
 ---
 title: "ADR 0002: remote spells are imported by registry path"
 order: 2
-description: How a magusfile names a spell published to an OCI registry. The import path is the registry path, the way a Go import path is its repository; a dot in the first element marks a spell as remote; magus.yaml declares it, magus.lock pins its digest, and only the update charm resolves a tag. Records the precedents, the Buzz resolver facts the design rests on, and the alternatives rejected.
+description: How a magusfile names a spell published to an OCI registry. The import path is the registry path, the way a Go import path is its repository; a dot in the first element marks a spell as remote; magus.yaml declares it, magus.lock pins its digest, and only the update charm resolves a tag. Records the precedents, the Buzz resolver facts the design rests on, and the alternatives rejected. Amended 2026-11-26 so an artifact may be a Buzz module library, bound as a file import.
 tags: [adr, decision, spells, oci, imports, buzz, lockfile, supply-chain]
 status: accepted
 date: 2026-09-22
@@ -166,3 +166,39 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
   the `update` charm produces.
 - Signing (who published a digest, not just which bytes) attaches to the same `magus.yaml`
   entries and is decided separately.
+
+## Amendments
+
+### 2026-11-26: an artifact may be a module library
+
+A workspace needs to import a Buzz library another repository publishes, pinned the way a
+spell is: the analyzer library is the first. Decision 6 assumed every artifact is a spell.
+This amendment widens it and changes nothing else.
+
+- **What the artifact holds decides its kind.** An artifact imported at path `P` is a
+  spell when it holds `spell.buzz`, as before. Otherwise it is a module library, whose
+  entry is `<last segment of P>.buzz`: `ghcr.io/team/libs/widget` loads `widget.buzz`, the
+  shape `libs/proofread/proofread.buzz` already has in a workspace. One holding neither is
+  refused at the pull. The manifest's artifact type stays
+  `application/vnd.magus.spell.v1`, so every published spell keeps its digest.
+- **A module binds as an ordinary file import.** Its exported objects and enums reach the
+  importer's checker, a flat import merges its exports and an alias isolates them, and its
+  own imports of bare sibling names resolve inside the artifact. A host value bound by the
+  module resolver would reach the checker as an unchecked handle, so a library's types
+  could not be named or built.
+- **The search templates cannot spell that entry**, since each substitutes the whole path.
+  So gopherbuzz gains a session option, `WithImportFile`, by which a host names
+  the file an import loads. It runs ahead of the module resolver, and the bytecode cache
+  re-resolves through it. magus answers it from the declared imports alone, so a local
+  file can no more stand in for a module than for a spell. It is a host API, not a
+  language change: upstream Buzz has no registry imports to match.
+- **Declaration, lock, update charm and overrides are unchanged.** A module is declared
+  under `spells:` with a `tag` or a `path`, `magus.lock` pins it, and `magus spell
+  push|pull|lock` move it. An override of an embedded `magus/spell/<name>` must still be a
+  spell.
+- **Pack takes the entry from the directory's name.** A module directory holds
+  `<its own name>.buzz` and is pushed to a repository ending in that name. A push under
+  another name builds an artifact the pull refuses, which names both entries it looked
+  for.
+- Nothing about any one library enters the binary. The binary gains only the ability to
+  import a module artifact.

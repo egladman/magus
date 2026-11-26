@@ -37,6 +37,7 @@ type Imports struct {
 	view      string
 	remote    map[string]string // import path -> <view>/<path>
 	overrides map[string]string // import path -> absolute override dir
+	modules   map[string]string // import path -> entry file, for a module library
 	// failed holds the remote paths whose pin could not be served, reported when an
 	// import names one rather than at load, so a stale lock never stops the workspace
 	// from loading the target that repairs it.
@@ -82,7 +83,7 @@ func (o LoadOptions) resolveOptions(host string) Options {
 // MGS1002; those are edits to the workspace, so they fail the load. Every failure is
 // reported, not just the first.
 func LoadImports(ctx context.Context, root string, cfg config.SpellsConfig, opts LoadOptions) (*Imports, error) {
-	im := &Imports{remote: map[string]string{}, overrides: map[string]string{}, failed: map[string]error{}}
+	im := &Imports{remote: map[string]string{}, overrides: map[string]string{}, modules: map[string]string{}, failed: map[string]error{}}
 	var remote []string
 	var errs []error
 	for _, path := range slices.Sorted(maps.Keys(cfg.Imports)) {
@@ -91,12 +92,15 @@ func LoadImports(ctx context.Context, root string, cfg config.SpellsConfig, opts
 			remote = append(remote, path)
 			continue
 		}
-		dir, err := overrideDir(root, path, decl.Path, opts.Embedded)
+		dir, spell, err := overrideDir(root, path, decl.Path, opts.Embedded)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		im.overrides[path] = dir
+		if !spell {
+			im.modules[path] = filepath.Join(dir, moduleEntry(path))
+		}
 	}
 	for _, path := range remote {
 		if shadow := filepath.Join(root, filepath.FromSlash(path)); isDir(shadow) {
@@ -144,7 +148,16 @@ func LoadImports(ctx context.Context, root string, cfg config.SpellsConfig, opts
 		return nil, err
 	}
 	for _, ref := range refs {
-		im.remote[ref.Import] = filepath.Join(im.view, filepath.FromSlash(ref.Import))
+		dir := filepath.Join(im.view, filepath.FromSlash(ref.Import))
+		im.remote[ref.Import] = dir
+		file, spell, err := artifactEntry(dir, ref.Import)
+		switch {
+		case err != nil:
+			im.failed[ref.Import] = fmt.Errorf("remote artifact: %w", err)
+			delete(im.remote, ref.Import)
+		case !spell:
+			im.modules[ref.Import] = file
+		}
 	}
 	return im, nil
 }
@@ -165,19 +178,25 @@ func frozenRef(path, tag string, lock Lock) (Ref, error) {
 }
 
 // overrideDir resolves a declared override to the absolute directory holding its
-// spell.buzz. The declaration is the acknowledgment, so it must point at a spell.
-func overrideDir(root, importPath, rel string, embedded func(string) bool) (string, error) {
-	if name, ok := strings.CutPrefix(importPath, spells.ModulePrefix); ok && embedded != nil && !embedded(name) {
-		return "", types.DiagnosticErrorf(types.SpellOverrideInvalid,
+// entry, and reports whether that is a spell. The declaration is the acknowledgment,
+// so it must point at an entry; an embedded spell's copy must be a spell.
+func overrideDir(root, importPath, rel string, embedded func(string) bool) (string, bool, error) {
+	name, builtin := strings.CutPrefix(importPath, spells.ModulePrefix)
+	if builtin && embedded != nil && !embedded(name) {
+		return "", false, types.DiagnosticErrorf(types.SpellOverrideInvalid,
 			"magus.yaml spells.%s replaces an embedded spell this magus does not ship; check the name with `magus describe spells`", importPath)
 	}
 	dir := filepath.Join(root, filepath.FromSlash(rel))
-	info, err := os.Stat(filepath.Join(dir, entryFile))
-	if err != nil || !info.Mode().IsRegular() {
-		return "", types.DiagnosticErrorf(types.SpellOverrideInvalid,
+	_, spell, err := artifactEntry(dir, importPath)
+	switch {
+	case builtin && !spell:
+		return "", false, types.DiagnosticErrorf(types.SpellOverrideInvalid,
 			"magus.yaml spells.%s: path %s holds no %s, so there is no spell to replace it with", importPath, rel, entryFile)
+	case err != nil:
+		return "", false, types.WrapDiagnostic(types.SpellOverrideInvalid, err,
+			"magus.yaml spells.%s: path %s: %v", importPath, rel, err)
 	}
-	return dir, nil
+	return dir, spell, nil
 }
 
 func isDir(p string) bool {
@@ -185,8 +204,9 @@ func isDir(p string) bool {
 	return err == nil && info.IsDir()
 }
 
-// View is the directory remote spells are laid out under by import path, so
-// <View>/<import path>/spell.buzz is each one's entry. Empty when none is declared.
+// View is the directory remote artifacts are laid out under by import path, so
+// <View>/<import path> holds each one, spell or module. Empty when none
+// is declared.
 func (im *Imports) View() string {
 	if im == nil {
 		return ""
@@ -201,6 +221,18 @@ func (im *Imports) Override(importPath string) (string, bool) {
 	}
 	dir, ok := im.overrides[importPath]
 	return dir, ok
+}
+
+// Module returns the entry file of the module library importPath names, from its
+// declared override or its verified copy under View. It answers false for a spell, an
+// undeclared path, and a pin that could not be served, which Dir reports. Its shape
+// is what gopherbuzz's WithImportFile takes, so a module binds as a file import.
+func (im *Imports) Module(importPath string) (string, bool) {
+	if im == nil {
+		return "", false
+	}
+	file, ok := im.modules[importPath]
+	return file, ok
 }
 
 // Dir returns the directory holding the spell a remote importPath names: its declared

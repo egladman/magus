@@ -53,6 +53,33 @@ const (
 	entryFile      = "spell.buzz"
 )
 
+// artifactEntry is the file an artifact unpacked at dir loads from when imported as
+// importPath. spell.buzz makes it a spell. Without one, <last segment>.buzz makes it
+// a module library, bound as an ordinary file import. Holding neither is an error.
+func artifactEntry(dir, importPath string) (file string, spell bool, err error) {
+	if isRegular(filepath.Join(dir, entryFile)) {
+		return filepath.Join(dir, entryFile), true, nil
+	}
+	module := moduleEntry(importPath)
+	if isRegular(filepath.Join(dir, module)) {
+		return filepath.Join(dir, module), false, nil
+	}
+	return "", false, fmt.Errorf("%s holds neither %s, which makes a spell, nor %s, which makes a module", importPath, entryFile, module)
+}
+
+// moduleEntry is the entry a module library imported as importPath carries. A
+// pulled reference's tag or digest is no part of the name.
+func moduleEntry(importPath string) string {
+	name, _, _ := strings.Cut(path.Base(importPath), "@")
+	name, _, _ = strings.Cut(name, ":")
+	return name + ".buzz"
+}
+
+func isRegular(p string) bool {
+	info, err := os.Lstat(p)
+	return err == nil && info.Mode().IsRegular()
+}
+
 // maxSpell bounds the uncompressed tar, including source and declared runtime
 // assets. The shipped Go/Wasm harness needs more than 8 MiB even with debug data stripped.
 const maxSpell = 16 << 20
@@ -213,8 +240,8 @@ func pull(ctx context.Context, c *oci.Client, ref Ref, dir string) error {
 	if err := extract(layer, filepath.Join(dir, "src")); err != nil {
 		return fmt.Errorf("remote spell %s: %w", ref.Import, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "src", entryFile)); err != nil {
-		return fmt.Errorf("remote spell %s holds no %s", ref.Import, entryFile)
+	if _, _, err := artifactEntry(filepath.Join(dir, "src"), ref.Import); err != nil {
+		return fmt.Errorf("remote artifact: %w", err)
 	}
 	return nil
 }
@@ -399,8 +426,9 @@ func extract(layer []byte, dst string) error {
 // Pack writes dir as a spell layer: the files under it that vcs tracks, sorted by
 // path, each with fixed mode, owner and time. An untracked or ignored file never
 // reaches the layer, so the digest is a function of what the repository holds and
-// is the same on every checkout. dir must hold a tracked spell.buzz, and a tracked
-// entry that is not a regular file is an error.
+// is the same on every checkout. dir must hold a tracked spell.buzz, or a tracked
+// <base of dir>.buzz for a module library, and a tracked entry that is not a regular
+// file is an error. A module is imported by a repository path ending in dir's base.
 func Pack(ctx context.Context, dir string, vcs types.TrackedFileReporter) ([]byte, error) {
 	candidates, err := dirEntries(dir)
 	if err != nil {
@@ -424,8 +452,9 @@ func Pack(ctx context.Context, dir string, vcs types.TrackedFileReporter) ([]byt
 // fixed mode, owner and time; dir only names the spell in an error.
 func packFiles(dir string, names []string, read func(name string) ([]byte, error)) ([]byte, error) {
 	names = slices.Compact(slices.Sorted(slices.Values(names)))
-	if !slices.Contains(names, entryFile) {
-		return nil, fmt.Errorf("%s holds no tracked %s", dir, entryFile)
+	module := moduleEntry(filepath.ToSlash(dir))
+	if !slices.Contains(names, entryFile) && !slices.Contains(names, module) {
+		return nil, fmt.Errorf("%s holds no tracked %s, which makes a spell, nor %s, which makes a module", dir, entryFile, module)
 	}
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
