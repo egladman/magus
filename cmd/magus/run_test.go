@@ -438,3 +438,10 @@ func (s *RunAllFlagSuite) TestAllWithProjectsIsRefused() {
 	s.Equal(exit.Usage, exit.Code(err))
 	s.ErrorContains(err, "takes no project arguments")
 }
+
+func TestRootedSelectionIsALocalRunNamingRoot(t *testing.T) {
+	ctx := t.Context()
+	assert.True(t, rootedSelection(ctx, "/ws"))
+	assert.False(t, rootedSelection(ctx, ""), "no --root")
+	assert.False(t, rootedSelection(proc.WithCurrentWorkingDirectory(ctx, "/ws/sub"), "/ws"), "an adopted run carries the server's root")
+}

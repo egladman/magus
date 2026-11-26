@@ -159,6 +159,21 @@ func TestResolveTargetsRootOverride(t *testing.T) {
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
 	})
 
+	// `--root <main> run go-build .` from a worktree nested under the main checkout
+	// named the worktree's path, which is no project of the main checkout.
+	t.Run("dot under --root from inside means the workspace root project", func(t *testing.T) {
+		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Projects: []string{"."}, Cwd: "/ws/b/api", Rooted: true})
+		require.NoError(t, err)
+		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
+	})
+
+	t.Run("cwd under --root still scopes a run naming no project", func(t *testing.T) {
+		targets, source, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Cwd: "/ws/b/api", Rooted: true})
+		require.NoError(t, err)
+		assert.Equal(t, "cwd", source)
+		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
+	})
+
 	// An escape is still an escape: re-anchoring at the root does not widen what resolves.
 	t.Run("escape from outside is still rejected", func(t *testing.T) {
 		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Projects: []string{"../up"}, Skips: nil, Cwd: "/ws/other"})
@@ -353,15 +368,5 @@ func TestCwdAnchor(t *testing.T) {
 
 	t.Run("cwd in the workspace parent anchors at the root", func(t *testing.T) {
 		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, filepath.Dir(root)))
-	})
-
-	// `magus --root <main> run go-build .` from a worktree nested under the main checkout
-	// resolved `.` to the worktree's path, which is no project of the main checkout.
-	t.Run("cwd in a checkout nested under the workspace anchors at the root", func(t *testing.T) {
-		tree := filepath.Join(root, ".claude", "worktrees", "w")
-		require.NoError(t, os.MkdirAll(filepath.Join(tree, "internal"), 0o755), "mkdir")
-		require.NoError(t, os.WriteFile(filepath.Join(tree, ".git"), []byte("gitdir: elsewhere\n"), 0o644), "write .git")
-		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, tree))
-		assert.Equal(t, ".", currentWorkingDirectoryAnchor(root, filepath.Join(tree, "internal")))
 	})
 }
