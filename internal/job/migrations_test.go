@@ -546,7 +546,7 @@ func (s *baseFenceSuite) TestAnUnstampedModifiedBinaryIsRefusedAndSaysItFellBack
 	off := s.refused(s.unstamped(s.base, true), st, path, "this binary carries no magus version stamp, and Go's VCS stamp says it was built from a modified tree")
 
 	s.Contains(off.Error(), "read from Go's VCS stamp because it carries no magus version stamp")
-	s.Contains(off.Error(), "./magus run go-build .")
+	s.Contains(off.Error(), "build magus from a clean checkout of this workspace, which declares no checkout.bootstrap hook")
 }
 
 func (s *baseFenceSuite) TestABinaryWithNoStampAtAllIsRefusedNamingTheBuild() {
@@ -554,7 +554,7 @@ func (s *baseFenceSuite) TestABinaryWithNoStampAtAllIsRefusedNamingTheBuild() {
 
 	off := s.refused(s.unstamped("", false), st, path, "this binary's build identity could not be read: it carries no magus version stamp and no Go VCS stamp")
 
-	s.Contains(off.Error(), "build magus with `./magus run go-build .` or `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`")
+	s.Contains(off.Error(), "build magus from a clean checkout of this workspace, which declares no checkout.bootstrap hook")
 	s.NotContains(off.Error(), "modified tree")
 }
 
@@ -612,7 +612,7 @@ func (s *consumerFenceSuite) refused(b types.MagusBuild, why string) {
 	s.True(off.Foreign)
 	s.Contains(err.Error(), fmt.Sprintf("%s holds no commit %.12s, so it is not magus's source", s.repo.Root(), s.magus))
 	s.Contains(err.Error(), why)
-	s.Contains(err.Error(), "install a magus release, build magus with `./magus run go-build .` in a clean magus checkout, or run this binary under its own XDG_STATE_HOME")
+	s.Contains(err.Error(), "install a magus release, build magus in a clean checkout of the workspace whose history this store holds, or run this binary under its own XDG_STATE_HOME")
 	s.NotContains(err.Error(), "rebuild magus from origin/main")
 	after, err := os.ReadFile(path)
 	s.Require().NoError(err)

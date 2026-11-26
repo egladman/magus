@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -805,7 +806,7 @@ func (e *offBaseMigrationError) Error() string {
 	if e.Foreign {
 		return fmt.Sprintf("job: job store %s is at %s, and this magus (%s) writes %s, but %s:"+
 			" a binary this workspace's history did not build migrates only on a clean magus version stamp, so nothing was read or written%s:"+
-			" install a magus release, build magus with `./magus run go-build .` in a clean magus checkout, or run this binary under its own XDG_STATE_HOME",
+			" install a magus release, build magus in a clean checkout of the workspace whose history this store holds, or run this binary under its own XDG_STATE_HOME",
 			e.Path, e.Found, self, e.Known, e.Why, e.Last.named())
 	}
 	return fmt.Sprintf("job: job store %s is at %s, and this magus (%s) writes %s, but %s:"+
@@ -825,6 +826,15 @@ func storeAt(st migrate.Store, header migrate.Entry, found int) string {
 		return "no api_version"
 	}
 	return string(st.Migrations[found-1].To)
+}
+
+// buildRemedy names how to build magus in root: the checkout.bootstrap hook the workspace
+// declares, or a plain instruction when it declares none.
+func buildRemedy(root string) string {
+	if hook := config.CheckoutHookAt(root); hook != "" {
+		return fmt.Sprintf("build magus with the workspace's checkout.bootstrap hook, `./magus buzz %s -- --here`", hook)
+	}
+	return "build magus from a clean checkout of this workspace, which declares no checkout.bootstrap hook"
 }
 
 // refuseOffBase refuses rewriting the file at path, at found as [storeAt] names it, when
@@ -871,10 +881,10 @@ func (s *Store) refuseOffBase(ctx context.Context, path, found string, due bool,
 		return refused("", "%s names no base branch", res.Name)
 	case build.Source == types.BuildSourceNone || build.Commit == buildinfo.UnknownVersion:
 		return refused(res.Base, "this binary's build identity could not be read: it carries no magus version stamp and no Go VCS stamp, so nothing says %s contains it;"+
-			" build magus with `./magus run go-build .` or `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`", res.Base)
+			" %s", res.Base, buildRemedy(root))
 	case build.Dirty && build.Source == types.BuildSourceVCS:
 		return refused(res.Base, "this binary carries no magus version stamp, and Go's VCS stamp says it was built from a modified tree;"+
-			" that stamp can name another revision and a modified tree in a linked git worktree, so build magus with `./magus run go-build .` to stamp it")
+			" that stamp can name another revision and a modified tree in a linked git worktree, so %s", buildRemedy(root))
 	case build.Dirty:
 		return refused(res.Base, "this binary was built from a modified tree (its version %s says so), and no commit holds what it was built from", build.Version)
 	}

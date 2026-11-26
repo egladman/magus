@@ -242,7 +242,7 @@ export object Link {
 }
 
 // ldFlags are go-build's linker flags plus the build stamp. A copy of ld_flags in magusfile.buzz,
-// kept because that magusfile cannot load under the old binary this build exists to replace.
+// kept because that magusfile may not load under the stale binary this build exists to replace.
 export fun ldFlags(link: Link) > str {
     return "-w -s"
         + " -X github.com/egladman/magus/internal/buildinfo.version=" + link.version
@@ -780,4 +780,32 @@ test "the build links with go directly, stamped as go-build stamps, without load
     ], message: "go build argv");
     assert\equal(buildStampProbe.indexOf("stale\\buildStamp(") != null, want: true, message: "the stamp is the tree's own buildStamp");
     assert\equal(buildStampProbe.indexOf("run") == null, want: true, message: "no target run, so no magusfile load");
+}
+
+// flagNames lists the `-X name=` linker symbols in text, in order.
+fun flagNames(text: str) > [str] {
+    final names: mut [str] = mut [];
+    final parts = text.split("-X ");
+    var i = 1;
+    while (i < parts.len()) {
+        final eq = parts[i].indexOf("=");
+        if (eq != null) {
+            names.append(parts[i].sub(0, len: eq!));
+        }
+        i = i + 1;
+    }
+    return names;
+}
+
+test "ldFlags names the symbols magusfile.buzz ld_flags does, plus the build stamp" {
+    final source = fs\readFile("magusfile.buzz");
+    final start = source.indexOf("fun ld_flags()");
+    assert\equal(start != null, want: true, message: "magusfile.buzz still defines ld_flags");
+    final body = source.sub(start!, len: source.len() - start!);
+    final end = body.indexOf("\n}\n");
+    final want = flagNames(body.sub(0, len: end!)).cloneMutable();
+    want.append("github.com/egladman/magus/internal/interp/bindings.buildStamp");
+    final link = Link{stamp = "s", version = "v", commit = "c", commitDate = "d", builtBy = "b"};
+    assert\equal(flagNames(ldFlags(link)), want: want, message: "the copy names the same -X symbols in the same order");
+    assert\equal(ldFlags(link).startsWith("-w -s "), want: true, message: "the copy strips the same way");
 }

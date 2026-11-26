@@ -1916,3 +1916,12 @@ func (s *fenceSuite) TestNoSkewSaysSoOnce() {
 	s.Require().NoError(err)
 	s.Equal(fmt.Sprintf("job: this magus fills no contract check into its job store, so nothing judged it against the contract %s carries before it wrote %s\n", s.loc.Root, path), notices.String())
 }
+
+func TestBuildRemedyNamesTheDeclaredCheckoutHook(t *testing.T) {
+	t.Parallel()
+	declared := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(declared, config.Filename), []byte("checkout:\n  bootstrap: tools/boot.buzz\n"), 0o644))
+
+	assert.Contains(t, buildRemedy(declared), "`./magus buzz tools/boot.buzz -- --here`")
+	assert.Contains(t, buildRemedy(t.TempDir()), "declares no checkout.bootstrap hook")
+}
