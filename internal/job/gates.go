@@ -268,6 +268,86 @@ func owningProject(projects []*types.Project, file string) *types.Project {
 	return owner
 }
 
+// testOp is the op a spell declares testScope on: the one run that tests a file it claims.
+type testOp struct{ spell, op string }
+
+func (t testOp) qualified() string { return fmt.Sprintf("%s::%s", t.spell, t.op) }
+
+// ownCiMembers is each target of p's ci chain that p itself declares. A member another
+// project contributes to the chain tests or lints that project, not p.
+func ownCiMembers(p *types.Project, lookup func(string) *types.Project) []string {
+	var out []string
+	visit := func(v types.ChainVisit) error {
+		if v.Project == p {
+			out = append(out, v.Target)
+		}
+		return nil
+	}
+	_ = types.WalkChain(p, ciTarget, lookup, visit) // visit never errs, so neither does the walk
+	return out
+}
+
+// testOps is the test op of each spell p binds. A spell declaring testScope on no op or on
+// several names none ([scopedOps]), the way [NarrowTestScope] reads it.
+func testOps(p *types.Project) []testOp {
+	var out []testOp
+	for _, sp := range p.ResolvedSpells {
+		if names := scopedOps(sp); len(names) == 1 {
+			out = append(out, testOp{spell: sp.Name(), op: types.Normalize(names[0])})
+		}
+	}
+	return out
+}
+
+// ciTestMembers is each target of p's own ci chain whose body invokes t.
+func ciTestMembers(p *types.Project, t testOp, lookup func(string) *types.Project) []string {
+	return slices.DeleteFunc(ownCiMembers(p, lookup), func(target string) bool {
+		return !slices.ContainsFunc(p.TargetSpellOps[target], func(u types.TargetSpellUse) bool {
+			return u.Spell == t.spell && slices.ContainsFunc(u.Ops, func(op string) bool { return types.Normalize(op) == t.op })
+		})
+	})
+}
+
+// ModuleChecks maps each project owning a written file to the targets that test or lint it.
+// Its ci chain declares them. Lint counts when the chain runs it. Each test op the chain
+// invokes counts qualified, and so does each invoking member that composes nothing else. A
+// worker may run these over its own write paths beyond its row's checks.
+func ModuleChecks(projects []*types.Project, written []string) map[string][]string {
+	byPath := map[string]*types.Project{}
+	for _, p := range projects {
+		byPath[p.Path] = p
+	}
+	lookup := func(path string) *types.Project { return byPath[path] }
+	out := map[string][]string{}
+	for _, file := range written {
+		p := owningProject(projects, file)
+		if p == nil {
+			continue
+		}
+		if _, done := out[p.Path]; done {
+			continue
+		}
+		var targets []string
+		if slices.Contains(ownCiMembers(p, lookup), lintTarget) {
+			targets = append(targets, lintTarget)
+		}
+		for _, t := range testOps(p) {
+			members := ciTestMembers(p, t, lookup)
+			if len(members) == 0 {
+				continue
+			}
+			targets = appendUnique(targets, t.qualified())
+			for _, m := range members {
+				if len(p.TargetChains[m]) == 0 {
+					targets = appendUnique(targets, m)
+				}
+			}
+		}
+		out[p.Path] = targets
+	}
+	return out
+}
+
 // runsTarget reports whether p declares target or a spell it binds does.
 func runsTarget(p *types.Project, target string) bool {
 	if slices.Contains(p.MagusfileTargets, target) {

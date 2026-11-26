@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -644,7 +645,7 @@ func (s *lintPostconditionArgsSuite) args(project, sources string, write ...stri
 	}
 	projects := []*types.Project{lintable("."), lintable("libs/kit")}
 	row := job.Job{ID: "j", Paths: job.Paths{Write: write}, Check: fixtureCheck(types.LeaseCheck{Target: "go-test", Project: "."})}
-	got, notes := lintPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
+	got, notes := derivedCheckPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
 	for _, p := range got {
 		if p.Check.Project == project {
 			return p.Check.Args, notes
@@ -678,6 +679,113 @@ func (s *lintPostconditionArgsSuite) TestAProjectWithNoWrittenFilePresentKeepsTh
 	s.Equal([]string{"internal/job/new.go"}, got, "empty args would lint the whole project")
 	s.Contains(notes, "none of the 1 file(s) the lint postcondition for . reads exists yet, so it names every one:"+
 		" drop from the run any the job does not create")
+}
+
+// testPostconditionSuite pins the test postcondition a fork derives for each project owning
+// a written file. It runs the spell's test op, scoped by testScope, when ci invokes it.
+type testPostconditionSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestTestPostconditions(t *testing.T) { suite.Run(t, new(testPostconditionSuite)) }
+
+func (s *testPostconditionSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	full := filepath.Join(s.root, "libs", "kit", "session", "session.go")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(full), 0o755))
+	s.Require().NoError(os.WriteFile(full, nil, 0o644))
+}
+
+// module is a project binding go, whose go-test declares testScope, with chain as its ci.
+func (s *testPostconditionSuite) module(path string, chain ...string) *types.Project {
+	steps := make([]types.ChainStep, len(chain))
+	for i, target := range chain {
+		steps[i] = types.ChainStep{Target: target}
+	}
+	return &types.Project{
+		Path: path, Sources: types.MustParseGlobs("**/*.go"),
+		ResolvedSpells:   []*spells.Spell{scopedSpell("go", ".go", map[string][]string{"go-test": {"./{dir}"}})},
+		MagusfileTargets: []string{"ci", "lint", "test", "go-test"},
+		TargetChains:     map[string][]types.ChainStep{"ci": steps},
+		TargetSpellOps:   map[string][]types.TargetSpellUse{"test": {{Spell: "go", Ops: []string{"go-test"}}}},
+	}
+}
+
+func (s *testPostconditionSuite) derive(check types.LeaseCheck, projects ...*types.Project) ([]types.Postcondition, []string) {
+	row := job.Job{ID: "j", Paths: job.Paths{Write: []string{"libs/kit/session/session.go"}}, Check: fixtureCheck(check)}
+	return derivedCheckPostconditions(s.T().Context(), s.root, row, Workspace{Projects: projects}, nil)
+}
+
+func (s *testPostconditionSuite) TestAWrittenModuleGetsItsTestScopedToWhatItWrote() {
+	got, _ := s.derive(types.LeaseCheck{Target: "go-test", Project: "."}, s.module(".", "test"), s.module("libs/kit", "lint", "test"))
+
+	i := slices.IndexFunc(got, func(p types.Postcondition) bool { return p.Check.Target == "go::go-test" })
+	s.Require().GreaterOrEqual(i, 0, "postconditions: %v", got)
+	s.Equal(types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session"}}, got[i].Check)
+	s.Equal("go-go-test-libs-kit", got[i].ID)
+	s.True(got[i].Derived)
+	s.True(slices.ContainsFunc(got, func(p types.Postcondition) bool { return p.Check.Target == "lint" && p.Check.Project == "libs/kit" }),
+		"the lint postcondition stays beside it")
+}
+
+func (s *testPostconditionSuite) TestACheckThatTestsTheModuleAlreadyGetsNone() {
+	got, _ := s.derive(types.LeaseCheck{Target: "test", Project: "libs/kit"}, s.module(".", "test"), s.module("libs/kit", "test"))
+
+	s.Empty(got)
+}
+
+func (s *testPostconditionSuite) TestACheckOverExactlyTheWrittenOperandsGetsNone() {
+	got, _ := s.derive(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session"}}, s.module(".", "test"), s.module("libs/kit", "test"))
+
+	s.Empty(got)
+}
+
+// requireFloor derives with check as the row's own and requires the unnarrowed test
+// postcondition of libs/kit among the result.
+func (s *testPostconditionSuite) requireFloor(check types.LeaseCheck, projects ...*types.Project) {
+	if len(projects) == 0 {
+		projects = []*types.Project{s.module(".", "test"), s.module("libs/kit", "test")}
+	}
+	got, _ := s.derive(check, projects...)
+
+	i := slices.IndexFunc(got, func(p types.Postcondition) bool { return p.Derived && p.Check.Target == "go::go-test" })
+	s.Require().GreaterOrEqual(i, 0, "postconditions: %v", got)
+	s.Equal(types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session"}}, got[i].Check)
+}
+
+func (s *testPostconditionSuite) TestACheckNarrowedByRunLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session", "-run", "TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestACheckNarrowedBySkipLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./session", "-skip", "TestTwo"}})
+}
+
+func (s *testPostconditionSuite) TestTheQualifiedOpNarrowedLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go::go-test", Project: "libs/kit", Args: []string{"./session", "-run=TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestACheckOverNarrowerOperandsLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "go-test", Project: "libs/kit", Args: []string{"./other"}})
+}
+
+func (s *testPostconditionSuite) TestAChainMemberNarrowedLeavesTheFloor() {
+	s.requireFloor(types.LeaseCheck{Target: "test", Project: "libs/kit", Args: []string{"-run", "TestOne"}})
+}
+
+func (s *testPostconditionSuite) TestArgsForwardedThroughAnotherProjectsChainLeaveTheFloor() {
+	root := s.module(".", "test")
+	root.TargetChains["ci"] = append(root.TargetChains["ci"], types.ChainStep{Project: "libs/kit", Target: "test"})
+
+	s.requireFloor(types.LeaseCheck{Target: "ci", Project: ".", Args: []string{"./session"}}, root, s.module("libs/kit", "test"))
+}
+
+func (s *testPostconditionSuite) TestAChainInvokingNoTestOpGetsNoneAndSaysSo() {
+	got, notes := s.derive(types.LeaseCheck{Target: "go-test", Project: "."}, s.module(".", "test"), s.module("libs/kit", "lint"))
+
+	s.False(slices.ContainsFunc(got, func(p types.Postcondition) bool { return p.Check.Target == "go::go-test" }))
+	s.Contains(notes, "no test postcondition for libs/kit: no target of its ci chain invokes go::go-test")
 }
 
 func TestAmbiguousSymbolProblemsRefuseAnUnresolvedPostconditionOnAnExistingSymbol(t *testing.T) {

@@ -221,16 +221,153 @@ func permitBut(ps types.JobProblems, deviations []job.Deviation) (kept, permitte
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintPostconditions lints each unlinted project over the written files present at fork: a
-// path never created would fail the tool. Exit grades the changed files ([ranOver]), so
-// created files still count. A project with none present keeps all.
-func lintPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) (postconditions []types.Postcondition, notes []string) {
+// derivedCheckPostconditions is every check postcondition a fork derives: the lint ones
+// ([lintOverWritten]), then each owning project's tests ([testPostconditions]).
+func derivedCheckPostconditions(ctx context.Context, root string, row job.Job, ws Workspace, grader CheckGrader) ([]types.Postcondition, []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
 		return nil, nil
 	}
 	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.Paths.Soft, f) })
 	slices.Sort(written)
-	gates, _ := unrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored), gradeWith(grader, root, row))
+	grade := gradeWith(grader, root, row)
+	lint, notes := lintOverWritten(ctx, root, row, ws, written, grade)
+	tests, testNotes := testPostconditions(root, row, ws, written, lint, grade)
+	return append(lint, tests...), append(notes, testNotes...)
+}
+
+// testPostconditions runs each written file's test op, scoped by its testScope
+// ([NarrowTestScope]), in the project owning it. The project's ci chain must invoke the op:
+// that chain, not a name core knows, says which run tests the project.
+func testPostconditions(root string, row job.Job, ws Workspace, written []string, derived []types.Postcondition, grade gradeFunc) (postconditions []types.Postcondition, notes []string) {
+	byPath := map[string]*types.Project{}
+	for _, p := range ws.Projects {
+		byPath[p.Path] = p
+	}
+	lookup := func(path string) *types.Project { return byPath[path] }
+	// A row whose checks do not read runs nothing, so every floor is derived.
+	checks, _ := effectiveChecks(row)
+	taken := map[string]bool{}
+	for _, g := range row.EffectivePostconditions() {
+		taken[g.ID] = true
+	}
+	for _, g := range derived {
+		taken[g.ID] = true
+	}
+	for _, scope := range wholeWins(NarrowTestScope(ws.Projects, written, root)) {
+		p := byPath[scope.Project]
+		if p == nil || scope.Spell == "" {
+			continue
+		}
+		if scope.Op == "" {
+			notes = append(notes, fmt.Sprintf("no test postcondition for %s: %s", scope.Project, scope.Whole))
+			continue
+		}
+		spell, op, _ := strings.Cut(scope.Op, "::")
+		members := ciTestMembers(p, testOp{spell: spell, op: types.Normalize(op)}, lookup)
+		if len(members) == 0 {
+			notes = append(notes, fmt.Sprintf("no test postcondition for %s: no target of its ci chain invokes %s", scope.Project, scope.Op))
+			continue
+		}
+		runs := append([]string{types.Normalize(op)}, members...)
+		if slices.ContainsFunc(checks, func(gc postconditionCheck) bool { return testsUnnarrowed(ws, gc, p, runs, scope, lookup) }) {
+			continue
+		}
+		postcondition := unrunPostcondition(p.Path, scope.Op, taken)
+		postcondition.Check.Args = scope.Operands
+		graded, denied := gradedPostcondition(postcondition, grade)
+		if denied {
+			notes = append(notes, fmt.Sprintf("no test postcondition for %s: the guard lets this job's worker run no form of `%s`", scope.Project, scope.Op))
+			continue
+		}
+		if scope.Whole != "" {
+			notes = append(notes, fmt.Sprintf("the test postcondition for %s runs %s over the whole project: %s", scope.Project, scope.Op, scope.Whole))
+		}
+		graded.Derived = true
+		postconditions = append(postconditions, graded)
+	}
+	return postconditions, notes
+}
+
+// testsUnnarrowed reports whether gc runs one of p's test runs over all of scope. A flag may
+// select tests, and args forwarded through another target's chain reach an unknown op, so
+// either leaves the floor in place.
+func testsUnnarrowed(ws Workspace, gc postconditionCheck, p *types.Project, runs []string, scope TestScope, lookup func(string) *types.Project) bool {
+	g := gc.Check
+	if gc.Postcondition.Kind != job.PostconditionKindCheck || g.Script != "" || g.Target == "" {
+		return false
+	}
+	names := []string{g.Target}
+	if _, tail, ok := strings.Cut(g.Target, "::"); ok {
+		names = append(names, tail)
+	}
+	from := lookup(cmp.Or(g.Project, "."))
+	reached := false
+	for _, name := range names {
+		if err := types.WalkChain(from, name, lookup, func(v types.ChainVisit) error {
+			reached = reached || (v.Project == p && slices.Contains(runs, v.Target))
+			return nil
+		}); err != nil {
+			return false
+		}
+	}
+	if !reached {
+		return false
+	}
+	if len(g.Args) == 0 {
+		return true
+	}
+	direct := from == p && slices.ContainsFunc(names, func(n string) bool { return slices.Contains(runs, types.Normalize(n)) })
+	if !direct || slices.ContainsFunc(g.Args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
+		return false
+	}
+	// Only go test reads `dir/...` as every package under dir.
+	dialect, known := resolvedTestSelection(ws, g)
+	trees := known && dialect == "go"
+	covers := func(arg, operand string) bool {
+		if tree, ok := strings.CutSuffix(arg, "/..."); ok && trees {
+			tree = path.Clean(tree)
+			return tree == "." || job.CoversPath(tree, path.Clean(operand))
+		}
+		return path.Clean(arg) == path.Clean(operand)
+	}
+	if scope.Whole != "" {
+		return trees && slices.Contains(g.Args, "./...")
+	}
+	return len(scope.Operands) > 0 && !slices.ContainsFunc(scope.Operands, func(o string) bool {
+		return !slices.ContainsFunc(g.Args, func(a string) bool { return covers(a, o) })
+	})
+}
+
+// wholeWins folds the scopes of one project's one test op into one. A group that cannot
+// narrow, such as a glob, runs the whole op, and that covers every narrowed group.
+func wholeWins(scopes []TestScope) []TestScope {
+	var out []TestScope
+	for _, s := range scopes {
+		i := slices.IndexFunc(out, func(o TestScope) bool { return o.Op != "" && o.Project == s.Project && o.Op == s.Op })
+		if i < 0 {
+			out = append(out, s)
+			continue
+		}
+		out[i].Files = append(out[i].Files, s.Files...)
+		if out[i].Whole == "" {
+			out[i].Whole = s.Whole
+		}
+		if out[i].Whole != "" {
+			out[i].Operands = nil
+			continue
+		}
+		for _, operand := range s.Operands {
+			out[i].Operands = appendUnique(out[i].Operands, operand)
+		}
+	}
+	return out
+}
+
+// lintOverWritten lints each unlinted project over the written files present at fork: a
+// path never created would fail the tool. Exit grades the changed files ([ranOver]), so
+// created files still count. A project with none present keeps all.
+func lintOverWritten(ctx context.Context, root string, row job.Job, ws Workspace, written []string, grade gradeFunc) (postconditions []types.Postcondition, notes []string) {
+	gates, _ := unrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored), grade)
 	var lint []UnrunGate
 	for _, g := range gates {
 		if g.Target == lintTarget && !g.IntegratorGates {

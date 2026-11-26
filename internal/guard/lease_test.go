@@ -4454,6 +4454,77 @@ func (s *workerCheckReadsSuite) TestABuildWithNoWorkspaceRuleIsRefused() {
 	s.Contains(got.Say, workerBuildVerdict)
 }
 
+// moduleWorkspace holds libs/kit and libs/other. Each binds a go spell whose go-test op
+// declares testScope, and runs lint and a test target invoking go-test in its ci chain.
+func moduleWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	goSpell := spells.NewSpell("go", spells.WithTargets("go-test", "go-fmt"), spells.WithOps(map[string]spells.Op{
+		"go-test": {Command: spells.Command{TestScope: []string{"./{dir}"}}}, "go-fmt": {},
+	}), spells.WithLanguageExtensions([]string{".go"}))
+	module := func(path string) *types.Project {
+		return &types.Project{
+			Path: path, ResolvedSpells: []*spells.Spell{goSpell}, MagusfileTargets: []string{"ci", "lint", "test", "format"},
+			TargetChains:   map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}, {Target: "format"}}},
+			TargetSpellOps: map[string][]types.TargetSpellUse{"test": {{Spell: "go", Ops: []string{"go-test"}}}},
+		}
+	}
+	kit, other := module("libs/kit"), module("libs/other")
+	ws := typestest.NewMockWorkspaceRepository(t)
+	nodes := []types.TargetGraphNode{
+		{Name: "ci", Dependencies: []string{"lint", "test", "format"}},
+		{Name: "test", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-test"}}}},
+		{Name: "lint"}, {Name: "format", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-fmt"}}}},
+	}
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: "libs/kit", Nodes: nodes}, {Path: "libs/other", Nodes: nodes},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get("libs/kit").Return(kit).Maybe()
+	ws.EXPECT().Get("libs/other").Return(other).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{kit, other}).Maybe()
+	return Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
+		Spells:  spellCatalog,
+	}
+}
+
+// moduleRow writes one file of libs/kit and checks the root.
+func moduleRow() jobtypes.Job {
+	row := testCheckLease()
+	row.Paths.Write = []string{"libs/kit/session/session.go"}
+	row.Check = rawCheck("go-test", ".")
+	return row
+}
+
+func (s *workerCheckReadsSuite) TestATestOfTheWrittenModulePasses() {
+	for _, command := range []string{
+		"./magus run go-test libs/kit --budget-wait 0 -- ./session",
+		"./magus run go::go-test libs/kit -- ./session",
+		"./magus run test libs/kit",
+		"./magus run lint libs/kit -- session/session.go",
+	} {
+		s.Empty(s.judged(moduleRow(), moduleWorkspace(s.T()), command), command)
+	}
+}
+
+func (s *workerCheckReadsSuite) TestATestOfTheWrittenModulePassesUnderTheDefaultRwCharm() {
+	deps := moduleWorkspace(s.T())
+	deps.DefaultCharms = []string{"rw"}
+	s.Empty(s.judged(moduleRow(), deps, "./magus run go-test libs/kit --budget-wait 0 -- ./session"))
+}
+
+func (s *workerCheckReadsSuite) TestATestOfAModuleTheJobDoesNotWriteIsRefused() {
+	s.True(s.judged(moduleRow(), moduleWorkspace(s.T()), "./magus run go-test libs/other -- ./session").refused())
+	s.True(s.judged(moduleRow(), moduleWorkspace(s.T()), "./magus run go-test libs/kit libs/other").refused())
+	s.True(s.judged(moduleRow(), moduleWorkspace(s.T()), "./magus run go-test --all").refused())
+}
+
+func (s *workerCheckReadsSuite) TestAWrittenModulesOtherCiTargetIsRefused() {
+	s.True(s.judged(moduleRow(), moduleWorkspace(s.T()), "./magus run format libs/kit").refused(),
+		"format neither tests nor lints, so the write set does not reach it")
+}
+
 // approved is a workspace whose only command rule is what resolved answers.
 func (s *workerCheckReadsSuite) approved(rule workspace.CommandRule, err error) Dependencies {
 	deps := composingWorkspace(s.T())
