@@ -712,7 +712,7 @@ proofread:
     internal/config/agents.go: {code-comment-budget: 1, code-comment-sentence: 4}
     internal/config/agents_test.go: {code-comment-sentence: 2}
     internal/config/cache_dir.go: {code-comment-budget: 1, code-comment-sentence: 2}
-    internal/config/config.go: {code-comment-budget: 37, code-comment-sentence: 61, comment-caps: 32, comment-history: 2}
+    internal/config/config.go: {code-comment-budget: 37, code-comment-sentence: 60, comment-caps: 32, comment-history: 2}
     internal/config/config_test.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
     internal/config/digest.go: {code-comment-sentence: 1}
     internal/config/envnames.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 2}
@@ -736,7 +736,7 @@ proofread:
     internal/deps/docs.go: {code-comment-budget: 1, code-comment-sentence: 2}
     internal/deps/node.go: {code-comment-budget: 3, code-comment-sentence: 3}
     internal/deps/python.go: {code-comment-budget: 1, code-comment-sentence: 3}
-    internal/describe/extract.go: {code-comment-budget: 36, code-comment-sentence: 47, comment-caps: 20, comment-history: 3, doc-path: 1}
+    internal/describe/extract.go: {code-comment-budget: 31, code-comment-sentence: 41, comment-caps: 20, comment-history: 3, doc-path: 1}
     internal/describe/extract_test.go: {code-comment-budget: 29, code-comment-sentence: 34, comment-caps: 12, doc-path: 1}
     internal/describe/files.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 4, doc-path: 1}
     internal/describe/list.go: {code-comment-sentence: 3, comment-caps: 1, doc-path: 1}
@@ -1352,7 +1352,7 @@ proofread:
     internal/interp/bindings/host.go: {code-comment-budget: 1}
     internal/interp/bindings/http_bytes.go: {code-comment-budget: 4, code-comment-sentence: 7}
     internal/interp/bindings/http_bytes_test.go: {code-comment-sentence: 1}
-    internal/interp/bindings/imports.go: {code-comment-budget: 10, code-comment-sentence: 13, comment-caps: 4}
+    internal/interp/bindings/imports.go: {code-comment-budget: 9, code-comment-sentence: 12, comment-caps: 4}
     internal/interp/bindings/imports_test.go: {code-comment-budget: 2, code-comment-sentence: 5, comment-history: 1}
     internal/interp/bindings/job_model_tier.go: {code-comment-budget: 2, code-comment-sentence: 3}
     internal/interp/bindings/job_model_tier_test.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}

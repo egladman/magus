@@ -387,7 +387,7 @@ fun main() > void !> any {
     }
     // What weakened the symbol half is said beside its findings, never left to be inferred.
     var caveats = mut [<str>];
-    foreach (u in review.uncovered) { caveats.append(uncoveredLine(u.project, reason: u.reason)); }
+    foreach (u in review.uncovered) { caveats.append(uncoveredLine(u.project, reason: u.reason.value)); }
     final baselineInput = advice\input("baseline");
     if (baselineInput.error -> err) { throw err.message; }
     if (!advice\collecting() and baselineInput.value! == "") {

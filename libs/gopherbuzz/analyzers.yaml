@@ -140,7 +140,7 @@ proofread:
     module.go: {code-comment-budget: 1, code-comment-sentence: 5}
     observer.go: {code-comment-budget: 3, code-comment-sentence: 3}
     observer_test.go: {banner: 4, code-comment-sentence: 2, comment-first-person: 1}
-    parser.go: {code-comment-budget: 23, code-comment-sentence: 29, comment-caps: 7, comment-first-person: 1, comment-history: 2}
+    parser.go: {code-comment-budget: 22, code-comment-sentence: 29, comment-caps: 7, comment-history: 2}
     parser_test.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 6, comment-history: 1}
     pool.go: {banner: 1, code-comment-budget: 10, code-comment-sentence: 20, comment-caps: 11, comment-first-person: 1, comment-history: 1}
     pool_test.go: {code-comment-budget: 9, code-comment-sentence: 14, comment-caps: 4}

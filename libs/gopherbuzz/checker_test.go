@@ -2506,3 +2506,97 @@ final spells = [ go\spell, go\spell ];
 `)
 	s.Require().NoError(err)
 }
+
+func TestCheck_MatchEnumFieldSubjectExhaustive(t *testing.T) {
+	checkOK(t, `enum E { a, b, c }
+object O { k: E }
+fun f(o: O) > str {
+    return match (o.k) { .a -> "a", .b -> "b", .c -> "c" };
+}`)
+}
+
+func TestCheck_MatchEnumFieldSubjectNonExhaustive(t *testing.T) {
+	checkError(t, `enum E { a, b, c }
+object O { k: E }
+fun f(o: O) > str {
+    return match (o.k) { .a -> "a", .b -> "b" };
+}`, "missing case(s): c")
+}
+
+func TestCheck_MatchOptionalEnumSubjectBareCaseRefused(t *testing.T) {
+	checkError(t, `enum E { a, b }
+fun f(x: E?) > str {
+    return match (x) { .a -> "a", .b -> "b", null -> "n" };
+}`, "cannot infer which enum .a")
+	checkError(t, `enum E { a, b }
+fun f(x: E?) > str {
+    return match (x) { .a -> "a", else -> "n" };
+}`, "cannot infer which enum .a")
+	checkError(t, `enum E { a, b }
+object O { k: E? }
+fun f(o: O) > str {
+    return match (o.k) { .a -> "a", .b -> "b", null -> "n" };
+}`, "cannot infer which enum .a")
+}
+
+func TestCheck_MatchOptionalEnumSubjectNeedsElse(t *testing.T) {
+	checkError(t, `enum E { a, b }
+fun f(x: E?) > str {
+    return match (x) { E.a -> "a", E.b -> "b", null -> "n" };
+}`, "an `else` branch is required")
+}
+
+func TestCheck_MatchOptionalEnumSubjectUnwrapped(t *testing.T) {
+	checkOK(t, `enum E { a, b }
+fun f(x: E?) > str {
+    return match (x!) { .a -> "a", .b -> "b" };
+}`)
+	checkOK(t, `enum E { a, b }
+fun f(x: E?) > str {
+    return match (x) { E.a -> "a", E.b -> "b", else -> "n" };
+}`)
+	checkOK(t, `enum E { a, b }
+fun f(x: E?) > str {
+    if (x -> v) {
+        return match (v) { .a -> "a", .b -> "b" };
+    }
+    return "n";
+}`)
+	checkOK(t, `enum E { a, b }
+fun f(x: E?) > str {
+    final y = x ?? E.a;
+    return match (y) { .a -> "a", .b -> "b" };
+}`)
+}
+
+const matchModuleSource = "namespace px;\n\nexport enum<str> Kind {\n    exited = \"exited\",\n    signaled = \"signaled\",\n}\n\nexport object Err {\n    kind: Kind,\n    code: int = 0,\n}\n"
+
+func matchModuleSession(t *testing.T) *Session {
+	t.Helper()
+	dir := t.TempDir()
+	writeModule(t, dir, "px.buzz", matchModuleSource)
+	sess := NewSession(context.Background())
+	t.Cleanup(func() { sess.Close() })
+	sess.SetIncludeDirs([]string{dir})
+	return sess
+}
+
+func TestCheck_MatchImportedEnumCasesExhaustive(t *testing.T) {
+	sess := matchModuleSession(t)
+	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nfun say(kind: px\\Kind) > str {\n    return match (kind) {\n        px\\Kind.exited -> \"exited\",\n        px\\Kind.signaled -> \"signaled\",\n    };\n}\n"))
+}
+
+func TestCheck_MatchImportedEnumFieldSubjectExhaustive(t *testing.T) {
+	sess := matchModuleSession(t)
+	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nfun say(e: px\\Err) > str {\n    return match (e.kind) {\n        px\\Kind.exited -> \"exited\",\n        px\\Kind.signaled -> \"signaled\",\n    };\n}\n"))
+	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nfun say(e: px\\Err) > str {\n    return match (e.kind) {\n        .exited -> \"exited\",\n        .signaled -> \"signaled\",\n    };\n}\n"))
+	diags := sess.Diagnostics("import \"px\";\n\nfun say(e: px\\Err) > str {\n    return match (e.kind) {\n        px\\Kind.exited -> \"exited\",\n    };\n}\n")
+	require.NotEmpty(t, diags)
+	assert.Contains(t, diags[0].Msg, "missing case(s): signaled")
+}
+
+func TestCheck_MatchImportedEnumFieldOfUnwrappedOptional(t *testing.T) {
+	sess := matchModuleSession(t)
+	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nobject Run { error: px\\Err? }\n\nfun say(ran: Run) > str {\n    final failed: px\\Err? = ran.error;\n    if (failed -> e) {\n        return match (e.kind) {\n            px\\Kind.exited -> \"exited\",\n            px\\Kind.signaled -> \"signaled\",\n        };\n    }\n    return \"none\";\n}\n"))
+	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nfun say(failed: px\\Err?) > str {\n    if (failed -> e) {\n        return match (e.kind) {\n            px\\Kind.exited -> \"exited\",\n            px\\Kind.signaled -> \"signaled\",\n        };\n    }\n    return \"none\";\n}\n"))
+}

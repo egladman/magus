@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 29535
-skill_short_bytes: 23442
+skill_full_bytes: 28459
+skill_short_bytes: 23375
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `602f26412fab` |
+| `skill-content` | `ba1eafed7cf9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -327,8 +327,6 @@ Read the facts:
 - Affinity stays with `client` (`magus\history().affinity`). Without MCP,
   run `magus buzz -e` printing `magus\history().affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
-
-A read-only job has no write set, so it is outside this analysis.
 
 Two jobs may run together only when:
 
@@ -686,16 +684,14 @@ Before spawning, state the topology: the model per job, and whether isolated wor
 - Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
   jobs, nested as deep, as the partition supports.
 - A limit exists only when magus.yaml's `jobs` section sets one. Read it with
-  `magus config view` or `config`.
-  - `max_depth` and `max_live` make `magus job fork` refuse past them, naming the key.
-  - `default_timeout` bounds a fork that names no `--timeout`.
-  - Honor a cap the user states the same way.
-- Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. A run kept out of that budget is
-  waits in its own call up to `budget_wait` (default 30m; `--budget-wait 0`
-  refuses at once, MGS3009) and names who holds it; a spawn or `magus job fork`
-  into a full one says how full it is.
-  Serialize validations that share a worktree, even when their write sets are disjoint.
+  `magus config view` or `config`. `max_depth` and `max_live` make
+  `magus job fork` refuse past them, naming the key; `default_timeout` bounds a fork
+  that names no `--timeout`. Honor a cap the user states the same way.
+- Editing costs the workspace nothing; VALIDATION contends for the machine's build
+  budget. A run kept out waits in its own call up to `budget_wait` (default 30m;
+  `--budget-wait 0` refuses at once, MGS3009) and names who holds it; a spawn or
+  `magus job fork` into a full budget says how full. Serialize validations that
+  share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
 `magus describe target ci <project>` names what `ci` chains and in what order.
@@ -708,12 +704,10 @@ Assign the check from the pipeline the workspace composed, not from convention.
   worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
-tree, after every unit lands, which is what stops seven fanned-out workers from
-each running the whole pipeline concurrently on one machine.
+tree, after every unit lands.
 
 Decide each job's validation PLANE with its target. Some worker environments cannot
-execute magus at all. Examples are an isolated tree with no usable binary, or a guard
-routing raw tools to targets it cannot run. Such a worker cannot validate what it
+execute magus at all, such as an isolated tree with no usable binary. Such a worker cannot validate what it
 writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
@@ -722,8 +716,7 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
   worker reports "done" with nothing executed, which `magus job wait` refuses to pass.
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
-problem; that is the shape that does not terminate, and
-the cost people attribute to "multi-agent" is almost always this. These instructions give it a
+problem; that shape does not terminate. These instructions give it a
 definitive end without capping depth:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
@@ -737,19 +730,16 @@ definitive end without capping depth:
   do the job locally; never re-fork it unchanged.
 
   A postcondition unmet twice marks it so: the root re-scopes the job, or serializes it behind
-  whatever keeps breaking it. Two jobs with an undeclared dependency each break
-  the other's criteria, and re-forking the failing one satisfies every instruction above
-  while alternating forever. The budget is what ends it.
+  whatever keeps breaking it: two jobs with an undeclared dependency can break
+  each other's criteria and alternate forever until the budget ends it.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
-  leaks by construction. Split "no caller of X remains" into per-project jobs, and
-  the callers in no project belong to nobody. Every job passes and the goal is
-  unmet. Carry a remainder row at each level and close it explicitly.
+  leaks by construction. Split "no caller of X remains" into per-project jobs
+  and the callers in no project belong to nobody. Carry a remainder row at each level and close it explicitly.
 
 START EVERY SPAWN AT THE ECONOMY TIER, and SAY which model you picked. Move a job up
 only for work the table below assigns higher. The fit still runs both ways: an
 ambiguous API boundary does not get the cheapest model because it looked like less
-work. Judge cost per COMPLETED job: a cheap worker that needs a rerun is not
-cheaper.
+work.
 
 Naming it is the checkable half: every spawn names a model, or an agent definition
 that names one.
@@ -778,8 +768,7 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at routine. Many routine workers finish about as
-fast as one design worker, for far fewer tokens:
+To prove something, brute-force it at routine:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
   Give each a script check, so `magus job wait` can pass it.
@@ -813,8 +802,7 @@ magus affected <target> --plan
 
 For a proposed change whose paths are known but not yet edited, plan those paths
 instead of the current diff (`--stdin --plan`, one repo-relative path per line).
-Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`. A shard is a
-history-balanced execution group, not an edit assignment or proof of write isolation.
+Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
 files, and projects before producing a stdin plan.
 
@@ -837,8 +825,6 @@ Read the facts:
   run `magus buzz -e` printing `magus\history().affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
 
-A read-only job has no write set, so it is outside this analysis.
-
 Two jobs may run together only when:
 
 - The combined classification reports no overlaps. Source write sets and declared
@@ -853,8 +839,7 @@ ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: a
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
-loading for everybody in that checkout, who lose `magus run`, `magus ls`
-and their own tests over an edit they cannot see.
+loading for everybody in that checkout.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
@@ -945,12 +930,10 @@ any cap the user set for the tree. Require the worker to:
 End every spawn prompt with the step that files the result, as the worker's LAST act
 before it reports back. `stop-unfiled` refuses a leased child's first stop until it files
 one, and a prompt that leaves it out gets a prose report and a row that never
-moves: the store keeps the write paths held, `magus job wait`
-has nothing to verify, and nobody notices until a sibling is refused over a path
-the finished worker no longer needs. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
+moves. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
 Never inline the result fields in a prompt; the row prints them filled in, and
 [reference.md](reference.md) shows a record.
-A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
+Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
 
 A worker writes only its own row and the children it forks. Every other store write

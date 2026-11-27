@@ -19,6 +19,7 @@
 // Run `magus doctor` at the keyboard to see the advisory tier, with the detail this
 // comment has no room for.
 import "advice";
+import "magus/check";
 import "magus";
 import "std";
 
@@ -26,7 +27,7 @@ final section = "doctor";
 
 // reportable names the threshold so a test can pin it. The header says why `advice`
 // fails this check.
-export fun reportable(status: str) > bool { return status == "fail"; }
+export fun reportable(status: magus\check\Status) > bool { return status == magus\check\Status.fail; }
 
 // summarize renders the failing checks. Pure over a plain list so the wording is
 // testable: the magus namespace's types annotate but do not construct.
@@ -86,8 +87,8 @@ test "summarize is empty with no failing check, so the section retracts" {
 }
 
 test "only a failing check reaches a pull request" {
-    std\assert(reportable("fail"), message: "a check that broke is worth the interruption");
-    std\assert(!reportable("advice"), message: "a clean main produces these too");
-    std\assert(!reportable("ok"), message: "nothing to say about a check that passed");
-    std\assert(!reportable("skip"), message: "a check that did not run found nothing");
+    std\assert(reportable(magus\check\Status.fail), message: "a check that broke is worth the interruption");
+    std\assert(!reportable(magus\check\Status.advice), message: "a clean main produces these too");
+    std\assert(!reportable(magus\check\Status.ok), message: "nothing to say about a check that passed");
+    std\assert(!reportable(magus\check\Status.none), message: "a check that did not run found nothing");
 }
