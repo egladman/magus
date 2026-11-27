@@ -964,6 +964,28 @@ func (s *IntegratedByContentSuite) TestABranchSquashedOnlyOnTheRemoteIsIntegrate
 	s.Empty(note)
 }
 
+// A local branch behind its own pushed copy is integrated once a base holds
+// that copy. The forge squashed what was pushed.
+func (s *IntegratedByContentSuite) TestABranchBehindItsMergedUpstreamIsIntegrated() {
+	s.branch("w", map[string]string{"w.txt": "first\n"})
+	s.repo.Git("switch", "-q", "w")
+	s.repo.Commit("pushed later", map[string]string{"w.txt": "second\n"})
+	s.repo.Git("update-ref", "refs/remotes/origin/w", s.repo.Head())
+	s.repo.Git("reset", "-q", "--hard", "HEAD~1")
+	s.repo.Git("config", "branch.w.remote", "origin")
+	s.repo.Git("config", "branch.w.merge", "refs/heads/w")
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Commit("squash w", map[string]string{"w.txt": "second\n"})
+
+	got, _ := s.waiting("w")
+
+	s.Empty(got, "the pushed copy the base squashed holds the local branch")
+
+	s.repo.Git("config", "--unset", "branch.w.merge")
+	got, _ = s.waiting("w")
+	s.Equal([]Unintegrated{{Job: "w", Branch: "w", Commits: 1}}, got, "an untracked branch is judged alone")
+}
+
 func (s *IntegratedByContentSuite) TestABranchNeitherBaseHoldsCountsAgainstTheNearer() {
 	s.repo.Git("update-ref", "refs/remotes/origin/main", s.repo.Head())
 	s.branch("w", map[string]string{"w.txt": "w\n"})
