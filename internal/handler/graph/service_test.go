@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus"
+	_ "github.com/egladman/magus/buzzengine" // Open fails without the engine linked
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -319,6 +320,7 @@ func TestFindAffected(t *testing.T) { suite.Run(t, new(findAffectedSuite)) }
 // app depends on lib, and the working tree edits a file in lib.
 func (s *findAffectedSuite) SetupTest() {
 	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":         ".magus/\n",
 		"magusfile.buzz":     "",
 		"lib/magusfile.buzz": "",
 		"lib/lib.txt":        "one\n",

@@ -86,7 +86,8 @@ type GraphServiceClient interface {
 	// card should not carry it.
 	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
 	// FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
-	// highlight what the working tree touches. `magus affected` over the wire.
+	// highlight what the working tree touches, with why each is reached and what to run.
+	// `magus affected` with --impact, --explain and --plan over the wire.
 	//
 	// Read-only like the rest of the service, but the only verb here that reads the VCS rather
 	// than the graph, so it is the only one whose answer changes while the graph stands still.
@@ -223,7 +224,8 @@ type GraphServiceHandler interface {
 	// card should not carry it.
 	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
 	// FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
-	// highlight what the working tree touches. `magus affected` over the wire.
+	// highlight what the working tree touches, with why each is reached and what to run.
+	// `magus affected` with --impact, --explain and --plan over the wire.
 	//
 	// Read-only like the rest of the service, but the only verb here that reads the VCS rather
 	// than the graph, so it is the only one whose answer changes while the graph stands still.
