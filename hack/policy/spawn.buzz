@@ -435,8 +435,9 @@ test "a brief for a job that owns its checkout may not teach the build either" {
 export final finishedBranchLimit = 10;
 
 // ForkCounts is what the rules read of magus\workspace().forkFacts().
-// It is copied out like Spawn. finishedBranches are the branches core read
-// as unmerged; branchesUnknown names the ones it could not read.
+// It is copied out like Spawn. finishedBranches are the places finished work
+// waits in: one per open change holding rows, one per row off every change.
+// branchesUnknown names the rows core could not place.
 export object ForkCounts {
     finishedBranches: [str] = [],
     branchesUnknown: str = "",
@@ -446,11 +447,11 @@ export object ForkCounts {
     testUnknown: str = "",
 }
 
-// decideFork refuses a top-level fork once the known unmerged branches reach
-// limit. Integrating and child forks pass, since they clear the backlog. An
-// unread branch never counts toward the limit, so it alone never refuses. A
-// record no reader could see passes with a note, because refusing on its shape
-// would stop forks that integrate.
+// decideFork refuses a top-level fork once the places holding finished work
+// reach limit. Integrating and child forks pass, since they clear the
+// backlog. An unread row never counts toward the limit, so it alone never
+// refuses. A record no reader could see passes with a note, because refusing
+// on its shape would stop forks that integrate.
 export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > GuardVerdict {
     if (counts.finishedBranches.len() == 0 or counts.finishedBranches.len() < limit) {
         return magus\guard.defer();
@@ -462,14 +463,16 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
     if (counts.branchesUnknown != "") {
         unread = "; unread, so not counted: {counts.branchesUnknown}";
     }
-    final facts = "{counts.finishedBranches.len()} finished branch(es) off the base: {counts.finishedBranches.join(", ")}{unread}; "
-        + "{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
+    final facts = "{counts.finishedBranches.len()} place(s) hold finished work off the base: {counts.finishedBranches.join(", ")}{unread}; "
+        + "{describeTest(counts)}. The limit is {limit} places, a starting guess: "
         + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
     if (!fork.known) {
         return magus\guard.advise("this fork's record could not be read, so it passes unjudged, though it would be refused if it does not integrate. {facts}");
     }
-    return magus\guard.deny("too many finished branches wait off the base, so this fork is refused\n{facts} "
-        + "Integrate them first with `./magus job fork --stdin --checkout <dir>`, given this record: {counts.integrateRecord}");
+    return magus\guard.deny("too many places hold finished work off the base, so this fork is refused\n{facts} "
+        + "Fork dependent work as a child of a row on an open change, which adds no place. "
+        + "For independent work a person merges a change or raises the limit. "
+        + "To fold the rows off every change into one, fork `./magus job fork --stdin --checkout <dir>` with this record: {counts.integrateRecord}");
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -553,7 +556,7 @@ fun noFile(path: str) > str {
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
     final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit), label: "at the limit");
     std\assert(v.decision == magus\GuardDecision.deny, message: "at the branch limit");
-    foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
+    foreach (want in ["10 place(s)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
         std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
     }
 }

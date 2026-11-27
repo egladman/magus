@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -768,16 +769,167 @@ func TestUnintegratedBranchesSkipsWorkTheBaseHolds(t *testing.T) {
 	branch("integration", map[string]string{"e.txt": "e\n"})
 	repo.Commit("squash squashed", map[string]string{"b.txt": "b\n"})
 
-	seed(t, s, job.Job{ID: "squashed", State: job.StatePass})
-	seed(t, s, job.Job{ID: "pending", State: job.StateExited})
-	seed(t, s, job.Job{ID: "named", State: job.StatePass})
-	seed(t, s, job.Job{ID: "integration", State: job.StatePass, Integrates: []string{"retired"}})
-	seed(t, s, job.Job{ID: "retry", State: job.StateExited, Integrates: []string{"named"}})
+	plant(t, s,
+		taken(repo, job.Job{ID: "squashed", State: job.StatePass}),
+		taken(repo, job.Job{ID: "pending", State: job.StateExited}),
+		taken(repo, job.Job{ID: "named", State: job.StatePass}),
+		taken(repo, job.Job{ID: "integration", State: job.StateNoReturn}),
+		job.Job{ID: "retry", State: job.StateRunning, Integrates: []string{"named"}},
+		job.Job{ID: "untaken", State: job.StateNoReturn})
 
 	got, err := s.UnintegratedBranches(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}, got,
-		"a squash-merged branch, a branch an integration job names whatever its state, and a passed integration job's own branch are integrated")
+	assert.Equal(t, []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}, {Job: "integration", Branch: "integration", Commits: 1}}, got,
+		"a squash-merged head, one a live integration names and a row no holder took wait nowhere; an ended row's head still does")
+}
+
+// taken is row as a holder that exited it leaves it: registered, its head the
+// tip of the branch named for it.
+func taken(repo *testkit.Repo, row job.Job) job.Job {
+	row.Registered = 1
+	row.Head = tip(repo, row.ID)
+	return row
+}
+
+func tip(repo *testkit.Repo, branch string) string {
+	return strings.TrimSpace(repo.Git("rev-parse", branch))
+}
+
+// headed is ids as exited rows standing at their branches' tips, the rows
+// [placeWith] reads. An id naming no branch has no head.
+func headed(repo *testkit.Repo, ids ...string) []job.Job {
+	tips := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(repo.Git("for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads")), "\n") {
+		if name, id, ok := strings.Cut(line, " "); ok {
+			tips[name] = id
+		}
+	}
+	rows := make([]job.Job, len(ids))
+	for i, id := range ids {
+		rows[i] = job.Job{ID: id, State: job.StateExited, Registered: 1, Head: tips[id]}
+	}
+	return rows
+}
+
+// waitingIn is the placements off every base and change, as [Unintegrated].
+func waitingIn(placed []Placed) []Unintegrated {
+	var out []Unintegrated
+	for _, p := range placed {
+		if p.Waiting() {
+			out = append(out, Unintegrated{Job: p.Job, Branch: p.Name(), Commits: p.Commits})
+		}
+	}
+	return out
+}
+
+// fresh is a change list read just now holding changes.
+func fresh(changes ...qtypes.Change) OpenChanges {
+	return OpenChanges{Fetch: &InflightFetch{Provider: "github", Base: "main", At: time.Now().Unix()}, Changes: qtypes.Changes{Base: "main", Changes: changes}}
+}
+
+// The regression the design was written for: a finished row whose branch was
+// pushed, then deleted locally, still waits and still counts.
+func TestAPushedRowWhoseBranchIsDeletedStillCounts(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	repo.Git("switch", "-q", "-c", "w", main)
+	repo.Commit("w", map[string]string{"w.txt": "w\n"})
+	repo.Git("switch", "-q", main)
+	row := taken(repo, job.Job{ID: "w", State: job.StateNoReturn})
+	repo.Git("update-ref", "refs/remotes/origin/w", row.Head)
+	repo.Git("branch", "-q", "-D", "w")
+	plant(t, s, row)
+	rows, err := s.List(t.Context())
+	require.NoError(t, err)
+
+	placed, _, err := Placements(t.Context(), repo.Root(), rows, fresh(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, placed, 1)
+	assert.Equal(t, PlacePushed, placed[0].Place)
+	assert.Empty(t, placed[0].Branch, "no local name holds it")
+	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
+	assert.Len(t, facts.FinishedBranches, 1)
+	assert.Contains(t, facts.FinishedBranches[0], "(job w, pushed, 1 commit(s))")
+}
+
+// Stacking is the answer at the limit, so rows on one open change are one place.
+func TestRowsOnOneOpenChangeCountAsOnePlace(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	repo.Git("switch", "-q", "-c", "stack", main)
+	var rows []job.Job
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		repo.Commit(id, map[string]string{"stack-" + id + ".txt": id + "\n"})
+		rows = append(rows, job.Job{ID: id, State: job.StateExited, Registered: 1, Head: repo.Head()})
+	}
+	repo.Git("switch", "-q", main)
+	repo.Git("switch", "-q", "-c", "alone", main)
+	repo.Commit("alone", map[string]string{"alone.txt": "alone\n"})
+	repo.Git("switch", "-q", main)
+	rows = append(rows, taken(repo, job.Job{ID: "alone", State: job.StateExited}))
+	plant(t, s, rows...)
+	listed, err := s.List(t.Context())
+	require.NoError(t, err)
+
+	facts := ForkFacts(t.Context(), repo.Root(), listed, FullTest{}, fresh(qtypes.Change{ID: "988", Head: tip(repo, "stack"), Branch: "stack", Base: "main"}))
+
+	assert.Equal(t, []string{"alone (job alone, local, 1 commit(s))", "#988 (open change, job(s) a, b, c, d, e)"}, facts.FinishedBranches)
+}
+
+// A change's branch rebased with --force-with-lease holds its rows by
+// content. A change closed unmerged drops them back to pushed. A list past
+// its age places none, so each counts alone.
+func TestAnOpenChangeHoldsItsRowsByContent(t *testing.T) {
+	t.Parallel()
+	_, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	repo.Git("switch", "-q", "-c", "w", main)
+	repo.Commit("w", map[string]string{"w.txt": "w\n"})
+	repo.Git("switch", "-q", main)
+	rows := headed(repo, "w")
+	repo.Git("update-ref", "refs/remotes/origin/w", rows[0].Head)
+	repo.Commit("main moves", map[string]string{"main.txt": "main\n"})
+	repo.Git("switch", "-q", "-c", "rebased", main)
+	repo.Commit("w again", map[string]string{"w.txt": "w\n"})
+	repo.Git("switch", "-q", main)
+	repo.Git("reset", "-q", "--hard", "HEAD~1")
+	driver, why := resolveDriver(t.Context(), repo.Root())
+	require.NotNil(t, driver, why)
+	place := func(open OpenChanges) Placed {
+		placed, _, err := placeWith(t.Context(), driver, repo.Root(), rows, open, time.Now())
+		require.NoError(t, err)
+		return placed[0]
+	}
+
+	rebased := place(fresh(qtypes.Change{ID: "7", Head: tip(repo, "rebased")}))
+	assert.Equal(t, PlaceProposed, rebased.Place)
+	assert.Equal(t, "7", rebased.Change)
+	assert.Equal(t, PlacePushed, place(fresh()).Place, "the change closed unmerged")
+	old := fresh(qtypes.Change{ID: "7", Head: tip(repo, "rebased")})
+	old.Fetch.At = time.Now().Add(-2 * ChangeListMaxAge).Unix()
+	assert.Equal(t, PlacePushed, place(old).Place, "an old list places no row on a change")
+}
+
+// A row stored without a head is unread, named with a fix, and counts toward
+// no place. No branch name stands in for the head.
+func TestARowWithNoHeadIsUnreadWithAFix(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	main := repo.Git("symbolic-ref", "--short", "HEAD")
+	repo.Git("switch", "-q", "-c", "old", main)
+	repo.Commit("old", map[string]string{"old.txt": "old\n"})
+	repo.Git("switch", "-q", main)
+	plant(t, s, job.Job{ID: "old", State: job.StatePass, Registered: 1})
+	rows, err := s.List(t.Context())
+	require.NoError(t, err)
+
+	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
+
+	assert.Empty(t, facts.FinishedBranches)
+	assert.Contains(t, facts.BranchesUnknown, "job old: no head is recorded: the row was stored before rows recorded a head")
+	assert.Contains(t, facts.BranchesUnknown, `"left_unmerged":"<why>"`)
 }
 
 func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
@@ -791,20 +943,17 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
 		repo.Git("switch", "-q", main)
 	}
-	seed(t, s, job.Job{ID: "mine", State: job.StateRunning})
-	_, err := s.RecordWorktree(t.Context(), "mine", job.Worktree{Root: t.TempDir(), Source: repo.Root()})
-	require.NoError(t, err)
-	seed(t, s, job.Job{ID: "mine-a", Parent: "mine", State: job.StatePass})
-	seed(t, s, job.Job{ID: "mine-b", Parent: "mine", State: job.StateExited})
-	seed(t, s, job.Job{ID: "peer", State: job.StateRunning})
-	_, err = s.RecordWorktree(t.Context(), "peer", job.Worktree{Root: t.TempDir(), Source: peerRoot})
-	require.NoError(t, err)
-	seed(t, s, job.Job{ID: "peer-a", Parent: "peer", State: job.StatePass})
+	plant(t, s,
+		job.Job{ID: "mine", State: job.StateRunning, Worktree: &job.Worktree{Root: t.TempDir(), Source: repo.Root()}},
+		taken(repo, job.Job{ID: "mine-a", Parent: "mine", State: job.StatePass}),
+		taken(repo, job.Job{ID: "mine-b", Parent: "mine", State: job.StateExited}),
+		job.Job{ID: "peer", State: job.StateRunning, Worktree: &job.Worktree{Root: t.TempDir(), Source: peerRoot}},
+		taken(repo, job.Job{ID: "peer-a", Parent: "peer", State: job.StatePass}))
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
-	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{})
-	assert.Equal(t, []string{"mine-a (job mine-a, 1 commit(s))", "mine-b (job mine-b, 1 commit(s))"}, facts.FinishedBranches,
+	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
+	assert.Equal(t, []string{"mine-a (job mine-a, local, 1 commit(s))", "mine-b (job mine-b, local, 1 commit(s))"}, facts.FinishedBranches,
 		"the peer's branch is not this tree's")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["mine-a","mine-b"]`)
 	assert.Contains(t, facts.TestUnknown, "no passed full test", "no run on record says so rather than reading as zero")
@@ -814,7 +963,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 
 	peerRows, err := peer.List(t.Context())
 	require.NoError(t, err)
-	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}).FinishedBranches, "mine-a (job mine-a, 1 commit(s))",
+	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}, fresh()).FinishedBranches, "mine-a (job mine-a, local, 1 commit(s))",
 		"another tree's backlog is not the peer's")
 }
 
@@ -825,13 +974,13 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 	repo.Commit("one", map[string]string{"one.txt": "1\n"})
 	repo.Commit("two", map[string]string{"two.txt": "2\n"})
 
-	facts := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: tested})
+	facts := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: tested}, fresh())
 	assert.Equal(t, 2, facts.CommitsSinceTest)
 	assert.Empty(t, facts.TestUnknown)
 	assert.Contains(t, ForkFactsLine(facts), fmt.Sprintf("2 commit(s) since the last full test (out1 at %s)", tested))
-	assert.Contains(t, ForkFactsLine(facts), "0 finished branches off the base")
+	assert.Contains(t, ForkFactsLine(facts), "0 places hold work off the base")
 
-	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"})
+	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"}, fresh())
 	assert.NotEmpty(t, gone.TestUnknown, "a revision the history lost is unknown, not zero")
 }
 
@@ -851,24 +1000,24 @@ func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	repo.Git("switch", "-q", "-c", "pending", main)
 	repo.Commit("pending", map[string]string{"pending.txt": "pending\n"})
 	repo.Git("switch", "-q", main)
-	finished := []job.Job{{ID: "pending", State: job.StateExited}}
+	finished := headed(repo, "pending")
 	driver, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, driver, why)
 
-	got, _, err := unintegratedWith(t.Context(), failedMissing{VCSDriver: driver}, repo.Root(), finished, nil)
+	got, _, err := placeWith(t.Context(), failedMissing{VCSDriver: driver}, repo.Root(), finished, fresh(), time.Now())
 	require.NoError(t, err)
 
 	require.Len(t, got, 1)
-	assert.Equal(t, "pending", got[0].Branch)
+	assert.Equal(t, PlaceUnread, got[0].Place)
 	assert.Zero(t, got[0].Commits)
-	assert.Contains(t, got[0].Unread, "git merge-base: bad object", "the unread state names the failed read")
+	assert.Contains(t, got[0].Why, "git merge-base: bad object", "the unread state names the failed read")
 
-	facts := withBranches(job.ForkFacts{}, append(got, Unintegrated{Job: "done", Branch: "done", Commits: 2}))
-	assert.Equal(t, []string{"done (job done, 2 commit(s))"}, facts.FinishedBranches, "an unread branch is not unmerged")
-	assert.Contains(t, facts.BranchesUnknown, "1 finished branch(es) unread: pending (job pending)")
+	facts := withPlaces(job.ForkFacts{}, append(got, Placed{Job: "done", Branch: "done", Place: PlaceLocal, Commits: 2}))
+	assert.Equal(t, []string{"done (job done, local, 2 commit(s))"}, facts.FinishedBranches, "an unread row is not unmerged")
+	assert.Contains(t, facts.BranchesUnknown, "1 finished row(s) unread, so not counted: job pending")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["done"]`)
 	line := ForkFactsLine(facts)
-	assert.Contains(t, line, "1 finished branch(es) off the base: done")
+	assert.Contains(t, line, "1 place(s) hold work off the base: done")
 	assert.Contains(t, line, "bad object")
 }
 
@@ -894,23 +1043,20 @@ func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
 	}
 	repo.Git("merge", "-q", "--ff-only", "landed")
 	repo.Commit("squash squashed", map[string]string{"squashed.txt": "squashed\n"})
-	finished := []job.Job{
-		{ID: "pending", State: job.StateExited}, {ID: "squashed", State: job.StateExited},
-		{ID: "landed", State: job.StatePass}, {ID: "gone", State: job.StateExited},
-	}
+	finished := headed(repo, "pending", "squashed", "landed", "gone")
 	driver, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, driver, why)
 	var reads atomic.Int64
 	counted := countedMissing{VCSDriver: driver, reads: &reads}
 
-	first, _, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	first, _, err := placeWith(t.Context(), counted, repo.Root(), finished, fresh(), time.Now())
 	require.NoError(t, err)
-	second, _, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	second, _, err := placeWith(t.Context(), counted, repo.Root(), finished, fresh(), time.Now())
 	require.NoError(t, err)
 
 	want := []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}
-	assert.Equal(t, []any{want, want}, []any{first, second})
-	assert.EqualValues(t, 3, reads.Load(), "the first read asks each standing branch once; a gone branch and every second answer cost none")
+	assert.Equal(t, []any{want, want}, []any{waitingIn(first), waitingIn(second)})
+	assert.EqualValues(t, 3, reads.Load(), "the first read asks each head once; a row with no head and every second answer cost none")
 }
 
 // IntegratedByContentSuite pins that a finished branch is integrated when its content
@@ -941,13 +1087,9 @@ func (s *IntegratedByContentSuite) branch(name string, files map[string]string) 
 func (s *IntegratedByContentSuite) waiting(ids ...string) ([]Unintegrated, string) {
 	driver, why := resolveDriver(s.T().Context(), s.repo.Root())
 	s.Require().NotNil(driver, why)
-	finished := make([]job.Job, len(ids))
-	for i, id := range ids {
-		finished[i] = job.Job{ID: id, State: job.StateExited}
-	}
-	got, note, err := unintegratedWith(s.T().Context(), driver, s.repo.Root(), finished, nil)
+	placed, note, err := placeWith(s.T().Context(), driver, s.repo.Root(), headed(s.repo, ids...), fresh(), time.Now())
 	s.Require().NoError(err)
-	return got, note
+	return waitingIn(placed), note
 }
 
 func (s *IntegratedByContentSuite) TestABranchSquashedOnlyOnTheRemoteIsIntegrated() {
@@ -1043,7 +1185,7 @@ func TestForkFactsTimesItselfOnTheCallClock(t *testing.T) {
 		return func() {}
 	})
 
-	ForkFacts(ctx, repo.Root(), nil, FullTest{})
+	ForkFacts(ctx, repo.Root(), nil, FullTest{}, OpenChanges{})
 
 	assert.Equal(t, []string{forkFactsCall}, timed)
 }
@@ -1066,8 +1208,9 @@ func branchFixture(tb testkit.TB, n int) (*testkit.Repo, []job.Job) {
 	var finished []job.Job
 	for i := range n {
 		name := fmt.Sprintf("job-%03d", i)
-		finished = append(finished, job.Job{ID: name, State: job.StateExited})
+		row := job.Job{ID: name, State: job.StateExited, Registered: 1}
 		if i%7 == 0 {
+			finished = append(finished, row)
 			continue
 		}
 		repo.Git("switch", "-q", "-c", name, "main")
@@ -1075,6 +1218,8 @@ func branchFixture(tb testkit.TB, n int) (*testkit.Repo, []job.Job) {
 		if i%3 == 0 {
 			repo.Commit(name+"-more", map[string]string{name + "-more.txt": "more\n"})
 		}
+		row.Head = repo.Head()
+		finished = append(finished, row)
 		repo.Git("switch", "-q", "main")
 		if i%5 == 0 {
 			repo.Git("merge", "-q", "--no-ff", "-m", "merge "+name, name)
@@ -1083,29 +1228,23 @@ func branchFixture(tb testkit.TB, n int) (*testkit.Repo, []job.Job) {
 	return repo, finished
 }
 
-// sequentialBranches reads one row at a time, as unintegratedWith did before it ran rows together.
+// sequentialBranches reads one row at a time, the order placeWith answers in.
 func sequentialBranches(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job) ([]Unintegrated, error) {
 	meta, err := driver.Metadata(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	tips, err := driver.BranchHeads(ctx, root)
-	if err != nil {
-		return nil, err
-	}
 	var out []Unintegrated
 	for _, row := range finished {
-		branch := jobBranch(ctx, driver, row)
-		tip, standing := tips[branch]
-		if !standing {
+		if row.Head == "" {
 			continue
 		}
-		_, missing, err := reached(ctx, driver, root, meta.ID, tip)
+		_, missing, err := reached(ctx, driver, root, meta.ID, row.Head)
 		if err != nil {
 			continue
 		}
 		if missing > 0 {
-			out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
+			out = append(out, Unintegrated{Job: row.ID, Branch: row.ID, Commits: missing})
 		}
 	}
 	return out, nil
@@ -1123,10 +1262,10 @@ func (s *BranchReadSuite) TestConcurrentReadMatchesTheSequentialOneInOrder() {
 	s.Require().NoError(err)
 	s.Require().NotEmpty(want)
 
-	got, _, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+	placed, _, err := placeWith(ctx, driver, s.repo.Root(), s.finished, fresh(), time.Now())
 	s.Require().NoError(err)
 
-	s.Equal(want, got)
+	s.Equal(want, waitingIn(placed))
 }
 
 func (s *BranchReadSuite) TestACancelledContextIsReportedNotReadAsIntegrated() {
@@ -1135,7 +1274,7 @@ func (s *BranchReadSuite) TestACancelledContextIsReportedNotReadAsIntegrated() {
 	s.Require().NotNil(driver, why)
 	cancel()
 
-	_, _, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+	_, _, err := placeWith(ctx, driver, s.repo.Root(), s.finished, fresh(), time.Now())
 
 	s.Require().Error(err)
 }
@@ -1150,7 +1289,7 @@ func BenchmarkForkFacts(b *testing.B) {
 	for range b.N {
 		// A cold answer cache, so every row pays its range read.
 		_ = os.Remove(missingCommitsPath(repo.Root()))
-		if _, _, err := unintegratedWith(b.Context(), driver, repo.Root(), finished, nil); err != nil {
+		if _, _, err := placeWith(b.Context(), driver, repo.Root(), finished, fresh(), time.Now()); err != nil {
 			b.Fatal(err)
 		}
 	}

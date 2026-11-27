@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -1675,21 +1676,27 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFact
 	if err != nil {
 		return jobtypes.ForkFacts{}, err
 	}
+	var rows []jobtypes.Job
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
 			return jobtypes.ForkFacts{}, snap.Err
 		}
-		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, last), nil
+		rows = snap.Clone().Rows
+	} else {
+		store, err := jobStoreFromContext(ctx, "job.forkFacts")
+		if err != nil {
+			return jobtypes.ForkFacts{}, err
+		}
+		if rows, err = store.List(ctx); err != nil {
+			return jobtypes.ForkFacts{}, err
+		}
 	}
-	store, err := jobStoreFromContext(ctx, "job.forkFacts")
-	if err != nil {
-		return jobtypes.ForkFacts{}, err
+	open, openErr := queue.OpenChanges(workspace)
+	facts := job.ForkFacts(ctx, workspace, rows, last, open)
+	if openErr != nil {
+		facts.BranchesUnknown = strings.TrimPrefix(facts.BranchesUnknown+"; the change list could not be read: "+openErr.Error(), "; ")
 	}
-	rows, err := store.List(ctx)
-	if err != nil {
-		return jobtypes.ForkFacts{}, err
-	}
-	return job.ForkFacts(ctx, workspace, rows, last), nil
+	return facts, nil
 }
 
 // MagusPutJob backs magus\workspace().putJob.

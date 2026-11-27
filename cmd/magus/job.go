@@ -292,7 +292,11 @@ func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 	if dirErr == nil {
 		last, dirErr = cache.NewOutputStore(dir).LastFullTest()
 	}
-	facts := job.ForkFacts(ctx, root, rows, last)
+	open, openErr := queue.OpenChanges(root)
+	facts := job.ForkFacts(ctx, root, rows, last, open)
+	if openErr != nil {
+		facts.BranchesUnknown = strings.TrimPrefix(facts.BranchesUnknown+"; the change list could not be read: "+openErr.Error(), "; ")
+	}
 	if dirErr != nil {
 		facts.TestUnknown = fmt.Sprintf("the output store could not be read: %s", dirErr)
 	}

@@ -27,7 +27,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
-	"golang.org/x/sync/errgroup"
 )
 
 // LeaseMarkerName is the file that binds a lease to a checkout for a caller its host names
@@ -848,104 +847,32 @@ func ownTree(rows []job.Job, root string, row job.Job) bool {
 	return true
 }
 
-// UnintegratedBranches is every passed or exited job of this checkout's tree ([ownTree])
-// whose branch's content neither the root's revision nor the remote default branch
-// holds ([reached]), in store order. A branch an integration job names is integrated.
-// An error means some branch went unread: a gap read as zero would hide the backlog.
+// UnintegratedBranches is the work of this checkout's tree that no base holds
+// ([Placements]), in store order, placed with no change list. An error means
+// some row went unread: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	waiting, _, err := unintegratedBranches(ctx, s.root, rows)
+	placed, _, err := Placements(ctx, s.root, rows, OpenChanges{}, time.Now())
 	if err != nil {
 		return nil, err
 	}
+	var waiting []Unintegrated
 	var unread error
-	for _, w := range waiting {
-		if w.Unread != "" {
-			unread = errors.Join(unread, errors.New(w.Unread))
+	for _, p := range placed {
+		switch {
+		case p.Place == PlaceUnread:
+			unread = errors.Join(unread, fmt.Errorf("job %s: %s", p.Job, p.Why))
+		case p.Waiting():
+			waiting = append(waiting, Unintegrated{Job: p.Job, Branch: p.Name(), Commits: p.Commits})
 		}
 	}
 	if unread != nil {
 		return nil, unread
 	}
 	return waiting, nil
-}
-
-func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]Unintegrated, string, error) {
-	var finished []job.Job
-	integrating := map[string]bool{}
-	for _, row := range rows {
-		for _, b := range row.Integrates {
-			integrating[b] = true
-		}
-		switch {
-		case row.Integrating() && row.State == job.StatePass:
-		case row.State == job.StatePass || row.State == job.StateExited:
-			if ownTree(rows, root, row) {
-				finished = append(finished, row)
-			}
-		}
-	}
-	if len(finished) == 0 {
-		return nil, "", nil
-	}
-	driver, why := resolveDriver(ctx, root)
-	if driver == nil {
-		return nil, "", errors.New(why)
-	}
-	return unintegratedWith(ctx, driver, root, finished, integrating)
-}
-
-// unintegratedWith reads each finished row's branch against every integration base.
-// missingCommitsFile answers a tip already read against a base, so only a moved tip
-// or base costs a read. note says why the remote default branch answered nothing.
-func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job, integrating map[string]bool) ([]Unintegrated, string, error) {
-	bases, note, err := integrationBases(ctx, driver, root)
-	if err != nil {
-		return nil, "", err
-	}
-	tips, err := driver.BranchHeads(ctx, root)
-	if err != nil {
-		return nil, "", fmt.Errorf("the branch heads: %w", err)
-	}
-	upstreams, err := branchUpstreams(ctx, driver, root)
-	if err != nil {
-		return nil, "", fmt.Errorf("the branch upstreams: %w", err)
-	}
-	answers := readMissingCache(root)
-	reads := make([]branchRead, len(finished))
-	var g errgroup.Group
-	g.SetLimit(branchReadWorkers)
-	for i, row := range finished {
-		g.Go(func() error {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			reads[i] = readBranch(ctx, driver, root, bases, row, tips, upstreams, integrating, answers)
-			return nil
-		})
-	}
-	// A row skipped because the deadline passed would read as integrated.
-	waitErr := g.Wait()
-	var out []Unintegrated
-	for i, row := range finished {
-		r := reads[i]
-		for _, a := range r.learned {
-			answers.put(a.Head, a.Tip, a.Missing)
-		}
-		if r.missing > 0 || r.unread != "" {
-			out = append(out, Unintegrated{Job: row.ID, Branch: r.branch, Commits: r.missing, Unread: r.unread})
-		}
-	}
-	if err := answers.write(bases...); err != nil {
-		slog.WarnContext(ctx, "missing-commit answers not stored", attr.Component("magus"), attr.Error(err))
-	}
-	if waitErr != nil {
-		return nil, "", fmt.Errorf("the finished branches: %w", waitErr)
-	}
-	return out, note, nil
 }
 
 // integrationBases are the revisions a finished branch's work may have reached: the
@@ -994,15 +921,6 @@ func remoteDefault(ctx context.Context, driver types.VCSDriver, root string) (st
 // start-up; 250 rows must not fork 250 gits together.
 const branchReadWorkers = 8
 
-type branchRead struct {
-	branch  string
-	missing int
-	// learned are the answers this read found that the cache has not got yet.
-	learned []missingAnswer
-	// unread is the failed read, so missing is unknown rather than zero.
-	unread string
-}
-
 // upstreamReporter is a driver that names the upstream each local branch
 // tracks. Git does; a driver without upstreams judges the local branch alone.
 type upstreamReporter interface {
@@ -1016,54 +934,6 @@ func branchUpstreams(ctx context.Context, driver types.VCSDriver, root string) (
 		return map[string]string{}, nil
 	}
 	return reporter.BranchUpstreams(ctx, root)
-}
-
-// readBranch only reads answers, so rows may run it concurrently. The caller
-// puts what each read learned. A branch is integrated when a base reached it,
-// or reached the upstream it is behind, the copy a forge merged.
-func readBranch(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, tips, upstreams map[string]string, integrating map[string]bool, answers *missingCache) branchRead {
-	branch := jobBranch(ctx, driver, row)
-	tip, standing := tips[branch]
-	// A branch that does not stand holds no work this checkout can name.
-	if integrating[branch] || !standing {
-		return branchRead{}
-	}
-	read := readTip(ctx, driver, root, bases, row, branch, tip, answers)
-	pushed, tracked := upstreams[branch]
-	if read.missing == 0 || read.unread != "" || !tracked || pushed == tip {
-		return read
-	}
-	if behind, err := driver.IsAncestor(ctx, root, tip, pushed); err != nil || !behind {
-		return read
-	}
-	if upstream := readTip(ctx, driver, root, bases, row, branch, pushed, answers); upstream.unread == "" && upstream.missing == 0 {
-		upstream.learned = append(read.learned, upstream.learned...)
-		return upstream
-	}
-	return read
-}
-
-// readTip is [readBranch] for branch standing at tip. Missing is the fewest
-// commits a base lacks.
-func readTip(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, branch, tip string, answers *missingCache) branchRead {
-	read := branchRead{branch: branch}
-	for _, base := range bases {
-		missing, known := answers.get(base, tip)
-		if !known {
-			var err error
-			if _, missing, err = reached(ctx, driver, root, base, tip); err != nil {
-				return branchRead{branch: branch, unread: fmt.Sprintf("%s (job %s): whether %s holds the content of %s: %s", branch, row.ID, base, tip, err)}
-			}
-			read.learned = append(read.learned, missingAnswer{Head: base, Tip: tip, Missing: missing})
-		}
-		if read.missing == 0 || missing < read.missing {
-			read.missing = missing
-		}
-		if missing == 0 {
-			break
-		}
-	}
-	return read
 }
 
 // reached reports whether base holds what tip changed since they split, by content
@@ -1141,38 +1011,50 @@ type FullTest struct {
 	Revision string
 }
 
-// ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
-// nothing, and a side it cannot read says why rather than reading as zero.
-// Each finished branch is merged (absent), unmerged (FinishedBranches) or
-// unread (named in BranchesUnknown). BranchesUnknown also names a remote
-// default branch that does not read. It times itself on ctx's [CallClock].
-func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) job.ForkFacts {
+// ForkFacts reads what a fork leaves waiting at root, from rows and the
+// change list open. It refuses nothing, and a side it cannot read says why
+// rather than reading as zero. FinishedBranches holds one entry per place
+// work waits in. BranchesUnknown names the unread rows, which count toward
+// no place. It times itself on ctx's [CallClock].
+func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest, open OpenChanges) job.ForkFacts {
 	defer timeCall(ctx, forkFactsCall)()
 	facts := job.ForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
-	waiting, note, err := unintegratedBranches(ctx, root, rows)
+	placed, note, err := Placements(ctx, root, rows, open, time.Now())
 	if err != nil {
 		facts.BranchesUnknown = err.Error()
 	}
-	facts = withBranches(facts, waiting)
-	if note != "" {
-		facts.BranchesUnknown = strings.Join(slices.DeleteFunc([]string{facts.BranchesUnknown, note}, func(s string) bool { return s == "" }), "; ")
-	}
+	facts = withPlaces(facts, placed)
+	facts.BranchesUnknown = joinNotes(facts.BranchesUnknown, note)
 	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
 	return facts
 }
 
-func withBranches(facts job.ForkFacts, waiting []Unintegrated) job.ForkFacts {
-	var branches, unread []string
-	for _, w := range waiting {
-		if w.Unread != "" {
-			unread = append(unread, w.Unread)
-			continue
+// withPlaces counts placed by place: one per open change holding rows, one
+// per row off every change. Stacking work on an open change adds nothing.
+func withPlaces(facts job.ForkFacts, placed []Placed) job.ForkFacts {
+	var branches, unread, order []string
+	onChange := map[string][]string{}
+	for _, p := range placed {
+		switch {
+		case p.Place == PlaceUnread:
+			unread = append(unread, fmt.Sprintf("job %s: %s; %s", p.Job, p.Why, p.Fix))
+		case p.Place == PlaceProposed:
+			if _, seen := onChange[p.Change]; !seen {
+				order = append(order, p.Change)
+			}
+			onChange[p.Change] = append(onChange[p.Change], p.Job)
+		case p.Waiting():
+			facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %s, %d commit(s))", p.Name(), p.Job, p.Place, p.Commits))
+			if p.Branch != "" {
+				branches = append(branches, p.Branch)
+			}
 		}
-		branches = append(branches, w.Branch)
-		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
+	}
+	for _, id := range order {
+		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("#%s (open change, job(s) %s)", id, strings.Join(onChange[id], ", ")))
 	}
 	if len(unread) > 0 {
-		facts.BranchesUnknown = fmt.Sprintf("%d finished branch(es) unread: %s", len(unread), strings.Join(unread, "; "))
+		facts.BranchesUnknown = fmt.Sprintf("%d finished row(s) unread, so not counted: %s", len(unread), strings.Join(unread, "; "))
 	}
 	if len(branches) > 0 {
 		record, _ := codec.Marshal(map[string]any{
@@ -1216,12 +1098,12 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 
 // ForkFactsLine renders facts as the one line a fork prints.
 func ForkFactsLine(facts job.ForkFacts) string {
-	branches := "0 finished branches off the base"
+	branches := "0 places hold work off the base"
 	if len(facts.FinishedBranches) > 0 {
-		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+		branches = fmt.Sprintf("%d place(s) hold work off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
 	}
 	if facts.BranchesUnknown != "" {
-		branches += "; finished branches off the base unknown: " + facts.BranchesUnknown
+		branches += "; unread: " + facts.BranchesUnknown
 	}
 	commits := "commits since the last full test: unknown, " + facts.TestUnknown
 	if facts.TestUnknown == "" {
@@ -1232,15 +1114,4 @@ func ForkFactsLine(facts job.ForkFacts) string {
 		line += fmt.Sprintf(". Integrate them: echo '%s' | %s", facts.IntegrateRecord, hint.JobFork.With("--stdin", "--checkout", "<dir>"))
 	}
 	return line
-}
-
-// jobBranch is the branch row's work is on: the one its standing checkout has checked out.
-// Else it is the branch named row.ID, which may not stand.
-func jobBranch(ctx context.Context, driver types.VCSDriver, row job.Job) string {
-	if row.Worktree.Standing() {
-		if ref, err := driver.Ref(ctx, row.Worktree.Root); err == nil && ref != "" {
-			return ref
-		}
-	}
-	return row.ID
 }

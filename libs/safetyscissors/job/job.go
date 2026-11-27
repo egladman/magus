@@ -726,12 +726,14 @@ type UnmergedReport struct {
 	Unknown string     `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
 
-// ForkFacts is what a fork leaves waiting: finished branches off the base
-// and commits since the last full test. It holds facts only, and repo policy
-// decides what they stop. BranchesUnknown and TestUnknown say why a side went
-// unread.
+// ForkFacts is what a fork leaves waiting: the places finished work waits in
+// off the base, and commits since the last full test. It holds facts only,
+// and repo policy decides what they stop. BranchesUnknown and TestUnknown say
+// why a side went unread.
 type ForkFacts struct {
-	// FinishedBranches names each as `<branch> (job <job>, <n> commit(s))`.
+	// FinishedBranches names one entry per place. A row off every open change
+	// reads `<branch or head> (job <job>, <pushed|local>, <n> commit(s))`. An
+	// open change holding rows reads `#<id> (open change, job(s) <jobs>)`.
 	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
 	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
 	// IntegrateRecord is the JSON job record an integration fork of them takes.
