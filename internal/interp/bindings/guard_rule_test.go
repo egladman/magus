@@ -43,32 +43,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	}
 }
 
-// swap hands back the value the session kept before, per key and per session.
-func TestSwapReturnsTheValueItReplaces(t *testing.T) {
-	rule, err := loadCommandRule(t, `
-import "magus";
-
-magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    return magus\guard.advise("[{magus\guard.swap("set", value: req.command)}]");
-});
-`)
-	require.NoError(t, err)
-	dir := t.TempDir()
-	s1, s2 := hint.NewGate(dir, "claude-code/s1"), hint.NewGate(dir, "claude-code/s2")
-	var got []string
-	for _, call := range []struct {
-		facts   hint.Gate
-		command string
-	}{{s1, "a"}, {s1, "b"}, {s1, "b"}, {s2, "c"}, {s1, "d \"quoted\"\nline"}, {s1, ""}} {
-		v, err := rule(t.Context(), types.CommandRequest{Command: call.command}, call.facts)
-		require.NoError(t, err)
-		got = append(got, v.Reason)
-	}
-	assert.Equal(t, []string{"[]", "[a]", "[b]", "[]", "[b]", "[d \"quoted\"\nline]"}, got)
-}
-
-// swap outside a rule call has no session to keep a value in, so it refuses.
-func TestSwapRefusesOutsideARule(t *testing.T) {
+func TestSwapIsNotBound(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 	registerAllBuzz(t.Context(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
@@ -76,7 +51,8 @@ func TestSwapRefusesOutsideARule(t *testing.T) {
 import "magus";
 _ = magus\guard.swap("k", value: "v");
 `)
-	require.ErrorContains(t, err, `magus\guard.swap: only callable inside`)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "only callable inside")
 }
 
 // A rule may ask: the call waits on the person, by the member or the enum case.
