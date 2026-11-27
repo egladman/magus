@@ -2710,7 +2710,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		return denial{}
 	}
 	integrator := integrates(me, spawnedAs(deps.facts, deps.caller.Agent), me.CheckoutRoot)
-	lands := func(c hint.Invocation) bool { return workerLands(c) || integrator && integratorLands(c) }
+	lands := func(c hint.Invocation) bool { return workerLands(c) || isRebase(c) || integrator && integratorLands(c) }
 	placed := lands
 	if refMoveRoot(me) != "" {
 		placed = func(c hint.Invocation) bool { return lands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
@@ -3059,7 +3059,7 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 		return vcsRefusal{}
 	case isInit(inv):
 		return initRefusal(row, inv, site, unlocated)
-	case !workerLands(inv) && (!integrator || !integratorLands(inv)):
+	case !workerLands(inv) && !isRebase(inv) && (!integrator || !integratorLands(inv)):
 		return vcsRefusal{op: op, kind: vcsOpOrchestrated}
 	case unlocated != "":
 		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
@@ -3068,11 +3068,18 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
 		why = mergeRefusal(operand, base, row)
 	}
-	if operand, rebase := integratorRebase(inv); why == "" && rebase && operand != "" && !mergesBase(operand, base, row) {
+	operand, rebase := integratorRebase(inv)
+	if why == "" && rebase && !integrator {
+		why = ownBranchRefusal(ctx, opts, row, inv.Name, site)
+		// A worker's base branch is the root's to bring in, so only a ref the row names counts.
+		base = ""
+	}
+	if why == "" && rebase && operand != "" && !mergesBase(operand, base, row) {
 		why = rebaseRefusal(operand, base, row)
 	}
-	// It lands other rows' commits, so their paths are not its write paths.
-	if why == "" && integrator && integratorLands(inv) {
+	// An integrator lands other rows' commits, and a rebase replays the job's own, so neither
+	// is graded by its write paths.
+	if why == "" && (rebase || integrator && integratorLands(inv)) {
 		return vcsRefusal{}
 	}
 	if why == "" {
@@ -3524,7 +3531,7 @@ func rebaseRefusal(operand, base string, row jobtypes.Job) string {
 	accepts = append(accepts, "the revision its job was handed")
 	accepts = append(accepts, slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" })...)
 	accepts = append(accepts, row.Integrates...)
-	return fmt.Sprintf("It rebases onto %s, and an integrator rebases only onto %s.", operand, strings.Join(accepts, ", "))
+	return fmt.Sprintf("It rebases onto %s, and a job rebases its branch only onto %s.", operand, strings.Join(accepts, ", "))
 }
 
 // initArgs returns the words after an init's subcommand and reports whether inv is one:

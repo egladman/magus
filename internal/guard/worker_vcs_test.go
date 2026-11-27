@@ -982,3 +982,40 @@ func (s *WorkerRevertSuite) TestIsRefusedARevertOutsideItsWritePaths() {
 func (s *WorkerRevertSuite) TestIsRefusedARebase() {
 	s.NotEmpty(s.judge("git rebase origin/main"), "only an integrator rebases")
 }
+
+// WorkerRebaseSuite pins that a worker rebases its own job branch onto a ref its row names.
+// It never rebases another branch, or onto a ref the row does not name.
+type WorkerRebaseSuite struct{ workerRevert }
+
+func TestWorkerRebaseSuite(t *testing.T) { suite.Run(t, new(WorkerRebaseSuite)) }
+
+func (s *WorkerRebaseSuite) SetupTest() {
+	s.build()
+	s.worker.ID = "lease-job"
+	s.worker.Checkpoint = s.repo.origin.Git("-C", s.wt, "rev-parse", "HEAD")
+	s.worker.DependsOn = []string{"done-a"}
+	s.ledger()
+}
+
+func (s *WorkerRebaseSuite) TestRebasesItsBranchOntoARefItsRowNames() {
+	for _, command := range []string{
+		"git rebase " + s.worker.Checkpoint[:12],
+		"git rebase done-a",
+		"git rebase --onto origin/done-a HEAD~1",
+		"git rebase --continue",
+	} {
+		s.Empty(s.judge(command), "%q", command)
+	}
+}
+
+func (s *WorkerRebaseSuite) TestIsRefusedARebaseOntoARefItsRowDoesNotName() {
+	reason := s.judge("git rebase origin/main")
+	s.Contains(reason, "It rebases onto origin/main")
+	s.Contains(reason, "done-a")
+}
+
+func (s *WorkerRebaseSuite) TestIsRefusedARebaseOfAnotherBranch() {
+	s.repo.git(s.wt, "checkout", "-q", "-b", "other-job")
+	s.Contains(s.judge("git rebase done-a"), "only its own job's branch, lease-job")
+	s.NotEmpty(s.judge("git rebase done-a lease-job"), "a second operand switches branches first")
+}
