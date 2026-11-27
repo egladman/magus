@@ -785,6 +785,8 @@ export object Job {
     deferred: [JobDeferred] = [],
     leftUnmerged: str = "",
     landed: bool = false,
+    head: str = "",
+    headUnread: str = "",
     weight: double = 0.0,
     paused: int = 0,
     pausedBy: Origin = Origin{},
