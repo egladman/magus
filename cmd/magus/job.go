@@ -855,15 +855,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				return job.FailedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))
 			}
 		}
-		rows, err := store.List(ctx)
-		if err != nil {
-			return err
-		}
 		// The job starts from what its checkout holds, not from the forker's tree.
-		start, note := job.StartCheckpoint(ctx, rows, row.ID, row.Checkpoint, worktree)
-		if note != "" {
-			slog.InfoContext(ctx, note, attr.Notice("note"))
-		}
+		start := job.StartCheckpoint(ctx, row.Checkpoint, worktree)
 		amend = func(u *jobtypes.Job) {
 			// The validated merge expanded the declared checkpoint already.
 			if start != row.Checkpoint {

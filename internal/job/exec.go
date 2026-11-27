@@ -108,7 +108,11 @@ func (s *Store) Exec(ctx context.Context, id string, opts ...ExecOption) (job.Jo
 			cur.State = job.StateRunning
 		}
 		cur.ReportedBase = base
-		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))
+		judged := base
+		if rev := checkpointRevision(cur.Checkpoint); rev != "" && rev == facts.ownFrom {
+			judged = onRevision(base, rev)
+		}
+		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(judged, full))
 		cur.Registered = now
 		cur.CheckoutRoot = here
 		if cur.State == job.StateDeclared {
@@ -123,6 +127,9 @@ type execFacts struct {
 	base  string
 	moved *job.Worktree
 	full  map[string]string
+	// ownFrom is row's checkpoint revision when this checkout is row's own and
+	// its head descends from it, "" otherwise.
+	ownFrom string
 }
 
 // readExecFacts reads them for row, the zero row when nothing declared id.
@@ -133,10 +140,42 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (exec
 			" `%s` run there says why: %w", s.root, id, hint.VCSCheckpoint.With("-o name"), err)
 	}
 	return execFacts{
-		base:  base,
-		moved: s.untakenElsewhere(ctx, row),
-		full:  s.fullRevisions(ctx, row.Checkpoint, base),
+		base:    base,
+		moved:   s.untakenElsewhere(ctx, row),
+		full:    s.fullRevisions(ctx, row.Checkpoint, base),
+		ownFrom: s.ownCommitsFrom(ctx, row, base),
 	}, nil
+}
+
+// ownCommitsFrom is row's checkpoint revision when this is row's own
+// checkout and base descends from it. The commits between are the job's
+// work, kept across a re-fork. They are no base its holder strayed to.
+func (s *Store) ownCommitsFrom(ctx context.Context, row job.Job, base string) string {
+	checkpoint, head := checkpointRevision(row.Checkpoint), checkpointRevision(base)
+	if s.root == "" || checkpoint == "" || head == "" || SameRevision(checkpoint, head) || !row.Worktree.Standing() {
+		return ""
+	}
+	here, err := filepath.Abs(s.root)
+	if err != nil || !samePath(here, row.Worktree.Root) {
+		return ""
+	}
+	driver, _ := resolveDriver(ctx, here)
+	if driver == nil {
+		return ""
+	}
+	if contained, err := driver.IsAncestor(ctx, here, checkpoint, head); err != nil || !contained {
+		return ""
+	}
+	return checkpoint
+}
+
+// onRevision is token with its revision half replaced by revision, the
+// dirty-tree digest kept.
+func onRevision(token, revision string) string {
+	if _, digest := types.ParseCheckpointToken(token); digest != "" {
+		return revision + "+" + digest
+	}
+	return revision
 }
 
 // Placement readies a checkout [Store.Exec] adopts for a job nobody took.
