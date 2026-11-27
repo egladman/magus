@@ -468,13 +468,13 @@ type unmergedRead struct {
 	changes                 []qtypes.Change
 	changeHeads, changeNote string
 	now                     int64
-	checkouts          map[string]string
-	branches           map[string]string
-	rows               map[string]*unmergedRow
-	unread             int
-	stale              int
-	recut              int
-	tries              job.Attempts
+	checkouts               map[string]string
+	branches                map[string]string
+	rows                    map[string]*unmergedRow
+	unread                  int
+	stale                   int
+	recut                   int
+	tries                   job.Attempts
 }
 
 // run answers every row in work from the stored facts, then asks the version

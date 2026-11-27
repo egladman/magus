@@ -50,8 +50,8 @@ type OpenChanges struct {
 
 // workPlace is where one row's work stands.
 type workPlace struct {
-	Job   string `json:"job"`
-	Head  string `json:"head,omitempty"`
+	Job   string    `json:"job"`
+	Head  string    `json:"head,omitempty"`
 	Place placeKind `json:"place"`
 	// Change is the open change whose head holds Head, for placeProposed.
 	Change string `json:"change,omitempty"`

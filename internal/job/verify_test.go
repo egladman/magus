@@ -1376,7 +1376,7 @@ func (s *narrowedRunSuite) TestAFileAnotherVerifiedRunReadPassesTheCheck() {
 	rep.ChangedPaths = []string{"spells/x.buzz", "internal/job/landings.go"}
 	rep.Validation.Command = row.Validation
 	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
-	ran :=job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"spells/x.buzz"}}
+	ran := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"spells/x.buzz"}}
 	lint := job.CapturedRun{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: []string{"internal/job/landings.go", "spells/x.buzz"}}
 
 	v := VerifyGates(row, rep, ran, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
