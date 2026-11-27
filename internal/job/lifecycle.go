@@ -373,11 +373,9 @@ func Wait(ctx context.Context, store *Store, id string, result *job.Result, reso
 	return status, nil
 }
 
-// reclaimForRework sends a rejected exited row back to running, re-claiming each write path
-// under the rule a claim meets ([checkClaimPath]).
-// Another job may have taken a path. One the result changed keeps the row
-// exited. One it never touched goes to that job. The note says which.
-// filed is the result row's live attempt filed.
+// reclaimForRework sends a rejected exited row back to running under [checkClaimPath].
+// A path another job took that the result changed ends the row as fail: exited and
+// ungraded, nothing would end it. One it never touched goes to that job.
 func reclaimForRework(row *job.Job, filed *job.Result, rows []job.Job) string {
 	if row.State != job.StateExited {
 		return ""
@@ -391,8 +389,9 @@ func reclaimForRework(row *job.Job, filed *job.Result, rows []job.Job) string {
 		case err == nil:
 			kept = append(kept, entry)
 		case filed != nil && slices.ContainsFunc(filed.ChangedPaths, func(p string) bool { return job.PathWithin(p, file) }):
-			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
-				row.ID, err)
+			row.State = job.StateFail
+			return fmt.Sprintf("%s ends as %s with its rejection recorded, since its rework could not re-claim its write paths: %v; `magus job fork` declares it again",
+				row.ID, job.StateFail, err)
 		default:
 			gaveUp = append(gaveUp, fmt.Sprintf("%s (%v)", entry, err))
 		}
@@ -1141,28 +1140,11 @@ type PruneOptions struct {
 	DryRun bool
 }
 
-// Prune ends, as no_return, every live row the store can show nobody is working, and
-// returns them in the order they ended. A row ends for the first of:
-//
-//   - a reason the read sweep ends rows for (see [sweeper.dead]);
-//   - its holder exited and nobody collected the result with `magus job wait`;
-//   - it is overdue ([job.Job.Overdue]);
-//   - it is stale ([job.StaleAt] against jobs.stale_after) and nobody took it, or
-//     opts.All is set.
-//
-// A declared or running row a holder took and touched within jobs.stale_after is never
-// ended, and neither is one it took that is not overdue unless opts.All is set, nor one a
-// person paused until its pause lapses, opts.All or not. Nor is any ancestor of such a
-// row, since its tree would end with it. Server rows and rows this
-// magus cannot write are left alone, as the sweep leaves them.
-//
-// A row that would end only because an ancestor this prune ends does is not ended
-// unseen: the prune is refused, naming each, until restated names them all, and until a
-// person confirms when one holds uncommitted work or a running check (see
-// [Store.refuseTreeEndings]). A dry run lists them and refuses nothing.
-//
-// A bound actor is refused: pruning ends other leases' rows.
-func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string) ([]Ending, error) {
+// Prune ends, as no_return, every live row nobody is working ([sweeper.prunable]), in
+// the order they ended. Named rows and their descendants scope it; a name no row
+// holds, or a named row it would not end, refuses it. A row ending only with its
+// ancestor must be named too ([Store.refuseTreeEndings]). A bound actor is refused.
+func (s *Store) Prune(ctx context.Context, opts PruneOptions, named ...string) ([]Ending, error) {
 	if actor := s.Actor(); actor.Bound() {
 		return nil, refuse(actor, actor.Lease, "pruning ends other leases' rows, so it belongs to whoever declared the plan")
 	}
@@ -1180,6 +1162,11 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	if err != nil {
 		return nil, err
 	}
+	for _, id := range named {
+		if !slices.ContainsFunc(f.Jobs, func(r job.Job) bool { return r.ID == id }) {
+			return nil, fmt.Errorf("job: there is no job %q to prune: `%s` lists them", id, hint.LsJobs)
+		}
+	}
 	// Probed outside the file lock, as the sweep does: the probe runs the VCS.
 	w.landed = s.landings(f.Jobs, w.now)
 	// So is the work a row ending with its tree holds, read in its checkout. The write
@@ -1187,14 +1174,14 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	// is refused rather than ended on this view.
 	var taken []job.Job
 	if !opts.DryRun {
-		preview, err := w.prunable(f.Jobs, window, opts.All)
+		preview, err := w.prunable(f.Jobs, window, opts.All, named)
 		if err != nil {
 			return nil, err
 		}
 		if taken, err = w.treeEndings(f.Jobs, preview, window); err != nil {
 			return nil, err
 		}
-		if err := s.refuseTreeEndings(ctx, taken, restated); err != nil {
+		if err := s.refuseTreeEndings(ctx, f.Jobs, preview, taken, named); err != nil {
 			return nil, err
 		}
 	}
@@ -1204,7 +1191,10 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 	err = s.Rewrite(ctx, func(cur *job.Rows) error {
 		ended = endings{}
 		var err error
-		if out, err = w.prunable(cur.Jobs, window, opts.All); err != nil {
+		if out, err = w.prunable(cur.Jobs, window, opts.All, named); err != nil {
+			return err
+		}
+		if err := endsEachNamed(out, named); err != nil {
 			return err
 		}
 		if opts.DryRun || len(out) == 0 {
@@ -1242,7 +1232,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 
 // prunable is what [Store.Prune] ends, repeated to a fixed point like [sweeper.dead]
 // because ending a row orphans its children.
-func (w *sweeper) prunable(rows []job.Job, window time.Duration, all bool) ([]Ending, error) {
+func (w *sweeper) prunable(rows []job.Job, window time.Duration, all bool, scope []string) ([]Ending, error) {
 	rows = slices.Clone(rows)
 	var out []Ending
 	for {
@@ -1251,7 +1241,7 @@ func (w *sweeper) prunable(rows []job.Job, window time.Duration, all bool) ([]En
 		x := indexRows(rows)
 		var round []Ending
 		for _, row := range rows {
-			if !row.State.Live() || row.ServerRun() || readOnly(row) != nil || kept[row.ID] {
+			if !row.State.Live() || row.ServerRun() || readOnly(row) != nil || kept[row.ID] || !inScope(rows, row, scope) {
 				continue
 			}
 			reason, err := w.reason(x, rows, row)
@@ -1274,6 +1264,30 @@ func (w *sweeper) prunable(rows []job.Job, window time.Duration, all bool) ([]En
 		}
 		out = append(out, round...)
 	}
+}
+
+// inScope reports row named in scope, or a descendant of one. An empty scope holds every row.
+func inScope(rows []job.Job, row job.Job, scope []string) bool {
+	if len(scope) == 0 || slices.Contains(scope, row.ID) {
+		return true
+	}
+	return slices.ContainsFunc(job.Ancestors(rows, row.ID), func(a job.Job) bool { return slices.Contains(scope, a.ID) })
+}
+
+// endsEachNamed refuses a prune that would leave a named row live. Naming it asked
+// for its end, which ending the rest alone would hide.
+func endsEachNamed(out []Ending, named []string) error {
+	var left []string
+	for _, id := range named {
+		if !slices.ContainsFunc(out, func(e Ending) bool { return e.ID == id }) {
+			left = append(left, id)
+		}
+	}
+	if len(left) == 0 {
+		return nil
+	}
+	return fmt.Errorf("job: prune would not end %s: nothing shows nobody is working it, so nothing was ended (`magus job prune --dry-run` lists what it ends)",
+		strings.Join(left, ", "))
 }
 
 // worked is the ids Prune keeps: every row a holder took and may still be working, every

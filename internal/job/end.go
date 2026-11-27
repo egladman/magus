@@ -309,37 +309,44 @@ func (w *sweeper) treeEndings(rows []job.Job, out []Ending, window time.Duration
 }
 
 // refuseTreeEndings refuses a prune that ends rows only because an ancestor ends, unless
-// restated names each of them, and refuses until a person confirms when one it names
-// holds work (see [Store.confirmEnd]). An id in restated that names no such row is refused
-// too: a restatement is of what the prune showed.
-func (s *Store) refuseTreeEndings(ctx context.Context, taken []job.Job, restated []string) error {
+// named holds each, and until a person confirms one holding work ([Store.confirmEnd]).
+// Its command names each one's ending ancestor too, since names scope a prune.
+func (s *Store) refuseTreeEndings(ctx context.Context, rows []job.Job, out []Ending, taken []job.Job, named []string) error {
 	var unstated, holding []descendant
 	for _, row := range taken {
 		d := describeDescendant(ctx, row)
 		switch {
-		case !slices.Contains(restated, row.ID):
+		case !slices.Contains(named, row.ID):
 			unstated = append(unstated, d)
 		case d.holdsWork():
 			holding = append(holding, d)
 		}
 	}
-	for _, id := range restated {
-		if !slices.ContainsFunc(taken, func(r job.Job) bool { return r.ID == id }) {
-			return fmt.Errorf("job: prune does not end %s with an ancestor, so there is nothing to restate: `magus job prune --dry-run` lists what it ends", id)
-		}
-	}
 	if len(unstated) > 0 {
-		ids := make([]string, len(unstated))
-		for i, d := range unstated {
-			ids[i] = d.row.ID
+		ids := slices.Clone(named)
+		for _, d := range unstated {
+			ids = append(ids, endingRoot(rows, out, d.row), d.row.ID)
 		}
-		return fmt.Errorf("job: prune would end %d live job(s) only because an ancestor it ends does: %s: restate each to end it too: `magus job prune %s`",
-			len(unstated), joinDescendants(unstated), strings.Join(append(slices.Clone(restated), ids...), " "))
+		slices.Sort(ids)
+		return fmt.Errorf("job: prune would end %d live job(s) only because an ancestor it ends does: %s: name each to end it too: `magus job prune %s`",
+			len(unstated), joinDescendants(unstated), strings.Join(slices.Compact(ids), " "))
 	}
 	if len(holding) == 0 {
 		return nil
 	}
-	return s.confirmEnd(ctx, restated, holding)
+	return s.confirmEnd(ctx, named, holding)
+}
+
+// endingRoot is the topmost ancestor of row that out ends, whose name scopes a prune
+// to row's tree.
+func endingRoot(rows []job.Job, out []Ending, row job.Job) string {
+	root := row.ID
+	for _, a := range job.Ancestors(rows, row.ID) {
+		if slices.ContainsFunc(out, func(e Ending) bool { return e.ID == a.ID }) {
+			root = a.ID
+		}
+	}
+	return root
 }
 
 // EndCheckouts removes the checkout each ended job's fork made once removing it loses

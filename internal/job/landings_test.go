@@ -403,6 +403,27 @@ func (s *unmergedSuite) TestAnAncestorOfTheBranchIsMerged() {
 	s.Empty(got.Unknown)
 }
 
+func (s *unmergedSuite) TestABranchSquashedOnlyOnTheRemoteIsMerged() {
+	s.repo.Git("remote", "add", "origin", s.repo.Root())
+	stale := s.repo.Head()
+	s.branch("w")
+	s.repo.Commit("squash", map[string]string{"w.txt": "w\n"})
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.repo.Head())
+	s.repo.Git("reset", "-q", "--hard", stale)
+
+	s.Empty(s.unmerged(job.Job{ID: "w", State: job.StatePass}).Jobs)
+}
+
+func (s *unmergedSuite) TestAnUnreadRemoteIsNamedBesideTheMiss() {
+	s.repo.Git("remote", "add", "origin", s.repo.Root())
+	s.branch("w")
+
+	got := s.unmerged(job.Job{ID: "w", State: job.StatePass})
+
+	s.Require().Len(got.Jobs, 1)
+	s.Contains(got.Jobs[0].Why, "origin/main does not read here")
+}
+
 func (s *unmergedSuite) TestASquashedBranchIsMergedByContent() {
 	s.branch("w")
 	s.repo.Commit("squash", map[string]string{"w.txt": "w\n"})
@@ -510,18 +531,19 @@ func (s *unmergedSuite) TestAnAnswerForABranchThatIsGoneIsDropped() {
 	s.Contains(facts, unmergedKey("w", s.main))
 }
 
-// slowMissing answers MissingCommits after took, or gives up with its context.
+// slowMissing answers RangeFiles, which opens every content read, after took, or
+// gives up with its context.
 type slowMissing struct {
 	types.VCSDriver
 	took time.Duration
 }
 
-func (r slowMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+func (r slowMissing) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
 	select {
 	case <-time.After(r.took):
-		return r.VCSDriver.MissingCommits(ctx, dir, branch, head)
+		return r.VCSDriver.RangeFiles(ctx, dir, base, head, paths)
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 
