@@ -1,12 +1,17 @@
 // @expect: 30
 // foreach over &fn() drives the fiber, binding each yielded value until it is over.
+var __r: any = null;
+
 fun squares(n: int) > void *> int? {
     foreach (i in 0..n) {
         _ = yield (i * i);
     }
 }
-var sum = 0;
-foreach (v in &squares(5)) {
-    sum = sum + v;
+
+fun main(args: [str]) > void !> any {
+    var sum = 0;
+    foreach (v in &squares(5)) {
+        sum = sum + v;
+    }
+    __r = sum;
 }
-final __r = sum;

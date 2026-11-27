@@ -21,7 +21,7 @@ export fun deriveTitle(md: str, rel: str) > str {
 // firstHeading is deriveTitle's H1, or null when md has none.
 export fun firstHeading(md: str) > str? {
     foreach (line in md.split("\n")) {
-        if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), ""); }
+        if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), with: ""); }
     }
     return null;
 }
@@ -133,9 +133,9 @@ export fun deriveDescription(html: str) > str {
         if (close == null) { return ""; }
         // sub(start, length): the inner-paragraph text runs from just past "<p>"
         // to just before "</p>", so its length is (close - (open + 3)).
-        final inner = rest.sub(open + 3, close - (open + 3));
+        final inner = rest.sub(open + 3, len: close - (open + 3));
         final text = decodeEntities(collapseWs(stripTags(inner)));
-        if (text != "") { return truncateWords(text, 155); }
+        if (text != "") { return truncateWords(text, n: 155); }
         rest = rest.sub(close + 4);
         open = rest.indexOf("<p>");
     }
@@ -156,15 +156,15 @@ export fun insertSinceBadge(html: str, since: str) > str {
 }
 
 test "insertSinceBadge places an Added-in marker right after the h1" {
-    final got = insertSinceBadge("<h1 id=\"t\">Title</h1>\n<p>body</p>", "v0.2.0");
-    assert\equal(got.indexOf("class=\"since-badge\"") != null, true, "badge present");
-    assert\equal(got.indexOf("Added in <code>v0.2.0</code>") != null, true, "version rendered in code");
-    assert\equal(got.indexOf("since-badge") < got.indexOf("<p>body"), true, "badge sits between the h1 and the body");
+    final got = insertSinceBadge("<h1 id=\"t\">Title</h1>\n<p>body</p>", since: "v0.2.0");
+    assert\equal(got.indexOf("class=\"since-badge\"") != null, want: true, message: "badge present");
+    assert\equal(got.indexOf("Added in <code>v0.2.0</code>") != null, want: true, message: "version rendered in code");
+    assert\equal(got.indexOf("since-badge") < got.indexOf("<p>body"), want: true, message: "badge sits between the h1 and the body");
 }
 
 test "insertSinceBadge is a no-op without a since value or without an h1" {
-    assert\equal(insertSinceBadge("<h1>X</h1>", ""), "<h1>X</h1>", "empty since leaves html untouched");
-    assert\equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
+    assert\equal(insertSinceBadge("<h1>X</h1>", since: ""), want: "<h1>X</h1>", message: "empty since leaves html untouched");
+    assert\equal(insertSinceBadge("<p>no heading</p>", since: "v1.0.0"), want: "<p>no heading</p>", message: "no h1 leaves html untouched");
 }
 
 // afterHeading splices node into html just after the "</h1>" that starts at.
@@ -218,23 +218,23 @@ export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > s
 }
 
 test "insertAdrMeta places status and date right after the h1" {
-    final got = insertAdrMeta("<h1 id=\"t\">Title</h1>\n<p>body</p>", "accepted (partly built)", "2026-09-22T00:00:00Z", "");
-    assert\equal(got.indexOf("Decision <strong>accepted (partly built)</strong> on") != null, true, "status");
-    assert\equal(got.indexOf("<time datetime=\"2026-09-22\">2026-09-22</time>") != null, true, "the calendar day");
-    assert\equal(got.indexOf("Supersedes") == null, true, "no supersedes line without a value");
-    assert\equal(got.indexOf("adr-meta") < got.indexOf("<p>body"), true, "between the h1 and the body");
+    final got = insertAdrMeta("<h1 id=\"t\">Title</h1>\n<p>body</p>", status: "accepted (partly built)", date: "2026-09-22T00:00:00Z", supersedes: "");
+    assert\equal(got.indexOf("Decision <strong>accepted (partly built)</strong> on") != null, want: true, message: "status");
+    assert\equal(got.indexOf("<time datetime=\"2026-09-22\">2026-09-22</time>") != null, want: true, message: "the calendar day");
+    assert\equal(got.indexOf("Supersedes") == null, want: true, message: "no supersedes line without a value");
+    assert\equal(got.indexOf("adr-meta") < got.indexOf("<p>body"), want: true, message: "between the h1 and the body");
 }
 
 test "insertAdrMeta shows what the page supersedes, with its code spans" {
-    final got = insertAdrMeta("<h1>T</h1>", "accepted", "2026-09-22", "the `import \"x\" as <y>;` form, `unpaired");
-    assert\equal(got.indexOf("Supersedes: the <code>import &#34;x&#34; as &lt;y&gt;;</code> form, `unpaired") != null, true,
-        "escaped, code span, literal backtick");
+    final got = insertAdrMeta("<h1>T</h1>", status: "accepted", date: "2026-09-22", supersedes: "the `import \"x\" as <y>;` form, `unpaired");
+    assert\equal(got.indexOf("Supersedes: the <code>import &#34;x&#34; as &lt;y&gt;;</code> form, `unpaired") != null, want: true,
+        message: "escaped, code span, literal backtick");
 }
 
 test "insertAdrMeta leaves a page without status and date, or without an h1, untouched" {
-    assert\equal(insertAdrMeta("<h1>X</h1>", "", "", ""), "<h1>X</h1>", "no status");
-    assert\equal(insertAdrMeta("<h1>X</h1>", "accepted", "", ""), "<h1>X</h1>", "no date");
-    assert\equal(insertAdrMeta("<p>no heading</p>", "accepted", "2026-09-22", ""), "<p>no heading</p>", "no h1");
+    assert\equal(insertAdrMeta("<h1>X</h1>", status: "", date: "", supersedes: ""), want: "<h1>X</h1>", message: "no status");
+    assert\equal(insertAdrMeta("<h1>X</h1>", status: "accepted", date: "", supersedes: ""), want: "<h1>X</h1>", message: "no date");
+    assert\equal(insertAdrMeta("<p>no heading</p>", status: "accepted", date: "2026-09-22", supersedes: ""), want: "<p>no heading</p>", message: "no h1");
 }
 
 // insertSizeRatio places a size comparison under the H1 of an agent-skill page: how
@@ -284,23 +284,23 @@ export fun insertSizeRatio(html: str, fullOpt: int?, shortOpt: int?) > str {
 }
 
 test "insertSizeRatio renders a progress bar and the saved percentage" {
-    final got = insertSizeRatio("<h1 id=\"s\">magus-vcs</h1>\n<p>body</p>", 1000, 720);
-    assert\equal(got.indexOf("<progress value=\"720\" max=\"1000\"") != null, true, "bar carries the real byte counts");
-    assert\equal(got.indexOf("28% smaller") != null, true, "the percentage is computed, not passed in");
-    assert\equal(got.indexOf("progress") < got.indexOf("<p>body"), true, "the bar sits between the h1 and the body");
+    final got = insertSizeRatio("<h1 id=\"s\">magus-vcs</h1>\n<p>body</p>", fullOpt: 1000, shortOpt: 720);
+    assert\equal(got.indexOf("<progress value=\"720\" max=\"1000\"") != null, want: true, message: "bar carries the real byte counts");
+    assert\equal(got.indexOf("28% smaller") != null, want: true, message: "the percentage is computed, not passed in");
+    assert\equal(got.indexOf("progress") < got.indexOf("<p>body"), want: true, message: "the bar sits between the h1 and the body");
     // The caption reads before the graphic, and names the forms the page shows rather
     // than a CLI flag that no longer exists.
-    assert\equal(got.indexOf("<small>") < got.indexOf("<progress"), true, "the caption precedes the bar");
-    assert\equal(got.indexOf("Short form:") != null, true, "the caption names the form the bar measures");
-    assert\equal(got.indexOf("--simple") == null, true, "no reference to a spelling nothing answers to");
+    assert\equal(got.indexOf("<small>") < got.indexOf("<progress"), want: true, message: "the caption precedes the bar");
+    assert\equal(got.indexOf("Short form:") != null, want: true, message: "the caption names the form the bar measures");
+    assert\equal(got.indexOf("--simple") == null, want: true, message: "no reference to a spelling nothing answers to");
 }
 
 test "insertSizeRatio is a no-op on missing, zero, or nonsensical counts" {
-    assert\equal(insertSizeRatio("<h1>X</h1>", null, null), "<h1>X</h1>", "an absent key decodes to null, not 0 - every non-skill page takes this path");
-    assert\equal(insertSizeRatio("<h1>X</h1>", 4723, null), "<h1>X</h1>", "one count without the other is refused");
-    assert\equal(insertSizeRatio("<h1>X</h1>", 0, 0), "<h1>X</h1>", "zero counts render nothing");
+    assert\equal(insertSizeRatio("<h1>X</h1>", fullOpt: null, shortOpt: null), want: "<h1>X</h1>", message: "an absent key decodes to null, not 0 - every non-skill page takes this path");
+    assert\equal(insertSizeRatio("<h1>X</h1>", fullOpt: 4723, shortOpt: null), want: "<h1>X</h1>", message: "one count without the other is refused");
+    assert\equal(insertSizeRatio("<h1>X</h1>", fullOpt: 0, shortOpt: 0), want: "<h1>X</h1>", message: "zero counts render nothing");
     // short > full would mean the elision GREW the body, which is a generator bug,
     // not something to draw a backwards bar for.
-    assert\equal(insertSizeRatio("<h1>X</h1>", 100, 200), "<h1>X</h1>", "an inverted ratio is refused");
-    assert\equal(insertSizeRatio("<p>no heading</p>", 1000, 500), "<p>no heading</p>", "no h1 leaves html untouched");
+    assert\equal(insertSizeRatio("<h1>X</h1>", fullOpt: 100, shortOpt: 200), want: "<h1>X</h1>", message: "an inverted ratio is refused");
+    assert\equal(insertSizeRatio("<p>no heading</p>", fullOpt: 1000, shortOpt: 500), want: "<p>no heading</p>", message: "no h1 leaves html untouched");
 }

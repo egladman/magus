@@ -40,14 +40,16 @@ Send a GET request; returns {status, body, headers}. opts is an Options (curl-st
 import "std";
 import "http";
 
-// A transport failure (DNS, TLS, timeout) RAISES; a 4xx/5xx does not, it arrives
-// as a status. The two are different answers and are handled separately.
-try {
-    final r = http\get("https://api.github.com/repos/egladman/magus");
-    std\print(r.status);
-    std\print(r.body.sub(0, 80) + "...");
-} catch (e) {
-    std\print("request never reached the server");
+fun main(args: [str]) > void {
+    // A transport failure (DNS, TLS, timeout) raises; a 4xx/5xx does not, it arrives
+    // as a status. The two are different answers and are handled separately.
+    try {
+        final r = http\get("https://api.github.com/repos/egladman/magus");
+        std\print(r.status);
+        std\print(r.body.sub(0, len: 80) + "...");
+    } catch (e) {
+        std\print("request never reached the server");
+    }
 }
 ```
 
@@ -89,20 +91,21 @@ Send a POST request with body; returns {status, body, headers}. opts is an Optio
 import "std";
 import "http";
 
-// Post JSON. opts carries the curl-style settings; retrying is a separate,
-// typed Retry argument, and without one the request runs exactly once.
-// Escape { and } as \{ \} so Buzz does not try to interpolate them.
-try {
-    final r = http\post(
-        "https://httpbin.org/post",
-        "\{\"target\":\"build\"\}",
-        {"Content-Type": "application/json"},
-        http\Options{timeoutSeconds = 10.0},
-        http\Retry{ attempts = 3, delayMs = 500.0 },
-    );
-    std\print(r.status);
-} catch (e) {
-    std\print("post never reached the server");
+fun main(args: [str]) > void {
+    // Post JSON. Retrying is a separate typed Retry argument; without one the request runs once.
+    // Escape { and } as \{ \} so Buzz does not interpolate them.
+    try {
+        final r = http\post(
+            "https://httpbin.org/post",
+            body: "\{\"target\":\"build\"\}",
+            headers: {"Content-Type": "application/json"},
+            opts: http\Options{timeoutSeconds = 10.0},
+            retry: http\Retry{ attempts = 3, delayMs = 500.0 },
+        );
+        std\print(r.status);
+    } catch (e) {
+        std\print("post never reached the server");
+    }
 }
 ```
 
@@ -129,18 +132,20 @@ Send an HTTP request; returns {status, body, headers}. opts is an Options (curl-
 import "std";
 import "http";
 
-// request lets you pick any method; useful for PUT/PATCH/DELETE.
-try {
-    final r = http\request(
-        "PUT",
-        "https://httpbin.org/put",
-        "hello",
-        { "Content-Type": "text/plain" },
-        http\Options{ timeoutSeconds = 10.0 },
-    );
-    std\print(r.status);
-} catch (e) {
-    std\print("request never reached the server");
+fun main(args: [str]) > void {
+    // request lets you pick any method; useful for PUT/PATCH/DELETE.
+    try {
+        final r = http\request(
+            "PUT",
+            url: "https://httpbin.org/put",
+            body: "hello",
+            headers: { "Content-Type": "text/plain" },
+            opts: http\Options{ timeoutSeconds = 10.0 },
+        );
+        std\print(r.status);
+    } catch (e) {
+        std\print("request never reached the server");
+    }
 }
 ```
 
@@ -162,12 +167,14 @@ Start a static file server in the background from an options map and return the 
 import "std";
 import "http";
 
-// Serve the current build output over http on port 8080 for quick sharing.
-// Blocks until the process exits; raises when the port is already taken.
-try {
-    _ = http\server(http\ServerOptions{dir = "dist/", port = 8080});
-} catch (e) {
-    std\print("port 8080 is not available");
+fun main(args: [str]) > void {
+    // Serve the current build output over http on port 8080 for quick sharing.
+    // Blocks until the process exits; raises when the port is already taken.
+    try {
+        _ = http\server(http\ServerOptions{dir = "dist/", port = 8080});
+    } catch (e) {
+        std\print("port 8080 is not available");
+    }
 }
 ```
 

@@ -66,19 +66,19 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // not the workspace reported any projects, because renderRoot writes that page regardless.
 export fun collectDevelopmentPages(site: Site) > result\Result::<bool> {
     try {
-        registerDevPage("Development", DEVELOPMENT_DESC, "development/", "README.md", site);
+        registerDevPage("Development", desc: DEVELOPMENT_DESC, url: "development/", srcRel: "README.md", site: site);
         if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
-            registerDevPage("Contributing", CONTRIBUTING_DESC,
-                "development/contributing/", "development/contributing/_index.md", site);
+            registerDevPage("Contributing", desc: CONTRIBUTING_DESC,
+                url: "development/contributing/", srcRel: "development/contributing/_index.md", site: site);
         }
         if (site.inputs.targets.projects.len() == 0) { return result\ok::<bool>(true); }
-        registerDevPage("Projects", PROJECTS_DESC,
-            "development/projects/", "development/projects/_index.md", site);
+        registerDevPage("Projects", desc: PROJECTS_DESC,
+            url: "development/projects/", srcRel: "development/projects/_index.md", site: site);
         foreach (proj in site.inputs.targets.projects) {
             final name = projectLabel(proj.path);
             final slug = slugifyProject(name);
-            registerDevPage(name + " targets", projectPageDesc(name),
-                "development/" + slug + "/", "development/" + slug + "/_index.md", site);
+            registerDevPage(name + " targets", desc: projectPageDesc(name),
+                url: "development/" + slug + "/", srcRel: "development/" + slug + "/_index.md", site: site);
         }
         return result\ok::<bool>(true);
     } catch (err: any) {
@@ -92,13 +92,13 @@ export fun collectDevelopmentPages(site: Site) > result\Result::<bool> {
 // right depth and trail. collectDevelopmentPages has already registered it.
 fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > result\Result::<bool> {
     try {
-        final html = renderContentHTML(markdown\toHtml(md), "", "");
+        final html = renderContentHTML(markdown\toHtml(md), oldDir: "", newDir: "");
         final r7 = generatedFrom(md);
         if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final r6 = renderPage(title, desc, html, srcRel, "", url, "", mut [], r7.value!, site);
+        final r6 = renderPage(title, description: desc, content: html, srcRel: srcRel, pager: "", canonUrl: url, reading: "", tags: mut [], generatedFrom: r7.value!, site: site);
         if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r6.value!;
-        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        final dir = fs\join(site.inputs.outDir, name: url.sub(0, len: url.len() - 1));
         fs\mkdirAll(dir);
         fs\writeFile(dir + "/index.html", doc);
         final r8 = site.addRecord(url, title, desc, md);
@@ -118,10 +118,10 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // text to index, since the HTML carries no useful prose.
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > result\Result::<bool> {
     try {
-        final r4 = renderPage(title, desc, html, srcRel, "", url, "", mut [], "", site);
+        final r4 = renderPage(title, description: desc, content: html, srcRel: srcRel, pager: "", canonUrl: url, reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r4.value!;
-        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        final dir = fs\join(site.inputs.outDir, name: url.sub(0, len: url.len() - 1));
         fs\mkdirAll(dir);
         fs\writeFile(dir + "/index.html", doc);
         final r5 = site.addRecord(url, title, desc, searchText);
@@ -282,11 +282,11 @@ export fun renderDevelopment(site: Site) > result\Result::<bool> {
         // not the workspace reported projects - it is prose about the repository, not about
         // the graph, and collectDevelopmentPages registers it on the same condition.
         if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
-            final cf = io\File.open(site.inputs.root + "/CONTRIBUTING.md", io\FileMode.read);
+            final cf = io\File.open(site.inputs.root + "/CONTRIBUTING.md", mode: io\FileMode.read);
             final contributingMd = cf.readAll();
             cf.close();
-            final r1 = renderDevelopmentPage("Contributing", CONTRIBUTING_DESC,
-                contributingMd, "development/contributing/", "development/contributing/_index.md", site);
+            final r1 = renderDevelopmentPage("Contributing", desc: CONTRIBUTING_DESC,
+                md: contributingMd, url: "development/contributing/", srcRel: "development/contributing/_index.md", site: site);
             if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         }
 
@@ -297,11 +297,11 @@ export fun renderDevelopment(site: Site) > result\Result::<bool> {
             final name = projectLabel(proj.path);
             final slug = slugifyProject(name);
             final md = projectCatalog(proj);
-            final r2 = renderDevelopmentPage(name + " targets", projectPageDesc(name),
-                md, "development/" + slug + "/", "development/" + slug + "/_index.md", site);
+            final r2 = renderDevelopmentPage(name + " targets", desc: projectPageDesc(name),
+                md: md, url: "development/" + slug + "/", srcRel: "development/" + slug + "/_index.md", site: site);
             if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
             // Redirect the old nested URL to the flattened one so inbound links survive.
-            site.collectAlias("development/projects/" + slug, "development/" + slug + "/");
+            site.collectAlias(alias: "development/projects/" + slug, target: "development/" + slug + "/");
         }
 
         // Project cards (Related-card look), one per project. Raw HTML with slash-terminated
@@ -343,10 +343,10 @@ export fun renderDevelopment(site: Site) > result\Result::<bool> {
 <p>One card per magus project in this repository, each linking to that project's runnable targets - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming and search.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
-{{{depsSection}}}`, {"projectCards": projectCards.join(""), "depsSection": depsSection});
-        final r3 = renderDevelopmentPageRaw("Projects", PROJECTS_DESC,
-            devHtml, "Projects project target catalogs workspace dependencies dependency order blast radius",
-            "development/projects/", "development/projects/_index.md", site);
+{{{depsSection}}}`, data: {"projectCards": projectCards.join(""), "depsSection": depsSection});
+        final r3 = renderDevelopmentPageRaw("Projects", desc: PROJECTS_DESC,
+            html: devHtml, searchText: "Projects project target catalogs workspace dependencies dependency order blast radius",
+            url: "development/projects/", srcRel: "development/projects/_index.md", site: site);
         if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
         return result\ok::<bool>(true);
     } catch (err: any) {

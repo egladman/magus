@@ -12,10 +12,13 @@ object Tracked {
     fun collect() > void { collected = collected + 1; }
 }
 
-var i = 0;
-// Each instance is unreachable the moment the next statement runs.
-while (i < 5000) {
-    _ = Tracked{ id = i };
-    i = i + 1;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    var i = 0;
+    while (i < 5000) {
+        _ = Tracked{ id = i };
+        i = i + 1;
+    }
+    __r = collected > 0;
 }
-final __r = collected > 0;

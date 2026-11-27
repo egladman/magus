@@ -1,16 +1,18 @@
 import "std";
 import "http";
 
-// request lets you pick any method; useful for PUT/PATCH/DELETE.
-try {
-    final r = http\request(
-        "PUT",
-        "https://httpbin.org/put",
-        "hello",
-        { "Content-Type": "text/plain" },
-        http\Options{ timeoutSeconds = 10.0 },
-    );
-    std\print(r.status);
-} catch (e) {
-    std\print("request never reached the server");
+fun main(args: [str]) > void {
+    // request lets you pick any method; useful for PUT/PATCH/DELETE.
+    try {
+        final r = http\request(
+            "PUT",
+            url: "https://httpbin.org/put",
+            body: "hello",
+            headers: { "Content-Type": "text/plain" },
+            opts: http\Options{ timeoutSeconds = 10.0 },
+        );
+        std\print(r.status);
+    } catch (e) {
+        std\print("request never reached the server");
+    }
 }

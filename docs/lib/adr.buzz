@@ -348,93 +348,93 @@ fun onlyProblem(md: str, line: int, has: str) > result\Result::<bool> {
 }
 
 test "an ADR that follows the template has no problems" {
-    assert\equal(problemsFor(GOOD).len(), 0, "the template itself passes");
+    assert\equal(problemsFor(GOOD).len(), want: 0, message: "the template itself passes");
 }
 
 test "only docs/decisions/NNNN-<slug>.md pages are held to the template" {
-    assert\equal(adrNumber(FILE), "0007", "the number");
-    assert\equal(adrNumber("docs/decisions/index.md"), "", "an index page");
-    assert\equal(adrNumber("docs/guides/0001-x.md"), "", "another tree");
-    assert\equal(adrProblems("docs/scope.md", md: "# Scope\n").len(), 0, "a page outside decisions");
+    assert\equal(adrNumber(FILE), want: "0007", message: "the number");
+    assert\equal(adrNumber("docs/decisions/index.md"), want: "", message: "an index page");
+    assert\equal(adrNumber("docs/guides/0001-x.md"), want: "", message: "another tree");
+    assert\equal(adrProblems("docs/scope.md", md: "# Scope\n").len(), want: 0, message: "a page outside decisions");
 }
 
 test "a missing front matter is one problem, on line 1" {
-    assert\equal(onlyProblem("# ADR 0007: one template\n", line: 1, has: "no front matter").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem("# ADR 0007: one template\n", line: 1, has: "no front matter").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "the title must be ADR NNNN with the file's number and a lowercase title" {
     assert\equal(onlyProblem(GOOD.replace("title: \"ADR 0007: one template\"", with: "title: \"ADR 0008: one template\""),
-        line: 2, has: "write `title: \"ADR 0007: <lowercase title>\"`").error?.message ?? "", "", "one problem, as described");
+        line: 2, has: "write `title: \"ADR 0007: <lowercase title>\"`").error?.message ?? "", want: "", message: "one problem, as described");
     assert\equal(onlyProblem(GOOD.replace("title: \"ADR 0007: one template\"", with: "title: \"ADR 0007: One template\""),
-        line: 2, has: "lowercase").error?.message ?? "", "", "one problem, as described");
+        line: 2, has: "lowercase").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "order must equal the file's number" {
-    assert\equal(onlyProblem(GOOD.replace("order: 7", with: "order: 3"), line: 3, has: "write `order: 7`").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("order: 7", with: "order: 3"), line: 3, has: "write `order: 7`").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "a missing description is named at the front matter's close" {
-    assert\equal(onlyProblem(GOOD.replace("description: Why.\n", with: ""), line: 7, has: "no description").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("description: Why.\n", with: ""), line: 7, has: "no description").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "tags must include adr" {
-    assert\equal(onlyProblem(GOOD.replace("tags: [adr, decision]", with: "tags: [decision]"), line: 5, has: "add `adr`").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("tags: [adr, decision]", with: "tags: [decision]"), line: 5, has: "add `adr`").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "the H1 must repeat the title" {
     assert\equal(onlyProblem(GOOD.replace("# ADR 0007: one template", with: "# ADR 0007: another"),
-        line: 10, has: "write `# ADR 0007: one template`").error?.message ?? "", "", "one problem, as described");
+        line: 10, has: "write `# ADR 0007: one template`").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "status takes the allowed values, optionally with a parenthetical" {
-    assert\equal(problemsFor(GOOD.replace("status: accepted", with: "status: accepted (partly built)")).len(), 0,
-        "a parenthetical");
-    assert\equal(onlyProblem(GOOD.replace("status: accepted", with: "status: Accepted"), line: 6, has: "status is `Accepted`").error?.message ?? "", "", "one problem, as described");
+    assert\equal(problemsFor(GOOD.replace("status: accepted", with: "status: accepted (partly built)")).len(), want: 0,
+        message: "a parenthetical");
+    assert\equal(onlyProblem(GOOD.replace("status: accepted", with: "status: Accepted"), line: 6, has: "status is `Accepted`").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "date must be a real YYYY-MM-DD day" {
-    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: October 7"), line: 7, has: "real day").error?.message ?? "", "", "one problem, as described");
-    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: 2026-02-29"), line: 7, has: "real day").error?.message ?? "", "", "one problem, as described");
-    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07", with: "date: 2028-02-29")).len(), 0, "a leap day");
+    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: October 7"), line: 7, has: "real day").error?.message ?? "", want: "", message: "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: 2026-02-29"), line: 7, has: "real day").error?.message ?? "", want: "", message: "one problem, as described");
+    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07", with: "date: 2028-02-29")).len(), want: 0, message: "a leap day");
 }
 
 test "a missing status or date is named at the front matter's close" {
-    assert\equal(onlyProblem(GOOD.replace("status: accepted\n", with: ""), line: 7, has: "no status").error?.message ?? "", "", "one problem, as described");
-    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07\n", with: ""), line: 7, has: "no date").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("status: accepted\n", with: ""), line: 7, has: "no status").error?.message ?? "", want: "", message: "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07\n", with: ""), line: 7, has: "no date").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "supersedes is optional but never empty" {
-    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07\n", with: "date: 2026-10-07\nsupersedes: the old page\n")).len(), 0,
-        "named");
+    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07\n", with: "date: 2026-10-07\nsupersedes: the old page\n")).len(), want: 0,
+        message: "named");
     assert\equal(onlyProblem(GOOD.replace("date: 2026-10-07\n", with: "date: 2026-10-07\nsupersedes:\n"), line: 8,
-        has: "supersedes is empty").error?.message ?? "", "", "one problem, as described");
+        has: "supersedes is empty").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "a Status, Date or Supersedes bullet under the H1 is refused" {
     final md = GOOD.replace("# ADR 0007: one template\n\n", with: "# ADR 0007: one template\n\n- **Status:** Accepted\n\n");
-    assert\equal(onlyProblem(md, line: 12, has: "move it to the `status` front matter key").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(md, line: 12, has: "move it to the `status` front matter key").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "a section outside the template is refused and named" {
-    assert\equal(onlyProblem(GOOD.replace("### 1. Part", with: "## 1. Part"), line: 18, has: "not a template section").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("### 1. Part", with: "## 1. Part"), line: 18, has: "not a template section").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "sections out of order are refused" {
     final md = GOOD.replace("## Alternatives\n\nText.\n\n## Consequences\n\n",
         with: "## Consequences\n\n## Alternatives\n\nText.\n\n");
-    assert\equal(onlyProblem(md, line: 27, has: "comes after `## Consequences`").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(md, line: 27, has: "comes after `## Consequences`").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "a missing required section is named at the H1" {
     final md = GOOD.replace("## Alternatives\n\nText.\n\n", with: "");
-    assert\equal(onlyProblem(md, line: 10, has: "no `## Alternatives` section").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(md, line: 10, has: "no `## Alternatives` section").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "an amendment opens with its date" {
     assert\equal(onlyProblem(GOOD.replace("### 2026-10-08: a change", with: "### A change, 2026-10-08"),
-        line: 41, has: "### YYYY-MM-DD: <what changed>").error?.message ?? "", "", "one problem, as described");
+        line: 41, has: "### YYYY-MM-DD: <what changed>").error?.message ?? "", want: "", message: "one problem, as described");
 }
 
 test "a State column takes only the five states" {
-    assert\equal(onlyProblem(GOOD.replace("| a | done |", with: "| a | shipped |"), line: 22, has: "state `shipped`").error?.message ?? "", "", "one problem, as described");
+    assert\equal(onlyProblem(GOOD.replace("| a | done |", with: "| a | shipped |"), line: 22, has: "state `shipped`").error?.message ?? "", want: "", message: "one problem, as described");
 }

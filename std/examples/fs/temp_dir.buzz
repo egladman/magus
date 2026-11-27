@@ -1,11 +1,13 @@
 import "std";
 import "fs";
 
-// No sensible fallback path exists, so an unwritable temp dir is reported rather
-// than substituted.
-try {
-    std\print(fs\tempDir("magus-build-"));
-    // -> "/tmp/magus-build-abc123"
-} catch (e) {
-    std\print("no writable temp dir");
+fun main(args: [str]) > void {
+    // No sensible fallback path exists, so an unwritable temp dir is reported rather
+    // than substituted.
+    try {
+        std\print(fs\tempDir("magus-build-"));
+        // -> "/tmp/magus-build-abc123"
+    } catch (e) {
+        std\print("no writable temp dir");
+    }
 }

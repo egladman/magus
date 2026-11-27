@@ -90,7 +90,7 @@ import "site/config" as _;
 // it broke.
 fun esbuild(args: [str]) > result\Result::<bool> {
     try {
-        _ = proc\exec("esbuild", args, ".", proc\ExecOptions{});
+        _ = proc\exec("esbuild", args: args, dir: ".", opts: proc\ExecOptions{});
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -103,7 +103,7 @@ fun esbuild(args: [str]) > result\Result::<bool> {
 fun walkBlog(site: Site) > result\Result::<bool> {
     try {
         if (isDirectory(site.inputs.root + "/" + site.inputs.blog) == false) { return result\ok::<bool>(true); }
-        foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
+        foreach (name in fs\listDir(fs\join(site.inputs.root, name: site.inputs.blog))) {
             final r47 = isPublishablePost(site, name);
             if (r47.error -> failed) { return result\Result::<bool>{ error = failed }; }
             if (r47.value!) {
@@ -183,7 +183,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         site.inputs.outDir = outDir;
         final r4 = loadMeta(site); if (r4.error -> failed) { return result\Result::<Site>{ error = failed }; }
         if (isDirectory(site.inputs.root + "/" + site.inputs.blog)) {
-            foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
+            foreach (name in fs\listDir(fs\join(site.inputs.root, name: site.inputs.blog))) {
                 final r5 = isPublishablePost(site, name); if (r5.error -> failed) { return result\Result::<Site>{ error = failed }; }
                 if (r5.value!) {
                     site.inputs.hasBlogPosts = true;
@@ -222,7 +222,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
             }
         }
         if (fs\isDir(site.inputs.root + "/assets")) {
-            fs\copyDir(site.inputs.root + "/assets", site.inputs.outDir + "/assets");
+            fs\copyDir(site.inputs.root + "/assets", dst: site.inputs.outDir + "/assets");
         }
 
         final bundled = bundleAssets(site); if (bundled.error -> failed) { return result\Result::<Site>{ error = failed }; }
@@ -326,7 +326,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
         // Flat {url, title, text, tags, description?} record per page; search.js fetches it
         // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
         // so the file is byte-stable across runs.
-        fs\writeFile(site.inputs.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
+        fs\writeFile(site.inputs.outDir + "/search-index.json", content: "["+ site.searchRecords.join(",") + "]");
 
         // Built last: the cache version digests the precached assets (incl. search-index.json
         // just above), so every one of them must already exist.

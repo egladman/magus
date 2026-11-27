@@ -138,7 +138,7 @@ export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > 
             return result\Result::<bool>{ error = err };
         }
         if (flags.value!.len() == 0) { return result\ok::<bool>(true); }
-        final edited = go["go-mod-edit"](ctx, {"args": flags.value!});
+        final edited = go["go-mod-edit"](ctx, opts: {"args": flags.value!});
         if (ctx.hasCharm("rw")) { return result\ok::<bool>(true); }
         if (edited.stdout != fs\readFile("go.mod")) {
             return result\fail::<bool>("MGS1016: go.mod has workspace-local replace drift; re-run this target with the rw charm (`magus run <target>:rw " + project + "`) to apply the derived replacements");

@@ -195,7 +195,7 @@ export fun mgs_listManifests() > [Manifest] {
     return [Manifest{value = "go.mod", lockCandidates = ["go.sum"], installs = {"go.sum": Install{
         name = "go-mod-download",
         command = Command{bin = "go", args = args, charms = {
-            "update": Charm{ops = set(args, "mod", "get").ops + set(args, "download", "-u").ops + after(args, "download", ["./..."]).ops},
+            "update": Charm{ops = set(args, anchor: "mod", val: "get").ops + set(args, anchor: "download", val: "-u").ops + after(args, anchor: "download", vals: ["./..."]).ops},
         }},
     }}}];
 }
@@ -250,7 +250,7 @@ fun goFmt(target: Target) > Command {
     // A forwarded file replaces the walk, so `go::go-fmt:rw -- a.go` rewrites a.go alone.
     return Command{bin = "gofmt", args = args, sources = ["**/*.go", "!**/.*/**"], edits = ["**/*.go", "!**/.*/**"],
         pathScope = ["\{file\}"], pathScopeFiles = ["**/*.go", "!**/.*/**"], charms = {
-        "rw": set(args, "-d", "-w"),
+        "rw": set(args, anchor: "-d", val: "-w"),
     }};
 }
 // Invoked directly rather than through `go tool`: golangci-lint generates no code,
@@ -263,7 +263,7 @@ fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
     return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV + GO_TOOLCHAIN_ENV, edits = ["**/*.go"], charms = {
         "debug": append(["-v"]),
-        "rw": after(args, "run", ["--fix"]),
+        "rw": after(args, anchor: "run", vals: ["--fix"]),
     }};
 }
 // `./...` is a default, not a fixed arg: a magusfile that passes args replaces it,
@@ -297,7 +297,7 @@ fun goFuzz(target: Target) > Command {
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
     return Command{bin = "go", args = args, edits = ["go.mod", "go.sum"], charms = {
-        "update": drop(args, "--diff"),
+        "update": drop(args, anchor: "--diff"),
     }};
 }
 // Edit is offline: it "reads only go.mod; it does not look up information about the
@@ -306,7 +306,7 @@ fun goModTidy(target: Target) > Command {
 fun goModEdit(target: Target) > Command {
     final args = ["mod", "edit", "-print"];
     return Command{bin = "go", args = args, capture = true, edits = ["go.mod"], charms = {
-        "rw": drop(args, "-print"),
+        "rw": drop(args, anchor: "-print"),
     }};
 }
 // Captures Go's structured module view for the spell's higher-level Buzz helper.

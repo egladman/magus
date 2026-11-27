@@ -1,8 +1,10 @@
 import "std";
 import "fs";
 
-try {
-    fs\appendFile("dist/build.log", "compile done\n");
-} catch (e) {
-    std\print("could not append to dist/build.log");
+fun main(args: [str]) > void {
+    try {
+        fs\appendFile("dist/build.log", content: "compile done\n");
+    } catch (e) {
+        std\print("could not append to dist/build.log");
+    }
 }

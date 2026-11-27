@@ -1,4 +1,6 @@
 import "std";
 import "fs";
 
-if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
+fun main(args: [str]) > void {
+    if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
+}

@@ -147,7 +147,7 @@ fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 // hood). os.time() returns epoch millis as a double — exactly what the time
 // module speaks — so it flows straight through with no conversion.
 fun amzTimestamp() > str {
-    return time\format("20060102T150405Z", os\time());
+    return time\format("20060102T150405Z", unixMillis: os\time());
 }
 
 // sign builds the signed request headers for an S3 path-style request. path is
@@ -157,7 +157,7 @@ fun amzTimestamp() > str {
 fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     final reg = region();
     final amzdate = amzTimestamp();
-    final datestamp = amzdate.sub(0, 8);
+    final datestamp = amzdate.sub(0, len: 8);
     final host = urlHost(endpoint());
     final scope = datestamp + "/" + reg + "/s3/aws4_request";
     final tok = token();
@@ -188,11 +188,11 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
 
     // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
-    final kDate = crypto\hmacSha256("AWS4" + secret(), datestamp);
-    final kRegion = crypto\hmacSha256(kDate, reg);
-    final kService = crypto\hmacSha256(kRegion, "s3");
-    final kSigning = crypto\hmacSha256(kService, "aws4_request");
-    final signature = crypto\hmacSha256Hex(kSigning, stringToSign);
+    final kDate = crypto\hmacSha256("AWS4" + secret(), data: datestamp);
+    final kRegion = crypto\hmacSha256(kDate, data: reg);
+    final kService = crypto\hmacSha256(kRegion, data: "s3");
+    final kSigning = crypto\hmacSha256(kService, data: "aws4_request");
+    final signature = crypto\hmacSha256Hex(kSigning, data: stringToSign);
 
     final authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
         + ", SignedHeaders=" + signedHeaders
@@ -220,8 +220,8 @@ export fun get_artifact(target: Target, req: ArtifactRequest) > result\Result::<
     if (access() == "" or bucket() == "") { return result\ok::<Ack>(Ack{ ok = false }); }
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     try {
-        final headers = sign("GET", path, "", EMPTY_SHA256);
-        final code = http\download(endpoint() + path, req.path, headers);
+        final headers = sign("GET", path, query: "", payloadHash: EMPTY_SHA256);
+        final code = http\download(endpoint() + path, dest: req.path, headers: headers);
         if (code == 404) { return result\ok::<Ack>(Ack{ ok = false }); }
         if (code != 200) { return result\fail::<Ack>("s3 cache: GET {path}: status {code}"); }
         return result\ok::<Ack>(Ack{ ok = true });
@@ -236,8 +236,8 @@ export fun has_artifact(target: Target, req: ArtifactRequest) > result\Result::<
     if (access() == "" or bucket() == "") { return result\ok::<Ack>(Ack{ ok = false }); }
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     try {
-        final headers = sign("HEAD", path, "", EMPTY_SHA256);
-        final res = http\request("HEAD", endpoint() + path, "", headers);
+        final headers = sign("HEAD", path, query: "", payloadHash: EMPTY_SHA256);
+        final res = http\request("HEAD", url: endpoint() + path, body: "", headers: headers);
         if (res["status"] == 404) { return result\ok::<Ack>(Ack{ ok = false }); }
         if (res["status"] != 200) { return result\fail::<Ack>("s3 cache: HEAD {path}: status {res["status"]}"); }
         return result\ok::<Ack>(Ack{ ok = true });
@@ -255,8 +255,8 @@ export fun put_artifact(target: Target, req: ArtifactRequest) > result\Result::<
     final src = req.path;
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     try {
-        final headers = sign("PUT", path, "", crypto\sha256File(src));
-        final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
+        final headers = sign("PUT", path, query: "", payloadHash: crypto\sha256File(src));
+        final res = http\upload_chunked("PUT", url: endpoint() + path, src: src, chunkSize: 0, headers: headers);
         if (res[0] != 200) { return result\fail::<Ack>("s3 cache: PUT {path}: status {res[0]}"); }
         return result\ok::<Ack>(Ack{ ok = true });
     } catch (err: any) {
@@ -282,9 +282,9 @@ fun listPage(marker: str) > result\Result::<str> {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
-    final headers = sign("GET", path, query, EMPTY_SHA256);
+    final headers = sign("GET", path, query: query, payloadHash: EMPTY_SHA256);
     try {
-        final res = http\get(endpoint() + path + "?" + query, headers);
+        final res = http\get(endpoint() + path + "?" + query, headers: headers);
         if (res["status"] != 200) {
             return result\fail::<str>("s3 prune: listing page failed with status {res["status"]} "
                 + "(marker \"{marker}\"); refusing to prune from a partial listing");
@@ -336,9 +336,9 @@ fun listing() > any {
 // is idempotent, returning 204 No Content whether or not the key existed.
 fun deleteObject(key: str) > result\Result::<bool> {
     final path = "/" + bucket() + "/" + key;
-    final headers = sign("DELETE", path, "", EMPTY_SHA256);
+    final headers = sign("DELETE", path, query: "", payloadHash: EMPTY_SHA256);
     try {
-        final res = http\request("DELETE", endpoint() + path, "", headers);
+        final res = http\request("DELETE", url: endpoint() + path, body: "", headers: headers);
         return result\ok::<bool>(res["status"] == 204 or res["status"] == 200);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -372,7 +372,7 @@ export fun prune(target: Target, req: PruneRequest) > result\Result::<PruneResul
         }
         final e: any = row.value!;
         try {
-            e["ms"] = time\parse(S3_TIME_LAYOUT, "{e["lastModified"]}");
+            e["ms"] = time\parse(S3_TIME_LAYOUT, value: "{e["lastModified"]}");
         } catch (err: any) {
             return result\caught::<PruneResult>(err);
         }

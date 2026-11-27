@@ -30,7 +30,7 @@ fun reduce(items: [int], seed: int, step: fun(int, int) int) > int {
     return acc;
 }
 fun sum(items: [int]) > int {
-    return reduce(items, 0, fun(a: int, b: int) > int { return a + b; });
+    return reduce(items, seed: 0, step: fun(a: int, b: int) > int { return a + b; });
 }
 
 // The one target: it prints values the functions above compute. `run demo`

@@ -1,6 +1,6 @@
-// Embedded mode infers E from the argument, and it is not a D.
-// Upstream mode also reports the missing type arguments at the call.
-// @error: want R::<int, D>
+// Upstream infers no type arguments at a generic call, so err("not a D")
+// is refused at the call before E could be checked against D.
+// @error: [BZZ1004] buzz: line 15:15: generic call requires explicit type arguments
 object D {
     name: str,
 }

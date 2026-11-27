@@ -1,12 +1,14 @@
 import "std";
 import "http";
 
-// A transport failure (DNS, TLS, timeout) RAISES; a 4xx/5xx does not, it arrives
-// as a status. The two are different answers and are handled separately.
-try {
-    final r = http\get("https://api.github.com/repos/egladman/magus");
-    std\print(r.status);
-    std\print(r.body.sub(0, 80) + "...");
-} catch (e) {
-    std\print("request never reached the server");
+fun main(args: [str]) > void {
+    // A transport failure (DNS, TLS, timeout) raises; a 4xx/5xx does not, it arrives
+    // as a status. The two are different answers and are handled separately.
+    try {
+        final r = http\get("https://api.github.com/repos/egladman/magus");
+        std\print(r.status);
+        std\print(r.body.sub(0, len: 80) + "...");
+    } catch (e) {
+        std\print("request never reached the server");
+    }
 }

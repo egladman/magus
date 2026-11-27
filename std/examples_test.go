@@ -9,15 +9,11 @@ import (
 	"github.com/egladman/magus/internal/spell"
 )
 
-// TestExamplesCompile walks every std/examples/**/*.buzz file and asserts each one
-// parses AND type-checks. Catches syntax typos and, more often, an unhandled raise
-// (BZZ1006) before the snippet ships in the docs, where cmd/magus-docs renders it
-// under each method and a reader copies it.
+// TestExamplesCompile parses and type-checks every std/examples/**/*.buzz file.
+// It catches syntax typos and unhandled raises (BZZ1006) before the docs ship them.
 //
-// The examples are EMBEDDED snippets, not standalone scripts. Wrapping each one in a
-// fun main() to satisfy upstream-strict parsing would put ceremony in front of the
-// method the example exists to show. It compiles rather than evaluates: the calls
-// touch fs, env and the network, which a unit test has no business doing.
+// Each example is a whole program with its own fun main, so it needs no wrapper.
+// It compiles rather than evaluates: the calls touch fs, env and the network.
 func TestExamplesCompile(t *testing.T) {
 	root := "examples"
 	if _, err := os.Stat(root); os.IsNotExist(err) {

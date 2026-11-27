@@ -1,7 +1,9 @@
 import "std";
 import "template";
 
-// Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
-// would collide with Buzz's own {expr} string interpolation.
-std\print(template\render(`Hello {{name}}`, {"name": "world"}) catch "");
-// -> "Hello world"
+fun main(args: [str]) > void {
+    // Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
+    // would collide with Buzz's own {expr} string interpolation.
+    std\print(template\render(`Hello {{name}}`, data: {"name": "world"}) catch "");
+    // -> "Hello world"
+}

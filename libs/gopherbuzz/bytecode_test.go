@@ -47,7 +47,9 @@ func TestBytecodeRoundTrip(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			sess := newSession(ctx)
+			// Strict, like the other fixture runners: the statements live in main,
+			// which the driver line calls once the declarations have loaded.
+			sess := NewSession(ctx)
 			chunk, err := sess.Compile(string(src))
 			require.NoError(t, err, "compile")
 
@@ -56,6 +58,10 @@ func TestBytecodeRoundTrip(t *testing.T) {
 			got, err := UnmarshalChunk(data)
 			require.NoError(t, err, "unmarshal")
 			require.NoError(t, sess.ExecChunk(ctx, got), "exec recovered chunk")
+			if strings.Contains(string(src), "fun main(") {
+				_, err = sess.CallValue(ctx, sess.GetGlobal("main"), []vmpackage.Value{vmpackage.ListValue(nil)})
+				require.NoError(t, err, "call main")
+			}
 			assert.Equal(t, meta.expect, sess.GetGlobal("__r").String())
 		})
 	}

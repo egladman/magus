@@ -11,5 +11,5 @@ import "fs";
 // render writes project's scoped MAGUS.md into the calling target's project directory.
 export fun render(project: str) > void !> any {
     final doc = magus\describe.graphMarkdown([project]);
-    fs\writeFile("MAGUS.md", doc + "\n");
+    fs\writeFile("MAGUS.md", content: doc + "\n");
 }

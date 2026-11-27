@@ -1,5 +1,7 @@
 import "std";
 import "strings";
 
-std\print(strings\ellipsis("the quick brown fox", 12));
-// -> "the quick..."
+fun main(args: [str]) > void {
+    std\print(strings\ellipsis("the quick brown fox", length: 12));
+    // -> "the quick..."
+}
