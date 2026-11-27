@@ -440,20 +440,20 @@ type unmergedRow struct {
 
 // unmergedRead answers [Unmerged] for one branch of one checkout.
 type unmergedRead struct {
-	driver    types.VCSDriver
-	root      string
-	branch    string
-	tip       string
+	driver types.VCSDriver
+	root   string
+	branch string
+	tip    string
 	// remote is the remote default branch's commit when it reads and differs from tip.
 	remote, remoteNote string
-	now       int64
-	checkouts map[string]string
-	branches  map[string]string
-	rows      map[string]*unmergedRow
-	unread    int
-	stale     int
-	recut     int
-	tries     job.Attempts
+	now                int64
+	checkouts          map[string]string
+	branches           map[string]string
+	rows               map[string]*unmergedRow
+	unread             int
+	stale              int
+	recut              int
+	tries              job.Attempts
 }
 
 // run answers every row in work from the stored facts, then asks the version
