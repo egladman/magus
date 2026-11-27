@@ -707,7 +707,7 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 		v.op, v.composers = true, r.composers(j.graph)
 		return v
 	}
-	v.outside = r.writesOutside(projects, j.row.Paths.Write, own)
+	v.outside = r.writesOutside(j.root, projects, j.row.Paths.Write, own)
 	return v
 }
 
@@ -1256,27 +1256,31 @@ func catalogOp(catalog []*spells.Spell, target string) (spells.Op, bool) {
 	return found[0], true
 }
 
-// writesOutside reads what a run under the rw charm writes from the workspace's
-// declarations, in every project the run selects: its target's ctx.writesFiles and
-// ctx.writesFiles(..., editsExistingSource: true) globs, and the ctx.writesFiles(..., editsExistingSource: true) globs of each step
-// its ctx.needs chain reaches in that project. It returns the rooted globs no write path
-// covers and own does not name: own are the outputs the row's write paths regenerate,
-// which count as inside them.
-//
-// A needed step's outputs and another project's steps are left out: they build what the
-// run consumes, and another project's ci settles its own formatting.
-func (r targetRun) writesOutside(projects []*types.Project, writePaths []string, own []job.RegeneratedOutput) (outside []string) {
+// writesOutside is each rooted glob an rw run declares writing, chain updates included,
+// that no write path covers and own does not regenerate. A run handed only files its
+// update globs match rewrites those, so it is held to them.
+func (r targetRun) writesOutside(root string, projects []*types.Project, writePaths []string, own []job.RegeneratedOutput) (outside []string) {
 	name := targetName(r.target)
 	for _, p := range projects {
 		var globs []types.Glob
 		for _, ref := range p.TargetOutputs[name] {
 			globs = append(globs, ref.Rooted(p.Path))
 		}
+		var updates []types.Glob
 		for _, ref := range p.TargetUpdates[name] {
-			globs = append(globs, ref.Rooted(p.Path))
+			updates = append(updates, ref.Rooted(p.Path))
 		}
 		// A nil lookup keeps the chain in p.
-		for _, g := range append(globs, types.ChainUpdates(p, name, nil)...) {
+		updates = append(updates, types.ChainUpdates(p, name, nil)...)
+		if files, ok := r.updatedFiles(root, p, updates); ok && len(globs) == 0 {
+			for _, f := range files {
+				if _, covered, err := declarationCovering(writePaths, f); (err != nil || !covered) && !slices.Contains(outside, f) {
+					outside = append(outside, f)
+				}
+			}
+			continue
+		}
+		for _, g := range append(globs, updates...) {
 			regenerated := slices.ContainsFunc(own, func(o job.RegeneratedOutput) bool { return o.Project() == p.Path && o.Output == g.String() })
 			if !regenerated && !leaseCoversGlob(writePaths, g.Pattern) && !slices.Contains(outside, g.Pattern) {
 				outside = append(outside, g.Pattern)
@@ -1284,6 +1288,29 @@ func (r targetRun) writesOutside(projects []*types.Project, writePaths []string,
 		}
 	}
 	return outside
+}
+
+// updatedFiles is each forwarded argument rooted in p, when every one is an existing file
+// inside the workspace that one of updates matches. ok is false for any other argument, or none.
+func (r targetRun) updatedFiles(root string, p *types.Project, updates []types.Glob) (files []string, ok bool) {
+	if len(r.forwarded) == 0 || len(updates) == 0 {
+		return nil, false
+	}
+	for _, arg := range r.forwarded {
+		rel := path.Clean(filepath.ToSlash(arg))
+		if strings.HasPrefix(arg, "-") || path.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, "../") {
+			return nil, false
+		}
+		rooted := path.Join(p.Path, rel)
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rooted))); err != nil || !info.Mode().IsRegular() {
+			return nil, false
+		}
+		if !slices.ContainsFunc(updates, func(g types.Glob) bool { return g.Match(rooted) }) {
+			return nil, false
+		}
+		files = append(files, rooted)
+	}
+	return files, true
 }
 
 // checksWrittenModule reports a run of a target testing or linting each project it names,
