@@ -2197,7 +2197,11 @@ func unmergedReport(ctx context.Context, root string, rows []jobtypes.Job, tries
 	if format == outputName {
 		return nil
 	}
-	report := job.Unmerged(ctx, root, rows, tries)
+	open, openErr := queue.OpenChanges(root)
+	report := job.UnmergedAgainst(ctx, root, rows, tries, open)
+	if openErr != nil {
+		report.Unknown = strings.TrimPrefix(report.Unknown+"; the change list could not be read: "+openErr.Error(), "; ")
+	}
 	return &report
 }
 

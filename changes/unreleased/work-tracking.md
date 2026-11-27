@@ -12,3 +12,7 @@
   apply` files an attention request and refuses while the row's head reads local, pushed
   or unread. Once a person disposes the request, the same apply writes the reason. A row
   whose head a base holds takes the reason at once.
+- **The root's stop reads a row's recorded head and the change list.** A row whose
+  branch was deleted still holds the stop by its head. Work an open change holds no
+  longer does. The remedy reads "open a change for it, or merge it into an open change's
+  branch", since merging into main is a person's.

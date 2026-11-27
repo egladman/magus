@@ -1634,7 +1634,7 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedR
 			return jobtypes.UnmergedReport{}, snap.Err
 		}
 		snap = snap.Clone()
-		return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+		return unmergedWithChanges(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
@@ -1644,7 +1644,18 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedR
 	if snap.Err != nil {
 		return jobtypes.UnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+	return unmergedWithChanges(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+}
+
+// unmergedWithChanges is [job.Unmerged] over the change list `magus queue ls` left. A
+// list that does not read is named in Unknown, so no work reads as proposed by it.
+func unmergedWithChanges(ctx context.Context, workspace string, rows []jobtypes.Job, tries jobtypes.Attempts) jobtypes.UnmergedReport {
+	open, err := queue.OpenChanges(workspace)
+	report := job.UnmergedAgainst(ctx, workspace, rows, tries, open)
+	if err != nil {
+		report.Unknown = strings.TrimPrefix(report.Unknown+"; the change list could not be read: "+err.Error(), "; ")
+	}
+	return report
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one

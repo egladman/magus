@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -380,12 +381,37 @@ func (s *unmergedSuite) branch(name string) string {
 }
 
 func (s *unmergedSuite) unmerged(rows ...job.Job) job.UnmergedReport {
-	return Unmerged(s.T().Context(), s.repo.Root(), rows, s.tries)
+	return UnmergedAgainst(s.T().Context(), s.repo.Root(), rows, s.tries, fresh())
 }
 
 // filed has job id's live try file result.
 func (s *unmergedSuite) filed(id string, result *job.Result) {
 	s.tries[id] = []job.Attempt{filedTry(id, result)}
+}
+
+// The recorded head holds a stop whose branch was pushed and deleted, though
+// the row filed no path and left no checkout.
+func (s *unmergedSuite) TestARowsRecordedHeadOutlivesItsDeletedBranch() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	s.repo.Git("update-ref", "refs/remotes/origin/w", head)
+	s.repo.Git("branch", "-q", "-D", "w")
+
+	got := s.unmerged(job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head})
+
+	s.Require().Len(got.Jobs, 1)
+	s.Contains(got.Jobs[0].Why, "on neither "+s.main+" nor an open change")
+	s.Contains(got.Jobs[0].Remedy, "open a change for")
+}
+
+// Work an open change holds waits on the person who merges, not on the root.
+func (s *unmergedSuite) TestARowAnOpenChangeHoldsIsNotUnmerged() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	row := job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head}
+
+	got := UnmergedAgainst(s.T().Context(), s.repo.Root(), []job.Job{row}, s.tries, fresh(qtypes.Change{ID: "9", Head: head}))
+
+	s.Empty(got.Jobs)
+	s.Len(s.unmerged(row).Jobs, 1, "once the change closes unmerged, the row is off again")
 }
 
 func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAndRemedy() {
@@ -398,8 +424,8 @@ func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAn
 	s.Require().Len(got.Jobs, 1)
 	s.Equal("w", got.Jobs[0].Job)
 	s.True(strings.HasPrefix(head, got.Jobs[0].Head), got.Jobs[0].Head)
-	s.Contains(got.Jobs[0].Why, "not on "+s.main)
-	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("merge %s into %s", got.Jobs[0].Head, s.main))
+	s.Contains(got.Jobs[0].Why, "on neither "+s.main+" nor an open change")
+	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("open a change for %s, or merge it into an open change's branch", got.Jobs[0].Head))
 	s.Contains(got.Jobs[0].Remedy, "left_unmerged")
 }
 
@@ -500,7 +526,7 @@ func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarries
 	spent, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	got := Unmerged(spent, s.repo.Root(), []job.Job{row}, s.tries)
+	got := UnmergedAgainst(spent, s.repo.Root(), []job.Job{row}, s.tries, fresh())
 
 	if got.Unknown == "" {
 		s.Fail("a read that answered nothing must say so", "%+v", got)
@@ -709,7 +735,7 @@ func (s *unmergedSuite) TestARepositoryWithNoCommitIsUnknownByName() {
 	bare := s.T().TempDir()
 	s.Require().NoError(exec.CommandContext(s.T().Context(), "git", "-C", bare, "init", "-q").Run())
 
-	got := Unmerged(s.T().Context(), bare, []job.Job{{ID: "w", State: job.StatePass}}, job.Attempts{"w": {filedTry("w", &job.Result{ChangedPaths: []string{"w.txt"}})}})
+	got := UnmergedAgainst(s.T().Context(), bare, []job.Job{{ID: "w", State: job.StatePass}}, job.Attempts{"w": {filedTry("w", &job.Result{ChangedPaths: []string{"w.txt"}})}}, fresh())
 
 	s.Equal("the branch of the repository: ", got.Unknown[:len("the branch of the repository: ")])
 	s.NotContains(got.Unknown, bare)
