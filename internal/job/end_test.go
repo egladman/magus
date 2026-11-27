@@ -380,7 +380,7 @@ func TestEndCheckoutsNeverRemovesACheckoutTheForkDidNotMake(t *testing.T) {
 }
 
 // A prune that ends a descendant only because its ancestor ends is refused until the
-// descendant is restated, and waits on a person when it holds work.
+// descendant is named with it, and waits on a person when it holds work.
 func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	t.Parallel()
 	const now = int64(100_000)
@@ -400,12 +400,12 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	_, err := s.Prune(t.Context(), PruneOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only because an ancestor it ends does: done/w (running")
-	assert.Contains(t, err.Error(), "`magus job prune done/w`")
-
-	_, err = s.Prune(t.Context(), PruneOptions{}, "done", "done/w")
-	require.ErrorContains(t, err, "prune does not end done with an ancestor")
+	assert.Contains(t, err.Error(), "`magus job prune done done/w`")
 
 	_, err = s.Prune(t.Context(), PruneOptions{}, "done/w")
+	require.ErrorContains(t, err, "prune would not end done/w", "without its ancestor named, the descendant has nothing to end with")
+
+	_, err = s.Prune(t.Context(), PruneOptions{}, "done", "done/w")
 	require.ErrorContains(t, err, "which an agent may not")
 	requests := endRequests(t, repo.Root())
 	require.Len(t, requests, 1)
@@ -414,7 +414,7 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	}
 
 	dispose(t, repo.Root(), requests[0].ID)
-	got, err := s.Prune(t.Context(), PruneOptions{}, "done/w")
+	got, err := s.Prune(t.Context(), PruneOptions{}, "done", "done/w")
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
 }

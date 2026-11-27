@@ -1217,19 +1217,30 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	}{
 		{
 			name:    "the default names a job that would end only with its ancestor, and ends nothing",
-			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken): restate each to end it too: `magus job prune done/c`",
+			refused: "prune would end 1 live job(s) only because an ancestor it ends does: done/c (declared, session holder, never taken): name each to end it too: `magus job prune done done/c`",
 		},
-		{name: "restating that job ends it with what is provably not worked", restated: []string{"done/c"}, want: defaults},
+		{name: "naming that job and its ancestor ends that tree alone", restated: []string{"done", "done/c"}, want: defaults[4:]},
+		{name: "a named job scopes the prune to it", restated: []string{"exited"}, want: defaults[:1]},
+		{
+			name:     "a named job it would not end refuses it and ends nothing",
+			restated: []string{"exited", "busy"},
+			refused:  "prune would not end busy: nothing shows nobody is working it",
+		},
+		{
+			name:     "a named descendant without its ending ancestor does not end",
+			restated: []string{"done/c"},
+			refused:  "prune would not end done/c",
+		},
 		{
 			name:     "all also ends a taken job nobody touched, and the root above it",
 			all:      true,
-			restated: []string{"done/c"},
-			want: append(slices.Clone(defaults[:4]),
-				Ending{ID: "idle", Reason: taken},
-				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
-				Ending{ID: "old-plan/w", Reason: taken},
+			restated: []string{"idle", "old-plan", "done", "done/c"},
+			want: []Ending{
+				{ID: "idle", Reason: taken},
+				{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
+				{ID: "old-plan/w", Reason: taken},
 				defaults[4], defaults[5],
-			),
+			},
 		},
 	}
 	for _, tt := range tests {

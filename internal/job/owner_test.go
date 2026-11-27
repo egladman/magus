@@ -386,7 +386,7 @@ func TestNoteEndedFilesOneRowPerEnding(t *testing.T) {
 
 // A rejecting wait sends an exited row back to rework, holding its write paths again under
 // the rule a claim meets; a path another job took meanwhile refuses the re-claim, naming
-// that job, and the row stays exited holding nothing.
+// that job, and the row ends as fail with its rejection recorded, so nothing waits on it.
 func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	t.Parallel()
 
@@ -403,12 +403,13 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 		require.NoError(t, err)
 		return loc
 	}
-	state := func(t *testing.T, loc Location) job.State {
+	stored := func(t *testing.T, loc Location) job.Job {
 		t.Helper()
 		rows, err := NewStore(loc).List(t.Context())
 		require.NoError(t, err)
-		return rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == result.Job })].State
+		return rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == result.Job })]
 	}
+	state := func(t *testing.T, loc Location) job.State { return stored(t, loc).State }
 
 	loc := exited(t)
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
@@ -422,6 +423,9 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
 	require.NoError(t, err)
 	require.False(t, status.Verified)
-	assert.Equal(t, job.StateExited, state(t, loc))
+	ended := stored(t, loc)
+	assert.Equal(t, job.StateFail, ended.State)
+	assert.NotNil(t, ended.Rejection, "the rejection stays on the row")
+	assert.Contains(t, strings.Join(status.Notes, "\n"), "ends as fail with its rejection recorded")
 	assert.Contains(t, strings.Join(status.Notes, "\n"), "cmd/magus/ledger.go is held by live job taker")
 }
