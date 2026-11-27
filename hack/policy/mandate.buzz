@@ -635,7 +635,8 @@ export object Try {
     started: int,
     // stale is jobs.stale_after's verdict on the row, as the store reports it.
     stale: bool = false,
-    // orphaned is a try still open on a row that already ended; no command closes it.
+    // orphaned is a try still open on a row that ended or is gone. The store closes a
+    // try as its row ends, so this one started later or an older store left it open.
     orphaned: bool = false,
 }
 
