@@ -132,13 +132,13 @@ func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string
 		return ""
 	}
 	if !unheld {
-		return why + ", and " + takeover
+		return fmt.Sprintf("%s, and %s", why, takeover)
 	}
 	refused := unheldRefusal(ctx, own, session, buildinfo.Self())
 	if refused == "" {
 		return ""
 	}
-	return why + ", and " + refused
+	return fmt.Sprintf("%s, and %s", why, refused)
 }
 
 // unheldRefusal says why own may not judge in place of self, "" when it may. No

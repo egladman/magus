@@ -1247,7 +1247,7 @@ func (gitVCS) CheckoutState(ctx context.Context, dir string) (types.CheckoutStat
 		if !ok || remote == "" || !isBranch {
 			continue
 		}
-		if name := remote + "/" + branch; !slices.Contains(state.RemoteBranches, name) {
+		if name := fmt.Sprintf("%s/%s", remote, branch); !slices.Contains(state.RemoteBranches, name) {
 			state.RemoteBranches = append(state.RemoteBranches, name)
 		}
 	}
