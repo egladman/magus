@@ -488,6 +488,11 @@ type Job struct {
 	// Landed says a landing probe ended the job because its work reads the same
 	// on the base or in an integration. EndReason says where, for a person.
 	Landed bool `json:"landed" yaml:"landed,omitempty"`
+	// Head is the commit the job's checkout stood at when its holder exited,
+	// and HeadUnread why none was read. Store-computed: a branch name can be
+	// deleted, so where the work stands is read from this commit.
+	Head       string `json:"head,omitempty"        yaml:"head,omitempty"`
+	HeadUnread string `json:"head_unread,omitempty" yaml:"head_unread,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
 	// budget.Claim. In (0,1]; zero reads as DefaultWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`

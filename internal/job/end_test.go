@@ -480,6 +480,50 @@ func (s *exitCommittedSuite) TestCommittedEditIsAccepted() {
 	s.NotEqual(job.StateRunning, exited.State)
 }
 
+// A deleted branch must not take the work out of every count, so the row
+// keeps the commit itself.
+func (s *exitCommittedSuite) TestAnExitRecordsTheCheckoutsHead() {
+	s.repo.Commit("edit", map[string]string{"internal/ledger/a.go": "package ledger // edited\n"})
+	s.take()
+
+	exited, err := s.exit()
+
+	s.Require().NoError(err)
+	s.Equal(s.repo.Head(), exited.Head)
+	s.Equal(s.repo.Head(), storedRows(s.T(), NewStore(s.loc))[s.row.ID].Head)
+}
+
+func (s *exitCommittedSuite) TestAnAbandonmentRecordsTheCheckoutsHead() {
+	s.take()
+
+	ended, err := Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, nil, nil)
+
+	s.Require().NoError(err)
+	s.Equal(job.StateNoReturn, ended.State)
+	s.Equal(s.repo.Head(), ended.Head)
+	s.Empty(ended.HeadUnread)
+}
+
+func (s *exitCommittedSuite) TestAnAbandonmentInAGoneCheckoutSaysWhyItHasNoHead() {
+	s.take()
+	s.Require().NoError(os.RemoveAll(s.repo.Root()))
+
+	ended, err := Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, nil, nil)
+
+	s.Require().NoError(err)
+	s.Empty(ended.Head)
+	s.Contains(ended.HeadUnread, "does not read")
+}
+
+// take records a holder on the row, as `magus job exec` does.
+func (s *exitCommittedSuite) take() {
+	s.Require().NoError(NewStore(s.loc).Rewrite(s.T().Context(), func(f *job.Rows) error {
+		i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == s.row.ID })
+		f.Jobs[i].Registered, f.Jobs[i].CheckoutRoot = 1, s.repo.Root()
+		return nil
+	}))
+}
+
 func TestExitAndWaitForDiscardedPrototype(t *testing.T) {
 	t.Parallel()
 	const file = "internal/ledger/a.go"
