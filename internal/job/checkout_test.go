@@ -804,7 +804,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 	require.NoError(t, err)
 
 	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{})
-	assert.Equal(t, []string{"mine-a (job mine-a, 1 commit(s))", "mine-b (job mine-b, 1 commit(s))"}, facts.FinishedBranches,
+	assert.Equal(t, []job.FinishedBranch{{Branch: "mine-a", Job: "mine-a", Commits: 1}, {Branch: "mine-b", Job: "mine-b", Commits: 1}}, facts.FinishedBranches,
 		"the peer's branch is not this tree's")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["mine-a","mine-b"]`)
 	assert.Contains(t, facts.TestUnknown, "no passed full test", "no run on record says so rather than reading as zero")
@@ -814,7 +814,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 
 	peerRows, err := peer.List(t.Context())
 	require.NoError(t, err)
-	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}).FinishedBranches, "mine-a (job mine-a, 1 commit(s))",
+	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}).FinishedBranches, job.FinishedBranch{Branch: "mine-a", Job: "mine-a", Commits: 1},
 		"another tree's backlog is not the peer's")
 }
 
@@ -864,7 +864,7 @@ func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	assert.Contains(t, got[0].Unread, "git merge-base: bad object", "the unread state names the failed read")
 
 	facts := withBranches(job.ForkFacts{}, append(got, Unintegrated{Job: "done", Branch: "done", Commits: 2}))
-	assert.Equal(t, []string{"done (job done, 2 commit(s))"}, facts.FinishedBranches, "an unread branch is not unmerged")
+	assert.Equal(t, []job.FinishedBranch{{Branch: "done", Job: "done", Commits: 2}}, facts.FinishedBranches, "an unread branch is not unmerged")
 	assert.Contains(t, facts.BranchesUnknown, "1 finished branch(es) unread: pending (job pending)")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["done"]`)
 	line := ForkFactsLine(facts)

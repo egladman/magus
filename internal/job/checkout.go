@@ -1169,7 +1169,7 @@ func withBranches(facts job.ForkFacts, waiting []Unintegrated) job.ForkFacts {
 			continue
 		}
 		branches = append(branches, w.Branch)
-		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
+		facts.FinishedBranches = append(facts.FinishedBranches, job.FinishedBranch{Branch: w.Branch, Job: w.Job, Commits: w.Commits})
 	}
 	if len(unread) > 0 {
 		facts.BranchesUnknown = fmt.Sprintf("%d finished branch(es) unread: %s", len(unread), strings.Join(unread, "; "))
@@ -1218,7 +1218,11 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 func ForkFactsLine(facts job.ForkFacts) string {
 	branches := "0 finished branches off the base"
 	if len(facts.FinishedBranches) > 0 {
-		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+		named := make([]string, 0, len(facts.FinishedBranches))
+		for _, b := range facts.FinishedBranches {
+			named = append(named, b.String())
+		}
+		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(named, ", "))
 	}
 	if facts.BranchesUnknown != "" {
 		branches += "; finished branches off the base unknown: " + facts.BranchesUnknown

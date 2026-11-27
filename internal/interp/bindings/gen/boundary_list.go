@@ -186,6 +186,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "Finding", Zero: types.Finding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFinding(v.(types.Finding)) }},
+	{Name: "FinishedBranch", Zero: job.FinishedBranch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobFinishedBranch(v.(job.FinishedBranch)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), enums) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
