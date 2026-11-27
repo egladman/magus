@@ -2600,3 +2600,126 @@ func TestCheck_MatchImportedEnumFieldOfUnwrappedOptional(t *testing.T) {
 	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nobject Run { error: px\\Err? }\n\nfun say(ran: Run) > str {\n    final failed: px\\Err? = ran.error;\n    if (failed -> e) {\n        return match (e.kind) {\n            px\\Kind.exited -> \"exited\",\n            px\\Kind.signaled -> \"signaled\",\n        };\n    }\n    return \"none\";\n}\n"))
 	assert.Empty(t, sess.Diagnostics("import \"px\";\n\nfun say(failed: px\\Err?) > str {\n    if (failed -> e) {\n        return match (e.kind) {\n            px\\Kind.exited -> \"exited\",\n            px\\Kind.signaled -> \"signaled\",\n        };\n    }\n    return \"none\";\n}\n"))
 }
+
+// upstreamRefusalsSuite holds programs upstream Buzz refuses at compile time.
+// Each test names the code upstream reports.
+type upstreamRefusalsSuite struct{ suite.Suite }
+
+func TestUpstreamRefusals(t *testing.T) { suite.Run(t, new(upstreamRefusalsSuite)) }
+
+func (s *upstreamRefusalsSuite) refused(src, substr string) {
+	s.T().Helper()
+	errs := checkStrict(s.T(), src)
+	for _, e := range errs {
+		if strings.Contains(e.Msg, substr) {
+			return
+		}
+	}
+	s.Failf("not refused", "want an error containing %q, got:\n%s", substr, fmtErrors(errs))
+}
+
+// Upstream E28 "Optional doesn't have field access", at the `.code` of `failure.exit.code`.
+func (s *upstreamRefusalsSuite) TestFieldReadThroughAnOptionalField() {
+	s.refused(`import "buzz:std";
+
+object Exit { code: int = 0 }
+object Failure { exit: Exit? = null }
+
+fun main() > void {
+    final failed: Failure? = Failure{};
+    if (failed -> failure) {
+        std\print("exited {failure.exit.code}");
+    }
+}
+`, "optional")
+}
+
+// Upstream E42 "Bad list type: got type `Captures`, expected `Runs`", at the second element.
+func (s *upstreamRefusalsSuite) TestListOfTwoObjectTypes() {
+	s.refused(`import "buzz:std";
+
+object Runs { n: int = 0 }
+object Captures { n: int = 0 }
+
+fun main() > void {
+    final mixed = [ Runs{}, Captures{} ];
+    std\print("{mixed.len()}");
+}
+`, "Captures")
+}
+
+// Upstream E55 "A member with that name already exists.", at the method `code`.
+func (s *upstreamRefusalsSuite) TestMethodNamedLikeAField() {
+	s.refused(`import "buzz:std";
+
+object Error {
+    code: str = "",
+
+    fun code() > str => this.code;
+}
+
+fun main() > void {
+    std\print(Error{}.code());
+}
+`, "already")
+}
+
+// Upstream E66 "Return value: got type `Result::<int, OpError>`, expected `Result::<int, Failure>`".
+func (s *upstreamRefusalsSuite) TestReturnAResultOfTheConcreteErrorAsOneOfTheProtocol() {
+	s.refused(upstreamProtocolResult+`
+fun target() > Result::<int, Failure> {
+    return verb();
+}
+
+fun main() > void {
+    std\print("{target().error != null}");
+}
+`, "Failure")
+}
+
+// Upstream E4 "Wrong variable type: got type `Result::<int, OpError>`, expected `Result::<int, Failure>`".
+func (s *upstreamRefusalsSuite) TestBindAResultOfTheConcreteErrorToOneOfTheProtocol() {
+	s.refused(upstreamProtocolResult+`
+fun main() > void {
+    final wide: Result::<int, Failure> = verb();
+    std\print("{wide.error != null}");
+}
+`, "Failure")
+}
+
+// Upstream E28 "`generic type #18-1` is not field accessible", at the `.plain` of `f.plain()`.
+func (s *upstreamRefusalsSuite) TestMethodCallOnAnUnboundGeneric() {
+	s.refused(`import "buzz:std";
+
+protocol Failure { fun plain() > Error; }
+object<Failure> Error { message: str = "", fun plain() > Error => this; }
+
+object Result::<T, E> { value: T? = null, error: E? = null }
+
+fun message::<T, E>(r: Result::<T, E>) > str {
+    final failed: E? = r.error;
+    if (failed -> f) {
+        return f.plain().message;
+    }
+    return "";
+}
+
+fun main() > void {
+    std\print(message::<int, Error>(Result::<int, Error>{ error = Error{ message = "m" } }));
+}
+`, "generic type")
+}
+
+const upstreamProtocolResult = `import "buzz:std";
+
+protocol Failure { fun plain() > Error; }
+object<Failure> Error { message: str = "", fun plain() > Error => this; }
+object<Failure> OpError { error: Error, fun plain() > Error => this.error; }
+
+object Result::<T, E> { value: T? = null, error: E? = null }
+fun err::<T, E>(error: E) > Result::<T, E> { return Result::<T, E>{ error = error }; }
+
+fun verb() > Result::<int, OpError> {
+    return err::<int, OpError>(OpError{ error = Error{ message = "exited 1" } });
+}
+`

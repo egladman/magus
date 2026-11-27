@@ -1019,7 +1019,7 @@ test "a mandate file's last line wins and a line that is no mandate is skipped" 
     final m = lastMandate(text);
     std\assert(m != null and m!.action == "revoke" and m!.at == 5, message: "the revoke line wins");
     std\assert(lastMandate("") == null, message: "no mandate");
-    std\assert(lastMandate("\{\"action\":\"issue\",\"at\":1,\"ends\":9,\"rows\":[\"a\",\"b\"]\}").rows.len() == 2, message: "rows decode");
+    std\assert(lastMandate("\{\"action\":\"issue\",\"at\":1,\"ends\":9,\"rows\":[\"a\",\"b\"]\}")!.rows.len() == 2, message: "rows decode");
 }
 
 test "a mandate is in force from its issue until its end time, and a revoke line ends it" {

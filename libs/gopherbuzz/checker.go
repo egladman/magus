@@ -111,6 +111,8 @@ type checker struct {
 	retOptional bool
 	// optExprs names expressions that read a declared optional.
 	optExprs map[ast.Node]string
+	// genericParams holds the type parameters of the function being checked.
+	genericParams map[string]bool
 	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !>; a call to a raising function is legal there without a surrounding
@@ -1483,6 +1485,15 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		c.yieldTyp = nil
 	}
 	c.raiseDeclared = fd.ErrAnnot != ""
+	savedGenerics := c.genericParams
+	c.genericParams = nil
+	if len(fd.TypeParams) > 0 {
+		c.genericParams = make(map[string]bool, len(fd.TypeParams))
+		for _, name := range fd.TypeParams {
+			c.genericParams[name] = true
+		}
+	}
+	defer func() { c.genericParams = savedGenerics }()
 	c.pushScope()
 	savedFnBase := c.fnScopeBase
 	c.fnScopeBase = len(c.scopes) - 1
@@ -1529,6 +1540,24 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.raiseDeclared = savedRaise
 }
 
+// checkDuplicateMembers reports a field, static or method that reuses the name of
+// an earlier member, which upstream refuses as E55.
+func (c *checker) checkDuplicateMembers(v *ast.ObjectDecl) {
+	seen := map[string]bool{}
+	for _, f := range slices.Concat(v.Fields, v.StaticFields) {
+		if seen[f.Name] {
+			c.errorf(v.Pos, "a member with that name already exists: %q", f.Name)
+		}
+		seen[f.Name] = true
+	}
+	for _, m := range v.Methods {
+		if seen[m.Name] {
+			c.errorf(m.Pos, "a member with that name already exists: %q", m.Name)
+		}
+		seen[m.Name] = true
+	}
+}
+
 func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 	if v.IsProtocol {
 		// Nothing to check inside a protocol: its members are signatures, already
@@ -1536,6 +1565,7 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		// method declarations would look for bodies that by definition do not exist.
 		return
 	}
+	c.checkDuplicateMembers(v)
 	ot, _ := c.types[v.Name].(*types.ObjectType)
 	if ot == nil {
 		ot = c.ownBaseObject(v.Name)
@@ -2731,6 +2761,12 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	// at buildObjectType time) may be resolvable here. An unresolvable NamedType
 	// (e.g. Boxed from a synthetic Go module) returns Unknown rather than Any so
 	// chained member access on synthetic-module values doesn't fire E28.
+	if nt, ok := ot.(*types.NamedType); ok && c.genericParams[nt.Name] && len(nt.Args) == 0 {
+		if _, declared := c.namedType(nt.Name); !declared {
+			c.errorf(v.Pos, "`generic type %s` is not field accessible: a type parameter has no bound", nt.Name)
+			return types.Unknown
+		}
+	}
 	if nt, ok := ot.(*types.NamedType); ok {
 		ot = c.resolveType(nt)
 		if _, unresolved := ot.(*types.NamedType); unresolved {
@@ -2742,6 +2778,11 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 	if ot == types.Any {
 		c.errorf(v.Pos, "`any` is not field accessible")
 		return types.Any
+	}
+	// E28: upstream refuses a field read through an optional unless `?.` or `!` is used.
+	if what, ok := c.optExprs[v.Object]; ok && !v.OptionalRecv {
+		c.errorf(v.Pos, "optional doesn't have field access: %s may be null; unwrap it with `!`, `??` or `if (%s -> name)`, or read through `?.`", what, what)
+		return types.Unknown
 	}
 	// The bare `t.0` shorthand is defined only on tuples. A named object or an
 	// anonymous one with a field literally called `@"0"` has to be spelled that way;
@@ -3113,7 +3154,7 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 		got := c.infer(item)
 		first, firstOK := elemTyp.(*types.ObjectType)
 		next, nextOK := got.(*types.ObjectType)
-		if firstOK && nextOK && first.Name == next.Name && len(first.Args) > 0 && !c.compat(got, elemTyp) {
+		if firstOK && nextOK && !first.IsNamespace && !next.IsNamespace && !c.compat(got, elemTyp) {
 			c.errorfc(ast.NodePos(item), TypeMismatch, "bad list type: got %s, expected %s", got.TypeName(), elemTyp.TypeName())
 		}
 	}
@@ -3244,7 +3285,8 @@ func (c *checker) compat(got, want types.Type) bool {
 }
 
 // argsCompat compares type arguments pairwise as types.Compat does, skipping an
-// unresolved name, which is an erased generic parameter.
+// unresolved name, which is an erased generic parameter. Arguments are invariant: a
+// Result over a concrete error does not stand where one over its protocol does.
 func (c *checker) argsCompat(got, want []types.Type) bool {
 	if len(got) == 0 || len(want) == 0 {
 		return true
@@ -3255,7 +3297,7 @@ func (c *checker) argsCompat(got, want []types.Type) bool {
 	for i := range got {
 		_, gErased := got[i].(*types.NamedType)
 		_, wErased := want[i].(*types.NamedType)
-		if !gErased && !wErased && !c.compat(got[i], want[i]) {
+		if !gErased && !wErased && !(c.compat(got[i], want[i]) && c.compat(want[i], got[i])) {
 			return false
 		}
 	}
