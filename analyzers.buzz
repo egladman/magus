@@ -4,10 +4,12 @@
 //
 //	magus buzz analyzers.buzz -- [--only <name>] [<path>...]
 import "os";
+import "magus";
 import "magus/lint";
 import "libs/analyzer/analyzer" as analyzer;
 import "libs/analyzer/adapter" as adapter;
 import "libs/analyzer/runner" as runner;
+import "libs/analyzer/stubs-never-reach-main" as stubs;
 import "hack/lint/run" as lintrun;
 import "hack/lint/banned-words" as bannedwords;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
@@ -33,6 +35,8 @@ import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
 import "hack/lint/lint-findings-carry-a-message-and-a-fix" as findingshape;
 import "hack/lint/local-skills-reach-every-host" as localskills;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
+import "hack/lint/library-imports-stay-inside" as libraryimports;
+import "hack/lint/core-reads-no-analyzer-policy" as corepolicy;
 import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
@@ -132,6 +136,8 @@ fun rules() > [analyzer\Analyzer] {
         rule("lint-findings-carry-a-message-and-a-fix", tier: MECHANICAL, reads: findingshape\reads(), check: findingshape\check),
         rule("measured-claims-cite-their-run", tier: MECHANICAL, reads: measuredclaims\reads(), check: measuredclaims\check),
         rule("file-name-words-tell-siblings-apart", tier: MECHANICAL, reads: filesiblings\reads(), check: filesiblings\check),
+        rule("library-imports-stay-inside", tier: MECHANICAL, reads: libraryimports\reads(), check: libraryimports\check),
+        rule("core-reads-no-analyzer-policy", tier: MECHANICAL, reads: corepolicy\reads(), check: corepolicy\check),
         // TODO: list touched-functions-keep-change-risk-under-10 once main's CI
         // has published its base coverage profile (ADR 0023, State).
     ];
@@ -151,21 +157,22 @@ fun footprint(globs: [str]) > analyzer\Analyzer {
         });
 }
 
-// plan is every analyzer this repository runs: the rules, then the footprint over their
-// reads.
-fun plan() > analyzer\Plan {
+// plan is every analyzer this repository runs: the library's, the rules, then the
+// footprint over their reads.
+fun plan(spells: [magus\Spell]) > analyzer\Plan {
     final own = rules();
+    final use = [stubs\stubs(spells)];
     final globs = mut [<str>];
-    foreach (a in own) {
+    foreach (a in use + own) {
         foreach (glob in a.files) {
             globs.append(glob);
         }
     }
-    return analyzer\Plan{ own = own + [footprint(globs)], walk = WALK };
+    return analyzer\Plan{ use = use, own = own + [footprint(globs)], walk = WALK };
 }
 
 fun main(args: [str]) > void !> any {
-    final code = runner\lint(args, plan: plan());
+    final code = runner\lint(args, plan: plan(magus\describe.spell()));
     if (code.error -> e) {
         throw e.message;
     }
