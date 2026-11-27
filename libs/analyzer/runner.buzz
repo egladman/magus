@@ -21,9 +21,9 @@ import "result";
 import "std";
 import "time";
 import "vcs";
-import "libs/analyzer/analyzer" as analyzer;
-import "libs/analyzer/finding" as finding;
-import "libs/analyzer/policy" as policy;
+import "analyzer" as analyzer;
+import "finding" as finding;
+import "policy" as policy;
 
 // ENTRY is the workspace file that declares the plan, where a finding about the plan
 // itself sits.
