@@ -537,6 +537,8 @@ type ApplyEntry struct {
 	UnrunGates []UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
 	// ClaimNotes is ForkOutput's, for every applied row.
 	ClaimNotes []string `json:"claim_notes,omitempty" yaml:"claim_notes,omitempty"`
+	// SetAside is [Applied.SetAside].
+	SetAside string `json:"set_aside,omitempty" yaml:"set_aside,omitempty"`
 }
 
 // PrintApply prints each row's change, then the claim notes for it.
@@ -564,6 +566,9 @@ func PrintApply(out io.Writer, applied []Applied, claims map[string][]string, dr
 			}
 			for _, line := range a.ChangeLines() {
 				fmt.Fprintf(out, "  %s\n", line)
+			}
+			if note := a.SetAside(); note != "" {
+				fmt.Fprintf(out, "note: %s\n", note)
 			}
 		}
 		PrintClaimNotes(out, claims[a.Next.ID])
