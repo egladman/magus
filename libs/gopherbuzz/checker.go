@@ -1912,9 +1912,19 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// resolve the same way (`final l: Locale? = match (n) { 1 -> .fr, ... }`).
 		subjTyp := c.infer(v.Subject)
 		want := c.wantType()
+		// Optionals are erased in subjTyp; upstream refuses bare cases over one (E90).
+		var optSubject string
+		if _, isEnum := subjTyp.(*types.EnumType); isEnum {
+			optSubject, _ = c.possiblyNullName(v.Subject)
+		}
 		var result types.Type
+		bareReported := false
 		for _, br := range v.Branches {
 			for _, cond := range br.Conds {
+				if bare, isBare := cond.(*ast.EnumCaseExpr); isBare && optSubject != "" && !bareReported {
+					bareReported = true
+					c.errorf(bare.Pos, "cannot infer which enum .%s belongs to here: %s is optional; unwrap it first or name the case (Enum.%s)", bare.Name, optSubject, bare.Name)
+				}
 				c.inferExpected(cond, subjTyp)
 			}
 			// A `-> { ... }` body is a block of STATEMENTS, not an expression: check it in
@@ -1936,7 +1946,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// Arm analysis runs AFTER the loop above: a bare enum case (`.one`) only
 		// knows which enum it belongs to once inferExpected has resolved it against
 		// the subject, and coverage cannot be computed before that.
-		c.checkMatchArms(v, subjTyp)
+		c.checkMatchArms(v, subjTyp, optSubject)
 		if result == nil {
 			return types.Unknown
 		}
@@ -2750,6 +2760,15 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 			if t.OptionalFields[v.Name] {
 				c.markOptional(v, c.exprText(v))
 			}
+			// A field typed by a later declaration is still a NamedType here. A match
+			// subject needs the enum itself for bare cases and coverage.
+			if nt, ok := ft.(*types.NamedType); ok {
+				if rt := c.resolveType(nt); rt != nil {
+					if _, unresolved := rt.(*types.NamedType); !unresolved {
+						return rt
+					}
+				}
+			}
 			return ft
 		}
 		if mt, ok := t.Methods[v.Name]; ok {
@@ -3425,6 +3444,16 @@ func (c *checker) reduceMatchCond(n ast.Node) matchCondShape {
 				return matchCondShape{kind: matchCondEnumCase, text: e.Name, pos: pos}
 			}
 		}
+		// `mod\Kind.two`: the same case reached through the module that exports it.
+		if q, isQual := e.Object.(*ast.MemberExpr); isQual && q.Namespaced {
+			if id, isID := q.Object.(*ast.IdentExpr); isID {
+				if ns := c.namespaceType(id.Name); ns != nil {
+					if _, isEnum := ns.Fields[q.Name].(*types.EnumType); isEnum {
+						return matchCondShape{kind: matchCondEnumCase, text: e.Name, pos: pos}
+					}
+				}
+			}
+		}
 	case *ast.RangeExpr:
 		lo, lok := foldConstNumber(e.Lo)
 		hi, rok := foldConstNumber(e.Hi)
@@ -3442,7 +3471,7 @@ func (c *checker) reduceMatchCond(n ast.Node) matchCondShape {
 }
 
 // checkMatchArms reports unreachable, ill-typed and non-exhaustive arms.
-func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type) {
+func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type, optSubject string) {
 	hasElse := false
 	covered := map[string]bool{}
 	var seen []matchCondShape
@@ -3466,6 +3495,10 @@ func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type) {
 		}
 	}
 	if hasElse {
+		return
+	}
+	if optSubject != "" {
+		c.errorf(v.Pos, "non-exhaustive match: an `else` branch is required over %s, which is optional", optSubject)
 		return
 	}
 	if et := expectedEnum(subjTyp); et != nil {
