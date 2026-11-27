@@ -110,6 +110,16 @@ export fun lint(paths: [str]) > [str] {
     return found;
 }
 
+// lintAmong lints the fragments among paths that still exist. A scoped lint run applies
+// the rules pr-changelog does. Other paths are not its to judge.
+export fun lintAmong(paths: [str]) > [str] {
+    final present = mut [<str>];
+    foreach (path in fragments(paths)) {
+        if (fs\exists(path) catch false) { present.append(path); }
+    }
+    return lint(present);
+}
+
 // read parses every fragment in dir in file-name order, the order entries render in within
 // a group. A missing dir holds none and dotfiles are skipped. It throws every malformed
 // file at once, one per line, rather than the first.
@@ -563,6 +573,17 @@ test "lint names every malformed path and passes good ones" {
     std\assert(got[1].endsWith("x.txt: not a fragment; fragments are <name>.md files"), message: got[1]);
     std\assert(got[2].endsWith("gone.md: cannot be read"), message: got[2]);
     fs\removeAll(dir) catch void;
+}
+
+test "lint refuses an over-cap fragment, and lintAmong skips what is not a present fragment" {
+    final dir = fs\tempDir("fragments") catch "";
+    final path = fs\join(dir, name: "over.md");
+    fs\writeFile(path, content: "### Added\n\n- **Probe.** " + "word ".repeat(WORD_CAP) + "end.\n") catch void;
+    final got = lint([path]);
+    fs\removeAll(dir) catch void;
+    std\assert(got.len() == 1 and got[0].indexOf("the cap is {WORD_CAP}") != null, message: "{got}");
+    final skipped = lintAmong(["internal/cache/key.go", "changes/unreleased/gone-probe.md"]);
+    std\assert(skipped.len() == 0, message: "{skipped}");
 }
 
 test "read skips dotfiles, reports every bad file, and orders by name" {
