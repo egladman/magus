@@ -38,13 +38,27 @@ export fun refuseDirty(dirty: [str]) > result\Result::<bool> {
     return result\ok::<bool>(true);
 }
 
+// A declared output is regenerated, so a dirty one is not wiring to refuse.
+export fun authoredDirt(dirty: [str], roles: {str: str}) > [str] {
+    final kept = mut [<str>];
+    foreach (file in dirty) {
+        if ((roles[file] ?? "") != "output") { kept.append(file); }
+    }
+    return kept;
+}
+
 fun dirtyGuarded() > result\Result::<[str]> {
     try {
         final paths = mut [<str>];
         foreach (file in vcs\status(GUARDED).files) {
             paths.append(file.value);
         }
-        return result\ok::<[str]>(paths);
+        if (paths.len() == 0) { return result\ok::<[str]>(paths); }
+        final roles = mut {<str: str>};
+        foreach (f in magus\describe.file(paths).files) {
+            roles[f.path] = f.role;
+        }
+        return result\ok::<[str]>(authoredDirt(paths, roles: roles));
     } catch (err: any) {
         return result\caught::<[str]>(err, doing: "harness-sync: read the status of the guarded paths");
     }
@@ -240,6 +254,13 @@ test "an id selects one loaded harness" {
 
 test "an unknown id is refused" {
     assert\isTrue(pickHarnesses("missing", loaded: ["alpha"]).error != null, message: "unknown");
+}
+
+test "a dirty declared output is not wiring" {
+    final roles = mut {<str: str>};
+    roles["spells/harness/x/gen/opencode.wasm"] = "output";
+    roles["spells/harness/x/spell.buzz"] = "source";
+    assert\equal(authoredDirt(["spells/harness/x/gen/opencode.wasm", "spells/harness/x/spell.buzz"], roles: roles), want: ["spells/harness/x/spell.buzz"], message: "output dropped");
 }
 
 test "dirty committed wiring is refused" {
