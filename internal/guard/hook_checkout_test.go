@@ -392,23 +392,36 @@ func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
 	s.Equal(s.repo.Root(), hookCallDir(s.line()))
 }
 
-// A job that changes the contract leaves the session's binary unable to load its checkout.
-// The checkout's ./magus judges there when it embeds that checkout's contract.
-func (s *UnheldRefusalSuite) TestABinaryEmbeddingItsCheckoutsContractJudgesThere() {
+// claimingContract changes the checkout's contract and returns the version answer of a
+// build that says it embeds the new one.
+func (s *DelegateToCheckoutSuite) claimingContract() string {
 	root := s.repo.Root()
 	lock := filepath.Join(root, "internal/commands/testdata/api.lock")
 	s.Require().NoError(os.MkdirAll(filepath.Dir(lock), 0o755))
 	s.Require().NoError(os.WriteFile(lock, []byte("a contract this job changed\n"), 0o644))
 	tree, err := contract.Tree(root)
 	s.Require().NoError(err)
+	return fmt.Sprintf(`{"embedded":{"contract_sha256":%q}}`, tree)
+}
 
-	own := s.stampIn(root, fmt.Sprintf(`{"embedded":{"contract_sha256":%q}}`, tree))
-	s.Empty(contractRefusal(s.T().Context(), own))
+// A worker that changed the contract and relinked ./magus would be judged by its own build.
+func (s *DelegateToCheckoutSuite) TestARelinkClaimingTheCheckoutsContractIsJudgedHere() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	placeStub(s.T(), s.repo.Root(), s.claimingContract(), `{"decision":"defer"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "its bytes do not hash to what job pinned pins")
+}
 
-	own = s.stampIn(root, `{"embedded":{"contract_sha256":"d269b39fcedd"}}`)
-	s.Contains(contractRefusal(s.T().Context(), own), "it embeds contract d269b39fcedd")
-	own = s.stampIn(root, `{"decision":"defer"}`)
-	s.Contains(contractRefusal(s.T().Context(), own), "reported no contract")
+func (s *DelegateToCheckoutSuite) TestAnUnpinnedBuildClaimingTheCheckoutsContractIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.claimingContract(), `{"decision":"defer"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "no live job row records it as its checkout's binary")
 }
 
 // UnheldRefusalSuite pins which ./magus judges in a checkout no live row works in:
