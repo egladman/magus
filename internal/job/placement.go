@@ -151,6 +151,9 @@ func placeWith(ctx context.Context, driver types.VCSDriver, root string, work []
 	if waitErr != nil {
 		return nil, "", fmt.Errorf("the finished rows: %w", waitErr)
 	}
+	if err := recordPlacedMain(root, out); err != nil {
+		slog.WarnContext(ctx, "heads on a base not stored, so retention keeps their rows", attr.Component("magus"), attr.Error(err))
+	}
 	return out, joinNotes(note, changeNote), nil
 }
 

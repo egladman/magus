@@ -53,15 +53,55 @@ func TestRetireDropsWhatIsOverAndOld(t *testing.T) {
 		server,
 	}
 
-	kept, dropped := retire(rows, retainNow, 7*24*time.Hour)
+	kept, dropped := retire(rows, retainNow, 7*24*time.Hour, nil)
 
 	assert.Equal(t, []string{"recent", "idle", "dependency", "queued", "grandparent", "parent", "child", "server"}, ids(kept),
 		"a live row stays however old, and keeps every row its tree and queue name; server rows are the server's")
 	assert.Equal(t, 4, dropped)
 
-	kept, dropped = retire(rows, retainNow, 0)
+	kept, dropped = retire(rows, retainNow, 0, nil)
 	assert.Equal(t, ids(rows), ids(kept), "a zero window keeps every row")
 	assert.Zero(t, dropped)
+}
+
+// Retention must not forget work: a row whose head no base is known to hold
+// stays until it lands or a person sets it aside.
+func TestRetireKeepsARowWhoseHeadNoBaseHolds(t *testing.T) {
+	t.Parallel()
+	wrote := func(id string) job.Job {
+		r := aged(id, job.StateNoReturn, 30)
+		r.Registered, r.Head = 1, id+"-head"
+		return r
+	}
+	off := wrote("off")
+	headless := wrote("headless")
+	headless.Head = ""
+	landed := wrote("landed")
+	landed.Landed = true
+	aside := wrote("aside")
+	aside.LeftUnmerged = "a person dropped it"
+	merged := wrote("merged")
+	untaken := aged("untaken", job.StateNoReturn, 30)
+
+	kept, dropped := retire([]job.Job{off, headless, landed, aside, merged, untaken}, retainNow, 7*24*time.Hour,
+		map[placedMain]bool{{ID: "merged", Head: "merged-head"}: true})
+
+	assert.Equal(t, []string{"off", "headless"}, ids(kept))
+	assert.Equal(t, 4, dropped)
+}
+
+// A placement that finds a head on a base records it for the retention pass.
+func TestAPlacementOnABaseIsRecordedForRetention(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	require.NoError(t, recordPlacedMain(root, []Placed{
+		{Job: "merged", Head: "abc", Place: PlaceMain},
+		{Job: "waiting", Head: "def", Place: PlaceLocal},
+	}))
+	require.NoError(t, recordPlacedMain(root, []Placed{{Job: "merged", Head: "abc", Place: PlaceMain}}))
+
+	assert.Equal(t, map[placedMain]bool{{ID: "merged", Head: "abc"}: true}, readPlacedMain(root))
 }
 
 // A write runs the pass at most once per retainEvery, and the pass also removes the

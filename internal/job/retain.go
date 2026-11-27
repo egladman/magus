@@ -30,11 +30,17 @@ func over(row job.Job) bool {
 	return row.State.Terminal() || row.State == job.StateExited
 }
 
-// retire removes from rows every row that is [over] and untouched for window, and returns
-// what stays and how many went. A row another staying row names as its parent, an
-// ancestor or a dependency stays with it, so no tree loses its root and no queue the row
-// it waits on. A zero window keeps every row.
-func retire(rows []job.Job, now int64, window time.Duration) ([]job.Job, int) {
+// unplaced reports a row a holder wrote in whose head no base is known to
+// hold, and that no person set aside. The row is what remembers that work.
+func unplaced(row job.Job, onBase map[placedMain]bool) bool {
+	wrote := row.Registered != 0 && !row.ReadOnly && row.Delivery != job.DeliveryFindings
+	return wrote && !row.Landed && row.LeftUnmerged == "" && !onBase[placedMain{ID: row.ID, Head: row.Head}]
+}
+
+// retire removes every row [over], not [unplaced] and untouched for window,
+// and says how many went. A row a staying row names as its parent, an
+// ancestor or a dependency stays with it. A zero window keeps all.
+func retire(rows []job.Job, now int64, window time.Duration, onBase map[placedMain]bool) ([]job.Job, int) {
 	if window <= 0 {
 		return rows, 0
 	}
@@ -46,7 +52,7 @@ func retire(rows []job.Job, now int64, window time.Duration) ([]job.Job, int) {
 	kept := map[string]bool{}
 	var pending []string
 	for _, r := range rows {
-		if !over(r) || r.Updated > cutoff {
+		if !over(r) || unplaced(r, onBase) || r.Updated > cutoff {
 			kept[r.ID] = true
 			pending = append(pending, r.ID)
 		}
@@ -93,7 +99,7 @@ func (s *Store) retainDue(_ context.Context, f *job.Rows, now time.Time) error {
 		return err
 	}
 	f.Retained = now.Unix()
-	f.Jobs, _ = retire(f.Jobs, now.Unix(), window)
+	f.Jobs, _ = retire(f.Jobs, now.Unix(), window, readPlacedMain(s.root))
 	s.dropExpiredFiles(now, window)
 	s.pruneFootprints(f.Jobs)
 	return nil
