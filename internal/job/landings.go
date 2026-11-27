@@ -52,11 +52,12 @@ type probeLog struct {
 	partial bool
 }
 
-// landingCandidate reports a running or exited row in a checkout, the only
-// rows a landing can be judged for. The checkout's diff decides, so a row
-// whose holder filed no result still qualifies.
+// landingCandidate reports an exited row, or a running row no holder took,
+// in a checkout. A taken row is its holder's to end: a base holding its
+// committed paths says nothing of the work still to come.
 func landingCandidate(row job.Job) bool {
-	return (row.State == job.StateExited || row.State == job.StateRunning) && !row.ServerRun() && !row.ReadOnly && row.Delivery != job.DeliveryFindings &&
+	held := row.State == job.StateRunning && row.Registered != 0
+	return (row.State == job.StateExited || row.State == job.StateRunning) && !held && !row.ServerRun() && !row.ReadOnly && row.Delivery != job.DeliveryFindings &&
 		row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }

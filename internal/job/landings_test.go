@@ -214,7 +214,7 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	assert.Equal(t, job.StateExited, states(t, s)["job"].State)
 }
 
-func landedWithNoResult(t *testing.T, dirty, differs bool) job.Job {
+func landedWithNoResult(t *testing.T, dirty, differs bool, registered int64) job.Job {
 	t.Helper()
 	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n"})
 	seedRev := repo.Head()
@@ -234,21 +234,30 @@ func landedWithNoResult(t *testing.T, dirty, differs bool) job.Job {
 	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, job.Job{ID: "job", State: job.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-		Paths: job.Paths{Write: []string{"a.go"}}, Updated: 1})
+		Paths: job.Paths{Write: []string{"a.go"}}, Registered: registered, Updated: 1})
 	return states(t, s)["job"]
 }
 
 // A running row with no filed result ends once its committed diff is on base.
 func TestARunningRowWithNoResultEndsWhenItsCommittedWorkLanded(t *testing.T) {
-	got := landedWithNoResult(t, false, false)
+	got := landedWithNoResult(t, false, false, 0)
 
 	assert.Equal(t, job.StateNoReturn, got.State)
 	assert.True(t, got.Landed)
 	assert.Contains(t, got.EndReason, "its work landed on origin/main")
 }
 
+// main-green-proto was ended under its worker once part of its diff was on
+// the base.
+func TestARowAHolderTookIsNeverEndedByItsCommittedWorkLanding(t *testing.T) {
+	got := landedWithNoResult(t, false, false, 1)
+
+	assert.Equal(t, job.StateRunning, got.State)
+	assert.False(t, got.Landed)
+}
+
 func TestARunningRowWithNoResultAndUncommittedEditsKeepsItsLease(t *testing.T) {
-	got := landedWithNoResult(t, true, false)
+	got := landedWithNoResult(t, true, false, 0)
 
 	assert.Equal(t, job.StateRunning, got.State)
 	assert.False(t, got.Landed)
@@ -278,7 +287,7 @@ func TestARowEndsWhenTheBaseEditedItsLandedFileSince(t *testing.T) {
 }
 
 func TestARunningRowWithNoResultAndAPathDifferingAtTheBaseKeepsItsLease(t *testing.T) {
-	got := landedWithNoResult(t, false, true)
+	got := landedWithNoResult(t, false, true, 0)
 
 	assert.Equal(t, job.StateRunning, got.State)
 	assert.False(t, got.Landed)
