@@ -1711,6 +1711,112 @@ func decodeEditedFile(v vm.Value, path string) (types.EditedFile, error) {
 	return out, nil
 }
 
+// DecodeEncoding decodes a Buzz Encoding, an object instance or a map, into a spells.Encoding.
+func DecodeEncoding(v vm.Value) (spells.Encoding, error) {
+	return decodeEncoding(v, "encoding")
+}
+
+func decodeEncoding(v vm.Value, path string) (spells.Encoding, error) {
+	var out spells.Encoding
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Encoding", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "pattern":
+			sPattern, err := decodeString(item, path+".pattern")
+			if err != nil {
+				return out, err
+			}
+			out.Pattern = sPattern
+		case "reserved":
+			strsReserved, err := decodeStringList(item, path+".reserved")
+			if err != nil {
+				return out, err
+			}
+			out.Reserved = strsReserved
+		case "open":
+			sOpen, err := decodeString(item, path+".open")
+			if err != nil {
+				return out, err
+			}
+			out.Open = sOpen
+		case "close":
+			sClose, err := decodeString(item, path+".close")
+			if err != nil {
+				return out, err
+			}
+			out.Close = sClose
+		case "escapes":
+			listEscapes, err := decodeList(item, path+".escapes", "[Escape]")
+			if err != nil {
+				return out, err
+			}
+			if len(listEscapes) > 0 {
+				itemsEscapes := make([]spells.Escape, len(listEscapes))
+				for indexEscapes, itemEscapes := range listEscapes {
+					xEscapesItem, err := decodeEscape(itemEscapes, fmt.Sprintf("%s[%d]", path+".escapes", indexEscapes))
+					if err != nil {
+						return out, err
+					}
+					itemsEscapes[indexEscapes] = xEscapesItem
+				}
+				out.Escapes = itemsEscapes
+			}
+		case "control":
+			sControl, err := decodeString(item, path+".control")
+			if err != nil {
+				return out, err
+			}
+			out.Control = sControl
+		default:
+			return out, unknownMember(path, "Encoding", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeEscape decodes a Buzz Escape, an object instance or a map, into a spells.Escape.
+func DecodeEscape(v vm.Value) (spells.Escape, error) {
+	return decodeEscape(v, "escape")
+}
+
+func decodeEscape(v vm.Value, path string) (spells.Escape, error) {
+	var out spells.Escape
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Escape", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "text":
+			sText, err := decodeString(item, path+".text")
+			if err != nil {
+				return out, err
+			}
+			out.Text = sText
+		case "to":
+			sTo, err := decodeString(item, path+".to")
+			if err != nil {
+				return out, err
+			}
+			out.To = sTo
+		default:
+			return out, unknownMember(path, "Escape", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeExecOptions decodes a Buzz ExecOptions, an object instance or a map, into a types.ExecOptions.
 func DecodeExecOptions(v vm.Value) (types.ExecOptions, error) {
 	return decodeExecOptions(v, "execOptions")
@@ -8331,6 +8437,22 @@ func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
 				}
 				optDecisions = xDecisions
 				out.Decisions = &optDecisions
+			}
+		case "encodings":
+			listEncodings, err := decodeList(item, path+".encodings", "[Encoding]")
+			if err != nil {
+				return out, err
+			}
+			if len(listEncodings) > 0 {
+				itemsEncodings := make([]spells.Encoding, len(listEncodings))
+				for indexEncodings, itemEncodings := range listEncodings {
+					xEncodingsItem, err := decodeEncoding(itemEncodings, fmt.Sprintf("%s[%d]", path+".encodings", indexEncodings))
+					if err != nil {
+						return out, err
+					}
+					itemsEncodings[indexEncodings] = xEncodingsItem
+				}
+				out.Encodings = itemsEncodings
 			}
 		default:
 			return out, unknownMember(path, "Syntax", key)

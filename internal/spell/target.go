@@ -151,6 +151,16 @@ var stubSyntaxSource string
 //go:embed gen/types/decisionsyntax.buzz
 var decisionSyntaxSource string
 
+// These precede syntaxSource: Syntax carries Encoding, and Encoding carries Escape.
+//
+//go:generate go run ../../cmd/magus-utils types -type Escape -out gen/types/escape.buzz
+//go:embed gen/types/escape.buzz
+var escapeSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Encoding -out gen/types/encoding.buzz
+//go:embed gen/types/encoding.buzz
+var encodingSource string
+
 //go:generate go run ../../cmd/magus-utils types -type Syntax -out gen/types/syntax.buzz
 //go:embed gen/types/syntax.buzz
 var syntaxSource string
@@ -400,7 +410,7 @@ var CharmModuleSource string
 // op records have no cross-references so their position is free). Shared by the runtime
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
-var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, patchOpSource, charmTypeSource, hintSource, commandSource, installSource, manifestSource, serviceSource, symbolIndexerSource, coverageSource, versionKeySource, versionBoundsSource, toolSource, sandboxAllowSource, sandboxEnvSource, sandboxCacheSource, sandboxSource, commentBlockSource, quoteSource, commentSyntaxSource, stubSyntaxSource, decisionSyntaxSource, syntaxSource, languageSource, projectSource, secretSource, releaseCycleSource, lifecycleSource,
+var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, patchOpSource, charmTypeSource, hintSource, commandSource, installSource, manifestSource, serviceSource, symbolIndexerSource, coverageSource, versionKeySource, versionBoundsSource, toolSource, sandboxAllowSource, sandboxEnvSource, sandboxCacheSource, sandboxSource, commentBlockSource, quoteSource, commentSyntaxSource, stubSyntaxSource, decisionSyntaxSource, escapeSource, encodingSource, syntaxSource, languageSource, projectSource, secretSource, releaseCycleSource, lifecycleSource,
 	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,

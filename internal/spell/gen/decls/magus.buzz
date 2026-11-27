@@ -2613,11 +2613,27 @@ export object DecisionSyntax {
     operators: [str] = [],
 }
 
+export object Escape {
+    text: str = "",
+    to: str = "",
+}
+
+export object Encoding {
+    name: str = "",
+    pattern: str = "",
+    reserved: [str] = [],
+    open: str = "",
+    close: str = "",
+    escapes: [Escape] = [],
+    control: str = "",
+}
+
 export object Syntax {
     comments: CommentSyntax? = null,
     stubs: StubSyntax? = null,
     operators: [str] = [],
     decisions: DecisionSyntax? = null,
+    encodings: [Encoding] = [],
 }
 
 export object SpellVersion {
