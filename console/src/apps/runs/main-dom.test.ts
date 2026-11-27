@@ -378,6 +378,22 @@ test("a row names its outcome in words and marks the current run for assistive t
   assert.ok(row.querySelector(".pf-v6-c-icon"), "and it has a shape");
 });
 
+test("each target links into the graph's blast view on its node", async () => {
+  serve(
+    [output({ ref: "o1", target: "build" }), output({ ref: "o2", project: ".", target: "test" })],
+    [runLog()],
+  );
+  const host = await mount();
+
+  const hrefs = [...host.querySelectorAll<HTMLAnchorElement>(".console-runs__graph")]
+    .map((a) => a.getAttribute("href"))
+    .sort();
+  assert.deepEqual(hrefs, [
+    "graph/#view=blast&node=target%3A.%3Atest",
+    "graph/#view=blast&node=target%3Aconsole%3Abuild",
+  ]);
+});
+
 // Every target in a run says "Open output"; a reader that lists links needs to know which.
 test("each Open output link names its target", async () => {
   serve(
