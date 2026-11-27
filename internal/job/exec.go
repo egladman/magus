@@ -109,7 +109,7 @@ func (s *Store) Exec(ctx context.Context, id string, opts ...ExecOption) (job.Jo
 		}
 		cur.ReportedBase = base
 		judged := base
-		if rev := checkpointRevision(cur.Checkpoint); rev != "" && rev == facts.ownFrom {
+		if rev := checkpointRevision(cur.Checkpoint); rev != "" && rev == facts.ownBase {
 			judged = onRevision(base, rev)
 		}
 		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(judged, full))
@@ -127,9 +127,9 @@ type execFacts struct {
 	base  string
 	moved *job.Worktree
 	full  map[string]string
-	// ownFrom is row's checkpoint revision when this checkout is row's own and
+	// ownBase is row's checkpoint revision when this checkout is row's own and
 	// its head descends from it, "" otherwise.
-	ownFrom string
+	ownBase string
 }
 
 // readExecFacts reads them for row, the zero row when nothing declared id.
@@ -143,14 +143,14 @@ func (s *Store) readExecFacts(ctx context.Context, id string, row job.Job) (exec
 		base:    base,
 		moved:   s.untakenElsewhere(ctx, row),
 		full:    s.fullRevisions(ctx, row.Checkpoint, base),
-		ownFrom: s.ownCommitsFrom(ctx, row, base),
+		ownBase: s.ownCommitsBase(ctx, row, base),
 	}, nil
 }
 
-// ownCommitsFrom is row's checkpoint revision when this is row's own
+// ownCommitsBase is row's checkpoint revision when this is row's own
 // checkout and base descends from it. The commits between are the job's
 // work, kept across a re-fork. They are no base its holder strayed to.
-func (s *Store) ownCommitsFrom(ctx context.Context, row job.Job, base string) string {
+func (s *Store) ownCommitsBase(ctx context.Context, row job.Job, base string) string {
 	checkpoint, head := checkpointRevision(row.Checkpoint), checkpointRevision(base)
 	if s.root == "" || checkpoint == "" || head == "" || SameRevision(checkpoint, head) || !row.Worktree.Standing() {
 		return ""
@@ -173,7 +173,7 @@ func (s *Store) ownCommitsFrom(ctx context.Context, row job.Job, base string) st
 // dirty-tree digest kept.
 func onRevision(token, revision string) string {
 	if _, digest := types.ParseCheckpointToken(token); digest != "" {
-		return revision + "+" + digest
+		return fmt.Sprintf("%s+%s", revision, digest)
 	}
 	return revision
 }

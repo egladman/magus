@@ -527,13 +527,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 		}
 	}
 
-	// A read-only row's filed result is its grade (see [gradedByHolder]), so
-	// the wait that collects it reads the risks it names and passes it.
-	if row.Check.IsZero() && len(row.Postconditions) == 0 && !row.Integrating() && !gradedByHolder(row) {
-		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no postcondition, so nothing magus can grade says it is done."+
-			" Declare one in the job record's check or postconditions; a fact no target checks can be shown by a script run with"+
-			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
-	}
+	v.Violations = append(v.Violations, ungradable(row)...)
 
 	// ONE list, from EffectivePostconditions, so the primary check is graded by the same loop as
 	// every other postcondition and lands in Gates like one. Grading it separately meant a job
@@ -629,7 +623,6 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 	}
 
 	statusByGate := map[string]job.VerificationStatus{}
-	var checked []string
 	for _, gate := range gates {
 		if cause, unrun := unrunByGate[gate.ID]; unrun && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
 			statusByGate[gate.ID] = job.VerificationStatus{ID: gate.ID, Violations: []string{
@@ -645,9 +638,6 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 			continue
 		}
 		check := checkOf[gate.ID]
-		if gate.Kind == job.PostconditionKindCheck {
-			checked = append(checked, gate.ID)
-		}
 		statusByGate[gate.ID] = verifyCheckedGate(row, gate, check, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 		if gate.Kind == job.PostconditionKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(check) &&
 			scopedRun(check, attemptByGate[gate.ID], seen.TestSelection) {
@@ -661,7 +651,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
 		}
 	}
-	v.Notes = append(v.Notes, regradeReadElsewhere(row, gates, checked, checkOf, evidenceByGate, attemptByGate, seen, statusByGate)...)
+	v.Notes = append(v.Notes, regradeReadElsewhere(row, gates, checkOf, evidenceByGate, attemptByGate, seen, statusByGate)...)
 	// A dependency may appear after its consumer in the declaration. Re-evaluate until
 	// no status changes so a failed prerequisite propagates through the whole typed
 	// graph. Declaration.Validate rejects cycles, so this always reaches a fixed point.
@@ -1064,14 +1054,31 @@ func leftOut(c types.LeaseCheck, a job.CapturedRun, changed []string, named map[
 	return fmt.Sprintf(": it leaves out what this job changed: %s", strings.Join(unread, ", "))
 }
 
-// regradeReadElsewhere grades each failed check in graded again without the
+// ungradable is the violation of a row declaring nothing magus can grade. A
+// read-only row's filed result is its grade (see [gradedByHolder]), so the
+// wait that collects it reads the risks it names and passes it.
+func ungradable(row job.Job) []string {
+	if !row.Check.IsZero() || len(row.Postconditions) > 0 || row.Integrating() || gradedByHolder(row) {
+		return nil
+	}
+	return []string{fmt.Sprintf("job %s declares no check and no postcondition, so nothing magus can grade says it is done."+
+		" Declare one in the job record's check or postconditions; a fact no target checks can be shown by a script run with"+
+		" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID)}
+}
+
+// regradeReadElsewhere grades each failed check among gates again without the
 // changed files another verified file-scoped run read. Every changed file
 // needs one run that read it, not one per check. It returns a note per
 // regrade.
-func regradeReadElsewhere(row job.Job, gates []job.Postcondition, graded []string, checkOf map[string]types.LeaseCheck,
+func regradeReadElsewhere(row job.Job, gates []job.Postcondition, checkOf map[string]types.LeaseCheck,
 	refs map[string]string, attempts map[string]job.CapturedRun, seen Observed, statusByGate map[string]job.VerificationStatus,
 ) []string {
-	var notes []string
+	var notes, graded []string
+	for _, gate := range gates {
+		if gate.Kind == job.PostconditionKindCheck {
+			graded = append(graded, gate.ID)
+		}
+	}
 	for again := true; again; {
 		again = false
 		for _, gate := range gates {
