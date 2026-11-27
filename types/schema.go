@@ -110,6 +110,7 @@ var StoredOutputSchema = FormatLedger{
 	Name:     "output-record",
 	Type:     reflect.TypeFor[StoredOutput](),
 	Version:  StoredOutputAPIVersion,
+	Added:    map[string]APIVersion{"settled_key": StoredOutputAPIVersion},
 	Reserved: []string{"schema_version"},
 }
 

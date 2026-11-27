@@ -472,9 +472,10 @@ func (s *Store) generated(p string) bool {
 	return false
 }
 
-// CurrentRun answers whether a run is current in tree: its cache key is the one its check
-// would mint there now. A cache HIT replays a run that began before the job's last write,
-// so the clock calls it stale while its inputs are the ones on disk. Nil answers no.
+// CurrentRun answers whether a run is current in tree: its check would mint there the
+// run's cache key, or the key the run settled at. A cache HIT replays a run that began
+// before the job's last write, and a `:rw` run rewrote a file it read. The clock calls
+// both stale while their inputs are on disk.
 type CurrentRun func(ctx context.Context, tree string, run job.CapturedRun) bool
 
 func (c CurrentRun) holds(ctx context.Context, tree string, run job.CapturedRun) bool {

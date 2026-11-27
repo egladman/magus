@@ -874,7 +874,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	c.reportReplayedCheckout(ctx, s, e.manifest.Checkout, logData)
 	// A new attempt, never an earlier one: an earlier attempt carries another run's
 	// timestamp and lease, so a job's evidence would point at a run that is not its own.
-	ref := c.recordOutput(ctx, s, hash, logData, result, nil, true)
+	ref := c.recordOutput(ctx, s, hash, "", logData, result, nil, true)
 	attrs := append(netAttrs(netRec),
 		slog.String("project", s.ProjectPath),
 		slog.String("label", s.Label),
@@ -972,7 +972,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	fail := func(err error) (Result, error) {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result, err, false)
+		ref := c.recordOutput(ctx, s, hash, "", rawOutput, result, err, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -1006,7 +1006,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// cancellation instead so the entry is neither replayed nor exported.
 	if err := ctx.Err(); err != nil {
 		result.Duration = time.Since(start)
-		result.Ref = c.recordOutput(ctx, s, hash, rawOutput, result, err, false)
+		result.Ref = c.recordOutput(ctx, s, hash, "", rawOutput, result, err, false)
 		rc.fireResults(rc.step, &result, err)
 		return result, err
 	}
@@ -1071,7 +1071,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	} else {
 		c.misses.Add(1)
 	}
-	ref := c.recordOutput(ctx, s, hash, rawOutput, result, nil, false)
+	ref := c.recordOutput(ctx, s, hash, c.settledKey(ctx, rc.step, preSources, postSources), rawOutput, result, nil, false)
 	result.Ref = ref
 
 	// Stored AFTER recordOutput, never before: the remote entry ships this run's output
@@ -1169,6 +1169,32 @@ func (c *Cache) actingLease(ctx context.Context) string {
 	return lease
 }
 
+// settledKey is the key s's inputs hash to after a passing run that moved only its
+// declared updates. A job judges the run at that tree. Any other moved or new input
+// answers "". It hashes as ComputeTargetKey does.
+func (c *Cache) settledKey(ctx context.Context, s *Step, pre, post sourceFingerprint) string {
+	if pre == nil || post == nil {
+		return ""
+	}
+	if _, fresh := keyStillDescribesInputs(pre, post); fresh {
+		return ""
+	}
+	// Both directions: one catches a source that changed or vanished, the other one that appeared.
+	if len(mutatedSources(pre, post, s.Updates, nil)) > 0 || len(mutatedSources(post, pre, s.Updates, nil)) > 0 {
+		return ""
+	}
+	key, _, now, err := c.hashStepSources(ctx, s)
+	if err != nil {
+		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+			fmt.Sprintf("no settled key for %s:%s: %v", s.ProjectPath, s.Target, err)))
+		return ""
+	}
+	if !maps.Equal(post, now) {
+		return ""
+	}
+	return key
+}
+
 // recordOutput persists a step's captured output events under a per-execution
 // reference id and returns that ref for the result log event. It builds the target's
 // `result` record (status/duration/error), persists the output events plus that
@@ -1177,7 +1203,7 @@ func (c *Cache) actingLease(ctx context.Context) string {
 // warning and yields an empty ref, so the run's own outcome never hinges on it. runErr
 // nil means the step passed; non-nil means it failed. cacheHit is a separate axis and
 // must come from the caller: by this point a hit and a fresh pass look identical.
-func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []byte, r Result, runErr error, cacheHit bool) string {
+func (c *Cache) recordOutput(ctx context.Context, s Step, hash, settled string, output []byte, r Result, runErr error, cacheHit bool) string {
 	nowMs := time.Now().UnixMilli()
 	dur := r.Duration
 	inv := recorder.InvocationIDFromContext(ctx)
@@ -1201,6 +1227,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Platform:    c.platform,
 		Lease:       c.actingLease(ctx),
 		Cached:      cacheHit,
+		SettledKey:  settled,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()

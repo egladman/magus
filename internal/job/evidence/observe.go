@@ -13,9 +13,9 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
-// check would mint there now is the key the run was stored under. Any lookup that fails
-// answers no, so the clock judges the run as it would without this.
+// runsAtCurrentKey answers whether a recorded run is current in tree: its check would
+// mint the run's key there, or the key it settled at. A failed lookup answers no, so the
+// clock judges the run as it would without this.
 func runsAtCurrentKey(graphIn func(tree string) *Graph, env Env) job.CurrentRun {
 	return func(ctx context.Context, tree string, run jobtypes.CapturedRun) bool {
 		if run.Ref == "" || run.Failed {
@@ -43,7 +43,7 @@ func runsAtCurrentKey(graphIn func(tree string) *Graph, env Env) job.CurrentRun 
 			names = strings.Split(charms, ",")
 		}
 		key, _, err := m.ComputeTargetKey(ctx, desc.Project, target, names)
-		return err == nil && key == desc.Key
+		return err == nil && (key == desc.Key || (desc.SettledKey != "" && key == desc.SettledKey))
 	}
 }
 

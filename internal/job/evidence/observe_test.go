@@ -2,16 +2,24 @@ package evidence
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -85,4 +93,55 @@ func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{checkout}, trees, "the worker's checkout holds the symbols its branch defines, not the waiter's")
 	assert.True(t, seen.SymbolsKnown)
+}
+
+// The cache hashes a settled key after a `:rw` run, and ComputeTargetKey mints a key for
+// the committed tree. They must be one key, so the run that rewrote a file stays current
+// until a hand edit moves that file again.
+func TestARunThatEditsInPlaceIsCurrentAtTheKeyItLeft(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "unformatted\n"})
+	repo.Magusfile("")
+	repo.Commit("magusfile", nil)
+	src := filepath.Join(repo.Root(), "a.txt")
+	name := register.Spell(t, "zzz-settled-key-spell",
+		spells.WithTargets("fmt"),
+		spells.WithSources("*.txt"),
+		spells.WithOps(map[string]spells.Op{"fmt": {Command: spells.Command{
+			Bin: "true", Edits: []string{"*.txt"}, Charms: map[string]spells.Charm{types.CharmReadWrite: {}},
+		}}}),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			if !types.HasCharm(ctx, types.CharmReadWrite) {
+				return nil, nil
+			}
+			return nil, os.WriteFile(src, []byte("formatted\n"), 0o644)
+		}),
+	)
+	reg := magus.NewWorkspaceRegistry()
+	reg.RegisterProject(".", magus.WithSpell(name))
+	m, err := magus.Open(t.Context(), repo.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(tier.Ceiling))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(t.Context(), []types.Target{{Path: ".", Name: "fmt"}}, magus.WithWrite()))
+	dir, err := magus.ResolveCacheDir(repo.Root())
+	require.NoError(t, err)
+	runs, err := cache.NewOutputStore(dir).ListDescriptors()
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	desc := runs[0]
+	require.NotEmpty(t, desc.SettledKey, "the run rewrote a.txt, its declared edit")
+	run := desc.JobAttempt(desc.Attempt)
+
+	repo.Commit("fmt", nil)
+	current := runsAtCurrentKey(func(string) *Graph {
+		return &Graph{workspace: func(context.Context) (*magus.Magus, error) { return m, nil }}
+	}, Env{})
+	key, _, err := m.ComputeTargetKey(t.Context(), ".", "fmt", []string{types.CharmReadWrite})
+	require.NoError(t, err)
+	assert.NotEqual(t, desc.Key, key, "the run's own key names the tree before its rewrite")
+	assert.Equal(t, desc.SettledKey, key, "the cache's post-run hash and ComputeTargetKey agree on one tree")
+	assert.True(t, current(t.Context(), repo.Root(), run), "the run is current at the tree it left")
+
+	require.NoError(t, os.WriteFile(src, []byte("hand edited\n"), 0o644))
+	assert.False(t, current(t.Context(), repo.Root(), run), "a hand edit after the run moves the key past both")
 }
