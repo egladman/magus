@@ -10,7 +10,11 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/testkit"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +64,12 @@ func (f cannedResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap,
 
 func (f cannedResolver) Affected(context.Context, string) (*types.AffectedResult, error) {
 	return f.aff, f.affErr
+}
+
+func (cannedResolver) Graph() (*types.Graph, error) { return nil, errors.New("canned: no project graph") }
+
+func (cannedResolver) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
+	return nil, nil
 }
 
 func newService() *Service { return NewService(cannedResolver{g: fixture(), probed: true}) }
@@ -279,21 +289,6 @@ func TestEmptyRequestFieldsAreInvalidArgument(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
-func TestFindAffectedMapsProjectPathsToNodeIds(t *testing.T) {
-	svc := NewService(cannedResolver{probed: true, aff: &types.AffectedResult{
-		Base:     "main",
-		Changed:  []string{"console/src/a.ts", "console/src/b.ts"},
-		Affected: []string{"console", "docs"},
-	}})
-	resp, err := svc.FindAffected(context.Background(),
-		connect.NewRequest(&graphv1.FindAffectedRequest{}))
-	require.NoError(t, err)
-	assert.Equal(t, "main", resp.Msg.GetBase())
-	assert.Equal(t, int32(2), resp.Msg.GetChangedFiles())
-	assert.Equal(t, []string{"project:console", "project:docs"}, resp.Msg.GetIds())
-	assert.Empty(t, resp.Msg.GetFallback())
-}
-
 // A diff that reaches nothing and a diff that could not be computed are different answers, so the
 // fallback has to survive as data rather than collapsing into an error code.
 func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
@@ -304,13 +299,93 @@ func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.GetIds())
 	assert.Contains(t, resp.Msg.GetFallback(), "shallow clone")
+}
 
-	empty := NewService(cannedResolver{probed: true, aff: &types.AffectedResult{Base: "main"}})
-	resp, err = empty.FindAffected(context.Background(),
+// An empty plan would read as "nothing runs".
+func TestFindAffectedWithoutAPlannerIsUnimplemented(t *testing.T) {
+	svc := NewService(cannedResolver{probed: true, aff: &types.AffectedResult{Base: "main"}})
+	_, err := svc.FindAffected(context.Background(),
 		connect.NewRequest(&graphv1.FindAffectedRequest{}))
-	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.GetIds())
-	assert.Empty(t, resp.Msg.GetFallback())
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
+type findAffectedSuite struct {
+	suite.Suite
+	svc *Service
+}
+
+func TestFindAffected(t *testing.T) { suite.Run(t, new(findAffectedSuite)) }
+
+// app depends on lib, and the working tree edits a file in lib.
+func (s *findAffectedSuite) SetupTest() {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		"magusfile.buzz":     "",
+		"lib/magusfile.buzz": "",
+		"lib/lib.txt":        "one\n",
+		"app/magusfile.buzz": "import \"magus\";\nmagus\\project({\"depends_on\": [\"../lib\"]});\n",
+	})
+	repo.Write("lib/lib.txt", "two\n")
+	m, err := magus.Open(context.Background(), repo.Root(), magus.WithSpawnRule(tier.Ceiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.svc = NewService(workspace.ViewAs[resolver](m))
+}
+
+func (s *findAffectedSuite) find() *graphv1.Affected {
+	resp, err := s.svc.FindAffected(context.Background(),
+		connect.NewRequest(&graphv1.FindAffectedRequest{Base: "HEAD"}))
+	s.Require().NoError(err)
+	s.Require().Empty(resp.Msg.GetFallback())
+	return resp.Msg
+}
+
+func (s *findAffectedSuite) TestSeedsNameThePathItsProjectAndRole() {
+	msg := s.find()
+	s.Equal([]string{"project:app", "project:lib"}, msg.GetIds())
+	files, err := s.svc.ws.ClassifyFiles(context.Background(), []string{"lib/lib.txt"})
+	s.Require().NoError(err)
+	s.Require().Len(files, 1)
+	s.Require().Len(msg.GetSeeds(), 1)
+	seed := msg.GetSeeds()[0]
+	s.Equal("lib/lib.txt", seed.GetPath())
+	s.Equal("project:lib", seed.GetProject())
+	s.NotEmpty(seed.GetRole())
+	s.Equal(files[0].Role, seed.GetRole(), "the role is the one `magus describe file` gives")
+}
+
+func (s *findAffectedSuite) TestADependentCarriesTheChainFromItsSeed() {
+	msg := s.find()
+	s.Require().Len(msg.GetReasons(), 2)
+	app, lib := msg.GetReasons()[0], msg.GetReasons()[1]
+
+	s.Equal("project:app", app.GetId())
+	s.False(app.GetSeed())
+	s.Require().Len(app.GetChains(), 1)
+	s.Equal("project:lib", app.GetChains()[0].GetSeed())
+	s.Require().Len(app.GetChains()[0].GetSteps(), 1)
+	step := app.GetChains()[0].GetSteps()[0]
+	s.Equal("project:lib", step.GetFrom())
+	s.Equal("project:app", step.GetTo())
+	s.Equal(string(types.RelationDependsOn), step.GetRelation())
+	s.False(step.GetForward(), "the dependent is the depends_on edge's source")
+
+	s.Equal("project:lib", lib.GetId())
+	s.True(lib.GetSeed())
+	for _, c := range lib.GetChains() {
+		s.Empty(c.GetSteps(), "a seed reaches itself in no steps")
+	}
+}
+
+func (s *findAffectedSuite) TestThePlanRunsTheAffectedProjects() {
+	plan := s.find().GetPlan()
+	s.Equal(types.TargetCI, plan.GetTarget(), "an empty target plans ci")
+	s.Equal("magus affected ci --base HEAD", plan.GetCommand())
+	projects := map[string]bool{}
+	for _, u := range plan.GetUnits() {
+		projects[u.GetProject()] = true
+	}
+	s.Equal(map[string]bool{"project:app": true, "project:lib": true}, projects,
+		"the plan runs what the diff reaches and nothing else")
 }
 
 func TestFindAffectedOtherErrorsAreInternal(t *testing.T) {
