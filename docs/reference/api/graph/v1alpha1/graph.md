@@ -63,7 +63,7 @@ Takes [FindDependentsRequest](#finddependentsrequest), returns [Dependents](#dep
 
 ### FindAffected
 
-FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can highlight what the working tree touches. `magus affected` over the wire.
+FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can highlight what the working tree touches, with why each is reached and what to run. `magus affected` with --impact, --explain and --plan over the wire.
 
 Read-only like the rest of the service, but the only verb here that reads the VCS rather than the graph, so it is the only one whose answer changes while the graph stands still.
 
@@ -83,16 +83,78 @@ Takes [GetGraphStatsRequest](#getgraphstatsrequest), returns [GraphStats](#graph
 
 ### Affected
 
-Affected is the reach of one VCS diff: which projects a change forces work in.
+Affected is the reach of one VCS diff: which projects a change forces work in, why, and what runs over them.
 
 Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
 
-| Field           | Type            | # | Description                                                                                                                                                                                                                                                 |
-| --------------- | --------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`          | string          | 1 | the ref actually diffed against, after resolution                                                                                                                                                                                                           |
-| `changed_files` | int32           | 2 | how many paths the diff carried                                                                                                                                                                                                                             |
-| `ids`           | repeated string | 3 | project node ids in the transitive reverse closure, sorted                                                                                                                                                                                                  |
-| `fallback`      | string          | 4 | fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base. ids is empty whenever it is set, and the two are read together - an empty ids with no fallback means the diff genuinely reaches nothing, which is a real answer. |
+| Field           | Type                                       | # | Description                                                                                                                                                                                                                                                                           |
+| --------------- | ------------------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`          | string                                     | 1 | the ref actually diffed against, after resolution                                                                                                                                                                                                                                     |
+| `changed_files` | int32                                      | 2 | how many paths the diff carried                                                                                                                                                                                                                                                       |
+| `ids`           | repeated string                            | 3 | project node ids in the transitive reverse closure, sorted                                                                                                                                                                                                                            |
+| `fallback`      | string                                     | 4 | fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base. ids, seeds, reasons and plan are empty whenever it is set, and the two are read together - an empty ids with no fallback means the diff genuinely reaches nothing, which is a real answer. |
+| `seeds`         | [repeated AffectedSeed](#affectedseed)     | 5 | seeds are the paths the diff carried, sorted, each with the project that owns it.                                                                                                                                                                                                     |
+| `reasons`       | [repeated AffectedReason](#affectedreason) | 6 | reasons says why each project in ids is there, in ids order: `magus affected --explain` for every project at once.                                                                                                                                                                    |
+| `plan`          | [AffectedPlan](#affectedplan)              | 7 | plan is what runs over the set: `magus affected <target> --plan`, flattened to its units.                                                                                                                                                                                             |
+
+Used by: [FindAffected (response)](graph.md#findaffected).
+
+### AffectedChain
+
+AffectedChain is one route a change took from its seed to a project.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field   | Type                           | # | Description                                                                                                                                                                                      |
+| ------- | ------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `seed`  | string                         | 1 | the project node id holding the changed paths                                                                                                                                                    |
+| `steps` | [repeated PathStep](#pathstep) | 2 | steps walk from the seed to the project, each a depends\_on edge walked against its own direction (forward=false), since the dependent is the edge's source. Empty when the project is the seed. |
+
+Used by: [FindAffected (response)](graph.md#findaffected).
+
+### AffectedPlan
+
+AffectedPlan is the shard plan for one target over the affected set, flattened: a viewer asks what runs, not how it packs onto runners.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field          | Type                           | # | Description                                                                                                                                                            |
+| -------------- | ------------------------------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`       | string                         | 1 | the target planned                                                                                                                                                     |
+| `source`       | string                         | 2 | what the plan computed the set from, e.g. "git diff vs origin/main"                                                                                                    |
+| `units`        | [repeated PlanUnit](#planunit) | 3 | units are what runs: stage zero's units first, then each shard's, in plan order.                                                                                       |
+| `unreached`    | [repeated PlanUnit](#planunit) | 4 | unreached are units of affected projects whose closures read no changed path, sorted. Each replays from the cache, so no shard runs it.                                |
+| `unbounded_by` | string                         | 5 | unbounded\_by, when set, says why the set is not a proof: the diff edits a declaration, a dependency manifest or a toolchain pin, or touches a path no project claims. |
+| `command`      | string                         | 6 | the command that runs the plan, e.g. "magus affected ci"                                                                                                               |
+
+Used by: [FindAffected (response)](graph.md#findaffected).
+
+### AffectedReason
+
+AffectedReason is why one project is in the affected set.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field    | Type                                     | # | Description                                                            |
+| -------- | ---------------------------------------- | - | ---------------------------------------------------------------------- |
+| `id`     | string                                   | 1 | the project node id, as it appears in ids                              |
+| `seed`   | bool                                     | 2 | a changed path sits in the project itself                              |
+| `chains` | [repeated AffectedChain](#affectedchain) | 3 | chains are the shortest chain from each seed that reaches the project. |
+
+Used by: [FindAffected (response)](graph.md#findaffected).
+
+### AffectedSeed
+
+AffectedSeed is one changed path and what it seeds.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field        | Type   | # | Description                                                                                                                                             |
+| ------------ | ------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`       | string | 1 | workspace-relative, slash-separated                                                                                                                     |
+| `project`    | string | 2 | project is the project node id the affected set charged the path to; empty when the path sits outside every project and seeds nothing.                  |
+| `role`       | string | 3 | role is the path's role as `magus describe file` gives it: "output" (generated: regenerate it, never hand-edit), "source", "maintained" or "unclaimed". |
+| `undeclared` | bool   | 4 | undeclared is true when no project declares the path, so it seeds its project by directory containment alone and moves no cache key.                    |
 
 Used by: [FindAffected (response)](graph.md#findaffected).
 
@@ -207,9 +269,10 @@ Used by: [ExplainNode (request)](graph.md#explainnode).
 
 Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
 
-| Field  | Type   | # | Description                                                                                                                                                                                         |
-| ------ | ------ | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base` | string | 1 | base is the VCS ref to diff against. Empty takes the workspace's configured base - the same resolution `magus affected` uses - so a caller with no opinion gets the one the repo already agreed on. |
+| Field    | Type   | # | Description                                                                                                                                                                                         |
+| -------- | ------ | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`   | string | 1 | base is the VCS ref to diff against. Empty takes the workspace's configured base - the same resolution `magus affected` uses - so a caller with no opinion gets the one the repo already agreed on. |
+| `target` | string | 2 | target is the target the plan runs, as `magus affected <target> --plan` takes it. Empty plans `ci`, the run `magus affected --impact` names as its follow-up; the plan echoes it.                   |
 
 Used by: [FindAffected (request)](graph.md#findaffected).
 
@@ -364,7 +427,20 @@ Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/gr
 | `relation` | string | 3 |             |
 | `forward`  | bool   | 4 |             |
 
-Used by: [FindPath (response)](graph.md#findpath).
+Used by: [FindAffected (response)](graph.md#findaffected), [FindPath (response)](graph.md#findpath).
+
+### PlanUnit
+
+PlanUnit is one target of one project.
+
+Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto).
+
+| Field     | Type   | # | Description         |
+| --------- | ------ | - | ------------------- |
+| `project` | string | 1 | the project node id |
+| `target`  | string | 2 | the target name     |
+
+Used by: [FindAffected (response)](graph.md#findaffected).
 
 ### Position
 
