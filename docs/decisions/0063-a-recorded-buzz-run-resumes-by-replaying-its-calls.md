@@ -12,8 +12,7 @@ date: 2026-11-27
 Evidence marks: **read** is source read in this checkout, **ran** is a run made for
 this record, **prototype** is the scratch branch `worktree-agent-a5d65d03affdb6c63`
 at `aa976aad7` (job `dx-replay-proto`, check `outcd195fb28c1a`), which is not merged
-and not proposed for merge. 0063 is the next free number: `docs/decisions` ends at 0062
-on this branch and on `origin/main`.
+and not proposed for merge.
 
 ## Context
 
