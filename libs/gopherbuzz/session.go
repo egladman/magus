@@ -193,6 +193,11 @@ type Session struct {
 	// declImports maps a module's namespace key to its declarations' imports, by
 	// qualifier; declDeps and declLoading track collection. See collectDeclImports.
 	declImports map[string]map[string]string
+	// importNamespaces maps an unaliased file import's path to the namespace its
+	// module declares; see noteDeclaredNamespace.
+	importNamespaces map[string]string
+	// closedEnums holds the enumKey of each exported enum a file module declares.
+	closedEnums map[string]bool
 	declDeps    map[string]bool
 	declLoading []string
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
@@ -1380,7 +1385,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound, s.programNestedImports(prog))
+	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound, s.programNestedImports(prog), s.importNamespaces, s.closedEnums)
 	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
@@ -2035,6 +2040,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		case imp.Alias != "" && imp.Alias != "_":
 			s.bindCachedAlias(imp.Alias, cached)
 		default:
+			s.noteDeclaredNamespace(imp, cached.src)
 			return ImportBound, s.bindCachedFlat(boundName, imp.Path, cached, true)
 		}
 		return ImportBound, nil
@@ -2084,6 +2090,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	// collect its exported types and functions so the importer can name
 	// them (Exec only merges runtime values, not type declarations).
 	prog := s.collectImportedModule(boundName, string(data))
+	s.noteDeclaredNamespace(imp, string(data))
 	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
 		return ImportFile, importFailed(imp.Path, path, err)
@@ -2129,8 +2136,32 @@ func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 	if err != nil {
 		return nil
 	}
+	s.closeEnums(prog)
 	s.collectProgram(boundName, prog)
 	return prog
+}
+
+// noteDeclaredNamespace records that an unaliased file import binds its module
+// as the one-segment namespace it declares, not as its path's last segment.
+// The declarations are collected under that name for the checker.
+func (s *Session) noteDeclaredNamespace(imp *ast.ImportStmt, src string) {
+	if imp.Alias != "" || len(imp.Only) > 0 {
+		return
+	}
+	ns := s.declaredNamespace(src)
+	if len(ns) != 1 {
+		return
+	}
+	prog, err := s.parse(src)
+	if err != nil {
+		return
+	}
+	if s.importNamespaces == nil {
+		s.importNamespaces = map[string]string{}
+	}
+	s.importNamespaces[imp.Path] = ns[0]
+	s.closeEnums(prog)
+	s.collectDecls(ns[0], prog, false)
 }
 
 // collectAliasedModule is collectImportedModule for an import bound as alias.
@@ -2138,7 +2169,23 @@ func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 // in the importer's own namespace alone (Parser.zig resolveGlobal).
 func (s *Session) collectAliasedModule(alias, src string) {
 	if prog, err := s.parse(src); err == nil {
+		s.closeEnums(prog)
 		s.collectDecls(alias, prog, false)
+	}
+}
+
+// closeEnums records the exported enums of a file module as closed: unlike a host
+// enum, a plain str or int does not fit them.
+func (s *Session) closeEnums(prog *ast.Program) {
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.EnumDecl)
+		if !ok || !d.IsExported {
+			continue
+		}
+		if s.closedEnums == nil {
+			s.closedEnums = map[string]bool{}
+		}
+		s.closedEnums[enumDeclKey(d.Name, d.Backing, d.Cases)] = true
 	}
 }
 
@@ -2183,10 +2230,32 @@ func (s *Session) collectDecls(boundName string, prog *ast.Program, bare bool) {
 				if s.importedModuleVars == nil {
 					s.importedModuleVars = map[string][]*ast.DeclStmt{}
 				}
-				s.importedModuleVars[boundName] = append(s.importedModuleVars[boundName], d)
+				s.importedModuleVars[boundName] = append(s.importedModuleVars[boundName], typedByCall(prog, d))
 			}
 		}
 	}
+}
+
+// typedByCall returns an unannotated export initialised by a call to one of
+// prog's own functions with that function's return annotation, which is the type
+// upstream gives it. Other declarations come back as they are.
+func typedByCall(prog *ast.Program, d *ast.DeclStmt) *ast.DeclStmt {
+	call, ok := d.Value.(*ast.CallExpr)
+	if !ok || d.TypeAnnot != "" {
+		return d
+	}
+	callee, ok := call.Callee.(*ast.IdentExpr)
+	if !ok {
+		return d
+	}
+	for _, stmt := range prog.Stmts {
+		if fd, ok := stmt.(*ast.FunDecl); ok && fd.Name == callee.Name && fd.RetAnnot != "" && len(fd.TypeParams) == 0 {
+			typed := *d
+			typed.TypeAnnot = fd.RetAnnot
+			return &typed
+		}
+	}
+	return d
 }
 
 // declDepKey is the namespace key a declaration module is collected under when
@@ -3012,6 +3081,8 @@ func (s *Session) loadIsolated(ctx context.Context, src, dir string) (*cachedImp
 	sub.hostTypes, sub.hostTypesSeen = s.hostTypes, s.hostTypesSeen
 	sub.collectedDecls = maps.Clone(s.collectedDecls)
 	sub.declImports = maps.Clone(s.declImports)
+	sub.importNamespaces = maps.Clone(s.importNamespaces)
+	sub.closedEnums = maps.Clone(s.closedEnums)
 	sub.declDeps = maps.Clone(s.declDeps)
 
 	// Copy parent's current globals into the sub-session so the imported file
