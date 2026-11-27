@@ -4,12 +4,14 @@ import (
 	"sync"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/libs/gopherbuzz/x/literal"
 )
 
 // scanner is built once because parse caches key on the Scanner's pointer: two
-// scanners with the same literals would each lex every source.
+// scanners with the same literals would each lex every source. libs/* modules,
+// which cannot import this package, build theirs from literal.Raw.
 var scanner = sync.OnceValues(func() (*token.Scanner, error) {
 	return token.NewScanner(literal.Raw)
 })
@@ -40,4 +42,15 @@ func Tokenize(src string) ([]token.Token, error) {
 		return nil, err
 	}
 	return sc.Tokenize(src)
+}
+
+// Parse is buzz.Parse with the door's scanner, through the shared cache. The cache
+// keys on the scanner, so a program lexed with extensions is never served to a
+// parse made without them. Each call returns a new Program the caller owns.
+func Parse(src string) (*ast.Program, error) {
+	p, err := Parser()
+	if err != nil {
+		return nil, err
+	}
+	return p.Parse(src)
 }
