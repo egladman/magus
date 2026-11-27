@@ -172,6 +172,16 @@ func JoinInflight(ctx context.Context, root string, list jobtypes.List, me job.I
 	}), nil
 }
 
+// OpenChanges is the newest snapshot's change list for a placement read
+// ([job.Placements]), with a nil Fetch when no read was ever kept.
+func OpenChanges(root string) (job.OpenChanges, error) {
+	s, ok, err := NewestSnapshot(root)
+	if err != nil || !ok {
+		return job.OpenChanges{}, err
+	}
+	return job.OpenChanges{Fetch: &s.Fetched, Changes: s.Changes}, nil
+}
+
 // checkoutBranches reads the branch each distinct job checkout is on. A checkout that is
 // gone, or on no branch, is left out.
 func checkoutBranches(ctx context.Context, rows []jobtypes.Job) map[string]string {

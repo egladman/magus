@@ -67,7 +67,9 @@ func (f cannedResolver) Affected(context.Context, string) (*types.AffectedResult
 	return f.aff, f.affErr
 }
 
-func (cannedResolver) Graph() (*types.Graph, error) { return nil, errors.New("canned: no project graph") }
+func (cannedResolver) Graph() (*types.Graph, error) {
+	return nil, errors.New("canned: no project graph")
+}
 
 func (cannedResolver) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
 	return nil, nil

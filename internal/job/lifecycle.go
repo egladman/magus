@@ -34,6 +34,26 @@ func gradedByHolder(row job.Job) bool {
 	return row.ReadOnly && row.Check.IsZero() && len(row.Postconditions) == 0
 }
 
+// exitHead is the commit row's checkout stands at, or why it was not read.
+// A row that writes nothing, or that no holder took, has no head to record.
+func exitHead(ctx context.Context, row job.Job) (head, unread string) {
+	if row.ReadOnly || row.Delivery == job.DeliveryFindings || row.Registered == 0 || row.CheckoutRoot == "" {
+		return "", ""
+	}
+	if info, err := os.Stat(row.CheckoutRoot); err != nil || !info.IsDir() {
+		return "", fmt.Sprintf("its checkout %s does not read: %v", row.CheckoutRoot, cmp.Or(err, errors.New("not a directory")))
+	}
+	driver, why := resolveDriver(ctx, row.CheckoutRoot)
+	if driver == nil {
+		return "", why
+	}
+	at, err := driver.FindCommit(ctx, row.CheckoutRoot, "")
+	if err != nil {
+		return "", fmt.Sprintf("the head of %s: %v", row.CheckoutRoot, err)
+	}
+	return at.ID, ""
+}
+
 // returnedReason is the end_reason of a row [gradedByHolder] passed.
 const returnedReason = "returned: its holder filed a result, and a read-only row declaring no check or postcondition passes on it"
 
@@ -97,7 +117,14 @@ func Exit(ctx context.Context, store *Store, id string, result *job.Result, reso
 	}
 	var filed *job.Result
 	var rejection *job.Rejection
-	update := func(apply func(*job.Job)) (job.Job, error) {
+	head, headUnread := exitHead(ctx, rows[i])
+	update := func(change func(*job.Job)) (job.Job, error) {
+		apply := func(row *job.Job) {
+			change(row)
+			if head != "" || headUnread != "" {
+				row.Head, row.HeadUnread = head, headUnread
+			}
+		}
 		if store.dryRun {
 			row := rows[i].Clone()
 			apply(&row)

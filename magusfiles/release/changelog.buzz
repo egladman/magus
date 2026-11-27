@@ -131,7 +131,8 @@ export fun read(dir: str) > [Fragment] !> str {
         }
         final parsed = parse(path, text: fs\readFile(path) catch "");
         if (parsed.error != null) {
-            throw parsed.error!.message;
+            errs.append(parsed.error!.message);
+            continue;
         }
         frags.append(parsed.value!);
     }

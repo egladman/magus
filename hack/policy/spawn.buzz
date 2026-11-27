@@ -435,10 +435,11 @@ test "a brief for a job that owns its checkout may not teach the build either" {
 export final finishedBranchLimit = 10;
 
 // ForkCounts is what the rules read of magus\workspace().forkFacts().
-// It is copied out like Spawn. finishedBranches are the branches core read
-// as unmerged; branchesUnknown names the ones it could not read.
+// It is copied out like Spawn. finishedBranches are the rows whose finished
+// work waits; placesOf counts them by place. branchesUnknown names the rows
+// core could not place.
 export object ForkCounts {
-    finishedBranches: [str] = [],
+    finishedBranches: [FinishedBranch] = [],
     branchesUnknown: str = "",
     integrateRecord: str = "",
     commitsSinceTest: int = 0,
@@ -446,14 +447,14 @@ export object ForkCounts {
     testUnknown: str = "",
 }
 
-// decideFork refuses a top-level fork once the known unmerged branches reach
-// limit. Integrating and child forks pass, since they clear the backlog. An
-// unread branch never counts toward the limit, so it alone never refuses. A
-// record no reader could see passes with a note, because refusing on its shape
-// would stop forks that integrate.
+// decideFork refuses a top-level fork once the places holding finished work
+// reach limit. Integrating and child forks pass, since they clear the
+// backlog. An unread row never counts toward the limit, so it alone never
+// refuses. A record no reader could see passes with a note, because refusing
+// on its shape would stop forks that integrate.
 export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > GuardVerdict {
-    final finished = othersBranches(counts.finishedBranches, id: fork.id);
-    if (finished.len() == 0 or finished.len() < limit) {
+    final places = placesOf(othersBranches(counts.finishedBranches, id: fork.id));
+    if (places.len() == 0 or places.len() < limit) {
         return magus\guard.defer();
     }
     if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
@@ -463,23 +464,44 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
     if (counts.branchesUnknown != "") {
         unread = "; unread, so not counted: {counts.branchesUnknown}";
     }
-    final facts = "{finished.len()} finished branch(es) off the base: {finished.join(", ")}{unread}; "
-        + "{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
+    final facts = "{places.len()} place(s) hold finished work off the base: {places.join(", ")}{unread}; "
+        + "{describeTest(counts)}. The limit is {limit} places, a starting guess: "
         + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
     if (!fork.known) {
         return magus\guard.advise("this fork's record could not be read, so it passes unjudged, though it would be refused if it does not integrate. {facts}");
     }
-    return magus\guard.deny("too many finished branches wait off the base, so this fork is refused\n{facts} "
-        + "Integrate them first with `./magus job fork --stdin --checkout <dir>`, given this record: {counts.integrateRecord}");
+    return magus\guard.deny("too many places hold finished work off the base, so this fork is refused\n{facts} "
+        + "Fork dependent work as a child of a row on an open change, which adds no place. "
+        + "For independent work a person merges a change or raises the limit. "
+        + "To fold the rows off every change into one, fork `./magus job fork --stdin --checkout <dir>` with this record: {counts.integrateRecord}");
 }
 
-// othersBranches is branches less job id's own: a re-fork reworks that branch
-// rather than adding one. forkFacts names each `<branch> (job <job>, <n> commit(s))`.
-fun othersBranches(branches: [str], id: str) > [str] {
+// othersBranches is branches less job id's own: a re-fork reworks that work
+// rather than adding a place.
+fun othersBranches(branches: [FinishedBranch], id: str) > [FinishedBranch] {
     if (id == "") {
         return branches;
     }
-    return branches.filter(fun (index: int, b: str) > bool => b.indexOf("(job {id},") == null);
+    return branches.filter(fun (index: int, b: FinishedBranch) > bool => b.job != id);
+}
+
+// placesOf names each place branches wait in: a row off every change by
+// itself, an open change once for all its rows.
+fun placesOf(branches: [FinishedBranch]) > [str] {
+    final names = mut [<str>];
+    final seen: mut {str: bool} = mut {};
+    foreach (b in branches) {
+        if (b.change == "") {
+            names.append("{b.branch} (job {b.job}, {b.place}, {b.commits} commit(s))");
+        } else if (!seen.hasKey(b.change)) {
+            seen[b.change] = true;
+            final jobs = branches
+                .filter(fun (index: int, other: FinishedBranch) > bool => other.change == b.change)
+                .map(fun (index: int, other: FinishedBranch) > str => other.job);
+            names.append("#{b.change} (open change, job(s) {jobs.join(", ")})");
+        }
+    }
+    return names;
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -540,9 +562,9 @@ fun forkRecord(programs: [helpers\Program], at: int, line: str, read: fun (path:
 }
 
 fun waiting(branches: int, commits: int = 3) > ForkCounts {
-    final names = mut [<str>];
+    final names = mut [<FinishedBranch>];
     for (var i = 0; i < branches; i = i + 1) {
-        names.append("done-{i} (job done-{i}, 1 commit(s))");
+        names.append(FinishedBranch{ branch = "done-{i}", job = "done-{i}", commits = 1, place = "local" });
     }
     return ForkCounts{
         finishedBranches = names,
@@ -563,12 +585,26 @@ fun noFile(path: str) > str {
 test "a re-fork does not count its own finished branch toward the limit" {
     std\assert(decideFork(mandate\Fork{ id = "done-3" }, counts: waiting(10), limit: 10).decision == magus\GuardDecision.defer, message: "its own branch");
     std\assert(decideFork(mandate\Fork{ id = "done-1" }, counts: waiting(11), limit: 10).decision == magus\GuardDecision.deny, message: "ten others still refuse");
+    final renamed = ForkCounts{ finishedBranches = waiting(9).finishedBranches + [FinishedBranch{ branch = "feature", job = "done-9", commits = 1, place = "local" }] };
+    std\assert(decideFork(mandate\Fork{ id = "done-9" }, counts: renamed, limit: 10).decision == magus\GuardDecision.defer, message: "matched by job id, not branch name");
+}
+
+test "rows on one open change count as one place" {
+    final stacked = mut [<FinishedBranch>];
+    foreach (id in ["a", "b", "c"]) {
+        stacked.append(FinishedBranch{ branch = id, job = id, commits = 1, place = "proposed", change = "988" });
+    }
+    final counts = ForkCounts{ finishedBranches = waiting(9).finishedBranches + stacked };
+    std\assert(placesOf(counts.finishedBranches).len() == 10, message: "nine rows and one change");
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: counts, limit: 10);
+    std\assert(v.decision == magus\GuardDecision.deny and v.reason.indexOf("#988 (open change, job(s) a, b, c)") != null, message: v.reason);
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: counts, limit: 11).decision == magus\GuardDecision.defer, message: "stacking adds one place");
 }
 
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
     final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit), label: "at the limit");
     std\assert(v.decision == magus\GuardDecision.deny, message: "at the branch limit");
-    foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
+    foreach (want in ["10 place(s)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
         std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
     }
 }

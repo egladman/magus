@@ -324,7 +324,7 @@ refactor/pricing  shop-pricing  pass       bounded  1      alone     magus run t
 refactor/tax      shop-tax      no_return  bounded  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are on neither main nor an open change; open a change for ea83860, or merge it into an open change's branch, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 

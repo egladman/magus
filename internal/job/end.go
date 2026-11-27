@@ -27,6 +27,73 @@ import (
 // it takes down live descendants that hold work.
 const endSource = "job/end"
 
+// asideSource is the attention source of the request a person disposes to let a stated
+// reason forget work no base holds.
+const asideSource = "job/left-unmerged"
+
+// confirmSetAside is nil once each record stating left_unmerged names a row a base
+// holds, or a person disposed the request to set it aside. Until then it files that
+// request and refuses. An agent's reason alone would forget work.
+func (s *Store) confirmSetAside(ctx context.Context, rows []job.Job, records []job.Declaration) error {
+	asked := map[string]bool{}
+	for _, rec := range records {
+		if rec.LeftUnmerged != "" {
+			asked[rec.ID] = true
+		}
+	}
+	if len(asked) == 0 {
+		return nil
+	}
+	placed, _, err := placements(ctx, s.root, rows, OpenChanges{}, s.now())
+	if err != nil {
+		return fmt.Errorf("setting work aside needs where that work stands, which does not read: %w", err)
+	}
+	var errs []error
+	for _, p := range placed {
+		if asked[p.Job] && p.Place != placeMain && p.Place != placeProposed {
+			errs = append(errs, s.confirmAside(ctx, p))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// confirmAside is [Store.confirmSetAside] for one placed row. The request is keyed by
+// the row and its head, so each attempt at one disposal lands on one request.
+func (s *Store) confirmAside(ctx context.Context, p workPlace) error {
+	where := p.Head
+	if where == "" {
+		where = "no recorded head"
+	}
+	dir, err := sessions.Dir(s.root)
+	if err != nil {
+		return fmt.Errorf("job: setting %s aside forgets work only a person may drop, and the attention queue that asks one cannot be placed: %w", p.Job, err)
+	}
+	open := sessions.AttentionOpen{
+		Outcome:  string(types.OutcomePermission),
+		Severity: string(types.SeverityWarning),
+		Source:   asideSource,
+		Where:    p.Job,
+		Lease:    s.Actor().Lease,
+		Message: fmt.Sprintf("setting %s aside forgets its work at %s, which reads %s and no base holds; a person disposes this request (`%s`) to confirm, and the same apply then proceeds",
+			p.Job, where, p.Place, hint.SessionDispose.With("<request>")),
+	}
+	id := sessions.RequestID(asideSource, open)
+	fold, err := session.ReadAll(ctx, dir)
+	if err != nil {
+		return fmt.Errorf("job: setting %s aside needs a person's confirmation, which cannot be read: %w", p.Job, err)
+	}
+	if slices.ContainsFunc(sessions.Attention(fold), func(r sessions.AttentionRequest) bool { return r.ID == id && r.Disposed }) {
+		return nil
+	}
+	if !s.dryRun {
+		if _, _, err := sessions.OpenRequest(ctx, dir, asideSource, open, session.InvocationStart{Origin: recorder.LocalOrigin(ctx), Workspace: s.root}); err != nil {
+			return fmt.Errorf("job: setting %s aside needs a person's confirmation, and the request for one cannot be filed: %w", p.Job, err)
+		}
+	}
+	return fmt.Errorf("job: %s's work at %s reads %s, so setting it aside forgets it: a person disposes attention request %s (`%s`), which an agent may not, then the same apply proceeds",
+		p.Job, where, p.Place, id, hint.SessionDispose.With(id))
+}
+
 // WrittenPaths reports which of paths, relative to the checkout at root, the workspace
 // there declares as a target's output or that magus maintains itself: the `magus
 // describe file` roles output and maintained. Ending a job restores those before judging

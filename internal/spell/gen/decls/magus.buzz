@@ -785,6 +785,8 @@ export object Job {
     deferred: [JobDeferred] = [],
     leftUnmerged: str = "",
     landed: bool = false,
+    head: str = "",
+    headUnread: str = "",
     weight: double = 0.0,
     paused: int = 0,
     pausedBy: Origin = Origin{},
@@ -1059,8 +1061,16 @@ export object JobList {
     unmerged: JobUnmergedReport? = null,
 }
 
+export object FinishedBranch {
+    branch: str = "",
+    job: str = "",
+    commits: int = 0,
+    place: str = "",
+    change: str = "",
+}
+
 export object JobForkFacts {
-    finishedBranches: [str] = [],
+    finishedBranches: [FinishedBranch] = [],
     branchesUnknown: str = "",
     integrateRecord: str = "",
     commitsSinceTest: int = 0,

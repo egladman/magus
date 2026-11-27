@@ -113,7 +113,7 @@ type checker struct {
 	optExprs map[ast.Node]string
 	// genericParams holds the type parameters of the function being checked.
 	genericParams map[string]bool
-	yieldTyp types.Type // non-nil when inside a function with a *> yield annotation
+	yieldTyp      types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
 	// !>; a call to a raising function is legal there without a surrounding
 	// try/catch, because the caller's own caller must handle it (or itself

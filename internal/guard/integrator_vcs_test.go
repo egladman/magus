@@ -114,15 +114,18 @@ func (s *IntegratorVCSSuite) TestStillLeavesPushResetAndStashToTheRoot() {
 	}
 }
 
-func (s *IntegratorVCSSuite) TestAChangeRoleWorkerIsRefusedARebase() {
+func (s *IntegratorVCSSuite) TestAChangeRoleWorkerIsRefusedARebaseOfAnotherBranch() {
+	s.repo.git(s.landing, "checkout", "-q", "-b", "other-job")
+	s.Empty(s.judge("git rebase origin/main"), "the integrator rebases whatever its checkout holds")
 	s.row.Integrates = nil
 	s.integrateAs("orchestrator/feat " + s.row.ID)
-	s.NotEmpty(s.judge("git rebase origin/main"))
+	s.Contains(s.judge("git rebase origin/main"), "only its own job's branch, land-job")
 }
 
-func (s *IntegratorVCSSuite) TestTheRootHoldingTheRowIsRefusedARebase() {
+func (s *IntegratorVCSSuite) TestTheRootHoldingTheRowIsRefusedARebaseOfAnotherBranch() {
+	s.repo.git(s.landing, "checkout", "-q", "-b", "other-job")
 	s.deps.caller.Agent = ""
-	s.NotEmpty(s.judge("git rebase origin/main"))
+	s.Contains(s.judge("git rebase origin/main"), "only its own job's branch, land-job")
 }
 
 func (s *IntegratorVCSSuite) TestMergesEachBranchALiteralLoopNames() {

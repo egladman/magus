@@ -394,8 +394,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
 			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Edits: []string{"**/*.go", "!**/.*/**"},
 				PathScope: []string{"{file}"}, PathScopeFiles: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
-			}}},
+					"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+				}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.

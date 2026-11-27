@@ -292,7 +292,11 @@ func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 	if dirErr == nil {
 		last, dirErr = cache.NewOutputStore(dir).LastFullTest()
 	}
-	facts := job.ForkFacts(ctx, root, rows, last)
+	open, openErr := queue.OpenChanges(root)
+	facts := job.ForkFacts(ctx, root, rows, last, open)
+	if openErr != nil {
+		facts.BranchesUnknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", facts.BranchesUnknown, openErr), "; ")
+	}
 	if dirErr != nil {
 		facts.TestUnknown = fmt.Sprintf("the output store could not be read: %s", dirErr)
 	}
@@ -2193,7 +2197,11 @@ func unmergedReport(ctx context.Context, root string, rows []jobtypes.Job, tries
 	if format == outputName {
 		return nil
 	}
-	report := job.Unmerged(ctx, root, rows, tries)
+	open, openErr := queue.OpenChanges(root)
+	report := job.UnmergedAgainst(ctx, root, rows, tries, open)
+	if openErr != nil {
+		report.Unknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", report.Unknown, openErr), "; ")
+	}
 	return &report
 }
 

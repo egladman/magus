@@ -983,7 +983,8 @@ func (s *WorkerRevertSuite) TestIsRefusedARebase() {
 	s.NotEmpty(s.judge("git rebase origin/main"), "only an integrator rebases")
 }
 
-// WorkerRebaseSuite pins that a worker rebases its own job branch onto a ref its row names.
+// WorkerRebaseSuite pins that a worker rebases its own job branch onto its base or a ref its
+// row names.
 // It never rebases another branch, or onto a ref the row does not name.
 type WorkerRebaseSuite struct{ workerRevert }
 
@@ -1008,9 +1009,15 @@ func (s *WorkerRebaseSuite) TestRebasesItsBranchOntoARefItsRowNames() {
 	}
 }
 
+// Rebasing onto the base its pull request targets is how a branch takes main without a merge.
+func (s *WorkerRebaseSuite) TestRebasesItsBranchOntoTheBase() {
+	s.Empty(s.judge("git rebase origin/main"))
+}
+
 func (s *WorkerRebaseSuite) TestIsRefusedARebaseOntoARefItsRowDoesNotName() {
-	reason := s.judge("git rebase origin/main")
-	s.Contains(reason, "It rebases onto origin/main")
+	reason := s.judge("git rebase origin/other-job")
+	s.Contains(reason, "It rebases onto origin/other-job")
+	s.Contains(reason, "origin/main")
 	s.Contains(reason, "done-a")
 }
 

@@ -63,6 +63,8 @@ type jobStatus struct {
 	Widenings             int                          `json:"widenings,omitzero"`
 	Claims                []claimRecord                `json:"claims,omitempty"`
 	Landed                bool                         `json:"landed,omitzero"`
+	Head                  string                       `json:"head,omitempty"`
+	HeadUnread            string                       `json:"head_unread,omitempty"`
 	Paused                int64                        `json:"paused,omitzero"`
 	PausedBy              originRecord                 `json:"paused_by,omitzero"`
 	PauseReason           string                       `json:"pause_reason,omitempty"`
@@ -183,6 +185,7 @@ func recordStatus(row Job, prev jobStatus) jobStatus {
 		Conditions:   lifecycleConditions(row, prev.Conditions),
 		ModelTier:    recordModelTier(row.ModelTier),
 		ReworkRounds: row.ReworkRounds, Widenings: row.Widenings, Landed: row.Landed,
+		Head: row.Head, HeadUnread: row.HeadUnread,
 		Paused: row.Paused, PausedBy: recordOrigin(row.PausedBy), PauseReason: row.PauseReason, PausedUntil: row.PausedUntil,
 		Rejection:    recordRejection(row.Rejection),
 		Unattributed: row.Unattributed, ReleaseRequests: row.ReleaseRequests,
@@ -278,6 +281,7 @@ func (s jobSpec) job(bad *wireReads) Job {
 func (st jobStatus) populate(row *Job, bad *wireReads, creds wireEnum[CredentialKind]) {
 	row.ModelTier = st.ModelTier.tier(bad)
 	row.ReworkRounds, row.Widenings, row.Landed = st.ReworkRounds, st.Widenings, st.Landed
+	row.Head, row.HeadUnread = st.Head, st.HeadUnread
 	row.Paused, row.PausedBy, row.PauseReason, row.PausedUntil = st.Paused, st.PausedBy.origin(bad, creds), st.PauseReason, st.PausedUntil
 	row.Rejection = st.Rejection.rejection()
 	row.Unattributed, row.ReleaseRequests = st.Unattributed, st.ReleaseRequests

@@ -488,6 +488,11 @@ type Job struct {
 	// Landed says a landing probe ended the job because its work reads the same
 	// on the base or in an integration. EndReason says where, for a person.
 	Landed bool `json:"landed" yaml:"landed,omitempty"`
+	// Head is the commit the job's checkout stood at when its holder exited,
+	// and HeadUnread why none was read. Store-computed: a branch name can be
+	// deleted, so where the work stands is read from this commit.
+	Head       string `json:"head,omitempty"        yaml:"head,omitempty"`
+	HeadUnread string `json:"head_unread,omitempty" yaml:"head_unread,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
 	// budget.Claim. In (0,1]; zero reads as DefaultWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
@@ -721,20 +726,41 @@ type UnmergedReport struct {
 	Unknown string     `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
 
-// ForkFacts is what a fork leaves waiting: finished branches off the base
-// and commits since the last full test. It holds facts only, and repo policy
-// decides what they stop. BranchesUnknown and TestUnknown say why a side went
-// unread.
+// ForkFacts is what a fork leaves waiting: the places finished work waits in
+// off the base, and commits since the last full test. It holds facts only,
+// and repo policy decides what they stop. BranchesUnknown and TestUnknown say
+// why a side went unread.
 type ForkFacts struct {
-	// FinishedBranches names each as `<branch> (job <job>, <n> commit(s))`.
-	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
-	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
+	// FinishedBranches holds one entry per finished row whose work waits. Rows
+	// sharing a Change are one place; every other row is a place of its own.
+	FinishedBranches []FinishedBranch `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
+	BranchesUnknown  string           `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
 	// IntegrateRecord is the JSON job record an integration fork of them takes.
 	IntegrateRecord  string `json:"integrate_record,omitempty"   yaml:"integrate_record,omitempty"`
 	CommitsSinceTest int    `json:"commits_since_test"           yaml:"commits_since_test"`
 	LastTestRef      string `json:"last_test_ref,omitempty"      yaml:"last_test_ref,omitempty"`
 	LastTestRevision string `json:"last_test_revision,omitempty" yaml:"last_test_revision,omitempty"`
 	TestUnknown      string `json:"test_unknown,omitempty"       yaml:"test_unknown,omitempty"`
+}
+
+// FinishedBranch is a finished row's work that the base does not hold. Job is
+// the row's id, which a rule matches against a fork's. Branch is what a person
+// reads the work by: its branch, else its short head. Place is pushed, local or
+// proposed; Change is the open change carrying a proposed row, "" otherwise.
+// String is for people.
+type FinishedBranch struct {
+	Branch  string `json:"branch"           yaml:"branch"`
+	Job     string `json:"job"              yaml:"job"`
+	Commits int    `json:"commits"          yaml:"commits"`
+	Place   string `json:"place"            yaml:"place"`
+	Change  string `json:"change,omitempty" yaml:"change,omitempty"`
+}
+
+func (b FinishedBranch) String() string {
+	if b.Change != "" {
+		return fmt.Sprintf("%s (job %s, on open change #%s)", b.Branch, b.Job, b.Change)
+	}
+	return fmt.Sprintf("%s (job %s, %s, %d commit(s))", b.Branch, b.Job, b.Place, b.Commits)
 }
 
 // Lines renders the report for a person, one line per fact, none when there

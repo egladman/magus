@@ -3134,6 +3134,18 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Job.Landed = bLanded
+		case "head":
+			sHead, err := decodeString(item, path+".head")
+			if err != nil {
+				return out, err
+			}
+			out.Job.Head = sHead
+		case "headUnread":
+			sHeadUnread, err := decodeString(item, path+".headUnread")
+			if err != nil {
+				return out, err
+			}
+			out.Job.HeadUnread = sHeadUnread
 		case "weight":
 			nWeight, err := decodeFloat(item, path+".weight")
 			if err != nil {

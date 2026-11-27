@@ -186,6 +186,8 @@ var jobStatus = codec.ObjectSchema{Name: "jobStatus", Closed: false, Fields: map
 	"widenings":              nil,
 	"claims":                 &codec.ObjectSchema{Element: &claimRecord},
 	"landed":                 nil,
+	"head":                   nil,
+	"head_unread":            nil,
 	"paused":                 nil,
 	"paused_by":              &originRecord,
 	"pause_reason":           nil,

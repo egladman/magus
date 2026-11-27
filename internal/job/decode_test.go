@@ -214,6 +214,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 		"updated", "deadline", "attempt", "postcondition_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation",
 		"rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",
+		"head", "head_unread",
 	}, storeStamped)
 }
 

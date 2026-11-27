@@ -564,7 +564,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	check := rawLeaseCheck(t, "test .")
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, jobtypes.Put{Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: &check, State: new(jobtypes.StateRunning)})
+		_, err := MagusPutJob(ctx, id, jobtypes.Put{Parent: new("root"), Checkpoint: new(rev), Paths: jobtypes.PathsPut{Write: new(paths)}, Check: &check, State: new(jobtypes.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)

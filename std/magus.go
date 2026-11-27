@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -1633,7 +1634,7 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedR
 			return jobtypes.UnmergedReport{}, snap.Err
 		}
 		snap = snap.Clone()
-		return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+		return unmergedWithChanges(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
@@ -1643,7 +1644,18 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedR
 	if snap.Err != nil {
 		return jobtypes.UnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+	return unmergedWithChanges(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
+}
+
+// unmergedWithChanges is [job.Unmerged] over the change list `magus queue ls` left. A
+// list that does not read is named in Unknown, so no work reads as proposed by it.
+func unmergedWithChanges(ctx context.Context, workspace string, rows []jobtypes.Job, tries jobtypes.Attempts) jobtypes.UnmergedReport {
+	open, err := queue.OpenChanges(workspace)
+	report := job.UnmergedAgainst(ctx, workspace, rows, tries, open)
+	if err != nil {
+		report.Unknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", report.Unknown, err), "; ")
+	}
+	return report
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one
@@ -1675,21 +1687,27 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFact
 	if err != nil {
 		return jobtypes.ForkFacts{}, err
 	}
+	var rows []jobtypes.Job
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
 			return jobtypes.ForkFacts{}, snap.Err
 		}
-		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, last), nil
+		rows = snap.Clone().Rows
+	} else {
+		store, err := jobStoreFromContext(ctx, "job.forkFacts")
+		if err != nil {
+			return jobtypes.ForkFacts{}, err
+		}
+		if rows, err = store.List(ctx); err != nil {
+			return jobtypes.ForkFacts{}, err
+		}
 	}
-	store, err := jobStoreFromContext(ctx, "job.forkFacts")
-	if err != nil {
-		return jobtypes.ForkFacts{}, err
+	open, openErr := queue.OpenChanges(workspace)
+	facts := job.ForkFacts(ctx, workspace, rows, last, open)
+	if openErr != nil {
+		facts.BranchesUnknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", facts.BranchesUnknown, openErr), "; ")
 	}
-	rows, err := store.List(ctx)
-	if err != nil {
-		return jobtypes.ForkFacts{}, err
-	}
-	return job.ForkFacts(ctx, workspace, rows, last), nil
+	return facts, nil
 }
 
 // MagusPutJob backs magus\workspace().putJob.

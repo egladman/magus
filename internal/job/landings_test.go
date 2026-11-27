@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	qtypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -214,7 +217,7 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	assert.Equal(t, job.StateExited, states(t, s)["job"].State)
 }
 
-func landedWithNoResult(t *testing.T, dirty, differs bool) job.Job {
+func landedWithNoResult(t *testing.T, dirty, differs bool, registered int64) job.Job {
 	t.Helper()
 	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n"})
 	seedRev := repo.Head()
@@ -234,21 +237,30 @@ func landedWithNoResult(t *testing.T, dirty, differs bool) job.Job {
 	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, job.Job{ID: "job", State: job.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-		Paths: job.Paths{Write: []string{"a.go"}}, Updated: 1})
+		Paths: job.Paths{Write: []string{"a.go"}}, Registered: registered, Updated: 1})
 	return states(t, s)["job"]
 }
 
 // A running row with no filed result ends once its committed diff is on base.
 func TestARunningRowWithNoResultEndsWhenItsCommittedWorkLanded(t *testing.T) {
-	got := landedWithNoResult(t, false, false)
+	got := landedWithNoResult(t, false, false, 0)
 
 	assert.Equal(t, job.StateNoReturn, got.State)
 	assert.True(t, got.Landed)
 	assert.Contains(t, got.EndReason, "its work landed on origin/main")
 }
 
+// main-green-proto was ended under its worker once part of its diff was on
+// the base.
+func TestARowAHolderTookIsNeverEndedByItsCommittedWorkLanding(t *testing.T) {
+	got := landedWithNoResult(t, false, false, 1)
+
+	assert.Equal(t, job.StateRunning, got.State)
+	assert.False(t, got.Landed)
+}
+
 func TestARunningRowWithNoResultAndUncommittedEditsKeepsItsLease(t *testing.T) {
-	got := landedWithNoResult(t, true, false)
+	got := landedWithNoResult(t, true, false, 0)
 
 	assert.Equal(t, job.StateRunning, got.State)
 	assert.False(t, got.Landed)
@@ -278,7 +290,7 @@ func TestARowEndsWhenTheBaseEditedItsLandedFileSince(t *testing.T) {
 }
 
 func TestARunningRowWithNoResultAndAPathDifferingAtTheBaseKeepsItsLease(t *testing.T) {
-	got := landedWithNoResult(t, false, true)
+	got := landedWithNoResult(t, false, true, 0)
 
 	assert.Equal(t, job.StateRunning, got.State)
 	assert.False(t, got.Landed)
@@ -369,12 +381,37 @@ func (s *unmergedSuite) branch(name string) string {
 }
 
 func (s *unmergedSuite) unmerged(rows ...job.Job) job.UnmergedReport {
-	return Unmerged(s.T().Context(), s.repo.Root(), rows, s.tries)
+	return UnmergedAgainst(s.T().Context(), s.repo.Root(), rows, s.tries, fresh())
 }
 
 // filed has job id's live try file result.
 func (s *unmergedSuite) filed(id string, result *job.Result) {
 	s.tries[id] = []job.Attempt{filedTry(id, result)}
+}
+
+// The recorded head holds a stop whose branch was pushed and deleted, though
+// the row filed no path and left no checkout.
+func (s *unmergedSuite) TestARowsRecordedHeadOutlivesItsDeletedBranch() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	s.repo.Git("update-ref", "refs/remotes/origin/w", head)
+	s.repo.Git("branch", "-q", "-D", "w")
+
+	got := s.unmerged(job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head})
+
+	s.Require().Len(got.Jobs, 1)
+	s.Contains(got.Jobs[0].Why, fmt.Sprintf("on neither %s nor an open change", s.main))
+	s.Contains(got.Jobs[0].Remedy, "open a change for")
+}
+
+// Work an open change holds waits on the person who merges, not on the root.
+func (s *unmergedSuite) TestARowAnOpenChangeHoldsIsNotUnmerged() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	row := job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head}
+
+	got := UnmergedAgainst(s.T().Context(), s.repo.Root(), []job.Job{row}, s.tries, fresh(qtypes.Change{ID: "9", Head: head}))
+
+	s.Empty(got.Jobs)
+	s.Len(s.unmerged(row).Jobs, 1, "once the change closes unmerged, the row is off again")
 }
 
 func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAndRemedy() {
@@ -387,8 +424,8 @@ func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAn
 	s.Require().Len(got.Jobs, 1)
 	s.Equal("w", got.Jobs[0].Job)
 	s.True(strings.HasPrefix(head, got.Jobs[0].Head), got.Jobs[0].Head)
-	s.Contains(got.Jobs[0].Why, "not on "+s.main)
-	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("merge %s into %s", got.Jobs[0].Head, s.main))
+	s.Contains(got.Jobs[0].Why, fmt.Sprintf("on neither %s nor an open change", s.main))
+	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("open a change for %s, or merge it into an open change's branch", got.Jobs[0].Head))
 	s.Contains(got.Jobs[0].Remedy, "left_unmerged")
 }
 
@@ -489,7 +526,7 @@ func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarries
 	spent, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	got := Unmerged(spent, s.repo.Root(), []job.Job{row}, s.tries)
+	got := UnmergedAgainst(spent, s.repo.Root(), []job.Job{row}, s.tries, fresh())
 
 	if got.Unknown == "" {
 		s.Fail("a read that answered nothing must say so", "%+v", got)
@@ -698,7 +735,7 @@ func (s *unmergedSuite) TestARepositoryWithNoCommitIsUnknownByName() {
 	bare := s.T().TempDir()
 	s.Require().NoError(exec.CommandContext(s.T().Context(), "git", "-C", bare, "init", "-q").Run())
 
-	got := Unmerged(s.T().Context(), bare, []job.Job{{ID: "w", State: job.StatePass}}, job.Attempts{"w": {filedTry("w", &job.Result{ChangedPaths: []string{"w.txt"}})}})
+	got := UnmergedAgainst(s.T().Context(), bare, []job.Job{{ID: "w", State: job.StatePass}}, job.Attempts{"w": {filedTry("w", &job.Result{ChangedPaths: []string{"w.txt"}})}}, fresh())
 
 	s.Equal("the branch of the repository: ", got.Unknown[:len("the branch of the repository: ")])
 	s.NotContains(got.Unknown, bare)
@@ -833,6 +870,36 @@ func (s *unmergedSuite) TestSettleRecordsAStatedReason() {
 
 	s.Require().NoError(err)
 	s.Equal("dropped", got[0].LeftUnmerged)
+}
+
+// An agent's reason alone must not forget work only this repository or a
+// remote branch holds: a person disposes the request first.
+func (s *unmergedSuite) TestSettingAsideUnmergedWorkWaitsOnAPerson() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	s.repo.Git("update-ref", "refs/remotes/origin/w", head)
+	plant(s.T(), s.store, job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head})
+
+	_, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "dropped"})
+
+	s.Require().ErrorContains(err, "reads pushed, so setting it aside forgets it")
+	s.Empty(storedRows(s.T(), s.store)["w"].LeftUnmerged, "the row stays listed")
+	requests := slices.DeleteFunc(attentionRows(s.T(), s.repo.Root()), func(r sessions.AttentionRequest) bool { return r.Source != asideSource })
+	s.Require().Len(requests, 1)
+
+	dispose(s.T(), s.repo.Root(), requests[0].ID)
+	got, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "dropped"})
+
+	s.Require().NoError(err)
+	s.Equal("dropped", got[0].LeftUnmerged)
+}
+
+func (s *unmergedSuite) TestSettingAsideWorkABaseHoldsWritesAtOnce() {
+	plant(s.T(), s.store, job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: s.repo.Head()})
+
+	got, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "landed by hand"})
+
+	s.Require().NoError(err)
+	s.Equal("landed by hand", got[0].LeftUnmerged)
 }
 
 func (s *unmergedSuite) TestSettleRefusesAnItemTheResultDoesNotDefer() {
