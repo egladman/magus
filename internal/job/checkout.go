@@ -910,6 +910,10 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 	if err != nil {
 		return nil, "", fmt.Errorf("the branch heads: %w", err)
 	}
+	upstreams, err := branchUpstreams(ctx, driver, root)
+	if err != nil {
+		return nil, "", fmt.Errorf("the branch upstreams: %w", err)
+	}
 	answers := readMissingCache(root)
 	reads := make([]branchRead, len(finished))
 	var g errgroup.Group
@@ -919,7 +923,7 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			reads[i] = readBranch(ctx, driver, root, bases, row, tips, integrating, answers)
+			reads[i] = readBranch(ctx, driver, root, bases, row, tips, upstreams, integrating, answers)
 			return nil
 		})
 	}
@@ -999,16 +1003,49 @@ type branchRead struct {
 	unread string
 }
 
-// readBranch only reads answers, so rows may run it concurrently. The caller puts what
-// each read learned. A branch any base reached is integrated; else missing is the
-// fewest commits a base lacks.
-func readBranch(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, tips map[string]string, integrating map[string]bool, answers *missingCache) branchRead {
+// upstreamReporter is a driver that names the upstream each local branch
+// tracks. Git does; a driver without upstreams judges the local branch alone.
+type upstreamReporter interface {
+	BranchUpstreams(ctx context.Context, root string) (map[string]string, error)
+}
+
+// branchUpstreams is driver's [upstreamReporter] answer, empty when it has none.
+func branchUpstreams(ctx context.Context, driver types.VCSDriver, root string) (map[string]string, error) {
+	reporter, ok := driver.(upstreamReporter)
+	if !ok {
+		return map[string]string{}, nil
+	}
+	return reporter.BranchUpstreams(ctx, root)
+}
+
+// readBranch only reads answers, so rows may run it concurrently. The caller
+// puts what each read learned. A branch is integrated when a base reached it,
+// or reached the upstream it is behind, the copy a forge merged.
+func readBranch(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, tips, upstreams map[string]string, integrating map[string]bool, answers *missingCache) branchRead {
 	branch := jobBranch(ctx, driver, row)
 	tip, standing := tips[branch]
 	// A branch that does not stand holds no work this checkout can name.
 	if integrating[branch] || !standing {
 		return branchRead{}
 	}
+	read := readTip(ctx, driver, root, bases, row, branch, tip, answers)
+	pushed, tracked := upstreams[branch]
+	if read.missing == 0 || read.unread != "" || !tracked || pushed == tip {
+		return read
+	}
+	if behind, err := driver.IsAncestor(ctx, root, tip, pushed); err != nil || !behind {
+		return read
+	}
+	if upstream := readTip(ctx, driver, root, bases, row, branch, pushed, answers); upstream.unread == "" && upstream.missing == 0 {
+		upstream.learned = append(read.learned, upstream.learned...)
+		return upstream
+	}
+	return read
+}
+
+// readTip is [readBranch] for branch standing at tip. Missing is the fewest
+// commits a base lacks.
+func readTip(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, branch, tip string, answers *missingCache) branchRead {
 	read := branchRead{branch: branch}
 	for _, base := range bases {
 		missing, known := answers.get(base, tip)
