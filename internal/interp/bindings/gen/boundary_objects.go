@@ -4076,6 +4076,33 @@ func ObjectEmpty(v types.Empty) vm.Value {
 	return out
 }
 
+func ObjectEscape(v spells.Escape) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("text", vm.StringValue(v.Text))
+	out.MapSet("to", vm.StringValue(v.To))
+	return out
+}
+
+func ObjectEncoding(v spells.Encoding) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("pattern", vm.StringValue(v.Pattern))
+	itemsReserved := make([]vm.Value, len(v.Reserved))
+	for indexReserved := range v.Reserved {
+		itemsReserved[indexReserved] = vm.StringValue(v.Reserved[indexReserved])
+	}
+	out.MapSet("reserved", vm.ListValue(itemsReserved))
+	out.MapSet("open", vm.StringValue(v.Open))
+	out.MapSet("close", vm.StringValue(v.Close))
+	itemsEscapes := make([]vm.Value, len(v.Escapes))
+	for indexEscapes := range v.Escapes {
+		itemsEscapes[indexEscapes] = ObjectEscape(v.Escapes[indexEscapes])
+	}
+	out.MapSet("escapes", vm.ListValue(itemsEscapes))
+	out.MapSet("control", vm.StringValue(v.Control))
+	return out
+}
+
 func ObjectServiceView(v spells.ServiceView) vm.Value {
 	out := vm.NewMap()
 	itemsReadiness := make([]vm.Value, len(v.Readiness))
@@ -5272,6 +5299,11 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 		optDecisions = ObjectDecisionSyntax((*v.Decisions))
 	}
 	out.MapSet("decisions", optDecisions)
+	itemsEncodings := make([]vm.Value, len(v.Encodings))
+	for indexEncodings := range v.Encodings {
+		itemsEncodings[indexEncodings] = ObjectEncoding(v.Encodings[indexEncodings])
+	}
+	out.MapSet("encodings", vm.ListValue(itemsEncodings))
 	return out
 }
 
