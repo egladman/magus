@@ -198,6 +198,14 @@ These names and messages changed with the hook, as deliberate breaks:
   `expected ';' after statement`, as upstream's E74 refuses it. `final a = r"x";` used
   to read as `final a = r` followed by the statement `"x"`.
 
+### One difference upstream does not enforce
+
+A file may hold several `namespace` statements. Upstream keeps the last one it
+walks (`Ast.namespace`), so a second declaration silently renames the first and
+an importer sees only the final name. gopherbuzz binds the first, and a call
+through the later name reports `BZZ1009`. The behavior is accidental upstream,
+so gopherbuzz does not follow it: declare one namespace per file, first.
+
 ### What does not
 
 **No open gaps remain.** Every one of the nine still-failing files is blocked by a
