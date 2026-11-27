@@ -223,7 +223,7 @@ func planToProto(target, base string, plan types.ShardPlan) *graphv1.AffectedPla
 		for _, u := range s.Units {
 			if !seen[u] {
 				seen[u] = true
-				out.Units = append(out.Units, unitToProto(u))
+				out.Units = append(out.Units, &graphv1.PlanUnit{Project: projectID(u.Project), Target: u.Target})
 			}
 		}
 	}
@@ -233,11 +233,7 @@ func planToProto(target, base string, plan types.ShardPlan) *graphv1.AffectedPla
 func unitsToProto(in []types.Unit) []*graphv1.PlanUnit {
 	out := make([]*graphv1.PlanUnit, 0, len(in))
 	for _, u := range in {
-		out = append(out, unitToProto(u))
+		out = append(out, &graphv1.PlanUnit{Project: projectID(u.Project), Target: u.Target})
 	}
 	return out
-}
-
-func unitToProto(u types.Unit) *graphv1.PlanUnit {
-	return &graphv1.PlanUnit{Project: projectID(u.Project), Target: u.Target}
 }
