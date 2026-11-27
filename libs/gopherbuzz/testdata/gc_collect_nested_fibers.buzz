@@ -24,7 +24,11 @@ fun outer() > void *> int {
     }
 }
 
-foreach (v in &outer()) {
-    _ = v;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    foreach (v in &outer()) {
+        _ = v;
+    }
+    __r = !collected;
 }
-final __r = !collected;

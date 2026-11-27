@@ -560,3 +560,24 @@ func TestGoSpellGrantsTheChecksumDatabaseWhereGoKeepsIt(t *testing.T) {
 		})
 	}
 }
+
+func TestResolve_EncodingDecodesFromBuzz(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "lang"; }
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "go",
+        extensions = [".go"],
+        syntax = Syntax{encodings = [
+            Encoding{name = "string", open = "\"", close = "\"", escapes = [Escape{text = "\"", to = "\\\""}], control = "\\x\{hex2}"},
+        ]},
+    };
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, []spells.Encoding{{
+		Name: "string", Open: `"`, Close: `"`, Escapes: []spells.Escape{{Text: `"`, To: `\"`}}, Control: `\x{hex2}`,
+	}}, spec.Syntax.Encodings)
+}

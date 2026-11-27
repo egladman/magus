@@ -1,18 +1,19 @@
 import "std";
 import "http";
 
-// Post JSON. opts carries the curl-style settings; retrying is a separate,
-// typed Retry argument, and without one the request runs exactly once.
-// Escape { and } as \{ \} so Buzz does not try to interpolate them.
-try {
-    final r = http\post(
-        "https://httpbin.org/post",
-        "\{\"target\":\"build\"\}",
-        {"Content-Type": "application/json"},
-        http\Options{timeoutSeconds = 10.0},
-        http\Retry{ attempts = 3, delayMs = 500.0 },
-    );
-    std\print(r.status);
-} catch (e) {
-    std\print("post never reached the server");
+fun main(args: [str]) > void {
+    // Post JSON. Retrying is a separate typed Retry argument; without one the request runs once.
+    // Escape { and } as \{ \} so Buzz does not interpolate them.
+    try {
+        final r = http\post(
+            "https://httpbin.org/post",
+            body: "\{\"target\":\"build\"\}",
+            headers: {"Content-Type": "application/json"},
+            opts: http\Options{timeoutSeconds = 10.0},
+            retry: http\Retry{ attempts = 3, delayMs = 500.0 },
+        );
+        std\print(r.status);
+    } catch (e) {
+        std\print("post never reached the server");
+    }
 }

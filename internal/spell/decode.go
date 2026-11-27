@@ -598,6 +598,9 @@ func validateSyntax(l spells.Language) error {
 			return fmt.Errorf("language.syntax: %w", err)
 		}
 	}
+	if err := spells.ValidateEncodings(l); err != nil {
+		return fmt.Errorf("language.syntax: %w", err)
+	}
 	return nil
 }
 

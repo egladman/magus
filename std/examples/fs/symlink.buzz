@@ -1,8 +1,10 @@
 import "std";
 import "fs";
 
-try {
-    fs\symlink("dist/magus", "/usr/local/bin/magus");
-} catch (e) {
-    std\print("could not link /usr/local/bin/magus");
+fun main(args: [str]) > void {
+    try {
+        fs\symlink("dist/magus", link: "/usr/local/bin/magus");
+    } catch (e) {
+        std\print("could not link /usr/local/bin/magus");
+    }
 }

@@ -225,18 +225,18 @@ export fun write(dir: str, rules: [magus\Rule]) > void !> any {
     fs\mkdirAll(dir);
     final keep = mut {"index.md": true};
     foreach (r in rules) {
-        final page = writeIfChanged(fs\join(dir, r.name + ".md"), body: renderRule(r));
+        final page = writeIfChanged(fs\join(dir, name: r.name + ".md"), body: renderRule(r));
         if (page.error != null) {
             throw page.error!.message;
         }
         keep[r.name + ".md"] = true;
     }
-    final index = writeIfChanged(fs\join(dir, "index.md"), body: renderIndex(rules));
+    final index = writeIfChanged(fs\join(dir, name: "index.md"), body: renderIndex(rules));
     if (index.error != null) {
         throw index.error!.message;
     }
     foreach (name in fs\listDir(dir)) {
-        final path = fs\join(dir, name);
+        final path = fs\join(dir, name: name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
         fs\remove(path);
     }
@@ -553,18 +553,18 @@ export fun writeProofread(dir: str, raw: str) > void !> any {
     fs\mkdirAll(dir);
     final keep = mut {"index.md": true};
     foreach (r in rules) {
-        final page = writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProofreadRule(r));
+        final page = writeIfChanged(fs\join(dir, name: r.name + ".md"), body: renderProofreadRule(r));
         if (page.error != null) {
             throw page.error!.message;
         }
         keep[r.name + ".md"] = true;
     }
-    final index = writeIfChanged(fs\join(dir, "index.md"), body: renderProofreadIndex(rules));
+    final index = writeIfChanged(fs\join(dir, name: "index.md"), body: renderProofreadIndex(rules));
     if (index.error != null) {
         throw index.error!.message;
     }
     foreach (name in fs\listDir(dir)) {
-        final path = fs\join(dir, name);
+        final path = fs\join(dir, name: name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
         fs\remove(path);
     }

@@ -257,90 +257,90 @@ fun cursor_scout_fixture(readOnly: bool) > ShippedAgent {
 
 test "mgs_renderAgents restricts no tool of a read-only agent, so discovery stays reachable" {
     final content = cursor_agent(cursor_scout_fixture(true)).content;
-    assert\isTrue(content.indexOf("\ntools:") == null, "an allowlist would drop what it omits");
+    assert\isTrue(content.indexOf("\ntools:") == null, message: "an allowlist would drop what it omits");
     foreach (name in DISCOVERY_TOOLS) {
-        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+        assert\isTrue(content.indexOf(name) == null, message: "{name} is not removed");
     }
 }
 
 test "mgs_renderAgents renders a read-only agent that inherits the model" {
     final file = cursor_agent(cursor_scout_fixture(true));
-    assert\equal(file.path, ".cursor/agents/magus-scout.md", "Cursor reads .cursor/agents");
+    assert\equal(file.path, want: ".cursor/agents/magus-scout.md", message: "Cursor reads .cursor/agents");
     assert\equal(
         file.content,
-        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmodel: inherit\nreadonly: true\n---\n\nFirst line.\n\nSecond line.\n",
-        "frontmatter then the instructions",
+        want: "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmodel: inherit\nreadonly: true\n---\n\nFirst line.\n\nSecond line.\n",
+        message: "frontmatter then the instructions",
     );
 }
 
 test "mgs_renderPrompts writes no file because the hook prompts" {
-    assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), 0, "an ask is Cursor's own dialog");
+    assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), want: 0, message: "an ask is Cursor's own dialog");
 }
 
 test "mgs_renderAgents omits readonly for a writable agent, and renders none for none" {
     final content = cursor_agent(cursor_scout_fixture(false)).content;
-    assert\isTrue(content.indexOf("readonly") == null, "no read-only mark");
-    assert\isTrue(content.indexOf("model: inherit") != null, "still inherits the model");
-    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
+    assert\isTrue(content.indexOf("readonly") == null, message: "no read-only mark");
+    assert\isTrue(content.indexOf("model: inherit") != null, message: "still inherits the model");
+    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), want: 0, message: "no agents, no files");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
-    assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
+    assert\equal(mgs_getName(), want: "cursor", message: "id must match magus\\harness.provider wiring and --id");
 }
 
 test "mgs_getHarness names the Cursor hooks file and seeds version 1, and no env" {
     final cfg = mgs_getHarness().config;
-    assert\equal(cfg.path, ".cursor/hooks.json", "workspace-relative host config path");
-    assert\equal("{cfg.defaults["version"]}", "1", "defaults merge on first create");
-    assert\isTrue(cfg.defaults["env"] == null, "hooks.json gains no env key");
+    assert\equal(cfg.path, want: ".cursor/hooks.json", message: "workspace-relative host config path");
+    assert\equal("{cfg.defaults["version"]}", want: "1", message: "defaults merge on first create");
+    assert\isTrue(cfg.defaults["env"] == null, message: "hooks.json gains no env key");
 }
 
 test "mgs_getSkills installs both forms into .agents/skills" {
-    assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins, as for the other hosts");
-    assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "a directory cursor-agent reads skills from");
+    assert\equal(mgs_getSkills().form.value, want: "both", message: "the short skills and their full twins, as for the other hosts");
+    assert\equal(mgs_getSkills().paths.join(","), want: ".agents/skills", message: "a directory cursor-agent reads skills from");
 }
 
 test "guard command is the shipped Cursor Buzz port, not a shell script" {
     final cmd = cursor_guard_command();
-    assert\isTrue(cmd.startsWith("magus buzz -s .magus/harness/hooks/cursor-hook.buzz"), "host runs the installed Buzz port, with no shell");
+    assert\isTrue(cmd.startsWith("magus buzz -s .magus/harness/hooks/cursor-hook.buzz"), message: "host runs the installed Buzz port, with no shell");
     final paths = mgs_getHarness().assets.map(fun (index: int, asset: HarnessAsset) > str => asset.path);
     foreach (hook in cursor_hooks()) {
-        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} is installed");
+        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, message: "{hook.script} is installed");
     }
-    assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, "names this host on the script argv");
-    assert\isTrue(cmd.endsWith(" -- --agent-name {mgs_getName()}"), "the host name is the one argument");
-    assert\isTrue(mgs_getLimits().observesSkillLoads, "a SKILL.md Read reaches preToolUse, so skill loads are reported");
+    assert\isTrue(cmd.indexOf(" -- --agent-name {mgs_getName()}") != null, message: "names this host on the script argv");
+    assert\isTrue(cmd.endsWith(" -- --agent-name {mgs_getName()}"), message: "the host name is the one argument");
+    assert\isTrue(mgs_getLimits().observesSkillLoads, message: "a SKILL.md Read reaches preToolUse, so skill loads are reported");
 }
 
 test "the entries cover every Cursor event magus uses, one guard entry each" {
     final names = cursor_event_names();
-    assert\equal(names.len(), 12, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt, stop, subagentStop");
-    assert\equal(cursor_points("stop")[0].value, "stop", "the guard answers the stop");
-    assert\equal(cursor_points("subagentStop")[0].value, "subagent-stop", "and the subagent's");
+    assert\equal(names.len(), want: 12, message: "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt, stop, subagentStop");
+    assert\equal(cursor_points("stop")[0].value, want: "stop", message: "the guard answers the stop");
+    assert\equal(cursor_points("subagentStop")[0].value, want: "subagent-stop", message: "and the subagent's");
     final entries = cursor_entries();
-    assert\equal(entries.len(), names.len(), "one managed block per event");
+    assert\equal(entries.len(), want: names.len(), message: "one managed block per event");
     foreach (i, block in entries) {
-        assert\equal(block.path.join("."), "hooks.{names[i]}", "Cursor nests events under hooks, in order");
+        assert\equal(block.path.join("."), want: "hooks.{names[i]}", message: "Cursor nests events under hooks, in order");
         final guard = block.entries[0];
-        assert\equal("{guard["command"]}", cursor_guard_command(), "every event names the guard script");
-        assert\equal(guard["timeout"] as? int, HOOK_TIMEOUT_S, "every entry bounds how long magus may run");
+        assert\equal("{guard["command"]}", want: cursor_guard_command(), message: "every event names the guard script");
+        assert\equal(guard["timeout"] as? int, want: HOOK_TIMEOUT_S, message: "every entry bounds how long magus may run");
         foreach (entry in block.entries) {
-            assert\equal((entry["failClosed"] as? bool) ?? false, !cursor_stops(names[i]), "a hook that cannot judge lets only a stop through");
+            assert\equal((entry["failClosed"] as? bool) ?? false, want: !cursor_stops(names[i]), message: "a hook that cannot judge lets only a stop through");
         }
-        assert\equal((guard["matcher"] as? str) ?? "", cursor_matcher(names[i]), "the matcher the event takes");
+        assert\equal((guard["matcher"] as? str) ?? "", want: cursor_matcher(names[i]), message: "the matcher the event takes");
     }
     final post = entries[names.indexOf("postToolUse")!];
-    assert\equal(post.entries.len(), 3, "the advice, the Buzz check and the duration recorder");
-    assert\equal("{post.entries[1]["matcher"]}", WRITE_MATCHER, "every tool that writes a file");
-    assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-duration.buzz") != null, "the recorder");
-    assert\isTrue("{post.entries[2]["command"]}".endsWith(" # magus:harness"), "magus cannot tell the recorder is its own without the marker");
+    assert\equal(post.entries.len(), want: 3, message: "the advice, the Buzz check and the duration recorder");
+    assert\equal("{post.entries[1]["matcher"]}", want: WRITE_MATCHER, message: "every tool that writes a file");
+    assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-duration.buzz") != null, message: "the recorder");
+    assert\isTrue("{post.entries[2]["command"]}".endsWith(" # magus:harness"), message: "magus cannot tell the recorder is its own without the marker");
 }
 
 test "mgs_getMcp prints Cursor stdio setup guidance only" {
     final mcp = mgs_getMcp();
-    assert\equal(mcp.transport.value, "stdio", "the host starts ./magus mcp per folder");
-    assert\isTrue(mcp.hint.indexOf(".cursor/mcp.json") != null, "points at the project config");
-    assert\isTrue(mcp.hint.indexOf("does not write") != null, "no Magus mcp.json write");
-    assert\isTrue(mcp.hint.indexOf(cursor_env_hint()) != null, "describe prints the MAGUS_LOG_SILENT note");
-    assert\isTrue(cursor_env_hint().indexOf("export") == null, "rewrites no command");
+    assert\equal(mcp.transport.value, want: "stdio", message: "the host starts ./magus mcp per folder");
+    assert\isTrue(mcp.hint.indexOf(".cursor/mcp.json") != null, message: "points at the project config");
+    assert\isTrue(mcp.hint.indexOf("does not write") != null, message: "no Magus mcp.json write");
+    assert\isTrue(mcp.hint.indexOf(cursor_env_hint()) != null, message: "describe prints the MAGUS_LOG_SILENT note");
+    assert\isTrue(cursor_env_hint().indexOf("export") == null, message: "rewrites no command");
 }

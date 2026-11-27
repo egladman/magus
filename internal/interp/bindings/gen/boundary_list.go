@@ -161,7 +161,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "EditSpan", Zero: types.EditSpan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEditSpan(v.(types.EditSpan)) }},
 	{Name: "EditedFile", Zero: types.EditedFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEditedFile(v.(types.EditedFile)) }},
 	{Name: "Empty", Zero: types.Empty{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmpty(v.(types.Empty)) }},
+	{Name: "Encoding", Zero: spells.Encoding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEncoding(v.(spells.Encoding)) }},
 	{Name: "Entry", Zero: imagetypes.Entry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(imagetypes.Entry), enums) }},
+	{Name: "Escape", Zero: spells.Escape{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEscape(v.(spells.Escape)) }},
 	{Name: "EvaluatedProject", Zero: types.EvaluatedProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectEvaluatedProject(v.(types.EvaluatedProject), enums)
 	}},

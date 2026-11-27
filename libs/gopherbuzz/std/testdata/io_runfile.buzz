@@ -1,9 +1,14 @@
 // @expect: ok
 import "io";
 import "os";
-final path = os\tmpFilename("buzz_runfile_test");
-final f = io\File.open(path, io\FileMode.write);
-f.write("final _rftmp = 2 + 2;");
-f.close();
-io\runFile(path);
-final __r = "ok";
+
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    final path = os\tmpFilename("buzz_runfile_test");
+    final f = io\File.open(path, mode: io\FileMode.write);
+    f.write("final _rftmp = 2 + 2;");
+    f.close();
+    io\runFile(path);
+    __r = "ok";
+}

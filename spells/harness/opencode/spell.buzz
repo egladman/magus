@@ -169,66 +169,66 @@ test "mgs_renderAgents renders a read-only subagent that denies edits and sets n
         instructions = "First line.\n\nSecond line.\n",
         readOnly = true,
     });
-    assert\equal(file.path, ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
+    assert\equal(file.path, want: ".opencode/agents/magus-scout.md", message: "OpenCode reads .opencode/agents");
     assert\equal(
         file.content,
-        "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\npermission:\n  edit: deny\n---\n\nFirst line.\n\nSecond line.\n",
-        "frontmatter then the instructions",
+        want: "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\npermission:\n  edit: deny\n---\n\nFirst line.\n\nSecond line.\n",
+        message: "frontmatter then the instructions",
     );
-    assert\isTrue(file.content.indexOf("model") == null, "the invoking session's model applies");
+    assert\isTrue(file.content.indexOf("model") == null, message: "the invoking session's model applies");
 }
 
 test "mgs_renderAgents denies no discovery tool of a read-only subagent" {
     final content = opencode_agent(ShippedAgent{name = "magus-scout", description = "Reads.", instructions = "x\n", readOnly = true}).content;
-    assert\isTrue(content.indexOf("\ntools:") == null, "tools is deprecated and an allowlist");
+    assert\isTrue(content.indexOf("\ntools:") == null, message: "tools is deprecated and an allowlist");
     foreach (name in DISCOVERY_TOOLS) {
-        assert\isTrue(content.indexOf(name) == null, "{name} stays allowed");
+        assert\isTrue(content.indexOf(name) == null, message: "{name} stays allowed");
     }
 }
 
 test "mgs_renderAgents leaves permissions alone for a writable subagent, and renders none for none" {
     final file = opencode_agent(ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"});
-    assert\isTrue(file.content.indexOf("permission") == null, "the session's permissions apply");
-    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
+    assert\isTrue(file.content.indexOf("permission") == null, message: "the session's permissions apply");
+    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), want: 0, message: "no agents, no files");
 }
 
 test "mgs_renderPrompts asks before every spelling of a human-only target's run" {
     final prompts = mgs_renderPrompts({"agent-bench-run": "launches paid sessions"});
-    assert\equal(prompts.len(), 16, "the 8 push keys, then a bare and an argument key per spelling");
+    assert\equal(prompts.len(), want: 16, message: "the 8 push keys, then a bare and an argument key per spelling");
     final want = ["magus run agent-bench-run", "magus run agent-bench-run *", "magus affected agent-bench-run", "magus affected agent-bench-run *",
         "./magus run agent-bench-run", "./magus run agent-bench-run *", "./magus affected agent-bench-run", "./magus affected agent-bench-run *"];
     foreach (i, verb in want) {
-        assert\equal(prompts[8 + i].key[2], verb, "permission key {8 + i}");
-        assert\equal("{prompts[8 + i].value}", "ask", "OpenCode prompts rather than refuses");
+        assert\equal(prompts[8 + i].key[2], want: verb, message: "permission key {8 + i}");
+        assert\equal("{prompts[8 + i].value}", want: "ask", message: "OpenCode prompts rather than refuses");
     }
 }
 
 test "mgs_renderPrompts asks before every backend's bare push and push with arguments" {
     final prompts = mgs_renderPrompts({<str: str>});
-    assert\equal(prompts.len(), 8, "a bare and an argument key per backend");
+    assert\equal(prompts.len(), want: 8, message: "a bare and an argument key per backend");
     final want = ["git push", "git push *", "hg push", "hg push *", "sl push", "sl push *", "jj git push", "jj git push *"];
     foreach (i, verb in want) {
-        assert\equal(prompts[i].path, "opencode.json", "the project config OpenCode loads");
-        assert\equal(prompts[i].key[2], verb, "permission key {i}");
-        assert\isTrue(prompts[i].key[0] != "env", "opencode.json gains no env key");
+        assert\equal(prompts[i].path, want: "opencode.json", message: "the project config OpenCode loads");
+        assert\equal(prompts[i].key[2], want: verb, message: "permission key {i}");
+        assert\isTrue(prompts[i].key[0] != "env", message: "opencode.json gains no env key");
     }
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
-    assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
+    assert\equal(mgs_getName(), want: "opencode", message: "id must match magus\\harness.provider wiring and --id");
 }
 
 test "the harness installs its plugin and runtime beside .opencode/skills" {
-    assert\equal(mgs_getHarness().config.path, "", "the plugin loads from its project directory");
-    assert\equal(mgs_getHarness().guard, "plugin", "no config path is not skills-only");
-    assert\equal(mgs_getHarness().assets.len(), 4, "plugin and activation runtime; the binary owns its managed glue");
-    assert\equal(mgs_getSkills().paths.join(","), ".opencode/skills", "OpenCode reads .opencode/skills");
-    assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
+    assert\equal(mgs_getHarness().config.path, want: "", message: "the plugin loads from its project directory");
+    assert\equal(mgs_getHarness().guard, want: "plugin", message: "no config path is not skills-only");
+    assert\equal(mgs_getHarness().assets.len(), want: 4, message: "plugin and activation runtime; the binary owns its managed glue");
+    assert\equal(mgs_getSkills().paths.join(","), want: ".opencode/skills", message: "OpenCode reads .opencode/skills");
+    assert\equal(mgs_getSkills().form.value, want: "both", message: "the short skills and their full twins");
 }
 
 test "mgs_getMcp points OpenCode at a stdio server it configures itself" {
     final mcp = mgs_getMcp();
-    assert\equal(mcp.transport.value, "stdio", "the host starts ./magus mcp per session");
-    assert\isTrue(mcp.hint.indexOf("does not write") != null, "no Magus write");
-    assert\isTrue(mcp.hint.indexOf(opencode_env_hint()) != null, "describe prints the MAGUS_LOG_SILENT note");
+    assert\equal(mcp.transport.value, want: "stdio", message: "the host starts ./magus mcp per session");
+    assert\isTrue(mcp.hint.indexOf("does not write") != null, message: "no Magus write");
+    assert\isTrue(mcp.hint.indexOf(opencode_env_hint()) != null, message: "describe prints the MAGUS_LOG_SILENT note");
 }

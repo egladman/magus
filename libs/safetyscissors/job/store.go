@@ -700,8 +700,10 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error, then func() e
 		}
 		f, log := ledger.rows, ledger.log
 		gone := make(map[string]bool, len(f.Jobs))
+		ended := make(map[string]bool, len(f.Jobs))
 		for _, row := range f.Jobs {
 			gone[row.ID] = true
+			ended[row.ID] = row.State.Terminal()
 		}
 		if err := fn(&f); err != nil {
 			if errors.Is(err, ErrSkipWrite) {
@@ -725,11 +727,58 @@ func (s *Store) rewrite(ctx context.Context, fn func(*Rows) error, then func() e
 		if err := s.dropAttempts(ctx, gone); err != nil {
 			return err
 		}
-		if err := s.write(f, log); err != nil || then == nil {
+		if err := s.write(f, log); err != nil {
 			return err
+		}
+		var ending []string
+		for _, row := range f.Jobs {
+			if row.State.Terminal() && !ended[row.ID] {
+				ending = append(ending, row.ID)
+			}
+		}
+		if err := s.closeAttempts(ctx, ending, s.Now().Unix()); err != nil {
+			return err
+		}
+		if then == nil {
+			return nil
 		}
 		return then()
 	})
+}
+
+// closeAttempts ends the running try of each job in ids, rows that just ended, at now as
+// [AttemptEndJob]. An end observed later replaces it; see [Store.ChangeLiveAttempt].
+func (s *Store) closeAttempts(ctx context.Context, ids []string, now int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	log, err := s.attemptsLog()
+	if err != nil {
+		return err
+	}
+	var failed error
+	err = log.Update(ctx, func(recs []attemptRecord) []attemptRecord {
+		var all []Attempt
+		if all, failed = s.decodeAttempts(recs); failed != nil {
+			return nil
+		}
+		tries := NewAttempts(all)
+		var out []attemptRecord
+		for _, id := range ids {
+			if live := tries.Live(id); live.Running() {
+				live.Status.Ended, live.Status.End = now, AttemptEndJob
+				out = append(out, recordAttempt(live))
+			}
+		}
+		return out
+	})
+	if err == nil {
+		err = failed
+	}
+	if err != nil {
+		return fmt.Errorf("job: %s: closing the tries of ended rows: %w", attemptsFileName, s.wrap(err))
+	}
+	return nil
 }
 
 // write records f against log, the file it was read from: the lines of the rows that
@@ -1240,6 +1289,9 @@ func (s *Store) Attempts(ctx context.Context) ([]Attempt, error) {
 
 // ChangeLiveAttempt shows change job id's try in progress under the attempts lock, and
 // appends it when change reports it changed. It returns the try as change left it.
+//
+// A try the store closed as [AttemptEndJob] shows as unended. An end its holder observed,
+// such as the exit that ended the row, then replaces the store's. Unchanged, it stands.
 func (s *Store) ChangeLiveAttempt(ctx context.Context, id string, change func(*Attempt) bool) (Attempt, error) {
 	log, err := s.attemptsLog()
 	if err != nil {
@@ -1248,19 +1300,17 @@ func (s *Store) ChangeLiveAttempt(ctx context.Context, id string, change func(*A
 	var live Attempt
 	var failed error
 	err = log.Update(ctx, func(recs []attemptRecord) []attemptRecord {
-		all := make([]Attempt, 0, len(recs))
-		for _, r := range recs {
-			if failed = s.refuseAttemptVersion(r); failed != nil {
-				return nil
-			}
-			var a Attempt
-			if a, failed = r.attempt(); failed != nil {
-				return nil
-			}
-			all = append(all, a)
+		var all []Attempt
+		if all, failed = s.decodeAttempts(recs); failed != nil {
+			return nil
 		}
 		live = NewAttempts(all).Live(id)
+		closed := live
+		if live.Status.End == AttemptEndJob && !live.Superseded() {
+			live.Status.Ended, live.Status.End = 0, ""
+		}
 		if !change(&live) {
+			live = closed
 			return nil
 		}
 		return []attemptRecord{recordAttempt(live)}
@@ -1272,6 +1322,22 @@ func (s *Store) ChangeLiveAttempt(ctx context.Context, id string, change func(*A
 		return Attempt{}, fmt.Errorf("job: %s: %w", attemptsFileName, s.wrap(err))
 	}
 	return live, nil
+}
+
+// decodeAttempts reads recs as tries, refusing a record of a version this store cannot read.
+func (s *Store) decodeAttempts(recs []attemptRecord) ([]Attempt, error) {
+	all := make([]Attempt, 0, len(recs))
+	for _, r := range recs {
+		if err := s.refuseAttemptVersion(r); err != nil {
+			return nil, err
+		}
+		a, err := r.attempt()
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, a)
+	}
+	return all, nil
 }
 
 // appendAttempts appends attempts as their records.

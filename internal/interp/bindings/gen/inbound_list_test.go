@@ -56,6 +56,8 @@ var inboundTypes = []inboundType{
 	{Name: "EditRefusal", Zero: types.EditRefusal{}, Encode: func(v any) vm.Value { return ObjectEditRefusal(v.(types.EditRefusal)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditRefusal(v) }},
 	{Name: "EditSpan", Zero: types.EditSpan{}, Encode: func(v any) vm.Value { return ObjectEditSpan(v.(types.EditSpan)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditSpan(v) }},
 	{Name: "EditedFile", Zero: types.EditedFile{}, Encode: func(v any) vm.Value { return ObjectEditedFile(v.(types.EditedFile)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEditedFile(v) }},
+	{Name: "Encoding", Zero: spells.Encoding{}, Encode: func(v any) vm.Value { return ObjectEncoding(v.(spells.Encoding)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEncoding(v) }},
+	{Name: "Escape", Zero: spells.Escape{}, Encode: func(v any) vm.Value { return ObjectEscape(v.(spells.Escape)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeEscape(v) }},
 	{Name: "ExecOptions", Zero: types.ExecOptions{}, Encode: func(v any) vm.Value { return ObjectExecOptions(v.(types.ExecOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeExecOptions(v) }},
 	{Name: "File", Zero: imagetypes.File{}, Encode: func(v any) vm.Value { return ObjectImageFile(v.(imagetypes.File)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageFile(v) }},
 	{Name: "ForgeCheck", Zero: types.ForgeCheck{}, Encode: func(v any) vm.Value { return ObjectForgeCheck(v.(types.ForgeCheck)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeForgeCheck(v) }},

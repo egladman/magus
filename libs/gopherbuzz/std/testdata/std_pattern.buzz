@@ -6,18 +6,22 @@
 // $"..." literals, which never interpolate.
 import "std";
 
-final p = std\pattern("^Untitled [0-9]+$");
-std\assert(p.match("Untitled 42") != null, "regex matches");
-std\assert(p.match("Settings") == null, "regex rejects");
+var __r: any = null;
 
-final pcre = std\pattern("(?i)co\{2\}l(?= beans)");
-std\assert(pcre.match("COOL beans") != null, "PCRE flags and lookahead work");
+fun main(args: [str]) > void !> any {
+    final p = std\pattern("^Untitled [0-9]+$");
+    std\assert(p.match("Untitled 42") != null, message: "regex matches");
+    std\assert(p.match("Settings") == null, message: "regex rejects");
 
-var caught = false;
-try {
-    std\pattern("(unclosed");
-} catch (e) {
-    caught = true;
+    final pcre = std\pattern("(?i)co\{2\}l(?= beans)");
+    std\assert(pcre.match("COOL beans") != null, message: "PCRE flags and lookahead work");
+
+    var caught = false;
+    try {
+        std\pattern("(unclosed");
+    } catch (e) {
+        caught = true;
+    }
+    std\assert(caught, message: "malformed pattern raises catchably");
+    __r = "ok";
 }
-std\assert(caught, "malformed pattern raises catchably");
-final __r = "ok";

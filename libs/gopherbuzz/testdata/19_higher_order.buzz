@@ -1,8 +1,14 @@
 // @expect: 9
+var __r: any = null;
+
 fun apply(f: fun(int)int, x: int) > int {
     return f(x);
 }
+
 fun square(n: int) > int {
     return n * n;
 }
-final __r = apply(square, 3);
+
+fun main(args: [str]) > void !> any {
+    __r = apply(square, x: 3);
+}

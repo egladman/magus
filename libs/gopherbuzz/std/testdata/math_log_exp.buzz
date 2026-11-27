@@ -1,9 +1,14 @@
 // log takes (base, n), matching upstream buzz's math.log signature.
 // @expect: [0, 2, 1, true]
 import "math";
-final __r = [
-    math\log(10.0, 1.0),
-    math\log(10.0, 100.0),
-    math\exp(0.0),
-    math\exp(1.0) > 2.7,
-];
+
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    __r = [
+        math\log(base: 10.0, n: 1.0),
+        math\log(base: 10.0, n: 100.0),
+        math\exp(0.0),
+        math\exp(1.0) > 2.7,
+    ];
+}

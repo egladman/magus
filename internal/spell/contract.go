@@ -36,7 +36,8 @@ type Contract struct {
 	// the probe that reads its version into the cache key.
 	Tools map[string]spells.Tool `mgs:"mgs_getTools"`
 	// The source language the spell adapts: its name, its file extensions and, when the
-	// spell can declare it honestly, its comment and string syntax.
+	// spell can declare it honestly, its comment and string syntax. Its encodings are how emit
+	// writes a value into that source.
 	Language *spells.Language `mgs:"mgs_getLanguage"`
 	// The command that writes the spell's SCIP symbol index. magus runs it as the
 	// reserved index op.
@@ -54,7 +55,7 @@ type Contract struct {
 	// graph, so magus treats the project as a black box.
 	Opaque bool `mgs:"mgs_isOpaque"`
 	// The args that tell an op apart from other uses of a program with no subcommand,
-	// keyed by op name: node runs scripts too, and only --test is node-test.
+	// keyed by op name. node runs scripts too, and only --test is node-test.
 	ModeArgs map[string][]string `mgs:"mgs_getModeArgs"`
 	// The spell's ops, keyed by op name. magus calls each handler once at load, with a
 	// null Target, to read the Command it declares, so a handler must not read its Target.

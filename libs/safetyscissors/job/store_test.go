@@ -505,3 +505,49 @@ func (s *StoreSuite) TestAnAttemptOfAnotherVersionIsRefused() {
 	s.Require().ErrorAs(err, &newer)
 	s.Equal("attempt 1 of a", newer.Record)
 }
+
+func (s *StoreSuite) TestARowThatEndsClosesItsRunningTry() {
+	ctx := s.T().Context()
+	st := s.open(WithClock(func() time.Time { return time.Unix(100, 0) }))
+	for _, id := range []string{"a", "b"} {
+		_, err := st.Update(ctx, id, func(*Job) {})
+		s.Require().NoError(err)
+		s.Require().NoError(st.appendAttempts(ctx, Attempt{Job: id, N: 1, Status: AttemptStatus{Started: 3}}))
+	}
+
+	_, err := st.Update(ctx, "a", func(row *Job) { row.State = StateNoReturn })
+	s.Require().NoError(err)
+
+	tries, err := st.Attempts(ctx)
+	s.Require().NoError(err)
+	live := NewAttempts(tries)
+	s.Equal(AttemptStatus{Started: 3, Ended: 100, End: AttemptEndJob}, live.Live("a").Status)
+	s.True(live.Live("b").Running(), "a row still working keeps its try open")
+}
+
+func (s *StoreSuite) TestAnEndObservedAfterTheStoreClosedTheTryReplacesIt() {
+	ctx := s.T().Context()
+	st := s.open(WithClock(func() time.Time { return time.Unix(100, 0) }))
+	_, err := st.Update(ctx, "a", func(*Job) {})
+	s.Require().NoError(err)
+	s.Require().NoError(st.appendAttempts(ctx, Attempt{Job: "a", N: 1, Status: AttemptStatus{Started: 3}}))
+	_, err = st.Update(ctx, "a", func(row *Job) { row.State = StateNoReturn })
+	s.Require().NoError(err)
+
+	kept, err := st.ChangeLiveAttempt(ctx, "a", func(*Attempt) bool { return false })
+	s.Require().NoError(err)
+	s.Equal(AttemptEndJob, kept.Status.End, "an unchanged try keeps the store's end")
+	ended, err := st.ChangeLiveAttempt(ctx, "a", func(a *Attempt) bool {
+		if a.Status.Ended != 0 {
+			return false
+		}
+		a.Status.Ended, a.Status.End = 101, AttemptEndExit
+		return true
+	})
+	s.Require().NoError(err)
+
+	s.Equal(AttemptStatus{Started: 3, Ended: 101, End: AttemptEndExit}, ended.Status)
+	tries, err := st.Attempts(ctx)
+	s.Require().NoError(err)
+	s.Equal(ended.Status, NewAttempts(tries).Live("a").Status)
+}

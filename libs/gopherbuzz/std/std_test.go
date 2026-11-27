@@ -88,13 +88,19 @@ func parseMeta(src string) conformanceMeta {
 	return m
 }
 
+// runCase loads a fixture in strict mode, then calls its main when it declares one.
+// Strict mode refuses top-level statements, so the work lives in main.
 func runCase(t *testing.T, src string, meta conformanceMeta) {
 	t.Helper()
-	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx)
 	defer func() { _ = sess.Close() }()
 	Register(sess)
 
-	err := sess.Exec(context.Background(), src)
+	err := sess.Exec(ctx, src)
+	if err == nil && strings.Contains(src, "fun main(") {
+		_, err = sess.CallValue(ctx, sess.GetGlobal("main"), []vm.Value{vm.ListValue(nil)})
+	}
 	if meta.errStr != "" {
 		require.Errorf(t, err, "expected error containing %q, got nil", meta.errStr)
 		require.Containsf(t, err.Error(), meta.errStr, "error %q does not contain %q", err.Error(), meta.errStr)

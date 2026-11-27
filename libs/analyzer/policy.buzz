@@ -7,7 +7,7 @@ import "std";
 import "fs";
 import "result";
 import "encoding/yaml";
-import "libs/analyzer/finding" as finding;
+import "finding" as finding;
 
 export final FILE = "analyzers.yaml";
 

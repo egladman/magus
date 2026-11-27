@@ -15,15 +15,18 @@ object Tracked {
 fun spawn(n: int) > void *> int {
     var i = 0;
     while (i < n) {
-        // Unreachable as soon as the next statement runs.
         _ = Tracked{ id = i };
         _ = yield i;
         i = i + 1;
     }
 }
 
-foreach (v in &spawn(3)) {
-    _ = v;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    foreach (v in &spawn(3)) {
+        _ = v;
+    }
+    gc\collect();
+    __r = collected;
 }
-gc\collect();
-final __r = collected;

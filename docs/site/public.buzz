@@ -56,7 +56,7 @@ export fun loadReleases(site: Site) > result\Result::<bool> {
             }
             foreach (name in sortNamesSemverDesc(names)) {
                 final path = relDir + "/" + name;
-                final f = io\File.open(path, io\FileMode.read);
+                final f = io\File.open(path, mode: io\FileMode.read);
                 final src = f.readAll();
                 f.close();
                 final doc = serialize\Boxed.init(yaml\parse(src));
@@ -141,7 +141,7 @@ export fun loadReleases(site: Site) > result\Result::<bool> {
             // Tagged with no manifest: real, and dated, but with no prose or artifacts.
             // The tag date is RFC3339; the manifests carry a bare date, so match them.
             var when = t.date;
-            if (when.len() >= 10) { when = when.sub(0, 10); }
+            if (when.len() >= 10) { when = when.sub(0, len: 10); }
             site.inputs.releases.append(Release{ version = ver, date = when });
         }
         return result\ok::<bool>(true);
@@ -228,7 +228,7 @@ are hosted on GitHub; the links below go there.</p>
 {{/hasReleases}}  <li><a href="../sitemap.xml">sitemap.xml</a> - XML sitemap</li>
   <li><a href="../robots.txt">robots.txt</a> - crawler policy</li>
 </ul>
-`, {"hasReleases": hasReleases, "releases": releases, "hasFeeds": feeds.len() > 0, "feeds": feeds});
+`, data: {"hasReleases": hasReleases, "releases": releases, "hasFeeds": feeds.len() > 0, "feeds": feeds});
 
         fs\mkdirAll(site.inputs.outDir + "/public");
         // srcRel is a synthesized-page marker, not a file: the "/_index.md" suffix is
@@ -243,7 +243,7 @@ are hosted on GitHub; the links below go there.</p>
         } else {
             site.inputs.metaCommits[site.inputs.metaPrefix + srcMarker] = site.inputs.metaFull + "|" + site.inputs.metaShort + "|" + site.inputs.metaStamp;
         }
-        final r1 = renderPage("Public files", "Machine-readable endpoints served by this site: release manifest, Atom feeds, sitemap, and robots policy.", body, srcMarker, "", "public/", "", mut [], "", site);
+        final r1 = renderPage("Public files", description: "Machine-readable endpoints served by this site: release manifest, Atom feeds, sitemap, and robots policy.", content: body, srcRel: srcMarker, pager: "", canonUrl: "public/", reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r1.value!;
         fs\writeFile(site.inputs.outDir + "/public/index.html", doc);

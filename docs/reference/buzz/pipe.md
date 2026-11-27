@@ -33,17 +33,19 @@ Report whether another record is coming from the magus stage writing this script
 import "std";
 import "pipe";
 
-// magus run test . | magus buzz failures.buzz
-// more waits for the next record, so each failure prints as the run reports it.
-try {
-    while (pipe\more()) {
-        final rec = pipe\next();
-        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
-            std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+fun main(args: [str]) > void {
+    // magus run test . | magus buzz failures.buzz
+    // more waits for the next record, so each failure prints as the run reports it.
+    try {
+        while (pipe\more()) {
+            final rec = pipe\next();
+            if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+                std\print("FAIL {rec.project}:{rec.target}  magus query output {rec.ref}");
+            }
         }
+    } catch (e) {
+        std\print("no magus run is piped into this script");
     }
-} catch (e) {
-    std\print("no magus run is piped into this script");
 }
 ```
 
@@ -79,19 +81,20 @@ Write record to stdout for the stage downstream. A record read from upstream pas
 import "std";
 import "pipe";
 
-// magus run test . | magus buzz retry.buzz | magus run test
-// A run.scope record names the projects a run downstream runs on when it names none,
-// so this passes on only the projects that failed.
-try {
-    var failed: mut [str] = mut [];
-    foreach (rec in pipe\all()) {
-        if (rec.@"type" == "run.target.result" and rec.status == "failed") {
-            failed.append(rec.project);
+fun main(args: [str]) > void {
+    // magus run test . | magus buzz retry.buzz | magus run test
+    // A run.scope record makes the downstream run use only the failed projects.
+    try {
+        var failed: mut [str] = mut [];
+        foreach (rec in pipe\all()) {
+            if (rec.@"type" == "run.target.result" and rec.status == "failed") {
+                failed.append(rec.project);
+            }
         }
+        pipe\emit(pipe\PipeRecord{ @"type" = "run.scope", projects = failed });
+    } catch (e) {
+        std\print("no magus run is piped into this script");
     }
-    pipe\emit(pipe\PipeRecord{ @"type" = "run.scope", projects = failed });
-} catch (e) {
-    std\print("no magus run is piped into this script");
 }
 ```
 
@@ -113,18 +116,20 @@ Return the files the target of record declared as outputs and that exist on disk
 import "std";
 import "pipe";
 
-// magus run build . | magus buzz export.buzz
-// Copies every file the build declared and produced under dist-copy/, keeping the tree.
-try {
-    foreach (rec in pipe\all()) {
-        if (rec.@"type" == "run.target.result") {
-            foreach (a in pipe\outputs(rec)) {
-                std\print(pipe\exportTo(a, dest: "dist-copy/{a.path}"));
+fun main(args: [str]) > void {
+    // magus run build . | magus buzz export.buzz
+    // Copies every file the build declared and produced under dist-copy/, keeping the tree.
+    try {
+        foreach (rec in pipe\all()) {
+            if (rec.@"type" == "run.target.result") {
+                foreach (a in pipe\outputs(rec)) {
+                    std\print(pipe\exportTo(a, dest: "dist-copy/{a.path}"));
+                }
             }
         }
+    } catch (e) {
+        std\print("no magus run is piped into this script");
     }
-} catch (e) {
-    std\print("no magus run is piped into this script");
 }
 ```
 

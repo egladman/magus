@@ -1,7 +1,10 @@
 // @expect: caught
 var __r = "ok";
-try {
-    throw "oops";
-} catch (e) {
-    __r = "caught";
+
+fun main(args: [str]) > void !> any {
+    try {
+        throw "oops";
+    } catch (e) {
+        __r = "caught";
+    }
 }

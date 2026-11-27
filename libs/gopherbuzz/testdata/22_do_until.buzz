@@ -1,6 +1,10 @@
 // @expect: 5
-var i = 0;
-do {
-    i = i + 1;
-} until (i >= 5);
-final __r = i;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    var i = 0;
+    do {
+        i = i + 1;
+    } until (i >= 5);
+    __r = i;
+}

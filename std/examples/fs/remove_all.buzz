@@ -1,8 +1,10 @@
 import "std";
 import "fs";
 
-try {
-    fs\removeAll("dist/");
-} catch (e) {
-    std\print("could not remove dist/");
+fun main(args: [str]) > void {
+    try {
+        fs\removeAll("dist/");
+    } catch (e) {
+        std\print("could not remove dist/");
+    }
 }

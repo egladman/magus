@@ -12,7 +12,7 @@ import "assert";
 export fun semverSortKey(name: str) > str {
     var v = name;
     if (v.startsWith("v")) { v = v.sub(1); }
-    if (v.endsWith(".yaml")) { v = v.sub(0, v.len() - 5); }
+    if (v.endsWith(".yaml")) { v = v.sub(0, len: v.len() - 5); }
     final parts = v.split(".");
     final key = mut [<str>];
     foreach (p in parts) { key.append(pad4(strToNat(p))); }
@@ -39,9 +39,9 @@ export fun isVersionTag(name: str) > bool {
         // Only the last of the three may carry a -prerelease or +build suffix.
         if (i == 2) {
             final dash = p.indexOf("-");
-            if (dash != null) { p = p.sub(0, dash!); }
+            if (dash != null) { p = p.sub(0, len: dash!); }
             final plus = p.indexOf("+");
-            if (plus != null) { p = p.sub(0, plus!); }
+            if (plus != null) { p = p.sub(0, len: plus!); }
         }
         if (p.len() == 0) { return false; }
         var j = 0;
@@ -56,14 +56,14 @@ export fun isVersionTag(name: str) > bool {
 }
 
 test "isVersionTag accepts release tags and rejects everything else" {
-    assert\equal(isVersionTag("v0.3.0"), true, "a plain release tag");
-    assert\equal(isVersionTag("v1.10.2"), true, "multi-digit parts");
-    assert\equal(isVersionTag("v1.0.0-rc.1"), true, "a prerelease suffix");
-    assert\equal(isVersionTag("verified-refinements"), false, "the tag that caused this");
-    assert\equal(isVersionTag("v0.3"), false, "too few parts");
-    assert\equal(isVersionTag("0.3.0"), false, "no leading v");
-    assert\equal(isVersionTag("vendor"), false, "a word starting with v");
-    assert\equal(isVersionTag("v0.x.0"), false, "a non-numeric part");
+    assert\equal(isVersionTag("v0.3.0"), want: true, message: "a plain release tag");
+    assert\equal(isVersionTag("v1.10.2"), want: true, message: "multi-digit parts");
+    assert\equal(isVersionTag("v1.0.0-rc.1"), want: true, message: "a prerelease suffix");
+    assert\equal(isVersionTag("verified-refinements"), want: false, message: "the tag that caused this");
+    assert\equal(isVersionTag("v0.3"), want: false, message: "too few parts");
+    assert\equal(isVersionTag("0.3.0"), want: false, message: "no leading v");
+    assert\equal(isVersionTag("vendor"), want: false, message: "a word starting with v");
+    assert\equal(isVersionTag("v0.x.0"), want: false, message: "a non-numeric part");
 }
 
 // sortNamesSemverDesc sorts release filenames newest-first. Selection sort; O(n^2)
@@ -118,11 +118,11 @@ export fun artifactDesc(name: str, platform: str) > str {
 // needs no hand-rolled JSON string helpers.
 
 test "semverSortKey produces zero-padded keys for numeric semver comparison" {
-    assert\equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");
-    assert\equal(semverSortKey("v0.10.0.yaml"), "0000.0010.0000", "v0.10.0");
-    assert\equal(semverSortKey("v1.0.0.yaml"),  "0001.0000.0000", "v1.0.0");
+    assert\equal(semverSortKey("v0.2.0.yaml"),  want: "0000.0002.0000", message: "v0.2.0");
+    assert\equal(semverSortKey("v0.10.0.yaml"), want: "0000.0010.0000", message: "v0.10.0");
+    assert\equal(semverSortKey("v1.0.0.yaml"),  want: "0001.0000.0000", message: "v1.0.0");
     // v0.10.0 key > v0.2.0 key: newest-first sort is correct
     final key10 = semverSortKey("v0.10.0.yaml");
     final key2  = semverSortKey("v0.2.0.yaml");
-    assert\equal(key10 > key2, true, "v0.10.0 sorts after v0.2.0 in descending pass");
+    assert\equal(key10 > key2, want: true, message: "v0.10.0 sorts after v0.2.0 in descending pass");
 }

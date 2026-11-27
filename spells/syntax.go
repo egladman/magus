@@ -10,6 +10,8 @@ type Syntax struct {
 	// unlisted.
 	Operators []string        `json:"operators,omitempty"`
 	Decisions *DecisionSyntax `json:"decisions,omitempty"`
+	// Encodings are how emit writes a value into this language's source.
+	Encodings []Encoding `json:"encodings,omitempty"`
 }
 
 // DecisionSyntax declares the tokens that each add one path through a

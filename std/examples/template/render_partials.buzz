@@ -1,14 +1,16 @@
 import "std";
 import "template";
 
-// Shared chrome lives in partials; the page template pulls them in with {{>name}}.
-// Backtick raw strings hold the Mustache verbatim (a double-quoted string would
-// collide with Buzz's own {expr} interpolation).
-final page = `{{>header}}<main>{{body}}</main>{{>footer}}`;
-final partials = {
-    "header": `<header>{{title}}</header>`,
-    "footer": `<footer>{{title}}</footer>`,
-};
+fun main(args: [str]) > void {
+    // Shared chrome lives in partials, pulled in with {{>name}}.
+    // Backtick raw strings hold the Mustache verbatim (a double-quoted string would
+    // collide with Buzz's own {expr} interpolation).
+    final page = `{{>header}}<main>{{body}}</main>{{>footer}}`;
+    final partials = {
+        "header": `<header>{{title}}</header>`,
+        "footer": `<footer>{{title}}</footer>`,
+    };
 
-std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials) catch "");
-// -> "<header>magus</header><main>hi</main><footer>magus</footer>"
+    std\print(template\renderPartials(page, data: {"title": "magus", "body": "hi"}, partials: partials) catch "");
+    // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
+}

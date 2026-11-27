@@ -148,12 +148,11 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 import "std";
 import "strings";
 
-final parts = strings\words("parseHTTPResponse2");
-foreach (w in parts) { std\print(w); }
-// -> parse
-// -> HTTP
-// -> Response
-// -> 2
+fun main(args: [str]) > void {
+    final parts = strings\words("parseHTTPResponse2");
+    foreach (w in parts) { std\print(w); }
+    // -> parse, HTTP, Response, 2
+}
 ```
 
 ### ellipsis
@@ -176,8 +175,10 @@ Trim s to at most length runes, appending "..." when truncated.
 import "std";
 import "strings";
 
-std\print(strings\ellipsis("the quick brown fox", 12));
-// -> "the quick..."
+fun main(args: [str]) > void {
+    std\print(strings\ellipsis("the quick brown fox", length: 12));
+    // -> "the quick..."
+}
 ```
 
 ### upperFirst

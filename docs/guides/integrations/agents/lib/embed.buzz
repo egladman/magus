@@ -76,33 +76,33 @@ export fun render(tmpl: str, files: {str: str}) > result\Result::<str> {
 test "a marker becomes a fenced block carrying the whole file" {
     final page = render("intro\n<!-- embed: magus-command.buzz -->\noutro",
         files: {"magus-command.buzz": "import \"std\";\nstd\\print(\"hi\");\n"}).value ?? "raised";
-    assert\equal(page, "intro\n```buzz\nimport \"std\";\nstd\\print(\"hi\");\n```\noutro", "block replaces the marker");
+    assert\equal(page, want: "intro\n```buzz\nimport \"std\";\nstd\\print(\"hi\");\n```\noutro", message: "block replaces the marker");
 }
 
 test "the fence follows the extension" {
-    assert\equal(fenceInfo("magus-command.buzz"), "buzz", "a Buzz template");
-    assert\equal(fenceInfo("notes.txt"), "text", "anything else is plain text");
+    assert\equal(fenceInfo("magus-command.buzz"), want: "buzz", message: "a Buzz template");
+    assert\equal(fenceInfo("notes.txt"), want: "text", message: "anything else is plain text");
 }
 
 test "a file's trailing newline does not open a blank line" {
     final page = render("<!-- embed: x.buzz -->", files: {"x.buzz": "one\n\n\n"}).value ?? "raised";
-    assert\equal(page, "```buzz\none\n```", "trailing newlines are trimmed");
+    assert\equal(page, want: "```buzz\none\n```", message: "trailing newlines are trimmed");
 }
 
 test "prose that merely mentions a marker is left alone" {
-    assert\equal(markerName("text <!-- embed: x.buzz --> more"), "", "a marker owns its whole line");
-    assert\equal(markerName("<!-- embed:  -->"), "", "a marker names a file");
-    assert\equal(markerName("<!-- embed: x.buzz -->"), "x.buzz", "and this one does");
+    assert\equal(markerName("text <!-- embed: x.buzz --> more"), want: "", message: "a marker owns its whole line");
+    assert\equal(markerName("<!-- embed:  -->"), want: "", message: "a marker names a file");
+    assert\equal(markerName("<!-- embed: x.buzz -->"), want: "x.buzz", message: "and this one does");
 }
 
 test "a marker naming a file nobody read raises instead of emptying the page" {
     final page = render("<!-- embed: missing.buzz -->", files: {"other.buzz": "x"}).value ?? "raised";
-    assert\equal(page, "raised", "the generator refuses rather than shipping a hole");
+    assert\equal(page, want: "raised", message: "the generator refuses rather than shipping a hole");
 }
 
 test "embedNames lists what the template asks for, in page order, once each" {
     final names = embedNames("<!-- embed: b.buzz -->\nprose\n<!-- embed: a.buzz -->\n<!-- embed: b.buzz -->");
-    assert\equal(names.len(), 2, "a repeated marker is one file to read");
-    assert\equal(names[0], "b.buzz", "page order, not sorted");
-    assert\equal(names[1], "a.buzz", "and the second");
+    assert\equal(names.len(), want: 2, message: "a repeated marker is one file to read");
+    assert\equal(names[0], want: "b.buzz", message: "page order, not sorted");
+    assert\equal(names[1], want: "a.buzz", message: "and the second");
 }

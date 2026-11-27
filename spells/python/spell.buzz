@@ -78,7 +78,7 @@ fun uvSync() > Install {
     final args = ["sync", "--locked"];
     return Install{
         name = "uv-sync",
-        command = Command{bin = "uv", args = args, charms = {"update": set(args, "--locked", "--upgrade")}},
+        command = Command{bin = "uv", args = args, charms = {"update": set(args, anchor: "--locked", val: "--upgrade")}},
         dir = ".venv",
     };
 }
@@ -128,14 +128,14 @@ fun ruffCheck(target: Target) > Command {
     final args = ["run", "ruff", "check", "."];
     return Command{bin = "uv", args = args, edits = ["**/*.py", "**/*.pyi"], charms = {
         "debug": append(["-v"]),
-        "rw": after(args, "check", ["--fix"]),
-        "gha": after(args, "check", ["--output-format=github"]),
+        "rw": after(args, anchor: "check", vals: ["--fix"]),
+        "gha": after(args, anchor: "check", vals: ["--output-format=github"]),
     }};
 }
 fun ruffFormat(target: Target) > Command {
     final args = ["run", "ruff", "format", "--check", "."];
     return Command{bin = "uv", args = args, edits = ["**/*.py", "**/*.pyi"], charms = {
-        "rw": drop(args, "--check"),
+        "rw": drop(args, anchor: "--check"),
     }};
 }
 // The project's test target writes it: `pytest --cov --cov-report=lcov`.

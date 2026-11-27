@@ -2,7 +2,7 @@
 // analyzers.buzz hands the runner.
 namespace analyzer;
 
-import "libs/analyzer/finding" as finding;
+import "finding" as finding;
 
 // Tier says what a finding does: a judgment finding prints as advice and never fails
 // the run; the other two fail it.

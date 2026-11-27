@@ -393,54 +393,54 @@ fun codex_commands(event: str) > [str] {
 
 test "mgs_renderAgents renders name, description and instructions with no model" {
     final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
-    assert\equal(file.path, ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
+    assert\equal(file.path, want: ".codex/agents/magus-scout.toml", message: "Codex reads .codex/agents");
     assert\equal(
         file.content,
-        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
-        "all three required fields, instructions as a literal",
+        want: "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
+        message: "all three required fields, instructions as a literal",
     );
-    assert\isTrue(file.content.indexOf("model") == null, "default_subagent_model applies");
+    assert\isTrue(file.content.indexOf("model") == null, message: "default_subagent_model applies");
 }
 
 test "mgs_renderAgents writes no sandbox the host would ignore, read-only or not" {
     final writable = ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"};
-    assert\isTrue(codex_agent(writable).content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
-    assert\isTrue(codex_agent(codex_scout_fixture("x\n")).content.indexOf("sandbox_mode") == null, "an agent file cannot override the parent");
+    assert\isTrue(codex_agent(writable).content.indexOf("sandbox_mode") == null, message: "the person's default sandbox applies");
+    assert\isTrue(codex_agent(codex_scout_fixture("x\n")).content.indexOf("sandbox_mode") == null, message: "an agent file cannot override the parent");
 }
 
 test "mgs_renderAgents restricts no tool, so discovery stays reachable" {
     final content = codex_agent(codex_scout_fixture("x\n")).content;
     foreach (name in DISCOVERY_TOOLS) {
-        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+        assert\isTrue(content.indexOf(name) == null, message: "{name} is not removed");
     }
-    assert\isTrue(content.indexOf("features.") == null, "no feature switched off");
+    assert\isTrue(content.indexOf("features.") == null, message: "no feature switched off");
 }
 
 test "mgs_renderAgents escapes instructions that carry the literal delimiter" {
     final content = codex_agent(codex_scout_fixture("say '''\n")).content;
-    assert\isTrue(content.endsWith("developer_instructions = \"say '''\\n\"\n"), "falls back to an escaped basic string");
+    assert\isTrue(content.endsWith("developer_instructions = \"say '''\\n\"\n"), message: "falls back to an escaped basic string");
 }
 
 test "mgs_renderAgents renders nothing when the call carries no agents" {
-    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
+    assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), want: 0, message: "no agents, no files");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
-    assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
+    assert\equal(mgs_getName(), want: "codex", message: "id must match magus\\harness.provider wiring and --id");
 }
 
 test "mgs_getHarness names the Codex hooks file and mgs_getSkills .agents/skills" {
-    assert\equal(mgs_getHarness().config.path, ".codex/hooks.json", "workspace-relative host config path");
-    assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
-    assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "Codex reads .agents/skills");
+    assert\equal(mgs_getHarness().config.path, want: ".codex/hooks.json", message: "workspace-relative host config path");
+    assert\equal(mgs_getSkills().form.value, want: "both", message: "the short skills and their full twins");
+    assert\equal(mgs_getSkills().paths.join(","), want: ".agents/skills", message: "Codex reads .agents/skills");
 }
 
 test "mgs_getHarness copies every script a hook runs, and the module they import" {
     final paths = mgs_getHarness().assets.map(fun (index: int, asset: HarnessAsset) > str => asset.path);
     foreach (hook in mgs_listHooks()) {
-        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, "{hook.script} is installed");
+        assert\isTrue(paths.indexOf("{GLUE_DIR}/{hook.script}.buzz") != null, message: "{hook.script} is installed");
     }
-    assert\isTrue(paths.indexOf("{GLUE_DIR}/lib/hook.buzz") != null, "the module every script imports");
+    assert\isTrue(paths.indexOf("{GLUE_DIR}/lib/hook.buzz") != null, message: "the module every script imports");
 }
 
 test "every hook appears in the entries, so the drift check magus runs passes" {
@@ -451,47 +451,47 @@ test "every hook appears in the entries, so the drift check magus runs passes" {
         }
     }
     foreach (hook in mgs_listHooks()) {
-        assert\isTrue(commands.indexOf(codex_command(hook)) != null, "{hook.event} {hook.script} is rendered");
+        assert\isTrue(commands.indexOf(codex_command(hook)) != null, message: "{hook.event} {hook.script} is rendered");
     }
 }
 
 test "every glue command is a plain argv that names this host, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
-    assert\isTrue(codex_glue(codex_guard_command()).endsWith(named), "command hook, with the host name its one argument");
-    assert\isTrue(codex_glue(codex_checkpoint_command()).endsWith(named), "Stop checkpoint");
-    assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
-    assert\isTrue(codex_glue(codex_rehydrate_command()).endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
+    assert\isTrue(codex_glue(codex_guard_command()).endsWith(named), message: "command hook, with the host name its one argument");
+    assert\isTrue(codex_glue(codex_checkpoint_command()).endsWith(named), message: "Stop checkpoint");
+    assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, message: "rehydrate reads no host");
+    assert\isTrue(codex_glue(codex_rehydrate_command()).endsWith(" -- --format json --rules AGENTS.md"), message: "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     foreach (hook in mgs_listHooks()) {
         final cmd = codex_glue(codex_command(hook));
-        assert\isTrue(cmd.startsWith("magus buzz -C . -s .magus/harness/hooks/{hook.script}.buzz"), "the installed copy, from the named working directory: {cmd}");
-        assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
-        assert\isTrue(cmd.indexOf("--tool-rows") == null, "magus finds the tool rows by host: {cmd}");
+        assert\isTrue(cmd.startsWith("magus buzz -C . -s .magus/harness/hooks/{hook.script}.buzz"), message: "the installed copy, from the named working directory: {cmd}");
+        assert\isTrue(cmd.indexOf(".sh") == null, message: "no entry wires a shell script: {cmd}");
+        assert\isTrue(cmd.indexOf("--tool-rows") == null, message: "magus finds the tool rows by host: {cmd}");
     }
 }
 
 test "every hook fails closed" {
     foreach (hook in mgs_listHooks()) {
         final cmd = codex_command(hook);
-        assert\isTrue(cmd.startsWith("fail_closed() \{ exec 3<&0; trap "), "the watchdog arms first: {cmd}");
+        assert\isTrue(cmd.startsWith("fail_closed() \{ exec 3<&0; trap "), message: "the watchdog arms first: {cmd}");
         if (codex_stops(hook.event)) {
             assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this stop") != null and cmd.indexOf("exit 2") == null,
-                "a failed stop ends the turn, never sends the agent back: {cmd}");
+                message: "a failed stop ends the turn, never sends the agent back: {cmd}");
         } else {
-            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this call") != null, "an exit but 0 or 2 is a block: {cmd}");
+            assert\isTrue(cmd.indexOf("|| \{ echo \"magus guard could not judge this call") != null, message: "an exit but 0 or 2 is a block: {cmd}");
         }
-        assert\isTrue(cmd.indexOf("(sleep 599; kill -TERM $$)") != null, "the watchdog fires before Codex stops waiting: {cmd}");
-        assert\isTrue(cmd.endsWith("; fail_closed " + codex_glue(cmd)), "the line ends in the glue invocation, which is how magus finds its entries: {cmd}");
+        assert\isTrue(cmd.indexOf("(sleep 599; kill -TERM $$)") != null, message: "the watchdog fires before Codex stops waiting: {cmd}");
+        assert\isTrue(cmd.endsWith("; fail_closed " + codex_glue(cmd)), message: "the line ends in the glue invocation, which is how magus finds its entries: {cmd}");
     }
 }
 
 test "mgs_renderPrompts keeps the git push prompt rule the shared template looks for" {
     final none = {<str: str>};
     final prompts = mgs_renderPrompts(none);
-    assert\equal(prompts.len(), 1, "one rules file");
-    assert\equal(prompts[0].path, ".codex/rules/magus.rules", "project-local Codex rules");
-    assert\isTrue(codex_rules(none).indexOf("[\"git\", \"push\"]") != null, "magus-command.buzz looks for this exact pattern");
-    assert\isTrue(codex_rules(none).indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
-    assert\isTrue(codex_rules(none).indexOf("\"run\"") == null, "no human-only target, no run prompt");
+    assert\equal(prompts.len(), want: 1, message: "one rules file");
+    assert\equal(prompts[0].path, want: ".codex/rules/magus.rules", message: "project-local Codex rules");
+    assert\isTrue(codex_rules(none).indexOf("[\"git\", \"push\"]") != null, message: "magus-command.buzz looks for this exact pattern");
+    assert\isTrue(codex_rules(none).indexOf("decision = \"prompt\"") != null, message: "the rule prompts rather than forbids");
+    assert\isTrue(codex_rules(none).indexOf("\"run\"") == null, message: "no human-only target, no run prompt");
 }
 
 test "mgs_renderPrompts prompts for every spelling of a human-only target's run" {
@@ -502,66 +502,66 @@ test "mgs_renderPrompts prompts for every spelling of a human-only target's run"
         "[\"magus\", \"affected\", \"agent-bench-run\"]",
         "[\"./magus\", \"affected\", \"agent-bench-run\"]",
     ]) {
-        assert\isTrue(rules.indexOf(pattern) != null, "prefix {pattern}");
+        assert\isTrue(rules.indexOf(pattern) != null, message: "prefix {pattern}");
     }
     assert\isTrue(rules.indexOf("justification = \"magus: a person runs this target: launches \\\"paid\\\" sessions\"") != null,
-        "the justification quotes the reason, escaped");
+        message: "the justification quotes the reason, escaped");
 }
 
 test "mgs_renderPrompts prompts for every backend's push" {
     final rules = codex_rules({<str: str>});
-    assert\isTrue(rules.indexOf("[\"hg\", \"push\"]") != null, "Mercurial push");
-    assert\isTrue(rules.indexOf("[\"sl\", \"push\"]") != null, "Sapling push, --to included by prefix");
-    assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, "Jujutsu push");
+    assert\isTrue(rules.indexOf("[\"hg\", \"push\"]") != null, message: "Mercurial push");
+    assert\isTrue(rules.indexOf("[\"sl\", \"push\"]") != null, message: "Sapling push, --to included by prefix");
+    assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, message: "Jujutsu push");
 }
 
 test "the entries cover the tool, subagent, session, Stop and message events" {
     final events = mut [<str>];
     foreach (block in codex_entries()) { events.append(block.path[1]); }
-    assert\equal(events.join(","), "PreToolUse,PostToolUse,SubagentStart,SubagentStop,PermissionRequest,SessionStart,Stop,UserPromptSubmit", "eight managed path blocks");
+    assert\equal(events.join(","), want: "PreToolUse,PostToolUse,SubagentStart,SubagentStop,PermissionRequest,SessionStart,Stop,UserPromptSubmit", message: "eight managed path blocks");
     final pre = codex_block("PreToolUse")!;
-    assert\equal(pre.entries.len(), 1, "one catch-all, so no call is judged twice");
-    assert\equal("{pre.entries[0]["matcher"]}", EVERY_TOOL, "every tool Codex raises the event for");
-    assert\equal(codex_commands("PreToolUse")[0], codex_guard_command(), "a command, a patch, an MCP call and a spawn reach one glue");
+    assert\equal(pre.entries.len(), want: 1, message: "one catch-all, so no call is judged twice");
+    assert\equal("{pre.entries[0]["matcher"]}", want: EVERY_TOOL, message: "every tool Codex raises the event for");
+    assert\equal(codex_commands("PreToolUse")[0], want: codex_guard_command(), message: "a command, a patch, an MCP call and a spawn reach one glue");
     final post = codex_block("PostToolUse")!;
-    assert\equal(post.entries.len(), 2, "the finished spawn and the Buzz check");
-    assert\equal("{post.entries[0]["matcher"]}", SPAWN_MATCHER, "the child's name rides the spawn's response");
-    assert\equal("{post.entries[1]["matcher"]}", "apply_patch", "the tool that writes a file");
-    assert\equal(codex_commands("SubagentStart")[0], codex_rehydrate_command(), "the child is briefed through additionalContext");
-    assert\equal(codex_commands("SubagentStart")[1], codex_guard_command(), "the child's id is joined to its spawn");
-    assert\equal(codex_commands("PermissionRequest")[0], codex_guard_command(), "same template as PreToolUse");
+    assert\equal(post.entries.len(), want: 2, message: "the finished spawn and the Buzz check");
+    assert\equal("{post.entries[0]["matcher"]}", want: SPAWN_MATCHER, message: "the child's name rides the spawn's response");
+    assert\equal("{post.entries[1]["matcher"]}", want: "apply_patch", message: "the tool that writes a file");
+    assert\equal(codex_commands("SubagentStart")[0], want: codex_rehydrate_command(), message: "the child is briefed through additionalContext");
+    assert\equal(codex_commands("SubagentStart")[1], want: codex_guard_command(), message: "the child's id is joined to its spawn");
+    assert\equal(codex_commands("PermissionRequest")[0], want: codex_guard_command(), message: "same template as PreToolUse");
     final start = codex_block("SessionStart")!;
-    assert\equal(start.entries.len(), 2, "the brief, then the restatement after a compaction");
-    assert\equal("{start.entries[0]["matcher"]}", SESSION_START_MATCHER, "every start that is not a compaction");
-    assert\equal("{start.entries[1]["matcher"]}", "compact", "the moment state was lost");
-    assert\equal(codex_commands("Stop").len(), 2, "the guard, then the checkpoint: the reply check is opt-in");
-    assert\equal(codex_commands("Stop")[0], codex_stop_command(), "a block sends the agent back to work");
-    assert\equal(codex_commands("Stop")[1], codex_checkpoint_command(), "records where the work stands");
+    assert\equal(start.entries.len(), want: 2, message: "the brief, then the restatement after a compaction");
+    assert\equal("{start.entries[0]["matcher"]}", want: SESSION_START_MATCHER, message: "every start that is not a compaction");
+    assert\equal("{start.entries[1]["matcher"]}", want: "compact", message: "the moment state was lost");
+    assert\equal(codex_commands("Stop").len(), want: 2, message: "the guard, then the checkpoint: the reply check is opt-in");
+    assert\equal(codex_commands("Stop")[0], want: codex_stop_command(), message: "a block sends the agent back to work");
+    assert\equal(codex_commands("Stop")[1], want: codex_checkpoint_command(), message: "records where the work stands");
     final message = codex_block("UserPromptSubmit")!;
-    assert\isTrue(message.entries[0]["matcher"] == null, "Codex ignores a matcher on this event");
+    assert\isTrue(message.entries[0]["matcher"] == null, message: "Codex ignores a matcher on this event");
 }
 
 test "mgs_getMcp is a stdio paste hint for Codex user config.toml" {
     final mcp = mgs_getMcp();
-    assert\equal(mcp.transport.value, "stdio", "the host starts ./magus mcp per session");
-    assert\isTrue(mcp.hint.indexOf("command = \"./magus\"") != null, "the checkout's own binary");
+    assert\equal(mcp.transport.value, want: "stdio", message: "the host starts ./magus mcp per session");
+    assert\isTrue(mcp.hint.indexOf("command = \"./magus\"") != null, message: "the checkout's own binary");
     assert\isTrue(mcp.hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_SILENT = \"true\"\n") != null,
-        "Codex's own environment table, as a header so a paste after the MCP table stays out of it");
+        message: "Codex's own environment table, as a header so a paste after the MCP table stays out of it");
     assert\isTrue((mcp.hint.indexOf("[mcp_servers.magus]") ?? -1) < (mcp.hint.indexOf("[shell_environment_policy.set]") ?? -1),
-        "the MCP table keeps its place at the top of the paste");
+        message: "the MCP table keeps its place at the top of the paste");
 }
 
 test "Codex tools distinguish dispatch from continuation" {
     final capability = mut {<str: str>};
     foreach (row in mgs_listTools().tools) { capability[row.name] = row.capability.value; }
-    assert\equal(capability["spawn_agent"] ?? "(no row)", "spawns", "new work");
-    assert\equal(capability["collaborationspawn_agent"] ?? "(no row)", "spawns", "new work");
-    assert\equal(capability["send_input"] ?? "(no row)", "continues", "existing work");
-    assert\equal(capability["resume_agent"] ?? "(no row)", "continues", "existing work");
+    assert\equal(capability["spawn_agent"] ?? "(no row)", want: "spawns", message: "new work");
+    assert\equal(capability["collaborationspawn_agent"] ?? "(no row)", want: "spawns", message: "new work");
+    assert\equal(capability["send_input"] ?? "(no row)", want: "continues", message: "existing work");
+    assert\equal(capability["resume_agent"] ?? "(no row)", want: "continues", message: "existing work");
     foreach (name in ["followup_task", "collaborationfollowup_task"]) {
-        assert\equal(capability[name] ?? "(no row)", "continues", name);
+        assert\equal(capability[name] ?? "(no row)", want: "continues", message: name);
     }
     foreach (name in ["send_message", "collaborationsend_message", "list_agents", "collaborationlist_agents"]) {
-        assert\equal(capability[name] ?? "(no row)", "inert", name);
+        assert\equal(capability[name] ?? "(no row)", want: "inert", message: name);
     }
 }

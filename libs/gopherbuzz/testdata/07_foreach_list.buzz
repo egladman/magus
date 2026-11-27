@@ -1,7 +1,11 @@
 // @expect: 15
-final items = [1, 2, 3, 4, 5];
-var sum = 0;
-foreach (x in items) {
-    sum = sum + x;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    final items = [1, 2, 3, 4, 5];
+    var sum = 0;
+    foreach (x in items) {
+        sum = sum + x;
+    }
+    __r = sum;
 }
-final __r = sum;

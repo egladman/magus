@@ -54,7 +54,7 @@ export fun renderCommitFooter(path: str, site: Site) > result\Result::<str> {
         // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
         // typography sets the muted look, no custom classes. One inline line (no newlines).
         var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
-            {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.inputs.config.repoURL, "full": cFull, "short": cShort});
+            data: {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.inputs.config.repoURL, "full": cFull, "short": cShort});
 
         // <details> disclosure of the EARLIER commits (the latest is named above, so it is
         // skipped to avoid a double reference). Semantic markup only. Gated on a real history
@@ -79,7 +79,7 @@ export fun renderCommitFooter(path: str, site: Site) > result\Result::<str> {
             }
             if (earlier.len() > 0) {
                 line = line + template\render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
-                    {"count": earlier.len(), "earlier": earlier, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch, "histKey": histKey});
+                    data: {"count": earlier.len(), "earlier": earlier, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch, "histKey": histKey});
             }
         }
         return result\ok::<str>(line);
@@ -144,7 +144,7 @@ export fun renderTocList(content: str) > result\Result::<str> {
         }
         return result\ok::<str>(template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
-`, {"ul": render(element("ul", attrs: [<Attr>], children: top))}));
+`, data: {"ul": render(element("ul", attrs: [<Attr>], children: top))}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -198,7 +198,7 @@ export fun renderSettingsPanel(showConsole: bool) > result\Result::<str> {
 {{{rows}}}{{{reading}}}          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
 {{{status}}}        
         </div>`;
-        return result\ok::<str>(template\render(tmpl, {"note": note, "rows": rows, "reading": reading, "status": status}));
+        return result\ok::<str>(template\render(tmpl, data: {"note": note, "rows": rows, "reading": reading, "status": status}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -271,7 +271,7 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > r
         }
         final r1 = renderSettingsPanel(false);
         if (r1.error -> failed) { return result\Result::<str>{ error = failed }; }
-        return result\ok::<str>(template\render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": r1.value!}));
+        return result\ok::<str>(template\render(tmpl, data: {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": r1.value!}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -288,11 +288,11 @@ var _refLoaded = false;
 
 // refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.
 export fun refDocHtml(rel: str, site: Site) > str {
-    final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, io\FileMode.read);
+    final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, mode: io\FileMode.read);
     final md = f.readAll();
     f.close();
     final cleanDir = newCleanDirectory(rel, site);
-    var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), cleanDir);
+    var html = renderContentHTML(markdown\toHtml(md), oldDir: oldFlatDirectory(rel), newDir: cleanDir);
     html = html.split("=\"../").join("=\"%%ROOT%%");
     // A link below the page's own directory (glossary.md's "workspace/" for its term page)
     // has no ../ to template, and embedded in another page it would resolve against that
@@ -432,7 +432,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
         // the glossary's fallback above, which shows everything: an unfamiliar WORD can appear on
         // a page the linker did not tag, so the full list is still a useful answer there. A
         // convention you are not looking at is not.
-        var conventions = keepConventionSections(_refConventions, conventionAnchorsIn(content));
+        var conventions = keepConventionSections(_refConventions, keep: conventionAnchorsIn(content));
         if (conventions == "") {
             conventions = "<p>This page uses none of the site's convention markers. The full set is on the "
                 + "<a href=\"%%ROOT%%conventions/\">conventions page</a>.</p>";
@@ -457,7 +457,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
     </div>
   </aside>
 `;
-        return result\ok::<str>(template\render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions}));
+        return result\ok::<str>(template\render(tmpl, data: {"root": root, "glossary": glossary, "conventions": conventions}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -479,7 +479,7 @@ export fun renderSiteFooter(root: str, site: Site) > result\Result::<str> {
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
-        return result\ok::<str>(template\render(tmpl, {"root": root, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch}));
+        return result\ok::<str>(template\render(tmpl, data: {"root": root, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -511,7 +511,7 @@ export fun renderAnnouncementBar(root: str, site: Site) > result\Result::<str> {
     </div>
   </div>
 `;
-        return result\ok::<str>(template\render(tmpl, {
+        return result\ok::<str>(template\render(tmpl, data: {
             "ver": ver,
             "released": released,
             "gh": site.inputs.config.repoURL,
@@ -528,13 +528,13 @@ test "conventionAnchorsIn reads the anchors the injected hints point at" {
     final html = "<p class=\"admonition-title\">Note<a class=\"convention-hint\" href=\"../conventions/#admonitions\" data-kind=\"convention\"></a></p>"
         + "<figcaption>x<a class=\"convention-hint\" href=\"../conventions/#code-block-titles\"></a></figcaption>";
     final got = conventionAnchorsIn(html);
-    assert\equal(got["admonitions"], true, "the admonition hint");
-    assert\equal(got["code-block-titles"], true, "the caption hint");
-    assert\equal(got["placeholders"], null, "a section this page cannot reach");
+    assert\equal(got["admonitions"], want: true, message: "the admonition hint");
+    assert\equal(got["code-block-titles"], want: true, message: "the caption hint");
+    assert\equal(got["placeholders"], want: null, message: "a section this page cannot reach");
 }
 
 test "conventionAnchorsIn finds nothing on a page with no hints" {
-    assert\equal(conventionAnchorsIn("<p>plain prose</p>").keys().len(), 0, "no hints, no sections");
+    assert\equal(conventionAnchorsIn("<p>plain prose</p>").keys().len(), want: 0, message: "no hints, no sections");
 }
 
 test "keepConventionSections keeps the named H2 sections and drops the rest" {
@@ -545,13 +545,13 @@ test "keepConventionSections keeps the named H2 sections and drops the rest" {
     var keep: mut {str: bool} = mut {};
     keep["admonitions"] = true;
     final got = keepConventionSections(doc, keep);
-    assert\equal(got.indexOf("Admonitions") != null, true, "the wanted section survives");
-    assert\equal(got.indexOf("<p>c</p>") != null, true, "and its body with it");
-    assert\equal(got.indexOf("Diffs"), null, "an unwanted section is dropped");
-    assert\equal(got.indexOf("intro"), null, "so is everything before the first H2");
+    assert\equal(got.indexOf("Admonitions") != null, want: true, message: "the wanted section survives");
+    assert\equal(got.indexOf("<p>c</p>") != null, want: true, message: "and its body with it");
+    assert\equal(got.indexOf("Diffs"), want: null, message: "an unwanted section is dropped");
+    assert\equal(got.indexOf("intro"), want: null, message: "so is everything before the first H2");
 }
 
 test "keepConventionSections returns empty when nothing is wanted" {
     final doc = "<h2 id=\"diffs\">Diffs</h2>\n<p>b</p>\n";
-    assert\equal(keepConventionSections(doc, mut {}), "", "the caller substitutes a pointer");
+    assert\equal(keepConventionSections(doc, keep: mut {}), want: "", message: "the caller substitutes a pointer");
 }

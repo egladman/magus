@@ -1025,3 +1025,21 @@ func (s *syntaxFactsSuite) TestRefusesEmptyDecisions() {
 	s.EqualError(err, `spell "lang": language.syntax: decisions declare no keyword or operator, `+
 		`so every function would read complexity 1`)
 }
+
+func (s *syntaxFactsSuite) TestAcceptsAnEncoding() {
+	m, err := describe(lexLanguage(func(syn *spells.Syntax) {
+		syn.Encodings = []spells.Encoding{{Name: "ident", Pattern: `^[a-z]+$`, Reserved: []string{"if"}}}
+	}))
+	s.Require().NoError(err)
+	s.Equal("ident", m.Syntax.Encodings[0].Name)
+}
+
+func (s *syntaxFactsSuite) TestRefusesAnEncodingTheEngineOwns() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Encodings = []spells.Encoding{{Name: "raw"}} }))
+	s.EqualError(err, `spell "lang": language.syntax: encodings[0] (raw): name "raw" is the engine's own encoding, pick another name`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesAnEncodingsPatternThatDoesNotCompile() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Encodings = []spells.Encoding{{Name: "ident", Pattern: "(a"}} }))
+	s.ErrorContains(err, `spell "lang": language.syntax: encodings[0] (ident): pattern does not compile as RE2`)
+}

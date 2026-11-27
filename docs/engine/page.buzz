@@ -86,11 +86,11 @@ export fun render404(site: Site) > result\Result::<bool> {
 </body>
 </html>
 `;
-        final r27 = renderSiteNav(basePath, "", false, site.inputs.config);
+        final r27 = renderSiteNav(basePath, active: "", withRef: false, cfg: site.inputs.config);
         if (r27.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final r28 = renderSiteFooter(basePath, site);
         if (r28.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final doc = template\render(tmpl, {
+        final doc = template\render(tmpl, data: {
             "title": title, "desc": desc, "basePath": basePath, "csp": site.inputs.csp,
             "nav": r27.value!, "footer": r28.value!,
         });
@@ -150,11 +150,11 @@ export fun writeOffline(site: Site) > result\Result::<bool> {
 </body>
 </html>
 `;
-        final r25 = renderSiteNav(basePath, "", false, site.inputs.config);
+        final r25 = renderSiteNav(basePath, active: "", withRef: false, cfg: site.inputs.config);
         if (r25.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final r26 = renderSiteFooter(basePath, site);
         if (r26.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final doc = template\render(tmpl, {
+        final doc = template\render(tmpl, data: {
             "title": title, "desc": desc, "basePath": basePath, "csp": site.inputs.csp,
             "nav": r25.value!, "footer": r26.value!,
         });
@@ -178,9 +178,9 @@ fun renderPagerLink(page: DocPage, dir: str, cls: str, climbPrefix: str) > resul
         final title = if (page.untitled) name else page.title;
         // A regular page lives in its own <slug>/ subdir, so it climbs one level to reach a
         // sibling (../<slug>/); an index.md landing sits in the parent, so it does not.
-        final slug = name.sub(0, name.len() - 3);   // drop ".md"
+        final slug = name.sub(0, len: name.len() - 3);   // drop ".md"
         return result\ok::<str>(template\render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
-`, {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title}));
+`, data: {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -230,7 +230,7 @@ fun renderPager(rel: str, site: Site) > result\Result::<str> {
         if (body == "") { return result\ok::<str>(""); }
         return result\ok::<str>(template\render(`    <nav class="page-nav" aria-label="Pagination">
 {{{body}}}    </nav>
-`, {"body": body}));
+`, data: {"body": body}));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -533,7 +533,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         // + apple-touch); the <noscript> explains the missing search box; one deferred main.js,
         // with head-critical theme.js separate above.
         final r19 = renderAnnouncementBar(root, site); if (r19.error -> failed) { return result\Result::<str>{ error = failed }; }
-        final r20 = renderSiteNav(root, active, true, site.inputs.config); if (r20.error -> failed) { return result\Result::<str>{ error = failed }; }
+        final r20 = renderSiteNav(root, active: active, withRef: true, cfg: site.inputs.config); if (r20.error -> failed) { return result\Result::<str>{ error = failed }; }
         var breadcrumb = "";
         if (canonUrl != "" and srcRel != DOWNLOAD_SRC) {
             final r21 = site.renderBreadcrumb(srcRel, title, root); if (r21.error -> failed) { return result\Result::<str>{ error = failed }; }
@@ -542,7 +542,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         final r22 = site.renderRelated(srcRel, root); if (r22.error -> failed) { return result\Result::<str>{ error = failed }; }
         final r23 = renderReferenceDrawer(root, canonUrl, content, site); if (r23.error -> failed) { return result\Result::<str>{ error = failed }; }
         final r24 = renderSiteFooter(root, site); if (r24.error -> failed) { return result\Result::<str>{ error = failed }; }
-        return result\ok::<str>(template\render(PAGE_TMPL, {
+        return result\ok::<str>(template\render(PAGE_TMPL, data: {
             "fullTitle": fullTitle,
             "csp": pageCsp,
             "description": description,
@@ -588,7 +588,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 // "../" rather than stripped.
 export fun renderRoot(site: Site) > result\Result::<bool> {
     try {
-        final f = io\File.open(site.inputs.root + "/README.md", io\FileMode.read);
+        final f = io\File.open(site.inputs.root + "/README.md", mode: io\FileMode.read);
         final rawMd = f.readAll();
         f.close();
 
@@ -624,15 +624,15 @@ export fun renderRoot(site: Site) > result\Result::<bool> {
         html = html.split("<h1 id=\"magus\">magus</h1>").join("<h1 id=\"development\">Development</h1>");
         // The page's own clean directory is README_URL minus its trailing slash, which is what
         // the link rewriter re-relativizes the in-content links against.
-        final pageDir = README_URL.sub(0, README_URL.len() - 1);
+        final pageDir = README_URL.sub(0, len: README_URL.len() - 1);
         html = renderContentHTML(html, pageDir, pageDir);
 
         // Same cross-linking every other docs page gets: auto-link the first occurrence of each
         // glossary term, link inline-code domain references, and hint rendered convention
         // markers back to their conventions section.
-        html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath(pageDir, "glossary/")).html;
-        html = linkCodeEntities(html, site.inputs.codeEntities, pageDir);
-        html = injectConventionHints(html, site.inputs.conventions, relativePath(pageDir, "conventions/"));
+        html = linkGlossaryTerms(html, terms: site.inputs.glossaryTerms, relToGlossary: relativePath(pageDir, toUrl: "glossary/")).html;
+        html = linkCodeEntities(html, entities: site.inputs.codeEntities, pageDir: pageDir);
+        html = injectConventionHints(html, conventions: site.inputs.conventions, relToConventions: relativePath(pageDir, toUrl: "conventions/"));
         // The README ships <picture> so GitHub renders the committed pair; inlining swaps it
         // for an SVG that reads the page's CSS variables and so follows the theme toggle.
         final r10 = drillHrefs(pageDir, site: site);
@@ -643,7 +643,7 @@ export fun renderRoot(site: Site) > result\Result::<bool> {
 
         final fm = serialize\jsonDecode(markdown\frontmatter(md));
         var title = fm.q("title").stringValue();
-        if (title == "") { title = deriveTitle(md, "README.md"); }
+        if (title == "") { title = deriveTitle(md, rel: "README.md"); }
         // Description: frontmatter, else first paragraph, else site default - always non-empty
         // so the meta tag fires.
         var desc = fm.q("description").stringValue();
@@ -654,7 +654,7 @@ export fun renderRoot(site: Site) > result\Result::<bool> {
         if (r12.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final r13 = generatedFrom(md);
         if (r13.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final r11 = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), r12.value!, r13.value!, site);
+        final r11 = renderPage(title, description: desc, content: html, srcRel: "README.md", pager: "", canonUrl: README_URL, reading: readingTime(md), tags: r12.value!, generatedFrom: r13.value!, site: site);
         if (r11.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r11.value!;
         final dir = site.inputs.outDir + "/" + pageDir;
@@ -682,7 +682,7 @@ export fun renderRoot(site: Site) > result\Result::<bool> {
 fun substituteVersionTokens(md: str, site: Site) > str {
     final latest = site.latestStable();
     if (latest == null) { return md; }
-    return $"__MAGUS_VERSION__".replaceAll(md, latest!.version);
+    return $"__MAGUS_VERSION__".replaceAll(md, with: latest!.version);
 }
 
 
@@ -726,7 +726,7 @@ fun injectDemoCallout(html: str, href: str) > str {
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
 export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
     try {
-        final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, io\FileMode.read);
+        final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, mode: io\FileMode.read);
         var md = f.readAll();
         f.close();
         // Resolve version placeholders once, up front, so every downstream consumer (HTML,
@@ -737,16 +737,16 @@ export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, rel); }
 
-        var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+        var html = renderContentHTML(markdown\toHtml(md), oldDir: oldFlatDirectory(rel), newDir: newCleanDirectory(rel, site));
         // Optional "Added in vX.Y.Z" compatibility marker from the frontmatter `since:`.
-        html = insertSinceBadge(html, fm.q("since").stringValue());
+        html = insertSinceBadge(html, since: fm.q("since").stringValue());
         // An ADR's status, date and supersedes, from the frontmatter keys the ADR template sets.
-        html = insertAdrMeta(html, fm.q("status").stringValue(), fm.q("date").stringValue(),
-            fm.q("supersedes").stringValue());
+        html = insertAdrMeta(html, status: fm.q("status").stringValue(), date: fm.q("date").stringValue(),
+            supersedes: fm.q("supersedes").stringValue());
         // Optional size comparison for an agent-skill page, from the byte counts the
         // skill generator states in frontmatter.
-        html = insertSizeRatio(html, fm.q("skill_full_bytes").integer(),
-            fm.q("skill_short_bytes").integer());
+        html = insertSizeRatio(html, fullOpt: fm.q("skill_full_bytes").integer(),
+            shortOpt: fm.q("skill_short_bytes").integer());
 
         // Description: frontmatter, else first paragraph, else site default - always non-empty
         // so the meta tag fires.
@@ -754,7 +754,7 @@ export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
         if (desc == "") { desc = deriveDescription(html); }
         if (desc == "") { desc = site.inputs.config.description; }
 
-        final url = cleanURL(rel, site.inputs.blog);
+        final url = cleanURL(rel, blogDir: site.inputs.blog);
 
         // Auto-link the first occurrence of each glossary term to its term page, baking the
         // definition into the link. A term page does not link its own term to itself.
@@ -762,16 +762,16 @@ export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
         foreach (t in site.inputs.glossaryTerms) {
             if (rel != "glossary/" + t.anchor + ".md") { terms.append(t); }
         }
-        html = linkGlossaryTerms(html, terms, relativePath(newCleanDirectory(rel, site), "glossary/")).html;
+        html = linkGlossaryTerms(html, terms: terms, relToGlossary: relativePath(newCleanDirectory(rel, site), toUrl: "glossary/")).html;
         // Link inline-code domain references (diagnostic codes, ...) to their reference pages on
         // every page, glossary included.
-        html = linkCodeEntities(html, site.inputs.codeEntities, newCleanDirectory(rel, site));
+        html = linkCodeEntities(html, entities: site.inputs.codeEntities, pageDir: newCleanDirectory(rel, site));
 
         // Hint each rendered convention marker (an admonition title, a code caption) back to its
         // section on the conventions page, with the section's blurb baked in for the popover. The
         // conventions page itself is skipped - it defines them.
         if (rel != "conventions.md") {
-            html = injectConventionHints(html, site.inputs.conventions, relativePath(newCleanDirectory(rel, site), "conventions/"));
+            html = injectConventionHints(html, conventions: site.inputs.conventions, relToConventions: relativePath(newCleanDirectory(rel, site), toUrl: "conventions/"));
             final r2 = drillHrefs(newCleanDirectory(rel, site), site: site);
             if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
             final r1 = diagrams\inlinePageDiagrams(html, hrefs: r2.value!);
@@ -783,7 +783,7 @@ export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
         // intro, deep-linking its tour card.
         final demo = site.inputs.demoBySlug[newCleanDirectory(rel, site)];
         if (demo != null) {
-            html = injectDemoCallout(html, relativePath(newCleanDirectory(rel, site), "tour/") + "#" + demo!.anchor);
+            html = injectDemoCallout(html, href: relativePath(newCleanDirectory(rel, site), toUrl: "tour/") + "#" + demo!.anchor);
         }
 
         final r4 = renderPager(rel, site);
@@ -792,16 +792,16 @@ export fun renderFile(rel: str, site: Site) > result\Result::<bool> {
         if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final r6 = generatedFrom(md);
         if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final r3 = renderPage(title, desc, html, site.inputs.docs + "/" + rel, r4.value!, url, readingTime(md), r5.value!, r6.value!, site);
+        final r3 = renderPage(title, description: desc, content: html, srcRel: site.inputs.docs + "/" + rel, pager: r4.value!, canonUrl: url, reading: readingTime(md), tags: r5.value!, generatedFrom: r6.value!, site: site);
         if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r3.value!;
 
         // Directory-index output: every page is <cleanURL>index.html (extensionless). url is
         // gen-root-relative and ends in a slash, matching search.js/sitemap/canonical.
-        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));   // drop trailing slash for mkdir
-        makeOutputDir(dir, site.inputs.docs + "/" + rel, url);
+        final dir = fs\join(site.inputs.outDir, name: url.sub(0, len: url.len() - 1));   // drop trailing slash for mkdir
+        makeOutputDir(dir, what: site.inputs.docs + "/" + rel, url: url);
 
-        final of = io\File.open(dir + "/index.html", io\FileMode.write);
+        final of = io\File.open(dir + "/index.html", mode: io\FileMode.write);
         of.write(doc);
         of.close();
 
@@ -825,12 +825,12 @@ test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest r
     s.inputs.releases.append(Release{ version = "v0.3.0-rc.1" });
     s.inputs.releases.append(Release{ version = "v0.2.0" });
     final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
-    assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the stable tag, not the newer candidate");
+    assert\equal(got, want: "get v0.2.0/magus_v0.2.0_linux.tar.gz", message: "both tokens replaced with the stable tag, not the newer candidate");
 }
 
 test "substituteVersionTokens is a no-op before any release has shipped" {
     final s = newSite();
-    assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
+    assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), want: "install __MAGUS_VERSION__", message: "token left literal with no releases");
 }
 
 
