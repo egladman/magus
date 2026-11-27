@@ -89,7 +89,7 @@ fun recentPosts(site: Site) > result\Result::<str> {
         while (i >= 0 and shown < 3) {
             final name = names[i];
             i = i - 1;
-            final f = io\File.open(dir + "/" + name, io\FileMode.read);
+            final f = io\File.open(dir + "/" + name, mode: io\FileMode.read);
             final md = f.readAll();
             f.close();
             final fm = serialize\jsonDecode(markdown\frontmatter(md));
@@ -565,28 +565,28 @@ export fun renderLanding(site: Site) > result\Result::<bool> {
     try {
         final recent = recentPosts(site);
         if (recent.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        var html = template\render(LANDING_TMPL, {"session": TERMINAL_SESSION, "recent": recent.value!});
+        var html = template\render(LANDING_TMPL, data: {"session": TERMINAL_SESSION, "recent": recent.value!});
 
         // Same cross-linking the docs pages get: auto-link the first mention of each
         // glossary term (definition baked into the popover) and link inline-code domain
         // references to their reference pages. Root-relative, so "" is both this page's
         // clean directory and the base relativePath resolves from.
-        html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath("", "glossary/")).html;
-        html = linkCodeEntities(html, site.inputs.codeEntities, "");
+        html = linkGlossaryTerms(html, terms: site.inputs.glossaryTerms, relToGlossary: relativePath("", toUrl: "glossary/")).html;
+        html = linkCodeEntities(html, entities: site.inputs.codeEntities, pageDir: "");
 
         // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
         // rather than "<title> - magus", so passing anything else here would only show up in
         // the search result heading.
         final title = "magus";
         final desc = site.inputs.config.description;
-        final r1 = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site); if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
+        final r1 = renderPage(title, description: desc, content: html, srcRel: LANDING_SRC, pager: "", canonUrl: "", reading: "", tags: mut [], generatedFrom: "", site: site); if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r1.value!;
         fs\writeFile(site.inputs.outDir + "/index.html", doc);
         // The plain-text body the search index carries. The HTML above is mostly layout, so
         // indexing it verbatim would fill a result snippet with markup rather than the words
         // someone would actually search for.
-        final r2 = site.addRecord("index.html", title, desc,
-            "magus task orchestrator monorepo polyglot build test lint affected set "
+        final r2 = site.addRecord(url: "index.html", title: title, desc: desc,
+            md: "magus task orchestrator monorepo polyglot build test lint affected set "
             + "content-addressed cache knowledge graph magusfile buzz typed targets spells "
             + "single binary install setup tour playground");
         if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }

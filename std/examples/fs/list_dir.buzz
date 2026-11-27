@@ -1,4 +1,6 @@
 import "std";
 import "fs";
 
-foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
+fun main(args: [str]) > void {
+    foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
+}

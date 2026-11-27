@@ -1,22 +1,22 @@
 import "std";
 import "term";
 
-// A prompt is the interactive spelling of a flag. The flag wins when it was
-// passed, and a person on a terminal who left it off is asked. With nothing to
-// ask on, or when the reader cancels with ESC or Ctrl-C (pick raises), nothing
-// is chosen: the run says which flag it needed.
-final projects = ["console", "docs", "libs/gopherbuzz"];
-final given: str? = null;
+fun main(args: [str]) > void {
+    // A prompt is the interactive spelling of a flag. The flag wins when passed.
+    // With nothing to ask on, or a cancel, the run says which flag it needed.
+    final projects = ["console", "docs", "libs/gopherbuzz"];
+    final given: str? = null;
 
-if (given -> project) {
-    std\print(project);
-} else if (!term\isInteractive()) {
-    std\print("--project is required (no terminal to ask on)");
-} else {
-    try {
-        final picked = projects[term\pick(projects, prompt: "project")];
-        std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
-    } catch (e) {
-        std\print("no project chosen: pass --project");
+    if (given -> project) {
+        std\print(project);
+    } else if (!term\isInteractive()) {
+        std\print("--project is required (no terminal to ask on)");
+    } else {
+        try {
+            final picked = projects[term\pick(projects, prompt: "project")];
+            std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
+        } catch (e) {
+            std\print("no project chosen: pass --project");
+        }
     }
 }

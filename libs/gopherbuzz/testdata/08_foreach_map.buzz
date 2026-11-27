@@ -1,7 +1,11 @@
 // @expect: 3
-final m = {"a": 1, "b": 2, "c": 3};
-var last = 0;
-foreach (k, v in m) {
-    last = v;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    final m = {"a": 1, "b": 2, "c": 3};
+    var last = 0;
+    foreach (k, v in m) {
+        last = v;
+    }
+    __r = last;
 }
-final __r = last;

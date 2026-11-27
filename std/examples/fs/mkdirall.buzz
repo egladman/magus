@@ -1,9 +1,11 @@
 import "std";
 import "fs";
 
-// Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
-try {
-    fs\mkdirAll("dist/reports", 493);
-} catch (e) {
-    std\print("could not create dist/reports");
+fun main(args: [str]) > void {
+    // Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
+    try {
+        fs\mkdirAll("dist/reports", perm: 493);
+    } catch (e) {
+        std\print("could not create dist/reports");
+    }
 }

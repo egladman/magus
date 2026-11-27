@@ -39,11 +39,11 @@ fun hasGap(c: DiscoveredProject, file: str, says: str) > bool {
 
 test "go.work use is authoritative and its modules depend on what they require" {
     final claims = discover([
-        marker("go.work", "go 1.22\n\nuse (\n\t./api // the server\n\t./sdk\n)\n"),
-        marker("api/go.mod", "module example.com/api\n\nrequire example.com/sdk v0.0.0\n"),
+        marker("go.work", content: "go 1.22\n\nuse (\n\t./api // the server\n\t./sdk\n)\n"),
+        marker("api/go.mod", content: "module example.com/api\n\nrequire example.com/sdk v0.0.0\n"),
         source("api/main.go"),
-        marker("sdk/go.mod", "module example.com/sdk\n"),
-        marker("tools/go.mod", "module example.com/tools\n"),
+        marker("sdk/go.mod", content: "module example.com/sdk\n"),
+        marker("tools/go.mod", content: "module example.com/tools\n"),
     ]);
     std\assert(paths(claims) == "api,sdk", message: "only the used modules form projects: {paths(claims)}");
     final api = claim(claims, at: "api");
@@ -55,8 +55,8 @@ test "go.work use is authoritative and its modules depend on what they require" 
 
 test "go.work use naming a dir with no go.mod is a gap" {
     final claims = discover([
-        marker("go.work", "use ./a\nuse ./missing\n"),
-        marker("a/go.mod", "module example.com/a\n"),
+        marker("go.work", content: "use ./a\nuse ./missing\n"),
+        marker("a/go.mod", content: "module example.com/a\n"),
     ]);
     std\assert(paths(claims) == "a", message: "one module");
     std\assert(hasGap(claims[0], file: "go.work", says: "use ./missing names a dir with no go.mod"), message: "missing use reported");
@@ -64,9 +64,9 @@ test "go.work use naming a dir with no go.mod is a gap" {
 
 test "without go.work every go.mod forms a project and a local replace draws a dependency" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\n\nrequire (\n\texample.com/root/libs/x v0.0.0\n)\n\nreplace example.com/root/libs/x => ./libs/x\n"),
+        marker("go.mod", content: "module example.com/root\n\nrequire (\n\texample.com/root/libs/x v0.0.0\n)\n\nreplace example.com/root/libs/x => ./libs/x\n"),
         source("main.go"),
-        marker("libs/x/go.mod", "module example.com/root/libs/x\n"),
+        marker("libs/x/go.mod", content: "module example.com/root/libs/x\n"),
         source("libs/x/x.go"),
     ]);
     std\assert(paths(claims) == ".,libs/x", message: "both modules: {paths(claims)}");
@@ -78,8 +78,8 @@ test "without go.work every go.mod forms a project and a local replace draws a d
 
 test "a require of an in-tree module with no local replace draws no dependency and says why" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\nrequire example.com/other v1.2.0\n"),
-        marker("other/go.mod", "module example.com/other\n"),
+        marker("go.mod", content: "module example.com/root\nrequire example.com/other v1.2.0\n"),
+        marker("other/go.mod", content: "module example.com/other\n"),
     ]);
     final root = claim(claims, at: ".");
     std\assert(root.dependsOn.len() == 0, message: "published version, no edge");
@@ -88,7 +88,7 @@ test "a require of an in-tree module with no local replace draws no dependency a
 
 test "replace targets outside the workspace or without a project are gaps" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\nreplace (\n\texample.com/up => ../up\n\texample.com/abs => /src/abs\n\texample.com/none => ./none\n\texample.com/remote => example.com/fork v1.0.0\n)\n"),
+        marker("go.mod", content: "module example.com/root\nreplace (\n\texample.com/up => ../up\n\texample.com/abs => /src/abs\n\texample.com/none => ./none\n\texample.com/remote => example.com/fork v1.0.0\n)\n"),
     ]);
     final root = claims[0];
     std\assert(root.dependsOn.len() == 0, message: "no edges");
@@ -100,10 +100,10 @@ test "replace targets outside the workspace or without a project are gaps" {
 
 test "go.mod under dirs ./... skips forms no project and is reported" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\n"),
-        marker("testdata/mod/go.mod", "module example.com/fixture\n"),
-        marker("_old/go.mod", "module example.com/old\n"),
-        marker(".tools/go.mod", "module example.com/tools\n"),
+        marker("go.mod", content: "module example.com/root\n"),
+        marker("testdata/mod/go.mod", content: "module example.com/fixture\n"),
+        marker("_old/go.mod", content: "module example.com/old\n"),
+        marker(".tools/go.mod", content: "module example.com/tools\n"),
     ]);
     std\assert(paths(claims) == ".", message: "only the root: {paths(claims)}");
     std\assert(hasGap(claims[0], file: "testdata/mod/go.mod", says: "under testdata"), message: "testdata");
@@ -113,13 +113,13 @@ test "go.mod under dirs ./... skips forms no project and is reported" {
 
 test "spans list the dirs a module's ./... compiles, stopping at nested modules and skipped dirs" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\n"),
+        marker("go.mod", content: "module example.com/root\n"),
         source("main.go"),
         source("web/embed.go"),
         source("cmd/tool/main.go"),
         source("testdata/fixture.go"),
         source("_scratch/x.go"),
-        marker("libs/y/go.mod", "module example.com/y\n"),
+        marker("libs/y/go.mod", content: "module example.com/y\n"),
         source("libs/y/y.go"),
         source("libs/y/inner/z.go"),
     ]);
@@ -129,9 +129,9 @@ test "spans list the dirs a module's ./... compiles, stopping at nested modules 
 
 test "lifecycle targets are the spell's own ops, build only where the module dir holds a package" {
     final claims = discover([
-        marker("go.mod", "module example.com/root\n"),
+        marker("go.mod", content: "module example.com/root\n"),
         source("root.go"),
-        marker("lib/go.mod", "module example.com/lib\n"),
+        marker("lib/go.mod", content: "module example.com/lib\n"),
         source("lib/pkg/p.go"),
     ]);
     final root = claim(claims, at: ".");
@@ -145,7 +145,7 @@ test "lifecycle targets are the spell's own ops, build only where the module dir
 }
 
 test "every module reports what .go content would show" {
-    final c = discover([marker("go.mod", "module example.com/root\n")])[0];
+    final c = discover([marker("go.mod", content: "module example.com/root\n")])[0];
     std\assert(hasGap(c, file: "go.mod", says: "build tags"), message: "tags");
     std\assert(hasGap(c, file: "go.mod", says: "service"), message: "services");
     std\assert(hasGap(c, file: "go.mod", says: "go:generate"), message: "generate");
@@ -154,7 +154,7 @@ test "every module reports what .go content would show" {
 
 test "C and .S sources are reported as cgo per directory" {
     final c = discover([
-        marker("go.mod", "module example.com/root\n"),
+        marker("go.mod", content: "module example.com/root\n"),
         source("native/a.c"),
         source("native/b.c"),
         source("asm/x.S"),
@@ -178,7 +178,7 @@ test "Go sources with no go.mod ride a root member claim" {
 }
 
 test "a quoted module path and an ignore directive are read" {
-    final c = discover([marker("go.mod", "module \"example.com/q\" // quoted\nignore ./node_modules\n")])[0];
+    final c = discover([marker("go.mod", content: "module \"example.com/q\" // quoted\nignore ./node_modules\n")])[0];
     std\assert(c.name == "example.com/q", message: "unquoted: {c.name}");
     std\assert(hasGap(c, file: "go.mod", says: "ignore ./node_modules"), message: "ignore reported");
 }

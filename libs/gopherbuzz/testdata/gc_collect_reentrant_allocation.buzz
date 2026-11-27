@@ -13,9 +13,13 @@ object Spawner {
     }
 }
 
-var i = 0;
-while (i < 2000) {
-    _ = Spawner{ id = i };
-    i = i + 1;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    var i = 0;
+    while (i < 2000) {
+        _ = Spawner{ id = i };
+        i = i + 1;
+    }
+    __r = collected > 0;
 }
-final __r = collected > 0;

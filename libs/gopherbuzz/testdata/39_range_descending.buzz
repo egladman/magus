@@ -1,7 +1,11 @@
 // @expect: 15
 // Ranges are half-open and descend when low > high: 5..0 yields 5,4,3,2,1.
-var sum = 0;
-foreach (n in 5..0) {
-    sum = sum + n;
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    var sum = 0;
+    foreach (n in 5..0) {
+        sum = sum + n;
+    }
+    __r = sum;
 }
-final __r = sum;

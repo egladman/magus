@@ -27,10 +27,10 @@ import "../libs/ssg/paths" as _;
 // source to view or edit, and so rootPrefix climbs the right number of levels.
 fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > result\Result::<bool> {
     try {
-        final r3 = renderPage(title, desc, body, srcRel, "", url, "", mut [], "", site);
+        final r3 = renderPage(title, description: desc, content: body, srcRel: srcRel, pager: "", canonUrl: url, reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r3.value!;
-        final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
+        final dir = fs\join(site.inputs.outDir, name: url.sub(0, len: url.len() - 1));
         fs\mkdirAll(dir);
         fs\writeFile(dir + "/index.html", doc);
         final r4 = site.addRecord(url, title, desc, searchText);
@@ -107,7 +107,7 @@ export fun renderTagPages(site: Site) > result\Result::<bool> {
             if (cards.len() == 0) { continue; }
 
             final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-                return strLess("{a["title"]}", "{b["title"]}");
+                return strLess("{a["title"]}", b: "{b["title"]}");
             });
 
             final url = "tags/" + slug + "/";
@@ -122,9 +122,9 @@ export fun renderTagPages(site: Site) > result\Result::<bool> {
 {{/cards}}
   </div>
   <p><a href="{{root}}tags/">All tags</a></p>
-`, {"name": name, "root": root, "cards": ordered});
+`, data: {"name": name, "root": root, "cards": ordered});
 
-            final r1 = writeTagPage(url, srcRel, title, desc, body, title + " " + desc, site);
+            final r1 = writeTagPage(url, srcRel: srcRel, title: title, desc: desc, body: body, searchText: title + " " + desc, site: site);
             if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
             hubRows.append(mut {"slug": slug, "name": name, "count": ordered.len()});
         }
@@ -140,11 +140,11 @@ export fun renderTagPages(site: Site) > result\Result::<bool> {
     <a class="tag" href="{{root}}tags/{{slug}}/">{{name}} ({{count}})</a>
 {{/rows}}
   </div>
-`, {"root": hubRoot, "rows": hubRows});
+`, data: {"root": hubRoot, "rows": hubRows});
 
-        final r2 = writeTagPage("tags/", hubSrcRel, "Tags",
-            "Every documentation topic, with the pages carrying it. Tags cut across the section tree.",
-            hubBody, "Tags topics index", site);
+        final r2 = writeTagPage("tags/", srcRel: hubSrcRel, title: "Tags",
+            desc: "Every documentation topic, with the pages carrying it. Tags cut across the section tree.",
+            body: hubBody, searchText: "Tags topics index", site: site);
         if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
         return result\ok::<bool>(true);
     } catch (err: any) {

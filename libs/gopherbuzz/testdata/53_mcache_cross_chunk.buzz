@@ -42,6 +42,10 @@ fun countLeaves(node: Node?) > int {
     }
     return countLeaves(n.first) + countLeaves(n.second);
 }
-final root = makeLeaf(1);
-splitLeaf(root, 2);
-final __r = countLeaves(root);
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    final root = makeLeaf(1);
+    splitLeaf(root, id: 2);
+    __r = countLeaves(root);
+}

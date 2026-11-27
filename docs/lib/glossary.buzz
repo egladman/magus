@@ -356,15 +356,15 @@ export fun parseConfigRow(line: str) > ConfigKey {
 
 test "parseConfigRow extracts the key and a type/flag/env summary" {
     final r = parseConfigRow("| `cache.dir` | `MAGUS_CACHE_DIR` | `--cache-dir` | string |");
-    assert\equal(r.ok, true, "dotted key row parsed");
-    assert\equal(r.key, "cache.dir", "key");
-    assert\equal(r.summary, "string, flag --cache-dir, env MAGUS_CACHE_DIR", "type + flag + env");
+    assert\equal(r.ok, want: true, message: "dotted key row parsed");
+    assert\equal(r.key, want: "cache.dir", message: "key");
+    assert\equal(r.summary, want: "string, flag --cache-dir, env MAGUS_CACHE_DIR", message: "type + flag + env");
 }
 
 test "parseConfigRow skips header, separator, and bare section keys" {
-    assert\equal(parseConfigRow("| Config key | Environment variable | Flag | Type |").ok, false, "header skipped");
-    assert\equal(parseConfigRow("|------------|----------------------|------|------|").ok, false, "separator skipped");
-    assert\equal(parseConfigRow("| `cache` | x | y | z |").ok, false, "non-dotted key skipped");
+    assert\equal(parseConfigRow("| Config key | Environment variable | Flag | Type |").ok, want: false, message: "header skipped");
+    assert\equal(parseConfigRow("|------------|----------------------|------|------|").ok, want: false, message: "separator skipped");
+    assert\equal(parseConfigRow("| `cache` | x | y | z |").ok, want: false, message: "non-dotted key skipped");
 }
 
 // sortLongestFirst returns terms ordered by descending term length, so linkGlossaryTerms
@@ -399,24 +399,24 @@ test "sortLongestFirst orders by descending term length" {
     ts.append(GlossaryTerm{ term = "remote cache", anchor = "remote-cache" });
     ts.append(GlossaryTerm{ term = "cache", anchor = "cache" });
     final sorted = sortLongestFirst(ts);
-    assert\equal(sorted[0].term, "remote cache", "longest first");
-    assert\equal(sorted[2].term, "pool", "shortest last");
+    assert\equal(sorted[0].term, want: "remote cache", message: "longest first");
+    assert\equal(sorted[2].term, want: "pool", message: "shortest last");
 }
 
 test "linkCodeEntities links inside inline code but never in a fenced block" {
     final ents: mut [Entity] = mut [<Entity>];
     ents.append(Entity{ token = "MGS1002", kind = "code", url = "reference/codes/graph/MGS1002/", summary = "duplicate spell" });
     final html = "<p>see <code>MGS1002</code> here</p><pre><code>MGS1002 again</code></pre>";
-    assert\equal(linkCodeEntities(html, ents, "concepts/cache"),
-        "<p>see <code><a class=\"code-xref\" href=\"../../reference/codes/graph/MGS1002/\" data-kind=\"code\" data-def=\"duplicate spell\">MGS1002</a></code> here</p><pre><code>MGS1002 again</code></pre>",
+    assert\equal(linkCodeEntities(html, entities: ents, pageDir: "concepts/cache"),
+        want: "<p>see <code><a class=\"code-xref\" href=\"../../reference/codes/graph/MGS1002/\" data-kind=\"code\" data-def=\"duplicate spell\">MGS1002</a></code> here</p><pre><code>MGS1002 again</code></pre>",
         message: "inline code linked, fenced block untouched, first occurrence only");
 }
 
 test "linkCodeEntities builds an anchored href for a method ref" {
     final ents: mut [Entity] = mut [<Entity>];
     ents.append(Entity{ token = "fs\\glob", kind = "method", url = "reference/buzz/fs/", anchor = "glob", summary = "list files" });
-    assert\equal(linkCodeEntities("<p><code>fs\\glob</code></p>", ents, "concepts/cache"),
-        "<p><code><a class=\"code-xref\" href=\"../../reference/buzz/fs/#glob\" data-kind=\"method\" data-def=\"list files\">fs\\glob</a></code></p>",
+    assert\equal(linkCodeEntities("<p><code>fs\\glob</code></p>", entities: ents, pageDir: "concepts/cache"),
+        want: "<p><code><a class=\"code-xref\" href=\"../../reference/buzz/fs/#glob\" data-kind=\"method\" data-def=\"list files\">fs\\glob</a></code></p>",
         message: "method ref links to its anchor");
 }
 
@@ -425,8 +425,8 @@ test "linkCodeEntities favors a full command over its bare alias" {
     ents.append(Entity{ token = "magus affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "run a target for changed projects" });
     ents.append(Entity{ token = "affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "magus affected" });
     final sorted = sortEntitiesLongestFirst(ents);
-    assert\equal(linkCodeEntities("<p><code>magus affected ci</code></p>", sorted, ""),
-        "<p><code><a class=\"code-xref\" href=\"reference/manpage/magus-affected/\" data-kind=\"command\" data-def=\"run a target for changed projects\">magus affected</a> ci</code></p>",
+    assert\equal(linkCodeEntities("<p><code>magus affected ci</code></p>", entities: sorted, pageDir: ""),
+        want: "<p><code><a class=\"code-xref\" href=\"reference/manpage/magus-affected/\" data-kind=\"command\" data-def=\"run a target for changed projects\">magus affected</a> ci</code></p>",
         message: "full command links once");
 }
 
@@ -435,56 +435,56 @@ test "sortEntitiesLongestFirst orders by descending match length" {
     es.append(Entity{ token = "magus affected" });
     es.append(Entity{ token = "magus affected ci" });
     final sorted = sortEntitiesLongestFirst(es);
-    assert\equal(sorted[0].token, "magus affected ci", "longest match first");
+    assert\equal(sorted[0].token, want: "magus affected ci", message: "longest match first");
 }
 
 test "glossarySlug mirrors goldmark heading ids" {
-    assert\equal(glossarySlug("Output reference"), "output-reference", "space to hyphen");
-    assert\equal(glossarySlug("MAGUS.md"), "magusmd", "punctuation dropped");
-    assert\equal(glossarySlug("One-off"), "one-off", "existing hyphen kept");
-    assert\equal(glossarySlug("CI"), "ci", "lowercased");
+    assert\equal(glossarySlug("Output reference"), want: "output-reference", message: "space to hyphen");
+    assert\equal(glossarySlug("MAGUS.md"), want: "magusmd", message: "punctuation dropped");
+    assert\equal(glossarySlug("One-off"), want: "one-off", message: "existing hyphen kept");
+    assert\equal(glossarySlug("CI"), want: "ci", message: "lowercased");
 }
 
 test "linkGlossaryTerms links the first linkable occurrence and records it" {
     final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache", def = "Content store." });
-    final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms, "../glossary/");
+    final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms: terms, relToGlossary: "../glossary/");
     assert\equal(r.html,
-        "<p>The <a class=\"glossary-term\" href=\"../glossary/cache/\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
+        want: "<p>The <a class=\"glossary-term\" href=\"../glossary/cache/\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
         message: "first occurrence only, definition baked in");
-    assert\equal(r.linked.len(), 1, "one anchor recorded");
-    assert\equal(r.linked[0], "cache", "recorded the cache anchor");
+    assert\equal(r.linked.len(), want: 1, message: "one anchor recorded");
+    assert\equal(r.linked[0], want: "cache", message: "recorded the cache anchor");
 }
 
 test "linkGlossaryTerms skips code, headings, and existing links" {
     final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
     final html = "<h2>cache</h2><pre>cache</pre><code>cache</code><a href=\"x\">cache</a>";
-    final r = linkGlossaryTerms(html, terms, "g/");
-    assert\equal(r.html, html, "every protected region untouched");
-    assert\equal(r.linked.len(), 0, "nothing recorded");
+    final r = linkGlossaryTerms(html, terms: terms, relToGlossary: "g/");
+    assert\equal(r.html, want: html, message: "every protected region untouched");
+    assert\equal(r.linked.len(), want: 0, message: "nothing recorded");
 }
 
 test "linkGlossaryTerms does not match a substring (plural) as a whole word" {
     final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "target", anchor = "target" });
-    assert\equal(linkGlossaryTerms("<p>targets everywhere</p>", terms, "g/").html,
-        "<p>targets everywhere</p>", "plural not linked");
+    assert\equal(linkGlossaryTerms("<p>targets everywhere</p>", terms: terms, relToGlossary: "g/").html,
+        want: "<p>targets everywhere</p>", message: "plural not linked");
 }
 
 test "linkGlossaryTerms prefers the longer term" {
     final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "pool mode", anchor = "pool-mode" });
     terms.append(GlossaryTerm{ term = "pool", anchor = "pool" });
-    assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms, "g/").html,
-        "<p><a class=\"glossary-term\" href=\"g/pool-mode/\" data-def=\"\">pool mode</a> here</p>",
+    assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms: terms, relToGlossary: "g/").html,
+        want: "<p><a class=\"glossary-term\" href=\"g/pool-mode/\" data-def=\"\">pool mode</a> here</p>",
         message: "longer term wins");
 }
 
 test "linkGlossaryTerms honors the noglossary opt-out" {
     final terms: mut [GlossaryTerm] = mut [<GlossaryTerm>];
     terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
-    final r = linkGlossaryTerms("<!-- magus-noglossary --><p>cache</p>", terms, "g/");
-    assert\equal(r.html, "<p>cache</p>", "marker stripped, nothing linked");
-    assert\equal(r.linked.len(), 0, "nothing recorded");
+    final r = linkGlossaryTerms("<!-- magus-noglossary --><p>cache</p>", terms: terms, relToGlossary: "g/");
+    assert\equal(r.html, want: "<p>cache</p>", message: "marker stripped, nothing linked");
+    assert\equal(r.linked.len(), want: 0, message: "nothing recorded");
 }

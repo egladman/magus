@@ -73,7 +73,7 @@ fun bufLint(target: Target) > Command {
 fun bufFormat(target: Target) > Command {
     final args = ["format", "--exit-code"];
     return Command{bin = "buf", args = args, edits = ["**/*.proto"], charms = {
-        "rw": set(args, "--exit-code", "-w"),
+        "rw": set(args, anchor: "--exit-code", val: "-w"),
     }};
 }
 

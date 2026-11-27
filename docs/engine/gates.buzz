@@ -69,7 +69,7 @@ export fun loadMeta(site: Site) > result\Result::<bool> {
 // terminated below it: the prefix every repo-relative path the history reports carries.
 fun sitePrefix(site: Site) > result\Result::<str> {
     try {
-        final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.inputs.root));
+        final fromRoot = filepath\rel(vcs\root(), target: filepath\abs(site.inputs.root));
         if (fromRoot == ".") { return result\ok::<str>(""); }
         if (fromRoot == ".." or fromRoot.startsWith("../")) {
             return result\fail::<str>("site root " + site.inputs.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)");
@@ -84,7 +84,7 @@ fun sitePrefix(site: Site) > result\Result::<str> {
 // offset, and a stamp that followed it would change bytes with whoever committed.
 fun utcStamp(date: str) > result\Result::<str> {
     try {
-        return result\ok::<str>(time\format("2006-01-02T15:04:05Z", time\parse("2006-01-02T15:04:05Z07:00", date)));
+        return result\ok::<str>(time\format("2006-01-02T15:04:05Z", unixMillis: time\parse("2006-01-02T15:04:05Z07:00", value: date)));
     } catch (err: any) {
         return result\caught::<str>(err);
     }
@@ -133,12 +133,12 @@ export fun assetIntegrityCheck(site: Site) > result\Result::<bool> {
             if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
                 // Non-textual asset: nothing to scan for refs.
             } else {
-                final fh = io\File.open(site.inputs.outDir + "/" + f, io\FileMode.read);
+                final fh = io\File.open(site.inputs.outDir + "/" + f, mode: io\FileMode.read);
                 final html = fh.readAll();
                 fh.close();
                 final parts = f.split("/");
                 var pageDir = "";
-                if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
+                if (parts.len() > 1) { pageDir = parts.sub(0, len: parts.len() - 1).join("/"); }
                 foreach (target in scanReferencesInHTML(html, pageDir)) {
                     final r21 = checkPathExists(target, site);
                     if (r21.error -> failed) { return result\Result::<bool>{ error = failed }; }
@@ -166,7 +166,7 @@ export fun orphanCheck(site: Site) > result\Result::<bool> {
         var isPage: mut {str: bool} = mut {};
         foreach (f in files) {
             if (f == "index.html") { isPage[""] = true; }
-            else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
+            else { if (f.endsWith("/index.html")) { isPage[f.sub(0, len: f.len() - 11)] = true; } }
         }
 
         var visited: mut {str: bool} = mut {};
@@ -180,7 +180,7 @@ export fun orphanCheck(site: Site) > result\Result::<bool> {
             head = head + 1;
             var path = site.inputs.outDir + "/index.html";
             if (key != "") { path = site.inputs.outDir + "/" + key + "/index.html"; }
-            final fh = io\File.open(path, io\FileMode.read);
+            final fh = io\File.open(path, mode: io\FileMode.read);
             final html = fh.readAll();
             fh.close();
             foreach (ref in scanReferencesInHTML(html, key)) {
@@ -195,7 +195,7 @@ export fun orphanCheck(site: Site) > result\Result::<bool> {
         var orphans: mut [str] = mut [<str>];
         foreach (p in site.docPages) {
             var dk = p.url;
-            if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
+            if (dk.endsWith("/")) { dk = dk.sub(0, len: dk.len() - 1); }
             if (visited[dk] == null) { orphans.append(p.url); }
         }
         if (orphans.len() > 0) {
@@ -265,10 +265,10 @@ export fun checkPathExists(target: str, site: Site) > result\Result::<bool> {
         if (target == "") { return result\ok::<bool>(fs\isFile(site.inputs.outDir + "/index.html")); }
         if (fs\isFile(fs\join(site.inputs.outDir, target))) { return result\ok::<bool>(true); }
         if (fs\isDir(fs\join(site.inputs.outDir, target))) {
-            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, target, "index.html")));
+            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, name: target, file: "index.html")));
         }
         if (target.endsWith("/")) {
-            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, target + "index.html")));
+            return result\ok::<bool>(fs\isFile(fs\join(site.inputs.outDir, name: target + "index.html")));
         }
         return result\ok::<bool>(false);
     } catch (err: any) {
@@ -392,7 +392,7 @@ export fun pruneStaleOutputs(site: Site) > result\Result::<bool> {
             if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
             if (path.endsWith("/index.html") == false) { continue; }   // only page-shaped files drive pruning
             if (site.writtenPaths[path] != null) { continue; }
-            staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
+            staleDirs[path.sub(0, len: path.len() - 11)] = true;   // len("/index.html") == 11
         }
         foreach (dir in staleDirs.keys()) {
             // Pruning keys off a missing index.html but deletes the whole directory, so a
@@ -427,7 +427,7 @@ export fun writeSiteManifest(site: Site) > result\Result::<bool> {
             if (rel == "site-manifest.sha256") { continue; }
             body.append(fileSha256(site.inputs.outDir + "/" + rel) + "  " + rel + "\n");
         }
-        fs\writeFile(site.inputs.outDir + "/site-manifest.sha256", body.join(""));
+        fs\writeFile(site.inputs.outDir + "/site-manifest.sha256", content: body.join(""));
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -440,9 +440,9 @@ export fun writeSiteManifest(site: Site) > result\Result::<bool> {
 // pass through unchanged and simply never match a real page key.
 export fun pageKey(resolved: str) > str {
     var r = resolved;
-    if (r.endsWith("/index.html")) { r = r.sub(0, r.len() - 11); }  // len("/index.html") == 11
+    if (r.endsWith("/index.html")) { r = r.sub(0, len: r.len() - 11); }  // len("/index.html") == 11
     if (r == "index.html") { return ""; }
-    if (r.endsWith("/")) { r = r.sub(0, r.len() - 1); }
+    if (r.endsWith("/")) { r = r.sub(0, len: r.len() - 1); }
     return r;
 }
 
@@ -459,7 +459,7 @@ export fun readURLSet(path: str) > result\Result::<{str: bool}> {
     try {
         var set: mut {str: bool} = mut {};
         if (fs\isFile(path) == false) { return result\ok::<{str: bool}>(set); }
-        final f = io\File.open(path, io\FileMode.read);
+        final f = io\File.open(path, mode: io\FileMode.read);
         final content = f.readAll();
         f.close();
         foreach (line in content.split("\n")) {
@@ -521,7 +521,7 @@ export fun updateUrlLock(site: Site) > result\Result::<bool> {
         final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
         final body = mut [<str>];
         foreach (u in sorted) { body.append(u + "\n"); }
-        fs\writeFile(URL_LOCK, body.join(""));
+        fs\writeFile(URL_LOCK, content: body.join(""));
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -572,7 +572,7 @@ fun collectMarkdown(base: str, rel: str, acc: mut [str]) > result\Result::<bool>
 fun dropIgnored(base: str, rels: [str]) > result\Result::<[str]> {
     try {
         if (vcs\name() != "git" or rels.len() == 0) { return result\ok::<[str]>(rels); }
-        final probe = vcs\cmd(["check-ignore", "--"] + rels, vcs\CommandOptions{dir = base, quiet = true, allowFailure = true});
+        final probe = vcs\cmd(["check-ignore", "--"] + rels, opts: vcs\CommandOptions{dir = base, quiet = true, allowFailure = true});
         // Exit 1 is "nothing ignored"; anything above it is a failed probe, not an answer.
         if (probe.code > 1) {
             return result\fail::<[str]>("git check-ignore failed in " + base + ": " + probe.stderr);
@@ -593,15 +593,15 @@ fun dropIgnored(base: str, rels: [str]) > result\Result::<[str]> {
 
 test "dropIgnored skips ignored untracked pages and keeps tracked and force-added ones" {
     final repo = fs\tempDir("magus-dropignored-");
-    _ = vcs\cmd(["init", "-q"], vcs\CommandOptions{dir = repo, quiet = true});
-    fs\writeFile(repo + "/.gitignore", "/rendered.md\n/forced.md\n");
-    fs\writeFile(repo + "/rendered.md", "[x](gone.md)\n");
-    fs\writeFile(repo + "/forced.md", "x\n");
-    fs\writeFile(repo + "/tracked.md", "x\n");
-    _ = vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], vcs\CommandOptions{dir = repo, quiet = true});
-    final kept = dropIgnored(repo, ["forced.md", "rendered.md", "tracked.md"]).value!;
+    _ = vcs\cmd(["init", "-q"], opts: vcs\CommandOptions{dir = repo, quiet = true});
+    fs\writeFile(repo + "/.gitignore", content: "/rendered.md\n/forced.md\n");
+    fs\writeFile(repo + "/rendered.md", content: "[x](gone.md)\n");
+    fs\writeFile(repo + "/forced.md", content: "x\n");
+    fs\writeFile(repo + "/tracked.md", content: "x\n");
+    _ = vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], opts: vcs\CommandOptions{dir = repo, quiet = true});
+    final kept = dropIgnored(repo, rels: ["forced.md", "rendered.md", "tracked.md"]).value!;
     fs\removeAll(repo);
-    assert\equal(kept.join(","), "forced.md,tracked.md", "only the ignored untracked page is dropped");
+    assert\equal(kept.join(","), want: "forced.md,tracked.md", message: "only the ignored untracked page is dropped");
 }
 
 // conventionPages lists the pages the conventions lint judges under base: every .md the
@@ -609,7 +609,7 @@ test "dropIgnored skips ignored untracked pages and keeps tracked and force-adde
 fun conventionPages(base: str) > result\Result::<[str]> {
     try {
         final found: mut [str] = mut [<str>];
-        final r9 = collectMarkdown(base, "", found);
+        final r9 = collectMarkdown(base, rel: "", acc: found);
         if (r9.error -> failed) { return result\Result::<[str]>{ error = failed }; }
         return dropIgnored(base, found);
     } catch (err: any) {
@@ -619,14 +619,14 @@ fun conventionPages(base: str) > result\Result::<[str]> {
 
 test "conventionPages lists a tracked page and not a stale ignored render" {
     final repo = fs\tempDir("magus-conventions-");
-    _ = vcs\cmd(["init", "-q"], vcs\CommandOptions{dir = repo, quiet = true});
-    fs\writeFile(repo + "/.gitignore", "/docs/changelog.md\n");
+    _ = vcs\cmd(["init", "-q"], opts: vcs\CommandOptions{dir = repo, quiet = true});
+    fs\writeFile(repo + "/.gitignore", content: "/docs/changelog.md\n");
     fs\mkdirAll(repo + "/docs/guides");
-    fs\writeFile(repo + "/docs/changelog.md", "See [gone](migrating/gone.md).\n");
-    fs\writeFile(repo + "/docs/guides/tracked.md", "See [gone](migrating/gone.md).\n");
+    fs\writeFile(repo + "/docs/changelog.md", content: "See [gone](migrating/gone.md).\n");
+    fs\writeFile(repo + "/docs/guides/tracked.md", content: "See [gone](migrating/gone.md).\n");
     final pages = conventionPages(repo + "/docs").value!;
     fs\removeAll(repo);
-    assert\equal(pages.join(","), "guides/tracked.md", "the ignored render is not judged");
+    assert\equal(pages.join(","), want: "guides/tracked.md", message: "the ignored render is not judged");
 }
 
 // pagesIn is the pages files names, or every page when files is empty.
@@ -636,8 +636,8 @@ fun pagesIn(pages: [str], files: [str]) > [str] {
 }
 
 test "pagesIn keeps every page with no files and only the named ones with some" {
-    assert\equal(pagesIn(["a.md", "b.md"], files: [<str>]).join(","), "a.md,b.md", "no files is the whole tree");
-    assert\equal(pagesIn(["a.md", "b.md"], files: ["b.md", "c.go"]).join(","), "b.md", "a named file that is no page is skipped");
+    assert\equal(pagesIn(["a.md", "b.md"], files: [<str>]).join(","), want: "a.md,b.md", message: "no files is the whole tree");
+    assert\equal(pagesIn(["a.md", "b.md"], files: ["b.md", "c.go"]).join(","), want: "b.md", message: "a named file that is no page is skipped");
 }
 
 // unmatchedFiles names each of files that is no page, since a run that judged nothing
@@ -665,16 +665,16 @@ fun unmatchedFiles(pages: [str], files: [str], root: str, docs: str) > [str] {
 test "a named file that matched no page fails, shown project-relative" {
     final repo = fs\tempDir("magus-conventions-");
     fs\mkdirAll(repo + "/docs/guides");
-    fs\writeFile(repo + "/docs/guides/a.md", "Plain.\n");
+    fs\writeFile(repo + "/docs/guides/a.md", content: "Plain.\n");
     final workspaceForm = unmatchedFiles(["guides/a.md"], files: ["docs/guides/a.md"], root: repo, docs: "docs");
     final missing = unmatchedFiles(["guides/a.md"], files: ["guides/zz.md"], root: repo, docs: "docs");
     final matched = unmatchedFiles(["guides/a.md"], files: ["guides/a.md"], root: repo, docs: "docs");
     fs\removeAll(repo);
-    assert\equal(workspaceForm.len(), 1, "one finding");
-    assert\equal(workspaceForm[0].indexOf("guides/a.md names no page") != null, true, workspaceForm[0]);
-    assert\equal(workspaceForm[0].indexOf("docs/guides/a.md names") == null, true, "the prefix is cut");
-    assert\equal(missing[0].indexOf("names no file") != null, true, missing[0]);
-    assert\equal(matched.len(), 0, "a page matches");
+    assert\equal(workspaceForm.len(), want: 1, message: "one finding");
+    assert\equal(workspaceForm[0].indexOf("guides/a.md names no page") != null, want: true, message: workspaceForm[0]);
+    assert\equal(workspaceForm[0].indexOf("docs/guides/a.md names") == null, want: true, message: "the prefix is cut");
+    assert\equal(missing[0].indexOf("names no file") != null, want: true, message: missing[0]);
+    assert\equal(matched.len(), want: 0, message: "a page matches");
 }
 
 // pathExists is the one filesystem question the conventions lint asks.

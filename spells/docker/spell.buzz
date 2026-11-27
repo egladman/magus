@@ -85,7 +85,7 @@ fun dockerLoad(target: Target) > Command { return Command{bin = "docker", args =
 fun trivyImage(target: Target) > Command {
     final args = ["image", "--skip-db-update"];
     return Command{bin = "trivy", args = args, external = External.reads, charms = {
-        "update": drop(args, "--skip-db-update"),
+        "update": drop(args, anchor: "--skip-db-update"),
     }};
 }
 

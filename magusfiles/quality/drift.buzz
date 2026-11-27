@@ -189,12 +189,12 @@ test "VCS snapshots keep an existing untracked directory opaque" {
 
     final before = vcsHashes([evals]).value!;
     assert\equal(before[evals], want: "dir", message: "directory marker");
-    assert\equal(vcsChangedSince(before, [evals]).value!, want: [], message: "unchanged opaque directory");
+    assert\equal(vcsChangedSince(before, paths: [evals]).value!, want: [], message: "unchanged opaque directory");
 
     final generated = root + "/new-output";
     fs\mkdirAll(generated);
     fs\writeFile(generated + "/artifact", content: "generated");
-    assert\contains(vcsChangedSince(before, [evals, generated]).value!, item: generated,
+    assert\contains(vcsChangedSince(before, paths: [evals, generated]).value!, item: generated,
         message: "new directory is still drift");
 }
 

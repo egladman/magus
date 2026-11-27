@@ -39,7 +39,7 @@ object TourStep {
           <a class="open-in-playground" href="{{playLink}}" target="_blank" rel="noopener" title="Open this snippet in the playground (new tab)" data-tooltip="Open in playground">Open in Playground <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a>
         </div>
       </li>
-`, {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)}));
+`, data: {"num": num, "title": this.title, "desc": this.desc, "root": root, "docSlug": this.docSlug, "docLabel": this.docLabel, "teaser": codeTeaser(src), "playLink": playgroundLink(root, src)}));
         } catch (err: any) {
             return result\caught::<str>(err);
         }
@@ -54,23 +54,23 @@ object TourStep {
 // chrome is the console status bar (in playground.html), not the docs footer.
 export fun renderPlayground(site: Site) > result\Result::<bool> {
     try {
-        final f = io\File.open("playground.html", io\FileMode.read);
+        final f = io\File.open("playground.html", mode: io\FileMode.read);
         var html = f.readAll();
         f.close();
         // Ships at /playground/ (a directory index), so the nav climbs one level to root.
         final outDir = "playground";
         final root = climbFromDir(outDir);
-        final r6 = renderSiteNav(root, "playground", true, site.inputs.config);
+        final r6 = renderSiteNav(root, active: "playground", withRef: true, cfg: site.inputs.config);
         if (r6.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        html = html.replace("<!-- site-nav -->", r6.value!);
+        html = html.replace("<!-- site-nav -->", with: r6.value!);
         // Default CSP meta - site.csp, not site.cspBadges: the playground never
         // loads an external image and holds the reader's own source, so it takes the
         // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
         // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
         // this file is both the hash's source and its sink.
-        html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.inputs.csp + "\">");
+        html = html.replace("<!-- csp -->", with: "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.inputs.csp + "\">");
         fs\mkdirAll(fs\join(site.inputs.outDir, outDir));
-        fs\writeFile(fs\join(site.inputs.outDir, outDir, "index.html"), html);
+        fs\writeFile(fs\join(site.inputs.outDir, name: outDir, file: "index.html"), content: html);
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -99,7 +99,7 @@ fun codeTeaser(src: str) > str {
 // tourSrc reads one curated example from tour/ (cwd-relative, build-time only; the
 // files aren't written - their content rides into the page as teaser + deep-link).
 fun tourSrc(file: str) > str {
-    final f = io\File.open("tour/" + file, io\FileMode.read);
+    final f = io\File.open("tour/" + file, mode: io\FileMode.read);
     final s = f.readAll();
     f.close();
     return s;
@@ -114,7 +114,7 @@ fun tourSrc(file: str) > str {
 // emits the compressed "1". internal/playground/share.go decodes all of them.
 fun playgroundLink(root: str, src: str) > str {
     var enc = base64\urlEncode(src);
-    while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
+    while (enc.endsWith("=")) { enc = enc.sub(0, len: enc.len() - 1); }
     return root + "playground/#source=0" + enc;
 }
 
@@ -147,8 +147,8 @@ export fun tourSteps() > result\Result::<[TourStep]> {
             final src = fs\readFile(f);
             steps.append(TourStep{
                 file = name,
-                title = tourMeta(src, "title"),
-                desc = tourMeta(src, "desc"),
+                title = tourMeta(src, key: "title"),
+                desc = tourMeta(src, key: "desc"),
                 docLabel = tourDocLabel(src),
                 docSlug = tourDocSlug(src),
             });
@@ -173,14 +173,14 @@ fun tourMeta(src: str, key: str) > str {
 // The doc cross-link is one line, `// doc: <slug>|<label>`, because a slug with no label
 // renders a link with nothing to click.
 fun tourDocSlug(src: str) > str {
-    final raw = tourMeta(src, "doc");
+    final raw = tourMeta(src, key: "doc");
     final bar = raw.indexOf("|");
     if (bar == null) { return raw; }
     return raw.sub(0, bar);
 }
 
 fun tourDocLabel(src: str) > str {
-    final raw = tourMeta(src, "doc");
+    final raw = tourMeta(src, key: "doc");
     final bar = raw.indexOf("|");
     if (bar == null) { return ""; }
     return raw.sub(bar + 1);
@@ -226,21 +226,21 @@ export fun renderTourPage(site: Site) > result\Result::<bool> {
 <p class="lede">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>
     <ol class="tour-grid">
 {{{cards}}}    </ol>
-`, {"cards": cards.join("")});
+`, data: {"cards": cards.join("")});
         final title = "Tour";
         final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
-        final r3 = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], "", site);
+        final r3 = renderPage(title, description: desc, content: body, srcRel: "tour/index.md", pager: "", canonUrl: "tour/", reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r3.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r3.value!;
         fs\mkdirAll(site.inputs.outDir + "/tour");
-        final of = io\File.open(site.inputs.outDir + "/tour/index.html", io\FileMode.write);
+        final of = io\File.open(site.inputs.outDir + "/tour/index.html", mode: io\FileMode.write);
         of.write(doc);
         of.close();
         // addRecord uses the desc arg directly and parses this stub only for tags, so the
         // stub is just a valid tags list (a description: line with colons would break the
         // YAML). The body text seeds a few search terms.
-        final r4 = site.addRecord("tour/", title, desc,
-            "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
+        final r4 = site.addRecord(url: "tour/", title: title, desc: desc,
+            md: "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
         if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
         std\print("  tour page -> " + site.inputs.outDir + "/tour/index.html");
         return result\ok::<bool>(true);

@@ -1,12 +1,14 @@
 import "std";
 import "fs";
 
-// Blocks; the callback fires per change batch. Return true to keep watching.
-try {
-    fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
-        foreach (p in paths) { std\print("changed: " + p); }
-        return true;
-    });
-} catch (e) {
-    std\print("watch stopped");
+fun main(args: [str]) > void {
+    // Blocks; the callback fires per change batch. Return true to keep watching.
+    try {
+        fs\watch(["cmd/**/*.go", "internal/**/*.go"], callback: fun (paths: [str]) > bool {
+            foreach (p in paths) { std\print("changed: " + p); }
+            return true;
+        });
+    } catch (e) {
+        std\print("watch stopped");
+    }
 }

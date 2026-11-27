@@ -41,12 +41,12 @@ export fun isPublishablePost(site: Site, name: str) > result\Result::<bool> {
         if (name.endsWith(".md") == false or name == "index.md" or name.startsWith("_")) {
             return result\ok::<bool>(false);
         }
-        final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
+        final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, mode: io\FileMode.read);
         final md = f.readAll();
         f.close();
         final fm = serialize\jsonDecode(markdown\frontmatter(md));
         if (fm.q("draft").booleanValue()) { return result\ok::<bool>(false); }
-        return result\ok::<bool>(isFuturePost(fm.q("date").stringValue(), site.inputs.metaStamp) == false);
+        return result\ok::<bool>(isFuturePost(fm.q("date").stringValue(), asOf: site.inputs.metaStamp) == false);
     } catch (err: any) {
         return result\caught::<bool>(err);
     }
@@ -69,13 +69,13 @@ export fun findReleasePost(site: Site) > result\Result::<bool> {
         final latest = site.latestStable();
         if (latest == null) { return result\ok::<bool>(true); }
         final ver = latest!.version;
-        final dir = fs\join(site.inputs.root, site.inputs.blog);
+        final dir = fs\join(site.inputs.root, name: site.inputs.blog);
         if (fs\isDir(dir) == false) { return result\ok::<bool>(true); }
         foreach (name in fs\listDir(dir)) {
             final r12 = isPublishablePost(site, name);
             if (r12.error -> failed) { return result\Result::<bool>{ error = failed }; }
             if (r12.value! == false) { continue; }
-            final f = io\File.open(dir + "/" + name, io\FileMode.read);
+            final f = io\File.open(dir + "/" + name, mode: io\FileMode.read);
             final md = f.readAll();
             f.close();
             if (serialize\jsonDecode(markdown\frontmatter(md)).q("release").stringValue() == ver) {
@@ -96,7 +96,7 @@ export fun findReleasePost(site: Site) > result\Result::<bool> {
 export fun renderBlogPost(base: str, site: Site) > result\Result::<bool> {
     try {
         final rel = site.inputs.blog + "/" + base;
-        final f = io\File.open(site.inputs.root + "/" + rel, io\FileMode.read);
+        final f = io\File.open(site.inputs.root + "/" + rel, mode: io\FileMode.read);
         final md = f.readAll();
         f.close();
 
@@ -134,7 +134,7 @@ export fun renderBlogPost(base: str, site: Site) > result\Result::<bool> {
         // cross-references (../../documentation/) resolve at the post's real depth.
         final r5 = drillHrefs(site.inputs.blog + "/" + urlPath, site: site);
         if (r5.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final r4 = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath),
+        final r4 = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), oldDir: site.inputs.blog, newDir: site.inputs.blog + "/" + urlPath),
             hrefs: r5.value!);
         if (r4.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final html = r4.value!;
@@ -167,14 +167,14 @@ export fun renderBlogPost(base: str, site: Site) > result\Result::<bool> {
         if (r8.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final r9 = generatedFrom(md);
         if (r9.error -> failed) { return result\Result::<bool>{ error = failed }; }
-        final r7 = renderPage(title, desc, article, rel, pager, url, readingTime(md), r8.value!, r9.value!, site);
+        final r7 = renderPage(title, description: desc, content: article, srcRel: rel, pager: pager, canonUrl: url, reading: readingTime(md), tags: r8.value!, generatedFrom: r9.value!, site: site);
         if (r7.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r7.value!;
         makeOutputDir(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath, rel, url);
-        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath + "/index.html", io\FileMode.write);
+        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath + "/index.html", mode: io\FileMode.write);
         of.write(doc);
         of.close();
-        fs\writeFile(fs\join(site.inputs.outDir, site.inputs.blog, urlPath, "index.md"), md);
+        fs\writeFile(fs\join(site.inputs.outDir, name: site.inputs.blog, dir: urlPath, file: "index.md"), content: md);
 
         final r10 = site.addRecord(url, title, desc, md);
         if (r10.error -> failed) { return result\Result::<bool>{ error = failed }; }
@@ -201,11 +201,11 @@ fun renderBlogPager(base: str, site: Site) > result\Result::<str> {
         // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
         // during the walk). Newest first.
         var posts: mut [BlogPost] = mut [<BlogPost>];
-        foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
+        foreach (name in fs\listDir(fs\join(site.inputs.root, name: site.inputs.blog))) {
             final r3 = isPublishablePost(site, name);
             if (r3.error -> failed) { return result\Result::<str>{ error = failed }; }
             if (r3.value!) {
-                final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
+                final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, mode: io\FileMode.read);
                 final md = f.readAll();
                 f.close();
                 final fm = serialize\jsonDecode(markdown\frontmatter(md));
@@ -218,8 +218,8 @@ fun renderBlogPager(base: str, site: Site) > result\Result::<str> {
         // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
         // posts share a date.
         final ordered = posts.sort(fun (a: BlogPost, b: BlogPost) > bool {
-            if (a.date != b.date) { return strLess(b.date, a.date); }
-            return strLess(a.base, b.base);
+            if (a.date != b.date) { return strLess(b.date, b: a.date); }
+            return strLess(a.base, b: b.base);
         });
 
         var pos = -1;
@@ -238,14 +238,14 @@ fun renderBlogPager(base: str, site: Site) > result\Result::<str> {
         // Previous = newer post (earlier in ordered), Next = older post (later).
         if (pos > 0) {
             final prev = ordered[pos - 1];
-            final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(prev.base) + "/");
+            final href = relativePath(fromDir, toUrl: site.inputs.blog + "/" + blogURLPath(prev.base) + "/");
             body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
                 + "<span class=\"page-nav-dir\">Newer</span>"
                 + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
         }
         if (pos < ordered.len() - 1) {
             final nxt = ordered[pos + 1];
-            final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(nxt.base) + "/");
+            final href = relativePath(fromDir, toUrl: site.inputs.blog + "/" + blogURLPath(nxt.base) + "/");
             body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
                 + "<span class=\"page-nav-dir\">Older</span>"
                 + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
@@ -265,8 +265,8 @@ export fun renderBlogIndex(site: Site) > result\Result::<bool> {
     try {
         // Newest first, tiebreak by base for determinism.
         final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
-            if (a.date != b.date) { return strLess(b.date, a.date); }
-            return strLess(a.base, b.base);
+            if (a.date != b.date) { return strLess(b.date, b: a.date); }
+            return strLess(a.base, b: b.base);
         });
 
         // View-model per post; date/description are optional (gated by hasDate/hasDesc).
@@ -300,7 +300,7 @@ export fun renderBlogIndex(site: Site) > result\Result::<bool> {
 {{^hasPosts}}
 <p>No posts yet.</p>
 {{/hasPosts}}
-`, {"hasPosts": sorted.len() > 0, "posts": posts});
+`, data: {"hasPosts": sorted.len() > 0, "posts": posts});
 
         final title = "Blog";
         final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
@@ -313,11 +313,11 @@ export fun renderBlogIndex(site: Site) > result\Result::<bool> {
             final rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/" + sorted[0].base];
             if (rec != null) { site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/index.md"] = rec; }
         }
-        final r1 = renderPage(title, desc, body, site.inputs.blog + "/index.md", "", url, "", mut [], "", site);
+        final r1 = renderPage(title, description: desc, content: body, srcRel: site.inputs.blog + "/index.md", pager: "", canonUrl: url, reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r1.value!;
-        fs\mkdirAll(fs\join(site.inputs.outDir, site.inputs.blog));
-        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/index.html", io\FileMode.write);
+        fs\mkdirAll(fs\join(site.inputs.outDir, name: site.inputs.blog));
+        final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/index.html", mode: io\FileMode.write);
         of.write(doc);
         of.close();
         // A real page, so it belongs in the search index and sitemap. No frontmatter

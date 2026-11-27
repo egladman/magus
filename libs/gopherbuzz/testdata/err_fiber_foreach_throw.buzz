@@ -1,11 +1,16 @@
 // @error: boom
 // An error raised inside a fiber surfaces out of the driving foreach.
+var __r: any = null;
+
 fun bad() > void *> int? {
     _ = yield 1;
     throw "boom";
 }
-var sum = 0;
-foreach (n in &bad()) {
-    sum = sum + n;
+
+fun main(args: [str]) > void !> any {
+    var sum = 0;
+    foreach (n in &bad()) {
+        sum = sum + n;
+    }
+    __r = sum;
 }
-final __r = sum;

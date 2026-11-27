@@ -37,16 +37,18 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 import "std";
 import "encoding/json";
 
-// parse RAISES on malformed input rather than returning a null document, so
-// invalid JSON cannot be mistaken for an empty one.
-try {
-    final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
-    std\print(v["name"]);
-    std\print(v["port"]);
-    // -> api
-    // -> 8080
-} catch (e) {
-    std\print("not JSON");
+fun main(args: [str]) > void {
+    // parse raises on malformed input rather than returning a null document, so
+    // invalid JSON cannot be mistaken for an empty one.
+    try {
+        final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
+        std\print(v["name"]);
+        std\print(v["port"]);
+        // -> api
+        // -> 8080
+    } catch (e) {
+        std\print("not JSON");
+    }
 }
 ```
 
@@ -69,12 +71,14 @@ Encode a value as a JSON string. With no indent (or "") the output is compact; p
 import "std";
 import "encoding/json";
 
-final config = { "target": "build", "parallel": true };
-std\print(json\stringify(config) catch "");
-// -> {"parallel":true,"target":"build"}
+fun main(args: [str]) > void {
+    final config = { "target": "build", "parallel": true };
+    std\print(json\stringify(config) catch "");
+    // -> {"parallel":true,"target":"build"}
 
-// Pretty-printed with two-space indent:
-std\print(json\stringify(config, "  ") catch "");
+    // Pretty-printed with two-space indent:
+    std\print(json\stringify(config, indent: "  ") catch "");
+}
 ```
 
 [^buzz-stdlib-json-parse]: `json\parse` is also in Buzz's standard library (`serialize.jsonDecode`); the magus form is sandbox-aware.

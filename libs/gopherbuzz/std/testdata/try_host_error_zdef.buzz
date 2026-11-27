@@ -1,11 +1,14 @@
 // @expect: caught
 // The plain-call (OpCall) twin of try_host_error.buzz: zdef is a global host
 // function, so its failure exercises the other native-call site in the VM.
-import "std";
 import "ffi";
+
 var __r = "not caught";
-try {
-    final _lib = zdef("/definitely/not/here/libnope", "int f(void);");
-} catch (e) {
-    __r = "caught";
+
+fun main(args: [str]) > void !> any {
+    try {
+        final _lib = zdef("/definitely/not/here/libnope", decl: "int f(void);");
+    } catch (e) {
+        __r = "caught";
+    }
 }

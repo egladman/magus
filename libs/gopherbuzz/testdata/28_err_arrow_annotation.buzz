@@ -2,9 +2,13 @@
 fun safe(x: int) > int !> str {
     return x;
 }
+
 var __r = 0;
-try {
-    __r = safe(42);
-} catch (e: str) {
-    __r = -1;
+
+fun main(args: [str]) > void !> any {
+    try {
+        __r = safe(42);
+    } catch (e: str) {
+        __r = -1;
+    }
 }

@@ -693,7 +693,7 @@ test "a go.mod inventory carries requires, replacements and the go line" {
 //
 // `-format json` exits 0 whatever it finds, so the verdict below is the only one.
 export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
-    final res = go["govulncheck"](run, {"args": ["-format", "json", "./..."]});
+    final res = go["govulncheck"](run, opts: {"args": ["-format", "json", "./..."]});
     final scanned = goFindings(res.stdout);
     if (scanned.error != null) {
         throw scanned.error!.message;
@@ -709,7 +709,7 @@ export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
             if (mod.text! != "") {
                 final path = fs\tempFile("base-go.mod");
                 fs\writeFile(path, content: mod.text!);
-                parsed = go["go-mod-json"](run, {"args": [path]}).stdout;
+                parsed = go["go-mod-json"](run, opts: {"args": [path]}).stdout;
                 fs\remove(path);
             }
             final read = goInventory(parsed);

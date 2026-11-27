@@ -1,7 +1,12 @@
 // @expect: [0, 0, 1]
 import "math";
-final __r = [
-    math\pow(0.0, 2.0),
-    math\pow(0.0, 3.0),
-    math\pow(2.0, 0.0),
-];
+
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    __r = [
+        math\pow(x: 0.0, y: 2.0),
+        math\pow(x: 0.0, y: 3.0),
+        math\pow(x: 2.0, y: 0.0),
+    ];
+}

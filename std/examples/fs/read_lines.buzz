@@ -1,4 +1,6 @@
 import "std";
 import "fs";
 
-foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
+fun main(args: [str]) > void {
+    foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
+}

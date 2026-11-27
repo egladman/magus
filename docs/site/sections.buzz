@@ -29,7 +29,7 @@ import "engine/page" as _;
 // better name should get a real authored page, which this then steps aside for.
 fun sectionTitle(seg: str) > str {
     if (seg == "") { return "Documentation"; }
-    final spaced = seg.replace("-", " ");
+    final spaced = seg.replace("-", with: " ");
     return strings\capitalize(spaced);
 }
 
@@ -107,7 +107,7 @@ export fun renderSectionIndexes(site: Site) > result\Result::<bool> {
             if (cards.len() == 0) { continue; }
 
             final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-                return strLess("{a["title"]}", "{b["title"]}");
+                return strLess("{a["title"]}", b: "{b["title"]}");
             });
 
             final root = rootPrefix(p.srcRel, site);
@@ -116,15 +116,15 @@ export fun renderSectionIndexes(site: Site) > result\Result::<bool> {
     <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
 {{/cards}}
   </div>
-`, {"root": root, "cards": ordered});
+`, data: {"root": root, "cards": ordered});
 
-            final r1 = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], "", site);
+            final r1 = renderPage(p.title, description: p.desc, content: body, srcRel: p.srcRel, pager: "", canonUrl: p.url, reading: "", tags: mut [], generatedFrom: "", site: site);
             if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
             final doc = r1.value!;
-            final dir = fs\join(site.inputs.outDir, p.url.sub(0, p.url.len() - 1));
+            final dir = fs\join(site.inputs.outDir, name: p.url.sub(0, len: p.url.len() - 1));
             fs\mkdirAll(dir);
             fs\writeFile(dir + "/index.html", doc);
-            final r2 = site.addRecord(p.url, p.title, p.desc, p.title + " " + p.desc);
+            final r2 = site.addRecord(url: p.url, title: p.title, desc: p.desc, md: p.title + " " + p.desc);
             if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
             site.pageUrls[p.url] = true;
         }

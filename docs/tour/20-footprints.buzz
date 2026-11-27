@@ -52,7 +52,7 @@ export fun report(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["data/**"]);
     ctx.writesFiles(["gen/report.txt"]);
     fs\mkdirAll("gen");
-    fs\writeFile("gen/report.txt", "report");
+    fs\writeFile("gen/report.txt", content: "report");
     magus\log.info("wrote gen/report.txt");
 }
 
@@ -66,7 +66,7 @@ export fun report(ctx: magus\Context, args: [str]) > void !> any {
 export fun stamp(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["gen/report.txt"]);
     fs\mkdirAll("gen");
-    fs\writeFile("gen/report.txt", "stamp");
+    fs\writeFile("gen/report.txt", content: "stamp");
 }
 
 // Editing rather than producing. This page is hand-written and only a region of it is
@@ -95,5 +95,5 @@ export fun inject(ctx: magus\Context, args: [str]) > void !> any {
 // target has opposite behavior on the two machines and neither run can reveal the other.
 export fun tidy(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["data/**"]);
-    fs\writeFile("data/notes.txt", "rewritten in place");
+    fs\writeFile("data/notes.txt", content: "rewritten in place");
 }
