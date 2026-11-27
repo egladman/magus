@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/std"
 )
 
 // Check parses and type-checks each named file WITHOUT running it, printing
@@ -76,7 +77,13 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }() // the diagnostics are already decided; a close error has no reader
 	if dir := scriptImportDir(resolved); dir != "" {
-		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
+		dirs := []string{dir}
+		// A project-relative import names a path from the workspace root, which
+		// neither the script's directory nor the cwd need be.
+		if root := std.FindAbove(dir, "magusfile.buzz"); root != "" && root != dir {
+			dirs = append(dirs, root)
+		}
+		sess.SetIncludeDirs(append(dirs, sess.IncludeDirs()...))
 	}
 	// Script output goes to STDERR on this path, unlike a run. A check prints no
 	// program output of its own, so anything reaching stdout here came from an
