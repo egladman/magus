@@ -731,17 +731,36 @@ type UnmergedReport struct {
 // and repo policy decides what they stop. BranchesUnknown and TestUnknown say
 // why a side went unread.
 type ForkFacts struct {
-	// FinishedBranches names one entry per place. A row off every open change
-	// reads `<branch or head> (job <job>, <pushed|local>, <n> commit(s))`. An
-	// open change holding rows reads `#<id> (open change, job(s) <jobs>)`.
-	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
-	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
+	// FinishedBranches holds one entry per finished row whose work waits. Rows
+	// sharing a Change are one place; every other row is a place of its own.
+	FinishedBranches []FinishedBranch `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
+	BranchesUnknown  string           `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
 	// IntegrateRecord is the JSON job record an integration fork of them takes.
 	IntegrateRecord  string `json:"integrate_record,omitempty"   yaml:"integrate_record,omitempty"`
 	CommitsSinceTest int    `json:"commits_since_test"           yaml:"commits_since_test"`
 	LastTestRef      string `json:"last_test_ref,omitempty"      yaml:"last_test_ref,omitempty"`
 	LastTestRevision string `json:"last_test_revision,omitempty" yaml:"last_test_revision,omitempty"`
 	TestUnknown      string `json:"test_unknown,omitempty"       yaml:"test_unknown,omitempty"`
+}
+
+// FinishedBranch is a finished row's work that the base does not hold. Job is
+// the row's id, which a rule matches against a fork's. Branch is what a person
+// reads the work by: its branch, else its short head. Place is pushed, local or
+// proposed; Change is the open change carrying a proposed row, "" otherwise.
+// String is for people.
+type FinishedBranch struct {
+	Branch  string `json:"branch"           yaml:"branch"`
+	Job     string `json:"job"              yaml:"job"`
+	Commits int    `json:"commits"          yaml:"commits"`
+	Place   string `json:"place"            yaml:"place"`
+	Change  string `json:"change,omitempty" yaml:"change,omitempty"`
+}
+
+func (b FinishedBranch) String() string {
+	if b.Change != "" {
+		return fmt.Sprintf("%s (job %s, on open change #%s)", b.Branch, b.Job, b.Change)
+	}
+	return fmt.Sprintf("%s (job %s, %s, %d commit(s))", b.Branch, b.Job, b.Place, b.Commits)
 }
 
 // Lines renders the report for a person, one line per fact, none when there

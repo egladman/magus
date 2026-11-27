@@ -1155,11 +1155,21 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
+func ObjectJobFinishedBranch(v job.FinishedBranch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StringValue(v.Branch))
+	out.MapSet("job", vm.StringValue(v.Job))
+	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
+	out.MapSet("place", vm.StringValue(v.Place))
+	out.MapSet("change", vm.StringValue(v.Change))
+	return out
+}
+
 func ObjectJobForkFacts(v job.ForkFacts) vm.Value {
 	out := vm.NewMap()
 	itemsFinishedBranches := make([]vm.Value, len(v.FinishedBranches))
 	for indexFinishedBranches := range v.FinishedBranches {
-		itemsFinishedBranches[indexFinishedBranches] = vm.StringValue(v.FinishedBranches[indexFinishedBranches])
+		itemsFinishedBranches[indexFinishedBranches] = ObjectJobFinishedBranch(v.FinishedBranches[indexFinishedBranches])
 	}
 	out.MapSet("finishedBranches", vm.ListValue(itemsFinishedBranches))
 	out.MapSet("branchesUnknown", vm.StringValue(v.BranchesUnknown))

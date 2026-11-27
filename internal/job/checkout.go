@@ -1013,8 +1013,8 @@ type FullTest struct {
 
 // ForkFacts reads what a fork leaves waiting at root, from rows and the
 // change list open. It refuses nothing, and a side it cannot read says why
-// rather than reading as zero. FinishedBranches holds one entry per place
-// work waits in. BranchesUnknown names the unread rows, which count toward
+// rather than reading as zero. FinishedBranches holds one entry per row
+// whose work waits. BranchesUnknown names the unread rows, which count toward
 // no place. It times itself on ctx's [CallClock].
 func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest, open OpenChanges) job.ForkFacts {
 	defer timeCall(ctx, forkFactsCall)()
@@ -1029,29 +1029,23 @@ func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest, 
 	return facts
 }
 
-// withPlaces counts placed by place: one per open change holding rows, one
-// per row off every change. Stacking work on an open change adds nothing.
+// withPlaces records each waiting or proposed row of placed with its place
+// and change. A reader counts one place per open change holding rows and one
+// per row off every change, so stacking on an open change adds nothing.
 func withPlaces(facts job.ForkFacts, placed []workPlace) job.ForkFacts {
-	var branches, unread, order []string
-	onChange := map[string][]string{}
+	var branches, unread []string
 	for _, p := range placed {
 		switch {
 		case p.Place == placeUnread:
 			unread = append(unread, fmt.Sprintf("job %s: %s; %s", p.Job, p.Why, p.Fix))
 		case p.Place == placeProposed:
-			if _, seen := onChange[p.Change]; !seen {
-				order = append(order, p.Change)
-			}
-			onChange[p.Change] = append(onChange[p.Change], p.Job)
+			facts.FinishedBranches = append(facts.FinishedBranches, finishedBranch(p))
 		case p.Waiting():
-			facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %s, %d commit(s))", p.Name(), p.Job, p.Place, p.Commits))
+			facts.FinishedBranches = append(facts.FinishedBranches, finishedBranch(p))
 			if p.Branch != "" {
 				branches = append(branches, p.Branch)
 			}
 		}
-	}
-	for _, id := range order {
-		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("#%s (open change, job(s) %s)", id, strings.Join(onChange[id], ", ")))
 	}
 	if len(unread) > 0 {
 		facts.BranchesUnknown = fmt.Sprintf("%d finished row(s) unread, so not counted: %s", len(unread), strings.Join(unread, "; "))
@@ -1067,6 +1061,33 @@ func withPlaces(facts job.ForkFacts, placed []workPlace) job.ForkFacts {
 		facts.IntegrateRecord = string(record)
 	}
 	return facts
+}
+
+func finishedBranch(p workPlace) job.FinishedBranch {
+	return job.FinishedBranch{Branch: p.Name(), Job: p.Job, Commits: p.Commits, Place: string(p.Place), Change: p.Change}
+}
+
+// finishedPlaces names each place branches wait in: a row off every change by
+// itself, an open change once for all its rows, in first-seen order.
+func finishedPlaces(branches []job.FinishedBranch) []string {
+	var names []string
+	slot := map[string]int{}
+	jobs := map[string][]string{}
+	for _, b := range branches {
+		if b.Change == "" {
+			names = append(names, b.String())
+			continue
+		}
+		if _, seen := slot[b.Change]; !seen {
+			slot[b.Change] = len(names)
+			names = append(names, "")
+		}
+		jobs[b.Change] = append(jobs[b.Change], b.Job)
+	}
+	for id, i := range slot {
+		names[i] = fmt.Sprintf("#%s (open change, job(s) %s)", id, strings.Join(jobs[id], ", "))
+	}
+	return names
 }
 
 func commitsSince(ctx context.Context, root string, last FullTest) (int, string) {
@@ -1100,7 +1121,8 @@ func commitsSince(ctx context.Context, root string, last FullTest) (int, string)
 func ForkFactsLine(facts job.ForkFacts) string {
 	branches := "0 places hold work off the base"
 	if len(facts.FinishedBranches) > 0 {
-		branches = fmt.Sprintf("%d place(s) hold work off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+		places := finishedPlaces(facts.FinishedBranches)
+		branches = fmt.Sprintf("%d place(s) hold work off the base: %s", len(places), strings.Join(places, ", "))
 	}
 	if facts.BranchesUnknown != "" {
 		branches += "; unread: " + facts.BranchesUnknown

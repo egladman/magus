@@ -850,7 +850,7 @@ func TestAPushedRowWhoseBranchIsDeletedStillCounts(t *testing.T) {
 	assert.Empty(t, placed[0].Branch, "no local name holds it")
 	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
 	assert.Len(t, facts.FinishedBranches, 1)
-	assert.Contains(t, facts.FinishedBranches[0], "(job w, pushed, 1 commit(s))")
+	assert.Contains(t, facts.FinishedBranches[0].String(), "(job w, pushed, 1 commit(s))")
 }
 
 // Stacking is the answer at the limit, so rows on one open change are one place.
@@ -875,7 +875,14 @@ func TestRowsOnOneOpenChangeCountAsOnePlace(t *testing.T) {
 
 	facts := ForkFacts(t.Context(), repo.Root(), listed, FullTest{}, fresh(qtypes.Change{ID: "988", Head: tip(repo, "stack"), Branch: "stack", Base: "main"}))
 
-	assert.Equal(t, []string{"alone (job alone, local, 1 commit(s))", "#988 (open change, job(s) a, b, c, d, e)"}, facts.FinishedBranches)
+	require.Len(t, facts.FinishedBranches, 6, "one entry per row")
+	for _, b := range facts.FinishedBranches {
+		if b.Job != "alone" {
+			assert.Equal(t, job.FinishedBranch{Branch: b.Branch, Job: b.Job, Commits: b.Commits, Place: "proposed", Change: "988"}, b, "job %s rides the open change", b.Job)
+		}
+	}
+	assert.ElementsMatch(t, []string{"alone (job alone, local, 1 commit(s))", "#988 (open change, job(s) a, b, c, d, e)"}, finishedPlaces(facts.FinishedBranches))
+	assert.Contains(t, ForkFactsLine(facts), "2 place(s) hold work off the base")
 }
 
 // A change's branch rebased with --force-with-lease holds its rows by
@@ -952,7 +959,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 	require.NoError(t, err)
 
 	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
-	assert.Equal(t, []string{"mine-a (job mine-a, local, 1 commit(s))", "mine-b (job mine-b, local, 1 commit(s))"}, facts.FinishedBranches,
+	assert.Equal(t, []job.FinishedBranch{{Branch: "mine-a", Job: "mine-a", Commits: 1, Place: "local"}, {Branch: "mine-b", Job: "mine-b", Commits: 1, Place: "local"}}, facts.FinishedBranches,
 		"the peer's branch is not this tree's")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["mine-a","mine-b"]`)
 	assert.Contains(t, facts.TestUnknown, "no passed full test", "no run on record says so rather than reading as zero")
@@ -962,7 +969,7 @@ func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 
 	peerRows, err := peer.List(t.Context())
 	require.NoError(t, err)
-	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}, fresh()).FinishedBranches, "mine-a (job mine-a, local, 1 commit(s))",
+	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}, fresh()).FinishedBranches, job.FinishedBranch{Branch: "mine-a", Job: "mine-a", Commits: 1, Place: "local"},
 		"another tree's backlog is not the peer's")
 }
 
@@ -1012,7 +1019,7 @@ func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	assert.Contains(t, got[0].Why, "git merge-base: bad object", "the unread state names the failed read")
 
 	facts := withPlaces(job.ForkFacts{}, append(got, workPlace{Job: "done", Branch: "done", Place: placeLocal, Commits: 2}))
-	assert.Equal(t, []string{"done (job done, local, 2 commit(s))"}, facts.FinishedBranches, "an unread row is not unmerged")
+	assert.Equal(t, []job.FinishedBranch{{Branch: "done", Job: "done", Commits: 2, Place: "local"}}, facts.FinishedBranches, "an unread row is not unmerged")
 	assert.Contains(t, facts.BranchesUnknown, "1 finished row(s) unread, so not counted: job pending")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["done"]`)
 	line := ForkFactsLine(facts)

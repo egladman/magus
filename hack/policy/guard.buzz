@@ -186,13 +186,17 @@ fun countsFrom(facts: JobForkFacts) > spawn\ForkCounts {
 
 test "the fork counts read every fact the host hands over" {
     final counts = countsFrom(JobForkFacts{
-        finishedBranches = ["done (job done, 1 commit(s))"],
+        finishedBranches = [
+            FinishedBranch{ branch = "done", job = "done", commits = 1, place = "local" },
+            FinishedBranch{ branch = "a", job = "a", commits = 1, place = "proposed", change = "988" },
+        ],
         integrateRecord = "\{\}",
         commitsSinceTest = 4,
         lastTestRef = "out1",
         lastTestRevision = "abc",
     });
-    std\assert(counts.finishedBranches.len() == 1 and counts.commitsSinceTest == 4, message: "counts");
+    std\assert(counts.finishedBranches.len() == 2 and counts.commitsSinceTest == 4, message: "counts");
+    std\assert(counts.finishedBranches[0].place == "local" and counts.finishedBranches[1].change == "988", message: "each row keeps its place and change");
     std\assert(counts.lastTest == "out1 at abc" and counts.testUnknown == "", message: counts.lastTest);
 }
 
