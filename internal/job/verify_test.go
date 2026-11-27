@@ -551,6 +551,20 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no check and no postcondition")
 }
 
+// A read-only row with no check is graded by the result its holder filed. The
+// wait that collects it passes it and carries its risks.
+func TestVerifyPassesAReadOnlyRowItsHolderGraded(t *testing.T) {
+	t.Parallel()
+
+	row := job.Job{ID: "survey", ReadOnly: true, State: job.StateExited}
+	rep := job.Result{Job: "survey", UnresolvedRisks: []string{"the cache layer was not read"}}
+
+	v := VerifyGates(row, rep, job.CapturedRun{}, nil, nil, Observed{})
+
+	assert.True(t, v.Verified, "%v", v.Violations)
+	assert.Equal(t, rep.UnresolvedRisks, v.UnresolvedRisks)
+}
+
 // The binary's spelling is a way of running one target, so it may not decide whether the
 // evidence binds; nor may a check's args when the run recorded none.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
