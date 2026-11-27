@@ -1,7 +1,7 @@
 ---
 title: Buzz modules live in their layer
 order: 44
-description: A Buzz module belongs to one of four layers; a generic library imports no magus module, and a product mechanism is embedded by the package that owns it.
+description: A Buzz module belongs to one of five layers; a generic library imports no magus module, and a product mechanism is embedded by the package that owns it.
 tags: [design, principle, buzz, layers]
 ---
 
@@ -11,7 +11,7 @@ A bare import such as `import "fs";` promises a generic library: one a person
 could use in any program. Once a module in that namespace imports a magus
 module or names a magus concept, the promise is false, and every script that
 imports it inherits the workspace. A hook that wants a disk sample should not
-open the workspace to get one. So each Buzz module sits in exactly one of four
+open the workspace to get one. So each Buzz module sits in exactly one of five
 layers, and the layer decides where its source lives and what it may import.
 
 - **std** holds generic libraries: fs, json, lcov, result. They import no
@@ -21,6 +21,11 @@ layers, and the layer decides where its source lives and what it may import.
   owns it, the way `libs/diagram` ships `magus/diagram`, and never from
   `std/lib/`.
 - **spells** hold toolchain knowledge: how a go, node or buf project is built.
+- **library** holds importable policy: `libs/analyzer` and `libs/guardrule`. Each is
+  a nested Go module that also holds its Buzz sources. Both import std and `magus`
+  modules only, and nothing under `hack/`, `magusfiles/` or another `libs/` path.
+  `libs/guardrule` may also import `libs/analyzer`. A workspace imports a library
+  by path or pins it by registry path.
 - **magusfile and hack/** hold this repository's policy: what it trusts, what
   it gates, how it reclaims its own disk.
 
@@ -32,6 +37,9 @@ layers, and the layer decides where its source lives and what it may import.
 - `TestDiskModulesRegisterAtTheirMagusPaths` in `std/lib_test.go` holds the
   disk modules at their `magus/` paths, so the hook's import is the one the
   layer names.
+- Planned, not yet written: a `hack/lint` analyzer fails a `.buzz` file under
+  `libs/analyzer` or `libs/guardrule` that imports a workspace path outside its
+  own directory. It reads import statements, so the check is mechanical.
 
 ## Good
 
