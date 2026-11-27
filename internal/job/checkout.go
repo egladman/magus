@@ -849,15 +849,15 @@ func ownTree(rows []job.Job, root string, row job.Job) bool {
 }
 
 // UnintegratedBranches is every passed or exited job of this checkout's tree ([ownTree])
-// whose branch holds commits the root's revision lacks, in store order. A branch an
-// integration job names, or whose work the root holds as a copy, is integrated. An error
-// means some range went unread: a gap read as zero would hide the backlog.
+// whose branch's content neither the root's revision nor the remote default branch
+// holds ([reached]), in store order. A branch an integration job names is integrated.
+// An error means some branch went unread: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	waiting, err := unintegratedBranches(ctx, s.root, rows)
+	waiting, _, err := unintegratedBranches(ctx, s.root, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -873,7 +873,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	return waiting, nil
 }
 
-func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]Unintegrated, error) {
+func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]Unintegrated, string, error) {
 	var finished []job.Job
 	integrating := map[string]bool{}
 	for _, row := range rows {
@@ -889,30 +889,26 @@ func unintegratedBranches(ctx context.Context, root string, rows []job.Job) ([]U
 		}
 	}
 	if len(finished) == 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 	driver, why := resolveDriver(ctx, root)
 	if driver == nil {
-		return nil, errors.New(why)
+		return nil, "", errors.New(why)
 	}
 	return unintegratedWith(ctx, driver, root, finished, integrating)
 }
 
-// unintegratedWith counts each finished row's missing commits. Two listings
-// answer most rows: the branch heads and the merged branches. missingCommitsFile
-// answers a tip already read at this revision. Only a moved tip costs a range read.
-func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job, integrating map[string]bool) ([]Unintegrated, error) {
-	meta, err := driver.Metadata(ctx, root)
+// unintegratedWith reads each finished row's branch against every integration base.
+// missingCommitsFile answers a tip already read against a base, so only a moved tip
+// or base costs a read. note says why the remote default branch answered nothing.
+func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, finished []job.Job, integrating map[string]bool) ([]Unintegrated, string, error) {
+	bases, note, err := integrationBases(ctx, driver, root)
 	if err != nil {
-		return nil, fmt.Errorf("the checkout's revision: %w", err)
+		return nil, "", err
 	}
 	tips, err := driver.BranchHeads(ctx, root)
 	if err != nil {
-		return nil, fmt.Errorf("the branch heads: %w", err)
-	}
-	merged, err := vcs.MergedBranches(ctx, driver, root, meta.ID)
-	if err != nil {
-		slog.DebugContext(ctx, "each finished branch is read for merged on its own", attr.Error(err))
+		return nil, "", fmt.Errorf("the branch heads: %w", err)
 	}
 	answers := readMissingCache(root)
 	reads := make([]branchRead, len(finished))
@@ -923,28 +919,71 @@ func unintegratedWith(ctx context.Context, driver types.VCSDriver, root string, 
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			reads[i] = readBranch(ctx, driver, root, meta.ID, row, tips, merged, integrating, answers)
+			reads[i] = readBranch(ctx, driver, root, bases, row, tips, integrating, answers)
 			return nil
 		})
 	}
 	// A row skipped because the deadline passed would read as integrated.
 	waitErr := g.Wait()
 	var out []Unintegrated
-	for i, r := range reads {
-		if r.fresh {
-			answers.put(meta.ID, r.tip, r.missing)
+	for i, row := range finished {
+		r := reads[i]
+		for _, a := range r.learned {
+			answers.put(a.Head, a.Tip, a.Missing)
 		}
 		if r.missing > 0 || r.unread != "" {
-			out = append(out, Unintegrated{Job: finished[i].ID, Branch: r.branch, Commits: r.missing, Unread: r.unread})
+			out = append(out, Unintegrated{Job: row.ID, Branch: r.branch, Commits: r.missing, Unread: r.unread})
 		}
 	}
-	if err := answers.write(meta.ID); err != nil {
+	if err := answers.write(bases...); err != nil {
 		slog.WarnContext(ctx, "missing-commit answers not stored", attr.Component("magus"), attr.Error(err))
 	}
 	if waitErr != nil {
-		return nil, fmt.Errorf("the finished branches: %w", waitErr)
+		return nil, "", fmt.Errorf("the finished branches: %w", waitErr)
 	}
-	return out, nil
+	return out, note, nil
+}
+
+// integrationBases are the revisions a finished branch's work may have reached: the
+// remote default branch's, which a pull request merged on the forge reaches first, and
+// the checkout's own. note says why the remote one is not among them.
+func integrationBases(ctx context.Context, driver types.VCSDriver, root string) ([]string, string, error) {
+	meta, err := driver.Metadata(ctx, root)
+	if err != nil {
+		return nil, "", fmt.Errorf("the checkout's revision: %w", err)
+	}
+	remote, why := remoteDefault(ctx, driver, root)
+	switch {
+	case why != "":
+		return []string{meta.ID}, fmt.Sprintf("%s, so only the checkout's revision %s was compared", why, shortRevision(types.Commit{ID: meta.ID})), nil
+	case remote == "" || remote == meta.ID:
+		return []string{meta.ID}, "", nil
+	}
+	return []string{remote, meta.ID}, "", nil
+}
+
+// remoteDefault is the commit of the remote default branch the VCS names for root
+// (git's origin/main), or "" and why it does not read. With no remote there is none
+// to lag behind, so no why.
+func remoteDefault(ctx context.Context, driver types.VCSDriver, root string) (string, string) {
+	switch url, err := driver.RemoteURL(ctx, root, ""); {
+	case errors.Is(err, types.ErrVCSUnsupported) || err == nil && url == "":
+		return "", ""
+	case err != nil:
+		return "", fmt.Sprintf("the remote does not read here: %v", err)
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	switch {
+	case err != nil:
+		return "", fmt.Sprintf("the remote default branch is not named: %v", err)
+	case res.Base == "":
+		return "", "the remote default branch is not named"
+	}
+	at, err := driver.FindCommit(ctx, root, res.Base)
+	if err != nil {
+		return "", fmt.Sprintf("the remote default branch %s does not read here: %v", res.Base, err)
+	}
+	return at.ID, ""
 }
 
 // branchReadWorkers bounds the git processes one pass runs at once. Eight hides process
@@ -953,31 +992,84 @@ const branchReadWorkers = 8
 
 type branchRead struct {
 	branch  string
-	tip     string
 	missing int
-	// fresh is a count from a range read, so the cache has not got it yet.
-	fresh bool
-	// unread is the failed range read, so missing is unknown rather than zero.
+	// learned are the answers this read found that the cache has not got yet.
+	learned []missingAnswer
+	// unread is the failed read, so missing is unknown rather than zero.
 	unread string
 }
 
 // readBranch only reads answers, so rows may run it concurrently. The caller puts what
-// each read learned.
-func readBranch(ctx context.Context, driver types.VCSDriver, root, rev string, row job.Job, tips map[string]string, merged, integrating map[string]bool, answers *missingCache) branchRead {
+// each read learned. A branch any base reached is integrated; else missing is the
+// fewest commits a base lacks.
+func readBranch(ctx context.Context, driver types.VCSDriver, root string, bases []string, row job.Job, tips map[string]string, integrating map[string]bool, answers *missingCache) branchRead {
 	branch := jobBranch(ctx, driver, row)
 	tip, standing := tips[branch]
 	// A branch that does not stand holds no work this checkout can name.
-	if integrating[branch] || !standing || merged[branch] {
+	if integrating[branch] || !standing {
 		return branchRead{}
 	}
-	if missing, known := answers.get(rev, tip); known {
-		return branchRead{branch: branch, missing: missing}
+	read := branchRead{branch: branch}
+	for _, base := range bases {
+		missing, known := answers.get(base, tip)
+		if !known {
+			var err error
+			if _, missing, err = reached(ctx, driver, root, base, tip); err != nil {
+				return branchRead{branch: branch, unread: fmt.Sprintf("%s (job %s): whether %s holds the content of %s: %s", branch, row.ID, base, tip, err)}
+			}
+			read.learned = append(read.learned, missingAnswer{Head: base, Tip: tip, Missing: missing})
+		}
+		if read.missing == 0 || missing < read.missing {
+			read.missing = missing
+		}
+		if missing == 0 {
+			break
+		}
 	}
-	missing, err := driver.MissingCommits(ctx, root, rev, tip)
+	return read
+}
+
+// reached reports whether base holds what tip changed since they split, by content
+// alone, so a squash reads as reached. Merging tip may change nothing, or a commit
+// since the split may read as tip. Else missing counts tip's commits.
+func reached(ctx context.Context, driver types.VCSDriver, root, base, tip string) (bool, int, error) {
+	paths, err := driver.RangeFiles(ctx, root, base, tip, nil)
 	if err != nil {
-		return branchRead{branch: branch, unread: fmt.Sprintf("%s (job %s): the commits %s holds that %s lacks: %s", branch, row.ID, tip, rev, err)}
+		return false, 0, err
 	}
-	return branchRead{branch: branch, tip: tip, missing: missing, fresh: true}
+	if len(paths) == 0 {
+		return true, 0, nil
+	}
+	differ, err := vcs.DifferingPaths(ctx, driver, root, base, tip, paths)
+	if err != nil {
+		return false, 0, err
+	}
+	if len(differ) == 0 || mergeChangesNothing(ctx, driver, root, "", types.Commit{ID: tip}, types.Commit{ID: base}) {
+		return true, 0, nil
+	}
+	// A squash the base edited since, with a conflict, reads as tip at the commit that landed it.
+	landed, err := driver.RangeCommits(ctx, root, tip, base, paths)
+	if err != nil {
+		return false, 0, err
+	}
+	asked := make(map[string][]string, len(landed))
+	for _, c := range landed {
+		asked[c.ID] = paths
+	}
+	answers, err := vcs.DifferingPathsByRevision(ctx, driver, root, tip, asked)
+	if err != nil {
+		return false, 0, err
+	}
+	for _, off := range answers {
+		if len(off) == 0 {
+			return true, 0, nil
+		}
+	}
+	commits, err := driver.RangeCommits(ctx, root, base, tip, nil)
+	if err != nil {
+		return false, 0, err
+	}
+	return false, max(1, len(commits)), nil
 }
 
 // forkFactsCall is what [ForkFacts] times itself as: the host call
@@ -1013,18 +1105,21 @@ type FullTest struct {
 }
 
 // ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
-// nothing, and a side it cannot read says why rather than reading as zero:
-// each finished branch is merged (absent), unmerged (FinishedBranches) or
-// unread (named in BranchesUnknown with its failed read).
-// It times itself on ctx's [CallClock] as "job.forkFacts".
+// nothing, and a side it cannot read says why rather than reading as zero.
+// Each finished branch is merged (absent), unmerged (FinishedBranches) or
+// unread (named in BranchesUnknown). BranchesUnknown also names a remote
+// default branch that does not read. It times itself on ctx's [CallClock].
 func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) job.ForkFacts {
 	defer timeCall(ctx, forkFactsCall)()
 	facts := job.ForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
-	waiting, err := unintegratedBranches(ctx, root, rows)
+	waiting, note, err := unintegratedBranches(ctx, root, rows)
 	if err != nil {
 		facts.BranchesUnknown = err.Error()
 	}
 	facts = withBranches(facts, waiting)
+	if note != "" {
+		facts.BranchesUnknown = strings.Join(slices.DeleteFunc([]string{facts.BranchesUnknown, note}, func(s string) bool { return s == "" }), "; ")
+	}
 	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
 	return facts
 }
@@ -1102,8 +1197,8 @@ func ForkFactsLine(facts job.ForkFacts) string {
 	return line
 }
 
-// jobBranch is the branch row's work is on: the one its standing checkout has checked out,
-// else the branch named row.ID, which the range read then finds or not.
+// jobBranch is the branch row's work is on: the one its standing checkout has checked out.
+// Else it is the branch named row.ID, which may not stand.
 func jobBranch(ctx context.Context, driver types.VCSDriver, row job.Job) string {
 	if row.Worktree.Standing() {
 		if ref, err := driver.Ref(ctx, row.Worktree.Root); err == nil && ref != "" {

@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -836,36 +835,33 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 	assert.NotEmpty(t, gone.TestUnknown, "a revision the history lost is unknown, not zero")
 }
 
-// failedMissing fails every range read MissingCommits runs.
+// failedMissing fails every range read a content read runs.
 type failedMissing struct {
 	types.VCSDriver
 }
 
-func (failedMissing) MissingCommits(context.Context, string, string, string) (int, error) {
-	return 0, errors.New("git rev-list --count: bad object")
+func (failedMissing) RangeFiles(context.Context, string, string, string, []string) ([]string, error) {
+	return nil, errors.New("git merge-base: bad object")
 }
 
 func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	t.Parallel()
 	_, _, repo := worktreeStore(t)
 	main := repo.Git("symbolic-ref", "--short", "HEAD")
-	for _, name := range []string{"pending", "landed"} {
-		repo.Git("switch", "-q", "-c", name, main)
-		repo.Commit(name, map[string]string{name + ".txt": name + "\n"})
-		repo.Git("switch", "-q", main)
-	}
-	repo.Git("merge", "-q", "--ff-only", "landed")
-	finished := []job.Job{{ID: "pending", State: job.StateExited}, {ID: "landed", State: job.StatePass}}
+	repo.Git("switch", "-q", "-c", "pending", main)
+	repo.Commit("pending", map[string]string{"pending.txt": "pending\n"})
+	repo.Git("switch", "-q", main)
+	finished := []job.Job{{ID: "pending", State: job.StateExited}}
 	driver, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, driver, why)
 
-	got, err := unintegratedWith(t.Context(), failedMissing{VCSDriver: driver}, repo.Root(), finished, nil)
+	got, _, err := unintegratedWith(t.Context(), failedMissing{VCSDriver: driver}, repo.Root(), finished, nil)
 	require.NoError(t, err)
 
-	require.Len(t, got, 1, "the merged branch costs no range read, so only pending is unread")
+	require.Len(t, got, 1)
 	assert.Equal(t, "pending", got[0].Branch)
 	assert.Zero(t, got[0].Commits)
-	assert.Contains(t, got[0].Unread, "git rev-list --count: bad object", "the unread state names the failed read")
+	assert.Contains(t, got[0].Unread, "git merge-base: bad object", "the unread state names the failed read")
 
 	facts := withBranches(job.ForkFacts{}, append(got, Unintegrated{Job: "done", Branch: "done", Commits: 2}))
 	assert.Equal(t, []string{"done (job done, 2 commit(s))"}, facts.FinishedBranches, "an unread branch is not unmerged")
@@ -876,15 +872,15 @@ func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	assert.Contains(t, line, "bad object")
 }
 
-// countedMissing counts the range reads MissingCommits runs.
+// countedMissing counts the content reads, one RangeFiles each.
 type countedMissing struct {
 	types.VCSDriver
 	reads *atomic.Int64
 }
 
-func (c countedMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+func (c countedMissing) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
 	c.reads.Add(1)
-	return c.VCSDriver.MissingCommits(ctx, dir, branch, head)
+	return c.VCSDriver.RangeFiles(ctx, dir, base, head, paths)
 }
 
 func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
@@ -907,14 +903,113 @@ func TestASecondReadOverUnchangedTipsRunsNoRangeRead(t *testing.T) {
 	var reads atomic.Int64
 	counted := countedMissing{VCSDriver: driver, reads: &reads}
 
-	first, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	first, _, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
 	require.NoError(t, err)
-	second, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
+	second, _, err := unintegratedWith(t.Context(), counted, repo.Root(), finished, nil)
 	require.NoError(t, err)
 
 	want := []Unintegrated{{Job: "pending", Branch: "pending", Commits: 1}}
 	assert.Equal(t, []any{want, want}, []any{first, second})
-	assert.EqualValues(t, 2, reads.Load(), "the first read asks pending and squashed; a merged or gone branch and every second answer cost none")
+	assert.EqualValues(t, 3, reads.Load(), "the first read asks each standing branch once; a gone branch and every second answer cost none")
+}
+
+// IntegratedByContentSuite pins that a finished branch is integrated when its content
+// reached the checkout or the remote default branch, by squash, rebase or merge.
+type IntegratedByContentSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	main string
+}
+
+func TestIntegratedByContentSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(IntegratedByContentSuite))
+}
+
+func (s *IntegratedByContentSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"shared.txt": "1\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.main = s.repo.Git("symbolic-ref", "--short", "HEAD")
+	s.repo.Git("remote", "add", "origin", s.repo.Root())
+}
+
+func (s *IntegratedByContentSuite) branch(name string, files map[string]string) {
+	s.repo.Git("switch", "-q", "-c", name, s.main)
+	s.repo.Commit(name, files)
+	s.repo.Git("switch", "-q", s.main)
+}
+
+func (s *IntegratedByContentSuite) waiting(ids ...string) ([]Unintegrated, string) {
+	driver, why := resolveDriver(s.T().Context(), s.repo.Root())
+	s.Require().NotNil(driver, why)
+	finished := make([]job.Job, len(ids))
+	for i, id := range ids {
+		finished[i] = job.Job{ID: id, State: job.StateExited}
+	}
+	got, note, err := unintegratedWith(s.T().Context(), driver, s.repo.Root(), finished, nil)
+	s.Require().NoError(err)
+	return got, note
+}
+
+func (s *IntegratedByContentSuite) TestABranchSquashedOnlyOnTheRemoteIsIntegrated() {
+	stale := s.repo.Head()
+	s.repo.Commit("main moves on", map[string]string{"main.txt": "main\n"})
+	s.branch("w", map[string]string{"w.txt": "w\n"})
+	s.repo.Commit("squash w", map[string]string{"w.txt": "w\n"})
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.repo.Head())
+	s.repo.Git("reset", "-q", "--hard", stale)
+
+	got, note := s.waiting("w")
+
+	s.Empty(got, "the checkout lags the remote, whose squash holds the branch's content")
+	s.Empty(note)
+}
+
+func (s *IntegratedByContentSuite) TestABranchNeitherBaseHoldsCountsAgainstTheNearer() {
+	s.repo.Git("update-ref", "refs/remotes/origin/main", s.repo.Head())
+	s.branch("w", map[string]string{"w.txt": "w\n"})
+
+	got, _ := s.waiting("w")
+
+	s.Equal([]Unintegrated{{Job: "w", Branch: "w", Commits: 1}}, got)
+}
+
+func (s *IntegratedByContentSuite) TestAnUnreadRemoteIsNamedAndTheCheckoutAnswers() {
+	s.branch("w", map[string]string{"w.txt": "w\n"})
+
+	got, note := s.waiting("w")
+
+	s.Equal([]Unintegrated{{Job: "w", Branch: "w", Commits: 1}}, got)
+	s.Contains(note, "origin/main does not read here")
+	s.Contains(note, "only the checkout's revision")
+}
+
+func (s *IntegratedByContentSuite) TestASquashOfABranchBehindTheBaseIsIntegrated() {
+	s.branch("w", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Commit("edit bottom", map[string]string{"shared.txt": "1\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+	s.repo.Commit("squash w", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	got, _ := s.waiting("w")
+
+	s.Empty(got, "merging the branch onto the base changes nothing")
+}
+
+func (s *IntegratedByContentSuite) TestASquashTheBaseRewroteSinceIsIntegrated() {
+	s.branch("w", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Commit("squash w", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Commit("rewrite the line", map[string]string{"shared.txt": "first\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+
+	got, _ := s.waiting("w")
+
+	s.Empty(got, "the squash commit reads as the branch on every path it changed")
+}
+
+func (s *IntegratedByContentSuite) TestAPartlyLandedBranchIsNotIntegrated() {
+	s.branch("w", map[string]string{"a.txt": "a\n", "b.txt": "b\n"})
+	s.repo.Commit("land half", map[string]string{"a.txt": "a\n"})
+
+	got, _ := s.waiting("w")
+
+	s.Equal([]Unintegrated{{Job: "w", Branch: "w", Commits: 1}}, got)
 }
 
 func TestForkFactsTimesItselfOnTheCallClock(t *testing.T) {
@@ -976,18 +1071,14 @@ func sequentialBranches(ctx context.Context, driver types.VCSDriver, root string
 	if err != nil {
 		return nil, err
 	}
-	merged, err := vcs.MergedBranches(ctx, driver, root, meta.ID)
-	if err != nil {
-		return nil, err
-	}
 	var out []Unintegrated
 	for _, row := range finished {
 		branch := jobBranch(ctx, driver, row)
 		tip, standing := tips[branch]
-		if !standing || merged[branch] {
+		if !standing {
 			continue
 		}
-		missing, err := driver.MissingCommits(ctx, root, meta.ID, tip)
+		_, missing, err := reached(ctx, driver, root, meta.ID, tip)
 		if err != nil {
 			continue
 		}
@@ -1010,7 +1101,7 @@ func (s *BranchReadSuite) TestConcurrentReadMatchesTheSequentialOneInOrder() {
 	s.Require().NoError(err)
 	s.Require().NotEmpty(want)
 
-	got, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+	got, _, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
 	s.Require().NoError(err)
 
 	s.Equal(want, got)
@@ -1022,7 +1113,7 @@ func (s *BranchReadSuite) TestACancelledContextIsReportedNotReadAsIntegrated() {
 	s.Require().NotNil(driver, why)
 	cancel()
 
-	_, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
+	_, _, err := unintegratedWith(ctx, driver, s.repo.Root(), s.finished, nil)
 
 	s.Require().Error(err)
 }
@@ -1037,7 +1128,7 @@ func BenchmarkForkFacts(b *testing.B) {
 	for range b.N {
 		// A cold answer cache, so every row pays its range read.
 		_ = os.Remove(missingCommitsPath(repo.Root()))
-		if _, err := unintegratedWith(b.Context(), driver, repo.Root(), finished, nil); err != nil {
+		if _, _, err := unintegratedWith(b.Context(), driver, repo.Root(), finished, nil); err != nil {
 			b.Fatal(err)
 		}
 	}

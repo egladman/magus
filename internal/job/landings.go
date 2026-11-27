@@ -321,12 +321,11 @@ func mergeChangesNothing(ctx context.Context, driver types.VCSDriver, root, chec
 	return err == nil && tree != "" && tree == merged.Tree
 }
 
-// Unmerged reports what the branch checked out at root does not hold, for job
-// trees forked from root. Content counts as well as ancestry, so a squash or a
-// replay reads as merged. A row's answer is stored and read again until its
-// head or the branch moves, and a read spends [unmergedBudget] at most, so a
-// stop hook can call it. What the budget left unread is named in Unknown.
-// Repo policy decides what a fact stops. tries holds each row's filed result.
+// Unmerged reports what neither root's branch nor the remote default branch
+// holds by content ([reached]), for job trees forked from root. An answer
+// stands until its head or a base moves. A read spends [unmergedBudget] at
+// most, so a stop hook can call it; Unknown names what it left unread.
+// tries holds each row's filed result.
 func Unmerged(ctx context.Context, root string, rows []job.Job, tries job.Attempts) job.UnmergedReport {
 	var report job.UnmergedReport
 	var work []job.Job
@@ -367,6 +366,11 @@ func Unmerged(ctx context.Context, root string, rows []job.Job, tries job.Attemp
 	}
 	report.Branch = branch
 	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix(), tries: tries}
+	if remote, why := remoteDefault(ctx, driver, root); why != "" {
+		read.remoteNote = why
+	} else if remote != meta.ID {
+		read.remote = remote
+	}
 	read.run(ctx, rows, work)
 	for _, row := range work {
 		report.Jobs = append(report.Jobs, read.facts(rows, row)...)
@@ -416,6 +420,7 @@ type unmergedFact struct {
 	Dirty    []string `json:"dirty,omitempty"`
 	DirtyAt  int64    `json:"dirty_at,omitempty"`
 	Tip      string   `json:"tip,omitempty"`
+	Remote   string   `json:"remote,omitempty"`
 	Merged   bool     `json:"merged,omitempty"`
 	Commits  int      `json:"commits,omitempty"`
 	MergedAt int64    `json:"merged_at,omitempty"`
@@ -439,6 +444,8 @@ type unmergedRead struct {
 	root      string
 	branch    string
 	tip       string
+	// remote is the remote default branch's commit when it reads and differs from tip.
+	remote, remoteNote string
 	now       int64
 	checkouts map[string]string
 	branches  map[string]string
@@ -571,7 +578,7 @@ func (r *unmergedRead) place(ctx context.Context, row job.Job, stored unmergedFa
 		rr.fact = unmergedFact{ID: row.ID, Branch: r.branch, Head: head}
 	}
 	interval := int64(landingInterval / time.Second)
-	moved := rr.fact.Tip != r.tip
+	moved := rr.fact.Tip != r.tip || rr.fact.Remote != r.remote
 	rr.mergedDue = rr.fact.Tip == "" || moved && (!rr.fact.Merged || r.now-rr.fact.MergedAt >= interval)
 	rr.dirtyDue = where != "" && (rr.fact.DirtyAt == 0 || rr.fact.Updated != row.Updated || rr.fact.Where != where || r.now-rr.fact.DirtyAt >= interval)
 	return rr
@@ -621,7 +628,7 @@ func (r *unmergedRead) check(ctx context.Context, rr *unmergedRow, row job.Job) 
 		if err != nil {
 			rr.rangeErr = err.Error()
 		} else {
-			f.Merged, f.Commits, f.Tip, f.MergedAt = merged, commits, r.tip, r.now
+			f.Merged, f.Commits, f.Tip, f.Remote, f.MergedAt = merged, commits, r.tip, r.remote, r.now
 		}
 	}
 	if f.Short == "" && (!f.Merged || len(f.Dirty) > 0) {
@@ -631,19 +638,17 @@ func (r *unmergedRead) check(ctx context.Context, rr *unmergedRow, row job.Job) 
 	}
 }
 
-// holds reports whether the branch has f's head, and else how many commits it
-// lacks. A stored answer stands while the branch keeps the tip it was read at.
+// holds reports whether the branch or the remote default branch holds f's head's
+// content ([reached]), and else how many commits the branch lacks.
 func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, error) {
-	if f.Merged && f.Tip != "" {
-		if kept, err := r.driver.IsAncestor(ctx, r.root, f.Tip, r.tip); err == nil && kept {
-			return true, 0, nil
-		}
+	held, missing, err := reached(ctx, r.driver, r.root, r.tip, f.Head)
+	if err != nil || held || r.remote == "" {
+		return held, missing, err
 	}
-	missing, err := r.driver.MissingCommits(ctx, r.root, r.tip, f.Head)
-	if err != nil {
-		return false, 0, err
+	if held, _, err = reached(ctx, r.driver, r.root, r.remote, f.Head); err != nil || held {
+		return held, 0, err
 	}
-	return missing == 0, missing, nil
+	return false, missing, nil
 }
 
 // facts is what row's work leaves off the branch: uncommitted paths, commits,
@@ -681,6 +686,8 @@ func (r *unmergedRead) facts(rows []job.Job, row job.Job) []job.Unmerged {
 	switch {
 	case rr.rangeErr != "":
 		out = append(out, fact(short, fmt.Sprintf("whether %s holds %s cannot be read: %s", r.branch, short, rr.rangeErr), merge))
+	case !f.Merged && r.remoteNote != "":
+		out = append(out, fact(short, fmt.Sprintf("%d commit(s) at %s are not on %s, and %s", f.Commits, short, r.branch, r.remoteNote), merge))
 	case !f.Merged:
 		out = append(out, fact(short, fmt.Sprintf("%d commit(s) at %s are not on %s", f.Commits, short, r.branch), merge))
 	}

@@ -10,13 +10,13 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// missingCommitsFile holds MissingCommits answers beside jobs.jsonl. An answer
+// missingCommitsFile holds [reached] answers beside jobs.jsonl. An answer
 // depends only on its two commits, so none goes stale. The last line per pair
-// is its entry.
-const missingCommitsFile = "missing-commits.jsonl"
+// is its entry. Its name keeps a commit-copy answer from being read as one.
+const missingCommitsFile = "reached.jsonl"
 
 // missingAnswer is one line of missingCommitsFile: Missing of Tip's commits
-// Head lacks a copy of.
+// Head lacks, 0 when Head holds Tip's content.
 type missingAnswer struct {
 	Head    string `json:"head"`
 	Tip     string `json:"tip"`
@@ -66,9 +66,9 @@ func (c *missingCache) put(head, tip string, missing int) {
 }
 
 // write appends what this read learned. A compaction keeps only the answers
-// naming rev, the checkout's revision: it only moves on, so no one asks about
-// an older one again.
-func (c *missingCache) write(rev string) error {
+// naming one of revs, the bases just read. Bases only move on, so no one asks
+// about an older one again.
+func (c *missingCache) write(revs ...string) error {
 	if c.path == "" || len(c.learned) == 0 {
 		return nil
 	}
@@ -83,7 +83,7 @@ func (c *missingCache) write(rev string) error {
 	}
 	var kept []missingAnswer
 	for k, n := range c.known {
-		if k.head == rev || k.tip == rev {
+		if slices.Contains(revs, k.head) || slices.Contains(revs, k.tip) {
 			kept = append(kept, missingAnswer{Head: k.head, Tip: k.tip, Missing: n})
 		}
 	}
