@@ -2075,7 +2075,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := job.ApplyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, job.ApplyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
+		report.Jobs = append(report.Jobs, job.ApplyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID], SetAside: a.SetAside()})
 	}
 	return emitFormatted(opts, report)
 }

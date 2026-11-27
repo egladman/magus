@@ -151,6 +151,29 @@ func (a Applied) ChangeLines() []string {
 	return lines
 }
 
+// SetAside says which runs the row's holder filed that this apply's spec
+// change leaves ungraded, "" for none. Wait sets aside a run filed against an
+// earlier generation, so the holder learns it here rather than at the wait.
+func (a Applied) SetAside() string {
+	if a.Created {
+		return ""
+	}
+	var runs []string
+	if a.Prev.Attempt != nil && a.Next.SpecChangedSince(a.Prev.Attempt.ObservedGeneration) {
+		runs = append(runs, job.PrimaryPostconditionID)
+	}
+	for _, g := range a.Prev.PostconditionAttempts {
+		if a.Next.SpecChangedSince(g.Attempt.ObservedGeneration) {
+			runs = append(runs, g.PostconditionID)
+		}
+	}
+	if len(runs) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("the runs %s's holder filed for %s were taken against an earlier spec than generation %d, so wait sets them aside: its holder runs them again and files them with `%s`",
+		a.Next.ID, strings.Join(runs, ", "), a.Next.Generation, hint.JobExit.With(a.Next.ID, "--stdin"))
+}
+
 // listChange is what pair's second list gained, then what it lost.
 func listChange(pair [2][]string) []string {
 	var parts []string

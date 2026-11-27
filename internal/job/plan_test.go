@@ -25,6 +25,25 @@ type appliedChangeLinesSuite struct {
 
 func TestAppliedChangeLines(t *testing.T) { suite.Run(t, new(appliedChangeLinesSuite)) }
 
+// An apply that moves a held row's spec past its filed runs says so, so its
+// holder learns it before the wait.
+func (s *appliedChangeLinesSuite) TestASpecChangeNamesTheRunsItSetsAside() {
+	prev := job.Job{ID: "w", State: job.StateRunning, Generation: 3,
+		Attempt:               &job.CapturedRun{Ref: "out1", ObservedGeneration: 3},
+		PostconditionAttempts: []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: job.CapturedRun{Ref: "out2", ObservedGeneration: 3}}}}
+	next := prev.Clone()
+	next.Generation = 4
+	next.Paths.Write = []string{"a.go"}
+	a := Applied{Prev: prev, Next: next, Changed: []string{"paths.write"}}
+
+	var out strings.Builder
+	PrintApply(&out, []Applied{a}, nil, false)
+
+	s.Contains(out.String(), "the runs w's holder filed for check, lint were taken against an earlier spec than generation 4, so wait sets them aside")
+	same := Applied{Prev: prev, Next: prev.Clone(), Changed: []string{"timeout"}}
+	s.Empty(same.SetAside(), "a write that keeps the generation sets nothing aside")
+}
+
 func (s *appliedChangeLinesSuite) TestAListNamesWhatItGainedAndLost() {
 	a := Applied{
 		Prev:    job.Job{Breaks: []string{"legacy_key", "api.Open"}},
