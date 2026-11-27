@@ -724,3 +724,17 @@ func TestDescribeTouched(t *testing.T) {
 	assert.Equal(t, "the top of the file, func A() {", describeTouched([]string{job.Preamble, "func A() {"}, nil))
 	assert.Equal(t, "unknown (its footprint could not be read)", describeTouched(nil, errors.New("its footprint could not be read")))
 }
+
+// A job changing a target edits its settings and the function it runs, so MGS3036 offers
+// the two claims together.
+func TestWholeConfigRefusalPairsATargetWithItsFunction(t *testing.T) {
+	t.Parallel()
+
+	all := []string{"export fun deployGenerate(ctx: magus\\Context, args: [str]) > void !> any {", "project.targets.deploy-generate", "project.name", "fun helper() > void {"}
+
+	got := listClaims("magusfile.buzz", all)
+
+	assert.Contains(t, got, "`magusfile.buzz#project.targets.deploy-generate` with `magusfile.buzz#deployGenerate`")
+	assert.Equal(t, 1, strings.Count(got, "#deployGenerate`"), "the function is listed once, beside its target: %s", got)
+	assert.Contains(t, got, "`magusfile.buzz#helper`")
+}

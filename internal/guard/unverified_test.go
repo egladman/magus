@@ -119,7 +119,7 @@ func (s *UnverifiedReaderSuite) TestAJobRowsRunAtOtherContentDoesNotReadTheFile(
 
 	got, err := guardUnverified(s.deps)(ctx, s.repo.Root(), head)
 	s.Require().NoError(err)
-	s.Equal([]string{"a.go"}, pathsOf(got.Unverified))
+	s.Equal([]string{"a.go"}, unverifiedPaths(got.Unverified))
 }
 
 func (s *UnverifiedReaderSuite) TestNoJobRowsLeaveTheFileUnverified() {
@@ -127,10 +127,10 @@ func (s *UnverifiedReaderSuite) TestNoJobRowsLeaveTheFileUnverified() {
 
 	got, err := guardUnverified(s.deps)(withSecrets(s.T().Context()), s.repo.Root(), head)
 	s.Require().NoError(err)
-	s.Equal([]string{"a.go"}, pathsOf(got.Unverified))
+	s.Equal([]string{"a.go"}, unverifiedPaths(got.Unverified))
 }
 
-func pathsOf(files []types.UnverifiedFile) []string {
+func unverifiedPaths(files []types.UnverifiedFile) []string {
 	var out []string
 	for _, f := range files {
 		out = append(out, f.Path)

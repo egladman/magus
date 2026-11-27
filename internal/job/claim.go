@@ -180,13 +180,32 @@ func listClaims(file string, all []string) string {
 	}
 	ordered := slices.Clone(all)
 	slices.SortStableFunc(ordered, func(a, b string) int { return rank(a) - rank(b) })
-	var claims []string
-	for _, d := range ordered {
+	claim := func(d string) string {
 		word := claimWord(d, all)
 		if len(job.NamedDeclarations(word, all)) != 1 {
+			return ""
+		}
+		return fmt.Sprintf("`%s#%s`", file, word)
+	}
+	paired := map[string]bool{}
+	var claims []string
+	for _, d := range ordered {
+		if paired[d] {
 			continue
 		}
-		claims = append(claims, fmt.Sprintf("`%s#%s`", file, word))
+		c := claim(d)
+		if c == "" {
+			continue
+		}
+		// A target's settings and the function it calls change together, so each is listed
+		// with the other.
+		if fn := targetFunction(d, all); fn != "" {
+			if fc := claim(fn); fc != "" {
+				paired[fn] = true
+				c += " with " + fc
+			}
+		}
+		claims = append(claims, c)
 	}
 	if len(claims) == 0 {
 		return fmt.Sprintf("`%s#<declaration>`", file)
@@ -195,6 +214,23 @@ func listClaims(file string, all []string) string {
 		return fmt.Sprintf("%s and %d more", strings.Join(claims[:maxListedClaims], ", "), len(claims)-maxListedClaims)
 	}
 	return strings.Join(claims, ", ")
+}
+
+// targetFunction is the function of all that runs the target d keys the settings of
+// (`project.targets.<name>`). It is "" when d keys no target or no function has its name.
+func targetFunction(d string, all []string) string {
+	name, ok := strings.CutPrefix(d, "project.targets.")
+	if !ok || strings.Contains(name, ".") {
+		return ""
+	}
+	for _, fn := range all {
+		_, rest, ok := strings.Cut(fn, "fun ")
+		ident, _, called := strings.Cut(rest, "(")
+		if ok && called && types.Normalize(strings.TrimSpace(ident)) == name {
+			return fn
+		}
+	}
+	return ""
 }
 
 // errVCSDisabled is claimDrivers' answer for a workspace that turned version control off.

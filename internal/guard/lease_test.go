@@ -1331,6 +1331,37 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 	}
 }
 
+// TestWorkerCheckOnlyHoldsAFileScopedRewriteToItsFiles: a rewrite handed files its update
+// globs match writes those files, not every file the globs reach.
+func TestWorkerCheckOnlyHoldsAFileScopedRewriteToItsFiles(t *testing.T) {
+	ws := typestest.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().Get("docs").Return(&types.Project{
+		Path:             "docs",
+		MagusfileTargets: []string{"format"},
+		TargetUpdates:    map[string][]types.UpdateRef{"format": {{Glob: "**/*.md"}}},
+	}).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
+	row := jobtypes.Job{
+		ID: "docs/jobs", Agent: jobtypes.Instructed("document jobs"), Paths: jobtypes.Paths{Write: []string{"docs/guides/jobs.md"}},
+		Check: rawCheck("format", "docs"), State: jobtypes.StateRunning, Registered: 1,
+	}
+	ctx, root := fleetFixture(t, row)
+	for _, f := range []string{"docs/guides/jobs.md", "docs/guides/other.md"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(f)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, f), []byte("# x\n"), 0o644))
+	}
+	deps := Dependencies{Inspect: inspect}
+
+	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run format:rw docs -- guides/jobs.md"), "the file it was given is a write path")
+	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run format:rw docs -- guides/other.md")
+	require.NotEmpty(t, reason)
+	assert.Contains(t, reason.Why, "`docs/guides/other.md`")
+	assert.NotContains(t, reason.Why, "**/*.md", "a glob it was not handed is not what it writes")
+}
+
 // TestWorkerCheckOnlyRefusesAnUncheckedRewrite: with a workspace that does not load, nothing
 // says what a run under the rw charm writes. The run is refused, naming the load error and
 // the run without the charm, which passes; a brief teaching it is refused the same way.
