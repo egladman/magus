@@ -812,7 +812,7 @@ func headed(repo *testkit.Repo, ids ...string) []job.Job {
 }
 
 // waitingIn is the placements off every base and change, as [Unintegrated].
-func waitingIn(placed []Placed) []Unintegrated {
+func waitingIn(placed []workPlace) []Unintegrated {
 	var out []Unintegrated
 	for _, p := range placed {
 		if p.Waiting() {
@@ -843,10 +843,10 @@ func TestAPushedRowWhoseBranchIsDeletedStillCounts(t *testing.T) {
 	rows, err := s.List(t.Context())
 	require.NoError(t, err)
 
-	placed, _, err := Placements(t.Context(), repo.Root(), rows, fresh(), time.Now())
+	placed, _, err := placements(t.Context(), repo.Root(), rows, fresh(), time.Now())
 	require.NoError(t, err)
 	require.Len(t, placed, 1)
-	assert.Equal(t, PlacePushed, placed[0].Place)
+	assert.Equal(t, placePushed, placed[0].Place)
 	assert.Empty(t, placed[0].Branch, "no local name holds it")
 	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{}, fresh())
 	assert.Len(t, facts.FinishedBranches, 1)
@@ -861,7 +861,7 @@ func TestRowsOnOneOpenChangeCountAsOnePlace(t *testing.T) {
 	repo.Git("switch", "-q", "-c", "stack", main)
 	var rows []job.Job
 	for _, id := range []string{"a", "b", "c", "d", "e"} {
-		repo.Commit(id, map[string]string{"stack-" + id + ".txt": id + "\n"})
+		repo.Commit(id, map[string]string{fmt.Sprintf("stack-%s.txt", id): id + "\n"})
 		rows = append(rows, job.Job{ID: id, State: job.StateExited, Registered: 1, Head: repo.Head()})
 	}
 	repo.Git("switch", "-q", main)
@@ -897,19 +897,18 @@ func TestAnOpenChangeHoldsItsRowsByContent(t *testing.T) {
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
 	driver, why := resolveDriver(t.Context(), repo.Root())
 	require.NotNil(t, driver, why)
-	place := func(open OpenChanges) Placed {
+	place := func(open OpenChanges) workPlace {
 		placed, _, err := placeWith(t.Context(), driver, repo.Root(), rows, open, time.Now())
 		require.NoError(t, err)
 		return placed[0]
 	}
 
-	rebased := place(fresh(qtypes.Change{ID: "7", Head: tip(repo, "rebased")}))
-	assert.Equal(t, PlaceProposed, rebased.Place)
-	assert.Equal(t, "7", rebased.Change)
-	assert.Equal(t, PlacePushed, place(fresh()).Place, "the change closed unmerged")
+	assert.Equal(t, workPlace{Job: "w", Head: rows[0].Head, Place: placeProposed, Change: "7", Branch: "w", Commits: 1},
+		place(fresh(qtypes.Change{ID: "7", Head: tip(repo, "rebased")})))
+	assert.Equal(t, placePushed, place(fresh()).Place, "the change closed unmerged")
 	old := fresh(qtypes.Change{ID: "7", Head: tip(repo, "rebased")})
-	old.Fetch.At = time.Now().Add(-2 * ChangeListMaxAge).Unix()
-	assert.Equal(t, PlacePushed, place(old).Place, "an old list places no row on a change")
+	old.Fetch.At = time.Now().Add(-2 * changeListMaxAge).Unix()
+	assert.Equal(t, placePushed, place(old).Place, "an old list places no row on a change")
 }
 
 // A row stored without a head is unread, named with a fix, and counts toward
@@ -1008,11 +1007,11 @@ func TestAnUnreadBranchIsUnreadNotMerged(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, got, 1)
-	assert.Equal(t, PlaceUnread, got[0].Place)
+	assert.Equal(t, placeUnread, got[0].Place)
 	assert.Zero(t, got[0].Commits)
 	assert.Contains(t, got[0].Why, "git merge-base: bad object", "the unread state names the failed read")
 
-	facts := withPlaces(job.ForkFacts{}, append(got, Placed{Job: "done", Branch: "done", Place: PlaceLocal, Commits: 2}))
+	facts := withPlaces(job.ForkFacts{}, append(got, workPlace{Job: "done", Branch: "done", Place: placeLocal, Commits: 2}))
 	assert.Equal(t, []string{"done (job done, local, 2 commit(s))"}, facts.FinishedBranches, "an unread row is not unmerged")
 	assert.Contains(t, facts.BranchesUnknown, "1 finished row(s) unread, so not counted: job pending")
 	assert.Contains(t, facts.IntegrateRecord, `"integrates":["done"]`)

@@ -19,26 +19,26 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Place is where a row's work stands, read from the commit the row recorded.
-type Place string
+// placeKind is where a row's work stands, read from the commit the row recorded.
+type placeKind string
 
 const (
-	// PlaceMain: a base holds the head's content.
-	PlaceMain Place = "main"
-	// PlaceProposed: an open change's head holds it.
-	PlaceProposed Place = "proposed"
-	// PlacePushed: a remote-tracking ref reaches it and no open change holds it.
-	PlacePushed Place = "pushed"
-	// PlaceLocal: only this repository holds it.
-	PlaceLocal Place = "local"
-	// PlaceUnread: the read could not answer. It is never read as kept.
-	PlaceUnread Place = "unread"
+	// placeMain: a base holds the head's content.
+	placeMain placeKind = "main"
+	// placeProposed: an open change's head holds it.
+	placeProposed placeKind = "proposed"
+	// placePushed: a remote-tracking ref reaches it and no open change holds it.
+	placePushed placeKind = "pushed"
+	// placeLocal: only this repository holds it.
+	placeLocal placeKind = "local"
+	// placeUnread: the read could not answer. It is never read as kept.
+	placeUnread placeKind = "unread"
 )
 
-// ChangeListMaxAge is how old a change list may be and still place a row on
+// changeListMaxAge is how old a change list may be and still place a row on
 // an open change. A change closed unmerged since the read would keep its rows
 // proposed, so past this age no row is.
-const ChangeListMaxAge = time.Hour
+const changeListMaxAge = time.Hour
 
 // OpenChanges is the change list `magus queue ls` left. A placement reads it
 // and never the network.
@@ -48,39 +48,39 @@ type OpenChanges struct {
 	Changes qtypes.Changes
 }
 
-// Placed is where one row's work stands.
-type Placed struct {
+// workPlace is where one row's work stands.
+type workPlace struct {
 	Job   string `json:"job"`
 	Head  string `json:"head,omitempty"`
-	Place Place  `json:"place"`
-	// Change is the open change whose head holds Head, for PlaceProposed.
+	Place placeKind `json:"place"`
+	// Change is the open change whose head holds Head, for placeProposed.
 	Change string `json:"change,omitempty"`
 	// Branch is a local branch standing at Head, "" when no name holds it.
 	Branch string `json:"branch,omitempty"`
 	// Commits is how many of Head's commits the nearer base lacks.
 	Commits int `json:"commits,omitempty"`
-	// Why and Fix say, for PlaceUnread, what did not read and the command that
+	// Why and Fix say, for placeUnread, what did not read and the command that
 	// makes it answer.
 	Why string `json:"why,omitempty"`
 	Fix string `json:"fix,omitempty"`
 }
 
 // Waiting reports work no base holds and no open change carries.
-func (p Placed) Waiting() bool { return p.Place == PlacePushed || p.Place == PlaceLocal }
+func (p workPlace) Waiting() bool { return p.Place == placePushed || p.Place == placeLocal }
 
 // Name is what a person reads the work by: its branch, else its short head.
-func (p Placed) Name() string {
+func (p workPlace) Name() string {
 	if p.Branch != "" {
 		return p.Branch
 	}
 	return p.Head[:min(len(p.Head), 12)]
 }
 
-// Placements places each over row of root's own tree ([ownTree]) a holder
+// placements places each over row of root's own tree ([ownTree]) a holder
 // wrote in, in store order. It leaves out a row a live integration names, one
 // that landed, and one a person set aside. The error is a read that answers
 // for no row; note names what the change list or the remote left unread.
-func Placements(ctx context.Context, root string, rows []job.Job, open OpenChanges, now time.Time) ([]Placed, string, error) {
+func placements(ctx context.Context, root string, rows []job.Job, open OpenChanges, now time.Time) ([]workPlace, string, error) {
 	work := placedRows(rows, root)
 	if len(work) == 0 {
 		return nil, "", nil
@@ -92,7 +92,7 @@ func Placements(ctx context.Context, root string, rows []job.Job, open OpenChang
 	return placeWith(ctx, driver, root, work, open, now)
 }
 
-// placedRows is the rows whose work [Placements] reads.
+// placedRows is the rows whose work [placements] reads.
 func placedRows(rows []job.Job, root string) []job.Job {
 	carried := map[string]bool{}
 	for _, r := range rows {
@@ -115,7 +115,7 @@ func placedRows(rows []job.Job, root string) []job.Job {
 
 // placeWith places work against every integration base. A head already read
 // against a base or a change head is answered from missingCommitsFile.
-func placeWith(ctx context.Context, driver types.VCSDriver, root string, work []job.Job, open OpenChanges, now time.Time) ([]Placed, string, error) {
+func placeWith(ctx context.Context, driver types.VCSDriver, root string, work []job.Job, open OpenChanges, now time.Time) ([]workPlace, string, error) {
 	bases, note, err := integrationBases(ctx, driver, root)
 	if err != nil {
 		return nil, "", err
@@ -131,7 +131,7 @@ func placeWith(ctx context.Context, driver types.VCSDriver, root string, work []
 	changes, changeNote := usableChanges(ctx, driver, root, open, now)
 	r := placeRead{driver: driver, root: root, bases: bases, tips: tips, upstreams: upstreams, changes: changes,
 		answers: readMissingCache(root), mu: &sync.Mutex{}}
-	out := make([]Placed, len(work))
+	out := make([]workPlace, len(work))
 	var g errgroup.Group
 	g.SetLimit(branchReadWorkers)
 	for i, row := range work {
@@ -161,13 +161,14 @@ func placeWith(ctx context.Context, driver types.VCSDriver, root string, work []
 // answers for fewer. A row no list places reads pushed or local and counts
 // alone: an over-report, never an under-report.
 func usableChanges(ctx context.Context, driver types.VCSDriver, root string, open OpenChanges, now time.Time) ([]qtypes.Change, string) {
+	// internal/hint declares no path for `queue ls`, so the command is spelled here.
 	if open.Fetch == nil {
-		return nil, fmt.Sprintf("no change list was read, so no row is placed on an open change; run `%s`",
-			queueLs("<provider>", "<base>"))
+		return nil, fmt.Sprintf("no change list was read, so no row is placed on an open change; run `%s queue ls --provider <provider> --base <base>`",
+			hint.BinaryName())
 	}
-	if age := now.Sub(time.Unix(open.Fetch.At, 0)); age > ChangeListMaxAge {
-		return nil, fmt.Sprintf("the change list is %s old, past %s, so no row is placed on an open change; run `%s`",
-			age.Round(time.Minute), ChangeListMaxAge, queueLs(open.Fetch.Provider, open.Fetch.Base))
+	if age := now.Sub(time.Unix(open.Fetch.At, 0)); age > changeListMaxAge {
+		return nil, fmt.Sprintf("the change list is %s old, past %s, so no row is placed on an open change; run `%s queue ls --provider %s --base %s`",
+			age.Round(time.Minute), changeListMaxAge, hint.BinaryName(), open.Fetch.Provider, open.Fetch.Base)
 	}
 	all := slices.Clone(open.Changes.Changes)
 	for _, u := range open.Changes.Unqueued {
@@ -190,12 +191,6 @@ func usableChanges(ctx context.Context, driver types.VCSDriver, root string, ope
 			len(unfetched), strings.Join(unfetched, ", "))
 	}
 	return usable, ""
-}
-
-// queueLs is the typed command that reads the change list. internal/hint
-// declares no path for it, and that package is not this one's to edit.
-func queueLs(provider, base string) string {
-	return fmt.Sprintf("%s queue ls --provider %s --base %s", hint.BinaryName(), provider, base)
 }
 
 func changeHeads(changes []qtypes.Change) []string {
@@ -223,8 +218,8 @@ type placeRead struct {
 	mu        *sync.Mutex
 }
 
-func (r placeRead) place(ctx context.Context, row job.Job) Placed {
-	p := Placed{Job: row.ID, Head: row.Head}
+func (r placeRead) place(ctx context.Context, row job.Job) workPlace {
+	p := workPlace{Job: row.ID, Head: row.Head}
 	if row.Head == "" {
 		why := row.HeadUnread
 		if why == "" {
@@ -241,27 +236,27 @@ func (r placeRead) place(ctx context.Context, row job.Job) Placed {
 		return r.unread(p, fmt.Sprintf("whether a base holds %s: %v", p.Name(), err))
 	}
 	if missing == 0 || r.upstreamLanded(ctx, p.Branch, row.Head) {
-		p.Place = PlaceMain
+		p.Place = placeMain
 		return p
 	}
 	p.Commits = missing
 	for _, c := range r.changes {
 		if held, err := r.holds(ctx, c.Head, row.Head); err == nil && held {
-			p.Place, p.Change = PlaceProposed, c.ID
+			p.Place, p.Change = placeProposed, c.ID
 			return p
 		}
 	}
-	p.Place = PlaceLocal
+	p.Place = placeLocal
 	if unpublished, err := r.driver.UnpublishedRevisions(ctx, r.root, row.Head); err == nil && len(unpublished) == 0 {
-		p.Place = PlacePushed
+		p.Place = placePushed
 	}
 	return p
 }
 
-// unread is p as PlaceUnread for why. Only a person sets work aside, so that
+// unread is p as placeUnread for why. Only a person sets work aside, so that
 // is the fix when no read can answer.
-func (r placeRead) unread(p Placed, why string) Placed {
-	p.Place, p.Why = PlaceUnread, why
+func (r placeRead) unread(p workPlace, why string) workPlace {
+	p.Place, p.Why = placeUnread, why
 	p.Fix = fmt.Sprintf("restore the commit, or have a person set it aside: `%s` with {\"api_version\":%q,\"id\":%q,\"left_unmerged\":\"<why>\"}",
 		hint.JobApply.With("--stdin"), job.APIVersion, p.Job)
 	return p

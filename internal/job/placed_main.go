@@ -56,7 +56,7 @@ func readPlacedMain(root string) map[placedMain]bool {
 
 // recordPlacedMain appends the heads in placed a base holds that the file
 // lacks, and returns the write's error.
-func recordPlacedMain(root string, placed []Placed) error {
+func recordPlacedMain(root string, placed []workPlace) error {
 	path := placedMainPath(root)
 	if path == "" {
 		return nil
@@ -65,7 +65,7 @@ func recordPlacedMain(root string, placed []Placed) error {
 	var fresh [][]byte
 	for _, p := range placed {
 		m := placedMain{ID: p.Job, Head: p.Head}
-		if p.Place != PlaceMain || known[m] {
+		if p.Place != placeMain || known[m] {
 			continue
 		}
 		known[m] = true

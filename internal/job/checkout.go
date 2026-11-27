@@ -848,14 +848,14 @@ func ownTree(rows []job.Job, root string, row job.Job) bool {
 }
 
 // UnintegratedBranches is the work of this checkout's tree that no base holds
-// ([Placements]), in store order, placed with no change list. An error means
+// ([placements]), in store order, placed with no change list. An error means
 // some row went unread: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	placed, _, err := Placements(ctx, s.root, rows, OpenChanges{}, time.Now())
+	placed, _, err := placements(ctx, s.root, rows, OpenChanges{}, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -863,7 +863,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	var unread error
 	for _, p := range placed {
 		switch {
-		case p.Place == PlaceUnread:
+		case p.Place == placeUnread:
 			unread = errors.Join(unread, fmt.Errorf("job %s: %s", p.Job, p.Why))
 		case p.Waiting():
 			waiting = append(waiting, Unintegrated{Job: p.Job, Branch: p.Name(), Commits: p.Commits})
@@ -1019,7 +1019,7 @@ type FullTest struct {
 func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest, open OpenChanges) job.ForkFacts {
 	defer timeCall(ctx, forkFactsCall)()
 	facts := job.ForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
-	placed, note, err := Placements(ctx, root, rows, open, time.Now())
+	placed, note, err := placements(ctx, root, rows, open, time.Now())
 	if err != nil {
 		facts.BranchesUnknown = err.Error()
 	}
@@ -1031,14 +1031,14 @@ func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest, 
 
 // withPlaces counts placed by place: one per open change holding rows, one
 // per row off every change. Stacking work on an open change adds nothing.
-func withPlaces(facts job.ForkFacts, placed []Placed) job.ForkFacts {
+func withPlaces(facts job.ForkFacts, placed []workPlace) job.ForkFacts {
 	var branches, unread, order []string
 	onChange := map[string][]string{}
 	for _, p := range placed {
 		switch {
-		case p.Place == PlaceUnread:
+		case p.Place == placeUnread:
 			unread = append(unread, fmt.Sprintf("job %s: %s; %s", p.Job, p.Why, p.Fix))
-		case p.Place == PlaceProposed:
+		case p.Place == placeProposed:
 			if _, seen := onChange[p.Change]; !seen {
 				order = append(order, p.Change)
 			}

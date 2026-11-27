@@ -399,7 +399,7 @@ func (s *unmergedSuite) TestARowsRecordedHeadOutlivesItsDeletedBranch() {
 	got := s.unmerged(job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head})
 
 	s.Require().Len(got.Jobs, 1)
-	s.Contains(got.Jobs[0].Why, "on neither "+s.main+" nor an open change")
+	s.Contains(got.Jobs[0].Why, fmt.Sprintf("on neither %s nor an open change", s.main))
 	s.Contains(got.Jobs[0].Remedy, "open a change for")
 }
 
@@ -424,7 +424,7 @@ func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAn
 	s.Require().Len(got.Jobs, 1)
 	s.Equal("w", got.Jobs[0].Job)
 	s.True(strings.HasPrefix(head, got.Jobs[0].Head), got.Jobs[0].Head)
-	s.Contains(got.Jobs[0].Why, "on neither "+s.main+" nor an open change")
+	s.Contains(got.Jobs[0].Why, fmt.Sprintf("on neither %s nor an open change", s.main))
 	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("open a change for %s, or merge it into an open change's branch", got.Jobs[0].Head))
 	s.Contains(got.Jobs[0].Remedy, "left_unmerged")
 }

@@ -377,6 +377,9 @@ func UnmergedAgainst(ctx context.Context, root string, rows []job.Job, tries job
 	report.Branch = branch
 	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix(), tries: tries}
 	read.changes, read.changeNote = usableChanges(ctx, driver, root, open, time.Now())
+	if open.Fetch == nil {
+		read.changeNote = ""
+	}
 	read.changeHeads = strings.Join(changeHeads(read.changes), ",")
 	if remote, why := remoteDefault(ctx, driver, root); why != "" {
 		read.remoteNote = why

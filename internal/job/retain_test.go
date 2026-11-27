@@ -95,11 +95,11 @@ func TestAPlacementOnABaseIsRecordedForRetention(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 
-	require.NoError(t, recordPlacedMain(root, []Placed{
-		{Job: "merged", Head: "abc", Place: PlaceMain},
-		{Job: "waiting", Head: "def", Place: PlaceLocal},
+	require.NoError(t, recordPlacedMain(root, []workPlace{
+		{Job: "merged", Head: "abc", Place: placeMain},
+		{Job: "waiting", Head: "def", Place: placeLocal},
 	}))
-	require.NoError(t, recordPlacedMain(root, []Placed{{Job: "merged", Head: "abc", Place: PlaceMain}}))
+	require.NoError(t, recordPlacedMain(root, []workPlace{{Job: "merged", Head: "abc", Place: placeMain}}))
 
 	assert.Equal(t, map[placedMain]bool{{ID: "merged", Head: "abc"}: true}, readPlacedMain(root))
 }

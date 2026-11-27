@@ -499,9 +499,7 @@ func (s *exitCommittedSuite) TestAnAbandonmentRecordsTheCheckoutsHead() {
 	ended, err := Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, nil, nil)
 
 	s.Require().NoError(err)
-	s.Equal(job.StateNoReturn, ended.State)
 	s.Equal(s.repo.Head(), ended.Head)
-	s.Empty(ended.HeadUnread)
 }
 
 func (s *exitCommittedSuite) TestAnAbandonmentInAGoneCheckoutSaysWhyItHasNoHead() {

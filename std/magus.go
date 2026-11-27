@@ -1653,7 +1653,7 @@ func unmergedWithChanges(ctx context.Context, workspace string, rows []jobtypes.
 	open, err := queue.OpenChanges(workspace)
 	report := job.UnmergedAgainst(ctx, workspace, rows, tries, open)
 	if err != nil {
-		report.Unknown = strings.TrimPrefix(report.Unknown+"; the change list could not be read: "+err.Error(), "; ")
+		report.Unknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", report.Unknown, err), "; ")
 	}
 	return report
 }
@@ -1705,7 +1705,7 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFact
 	open, openErr := queue.OpenChanges(workspace)
 	facts := job.ForkFacts(ctx, workspace, rows, last, open)
 	if openErr != nil {
-		facts.BranchesUnknown = strings.TrimPrefix(facts.BranchesUnknown+"; the change list could not be read: "+openErr.Error(), "; ")
+		facts.BranchesUnknown = strings.TrimPrefix(fmt.Sprintf("%s; the change list could not be read: %v", facts.BranchesUnknown, openErr), "; ")
 	}
 	return facts, nil
 }

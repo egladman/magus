@@ -44,13 +44,13 @@ func (s *Store) confirmSetAside(ctx context.Context, rows []job.Job, records []j
 	if len(asked) == 0 {
 		return nil
 	}
-	placed, _, err := Placements(ctx, s.root, rows, OpenChanges{}, s.now())
+	placed, _, err := placements(ctx, s.root, rows, OpenChanges{}, s.now())
 	if err != nil {
-		return fmt.Errorf("job: setting work aside needs where that work stands, which does not read: %w", err)
+		return fmt.Errorf("setting work aside needs where that work stands, which does not read: %w", err)
 	}
 	var errs []error
 	for _, p := range placed {
-		if asked[p.Job] && p.Place != PlaceMain && p.Place != PlaceProposed {
+		if asked[p.Job] && p.Place != placeMain && p.Place != placeProposed {
 			errs = append(errs, s.confirmAside(ctx, p))
 		}
 	}
@@ -59,7 +59,7 @@ func (s *Store) confirmSetAside(ctx context.Context, rows []job.Job, records []j
 
 // confirmAside is [Store.confirmSetAside] for one placed row. The request is keyed by
 // the row and its head, so each attempt at one disposal lands on one request.
-func (s *Store) confirmAside(ctx context.Context, p Placed) error {
+func (s *Store) confirmAside(ctx context.Context, p workPlace) error {
 	where := p.Head
 	if where == "" {
 		where = "no recorded head"
