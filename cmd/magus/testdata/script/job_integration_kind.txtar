@@ -25,11 +25,16 @@ exec git switch -q main
 # A live job on main holds the file done-a changed.
 exec magus job fork editor --write-paths pricing.txt --check 'test .' --instructions 'edit pricing'
 
-# One finished branch off the base: the next fork reports it and the commits since a full test.
+# One finished row off the base: taken at done-a and abandoned there, it records that head, and the next fork reports it and the commits since a full test.
 stdin $WORK/done-a.json
 exec magus job fork --stdin
+exec git switch -q done-a
+exec magus job exec done-a
+exec magus job exit done-a
+exec git switch -q main
 exec magus job fork reader --read-only --instructions 'read the tax code'
-stderr 'note: 1 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\); commits since the last full test: unknown, '
+stderr 'note: 1 place\(s\) hold work off the base: done-a \(job done-a, local, 1 commit\(s\)\); unread: no change list was read'
+stderr 'commits since the last full test: unknown, '
 stderr '"integrates":\["done-a"\]'
 stderr 'magus job fork --stdin --checkout <dir>'
 
@@ -40,8 +45,12 @@ stdout '^finished branches off the base: 1: done-a$'
 # However many wait, magus only reports them: no policy here, so the fork goes through.
 stdin $WORK/done-b.json
 exec magus job fork --stdin
+exec git switch -q done-b
+exec magus job exec done-b
+exec magus job exit done-b
+exec git switch -q main
 exec magus job fork writer --read-only --instructions 'read the tests'
-stderr '2 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\), done-b \(job done-b, 1 commit\(s\)\)'
+stderr '2 place\(s\) hold work off the base: done-a \(job done-a, local, 1 commit\(s\)\), done-b \(job done-b, local, 1 commit\(s\)\)'
 
 # An integration job naming write paths is refused: they are computed, never declared.
 stdin $WORK/declares-paths.json
@@ -67,7 +76,7 @@ stdout '^  pricing.txt$'
 
 # Named by a live integration job, the branches no longer count, and forks go through.
 exec magus job fork writer --read-only --instructions 'read the tests'
-stderr '0 finished branches off the base'
+stderr '0 places hold work off the base'
 
 # A regeneration a merge left owed in the checkout refuses the integration's pass until
 # `magus vcs resolve` runs it once and its result is committed.
@@ -106,9 +115,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 -- done-a.json --
-{"api_version": "safetyscissors.job/v1alpha1", "id": "done-a", "state": "pass", "agent": {"instructions": "raise prices", "worker": {"type": "resumed"}}, "paths": {"write": ["pricing.txt"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "done-a", "agent": {"instructions": "raise prices", "worker": {"type": "resumed"}}, "paths": {"write": ["pricing.txt"]}, "check": {"target": "test", "project": "."}}
 -- done-b.json --
-{"api_version": "safetyscissors.job/v1alpha1", "id": "done-b", "state": "pass", "agent": {"instructions": "add a lint target", "worker": {"type": "resumed"}}, "paths": {"write": ["magusfile.buzz#lint"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "safetyscissors.job/v1alpha1", "id": "done-b", "agent": {"instructions": "add a lint target", "worker": {"type": "resumed"}}, "paths": {"write": ["magusfile.buzz#lint"]}, "check": {"target": "test", "project": "."}}
 -- declares-paths.json --
 {"api_version": "safetyscissors.job/v1alpha1", "id": "integrate", "integrates": ["done-a"], "paths": {"write": ["pricing.txt"]}, "check": {"target": "test", "project": "."}}
 -- missing.json --

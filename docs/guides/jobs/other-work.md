@@ -88,8 +88,8 @@ upgrade/api  ana     pass   bounded  1      alone     magus run test api
 upgrade/web  ben     pass   bounded  1      disjoint  magus run test web
 
 not merged onto main: 2
-  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"upgrade/api","left_unmerged":"<why>"}
-  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"upgrade/web","left_unmerged":"<why>"}
+  upgrade/api at 4482968: 1 commit(s) at 4482968 are on neither main nor an open change; open a change for 4482968, or merge it into an open change's branch, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are on neither main nor an open change; open a change for c2385b8, or merge it into an open change's branch, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -210,7 +210,7 @@ release-1.3/changelog  changelog  exited  bounded  1      alone     -
 release-1.3/notes      notes      exited  bounded  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are on neither main nor an open change; open a change for 7b9e9dc, or merge it into an open change's branch, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
@@ -258,7 +258,7 @@ release-1.3/changelog  changelog  pass     bounded  1      alone     -
 release-1.3/notes      notes      running  bounded  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are on neither main nor an open change; open a change for 7b9e9dc, or merge it into an open change's branch, or state why it stays off: `magus job apply --stdin` with {"api_version":"safetyscissors.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
