@@ -39,8 +39,10 @@ a verdict nobody in the repository can read or change.
   rules advise (`hack/lint/rules-name-their-tier.buzz`).
 - The Go analyzers take their paths, word lists and ceilings from config, never
   from code ([the conventions README](https://github.com/egladman/magus/blob/main/libs/conventions/README.md)).
-- Nothing refuses a verdict added to magus core yet, so the split holds in
-  review alone.
+- Planned, not yet written: `hack/lint/core-reads-no-analyzer-policy.buzz`
+  refuses a root-module Go file that names `analyzers.yaml`, the verdict that
+  would otherwise slip into core ([ADR 0062](../../decisions/0062-analyzers-live-outside-the-binary.md)).
+  Until it lands, the split holds in review alone.
 
 ## Good
 
