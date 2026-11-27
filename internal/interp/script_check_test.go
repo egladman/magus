@@ -76,3 +76,14 @@ func TestUnresolvedSpellHandleReadsEitherPosition(t *testing.T) {
 	_, ok = unresolvedSpellHandle(buzz.Diagnostic{Code: unresolvedImportCode, Msg: `cannot resolve import "lib"`})
 	assert.False(t, ok, "only a spell import names a handle")
 }
+
+func TestCheckFileResolvesImportFromWorkspaceRootPastANestedMagusfile(t *testing.T) {
+	root := writeProjectFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "magusfile.buzz"), nil, 0o644))
+	t.Chdir(filepath.Join(root, "docs"))
+
+	diags, err := checkRunner().CheckFile(t.Context(), "x.buzz", false)
+	require.NoError(t, err)
+	assert.Empty(t, diags)
+}

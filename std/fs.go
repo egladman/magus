@@ -1318,22 +1318,6 @@ func trimStopped(ctx context.Context, err error) (string, error) {
 	return "", err
 }
 
-// FindAbove returns the closest directory at or above dir holding an entry called
-// name, or "" when none does up to the filesystem root.
-func FindAbove(dir, name string) string {
-	for dir != "" {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	return ""
-}
-
 // walkFiles calls fn with each regular file under dir, checking ctx between entries.
 func walkFiles(ctx context.Context, dir string, fn func(path string, info fs.FileInfo) error) error {
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
