@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
@@ -389,6 +390,25 @@ func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
 
 func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
 	s.Equal(s.repo.Root(), hookCallDir(s.line()))
+}
+
+// A job that changes the contract leaves the session's binary unable to load its checkout.
+// The checkout's ./magus judges there when it embeds that checkout's contract.
+func (s *UnheldRefusalSuite) TestABinaryEmbeddingItsCheckoutsContractJudgesThere() {
+	root := s.repo.Root()
+	lock := filepath.Join(root, "internal/commands/testdata/api.lock")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(lock), 0o755))
+	s.Require().NoError(os.WriteFile(lock, []byte("a contract this job changed\n"), 0o644))
+	tree, err := contract.Tree(root)
+	s.Require().NoError(err)
+
+	own := s.stampIn(root, fmt.Sprintf(`{"embedded":{"contract_sha256":%q}}`, tree))
+	s.Empty(contractRefusal(s.T().Context(), own))
+
+	own = s.stampIn(root, `{"embedded":{"contract_sha256":"d269b39fcedd"}}`)
+	s.Contains(contractRefusal(s.T().Context(), own), "it embeds contract d269b39fcedd")
+	own = s.stampIn(root, `{"decision":"defer"}`)
+	s.Contains(contractRefusal(s.T().Context(), own), "reported no contract")
 }
 
 // UnheldRefusalSuite pins which ./magus judges in a checkout no live row works in:

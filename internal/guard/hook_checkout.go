@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -121,8 +122,17 @@ func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string
 	if err != nil {
 		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
-	if why == "" || !unheld {
-		return why
+	if why == "" {
+		return ""
+	}
+	// A job that changes the contract leaves this binary unable to load its checkout,
+	// so the one built from that checkout's contract judges it instead.
+	takeover := contractRefusal(ctx, own)
+	if takeover == "" {
+		return ""
+	}
+	if !unheld {
+		return why + ", and " + takeover
 	}
 	refused := unheldRefusal(ctx, own, session, buildinfo.Self())
 	if refused == "" {
@@ -152,6 +162,52 @@ func unheldRefusal(ctx context.Context, own, session string, self types.MagusBui
 		return fmt.Sprintf("this binary would not take it as its replacement: %v", err)
 	}
 	return ""
+}
+
+// contractRefusal says why own may not judge its checkout in this binary's place, "" when
+// it may. It may when own embeds the checkout's contract and this binary does not.
+func contractRefusal(ctx context.Context, own string) string {
+	tree, err := contract.Tree(filepath.Dir(own))
+	switch {
+	case errors.Is(err, contract.ErrNotCarried) || err == nil && tree == "":
+		return "its checkout carries no contract"
+	case err != nil:
+		return fmt.Sprintf("its checkout's contract is unreadable: %v", err)
+	}
+	if self, err := contract.Binary(); err == nil && self == tree {
+		return "this binary already carries its checkout's contract"
+	}
+	embedded, err := reportedContract(ctx, own)
+	if err != nil {
+		return err.Error()
+	}
+	if embedded != tree {
+		return fmt.Sprintf("it embeds contract %.12s, and its checkout carries %.12s", embedded, tree)
+	}
+	return ""
+}
+
+// reportedContract is the contract digest bin's `version -o json` says it embeds.
+func reportedContract(ctx context.Context, bin string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, stampTimeout)
+	defer cancel()
+	var out bytes.Buffer
+	cmd := exec.CommandContext(ctx, bin, "version", "-o", "json")
+	cmd.Dir = filepath.Dir(bin)
+	cmd.Env = append(os.Environ(), workspace.BootstrapExecSentinelVar+"=1")
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("it did not report its version: %w", err)
+	}
+	var reported struct {
+		Embedded struct {
+			Contract string `json:"contract_sha256"`
+		} `json:"embedded"`
+	}
+	if err := codec.Unmarshal(out.Bytes(), &reported); err != nil || reported.Embedded.Contract == "" {
+		return "", errors.New("it reported no contract this binary can read")
+	}
+	return reported.Embedded.Contract, nil
 }
 
 // stampTimeout bounds the version call, which spends the hook's own budget.
