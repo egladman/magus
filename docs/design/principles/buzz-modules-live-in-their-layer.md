@@ -24,6 +24,10 @@ layers, and the layer decides where its source lives and what it may import.
 - **magusfile and hack/** hold this repository's policy: what it trusts, what
   it gates, how it reclaims its own disk.
 
+A Go host module that reads the run, such as `emit`, which reads the resolved spells and
+the lease, is registered beside the package that owns that state, as `splice` is, and
+refuses rather than answers empty when the run's context is absent.
+
 ## Enforced by
 
 - `TestStdLibRefusesMagus` in `std/lib_test.go` fails when a source under
