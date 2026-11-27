@@ -131,32 +131,6 @@ func pathsAmong(changed, paths []string) []string {
 	return out
 }
 
-// MergedBranches is every local branch rev reaches, in one read. Such a branch
-// lacks nothing rev has. Only git answers; another backend declines with
-// *types.VCSUnsupportedError.
-func MergedBranches(ctx context.Context, d types.VCSIdentity, dir, rev string) (map[string]bool, error) {
-	if d.Name() != (gitVCS{}).Name() {
-		return nil, &types.VCSUnsupportedError{VCS: d.Name(), Capability: types.CapBranchHeadReporter}
-	}
-	if rev == "" {
-		return nil, fmt.Errorf("vcs: MergedBranches needs a revision")
-	}
-	if err := checkRev(rev); err != nil {
-		return nil, err
-	}
-	listed, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--merged="+rev, "--format=%(refname:lstrip=2)", "refs/heads/")
-	if err != nil {
-		return nil, fmt.Errorf("git for-each-ref --merged=%s: %w", rev, err)
-	}
-	merged := map[string]bool{}
-	for _, branch := range splitLines([]byte(listed)) {
-		if branch != "" {
-			merged[branch] = true
-		}
-	}
-	return merged, nil
-}
-
 // workReader is what missingCommits reads, which every backend answers.
 type workReader interface {
 	types.RangeReporter
