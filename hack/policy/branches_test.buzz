@@ -170,3 +170,14 @@ test "a cd or git -C push is scored where the guard placed it, not on the host's
     final host = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: mut [<str>]), once: helpers\counter());
     std\assert(host.reason.indexOf("adds 11 topics") != null, message: "the host checkout's own wide branch is still judged: {host.reason}");
 }
+
+test "a commit subject's opening verb names no topic" {
+    final plain = branches\commitSubjectTopic("let --schema and --dry-run past the finished-branch limit");
+    std\assert(plain.words.indexOf("let") == null, message: plain.words.join(","));
+    std\assert(plain.words.indexOf("schema") != null, message: plain.words.join(","));
+    final typed = branches\commitSubjectTopic("fix(guard)!: drop the stale branch check");
+    std\assert(typed.words.indexOf("drop") == null, message: typed.words.join(","));
+    std\assert(typed.words.indexOf("fix") == null, message: typed.words.join(","));
+    std\assert(typed.words.indexOf("guard") != null, message: typed.words.join(","));
+    std\assert(typed.words.indexOf("stale") != null, message: typed.words.join(","));
+}
