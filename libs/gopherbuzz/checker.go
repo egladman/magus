@@ -164,6 +164,12 @@ type checker struct {
 	// nested are the nested namespaces this chunk's own imports bind, since
 	// upstream imports are per file. nil checks no chunk's imports.
 	nested *chunkNamespaces
+	// importNamespaces maps an unaliased file import to the namespace its module
+	// declares, which is the name the import binds.
+	importNamespaces map[string]string
+	// closedEnums holds the enumKey of each enum a file module declares. Unlike a
+	// host enum, such an enum takes only its own cases.
+	closedEnums map[string]bool
 	// base holds the builtins and imported types beneath scopes[0] and types; nil
 	// means those two hold everything. A check writes to it only to memoize a
 	// namespace type (see namespaceType).
@@ -313,7 +319,7 @@ func (c *checker) baseEntry(name string) (scopeEntry, bool) {
 // the missing `export` instead of a bare "undefined". embedded mirrors
 // Session.embedded (see checker.embedded).
 func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
-	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil, nil)
+	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil, nil, nil, nil)
 }
 
 // checkWithPrelude is checkWithGlobals with the builtins and imported types
@@ -327,19 +333,21 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 //	measured: BenchmarkSessionImportedTypes -43% B/op, -77% allocs/op (benchstat, n=10).
 //	trade-off: a global resolves through two map layers (scopes[0], then base), and
 //	a type a check rewrites must be copied out of base first (ownBaseObject).
-func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool, nested *chunkNamespaces) (errs []typeError, warnings []typeError) {
+func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool, nested *chunkNamespaces, importNamespaces map[string]string, closedEnums map[string]bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
-		nested:       nested,
-		types:        map[string]types.Type{},
-		moduleFuncs:  moduleFuncs,
-		moduleTypes:  moduleTypes,
-		moduleVars:   moduleVars,
-		declImports:  declImports,
-		required:     map[*types.ObjectType][]string{},
-		private:      private,
-		embedded:     embedded,
-		valueImports: valueImports,
-		base:         prelude,
+		nested:           nested,
+		importNamespaces: importNamespaces,
+		closedEnums:      closedEnums,
+		types:            map[string]types.Type{},
+		moduleFuncs:      moduleFuncs,
+		moduleTypes:      moduleTypes,
+		moduleVars:       moduleVars,
+		declImports:      declImports,
+		required:         map[*types.ObjectType][]string{},
+		private:          private,
+		embedded:         embedded,
+		valueImports:     valueImports,
+		base:             prelude,
 	}
 	// Sized for the globals and top-level declarations defined here up front.
 	c.scopes = append(c.scopes, make(map[string]scopeEntry, len(extraGlobals)+len(prog.Stmts)))
@@ -450,6 +458,8 @@ func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []as
 		var vt types.Type = types.Unknown
 		if vd.TypeAnnot != "" {
 			vt = c.resolveAnnot(vd.TypeAnnot)
+		} else if lit, ok := vd.Value.(*ast.ObjectLit); ok {
+			vt = c.exportedLiteralType(lit)
 		}
 		nt.Fields[vd.Name] = vt
 		noteOptionalField(nt, vd.Name, vd.TypeAnnot)
@@ -459,6 +469,26 @@ func (c *checker) buildNamespaceType(name string, fds []*ast.FunDecl, decls []as
 	// `File.open(...)` does, and `io\FileMode.read` the same case.
 	maps.Copy(nt.Fields, c.nsTypes)
 	return nt
+}
+
+// exportedLiteralType types an unannotated export from its object literal.
+// Upstream types every export by its initialiser, and the importer needs that
+// to check calls through it. Anything it cannot name stays Unknown.
+func (c *checker) exportedLiteralType(lit *ast.ObjectLit) types.Type {
+	var head types.Type
+	if own, ok := c.nsTypes[lit.TypeName]; ok && lit.Namespace == "" {
+		head = own
+	} else if named, ok := c.namedType(lit.TypeName); ok {
+		head = named
+	}
+	ot, ok := head.(*types.ObjectType)
+	if !ok {
+		return types.Unknown
+	}
+	if lit.TypeArgs != "" {
+		return types.Instantiate(ot, c.literalTypeArgs(lit.TypeArgs))
+	}
+	return ot
 }
 
 // registerBuiltins pre-defines the stdlib functions so the checker doesn't
@@ -588,6 +618,9 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// scheme stripped, which is the same bare name resolveImport binds under.
 			parts := strings.Split(strings.TrimPrefix(v.Path, "buzz:"), "/")
 			name := parts[len(parts)-1]
+			if declared, ok := c.importNamespaces[v.Path]; ok && v.Alias == "" && len(v.Only) == 0 {
+				name = declared
+			}
 			// An alias equal to the default binding has no effect ONLY for a path style
 			// resolveImport binds as a single VALUE regardless of aliasing (see
 			// importBindsByValue). A plain FILE import binds differently with an alias
@@ -1032,7 +1065,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	declTyp := inferred
 	if v.TypeAnnot != "" {
 		annotTyp := annot
-		if !types.Compat(inferred, annotTyp) {
+		if !c.compat(inferred, annotTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s variable %q",
 				inferred.TypeName(), annotTyp.TypeName(), v.Name)
 		} else if what, isNull := c.possiblyNullName(v.Value); isNull && !strings.HasSuffix(strings.TrimSpace(v.TypeAnnot), "?") && annotTyp != types.Any && annotTyp != types.Unknown {
@@ -1084,7 +1117,7 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 			// The variable's type is the expected type for the value, so `assigned = .en`
 			// resolves against the declaration.
 			rhs := c.inferExpected(v.Value, e.typ)
-			if !types.Compat(rhs, e.typ) {
+			if !c.compat(rhs, e.typ) {
 				c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
 			} else if what, isNull := c.possiblyNullName(v.Value); isNull && e.nonOptional && !e.optional {
 				c.errorfc(v.Pos, TypeMismatch, "cannot assign optional %s to non-optional %q", what, id.Name)
@@ -1226,7 +1259,7 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 			c.errorfc(ast.NodePos(v.Value), TypeMismatch, "return value is null but this function declares a non-optional > %s; declare > %s? to allow null", c.retTyp.TypeName(), c.retTyp.TypeName())
 		}
 	}
-	if c.retTyp != nil && c.retTyp != types.Any && c.retTyp != types.Fib && !retIsFibType && c.yieldTyp == nil && !types.Compat(ret, c.retTyp) {
+	if c.retTyp != nil && c.retTyp != types.Any && c.retTyp != types.Fib && !retIsFibType && c.yieldTyp == nil && !c.compat(ret, c.retTyp) {
 		c.errorfc(v.Pos, TypeMismatch, "return type mismatch: got %s, want %s",
 			ret.TypeName(), c.retTyp.TypeName())
 	}
@@ -1828,9 +1861,9 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// the result optional, which this checker erases, so it reports the other
 		// branch. Anything else is genuinely two types and stays Unknown.
 		switch {
-		case types.Compat(els, then):
+		case c.compat(els, then):
 			return then
-		case types.Compat(then, els):
+		case c.compat(then, els):
 			return els
 		default:
 			return types.Unknown
@@ -1953,7 +1986,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// fixtures omit the annotation, and so does magus's s3-cache spell
 		// (`fun listing() > any !> any` yields without one). Closing it is a dialect
 		// decision with a migration, not an oversight to patch.
-		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
+		if c.yieldTyp != nil && !c.compat(vt, c.yieldTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
 		}
 		return types.Null // yield expression evaluates to null (the resumed value)
@@ -2261,7 +2294,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			switch {
 			case c.yieldTyp == nil:
 				c.errorfc(v.Pos, TypeMismatch, "call to a yielding function must be declared with *> %s or wrapped in a fiber (&call)", ft.Yield.TypeName())
-			case !types.Compat(ft.Yield, c.yieldTyp):
+			case !c.compat(ft.Yield, c.yieldTyp):
 				c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: callee yields %s, enclosing function declares %s", ft.Yield.TypeName(), c.yieldTyp.TypeName())
 			}
 		}
@@ -2486,7 +2519,7 @@ func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, wan
 	if hasErasedType(want) || hasErasedType(got) {
 		return
 	}
-	if types.Compat(got, want) {
+	if c.compat(got, want) {
 		return
 	}
 	slot := fmt.Sprintf("argument %d", i+1)
@@ -3058,7 +3091,12 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 	}
 	elemTyp := c.infer(v.Items[0])
 	for _, item := range v.Items[1:] {
-		c.infer(item)
+		got := c.infer(item)
+		first, firstOK := elemTyp.(*types.ObjectType)
+		next, nextOK := got.(*types.ObjectType)
+		if firstOK && nextOK && first.Name == next.Name && len(first.Args) > 0 && !c.compat(got, elemTyp) {
+			c.errorfc(ast.NodePos(item), TypeMismatch, "bad list type: got %s, expected %s", got.TypeName(), elemTyp.TypeName())
+		}
 	}
 	return &types.ListType{Elem: elemTyp, Mut: v.Mut}
 }
@@ -3117,7 +3155,7 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		if _, unresolved := want.(*types.NamedType); unresolved {
 			continue
 		}
-		if !types.Compat(got, want) || c.enumGotPrimitive(want, got) {
+		if !c.compat(got, want) || c.enumGotPrimitive(want, got) {
 			c.errorfc(ast.NodePos(v.Values[i]), TypeMismatch, "wrong property type: field %s.%s is %s, got %s", v.TypeName, key, want.TypeName(), got.TypeName())
 		}
 	}
@@ -3139,6 +3177,70 @@ func (c *checker) requiredFields(ot *types.ObjectType) []string {
 		return c.base.required[ot]
 	}
 	return nil
+}
+
+// enumKey names an enum by its declaration, since two modules may each declare
+// an enum called Op and types.Compat compares by name.
+func enumKey(e *types.EnumType) string {
+	return enumDeclKey(e.Name, e.Backing, e.Cases)
+}
+
+func enumDeclKey(name, backing string, cases []string) string {
+	return name + "|" + backing + "|" + strings.Join(cases, ",")
+}
+
+// compat is types.Compat with two rules for enums a file module declares: only
+// the same declaration fits, and a plain str or int never does. Host enums keep
+// the lenient rule, which their open parameters rely on.
+func (c *checker) compat(got, want types.Type) bool {
+	if got == nil || want == nil || got == types.Any || got == types.Unknown ||
+		want == types.Any || want == types.Unknown || got == types.Null {
+		return types.Compat(got, want)
+	}
+	switch w := want.(type) {
+	case *types.EnumType:
+		if g, ok := got.(*types.EnumType); ok {
+			return enumKey(g) == enumKey(w)
+		}
+		switch got {
+		case types.Str, types.Int, types.Double, types.Bool:
+			if c.closedEnums[enumKey(w)] {
+				return false
+			}
+		}
+	case *types.ListType:
+		if g, ok := got.(*types.ListType); ok {
+			return (g.Mut || !w.Mut) && c.compat(g.Elem, w.Elem)
+		}
+	case *types.MapType:
+		if g, ok := got.(*types.MapType); ok {
+			return (g.Mut || !w.Mut) && c.compat(g.Key, w.Key) && c.compat(g.Val, w.Val)
+		}
+	case *types.ObjectType:
+		if g, ok := got.(*types.ObjectType); ok && g.Name == w.Name && !g.IsNamespace {
+			return c.argsCompat(g.Args, w.Args)
+		}
+	}
+	return types.Compat(got, want)
+}
+
+// argsCompat compares type arguments pairwise as types.Compat does, skipping an
+// unresolved name, which is an erased generic parameter.
+func (c *checker) argsCompat(got, want []types.Type) bool {
+	if len(got) == 0 || len(want) == 0 {
+		return true
+	}
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		_, gErased := got[i].(*types.NamedType)
+		_, wErased := want[i].(*types.NamedType)
+		if !gErased && !wErased && !c.compat(got[i], want[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // enumGotPrimitive reports a str, int, double or bool where an enum is wanted, or a list
@@ -3751,7 +3853,38 @@ func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectTy
 		for _, m := range missing {
 			c.errorf(v.Pos, "object %s is declared as conforming to protocol %s but does not implement method %q", v.Name, name, m)
 		}
+		for _, m := range slices.Sorted(maps.Keys(pt.Methods)) {
+			got, has := ot.Methods[m]
+			if has && !c.sameSignature(got, pt.Methods[m]) {
+				c.errorfc(v.Pos, TypeMismatch, "method not conforming to protocol: %s.%s is %s, protocol %s expects %s", v.Name, m, got.TypeName(), name, pt.Methods[m].TypeName())
+			}
+		}
 	}
+}
+
+// sameSignature reports whether a method has the parameter and return types its
+// protocol declares. An omitted return is void.
+func (c *checker) sameSignature(got, want *types.FuncType) bool {
+	if len(got.Params) != len(want.Params) {
+		return false
+	}
+	same := func(g, w types.Type) bool {
+		g, w = c.resolveType(g), c.resolveType(w)
+		return c.compat(g, w) && c.compat(w, g)
+	}
+	for i := range got.Params {
+		if !same(got.Params[i], want.Params[i]) {
+			return false
+		}
+	}
+	gotRet, wantRet := got.Ret, want.Ret
+	if gotRet == nil {
+		gotRet = types.Void
+	}
+	if wantRet == nil {
+		wantRet = types.Void
+	}
+	return same(gotRet, wantRet)
 }
 
 // checkLocalShadowing reports a local declaration that reuses the name of a local

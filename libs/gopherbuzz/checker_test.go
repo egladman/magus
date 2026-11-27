@@ -1846,14 +1846,14 @@ func TestCheckPrelude_NamespaceRebuiltWhenItsTypeArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	p := (*checkPrelude)(nil).sync(nil)
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil, nil, nil, nil)
 	before := p.ns["host"]
 	require.NotNil(t, before)
 	assert.IsType(t, &types.NamedType{}, before.typ.Fields["make"].(*types.FuncType).Ret)
 
 	p = p.sync(late.Stmts)
 	assert.Nil(t, p.ns["host"])
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil, nil, nil, nil)
 	assert.Same(t, p.types["Late"], p.ns["host"].typ.Fields["make"].(*types.FuncType).Ret)
 }
 
@@ -2227,4 +2227,282 @@ func TestCheck_WriteMapLiteralFitsExpectedMapType(t *testing.T) {
 fun g(m: {str: int}) > void {}
 g({"a": 1}); g({});
 final k: {str: [int]} = {"a": [1], "b": []};`)
+}
+
+// crossImportModules is a spell-shaped module tree. mg exports a generic handle.
+// go and ts export one each over their own enum. rsA declares namespace rs.
+const crossImportModules = `
+-- mg.buzz --
+namespace mg;
+
+export object Context {
+    cwd: str = ".",
+}
+
+export object Record {
+    stdout: str,
+    code: int,
+    ok: bool,
+}
+
+export object Spell::<T> {
+    name: str,
+
+    fun run(ctx: Context, op: T, args: [str] = []) > void {
+    }
+
+    fun capture(ctx: Context, op: T, args: [str] = [], allowFailure: bool = false) > Record {
+        return Record{ stdout = "{args.len()}", code = 0, ok = allowFailure };
+    }
+}
+-- go.buzz --
+namespace go;
+
+import "mg";
+
+export enum<str> Op {
+    goTest = "go-test",
+    goBuild = "go-build",
+    goVet = "go-vet",
+}
+
+export final spell = mg\Spell::<Op>{ name = "go" };
+-- go2.buzz --
+namespace go2;
+
+import "mg";
+
+export enum<str> Op {
+    goVet = "go-vet",
+}
+
+fun make() > mg\Spell::<Op> {
+    return mg\Spell::<Op>{ name = "go" };
+}
+
+export final spell = make();
+-- ts.buzz --
+namespace ts;
+
+import "mg";
+
+export enum<str> Op {
+    tsc = "tsc",
+    eslint = "eslint",
+}
+
+export final spell = mg\Spell::<Op>{ name = "typescript" };
+-- rsA.buzz --
+namespace rs;
+
+export enum<str> Op {
+    cargoTest = "cargo-test",
+    clippy = "clippy",
+}
+
+export fun run(ctx: str, op: Op) > str {
+    return "{ctx} {op.value}";
+}
+
+export object Spell {
+    fun cargoTest(ctx: str) > void {}
+}
+
+export final spell = Spell{};
+-- host.buzz --
+namespace host;
+
+export protocol Runnable {
+    fun name() > str;
+    fun run(ctx: str, op: str) > str;
+}
+`
+
+// CrossImportSuite runs programs that use an imported module's types in a
+// strict session. Each case names the error upstream Buzz gives the program.
+type CrossImportSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestCrossImportSuite(t *testing.T) {
+	suite.Run(t, new(CrossImportSuite))
+}
+
+func (s *CrossImportSuite) SetupTest() {
+	s.dir = writeTxtar(s.T(), crossImportModules)
+}
+
+func (s *CrossImportSuite) exec(src string) (*Session, error) {
+	ctx := context.Background()
+	sess := NewSession(ctx)
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetIncludeDirs([]string{s.dir})
+	return sess, sess.Exec(ctx, src)
+}
+
+func (s *CrossImportSuite) refuses(src, want string) {
+	s.T().Helper()
+	_, err := s.exec(`import "mg";
+import "go";
+import "ts";
+
+final ctx = mg\Context{};
+` + src)
+	s.Require().Error(err, "the program is accepted")
+	s.Contains(err.Error(), want)
+}
+
+// Gap 1: upstream infers .goTest from the parameter type of go\spell.run.
+func (s *CrossImportSuite) TestEnumCaseInferredThroughImportedGenericMethod() {
+	_, err := s.exec(`import "mg";
+import "go";
+
+final ctx = mg\Context{};
+go\spell.run(ctx, op: .goTest);
+go\spell.run(ctx, op: .goBuild, args: ["-race"]);
+final vet = go\spell.capture(ctx, op: .goVet);
+final mod = go\spell.capture(ctx, op: .goVet, allowFailure: true);
+`)
+	s.Require().NoError(err)
+}
+
+// Gap 2: an omitted args and allowFailure take their declared defaults. The
+// export is a literal in go and the result of a typed function in go2.
+func (s *CrossImportSuite) TestDefaultArgumentAppliedAcrossImport() {
+	sess, err := s.exec(`import "mg";
+import "go";
+import "go2";
+
+final ctx = mg\Context{};
+final plain = go\spell.capture(ctx, op: .goVet);
+final made = go2\spell.capture(ctx, op: go2\Op.goVet);
+export final plainArgs = plain.stdout;
+export final plainOk = plain.ok;
+export final madeArgs = made.stdout;
+export final madeOk = made.ok;
+`)
+	s.Require().NoError(err)
+	exports := sess.Exports()
+	s.Equal("0", exports["plainArgs"].AsString())
+	s.False(exports["plainOk"].AsBool())
+	s.Equal("0", exports["madeArgs"].AsString())
+	s.False(exports["madeOk"].AsBool())
+}
+
+// Gap 3, upstream E9: Argument `allowFail` does not exists.
+func (s *CrossImportSuite) TestImportedMethodRefusesUnknownLabel() {
+	s.refuses(`final r = go\spell.capture(ctx, op: .goVet, allowFail: true);`, `unknown argument name "allowFail"`)
+}
+
+// Gap 3, upstream E9: Argument `allowFailure` does not exists. run has none.
+func (s *CrossImportSuite) TestImportedMethodRefusesLabelOfAnotherMethod() {
+	s.refuses(`go\spell.run(ctx, op: .goTest, allowFailure: true);`, `unknown argument name "allowFailure"`)
+}
+
+// Gap 3, upstream E8: Bad argument type: got type `str`, expected `[str]`.
+func (s *CrossImportSuite) TestImportedMethodRefusesWrongArgumentType() {
+	s.refuses(`go\spell.run(ctx, op: .goTest, args: "-race");`, `cannot pass str as argument "args" of type [str]`)
+}
+
+// Gap 3, upstream E4: Wrong variable type: got type `void`, expected `Record`.
+func (s *CrossImportSuite) TestImportedMethodRefusesUsedVoidResult() {
+	s.refuses(`final rec: mg\Record = go\spell.run(ctx, op: .goTest);`, "cannot assign void to Record")
+}
+
+// Gap 3, upstream E57: Property `walk` does not exists in object `Spell`.
+func (s *CrossImportSuite) TestImportedObjectRefusesUnknownMethod() {
+	s.refuses(`go\spell.walk(ctx);`, `object Spell has no field or method "walk"`)
+}
+
+// Gap 3, upstream E8: Bad argument type: got type `Op`, expected `Op`.
+func (s *CrossImportSuite) TestImportedMethodRefusesAnotherModulesEnum() {
+	s.refuses(`go\spell.run(ctx, op: ts\Op.tsc);`, `cannot pass Op as argument "op" of type Op`)
+}
+
+// Gap 3, upstream E8: Bad argument type: got type `str`, expected `Op`.
+// Accepted, the program would dispatch go::null and exit 0.
+func (s *CrossImportSuite) TestImportedMethodRefusesStringForEnum() {
+	s.refuses(`go\spell.run(ctx, op: "go-test");`, `cannot pass str as argument "op" of type Op`)
+}
+
+// Gap 4: rsA.buzz declares namespace rs, so rs\ is the name upstream binds.
+func (s *CrossImportSuite) TestUnaliasedImportIsTypedByDeclaredNamespace() {
+	_, err := s.exec(`import "rsA";
+
+final a = rs\run("ctx", op: .clippy);
+final b = rs\run("ctx", op: rs\Op.clippy);
+`)
+	s.Require().NoError(err)
+
+	_, err = s.exec(`import "rsA";
+
+final a = rs\run("ctx", op: .clipy);
+`)
+	s.Require().Error(err, "upstream E90: Could not infer type for enum case `clipy`")
+	s.Contains(err.Error(), `enum Op has no case "clipy"`)
+
+	_, err = s.exec(`import "rsA";
+
+final a = rs\run("ctx", op: "clippy");
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `cannot pass str as argument "op" of type Op`)
+
+	_, err = s.exec(`import "rsA";
+
+rs\spell.cargoTset("ctx");
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `has no field or method "cargoTset"`)
+
+	_, err = s.exec(`import "rsA";
+
+final rec: str = rs\spell.cargoTest("ctx");
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "cannot assign void to str")
+}
+
+// Gap 5, upstream E60: Method not conforming to protocol.
+func (s *CrossImportSuite) TestMethodWithWrongSignatureDoesNotSatisfyProtocol() {
+	_, err := s.exec(`import "host";
+
+object<host\Runnable> Spell {
+    fun name() > str => "x";
+    fun run(ctx: str, op: int) > str => "y";
+}
+
+final s = Spell{};
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "method not conforming to protocol")
+
+	_, err = s.exec(`import "host";
+
+object<host\Runnable> Spell {
+    fun name() > str => "x";
+    fun run(ctx: str, op: str) > str => "y";
+}
+
+final s = Spell{};
+`)
+	s.Require().NoError(err)
+}
+
+// Gap 6, upstream E42: Bad list type: got type `Spell::<Op>`, expected `Spell::<Op>`.
+func (s *CrossImportSuite) TestListOfTwoInstantiationsOfOneGenericIsRefused() {
+	_, err := s.exec(`import "go";
+import "ts";
+
+final spells = [ go\spell, ts\spell ];
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "bad list type")
+
+	_, err = s.exec(`import "go";
+
+final spells = [ go\spell, go\spell ];
+`)
+	s.Require().NoError(err)
 }
