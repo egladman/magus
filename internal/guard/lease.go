@@ -3098,8 +3098,6 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row jobtypes.J
 	operand, rebase := integratorRebase(inv)
 	if why == "" && rebase && !integrator {
 		why = ownBranchRefusal(ctx, opts, row, inv.Name, site)
-		// A worker's base branch is the root's to bring in, so only a ref the row names counts.
-		base = ""
 	}
 	if why == "" && rebase && operand != "" && !mergesBase(operand, base, row) {
 		why = rebaseRefusal(operand, base, row)
